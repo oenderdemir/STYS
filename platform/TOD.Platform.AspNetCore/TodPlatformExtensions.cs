@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.CurrentUser.Services;
 using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.SharedKernel.Responses;
@@ -37,6 +39,29 @@ public static class TodPlatformExtensions
 
                 return new BadRequestObjectResult(ApiResponse.Fail("Validation failed.", errors, context.HttpContext.TraceIdentifier));
             };
+        });
+
+        return services;
+    }
+
+    public static IServiceCollection AddTodPlatformAuthorization(
+        this IServiceCollection services,
+        Action<TodPlatformAuthorizationOptions>? configure = null)
+    {
+        var options = new TodPlatformAuthorizationOptions();
+        configure?.Invoke(options);
+
+        services.AddAuthorization(authOptions =>
+        {
+            authOptions.AddPolicy(TodPlatformAuthorizationConstants.UiPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.UiUserPermission)
+                .AddAuthenticationSchemes(options.UiScheme));
+
+            authOptions.AddPolicy(TodPlatformAuthorizationConstants.ServicePolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.ServiceUserPermission)
+                .AddAuthenticationSchemes(options.ServiceScheme));
         });
 
         return services;

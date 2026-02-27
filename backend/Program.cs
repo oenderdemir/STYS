@@ -1,16 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Serilog;
-using System.Text;
-using System.Threading.RateLimiting;
 using TOD.Platform.AspNetCore;
+using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.AspNetCore.Logging;
+using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
-using TOD.Platform.SharedKernel.Responses;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -29,80 +25,9 @@ builder.Services.AddTodPlatformIdentity(
     options => options.UseSqlServer(builder.Configuration.GetConnectionString("TodIdentityDbConnection")),
     builder.Configuration);
 
-var jwtSection = builder.Configuration.GetSection("Jwt");
-var jwtKey = jwtSection["Key"] ?? throw new InvalidOperationException("Jwt:Key is required.");
-var jwtIssuer = jwtSection["Issuer"];
-var jwtAudience = jwtSection["Audience"];
-var validateIssuer = !string.IsNullOrWhiteSpace(jwtIssuer);
-var validateAudience = !string.IsNullOrWhiteSpace(jwtAudience);
-
-void ConfigureJwt(JwtBearerOptions options)
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero,
-        ValidateIssuer = validateIssuer,
-        ValidateAudience = validateAudience,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience
-    };
-}
-
-builder.Services
-    .AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwt)
-    .AddJwtBearer("UIScheme", ConfigureJwt)
-    .AddJwtBearer("ServiceScheme", ConfigureJwt);
-
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("UIPolicy", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim("permission", "KullaniciTipi.Admin", "KullaniciTipi.UIUser")
-        .AddAuthenticationSchemes("UIScheme"));
-
-    options.AddPolicy("ServicePolicy", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireClaim("permission", "KullaniciTipi.Admin", "KullaniciTipi.ServiceUser")
-        .AddAuthenticationSchemes("ServiceScheme"));
-});
-
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-    {
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ip,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 120,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            });
-    });
-    options.OnRejected = async (context, cancellationToken) =>
-    {
-        context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsJsonAsync(
-            ApiResponse.Fail(
-                "Too many requests.",
-                [new ApiError("RATE_LIMITED", null, "Too many requests. Please try again later.")],
-                context.HttpContext.TraceIdentifier),
-            cancellationToken: cancellationToken);
-    };
-});
+builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
+builder.Services.AddTodPlatformAuthorization();
+builder.Services.AddTodPlatformRateLimiting(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -143,35 +68,12 @@ app.UseRequestResponseLogging();
 app.UseJwtTokenLogging();
 app.UseSecurityHeaders();
 app.UseHttpsRedirection();
-app.UseRateLimiter();
+app.UseTodPlatformRateLimiting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapTodPlatformHealthChecks();
 app.MapControllers();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-
-    return forecast;
-})
-.WithName("GetWeatherForecast");
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

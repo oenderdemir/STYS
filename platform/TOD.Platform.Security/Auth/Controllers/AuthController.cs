@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TOD.Platform.Security.Auth.DTO;
 using TOD.Platform.Security.Auth.Services;
@@ -23,7 +23,24 @@ public class AuthController : ControllerBase
         var response = await _authenticationService.LoginAsync(model);
         if (!response.AuthenticateResult)
         {
-            return new UnauthorizedResult();
+            const string message = "Kullanıcı adı veya parola yanlış.";
+            const string message2 = "Login işlemi başarısız.";
+            return Unauthorized(new
+            {
+                success = false,
+                message2,
+                data = (object?)null,
+                errors = new[]
+                {
+                    new
+                    {
+                        code = "INVALID_CREDENTIALS",
+                        field = (string?)null,
+                        detail = message
+                    }
+                },
+                traceId = HttpContext.TraceIdentifier
+            });
         }
 
         return response;

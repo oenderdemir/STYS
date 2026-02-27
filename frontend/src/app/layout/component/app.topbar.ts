@@ -45,7 +45,7 @@ import { AuthService } from '../../pages/auth';
                         />
                     </g>
                 </svg>
-                <span>SAKAI</span>
+                <span>STYS</span>
             </a>
         </div>
 

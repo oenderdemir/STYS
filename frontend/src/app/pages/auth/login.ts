@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -82,6 +82,7 @@ export class Login implements OnInit {
     private readonly authService = inject(AuthService);
     private readonly router = inject(Router);
     private readonly route = inject(ActivatedRoute);
+    private readonly cdr = inject(ChangeDetectorRef);
 
     userName = '';
     password = '';
@@ -119,20 +120,19 @@ export class Login implements OnInit {
             .pipe(
                 finalize(() => {
                     this.isSubmitting = false;
+                    this.cdr.detectChanges();
                 })
             )
             .subscribe({
                 next: (response: LoginResponseDto) => {
-                    if (!response.authenticateResult || !response.authToken) {
-                        this.errorMessage = 'Invalid username or password.';
-                        return;
-                    }
-
+                    
+ 
                     this.authService.storeSession(response);
                     void this.router.navigateByUrl(this.getReturnUrl());
                 },
                 error: (error: unknown) => {
                     this.errorMessage = this.resolveErrorMessage(error);
+                    this.cdr.detectChanges();
                 }
             });
     }
@@ -149,12 +149,16 @@ export class Login implements OnInit {
     private resolveErrorMessage(error: unknown): string {
         if (error instanceof HttpErrorResponse) {
             const apiMessage = tryReadApiMessage(error.error);
-            if (apiMessage) {
-                return apiMessage;
+            if (error.status === 401) {
+                if (apiMessage) {
+                    return `${apiMessage}`;
+                }
+
+                return 'Kullanıcı adı veya parola yanlış.';
             }
 
-            if (error.status === 401) {
-                return 'Invalid username or password.';
+            if (apiMessage) {
+                return apiMessage;
             }
         }
 
@@ -162,6 +166,6 @@ export class Login implements OnInit {
             return error.message;
         }
 
-        return 'Login request failed. Please try again.';
+        return 'Login başarısız. Tekrar deneyin.';
     }
 }

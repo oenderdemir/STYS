@@ -11,6 +11,9 @@ import { Notfound } from './app/pages/notfound/notfound';
 import { RolYonetimi } from './app/pages/rol-yonetimi/rol-yonetimi';
 
 export const appRoutes: Routes = [
+    { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
+    { path: 'landing', component: Landing },
+    { path: 'notfound', component: Notfound },
     {
         path: '',
         component: AppLayout,
@@ -27,8 +30,5 @@ export const appRoutes: Routes = [
             { path: 'pages', loadChildren: () => import('./app/pages/pages.routes') }
         ]
     },
-    { path: 'landing', component: Landing },
-    { path: 'notfound', component: Notfound },
-    { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
     { path: '**', redirectTo: '/notfound' }
 ];

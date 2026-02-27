@@ -5,25 +5,35 @@ import { AppTopbar } from './app.topbar';
 import { AppSidebar } from './app.sidebar';
 import { AppFooter } from './app.footer';
 import { LayoutService } from '@/app/layout/service/layout.service';
+import { AuthService } from '../../pages/auth';
 
 @Component({
     selector: 'app-layout',
     standalone: true,
     imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter],
     template: `<div class="layout-wrapper" [ngClass]="containerClass()">
-        <app-topbar></app-topbar>
-        <app-sidebar></app-sidebar>
-        <div class="layout-main-container">
-            <div class="layout-main">
-                <router-outlet></router-outlet>
+        @if (isAuthenticated()) {
+            <app-topbar></app-topbar>
+            <app-sidebar></app-sidebar>
+            <div class="layout-main-container">
+                <div class="layout-main">
+                    <router-outlet></router-outlet>
+                </div>
+                <app-footer></app-footer>
             </div>
-            <app-footer></app-footer>
-        </div>
+        } @else {
+            <div class="layout-main-container">
+                <div class="layout-main">
+                    <router-outlet></router-outlet>
+                </div>
+            </div>
+        }
         <div class="layout-mask"></div>
     </div> `
 })
 export class AppLayout {
     layoutService = inject(LayoutService);
+    private readonly authService = inject(AuthService);
 
     constructor() {
         effect(() => {
@@ -46,5 +56,10 @@ export class AppLayout {
             'layout-overlay-active': state.overlayMenuActive,
             'layout-mobile-active': state.mobileMenuActive
         };
-    })
+    });
+
+    readonly isAuthenticated = computed(() => {
+        this.authService.sessionRevision();
+        return this.authService.isAuthenticated();
+    });
 }

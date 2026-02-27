@@ -12,6 +12,7 @@ export class AuthService {
     private readonly router = inject(Router);
     private readonly tokenStorageKey = 'stys.auth.token';
     private readonly tokenExpiryStorageKey = 'stys.auth.token_expiry';
+    private readonly userStatusStorageKey = 'stys.auth.user_status';
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -60,6 +61,11 @@ export class AuthService {
     storeSession(response: LoginResponseDto): void {
         localStorage.setItem(this.tokenStorageKey, response.authToken);
         localStorage.setItem(this.tokenExpiryStorageKey, response.accessTokenExpireDate);
+        if (response.userStatus && response.userStatus.trim().length > 0) {
+            localStorage.setItem(this.userStatusStorageKey, response.userStatus.trim());
+        } else {
+            localStorage.removeItem(this.userStatusStorageKey);
+        }
         this.resetInactivityTimer();
         this.bumpSessionRevision();
     }
@@ -67,6 +73,7 @@ export class AuthService {
     clearSession(): void {
         localStorage.removeItem(this.tokenStorageKey);
         localStorage.removeItem(this.tokenExpiryStorageKey);
+        localStorage.removeItem(this.userStatusStorageKey);
         this.clearInactivityTimer();
         this.bumpSessionRevision();
     }
@@ -96,6 +103,24 @@ export class AuthService {
 
     getToken(): string | null {
         return localStorage.getItem(this.tokenStorageKey);
+    }
+
+    getUserStatus(): string | null {
+        const value = localStorage.getItem(this.userStatusStorageKey);
+        if (!value || value.trim().length === 0) {
+            return null;
+        }
+
+        return value.trim();
+    }
+
+    mustChangePassword(): boolean {
+        const status = this.getUserStatus();
+        if (!status) {
+            return false;
+        }
+
+        return status.trim().toLowerCase() === 'mustchangepassword';
     }
 
     isAuthenticated(): boolean {

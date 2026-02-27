@@ -1,10 +1,10 @@
-import { ChangeDetectorRef, Component, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, effect, inject, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
-import { MenuModule } from 'primeng/menu';
+import { Menu, MenuModule } from 'primeng/menu';
 import { PasswordModule } from 'primeng/password';
 import { RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -84,20 +84,23 @@ import { AuthService } from '../../pages/auth';
                         <i class="pi pi-inbox"></i>
                         <span>Messages</span>
                     </button>
-                    <button type="button" class="layout-topbar-action" (click)="profileMenu.toggle($event)">
+                    <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)">
                         <i class="pi pi-user"></i>
                         <span>Profile</span>
                     </button>
-                    <p-menu #profileMenu [popup]="true" [model]="profileMenuItems" appendTo="body"></p-menu>
+                    <p-menu #profileMenu [popup]="true" [model]="profileMenuItems"></p-menu>
                 </div>
             </div>
         </div>
     </div>
 
 	    <p-dialog
-	        header="Sifre Degistir"
+        [header]="isForceChangePasswordMode ? 'Zorunlu Sifre Degistirme' : 'Sifre Degistir'"
         [(visible)]="changePasswordDialogVisible"
         [modal]="true"
+        [closable]="!isForceChangePasswordMode"
+        [closeOnEscape]="!isForceChangePasswordMode"
+        [dismissableMask]="!isForceChangePasswordMode"
         [style]="{ width: '28rem', 'max-width': '95vw' }"
         [breakpoints]="{ '960px': '95vw' }"
     >
@@ -122,11 +125,13 @@ import { AuthService } from '../../pages/auth';
             }
         </div>
 
-	        <ng-template #footer>
-	            <p-button label="Iptal" icon="pi pi-times" severity="secondary" text [disabled]="isChangingPassword" (onClick)="changePasswordDialogVisible = false" />
-	            <p-button
-	                [label]="isChangingPassword ? 'Degistiriliyor...' : 'Degistir'"
-	                icon="pi pi-check"
+		        <ng-template #footer>
+                    @if (!isForceChangePasswordMode) {
+		                <p-button label="Iptal" icon="pi pi-times" severity="secondary" text [disabled]="isChangingPassword" (onClick)="changePasswordDialogVisible = false" />
+                    }
+		            <p-button
+		                [label]="isChangingPassword ? 'Degistiriliyor...' : 'Degistir'"
+		                icon="pi pi-check"
 	                [disabled]="isChangingPassword || !currentPassword || !newPassword || !newPasswordAgain"
 	                (onClick)="submitChangePassword()"
 	            />
@@ -159,6 +164,7 @@ export class AppTopbar {
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    @ViewChild('profileMenu') private profileMenu?: Menu;
 
     changePasswordDialogVisible = false;
     changePasswordErrorDialogVisible = false;
@@ -166,6 +172,7 @@ export class AppTopbar {
     currentPassword = '';
     newPassword = '';
     newPasswordAgain = '';
+    isForceChangePasswordMode = false;
     changePasswordError: string | null = null;
     changePasswordErrorDetails: string[] = [];
 
@@ -185,6 +192,29 @@ export class AppTopbar {
         }
     ];
 
+    constructor() {
+        effect(() => {
+            this.authService.sessionRevision();
+
+            if (!this.authService.isAuthenticated()) {
+                this.closeAllOverlays();
+                return;
+            }
+
+            if (this.authService.mustChangePassword()) {
+                if (!this.changePasswordDialogVisible || !this.isForceChangePasswordMode) {
+                    this.openForcedChangePasswordDialog();
+                }
+                return;
+            }
+
+            if (this.isForceChangePasswordMode) {
+                this.isForceChangePasswordMode = false;
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
     toggleDarkMode() {
         this.layoutService.layoutConfig.update((state) => ({
             ...state,
@@ -193,6 +223,8 @@ export class AppTopbar {
     }
 
     private openChangePasswordDialog(): void {
+        this.profileMenu?.hide();
+        this.isForceChangePasswordMode = false;
         this.currentPassword = '';
         this.newPassword = '';
         this.newPasswordAgain = '';
@@ -204,7 +236,12 @@ export class AppTopbar {
     }
 
     private handleLogout(): void {
+        this.closeAllOverlays();
         this.authService.logout({ preserveReturnUrl: false });
+    }
+
+    onProfileMenuToggle(event: Event, menu: Menu): void {
+        menu.toggle(event);
     }
 
     submitChangePassword(): void {
@@ -231,6 +268,7 @@ export class AppTopbar {
             )
             .subscribe({
                 next: () => {
+                    this.isForceChangePasswordMode = false;
                     this.changePasswordDialogVisible = false;
                     this.messageService.add({
                         severity: 'success',
@@ -250,6 +288,28 @@ export class AppTopbar {
         this.changePasswordError = null;
         this.changePasswordErrorDetails = this.resolveErrorDetails(error);
         this.changePasswordErrorDialogVisible = true;
+    }
+
+    private openForcedChangePasswordDialog(): void {
+        this.profileMenu?.hide();
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.newPasswordAgain = '';
+        this.changePasswordError = null;
+        this.changePasswordErrorDialogVisible = false;
+        this.changePasswordErrorDetails = [];
+        this.isForceChangePasswordMode = true;
+        this.changePasswordDialogVisible = true;
+        this.cdr.detectChanges();
+    }
+
+    private closeAllOverlays(): void {
+        this.profileMenu?.hide();
+        this.changePasswordDialogVisible = false;
+        this.changePasswordErrorDialogVisible = false;
+        this.changePasswordErrorDetails = [];
+        this.isForceChangePasswordMode = false;
+        this.cdr.detectChanges();
     }
 
     private resolveErrorDetails(error: unknown): string[] {

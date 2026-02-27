@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using TOD.Platform.Persistence.RDBMS.Dto;
 using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.RDBMS.Paging;
 
 namespace TOD.Platform.Persistence.RDBMS.Services;
 
@@ -12,6 +13,12 @@ public interface IBaseService<TDto, TEntity, TKey>
     Task<IEnumerable<TDto>> GetAllAsync(Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null);
 
     Task<TDto?> GetByIdAsync(TKey id, Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null);
+
+    Task<PagedResult<TDto>> GetPagedAsync(
+        PagedRequest request,
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null);
 
     Task<TDto> AddAsync(TDto dto);
 

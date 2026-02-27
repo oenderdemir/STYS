@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.RDBMS.Paging;
 
 namespace TOD.Platform.Persistence.RDBMS.Repositories;
 
@@ -78,6 +79,38 @@ public class BaseRepository<TEntity, TKey> : IBaseRepository<TEntity, TKey>
         }
 
         return await query.FirstOrDefaultAsync(predicate);
+    }
+
+    public async Task<PagedResult<TEntity>> GetPagedAsync(
+        PagedRequest request,
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+    {
+        var (pageNumber, pageSize) = request.Normalize();
+        IQueryable<TEntity> query = Context.Set<TEntity>();
+
+        if (include is not null)
+        {
+            query = include(query);
+        }
+
+        if (predicate is not null)
+        {
+            query = query.Where(predicate);
+        }
+
+        var totalCount = await query.CountAsync();
+        query = orderBy is not null
+            ? orderBy(query)
+            : query.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id);
+
+        var items = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<TEntity>(items, pageNumber, pageSize, totalCount);
     }
 
     public Task AddAsync(TEntity entity)

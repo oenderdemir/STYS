@@ -2,6 +2,7 @@ using AutoMapper;
 using System.Linq.Expressions;
 using TOD.Platform.Persistence.RDBMS.Dto;
 using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.RDBMS.Paging;
 using TOD.Platform.Persistence.RDBMS.Repositories;
 
 namespace TOD.Platform.Persistence.RDBMS.Services;
@@ -35,6 +36,17 @@ public class BaseService<TDto, TEntity, TKey> : IBaseService<TDto, TEntity, TKey
     {
         var entity = await Repository.GetByIdAsync(id, include);
         return Mapper.Map<TDto?>(entity);
+    }
+
+    public virtual async Task<PagedResult<TDto>> GetPagedAsync(
+        PagedRequest request,
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+    {
+        var pagedEntities = await Repository.GetPagedAsync(request, predicate, include, orderBy);
+        var mappedItems = Mapper.Map<List<TDto>>(pagedEntities.Items);
+        return new PagedResult<TDto>(mappedItems, pagedEntities.PageNumber, pagedEntities.PageSize, pagedEntities.TotalCount);
     }
 
     public virtual async Task<TDto> AddAsync(TDto dto)

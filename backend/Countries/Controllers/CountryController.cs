@@ -4,6 +4,7 @@ using STYS.Countries.Dto;
 using STYS.Countries.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Persistence.RDBMS.Paging;
 
 namespace STYS.Countries.Controllers;
 
@@ -22,6 +23,13 @@ public class CountryController : UIController
     {
         var countries = await _countryService.GetAllAsync();
         return countries.ToList();
+    }
+
+    [HttpGet("paged")]
+    [Permission(CountryPermissions.View)]
+    public Task<PagedResult<CountryDto>> GetPaged([FromQuery] PagedRequest request)
+    {
+        return _countryService.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.Name));
     }
 
     [HttpGet("{id:guid}")]

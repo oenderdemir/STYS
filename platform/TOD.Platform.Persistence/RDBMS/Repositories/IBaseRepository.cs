@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.RDBMS.Paging;
 
 namespace TOD.Platform.Persistence.RDBMS.Repositories;
 
@@ -16,6 +17,12 @@ public interface IBaseRepository<TEntity, TKey>
     Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate, Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null);
 
     Task<TEntity?> FirstOrDefaultAsync(Expression<Func<TEntity, bool>> predicate, Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null);
+
+    Task<PagedResult<TEntity>> GetPagedAsync(
+        PagedRequest request,
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null);
 
     Task AddAsync(TEntity entity);
 

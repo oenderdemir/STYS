@@ -77,7 +77,7 @@ public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuIte
             throw new InvalidOperationException("Id cannot be empty.");
         }
 
-        var menuItem = await Repository.GetByIdAsync(dto.Id.Value, q => q.Include(x => x.MenuItemRoles));
+        var menuItem = await Repository.GetByIdAsync(dto.Id.Value, q => q.IgnoreQueryFilters().Include(x => x.MenuItemRoles));
         if (menuItem is null)
         {
             throw new InvalidOperationException("Menu item was not found.");
@@ -90,14 +90,21 @@ public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuIte
         menuItem.MenuOrder = dto.MenuOrder;
         menuItem.ParentId = dto.ParentId;
 
-        if (menuItem.MenuItemRoles.Any())
+        var desiredRoleIds = dto.Roles?
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToHashSet() ?? new HashSet<Guid>();
+
+        var existingRoleIds = menuItem.MenuItemRoles.Select(x => x.RoleId).ToHashSet();
+
+        foreach (var menuItemRole in menuItem.MenuItemRoles)
         {
-            _menuItemRepository.RemoveMenuItemRolesRange(menuItem.MenuItemRoles);
+            menuItemRole.IsDeleted = !desiredRoleIds.Contains(menuItemRole.RoleId);
         }
 
-        menuItem.MenuItemRoles = new List<MenuItemRole>();
-
-        foreach (var roleId in dto.Roles?.Select(x => x.Id).Where(x => x.HasValue).Select(x => x!.Value).Distinct() ?? Enumerable.Empty<Guid>())
+        foreach (var roleId in desiredRoleIds.Except(existingRoleIds))
         {
             var role = await _roleRepository.GetByIdAsync(roleId);
             if (role is null)
@@ -107,8 +114,11 @@ public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuIte
 
             menuItem.MenuItemRoles.Add(new MenuItemRole
             {
+                MenuItemId = menuItem.Id,
+                RoleId = roleId,
                 MenuItem = menuItem,
-                Role = role
+                Role = role,
+                IsDeleted = false
             });
         }
 

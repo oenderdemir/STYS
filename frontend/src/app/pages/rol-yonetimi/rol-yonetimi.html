@@ -1,0 +1,84 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Rol Ekle" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    #dt
+    [value]="roles"
+    [loading]="loading"
+    dataKey="id"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [tableStyle]="{ 'min-width': '50rem' }"
+    [globalFilterFields]="['domain', 'name']"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex items-center justify-between">
+            <h5 class="m-0">Rol Yonetimi</h5>
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+            </p-iconfield>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th>Domain</th>
+            <th>Ad</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-role>
+        <tr>
+            <td>{{ role.domain || '-' }}</td>
+            <td>{{ role.name || '-' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(role)" />
+                    @if (canManage) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteRole(role)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [header]="isEditMode ? 'Rol Duzenle' : 'Yeni Rol Ekle'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '30rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '90vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12">
+            <label for="domain" class="block font-medium mb-2">Domain</label>
+            <input id="domain" pInputText [(ngModel)]="selectedRole.domain" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12">
+            <label for="name" class="block font-medium mb-2">Ad</label>
+            <input id="name" pInputText [(ngModel)]="selectedRole.name" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveRole()" />
+        }
+    </ng-template>
+</p-dialog>

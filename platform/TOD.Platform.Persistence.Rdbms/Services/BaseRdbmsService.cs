@@ -64,7 +64,7 @@ public class BaseRdbmsService<TDto, TEntity, TKey> : IBaseRdbmsService<TDto, TEn
 
         await OnEntitySavedAsync(entity.Id);
 
-        return dto;
+        return Mapper.Map<TDto>(entity);
     }
 
     public virtual async Task<TDto> UpdateAsync(TDto dto)

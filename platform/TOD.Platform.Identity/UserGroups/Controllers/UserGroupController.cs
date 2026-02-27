@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Identity;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.UserGroups.Services;
 
@@ -17,7 +18,7 @@ public class UserGroupController : UIController
     }
 
     [HttpGet]
-    [Permission("UserGroupManagement.View")]
+    [Permission(IdentityPermissions.UserGroupManagement.View)]
     public Task<IEnumerable<UserGroupDto>> GetAll()
     {
         return _userGroupService.GetAllAsync(q => q
@@ -26,14 +27,14 @@ public class UserGroupController : UIController
     }
 
     [HttpGet("{id:guid}")]
-    [Permission("UserGroupManagement.View")]
+    [Permission(IdentityPermissions.UserGroupManagement.View)]
     public Task<UserGroupDto?> GetById(Guid id)
     {
         return _userGroupService.GetByIdAsync(id, q => q.Include(x => x.UserGroupRoles).ThenInclude(x => x.Role));
     }
 
     [HttpPost]
-    [Permission("UserGroupManagement.Manage")]
+    [Permission(IdentityPermissions.UserGroupManagement.Manage)]
     public async Task<ActionResult<UserGroupDto>> Create([FromBody] UserGroupDto dto)
     {
         var created = await _userGroupService.AddAsync(dto);
@@ -41,7 +42,7 @@ public class UserGroupController : UIController
     }
 
     [HttpPut("{id:guid}")]
-    [Permission("UserGroupManagement.Manage")]
+    [Permission(IdentityPermissions.UserGroupManagement.Manage)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UserGroupDto dto)
     {
         dto.Id = id;
@@ -50,7 +51,7 @@ public class UserGroupController : UIController
     }
 
     [HttpDelete("{id:guid}")]
-    [Permission("UserGroupManagement.Manage")]
+    [Permission(IdentityPermissions.UserGroupManagement.Manage)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _userGroupService.DeleteAsync(id);

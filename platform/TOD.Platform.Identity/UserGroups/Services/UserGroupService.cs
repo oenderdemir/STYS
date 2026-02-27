@@ -11,13 +11,11 @@ namespace TOD.Platform.Identity.UserGroups.Services;
 
 public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUserGroupService
 {
-    private readonly IUserGroupRepository _userGroupRepository;
     private readonly IRoleRepository _roleRepository;
 
     public UserGroupService(IUserGroupRepository userGroupRepository, IRoleRepository roleRepository, IMapper mapper)
         : base(userGroupRepository, mapper)
     {
-        _userGroupRepository = userGroupRepository;
         _roleRepository = roleRepository;
     }
 
@@ -54,7 +52,7 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
             throw new InvalidOperationException("Id cannot be empty.");
         }
 
-        var userGroup = await Repository.GetByIdAsync(dto.Id.Value, q => q.Include(x => x.UserGroupRoles));
+        var userGroup = await Repository.GetByIdAsync(dto.Id.Value, q => q.IgnoreQueryFilters().Include(x => x.UserGroupRoles));
         if (userGroup is null)
         {
             throw new InvalidOperationException("User group was not found.");
@@ -62,14 +60,21 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
 
         userGroup.Name = dto.Name;
 
-        if (userGroup.UserGroupRoles.Any())
+        var desiredRoleIds = dto.Roles?
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToHashSet() ?? new HashSet<Guid>();
+
+        var existingRoleIds = userGroup.UserGroupRoles.Select(x => x.RoleId).ToHashSet();
+
+        foreach (var userGroupRole in userGroup.UserGroupRoles)
         {
-            _userGroupRepository.RemoveUserGroupRolesRange(userGroup.UserGroupRoles);
+            userGroupRole.IsDeleted = !desiredRoleIds.Contains(userGroupRole.RoleId);
         }
 
-        userGroup.UserGroupRoles = new List<UserGroupRole>();
-
-        foreach (var roleId in dto.Roles?.Select(x => x.Id).Where(x => x.HasValue).Select(x => x!.Value).Distinct() ?? Enumerable.Empty<Guid>())
+        foreach (var roleId in desiredRoleIds.Except(existingRoleIds))
         {
             var role = await _roleRepository.GetByIdAsync(roleId);
             if (role is null)
@@ -79,8 +84,11 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
 
             userGroup.UserGroupRoles.Add(new UserGroupRole
             {
+                UserGroupId = userGroup.Id,
+                RoleId = roleId,
                 UserGroup = userGroup,
-                Role = role
+                Role = role,
+                IsDeleted = false
             });
         }
 

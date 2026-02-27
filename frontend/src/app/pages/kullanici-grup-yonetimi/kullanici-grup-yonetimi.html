@@ -1,0 +1,97 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Grup Ekle" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    #dt
+    [value]="userGroups"
+    [loading]="loading"
+    dataKey="id"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [tableStyle]="{ 'min-width': '60rem' }"
+    [globalFilterFields]="['name']"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex items-center justify-between">
+            <h5 class="m-0">Kullanici Grup Yonetimi</h5>
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+            </p-iconfield>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th>Grup Adi</th>
+            <th>Roller</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-group>
+        <tr>
+            <td>{{ group.name }}</td>
+            <td>{{ getRoleText(group) }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(group)" />
+                    @if (canManage) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteUserGroup(group)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [header]="isEditMode ? 'Grup Duzenle' : 'Yeni Grup Ekle'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '40rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '90vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12">
+            <label for="name" class="block font-medium mb-2">Grup Adi</label>
+            <input id="name" pInputText [(ngModel)]="selectedUserGroup.name" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12">
+            <label for="roles" class="block font-medium mb-2">Roller</label>
+            <p-multiSelect
+                id="roles"
+                [options]="allRoles"
+                optionLabel="label"
+                optionValue="id"
+                [(ngModel)]="selectedRoleIds"
+                [filter]="true"
+                [showClear]="true"
+                display="chip"
+                placeholder="Rolleri seciniz"
+                class="w-full"
+                appendTo="body"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveUserGroup()" />
+        }
+    </ng-template>
+</p-dialog>

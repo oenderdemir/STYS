@@ -1,0 +1,115 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Menu Ekle" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-treeTable [value]="treeMenuItems" [loading]="loading" [tableStyle]="{ 'min-width': '70rem' }">
+    <ng-template pTemplate="header">
+        <tr>
+            <th>Label</th>
+            <th>Icon</th>
+            <th>Route</th>
+            <th>Order</th>
+            <th style="width: 18rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template pTemplate="body" let-rowNode let-rowData="rowData">
+        <tr [ttRow]="rowNode">
+            <td>
+                <p-treeTableToggler [rowNode]="rowNode" />
+                {{ rowData.label || '-' }}
+            </td>
+            <td><i [class]="rowData.icon"></i> {{ rowData.icon || '-' }}</td>
+            <td>{{ rowData.route || '-' }}</td>
+            <td>{{ rowData.menuOrder ?? 0 }}</td>
+            <td>
+                <div class="flex gap-2">
+                    @if (canManage) {
+                        <p-button icon="pi pi-plus" size="small" severity="success" [outlined]="true" (onClick)="openNewChild(rowData.id)" />
+                    }
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(rowData)" />
+                    @if (canManage && !hasChild(rowNode)) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteMenuItem(rowData)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-treeTable>
+
+<p-dialog
+    [header]="isEditMode ? 'Menu Duzenle' : 'Yeni Menu Ekle'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '48rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '90vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6">
+            <label for="label" class="block font-medium mb-2">Label</label>
+            <input id="label" pInputText [(ngModel)]="selectedMenuItem.label" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="icon" class="block font-medium mb-2">Icon</label>
+            <input id="icon" pInputText [(ngModel)]="selectedMenuItem.icon" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="route" class="block font-medium mb-2">Route</label>
+            <input id="route" pInputText [(ngModel)]="selectedMenuItem.route" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="menuOrder" class="block font-medium mb-2">Menu Order</label>
+            <input id="menuOrder" pInputText type="number" [(ngModel)]="selectedMenuItem.menuOrder" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="parentId" class="block font-medium mb-2">Ust Menu</label>
+            <p-select
+                inputId="parentId"
+                [options]="parentMenuOptions"
+                optionLabel="label"
+                optionValue="id"
+                [(ngModel)]="selectedParentId"
+                [filter]="true"
+                [showClear]="true"
+                class="w-full"
+                appendTo="body"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="roles" class="block font-medium mb-2">Roller</label>
+            <p-multiSelect
+                id="roles"
+                [options]="allRoles"
+                optionLabel="label"
+                optionValue="id"
+                [(ngModel)]="selectedRoleIds"
+                [filter]="true"
+                [showClear]="true"
+                display="chip"
+                class="w-full"
+                appendTo="body"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+        <div class="col-span-12">
+            <label for="queryParams" class="block font-medium mb-2">Query Params</label>
+            <input id="queryParams" pInputText [(ngModel)]="selectedMenuItem.queryParams" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveMenuItem()" />
+        }
+    </ng-template>
+</p-dialog>

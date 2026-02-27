@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -78,7 +78,7 @@ import { AppFloatingConfigurator } from '../../layout/component/app.floatingconf
         </div>
     `
 })
-export class Login {
+export class Login implements OnInit {
     private readonly authService = inject(AuthService);
     private readonly router = inject(Router);
     private readonly route = inject(ActivatedRoute);
@@ -88,6 +88,23 @@ export class Login {
     checked = false;
     isSubmitting = false;
     errorMessage: string | null = null;
+
+    ngOnInit(): void {
+        const reason = this.route.snapshot.queryParamMap.get('reason');
+        if (reason === 'expired') {
+            this.errorMessage = 'Session expired. Please sign in again.';
+            return;
+        }
+
+        if (reason === 'inactivity') {
+            this.errorMessage = 'Session ended due to inactivity. Please sign in again.';
+            return;
+        }
+
+        if (reason === 'unauthorized') {
+            this.errorMessage = 'Your session is no longer valid. Please sign in again.';
+        }
+    }
 
     signIn(): void {
         if (this.isSubmitting || !this.userName || !this.password) {

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Identity;
 using TOD.Platform.Identity.MenuItems.DTO;
 using TOD.Platform.Identity.MenuItems.Services;
 
@@ -17,7 +18,7 @@ public class MenuItemController : UIController
     }
 
     [HttpGet]
-    [Permission("MenuManagement.View")]
+    [Permission(IdentityPermissions.MenuManagement.View)]
     public Task<IEnumerable<MenuItemDto>> GetAll()
     {
         return _menuItemService.GetAllAsync(q => q
@@ -26,20 +27,21 @@ public class MenuItemController : UIController
     }
 
     [HttpGet("{id:guid}")]
-    [Permission("MenuManagement.View")]
+    [Permission(IdentityPermissions.MenuManagement.View)]
     public Task<MenuItemDto?> GetById(Guid id)
     {
         return _menuItemService.GetByIdAsync(id, q => q.Include(x => x.MenuItemRoles).ThenInclude(x => x.Role));
     }
 
     [HttpGet("tree")]
+
     public Task<IEnumerable<MenuItemDto>> GetTree()
     {
         return _menuItemService.GetMenuTreeAsync();
     }
 
     [HttpPost]
-    [Permission("MenuManagement.Manage")]
+    [Permission(IdentityPermissions.MenuManagement.Manage)]
     public async Task<ActionResult<MenuItemDto>> Create([FromBody] MenuItemDto dto)
     {
         var created = await _menuItemService.AddAsync(dto);
@@ -47,7 +49,7 @@ public class MenuItemController : UIController
     }
 
     [HttpPut("{id:guid}")]
-    [Permission("MenuManagement.Manage")]
+    [Permission(IdentityPermissions.MenuManagement.Manage)]
     public async Task<IActionResult> Update(Guid id, [FromBody] MenuItemDto dto)
     {
         dto.Id = id;
@@ -56,7 +58,7 @@ public class MenuItemController : UIController
     }
 
     [HttpDelete("{id:guid}")]
-    [Permission("MenuManagement.Manage")]
+    [Permission(IdentityPermissions.MenuManagement.Manage)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _menuItemService.DeleteAsync(id);

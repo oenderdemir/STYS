@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 using System.Diagnostics;
 using System.Text.Json;
 using Serilog;
-using TOD.Platform.SharedKernel.Exceptions;
+using Serilog.Context;
 
 namespace TOD.Platform.AspNetCore.Middleware;
 
@@ -22,6 +22,8 @@ public class RequestResponseLoggingMiddleware
 
         context.Items["RequestGuid"] = requestGuid;
         context.Request.EnableBuffering();
+        using var traceScope = LogContext.PushProperty("TraceId", context.TraceIdentifier);
+        using var requestScope = LogContext.PushProperty("RequestGuid", requestGuid);
 
         var originalBodyStream = context.Response.Body;
         await using var responseBodyStream = new MemoryStream();
@@ -39,7 +41,8 @@ public class RequestResponseLoggingMiddleware
 
             responseBodyStream.Seek(0, SeekOrigin.Begin);
             var responseBody = await new StreamReader(responseBodyStream).ReadToEndAsync();
-            LogResponse(requestGuid, responseBody);
+            var maskedResponseBody = MaskSensitiveData(responseBody);
+            LogResponse(requestGuid, maskedResponseBody);
 
             responseBodyStream.Seek(0, SeekOrigin.Begin);
             await responseBodyStream.CopyToAsync(originalBodyStream);
@@ -47,7 +50,8 @@ public class RequestResponseLoggingMiddleware
         catch (Exception ex)
         {
             context.Response.Body = originalBodyStream;
-            await HandleException(context, ex);
+            Log.Error(ex, "Unhandled exception for request {RequestGuid}", requestGuid);
+            throw;
         }
         finally
         {
@@ -104,7 +108,7 @@ public class RequestResponseLoggingMiddleware
     private static bool IsSensitive(string propertyName)
     {
         var key = propertyName.ToLowerInvariant();
-        return key is "password" or "parola" or "secret" or "token";
+        return key is "password" or "parola" or "secret" or "token" or "accesstoken" or "refreshtoken" or "authtoken" or "authorization";
     }
 
     private static void LogRequest(HttpContext context, Guid requestGuid, string body)
@@ -152,25 +156,4 @@ public class RequestResponseLoggingMiddleware
         Log.Information("{@LogData}", logData);
     }
 
-    private static Task HandleException(HttpContext context, Exception ex)
-    {
-        var requestGuid = context.Items["RequestGuid"] as Guid? ?? Guid.Empty;
-        var code = "system_error";
-        var statusCode = 500;
-
-        if (ex is BaseException baseException)
-        {
-            code = baseException.ErrorCode.ToString();
-            statusCode = baseException.ErrorCode;
-        }
-
-        var errorBody = JsonSerializer.Serialize(new { Message = ex.Message, Code = code });
-
-        Log.Error(ex, "Unhandled exception for request {RequestGuid}", requestGuid);
-
-        context.Response.ContentType = "application/json";
-        context.Response.StatusCode = statusCode;
-
-        return context.Response.WriteAsync(errorBody);
-    }
 }

@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TOD.Platform.AspNetCore.CurrentUser.Services;
 using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.SharedKernel.Responses;
@@ -17,6 +19,7 @@ public static class TodPlatformExtensions
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddTodPlatformHealthChecks();
         services.Configure<MvcOptions>(options =>
         {
             options.Filters.Add(new ApiResponseWrapperFilter());
@@ -35,6 +38,22 @@ public static class TodPlatformExtensions
                 return new BadRequestObjectResult(ApiResponse.Fail("Validation failed.", errors, context.HttpContext.TraceIdentifier));
             };
         });
+
+        return services;
+    }
+
+    public static IServiceCollection AddTodPlatformHealthChecks(
+        this IServiceCollection services,
+        Action<IHealthChecksBuilder>? configure = null)
+    {
+        var builder = services
+            .AddHealthChecks()
+            .AddCheck(
+                "self",
+                () => HealthCheckResult.Healthy("Application is running."),
+                tags: ["live", "ready"]);
+
+        configure?.Invoke(builder);
 
         return services;
     }
@@ -88,6 +107,60 @@ public static class TodPlatformExtensions
         return app.UseMiddleware<Middleware.JwtTokenLoggingMiddleware>();
     }
 
+    public static WebApplication MapTodPlatformHealthChecks(this WebApplication app)
+    {
+        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("live"),
+            ResultStatusCodes =
+            {
+                [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                [HealthStatus.Degraded] = StatusCodes.Status200OK,
+                [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+            },
+            ResponseWriter = WriteHealthCheckResponse
+        }).AllowAnonymous();
+
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = registration => registration.Tags.Contains("ready"),
+            ResultStatusCodes =
+            {
+                [HealthStatus.Healthy] = StatusCodes.Status200OK,
+                [HealthStatus.Degraded] = StatusCodes.Status200OK,
+                [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+            },
+            ResponseWriter = WriteHealthCheckResponse
+        }).AllowAnonymous();
+
+        return app;
+    }
+
+    public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app)
+    {
+        return app.Use(async (context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                var headers = context.Response.Headers;
+                headers["X-Content-Type-Options"] = "nosniff";
+                headers["X-Frame-Options"] = "DENY";
+                headers["Referrer-Policy"] = "no-referrer";
+                headers["X-Permitted-Cross-Domain-Policies"] = "none";
+                headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+
+                if (context.Request.IsHttps)
+                {
+                    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+                }
+
+                return Task.CompletedTask;
+            });
+
+            await next();
+        });
+    }
+
     private static (int StatusCode, string Code, string Message) ResolveException(Exception? exception)
     {
         if (exception is null)
@@ -108,5 +181,39 @@ public static class TodPlatformExtensions
         }
 
         return (500, "UNEXPECTED_ERROR", string.IsNullOrWhiteSpace(exception.Message) ? "An unexpected error occurred." : exception.Message);
+    }
+
+    private static async Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            totalDurationMs = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.ToDictionary(
+                x => x.Key,
+                x => new
+                {
+                    status = x.Value.Status.ToString(),
+                    description = x.Value.Description,
+                    durationMs = x.Value.Duration.TotalMilliseconds
+                })
+        };
+
+        if (report.Status == HealthStatus.Unhealthy)
+        {
+            var errors = report.Entries
+                .Where(x => x.Value.Status == HealthStatus.Unhealthy)
+                .Select(x => new ApiError("HEALTHCHECK_UNHEALTHY", x.Key, x.Value.Description ?? "Health check failed."))
+                .ToList();
+
+            await context.Response.WriteAsJsonAsync(
+                ApiResponse.Fail("Health check failed.", errors, context.TraceIdentifier));
+            return;
+        }
+
+        await context.Response.WriteAsJsonAsync(
+            ApiResponse.Ok(payload, "Health check completed.", context.TraceIdentifier));
     }
 }

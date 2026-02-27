@@ -1,13 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Serilog;
 using System.Text;
+using System.Threading.RateLimiting;
 using TOD.Platform.AspNetCore;
 using TOD.Platform.AspNetCore.Filters;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Identity;
+using TOD.Platform.SharedKernel.Responses;
 
 var builder = WebApplication.CreateBuilder(args);
+SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    loggerConfiguration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext();
+});
 
 // Add services to the container.
 builder.Services.AddTodPlatformDefaults();
@@ -62,6 +76,34 @@ builder.Services.AddAuthorization(options =>
         .AddAuthenticationSchemes("ServiceScheme"));
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ip,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponse.Fail(
+                "Too many requests.",
+                [new ApiError("RATE_LIMITED", null, "Too many requests. Please try again later.")],
+                context.HttpContext.TraceIdentifier),
+            cancellationToken: cancellationToken);
+    };
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -99,9 +141,12 @@ if (app.Environment.IsDevelopment())
 app.UseTodPlatformDefaults();
 app.UseRequestResponseLogging();
 app.UseJwtTokenLogging();
+app.UseSecurityHeaders();
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapTodPlatformHealthChecks();
 app.MapControllers();
 
 var summaries = new[]

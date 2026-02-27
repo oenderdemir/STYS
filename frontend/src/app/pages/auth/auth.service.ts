@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl, getSessionInactivityTimeoutMs } from '../../core/config';
-import { LoginRequestDto, LoginResponseDto } from './dto';
+import { ChangePasswordRequestDto, LoginRequestDto, LoginResponseDto } from './dto';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -35,6 +35,24 @@ export class AuthService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Login request failed.');
+            })
+        );
+    }
+
+    changePassword(currentPassword: string, newPassword: string, newPassword2: string): Observable<LoginResponseDto> {
+        const request: ChangePasswordRequestDto = {
+            currentPassword,
+            newPassword,
+            newPassword2
+        };
+
+        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/changepassword`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Change password request failed.');
             })
         );
     }

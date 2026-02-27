@@ -56,6 +56,7 @@ public class EfIdentityStore : IIdentityStore<Guid>
             throw new InvalidOperationException("User was not found.");
         }
 
+        user.Status = Common.Enums.UserStatus.Standard;
         user.PasswordHash = newPasswordHash;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

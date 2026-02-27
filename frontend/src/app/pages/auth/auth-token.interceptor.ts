@@ -10,6 +10,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
     const normalizedUrl = request.url.toLowerCase();
     const isBackendRequest = isBackendApiRequest(normalizedUrl, apiBaseUrl);
     const isAuthRequest = normalizedUrl.includes('/auth/auth/login');
+    const isChangePasswordRequest = normalizedUrl.includes('/auth/auth/changepassword');
     const token = authService.getToken();
 
     if (isBackendRequest && !isAuthRequest && !token) {
@@ -39,7 +40,8 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
         catchError((error: unknown) => {
             if (error instanceof HttpErrorResponse && !isAuthRequest && authService.getToken()) {
                 const isUnauthorized = error.status === 401 || error.status === 0;
-                if (isUnauthorized) {
+                const shouldAutoLogout = !isChangePasswordRequest;
+                if (isUnauthorized && shouldAutoLogout) {
                     authService.logout({ reason: looksLikeExpiredToken(error) ? 'expired' : 'unauthorized' });
                 }
             }

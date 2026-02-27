@@ -200,9 +200,13 @@ public static class TodPlatformExtensions
             return (statusCode, "BASE_EXCEPTION", message);
         }
 
-        if (exception is UnauthorizedAccessException)
+        if (exception is UnauthorizedAccessException unauthorizedAccessException)
         {
-            return (401, "UNAUTHORIZED", "Unauthorized access.");
+            var message = string.IsNullOrWhiteSpace(unauthorizedAccessException.Message)
+                ? "Unauthorized access."
+                : unauthorizedAccessException.Message;
+
+            return (401, "UNAUTHORIZED", message);
         }
 
         return (500, "UNEXPECTED_ERROR", string.IsNullOrWhiteSpace(exception.Message) ? "An unexpected error occurred." : exception.Message);

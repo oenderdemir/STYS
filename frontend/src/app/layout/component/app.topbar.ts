@@ -1,16 +1,28 @@
-import { Component, inject } from '@angular/core';
-import { MenuItem } from 'primeng/api';
+import { ChangeDetectorRef, Component, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
+import { MenuItem, MessageService } from 'primeng/api';
+import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
+import { MenuModule } from 'primeng/menu';
+import { PasswordModule } from 'primeng/password';
 import { RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { StyleClassModule } from 'primeng/styleclass';
+import { ToastModule } from 'primeng/toast';
+import { HttpErrorResponse } from '@angular/common/http';
+import { ApiErrorItem, tryReadApiMessage } from '../../core/api';
 import { AppConfigurator } from './app.configurator';
 import { LayoutService } from '@/app/layout/service/layout.service';
+import { AuthService } from '../../pages/auth';
 
 @Component({
     selector: 'app-topbar',
     standalone: true,
-    imports: [RouterModule, CommonModule, StyleClassModule, AppConfigurator],
+    imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, DialogModule, PasswordModule, ButtonModule, ToastModule],
+    providers: [MessageService],
     template: ` <div class="layout-topbar">
+            <p-toast />
         <div class="layout-topbar-logo-container">
             <button class="layout-menu-button layout-topbar-action" (click)="layoutService.onMenuToggle()">
                 <i class="pi pi-bars"></i>
@@ -72,19 +84,106 @@ import { LayoutService } from '@/app/layout/service/layout.service';
                         <i class="pi pi-inbox"></i>
                         <span>Messages</span>
                     </button>
-                    <button type="button" class="layout-topbar-action">
+                    <button type="button" class="layout-topbar-action" (click)="profileMenu.toggle($event)">
                         <i class="pi pi-user"></i>
                         <span>Profile</span>
                     </button>
+                    <p-menu #profileMenu [popup]="true" [model]="profileMenuItems" appendTo="body"></p-menu>
                 </div>
             </div>
         </div>
-    </div>`
+    </div>
+
+	    <p-dialog
+	        header="Sifre Degistir"
+        [(visible)]="changePasswordDialogVisible"
+        [modal]="true"
+        [style]="{ width: '28rem', 'max-width': '95vw' }"
+        [breakpoints]="{ '960px': '95vw' }"
+    >
+        <div class="flex flex-col gap-4">
+            <div>
+                <label for="currentPassword" class="block font-medium mb-2">Mevcut Sifre</label>
+                <p-password id="currentPassword" [(ngModel)]="currentPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+            </div>
+
+            <div>
+                <label for="newPassword" class="block font-medium mb-2">Yeni Sifre</label>
+                <p-password id="newPassword" [(ngModel)]="newPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+            </div>
+
+            <div>
+                <label for="newPasswordAgain" class="block font-medium mb-2">Yeni Sifre (Tekrar)</label>
+                <p-password id="newPasswordAgain" [(ngModel)]="newPasswordAgain" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+            </div>
+
+            @if (changePasswordError) {
+                <small class="text-red-500">{{ changePasswordError }}</small>
+            }
+        </div>
+
+	        <ng-template #footer>
+	            <p-button label="Iptal" icon="pi pi-times" severity="secondary" text [disabled]="isChangingPassword" (onClick)="changePasswordDialogVisible = false" />
+	            <p-button
+	                [label]="isChangingPassword ? 'Degistiriliyor...' : 'Degistir'"
+	                icon="pi pi-check"
+	                [disabled]="isChangingPassword || !currentPassword || !newPassword || !newPasswordAgain"
+	                (onClick)="submitChangePassword()"
+	            />
+	        </ng-template>
+	    </p-dialog>
+
+        <p-dialog
+            header="Sifre Degistirme Hatasi"
+            [(visible)]="changePasswordErrorDialogVisible"
+            [modal]="true"
+            [style]="{ width: '30rem', 'max-width': '95vw' }"
+            [breakpoints]="{ '960px': '95vw' }"
+        >
+            <div class="flex flex-col gap-3">
+                <span>Islem tamamlanamadi. Lutfen hata detaylarini kontrol edin.</span>
+                <ul class="m-0 pl-5">
+                    @for (detail of changePasswordErrorDetails; track $index) {
+                        <li>{{ detail }}</li>
+                    }
+                </ul>
+            </div>
+
+            <ng-template #footer>
+                <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="changePasswordErrorDialogVisible = false" />
+            </ng-template>
+        </p-dialog>`
 })
 export class AppTopbar {
-    items!: MenuItem[];
-
     layoutService = inject(LayoutService);
+    private readonly authService = inject(AuthService);
+    private readonly messageService = inject(MessageService);
+    private readonly cdr = inject(ChangeDetectorRef);
+
+    changePasswordDialogVisible = false;
+    changePasswordErrorDialogVisible = false;
+    isChangingPassword = false;
+    currentPassword = '';
+    newPassword = '';
+    newPasswordAgain = '';
+    changePasswordError: string | null = null;
+    changePasswordErrorDetails: string[] = [];
+
+    readonly profileMenuItems: MenuItem[] = [
+        {
+            label: 'Sifre Degistir',
+            icon: 'pi pi-key',
+            command: () => this.openChangePasswordDialog()
+        },
+        {
+            separator: true
+        },
+        {
+            label: 'Cikis',
+            icon: 'pi pi-sign-out',
+            command: () => this.handleLogout()
+        }
+    ];
 
     toggleDarkMode() {
         this.layoutService.layoutConfig.update((state) => ({
@@ -92,4 +191,138 @@ export class AppTopbar {
             darkTheme: !state.darkTheme
         }));
     }
+
+    private openChangePasswordDialog(): void {
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.newPasswordAgain = '';
+        this.changePasswordError = null;
+        this.changePasswordErrorDialogVisible = false;
+        this.changePasswordErrorDetails = [];
+        this.changePasswordDialogVisible = true;
+        this.cdr.detectChanges();
+    }
+
+    private handleLogout(): void {
+        this.authService.logout({ preserveReturnUrl: false });
+    }
+
+    submitChangePassword(): void {
+        if (this.isChangingPassword) {
+            return;
+        }
+
+        if (this.newPassword !== this.newPasswordAgain) {
+            this.changePasswordError = 'Yeni sifreler ayni degil.';
+            this.cdr.detectChanges();
+            return;
+        }
+
+        this.changePasswordError = null;
+        this.isChangingPassword = true;
+
+        this.authService
+            .changePassword(this.currentPassword, this.newPassword, this.newPasswordAgain)
+            .pipe(
+                finalize(() => {
+                    this.isChangingPassword = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.changePasswordDialogVisible = false;
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: 'Sifre degistirildi. Lutfen tekrar giris yapin.'
+                    });
+                    this.authService.logout({ preserveReturnUrl: false });
+                },
+                error: (error: unknown) => {
+                    this.openChangePasswordErrorDialog(error);
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private openChangePasswordErrorDialog(error: unknown): void {
+        this.changePasswordError = null;
+        this.changePasswordErrorDetails = this.resolveErrorDetails(error);
+        this.changePasswordErrorDialogVisible = true;
+    }
+
+    private resolveErrorDetails(error: unknown): string[] {
+        if (error instanceof HttpErrorResponse) {
+            const responseDetails = this.tryReadApiDetails(error.error);
+            if (responseDetails.length > 0) {
+                return responseDetails;
+            }
+
+            const statusMessage = tryReadApiMessage(error.error);
+            if (statusMessage) {
+                return [statusMessage];
+            }
+        }
+
+        const directDetails = this.tryReadApiDetails(error);
+        if (directDetails.length > 0) {
+            return directDetails;
+        }
+
+        const fallbackMessage = this.resolveErrorMessage(error);
+        return [fallbackMessage];
+    }
+
+    private tryReadApiDetails(payload: unknown): string[] {
+        if (!isRecord(payload)) {
+            return [];
+        }
+
+        const details: string[] = [];
+        const message = payload['message'];
+        if (typeof message === 'string' && message.trim().length > 0) {
+            details.push(message.trim());
+        }
+
+        const errors = payload['errors'];
+        if (Array.isArray(errors)) {
+            for (const errorItem of errors) {
+                if (!isRecord(errorItem)) {
+                    continue;
+                }
+
+                const typedItem = errorItem as Partial<ApiErrorItem>;
+                if (typeof typedItem.detail === 'string' && typedItem.detail.trim().length > 0) {
+                    details.push(typedItem.detail.trim());
+                }
+            }
+        }
+
+        return [...new Set(details)];
+    }
+
+    private resolveErrorMessage(error: unknown): string {
+        if (error instanceof HttpErrorResponse) {
+            const apiMessage = tryReadApiMessage(error.error);
+            if (apiMessage) {
+                return apiMessage;
+            }
+        }
+
+        const apiMessage = tryReadApiMessage(error);
+        if (apiMessage) {
+            return apiMessage;
+        }
+
+        if (error instanceof Error && error.message.trim().length > 0) {
+            return error.message;
+        }
+
+        return 'Sifre degistirme islemi basarisiz oldu.';
+    }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
 }

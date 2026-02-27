@@ -13,7 +13,7 @@ namespace TOD.Platform.Identity.Users.Services;
 
 public class UserService : BaseRdbmsService<UserDto, User>, IUserService
 {
-    private const string DefaultPassword = "ChangeMe123!";
+    private const string DefaultPassword = "1";
 
     private readonly IUserGroupRepository _userGroupRepository;
     private readonly IPasswordHasher _passwordHasher;

@@ -11,7 +11,7 @@ using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
-using TOD.Platform.Persistence.Extensions;
+using TOD.Platform.Persistence.Rdbms.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -42,7 +42,7 @@ builder.Services.AddSingleton(mapperConfig);
 builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
 builder.Services.AddDbContext<StysAppDbContext>(options => options.UseSqlServer(connectionString));
-builder.Services.AddBaseServicesAndRepositoriesScoped(typeof(Program).Assembly);
+builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
 builder.Services.AddTodPlatformAuthorization();

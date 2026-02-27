@@ -36,7 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="..\platform\TOD.Platform.SharedKernel\TOD.Platform.SharedKernel.csproj" />
     <ProjectReference Include="..\platform\TOD.Platform.AspNetCore\TOD.Platform.AspNetCore.csproj" />
-    <ProjectReference Include="..\platform\TOD.Platform.Persistence\TOD.Platform.Persistence.csproj" />
+    <ProjectReference Include="..\platform\TOD.Platform.Persistence.Rdbms\TOD.Platform.Persistence.Rdbms.csproj" />
     <ProjectReference Include="..\platform\TOD.Platform.Security\TOD.Platform.Security.csproj" />
     <ProjectReference Include="..\platform\TOD.Platform.Identity\TOD.Platform.Identity.csproj" />
   </ItemGroup>

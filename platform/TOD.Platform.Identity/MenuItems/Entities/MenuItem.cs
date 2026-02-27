@@ -1,5 +1,5 @@
 using TOD.Platform.Identity.MenuItemRoles.Entities;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace TOD.Platform.Identity.MenuItems.Entities;
 

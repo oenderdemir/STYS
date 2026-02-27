@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TOD.Platform.AspNetCore\TOD.Platform.AspNetCore.csproj" />
-    <ProjectReference Include="..\TOD.Platform.Persistence\TOD.Platform.Persistence.csproj" />
+    <ProjectReference Include="..\TOD.Platform.Persistence.Rdbms\TOD.Platform.Persistence.Rdbms.csproj" />
     <ProjectReference Include="..\TOD.Platform.Security\TOD.Platform.Security.csproj" />
   </ItemGroup>
 

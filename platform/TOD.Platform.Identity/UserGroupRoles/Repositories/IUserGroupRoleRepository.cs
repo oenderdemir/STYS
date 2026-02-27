@@ -1,8 +1,8 @@
 using TOD.Platform.Identity.UserGroupRoles.Entities;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace TOD.Platform.Identity.UserGroupRoles.Repositories;
 
-public interface IUserGroupRoleRepository : IBaseRepository<UserGroupRole>
+public interface IUserGroupRoleRepository : IBaseRdbmsRepository<UserGroupRole>
 {
 }

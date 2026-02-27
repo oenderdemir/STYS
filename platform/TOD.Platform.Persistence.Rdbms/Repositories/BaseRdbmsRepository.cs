@@ -1,12 +1,12 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
-using TOD.Platform.Persistence.RDBMS.Entities;
-using TOD.Platform.Persistence.RDBMS.Paging;
+using TOD.Platform.Persistence.Rdbms.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
-namespace TOD.Platform.Persistence.RDBMS.Repositories;
+namespace TOD.Platform.Persistence.Rdbms.Repositories;
 
-public class BaseRepository<TEntity, TKey> : IBaseRepository<TEntity, TKey>
+public class BaseRdbmsRepository<TEntity, TKey> : IBaseRdbmsRepository<TEntity, TKey>
     where TEntity : BaseEntity<TKey>
     where TKey : struct
 {
@@ -14,7 +14,7 @@ public class BaseRepository<TEntity, TKey> : IBaseRepository<TEntity, TKey>
     protected readonly DbSet<TEntity> DbSet;
     private readonly IMapper _mapper;
 
-    public BaseRepository(DbContext context, IMapper mapper)
+    public BaseRdbmsRepository(DbContext context, IMapper mapper)
     {
         Context = context;
         DbSet = context.Set<TEntity>();
@@ -180,10 +180,10 @@ public class BaseRepository<TEntity, TKey> : IBaseRepository<TEntity, TKey>
     }
 }
 
-public class BaseRepository<TEntity> : BaseRepository<TEntity, Guid>, IBaseRepository<TEntity>
+public class BaseRdbmsRepository<TEntity> : BaseRdbmsRepository<TEntity, Guid>, IBaseRdbmsRepository<TEntity>
     where TEntity : BaseEntity<Guid>
 {
-    public BaseRepository(DbContext context, IMapper mapper)
+    public BaseRdbmsRepository(DbContext context, IMapper mapper)
         : base(context, mapper)
     {
     }

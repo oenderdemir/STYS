@@ -2,11 +2,11 @@ using AutoMapper;
 using TOD.Platform.Identity.Roles.DTO;
 using TOD.Platform.Identity.Roles.Entities;
 using TOD.Platform.Identity.Roles.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace TOD.Platform.Identity.Roles.Services;
 
-public class RoleService : BaseService<RoleDto, Role>, IRoleService
+public class RoleService : BaseRdbmsService<RoleDto, Role>, IRoleService
 {
     private readonly IRoleRepository _roleRepository;
 

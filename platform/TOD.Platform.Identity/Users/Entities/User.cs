@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using TOD.Platform.Identity.Common.Enums;
 using TOD.Platform.Identity.UserUserGroups.Entities;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace TOD.Platform.Identity.Users.Entities;
 

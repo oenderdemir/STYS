@@ -1,11 +1,11 @@
 using System.Linq.Expressions;
-using TOD.Platform.Persistence.RDBMS.Dto;
-using TOD.Platform.Persistence.RDBMS.Entities;
-using TOD.Platform.Persistence.RDBMS.Paging;
+using TOD.Platform.Persistence.Rdbms.Dto;
+using TOD.Platform.Persistence.Rdbms.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
-namespace TOD.Platform.Persistence.RDBMS.Services;
+namespace TOD.Platform.Persistence.Rdbms.Services;
 
-public interface IBaseService<TDto, TEntity, TKey>
+public interface IBaseRdbmsService<TDto, TEntity, TKey>
     where TEntity : BaseEntity<TKey>
     where TDto : BaseRdbmsDto<TKey>
     where TKey : struct
@@ -31,7 +31,7 @@ public interface IBaseService<TDto, TEntity, TKey>
     Task<bool> AnyAsync(Expression<Func<TEntity, bool>> predicate, Func<IQueryable<TEntity>, IQueryable<TEntity>>? include = null);
 }
 
-public interface IBaseService<TDto, TEntity> : IBaseService<TDto, TEntity, Guid>
+public interface IBaseRdbmsService<TDto, TEntity> : IBaseRdbmsService<TDto, TEntity, Guid>
     where TEntity : BaseEntity<Guid>
     where TDto : BaseRdbmsDto<Guid>
 {

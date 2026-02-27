@@ -1,11 +1,11 @@
 using AutoMapper;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Users.Entities;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace TOD.Platform.Identity.Users.Repositories;
 
-public class UserRepository : BaseRepository<User>, IUserRepository
+public class UserRepository : BaseRdbmsRepository<User>, IUserRepository
 {
     public UserRepository(TodIdentityDbContext context, IMapper mapper)
         : base(context, mapper)

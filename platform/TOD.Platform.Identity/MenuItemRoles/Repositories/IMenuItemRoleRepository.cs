@@ -1,8 +1,8 @@
 using TOD.Platform.Identity.MenuItemRoles.Entities;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace TOD.Platform.Identity.MenuItemRoles.Repositories;
 
-public interface IMenuItemRoleRepository : IBaseRepository<MenuItemRole>
+public interface IMenuItemRoleRepository : IBaseRdbmsRepository<MenuItemRole>
 {
 }

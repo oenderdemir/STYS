@@ -1,6 +1,6 @@
 using TOD.Platform.Identity.Roles.Entities;
 using TOD.Platform.Identity.UserGroups.Entities;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace TOD.Platform.Identity.UserGroupRoles.Entities;
 

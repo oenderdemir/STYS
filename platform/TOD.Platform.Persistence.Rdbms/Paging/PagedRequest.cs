@@ -1,4 +1,4 @@
-namespace TOD.Platform.Persistence.RDBMS.Paging;
+namespace TOD.Platform.Persistence.Rdbms.Paging;
 
 public sealed class PagedRequest
 {

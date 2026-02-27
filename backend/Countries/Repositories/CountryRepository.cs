@@ -1,11 +1,11 @@
 using AutoMapper;
 using STYS.Countries.Entities;
 using STYS.Infrastructure.EntityFramework;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace STYS.Countries.Repositories;
 
-public class CountryRepository : BaseRepository<Country>, ICountryRepository
+public class CountryRepository : BaseRdbmsRepository<Country>, ICountryRepository
 {
     public CountryRepository(StysAppDbContext dbContext, IMapper mapper)
         : base(dbContext, mapper)

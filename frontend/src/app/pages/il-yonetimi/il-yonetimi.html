@@ -1,0 +1,84 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Il" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    #dt
+    [value]="iller"
+    [loading]="loading"
+    dataKey="id"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [tableStyle]="{ 'min-width': '50rem' }"
+    [globalFilterFields]="['ad']"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex items-center justify-between">
+            <h5 class="m-0">Il Yonetimi</h5>
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+            </p-iconfield>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th>Il Adi</th>
+            <th>Durum</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-il>
+        <tr>
+            <td>{{ il.ad }}</td>
+            <td>{{ il.aktifMi ? 'Aktif' : 'Pasif' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(il)" />
+                    @if (canManage) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteIl(il)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [header]="isEditMode ? 'Il Duzenle' : 'Yeni Il'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '30rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '90vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12">
+            <label for="ad" class="block font-medium mb-2">Il Adi</label>
+            <input id="ad" pInputText [(ngModel)]="selectedIl.ad" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 flex items-center gap-3">
+            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedIl.aktifMi" [disabled]="!canManage || saving" />
+            <label for="aktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveIl()" />
+        }
+    </ng-template>
+</p-dialog>

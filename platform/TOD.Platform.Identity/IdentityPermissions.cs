@@ -26,4 +26,3 @@ public static class IdentityPermissions
         public const string Manage = "MenuManagement.Manage";
     }
 }
-

@@ -1,0 +1,117 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Tesis" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    #dt
+    [value]="tesisler"
+    [loading]="loading"
+    dataKey="id"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [tableStyle]="{ 'min-width': '70rem' }"
+    [globalFilterFields]="['ad', 'telefon', 'adres']"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex items-center justify-between">
+            <h5 class="m-0">Tesis Yonetimi</h5>
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+            </p-iconfield>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th>Tesis Adi</th>
+            <th>Il</th>
+            <th>Telefon</th>
+            <th>Adres</th>
+            <th>Durum</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-tesis>
+        <tr>
+            <td>{{ tesis.ad }}</td>
+            <td>{{ getIlAdi(tesis.ilId) }}</td>
+            <td>{{ tesis.telefon }}</td>
+            <td>{{ tesis.adres }}</td>
+            <td>{{ tesis.aktifMi ? 'Aktif' : 'Pasif' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(tesis)" />
+                    @if (canManage) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteTesis(tesis)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [header]="isEditMode ? 'Tesis Duzenle' : 'Yeni Tesis'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '40rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '95vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6">
+            <label for="ad" class="block font-medium mb-2">Tesis Adi</label>
+            <input id="ad" pInputText [(ngModel)]="selectedTesis.ad" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="ilId" class="block font-medium mb-2">Il</label>
+            <p-select
+                inputId="ilId"
+                [options]="iller"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedTesis.ilId"
+                [showClear]="true"
+                [filter]="true"
+                appendTo="body"
+                class="w-full"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="telefon" class="block font-medium mb-2">Telefon</label>
+            <input id="telefon" pInputText [(ngModel)]="selectedTesis.telefon" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="eposta" class="block font-medium mb-2">Eposta</label>
+            <input id="eposta" pInputText [(ngModel)]="selectedTesis.eposta" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12">
+            <label for="adres" class="block font-medium mb-2">Adres</label>
+            <input id="adres" pInputText [(ngModel)]="selectedTesis.adres" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 flex items-center gap-3">
+            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedTesis.aktifMi" [disabled]="!canManage || saving" />
+            <label for="aktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveTesis()" />
+        }
+    </ng-template>
+</p-dialog>

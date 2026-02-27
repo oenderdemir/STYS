@@ -1,0 +1,130 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Oda" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    #dt
+    [value]="odalar"
+    [loading]="loading"
+    dataKey="id"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [tableStyle]="{ 'min-width': '70rem' }"
+    [globalFilterFields]="['odaNo']"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex items-center justify-between">
+            <h5 class="m-0">Oda Yonetimi</h5>
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+            </p-iconfield>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th>Oda No</th>
+            <th>Bina</th>
+            <th>Oda Tipi</th>
+            <th>Kat No</th>
+            <th>Yatak Sayisi</th>
+            <th>Durum</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-oda>
+        <tr>
+            <td>{{ oda.odaNo }}</td>
+            <td>{{ getBinaAdi(oda.binaId) }}</td>
+            <td>{{ getOdaTipiAdi(oda.odaTipiId) }}</td>
+            <td>{{ oda.katNo }}</td>
+            <td>{{ oda.yatakSayisi ?? '-' }}</td>
+            <td>{{ oda.aktifMi ? 'Aktif' : 'Pasif' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(oda)" />
+                    @if (canManage) {
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteOda(oda)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [header]="isEditMode ? 'Oda Duzenle' : 'Yeni Oda'"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '40rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '95vw' }"
+>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6">
+            <label for="odaNo" class="block font-medium mb-2">Oda No</label>
+            <input id="odaNo" pInputText [(ngModel)]="selectedOda.odaNo" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="katNo" class="block font-medium mb-2">Kat No</label>
+            <p-inputnumber inputId="katNo" [(ngModel)]="selectedOda.katNo" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="binaId" class="block font-medium mb-2">Bina</label>
+            <p-select
+                inputId="binaId"
+                [options]="binalar"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedOda.binaId"
+                [showClear]="true"
+                [filter]="true"
+                appendTo="body"
+                class="w-full"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="odaTipiId" class="block font-medium mb-2">Oda Tipi</label>
+            <p-select
+                inputId="odaTipiId"
+                [options]="odaTipleri"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedOda.odaTipiId"
+                [showClear]="true"
+                [filter]="true"
+                appendTo="body"
+                class="w-full"
+                [disabled]="!canManage || saving"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="yatakSayisi" class="block font-medium mb-2">Yatak Sayisi</label>
+            <p-inputnumber inputId="yatakSayisi" [(ngModel)]="selectedOda.yatakSayisi" [min]="0" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
+            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedOda.aktifMi" [disabled]="!canManage || saving" />
+            <label for="aktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveOda()" />
+        }
+    </ng-template>
+</p-dialog>

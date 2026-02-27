@@ -15,6 +15,7 @@ using TOD.Platform.Persistence.Rdbms.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
+const string frontendCorsPolicy = "FrontendDevCors";
 
 builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 {
@@ -47,6 +48,20 @@ builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assem
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
 builder.Services.AddTodPlatformAuthorization();
 builder.Services.AddTodPlatformRateLimiting(builder.Configuration);
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendCorsPolicy, policyBuilder =>
+    {
+        policyBuilder
+            .WithOrigins(
+                "http://localhost:4200",
+                "https://localhost:4200",
+                "http://localhost:4201",
+                "https://localhost:4201")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -87,6 +102,7 @@ app.UseRequestResponseLogging();
 app.UseJwtTokenLogging();
 app.UseSecurityHeaders();
 app.UseHttpsRedirection();
+app.UseCors(frontendCorsPolicy);
 app.UseTodPlatformRateLimiting();
 app.UseAuthentication();
 app.UseAuthorization();

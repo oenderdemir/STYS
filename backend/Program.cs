@@ -1,12 +1,17 @@
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
+using STYS.Countries.Mapping;
+using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.AspNetCore;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
+using TOD.Platform.Persistence.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -20,10 +25,24 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 });
 
 // Add services to the container.
+var connectionString = builder.Configuration.GetConnectionString("TodIdentityDbConnection")
+    ?? throw new InvalidOperationException("Connection string 'TodIdentityDbConnection' is required.");
+
 builder.Services.AddTodPlatformDefaults();
 builder.Services.AddTodPlatformIdentity(
-    options => options.UseSqlServer(builder.Configuration.GetConnectionString("TodIdentityDbConnection")),
+    options => options.UseSqlServer(connectionString),
     builder.Configuration);
+
+var mapperConfig = new MapperConfiguration(cfg =>
+{
+    cfg.AddMaps(typeof(TOD.Platform.Identity.DependencyInjection).Assembly);
+    cfg.AddMaps(typeof(CountryProfile).Assembly);
+}, NullLoggerFactory.Instance);
+builder.Services.AddSingleton(mapperConfig);
+builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
+
+builder.Services.AddDbContext<StysAppDbContext>(options => options.UseSqlServer(connectionString));
+builder.Services.AddBaseServicesAndRepositoriesScoped(typeof(Program).Assembly);
 
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
 builder.Services.AddTodPlatformAuthorization();

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TOD.Platform.Identity.Roles.Controllers;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Infrastructure.Stores;
-using TOD.Platform.Persistence.Extensions;
+using TOD.Platform.Persistence.Rdbms.Extensions;
 using TOD.Platform.Security;
 
 namespace TOD.Platform.Identity;
@@ -30,7 +30,7 @@ public static class DependencyInjection
         services.AddSingleton(mapperConfig);
         services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
-        services.AddBaseServicesAndRepositoriesScoped(typeof(DependencyInjection).Assembly);
+        services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(DependencyInjection).Assembly);
 
         services.AddControllers()
             .AddApplicationPart(typeof(RoleController).Assembly);

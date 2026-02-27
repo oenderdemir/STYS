@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Countries.Entities;
 

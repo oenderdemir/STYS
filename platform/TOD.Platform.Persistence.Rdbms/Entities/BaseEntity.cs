@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace TOD.Platform.Persistence.RDBMS.Entities;
+namespace TOD.Platform.Persistence.Rdbms.Entities;
 
 public abstract class BaseEntity<TKey> where TKey : struct
 {

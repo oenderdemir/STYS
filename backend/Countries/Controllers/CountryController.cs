@@ -4,7 +4,7 @@ using STYS.Countries.Dto;
 using STYS.Countries.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
-using TOD.Platform.Persistence.RDBMS.Paging;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Countries.Controllers;
 

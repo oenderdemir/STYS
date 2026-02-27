@@ -2,11 +2,11 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Roles.Entities;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace TOD.Platform.Identity.Roles.Repositories;
 
-public class RoleRepository : BaseRepository<Role>, IRoleRepository
+public class RoleRepository : BaseRdbmsRepository<Role>, IRoleRepository
 {
     public RoleRepository(TodIdentityDbContext context, IMapper mapper)
         : base(context, mapper)

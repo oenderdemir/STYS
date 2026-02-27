@@ -5,11 +5,11 @@ using TOD.Platform.Identity.MenuItems.DTO;
 using TOD.Platform.Identity.MenuItems.Entities;
 using TOD.Platform.Identity.MenuItems.Repositories;
 using TOD.Platform.Identity.Roles.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace TOD.Platform.Identity.MenuItems.Services;
 
-public class MenuItemService : BaseService<MenuItemDto, MenuItem>, IMenuItemService
+public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuItemService
 {
     private readonly IMenuItemRepository _menuItemRepository;
     private readonly IRoleRepository _roleRepository;

@@ -1,6 +1,6 @@
 using TOD.Platform.Identity.Roles.DTO;
 using TOD.Platform.Identity.UserGroups.DTO;
-using TOD.Platform.Persistence.RDBMS.Dto;
+using TOD.Platform.Persistence.Rdbms.Dto;
 
 namespace TOD.Platform.Identity.UserGroupRoles.DTO;
 

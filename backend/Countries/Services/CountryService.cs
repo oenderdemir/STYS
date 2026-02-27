@@ -2,11 +2,11 @@ using AutoMapper;
 using STYS.Countries.Dto;
 using STYS.Countries.Entities;
 using STYS.Countries.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.Countries.Services;
 
-public class CountryService : BaseService<CountryDto, Country>, ICountryService
+public class CountryService : BaseRdbmsService<CountryDto, Country>, ICountryService
 {
     private readonly ICountryRepository _countryRepository;
 

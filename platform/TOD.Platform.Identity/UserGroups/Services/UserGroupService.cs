@@ -5,11 +5,11 @@ using TOD.Platform.Identity.UserGroupRoles.Entities;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.UserGroups.Entities;
 using TOD.Platform.Identity.UserGroups.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace TOD.Platform.Identity.UserGroups.Services;
 
-public class UserGroupService : BaseService<UserGroupDto, UserGroup>, IUserGroupService
+public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUserGroupService
 {
     private readonly IUserGroupRepository _userGroupRepository;
     private readonly IRoleRepository _roleRepository;

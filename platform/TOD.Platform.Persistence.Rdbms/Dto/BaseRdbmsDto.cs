@@ -1,4 +1,4 @@
-namespace TOD.Platform.Persistence.RDBMS.Dto;
+namespace TOD.Platform.Persistence.Rdbms.Dto;
 
 public abstract class BaseRdbmsDto<TKey> where TKey : struct
 {

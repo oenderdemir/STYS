@@ -3,11 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using TOD.Platform.Identity.UserUserGroups.DTO;
 using TOD.Platform.Identity.UserUserGroups.Entities;
 using TOD.Platform.Identity.UserUserGroups.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace TOD.Platform.Identity.UserUserGroups.Services;
 
-public class UserUserGroupService : BaseService<UserUserGroupDto, UserUserGroup>, IUserUserGroupService
+public class UserUserGroupService : BaseRdbmsService<UserUserGroupDto, UserUserGroup>, IUserUserGroupService
 {
     public UserUserGroupService(IUserUserGroupRepository userUserGroupRepository, IMapper mapper)
         : base(userUserGroupRepository, mapper)

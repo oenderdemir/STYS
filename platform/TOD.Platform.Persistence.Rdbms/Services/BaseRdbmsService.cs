@@ -1,21 +1,21 @@
 using AutoMapper;
 using System.Linq.Expressions;
-using TOD.Platform.Persistence.RDBMS.Dto;
-using TOD.Platform.Persistence.RDBMS.Entities;
-using TOD.Platform.Persistence.RDBMS.Paging;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Dto;
+using TOD.Platform.Persistence.Rdbms.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
-namespace TOD.Platform.Persistence.RDBMS.Services;
+namespace TOD.Platform.Persistence.Rdbms.Services;
 
-public class BaseService<TDto, TEntity, TKey> : IBaseService<TDto, TEntity, TKey>
+public class BaseRdbmsService<TDto, TEntity, TKey> : IBaseRdbmsService<TDto, TEntity, TKey>
     where TEntity : BaseEntity<TKey>
     where TDto : BaseRdbmsDto<TKey>
     where TKey : struct
 {
-    protected readonly IBaseRepository<TEntity, TKey> Repository;
+    protected readonly IBaseRdbmsRepository<TEntity, TKey> Repository;
     protected readonly IMapper Mapper;
 
-    public BaseService(IBaseRepository<TEntity, TKey> repository, IMapper mapper)
+    public BaseRdbmsService(IBaseRdbmsRepository<TEntity, TKey> repository, IMapper mapper)
     {
         Repository = repository;
         Mapper = mapper;
@@ -121,11 +121,11 @@ public class BaseService<TDto, TEntity, TKey> : IBaseService<TDto, TEntity, TKey
     }
 }
 
-public class BaseService<TDto, TEntity> : BaseService<TDto, TEntity, Guid>, IBaseService<TDto, TEntity>
+public class BaseRdbmsService<TDto, TEntity> : BaseRdbmsService<TDto, TEntity, Guid>, IBaseRdbmsService<TDto, TEntity>
     where TEntity : BaseEntity<Guid>
     where TDto : BaseRdbmsDto<Guid>
 {
-    public BaseService(IBaseRepository<TEntity, Guid> repository, IMapper mapper)
+    public BaseRdbmsService(IBaseRdbmsRepository<TEntity, Guid> repository, IMapper mapper)
         : base(repository, mapper)
     {
     }

@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using STYS.Countries.Entities;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
 
 namespace STYS.Infrastructure.EntityFramework;

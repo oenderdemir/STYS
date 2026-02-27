@@ -7,7 +7,7 @@ using TOD.Platform.Identity.UserGroupRoles.Entities;
 using TOD.Platform.Identity.UserGroups.Entities;
 using TOD.Platform.Identity.Users.Entities;
 using TOD.Platform.Identity.UserUserGroups.Entities;
-using TOD.Platform.Persistence.RDBMS.Entities;
+using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
 
 namespace TOD.Platform.Identity.Infrastructure.EntityFramework;

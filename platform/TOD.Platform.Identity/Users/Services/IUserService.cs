@@ -1,9 +1,9 @@
 using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Entities;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace TOD.Platform.Identity.Users.Services;
 
-public interface IUserService : IBaseService<UserDto, User>
+public interface IUserService : IBaseRdbmsService<UserDto, User>
 {
 }

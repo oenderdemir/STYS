@@ -1,10 +1,10 @@
 using System.Linq.Expressions;
-using TOD.Platform.Persistence.RDBMS.Entities;
-using TOD.Platform.Persistence.RDBMS.Paging;
+using TOD.Platform.Persistence.Rdbms.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
-namespace TOD.Platform.Persistence.RDBMS.Repositories;
+namespace TOD.Platform.Persistence.Rdbms.Repositories;
 
-public interface IBaseRepository<TEntity, TKey>
+public interface IBaseRdbmsRepository<TEntity, TKey>
     where TEntity : BaseEntity<TKey>
     where TKey : struct
 {
@@ -41,7 +41,7 @@ public interface IBaseRepository<TEntity, TKey>
     Task<TEntity?> UndoDelete(TKey id, CancellationToken cancellationToken = default);
 }
 
-public interface IBaseRepository<TEntity> : IBaseRepository<TEntity, Guid>
+public interface IBaseRdbmsRepository<TEntity> : IBaseRdbmsRepository<TEntity, Guid>
     where TEntity : BaseEntity<Guid>
 {
 }

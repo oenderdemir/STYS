@@ -1,4 +1,4 @@
-namespace TOD.Platform.Persistence.RDBMS.Services;
+namespace TOD.Platform.Persistence.Rdbms.Services;
 
 public interface IHashService
 {

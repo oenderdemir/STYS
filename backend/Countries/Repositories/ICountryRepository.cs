@@ -1,9 +1,9 @@
 using STYS.Countries.Entities;
-using TOD.Platform.Persistence.RDBMS.Repositories;
+using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace STYS.Countries.Repositories;
 
-public interface ICountryRepository : IBaseRepository<Country>
+public interface ICountryRepository : IBaseRdbmsRepository<Country>
 {
     Task<Country?> GetByCodeAsync(string code);
 }

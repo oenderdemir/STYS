@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.SharedKernel",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.AspNetCore", "platform\TOD.Platform.AspNetCore\TOD.Platform.AspNetCore.csproj", "{2CB6271B-5CBB-4604-896A-0D930D74966F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.Persistence", "platform\TOD.Platform.Persistence\TOD.Platform.Persistence.csproj", "{FB01EAD3-72BD-45AB-9B2C-3B3E076B1ADD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.Persistence.Rdbms", "platform\TOD.Platform.Persistence.Rdbms\TOD.Platform.Persistence.Rdbms.csproj", "{FB01EAD3-72BD-45AB-9B2C-3B3E076B1ADD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.Security", "platform\TOD.Platform.Security\TOD.Platform.Security.csproj", "{725F230F-948A-4BFE-AFF2-138DB5173D69}"
 EndProject

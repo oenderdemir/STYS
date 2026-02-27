@@ -1,14 +1,14 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using TOD.Platform.Persistence.RDBMS.Repositories;
-using TOD.Platform.Persistence.RDBMS.Services;
+using TOD.Platform.Persistence.Rdbms.Repositories;
+using TOD.Platform.Persistence.Rdbms.Services;
 
-namespace TOD.Platform.Persistence.Extensions;
+namespace TOD.Platform.Persistence.Rdbms.Extensions;
 
 public static class DependencyInjectionExtensions
 {
-    public static IServiceCollection AddBaseServicesAndRepositoriesScoped(
+    public static IServiceCollection AddBaseRdbmsServicesAndRepositoriesScoped(
         this IServiceCollection services,
         Assembly assembly)
     {
@@ -33,10 +33,10 @@ public static class DependencyInjectionExtensions
 
     private static bool IsRdbmsContract(Type contract)
     {
-        return IsAssignableToOpenGeneric(contract, typeof(IBaseRepository<>)) ||
-               IsAssignableToOpenGeneric(contract, typeof(IBaseRepository<,>)) ||
-               IsAssignableToOpenGeneric(contract, typeof(IBaseService<,>)) ||
-               IsAssignableToOpenGeneric(contract, typeof(IBaseService<,,>));
+        return IsAssignableToOpenGeneric(contract, typeof(IBaseRdbmsRepository<>)) ||
+               IsAssignableToOpenGeneric(contract, typeof(IBaseRdbmsRepository<,>)) ||
+               IsAssignableToOpenGeneric(contract, typeof(IBaseRdbmsService<,>)) ||
+               IsAssignableToOpenGeneric(contract, typeof(IBaseRdbmsService<,,>));
     }
 
     private static bool IsAssignableToOpenGeneric(Type type, Type openGenericType)

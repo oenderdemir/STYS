@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -25,7 +25,7 @@ import { IlDto, IlYonetimiService } from './il-yonetimi.service';
     templateUrl: './il-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class IlYonetimi implements OnInit, OnDestroy {
+export class IlYonetimi implements OnDestroy {
     private readonly service = inject(IlYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -47,10 +47,6 @@ export class IlYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('IlYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadIller(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -24,7 +24,7 @@ import { UlkeDto, UlkeYonetimiService } from './ulke-yonetimi.service';
     templateUrl: './ulke-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class UlkeYonetimi implements OnInit, OnDestroy {
+export class UlkeYonetimi implements OnDestroy {
     private readonly service = inject(UlkeYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -47,10 +47,6 @@ export class UlkeYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('CountryManagement.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadUlkeler(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

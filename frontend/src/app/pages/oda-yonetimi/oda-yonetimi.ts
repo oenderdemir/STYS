@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -29,7 +29,7 @@ import { OdaDto, OdaYonetimiService } from './oda-yonetimi.service';
     templateUrl: './oda-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class OdaYonetimi implements OnInit, OnDestroy {
+export class OdaYonetimi implements OnDestroy {
     private readonly service = inject(OdaYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -53,10 +53,6 @@ export class OdaYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('OdaYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadData(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

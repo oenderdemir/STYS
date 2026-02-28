@@ -60,4 +60,4 @@
     </ng-template>
 </p-table>
 
-<app-ulke-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedUlke" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-ulke-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedUlke" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

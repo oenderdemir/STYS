@@ -21,6 +21,12 @@ import { IlDto } from './il-yonetimi.dto';
             [breakpoints]="{ '960px': '90vw' }"
             (onHide)="close()"
         >
+            @if (showLockToggle) {
+                <div class="flex justify-end mb-3">
+                    <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
+                </div>
+            }
+
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12">
                     <label for="ad" class="block font-medium mb-2">Il Adi</label>
@@ -50,6 +56,7 @@ export class IlDialog implements OnChanges {
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<IlDto>();
+    @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: IlDto = { ad: '', aktifMi: true };
 
@@ -59,6 +66,22 @@ export class IlDialog implements OnChanges {
 
     get showSaveButton(): boolean {
         return this.mode !== 'view' && this.canManage;
+    }
+
+    get showLockToggle(): boolean {
+        return this.canManage && this.mode !== 'create';
+    }
+
+    get lockIcon(): string {
+        return this.mode === 'view' ? 'pi pi-lock' : 'pi pi-lock-open';
+    }
+
+    get lockSeverity(): 'danger' | 'success' {
+        return this.mode === 'view' ? 'danger' : 'success';
+    }
+
+    get lockAriaLabel(): string {
+        return this.mode === 'view' ? 'Kilitli' : 'Kilit acik';
     }
 
     get saveButtonLabel(): string {
@@ -101,6 +124,20 @@ export class IlDialog implements OnChanges {
             ad: this.workingModel.ad.trim(),
             aktifMi: this.workingModel.aktifMi
         });
+    }
+
+    toggleLockMode(): void {
+        if (!this.canManage || this.mode === 'create') {
+            return;
+        }
+
+        if (this.mode === 'view') {
+            this.modeChange.emit('edit');
+            return;
+        }
+
+        this.workingModel = { ...this.model };
+        this.modeChange.emit('view');
     }
 
     close(): void {

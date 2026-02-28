@@ -68,4 +68,4 @@
     </ng-template>
 </p-table>
 
-<app-oda-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOda" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-oda-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOda" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

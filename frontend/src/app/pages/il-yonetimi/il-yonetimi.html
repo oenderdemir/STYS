@@ -88,4 +88,4 @@
     </ng-template>
 </p-table>
 
-<app-il-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedIl" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-il-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedIl" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

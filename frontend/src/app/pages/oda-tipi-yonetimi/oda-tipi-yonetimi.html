@@ -70,4 +70,4 @@
     </ng-template>
 </p-table>
 
-<app-oda-tipi-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOdaTipi" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-oda-tipi-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOdaTipi" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

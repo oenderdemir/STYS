@@ -112,5 +112,15 @@
     </ng-template>
 </p-table>
 
-<app-bina-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedBina" [tesisler]="tesisler" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
-<app-oda-dialog [(visible)]="odaViewDialogVisible" [mode]="odaViewMode" [model]="selectedOdaForView" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="false" [canManage]="false" />
+<app-bina-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedBina" [tesisler]="tesisler" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />
+<app-oda-dialog
+    [(visible)]="odaViewDialogVisible"
+    [mode]="odaViewMode"
+    [model]="selectedOdaForView"
+    [binalar]="binalar"
+    [odaTipleri]="odaTipleri"
+    [saving]="odaViewSaving"
+    [canManage]="canManageOda"
+    (save)="onOdaDialogSave($event)"
+    (modeChange)="odaViewMode = $event"
+/>

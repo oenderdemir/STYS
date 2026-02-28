@@ -62,4 +62,4 @@
     </ng-template>
 </p-table>
 
-<app-isletme-alani-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedAlan" [binalar]="binalar" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-isletme-alani-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedAlan" [binalar]="binalar" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

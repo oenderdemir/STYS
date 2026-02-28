@@ -18,6 +18,7 @@ import { AuthService } from '../auth';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
 import { OdaDialog } from '../oda-yonetimi/oda-dialog';
+import { OdaYonetimiService } from '../oda-yonetimi/oda-yonetimi.service';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { BinaDialog } from './bina-dialog';
@@ -33,6 +34,7 @@ import { BinaYonetimiService } from './bina-yonetimi.service';
 })
 export class BinaYonetimi implements OnDestroy {
     private readonly service = inject(BinaYonetimiService);
+    private readonly odaService = inject(OdaYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
@@ -46,6 +48,7 @@ export class BinaYonetimi implements OnDestroy {
     dialogVisible = false;
     dialogMode: CrudDialogMode = 'create';
     odaViewMode: CrudDialogMode = 'view';
+    odaViewSaving = false;
     odaViewDialogVisible = false;
     selectedOdaForView: OdaDto = this.getEmptyOdaForView();
     pageNumber = 1;
@@ -62,6 +65,10 @@ export class BinaYonetimi implements OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('BinaYonetimi.Manage');
+    }
+
+    get canManageOda(): boolean {
+        return this.authService.hasPermission('OdaYonetimi.Manage');
     }
 
     ngOnDestroy(): void {
@@ -177,7 +184,36 @@ export class BinaYonetimi implements OnDestroy {
 
     openOdaView(oda: OdaDto): void {
         this.selectedOdaForView = { ...oda };
+        this.odaViewMode = 'view';
         this.odaViewDialogVisible = true;
+    }
+
+    onOdaDialogSave(payload: OdaDto): void {
+        if (this.odaViewSaving || this.odaViewMode !== 'edit' || !this.selectedOdaForView.id) {
+            return;
+        }
+
+        this.odaViewSaving = true;
+        this.odaService
+            .updateOda(this.selectedOdaForView.id, payload)
+            .pipe(
+                finalize(() => {
+                    this.odaViewSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.odaViewDialogVisible = false;
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda guncellendi.' });
+                    this.loadData(this.pageNumber, this.pageSize);
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     onDialogSave(payload: BinaDto): void {

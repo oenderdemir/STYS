@@ -66,4 +66,4 @@
     </ng-template>
 </p-table>
 
-<app-tesis-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedTesis" [iller]="iller" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-tesis-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedTesis" [iller]="iller" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />

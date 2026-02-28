@@ -25,6 +25,12 @@ import { OdaDto } from './oda-yonetimi.dto';
             [breakpoints]="{ '960px': '95vw' }"
             (onHide)="close()"
         >
+            @if (showLockToggle) {
+                <div class="flex justify-end mb-3">
+                    <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
+                </div>
+            }
+
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 md:col-span-6">
                     <label for="odaNo" class="block font-medium mb-2">Oda No</label>
@@ -94,6 +100,7 @@ export class OdaDialog implements OnChanges {
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<OdaDto>();
+    @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: OdaDto = { odaNo: '', binaId: 0, odaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
 
@@ -103,6 +110,22 @@ export class OdaDialog implements OnChanges {
 
     get showSaveButton(): boolean {
         return this.mode !== 'view' && this.canManage;
+    }
+
+    get showLockToggle(): boolean {
+        return this.canManage && this.mode !== 'create';
+    }
+
+    get lockIcon(): string {
+        return this.mode === 'view' ? 'pi pi-lock' : 'pi pi-lock-open';
+    }
+
+    get lockSeverity(): 'danger' | 'success' {
+        return this.mode === 'view' ? 'danger' : 'success';
+    }
+
+    get lockAriaLabel(): string {
+        return this.mode === 'view' ? 'Kilitli' : 'Kilit acik';
     }
 
     get saveButtonLabel(): string {
@@ -151,6 +174,20 @@ export class OdaDialog implements OnChanges {
             yatakSayisi: this.workingModel.yatakSayisi ?? null,
             aktifMi: this.workingModel.aktifMi
         });
+    }
+
+    toggleLockMode(): void {
+        if (!this.canManage || this.mode === 'create') {
+            return;
+        }
+
+        if (this.mode === 'view') {
+            this.modeChange.emit('edit');
+            return;
+        }
+
+        this.workingModel = { ...this.model };
+        this.modeChange.emit('view');
     }
 
     close(): void {

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -11,11 +11,11 @@ import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
-import { Table, TableModule } from 'primeng/table';
+import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import { IlDto } from '../il-yonetimi/il-yonetimi.service';
 import { TesisDto, TesisYonetimiService } from './tesis-yonetimi.service';
@@ -27,7 +27,7 @@ import { TesisDto, TesisYonetimiService } from './tesis-yonetimi.service';
     templateUrl: './tesis-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class TesisYonetimi implements OnInit {
+export class TesisYonetimi implements OnInit, OnDestroy {
     private readonly service = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -41,21 +41,54 @@ export class TesisYonetimi implements OnInit {
     saving = false;
     dialogVisible = false;
     isEditMode = false;
+    pageNumber = 1;
+    pageSize = 10;
+    totalRecords = 0;
+    searchQuery = '';
+
+    private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
         return this.authService.hasPermission('TesisYonetimi.Manage');
     }
 
     ngOnInit(): void {
-        this.loadData();
+        this.loadData(this.pageNumber, this.pageSize);
     }
 
-    onGlobalFilter(table: Table, event: Event): void {
-        table.filterGlobal((event.target as HTMLInputElement).value, 'contains');
+    ngOnDestroy(): void {
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+        }
+    }
+
+    onLazyLoad(event: LazyLoadPayload): void {
+        const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
+        const nextFirst = event.first && event.first >= 0 ? event.first : 0;
+        const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        this.pageNumber = nextPageNumber;
+        this.pageSize = nextPageSize;
+        this.loadData(this.pageNumber, this.pageSize);
+    }
+
+    onSearchInput(event: Event): void {
+        const value = (event.target as HTMLInputElement).value;
+        this.searchQuery = value;
+
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+        }
+
+        this.searchDebounceHandle = setTimeout(() => {
+            this.pageNumber = 1;
+            this.loadData(this.pageNumber, this.pageSize);
+            this.searchDebounceHandle = null;
+        }, 300);
     }
 
     refresh(): void {
-        this.loadData();
+        this.loadData(this.pageNumber, this.pageSize);
     }
 
     openNew(): void {
@@ -102,7 +135,7 @@ export class TesisYonetimi implements OnInit {
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
-                    this.loadData();
+                    this.loadData(this.pageNumber, this.pageSize);
                     this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Tesis guncellendi.' : 'Tesis olusturuldu.' });
                     this.cdr.detectChanges();
                 },
@@ -129,7 +162,7 @@ export class TesisYonetimi implements OnInit {
             accept: () => {
                 this.service.deleteTesis(tesis.id!).subscribe({
                     next: () => {
-                        this.loadData();
+                        this.loadData(this.pageNumber, this.pageSize);
                         this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Tesis silindi.' });
                         this.cdr.detectChanges();
                     },
@@ -147,10 +180,10 @@ export class TesisYonetimi implements OnInit {
         return il?.ad ?? '-';
     }
 
-    private loadData(): void {
+    private loadData(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            tesisler: this.service.getTesisler(),
+            tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery),
             iller: this.service.getIller()
         })
             .pipe(
@@ -161,7 +194,16 @@ export class TesisYonetimi implements OnInit {
             )
             .subscribe({
                 next: ({ tesisler, iller }) => {
-                    this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    if (tesisler.totalCount > 0 && tesisler.totalPages > 0 && pageNumber > tesisler.totalPages) {
+                        this.pageNumber = tesisler.totalPages;
+                        this.loadData(this.pageNumber, this.pageSize);
+                        return;
+                    }
+
+                    this.tesisler = tesisler.items;
+                    this.pageNumber = tesisler.pageNumber;
+                    this.pageSize = tesisler.pageSize;
+                    this.totalRecords = tesisler.totalCount;
                     this.iller = [...iller].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.cdr.detectChanges();
                 },

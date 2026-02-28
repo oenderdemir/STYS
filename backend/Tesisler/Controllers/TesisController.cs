@@ -3,6 +3,7 @@ using STYS.Tesisler.Dto;
 using STYS.Tesisler.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Tesisler.Controllers;
 
@@ -21,6 +22,23 @@ public class TesisController : UIController
     {
         var tesisler = await _tesisService.GetAllAsync();
         return tesisler.OrderBy(x => x.Ad).ToList();
+    }
+
+    [HttpGet("paged")]
+    [Permission(StructurePermissions.TesisYonetimi.View)]
+    public async Task<ActionResult<PagedResult<TesisDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    {
+        var normalizedQuery = query?.Trim();
+        var result = await _tesisService.GetPagedAsync(
+            request,
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery)
+                ? null
+                : x => x.Ad.Contains(normalizedQuery)
+                    || x.Telefon.Contains(normalizedQuery)
+                    || x.Adres.Contains(normalizedQuery)
+                    || (x.Eposta != null && x.Eposta.Contains(normalizedQuery)),
+            orderBy: q => q.OrderBy(x => x.Ad));
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

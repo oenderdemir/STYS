@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { IlDto } from '../il-yonetimi/il-yonetimi.service';
 
@@ -19,6 +19,24 @@ export interface TesisDto {
 export class TesisYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
+
+    getTesislerPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<TesisDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length > 0) {
+            params = params.set('q', normalizedQuery);
+        }
+
+        return this.http.get<ApiResponse<PagedResponseDto<TesisDto>>>(`${this.apiBaseUrl}/ui/tesis/paged`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis listesi alinamadi.');
+            })
+        );
+    }
 
     getTesisler(): Observable<TesisDto[]> {
         return this.http.get<ApiResponse<TesisDto[]>>(`${this.apiBaseUrl}/ui/tesis`).pipe(

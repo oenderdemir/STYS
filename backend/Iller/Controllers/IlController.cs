@@ -3,6 +3,7 @@ using STYS.Iller.Dto;
 using STYS.Iller.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Iller.Controllers;
 
@@ -21,6 +22,18 @@ public class IlController : UIController
     {
         var iller = await _ilService.GetAllAsync();
         return iller.OrderBy(x => x.Ad).ToList();
+    }
+
+    [HttpGet("paged")]
+    [Permission(StructurePermissions.IlYonetimi.View)]
+    public async Task<ActionResult<PagedResult<IlDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    {
+        var normalizedQuery = query?.Trim();
+        var result = await _ilService.GetPagedAsync(
+            request,
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
+            orderBy: q => q.OrderBy(x => x.Ad));
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

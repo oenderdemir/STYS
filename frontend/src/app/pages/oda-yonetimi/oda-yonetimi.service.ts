@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.service';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.service';
@@ -20,6 +20,24 @@ export interface OdaDto {
 export class OdaYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
+
+    getOdalarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<OdaDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length > 0) {
+            params = params.set('q', normalizedQuery);
+        }
+
+        return this.http.get<ApiResponse<PagedResponseDto<OdaDto>>>(`${this.apiBaseUrl}/ui/oda/paged`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda listesi alinamadi.');
+            })
+        );
+    }
 
     getOdalar(): Observable<OdaDto[]> {
         return this.http.get<ApiResponse<OdaDto[]>>(`${this.apiBaseUrl}/ui/oda`).pipe(

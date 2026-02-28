@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -10,11 +10,11 @@ import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
-import { Table, TableModule } from 'primeng/table';
+import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import { IlDto, IlYonetimiService } from './il-yonetimi.service';
 
@@ -25,7 +25,7 @@ import { IlDto, IlYonetimiService } from './il-yonetimi.service';
     templateUrl: './il-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class IlYonetimi implements OnInit {
+export class IlYonetimi implements OnInit, OnDestroy {
     private readonly service = inject(IlYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -38,21 +38,54 @@ export class IlYonetimi implements OnInit {
     saving = false;
     dialogVisible = false;
     isEditMode = false;
+    pageNumber = 1;
+    pageSize = 10;
+    totalRecords = 0;
+    searchQuery = '';
+
+    private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
         return this.authService.hasPermission('IlYonetimi.Manage');
     }
 
     ngOnInit(): void {
-        this.loadIller();
+        this.loadIller(this.pageNumber, this.pageSize);
     }
 
-    onGlobalFilter(table: Table, event: Event): void {
-        table.filterGlobal((event.target as HTMLInputElement).value, 'contains');
+    ngOnDestroy(): void {
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+        }
+    }
+
+    onLazyLoad(event: LazyLoadPayload): void {
+        const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
+        const nextFirst = event.first && event.first >= 0 ? event.first : 0;
+        const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        this.pageNumber = nextPageNumber;
+        this.pageSize = nextPageSize;
+        this.loadIller(this.pageNumber, this.pageSize);
+    }
+
+    onSearchInput(event: Event): void {
+        const value = (event.target as HTMLInputElement).value;
+        this.searchQuery = value;
+
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+        }
+
+        this.searchDebounceHandle = setTimeout(() => {
+            this.pageNumber = 1;
+            this.loadIller(this.pageNumber, this.pageSize);
+            this.searchDebounceHandle = null;
+        }, 300);
     }
 
     refresh(): void {
-        this.loadIller();
+        this.loadIller(this.pageNumber, this.pageSize);
     }
 
     openNew(): void {
@@ -95,7 +128,7 @@ export class IlYonetimi implements OnInit {
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
-                    this.loadIller();
+                    this.loadIller(this.pageNumber, this.pageSize);
                     this.messageService.add({
                         severity: 'success',
                         summary: 'Basarili',
@@ -126,7 +159,7 @@ export class IlYonetimi implements OnInit {
             accept: () => {
                 this.service.deleteIl(il.id!).subscribe({
                     next: () => {
-                        this.loadIller();
+                        this.loadIller(this.pageNumber, this.pageSize);
                         this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Il silindi.' });
                         this.cdr.detectChanges();
                     },
@@ -139,10 +172,10 @@ export class IlYonetimi implements OnInit {
         });
     }
 
-    private loadIller(): void {
+    private loadIller(pageNumber: number, pageSize: number): void {
         this.loading = true;
         this.service
-            .getIller()
+            .getIllerPaged(pageNumber, pageSize, this.searchQuery)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -150,8 +183,17 @@ export class IlYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: (iller) => {
-                    this.iller = [...iller].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                next: (pagedResponse) => {
+                    if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
+                        this.pageNumber = pagedResponse.totalPages;
+                        this.loadIller(this.pageNumber, this.pageSize);
+                        return;
+                    }
+
+                    this.iller = pagedResponse.items;
+                    this.pageNumber = pagedResponse.pageNumber;
+                    this.pageSize = pagedResponse.pageSize;
+                    this.totalRecords = pagedResponse.totalCount;
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

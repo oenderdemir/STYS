@@ -13,14 +13,9 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import { UlkeDto, UlkeYonetimiService } from './ulke-yonetimi.service';
-
-interface LazyLoadPayload {
-    first?: number | null;
-    rows?: number | null;
-}
 
 @Component({
     selector: 'app-ulke-yonetimi',

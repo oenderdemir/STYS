@@ -3,6 +3,7 @@ using STYS.Odalar.Dto;
 using STYS.Odalar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Odalar.Controllers;
 
@@ -21,6 +22,18 @@ public class OdaController : UIController
     {
         var odalar = await _odaService.GetAllAsync();
         return odalar.OrderBy(x => x.OdaNo).ToList();
+    }
+
+    [HttpGet("paged")]
+    [Permission(StructurePermissions.OdaYonetimi.View)]
+    public async Task<ActionResult<PagedResult<OdaDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    {
+        var normalizedQuery = query?.Trim();
+        var result = await _odaService.GetPagedAsync(
+            request,
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.OdaNo.Contains(normalizedQuery),
+            orderBy: q => q.OrderBy(x => x.OdaNo));
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

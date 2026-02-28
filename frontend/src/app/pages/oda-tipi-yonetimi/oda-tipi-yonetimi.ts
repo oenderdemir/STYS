@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -11,11 +11,11 @@ import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
-import { Table, TableModule } from 'primeng/table';
+import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import { OdaTipiDto, OdaTipiYonetimiService } from './oda-tipi-yonetimi.service';
 
@@ -26,7 +26,7 @@ import { OdaTipiDto, OdaTipiYonetimiService } from './oda-tipi-yonetimi.service'
     templateUrl: './oda-tipi-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class OdaTipiYonetimi implements OnInit {
+export class OdaTipiYonetimi implements OnInit, OnDestroy {
     private readonly service = inject(OdaTipiYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -39,21 +39,54 @@ export class OdaTipiYonetimi implements OnInit {
     saving = false;
     dialogVisible = false;
     isEditMode = false;
+    pageNumber = 1;
+    pageSize = 10;
+    totalRecords = 0;
+    searchQuery = '';
+
+    private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
         return this.authService.hasPermission('OdaTipiYonetimi.Manage');
     }
 
     ngOnInit(): void {
-        this.loadOdaTipleri();
+        this.loadOdaTipleri(this.pageNumber, this.pageSize);
     }
 
-    onGlobalFilter(table: Table, event: Event): void {
-        table.filterGlobal((event.target as HTMLInputElement).value, 'contains');
+    ngOnDestroy(): void {
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+            this.searchDebounceHandle = null;
+        }
+    }
+
+    onLazyLoad(event: LazyLoadPayload): void {
+        const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
+        const nextFirst = event.first && event.first >= 0 ? event.first : 0;
+        const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        this.pageNumber = nextPageNumber;
+        this.pageSize = nextPageSize;
+        this.loadOdaTipleri(this.pageNumber, this.pageSize);
+    }
+
+    onSearchInput(event: Event): void {
+        const value = (event.target as HTMLInputElement).value;
+        this.searchQuery = value;
+
+        if (this.searchDebounceHandle !== null) {
+            clearTimeout(this.searchDebounceHandle);
+        }
+
+        this.searchDebounceHandle = setTimeout(() => {
+            this.pageNumber = 1;
+            this.loadOdaTipleri(this.pageNumber, this.pageSize);
+            this.searchDebounceHandle = null;
+        }, 300);
     }
 
     refresh(): void {
-        this.loadOdaTipleri();
+        this.loadOdaTipleri(this.pageNumber, this.pageSize);
     }
 
     openNew(): void {
@@ -101,7 +134,7 @@ export class OdaTipiYonetimi implements OnInit {
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
-                    this.loadOdaTipleri();
+                    this.loadOdaTipleri(this.pageNumber, this.pageSize);
                     this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Oda tipi guncellendi.' : 'Oda tipi olusturuldu.' });
                     this.cdr.detectChanges();
                 },
@@ -128,7 +161,7 @@ export class OdaTipiYonetimi implements OnInit {
             accept: () => {
                 this.service.deleteOdaTipi(odaTipi.id!).subscribe({
                     next: () => {
-                        this.loadOdaTipleri();
+                        this.loadOdaTipleri(this.pageNumber, this.pageSize);
                         this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda tipi silindi.' });
                         this.cdr.detectChanges();
                     },
@@ -141,10 +174,10 @@ export class OdaTipiYonetimi implements OnInit {
         });
     }
 
-    private loadOdaTipleri(): void {
+    private loadOdaTipleri(pageNumber: number, pageSize: number): void {
         this.loading = true;
         this.service
-            .getOdaTipleri()
+            .getOdaTipleriPaged(pageNumber, pageSize, this.searchQuery)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -152,8 +185,17 @@ export class OdaTipiYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: (odaTipleri) => {
-                    this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                next: (pagedResponse) => {
+                    if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
+                        this.pageNumber = pagedResponse.totalPages;
+                        this.loadOdaTipleri(this.pageNumber, this.pageSize);
+                        return;
+                    }
+
+                    this.odaTipleri = pagedResponse.items;
+                    this.pageNumber = pagedResponse.pageNumber;
+                    this.pageSize = pagedResponse.pageSize;
+                    this.totalRecords = pagedResponse.totalCount;
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

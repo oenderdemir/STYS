@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.service';
 
@@ -17,6 +17,24 @@ export interface BinaDto {
 export class BinaYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
+
+    getBinalarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<BinaDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length > 0) {
+            params = params.set('q', normalizedQuery);
+        }
+
+        return this.http.get<ApiResponse<PagedResponseDto<BinaDto>>>(`${this.apiBaseUrl}/ui/bina/paged`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bina listesi alinamadi.');
+            })
+        );
+    }
 
     getBinalar(): Observable<BinaDto[]> {
         return this.http.get<ApiResponse<BinaDto[]>>(`${this.apiBaseUrl}/ui/bina`).pipe(

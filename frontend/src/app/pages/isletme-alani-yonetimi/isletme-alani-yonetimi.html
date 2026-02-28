@@ -11,15 +11,17 @@
 </p-toolbar>
 
 <p-table
-    #dt
     [value]="alanlar"
     [loading]="loading"
     dataKey="id"
+    [lazy]="true"
+    (onLazyLoad)="onLazyLoad($event)"
     [paginator]="true"
-    [rows]="10"
+    [rows]="pageSize"
+    [first]="(pageNumber - 1) * pageSize"
     [rowsPerPageOptions]="[10, 20, 50]"
+    [totalRecords]="totalRecords"
     [tableStyle]="{ 'min-width': '60rem' }"
-    [globalFilterFields]="['ad']"
     currentPageReportTemplate="{first} - {last} / {totalRecords}"
     [showCurrentPageReport]="true"
 >
@@ -28,7 +30,7 @@
             <h5 class="m-0">Isletme Alani Yonetimi</h5>
             <p-iconfield>
                 <p-inputicon styleClass="pi pi-search" />
-                <input pInputText type="text" placeholder="Ara..." (input)="onGlobalFilter(dt, $event)" />
+                <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ara..." (input)="onSearchInput($event)" />
             </p-iconfield>
         </div>
     </ng-template>

@@ -1,23 +1,13 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 
 export interface UlkeDto {
     id?: string | null;
     name: string;
     code: string;
-}
-
-export interface PagedResponseDto<T> {
-    items: T[];
-    pageNumber: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-    hasPreviousPage: boolean;
-    hasNextPage: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

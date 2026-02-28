@@ -3,6 +3,7 @@ using STYS.Binalar.Dto;
 using STYS.Binalar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Binalar.Controllers;
 
@@ -21,6 +22,18 @@ public class BinaController : UIController
     {
         var binalar = await _binaService.GetAllAsync();
         return binalar.OrderBy(x => x.Ad).ToList();
+    }
+
+    [HttpGet("paged")]
+    [Permission(StructurePermissions.BinaYonetimi.View)]
+    public async Task<ActionResult<PagedResult<BinaDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    {
+        var normalizedQuery = query?.Trim();
+        var result = await _binaService.GetPagedAsync(
+            request,
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
+            orderBy: q => q.OrderBy(x => x.Ad));
+        return Ok(result);
     }
 
     [HttpGet("{id:int}")]

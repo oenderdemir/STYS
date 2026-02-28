@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 
 export interface OdaTipiDto {
@@ -19,6 +19,24 @@ export interface OdaTipiDto {
 export class OdaTipiYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
+
+    getOdaTipleriPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<OdaTipiDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length > 0) {
+            params = params.set('q', normalizedQuery);
+        }
+
+        return this.http.get<ApiResponse<PagedResponseDto<OdaTipiDto>>>(`${this.apiBaseUrl}/ui/odatipi/paged`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
+            })
+        );
+    }
 
     getOdaTipleri(): Observable<OdaTipiDto[]> {
         return this.http.get<ApiResponse<OdaTipiDto[]>>(`${this.apiBaseUrl}/ui/odatipi`).pipe(

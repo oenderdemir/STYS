@@ -41,6 +41,19 @@ public class TesisController : UIController
         return Ok(result);
     }
 
+    [HttpGet("by-il/{ilId:int}")]
+    [Permission(StructurePermissions.TesisYonetimi.View)]
+    public async Task<List<TesisDto>> GetByIl(int ilId)
+    {
+        if (ilId <= 0)
+        {
+            return [];
+        }
+
+        var tesisler = await _tesisService.WhereAsync(x => x.IlId == ilId);
+        return tesisler.OrderBy(x => x.Ad).ToList();
+    }
+
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.TesisYonetimi.View)]
     public async Task<ActionResult<TesisDto>> GetById(int id)

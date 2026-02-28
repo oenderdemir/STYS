@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -17,7 +17,8 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { OdaTipiDto, OdaTipiYonetimiService } from './oda-tipi-yonetimi.service';
+import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
+import { OdaTipiYonetimiService } from './oda-tipi-yonetimi.service';
 
 @Component({
     selector: 'app-oda-tipi-yonetimi',
@@ -26,7 +27,7 @@ import { OdaTipiDto, OdaTipiYonetimiService } from './oda-tipi-yonetimi.service'
     templateUrl: './oda-tipi-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class OdaTipiYonetimi implements OnInit, OnDestroy {
+export class OdaTipiYonetimi implements OnDestroy {
     private readonly service = inject(OdaTipiYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -48,10 +49,6 @@ export class OdaTipiYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('OdaTipiYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadOdaTipleri(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

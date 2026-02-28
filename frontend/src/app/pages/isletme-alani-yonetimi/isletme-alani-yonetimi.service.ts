@@ -3,14 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.service';
-
-export interface IsletmeAlaniDto {
-    id?: number | null;
-    ad: string;
-    binaId: number;
-    aktifMi: boolean;
-}
+import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { IsletmeAlaniDto } from './isletme-alani-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class IsletmeAlaniYonetimiService {

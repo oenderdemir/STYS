@@ -3,12 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-
-export interface UlkeDto {
-    id?: string | null;
-    name: string;
-    code: string;
-}
+import { UlkeDto } from './ulke-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class UlkeYonetimiService {

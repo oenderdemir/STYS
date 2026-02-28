@@ -36,6 +36,19 @@ public class OdaController : UIController
         return Ok(result);
     }
 
+    [HttpGet("by-bina/{binaId:int}")]
+    [Permission(StructurePermissions.OdaYonetimi.View)]
+    public async Task<List<OdaDto>> GetByBina(int binaId)
+    {
+        if (binaId <= 0)
+        {
+            return [];
+        }
+
+        var odalar = await _odaService.WhereAsync(x => x.BinaId == binaId);
+        return odalar.OrderBy(x => x.OdaNo).ToList();
+    }
+
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.OdaYonetimi.View)]
     public async Task<ActionResult<OdaDto>> GetById(int id)

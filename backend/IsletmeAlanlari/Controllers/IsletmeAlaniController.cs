@@ -36,6 +36,19 @@ public class IsletmeAlaniController : UIController
         return Ok(result);
     }
 
+    [HttpGet("by-bina/{binaId:int}")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.View)]
+    public async Task<List<IsletmeAlaniDto>> GetByBina(int binaId)
+    {
+        if (binaId <= 0)
+        {
+            return [];
+        }
+
+        var alanlar = await _isletmeAlaniService.WhereAsync(x => x.BinaId == binaId);
+        return alanlar.OrderBy(x => x.Ad).ToList();
+    }
+
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.IsletmeAlaniYonetimi.View)]
     public async Task<ActionResult<IsletmeAlaniDto>> GetById(int id)

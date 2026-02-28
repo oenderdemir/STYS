@@ -3,17 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { IlDto } from '../il-yonetimi/il-yonetimi.service';
-
-export interface TesisDto {
-    id?: number | null;
-    ad: string;
-    ilId: number;
-    telefon: string;
-    adres: string;
-    eposta?: string | null;
-    aktifMi: boolean;
-}
+import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
+import { TesisDto } from './tesis-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class TesisYonetimiService {

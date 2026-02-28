@@ -3,18 +3,9 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.service';
-import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.service';
-
-export interface OdaDto {
-    id?: number | null;
-    odaNo: string;
-    binaId: number;
-    odaTipiId: number;
-    katNo: number;
-    yatakSayisi?: number | null;
-    aktifMi: boolean;
-}
+import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
+import { OdaDto } from './oda-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class OdaYonetimiService {

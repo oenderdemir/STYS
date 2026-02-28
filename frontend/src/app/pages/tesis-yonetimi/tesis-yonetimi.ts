@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -17,8 +17,9 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { IlDto } from '../il-yonetimi/il-yonetimi.service';
-import { TesisDto, TesisYonetimiService } from './tesis-yonetimi.service';
+import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
+import { TesisDto } from './tesis-yonetimi.dto';
+import { TesisYonetimiService } from './tesis-yonetimi.service';
 
 @Component({
     selector: 'app-tesis-yonetimi',
@@ -27,7 +28,7 @@ import { TesisDto, TesisYonetimiService } from './tesis-yonetimi.service';
     templateUrl: './tesis-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class TesisYonetimi implements OnInit, OnDestroy {
+export class TesisYonetimi implements OnDestroy {
     private readonly service = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -50,10 +51,6 @@ export class TesisYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('TesisYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadData(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

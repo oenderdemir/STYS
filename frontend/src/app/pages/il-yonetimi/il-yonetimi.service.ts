@@ -3,12 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-
-export interface IlDto {
-    id?: number | null;
-    ad: string;
-    aktifMi: boolean;
-}
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { IlDto } from './il-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class IlYonetimiService {
@@ -41,6 +37,18 @@ export class IlYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Il listesi alinamadi.');
+            })
+        );
+    }
+
+    getTesislerByIl(ilId: number): Observable<TesisDto[]> {
+        return this.http.get<ApiResponse<TesisDto[]>>(`${this.apiBaseUrl}/ui/tesis/by-il/${ilId}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Ile bagli tesis listesi alinamadi.');
             })
         );
     }

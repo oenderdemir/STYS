@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -16,7 +16,9 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { IlDto, IlYonetimiService } from './il-yonetimi.service';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { IlDto } from './il-yonetimi.dto';
+import { IlYonetimiService } from './il-yonetimi.service';
 
 @Component({
     selector: 'app-il-yonetimi',
@@ -25,7 +27,7 @@ import { IlDto, IlYonetimiService } from './il-yonetimi.service';
     templateUrl: './il-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class IlYonetimi implements OnInit, OnDestroy {
+export class IlYonetimi implements OnDestroy {
     private readonly service = inject(IlYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -42,15 +44,14 @@ export class IlYonetimi implements OnInit, OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    expandedRowKeys: Record<string, boolean> = {};
+    tesislerByIlId: Record<number, TesisDto[]> = {};
+    tesisLoadingByIlId: Record<number, boolean> = {};
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
         return this.authService.hasPermission('IlYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadIller(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {
@@ -86,6 +87,53 @@ export class IlYonetimi implements OnInit, OnDestroy {
 
     refresh(): void {
         this.loadIller(this.pageNumber, this.pageSize);
+    }
+
+    onRowExpand(event: { data?: IlDto }): void {
+        const ilId = event.data?.id;
+        if (!ilId || ilId <= 0) {
+            return;
+        }
+
+        if (this.tesislerByIlId[ilId] || this.tesisLoadingByIlId[ilId]) {
+            return;
+        }
+
+        this.tesisLoadingByIlId[ilId] = true;
+        this.service
+            .getTesislerByIl(ilId)
+            .pipe(
+                finalize(() => {
+                    this.tesisLoadingByIlId[ilId] = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (tesisler) => {
+                    this.tesislerByIlId[ilId] = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getTesisler(ilId: number | null | undefined): TesisDto[] {
+        if (!ilId || ilId <= 0) {
+            return [];
+        }
+
+        return this.tesislerByIlId[ilId] ?? [];
+    }
+
+    isTesisLoading(ilId: number | null | undefined): boolean {
+        if (!ilId || ilId <= 0) {
+            return false;
+        }
+
+        return this.tesisLoadingByIlId[ilId] ?? false;
     }
 
     openNew(): void {
@@ -194,6 +242,7 @@ export class IlYonetimi implements OnInit, OnDestroy {
                     this.pageNumber = pagedResponse.pageNumber;
                     this.pageSize = pagedResponse.pageSize;
                     this.totalRecords = pagedResponse.totalCount;
+                    this.expandedRowKeys = {};
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

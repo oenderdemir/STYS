@@ -3,15 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.service';
-
-export interface BinaDto {
-    id?: number | null;
-    ad: string;
-    tesisId: number;
-    katSayisi: number;
-    aktifMi: boolean;
-}
+import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
+import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { BinaDto } from './bina-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class BinaYonetimiService {
@@ -56,6 +51,30 @@ export class BinaYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis listesi alinamadi.');
+            })
+        );
+    }
+
+    getOdalarByBina(binaId: number): Observable<OdaDto[]> {
+        return this.http.get<ApiResponse<OdaDto[]>>(`${this.apiBaseUrl}/ui/oda/by-bina/${binaId}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Binaya bagli oda listesi alinamadi.');
+            })
+        );
+    }
+
+    getAlanlarByBina(binaId: number): Observable<IsletmeAlaniDto[]> {
+        return this.http.get<ApiResponse<IsletmeAlaniDto[]>>(`${this.apiBaseUrl}/ui/isletmealani/by-bina/${binaId}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Binaya bagli isletme alani listesi alinamadi.');
             })
         );
     }

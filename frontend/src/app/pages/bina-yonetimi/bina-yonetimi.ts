@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -18,8 +18,11 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.service';
-import { BinaDto, BinaYonetimiService } from './bina-yonetimi.service';
+import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
+import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { BinaDto } from './bina-yonetimi.dto';
+import { BinaYonetimiService } from './bina-yonetimi.service';
 
 @Component({
     selector: 'app-bina-yonetimi',
@@ -28,7 +31,7 @@ import { BinaDto, BinaYonetimiService } from './bina-yonetimi.service';
     templateUrl: './bina-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class BinaYonetimi implements OnInit, OnDestroy {
+export class BinaYonetimi implements OnDestroy {
     private readonly service = inject(BinaYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -46,15 +49,15 @@ export class BinaYonetimi implements OnInit, OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    expandedRowKeys: Record<string, boolean> = {};
+    odalarByBinaId: Record<number, OdaDto[]> = {};
+    alanlarByBinaId: Record<number, IsletmeAlaniDto[]> = {};
+    detailLoadingByBinaId: Record<number, boolean> = {};
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
         return this.authService.hasPermission('BinaYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadData(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {
@@ -90,6 +93,64 @@ export class BinaYonetimi implements OnInit, OnDestroy {
 
     refresh(): void {
         this.loadData(this.pageNumber, this.pageSize);
+    }
+
+    onRowExpand(event: { data?: BinaDto }): void {
+        const binaId = event.data?.id;
+        if (!binaId || binaId <= 0) {
+            return;
+        }
+
+        if ((this.odalarByBinaId[binaId] && this.alanlarByBinaId[binaId]) || this.detailLoadingByBinaId[binaId]) {
+            return;
+        }
+
+        this.detailLoadingByBinaId[binaId] = true;
+        forkJoin({
+            odalar: this.service.getOdalarByBina(binaId),
+            alanlar: this.service.getAlanlarByBina(binaId)
+        })
+            .pipe(
+                finalize(() => {
+                    this.detailLoadingByBinaId[binaId] = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: ({ odalar, alanlar }) => {
+                    this.odalarByBinaId[binaId] = [...odalar].sort((left, right) => (left.odaNo ?? '').localeCompare(right.odaNo ?? ''));
+                    this.alanlarByBinaId[binaId] = [...alanlar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getOdalar(binaId: number | null | undefined): OdaDto[] {
+        if (!binaId || binaId <= 0) {
+            return [];
+        }
+
+        return this.odalarByBinaId[binaId] ?? [];
+    }
+
+    getAlanlar(binaId: number | null | undefined): IsletmeAlaniDto[] {
+        if (!binaId || binaId <= 0) {
+            return [];
+        }
+
+        return this.alanlarByBinaId[binaId] ?? [];
+    }
+
+    isDetailLoading(binaId: number | null | undefined): boolean {
+        if (!binaId || binaId <= 0) {
+            return false;
+        }
+
+        return this.detailLoadingByBinaId[binaId] ?? false;
     }
 
     openNew(): void {
@@ -204,6 +265,10 @@ export class BinaYonetimi implements OnInit, OnDestroy {
                     this.pageSize = binalar.pageSize;
                     this.totalRecords = binalar.totalCount;
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.expandedRowKeys = {};
+                    this.odalarByBinaId = {};
+                    this.alanlarByBinaId = {};
+                    this.detailLoadingByBinaId = {};
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

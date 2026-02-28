@@ -3,17 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-
-export interface OdaTipiDto {
-    id?: number | null;
-    ad: string;
-    paylasimliMi: boolean;
-    kapasite: number;
-    balkonVarMi: boolean;
-    klimaVarMi: boolean;
-    metrekare?: number | null;
-    aktifMi: boolean;
-}
+import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class OdaTipiYonetimiService {

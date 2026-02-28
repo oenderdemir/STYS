@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -17,8 +17,9 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.service';
-import { IsletmeAlaniDto, IsletmeAlaniYonetimiService } from './isletme-alani-yonetimi.service';
+import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { IsletmeAlaniDto } from './isletme-alani-yonetimi.dto';
+import { IsletmeAlaniYonetimiService } from './isletme-alani-yonetimi.service';
 
 @Component({
     selector: 'app-isletme-alani-yonetimi',
@@ -27,7 +28,7 @@ import { IsletmeAlaniDto, IsletmeAlaniYonetimiService } from './isletme-alani-yo
     templateUrl: './isletme-alani-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class IsletmeAlaniYonetimi implements OnInit, OnDestroy {
+export class IsletmeAlaniYonetimi implements OnDestroy {
     private readonly service = inject(IsletmeAlaniYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -50,10 +51,6 @@ export class IsletmeAlaniYonetimi implements OnInit, OnDestroy {
 
     get canManage(): boolean {
         return this.authService.hasPermission('IsletmeAlaniYonetimi.Manage');
-    }
-
-    ngOnInit(): void {
-        this.loadData(this.pageNumber, this.pageSize);
     }
 
     ngOnDestroy(): void {

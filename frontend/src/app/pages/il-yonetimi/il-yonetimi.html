@@ -14,6 +14,8 @@
     [value]="iller"
     [loading]="loading"
     dataKey="id"
+    [expandedRowKeys]="expandedRowKeys"
+    (onRowExpand)="onRowExpand($event)"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
     [paginator]="true"
@@ -37,14 +39,18 @@
 
     <ng-template #header>
         <tr>
+            <th style="width: 4rem"></th>
             <th>Il Adi</th>
             <th>Durum</th>
             <th style="width: 12rem">Islem</th>
         </tr>
     </ng-template>
 
-    <ng-template #body let-il>
+    <ng-template #body let-il let-expanded="expanded">
         <tr>
+            <td>
+                <p-button type="button" [pRowToggler]="il" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
+            </td>
             <td>{{ il.ad }}</td>
             <td>{{ il.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
@@ -52,6 +58,28 @@
                     <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(il)" />
                     @if (canManage) {
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteIl(il)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+
+    <ng-template #expandedrow let-il>
+        <tr>
+            <td colspan="4">
+                <div class="p-3">
+                    @if (isTesisLoading(il.id)) {
+                        <span class="text-color-secondary">Tesisler yukleniyor...</span>
+                    } @else if (getTesisler(il.id).length === 0) {
+                        <span class="text-color-secondary">Bu ile bagli tesis bulunmuyor.</span>
+                    } @else {
+                        <div class="flex flex-wrap gap-2">
+                            @for (tesis of getTesisler(il.id); track tesis.id) {
+                                <span class="px-2 py-1 border-round bg-surface-100">
+                                    {{ tesis.ad }} ({{ tesis.aktifMi ? 'Aktif' : 'Pasif' }})
+                                </span>
+                            }
+                        </div>
                     }
                 </div>
             </td>

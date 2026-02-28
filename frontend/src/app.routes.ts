@@ -15,6 +15,7 @@ import { OdaTipiYonetimi } from './app/pages/oda-tipi-yonetimi/oda-tipi-yonetimi
 import { OdaYonetimi } from './app/pages/oda-yonetimi/oda-yonetimi';
 import { RolYonetimi } from './app/pages/rol-yonetimi/rol-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
+import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
 
 export const appRoutes: Routes = [
     { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
@@ -31,6 +32,7 @@ export const appRoutes: Routes = [
             { path: 'kullanici-gruplar', component: KullaniciGrupYonetimi },
             { path: 'yetkiler', component: RolYonetimi },
             { path: 'menuler', component: MenuYonetimi },
+            { path: 'ulkeler', component: UlkeYonetimi },
             { path: 'iller', component: IlYonetimi },
             { path: 'tesisler', component: TesisYonetimi },
             { path: 'binalar', component: BinaYonetimi },

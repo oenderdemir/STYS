@@ -27,9 +27,16 @@ public class CountryController : UIController
 
     [HttpGet("paged")]
     [Permission(CountryPermissions.View)]
-    public Task<PagedResult<CountryDto>> GetPaged([FromQuery] PagedRequest request)
+    public async Task<ActionResult<PagedResult<CountryDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
     {
-        return _countryService.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.Name));
+        var normalizedQuery = query?.Trim();
+        var result = await _countryService.GetPagedAsync(
+            request,
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery)
+                ? null
+                : x => x.Name.Contains(normalizedQuery) || x.Code.Contains(normalizedQuery),
+            orderBy: q => q.OrderBy(x => x.Name));
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

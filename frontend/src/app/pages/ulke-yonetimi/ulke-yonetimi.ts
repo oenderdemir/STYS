@@ -6,22 +6,23 @@ import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
+import { UlkeDialog } from './ulke-dialog';
 import { UlkeDto } from './ulke-yonetimi.dto';
 import { UlkeYonetimiService } from './ulke-yonetimi.service';
 
 @Component({
     selector: 'app-ulke-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, UlkeDialog],
     templateUrl: './ulke-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -37,7 +38,7 @@ export class UlkeYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
 
     pageNumber = 1;
     pageSize = 10;
@@ -87,38 +88,29 @@ export class UlkeYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedUlke = this.getEmptyUlke();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(ulke: UlkeDto): void {
         this.selectedUlke = { ...ulke };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveUlke(): void {
-        if (!this.canManage || this.saving) {
-            return;
-        }
+    openView(ulke: UlkeDto): void {
+        this.selectedUlke = { ...ulke };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
 
-        const payload: UlkeDto = {
-            name: this.selectedUlke.name.trim(),
-            code: this.selectedUlke.code.trim().toUpperCase()
-        };
-
-        if (!payload.name) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Ulke adi zorunludur.' });
-            return;
-        }
-
-        if (!payload.code) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Ulke kodu zorunludur.' });
+    onDialogSave(payload: UlkeDto): void {
+        if (this.saving) {
             return;
         }
 
         const save$: Observable<unknown> =
-            this.isEditMode && this.selectedUlke.id
+            this.dialogMode === 'edit' && this.selectedUlke.id
                 ? this.service.updateUlke(this.selectedUlke.id, payload)
                 : this.service.createUlke(payload);
 
@@ -137,7 +129,7 @@ export class UlkeYonetimi implements OnDestroy {
                     this.messageService.add({
                         severity: 'success',
                         summary: 'Basarili',
-                        detail: this.isEditMode ? 'Ulke guncellendi.' : 'Ulke olusturuldu.'
+                        detail: this.dialogMode === 'edit' ? 'Ulke guncellendi.' : 'Ulke olusturuldu.'
                     });
                     this.cdr.detectChanges();
                 },

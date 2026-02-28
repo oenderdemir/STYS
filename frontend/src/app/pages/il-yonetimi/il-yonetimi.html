@@ -42,7 +42,7 @@
             <th style="width: 4rem"></th>
             <th>Il Adi</th>
             <th>Durum</th>
-            <th style="width: 12rem">Islem</th>
+            <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
 
@@ -55,8 +55,9 @@
             <td>{{ il.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
-                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(il)" />
+                    <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(il)" />
                     @if (canManage) {
+                        <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(il)" />
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteIl(il)" />
                     }
                 </div>
@@ -87,28 +88,4 @@
     </ng-template>
 </p-table>
 
-<p-dialog
-    [header]="isEditMode ? 'Il Duzenle' : 'Yeni Il'"
-    [(visible)]="dialogVisible"
-    [modal]="true"
-    [style]="{ width: '30rem', 'max-width': '95vw' }"
-    [breakpoints]="{ '960px': '90vw' }"
->
-    <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12">
-            <label for="ad" class="block font-medium mb-2">Il Adi</label>
-            <input id="ad" pInputText [(ngModel)]="selectedIl.ad" class="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 flex items-center gap-3">
-            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedIl.aktifMi" [disabled]="!canManage || saving" />
-            <label for="aktifMi">Aktif</label>
-        </div>
-    </div>
-
-    <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
-        @if (canManage) {
-            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveIl()" />
-        }
-    </ng-template>
-</p-dialog>
+<app-il-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedIl" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />

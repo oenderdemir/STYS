@@ -5,6 +5,7 @@ import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api
 import { getApiBaseUrl } from '../../core/config';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
+import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { BinaDto } from './bina-yonetimi.dto';
 
@@ -75,6 +76,18 @@ export class BinaYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Binaya bagli isletme alani listesi alinamadi.');
+            })
+        );
+    }
+
+    getOdaTipleri(): Observable<OdaTipiDto[]> {
+        return this.http.get<ApiResponse<OdaTipiDto[]>>(`${this.apiBaseUrl}/ui/odatipi`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
             })
         );
     }

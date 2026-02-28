@@ -1,0 +1,146 @@
+import { CommonModule } from '@angular/common';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
+import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
+import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
+import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
+import { TesisDto } from './tesis-yonetimi.dto';
+
+@Component({
+    selector: 'app-tesis-dialog',
+    standalone: true,
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, SelectModule, ToggleSwitchModule],
+    template: `
+        <p-dialog
+            [header]="dialogTitle"
+            [visible]="visible"
+            [modal]="true"
+            [style]="{ width: '40rem', 'max-width': '95vw' }"
+            [breakpoints]="{ '960px': '95vw' }"
+            (onHide)="close()"
+        >
+            <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-12 md:col-span-6">
+                    <label for="ad" class="block font-medium mb-2">Tesis Adi</label>
+                    <input id="ad" pInputText [(ngModel)]="workingModel.ad" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="ilId" class="block font-medium mb-2">Il</label>
+                    <p-select
+                        inputId="ilId"
+                        [options]="iller"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="workingModel.ilId"
+                        [showClear]="true"
+                        [filter]="true"
+                        appendTo="body"
+                        class="w-full"
+                        [disabled]="isReadOnly || saving"
+                    />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="telefon" class="block font-medium mb-2">Telefon</label>
+                    <input id="telefon" pInputText [(ngModel)]="workingModel.telefon" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="eposta" class="block font-medium mb-2">Eposta</label>
+                    <input id="eposta" pInputText [(ngModel)]="workingModel.eposta" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
+                <div class="col-span-12">
+                    <label for="adres" class="block font-medium mb-2">Adres</label>
+                    <input id="adres" pInputText [(ngModel)]="workingModel.adres" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
+                <div class="col-span-12 flex items-center gap-3">
+                    <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
+                    <label for="aktifMi">Aktif</label>
+                </div>
+            </div>
+
+            <ng-template #footer>
+                <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="close()" />
+                @if (showSaveButton) {
+                    <p-button [label]="saving ? 'Kaydediliyor...' : saveButtonLabel" icon="pi pi-check" [disabled]="saving || !canSubmit()" (onClick)="submit()" />
+                }
+            </ng-template>
+        </p-dialog>
+    `
+})
+export class TesisDialog implements OnChanges {
+    @Input() visible = false;
+    @Input() mode: CrudDialogMode = 'create';
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true };
+    @Input() iller: IlDto[] = [];
+    @Input() saving = false;
+    @Input() canManage = false;
+
+    @Output() readonly visibleChange = new EventEmitter<boolean>();
+    @Output() readonly save = new EventEmitter<TesisDto>();
+
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true };
+
+    get isReadOnly(): boolean {
+        return this.mode === 'view' || !this.canManage;
+    }
+
+    get showSaveButton(): boolean {
+        return this.mode !== 'view' && this.canManage;
+    }
+
+    get saveButtonLabel(): string {
+        return this.mode === 'edit' ? 'Guncelle' : 'Olustur';
+    }
+
+    get dialogTitle(): string {
+        if (this.mode === 'create') {
+            return 'Yeni Tesis';
+        }
+
+        if (this.mode === 'edit') {
+            return 'Tesis Duzenle';
+        }
+
+        return 'Tesis Detay';
+    }
+
+    ngOnChanges(changes: SimpleChanges): void {
+        if (changes['model']) {
+            this.workingModel = { ...this.model };
+        }
+
+        if (changes['visible'] && this.visible) {
+            this.workingModel = { ...this.model };
+        }
+    }
+
+    canSubmit(): boolean {
+        return (this.workingModel.ad?.trim() ?? '').length > 0
+            && !!this.workingModel.ilId
+            && (this.workingModel.telefon?.trim() ?? '').length > 0
+            && (this.workingModel.adres?.trim() ?? '').length > 0;
+    }
+
+    submit(): void {
+        if (!this.canManage || this.mode === 'view' || !this.canSubmit()) {
+            return;
+        }
+
+        this.save.emit({
+            id: this.workingModel.id ?? null,
+            ad: this.workingModel.ad.trim(),
+            ilId: this.workingModel.ilId,
+            telefon: this.workingModel.telefon.trim(),
+            adres: this.workingModel.adres.trim(),
+            eposta: this.workingModel.eposta?.trim() || null,
+            aktifMi: this.workingModel.aktifMi
+        });
+    }
+
+    close(): void {
+        this.visibleChange.emit(false);
+    }
+}

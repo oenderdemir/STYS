@@ -6,7 +6,6 @@ import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
@@ -15,15 +14,17 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { IlDialog } from './il-dialog';
 import { IlDto } from './il-yonetimi.dto';
 import { IlYonetimiService } from './il-yonetimi.service';
 
 @Component({
     selector: 'app-il-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule, IlDialog],
     templateUrl: './il-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -39,7 +40,7 @@ export class IlYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -138,32 +139,28 @@ export class IlYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedIl = this.getEmptyIl();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(il: IlDto): void {
         this.selectedIl = { ...il };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveIl(): void {
-        if (!this.canManage || this.saving) {
+    openView(il: IlDto): void {
+        this.selectedIl = { ...il };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    onDialogSave(payload: IlDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: IlDto = {
-            ad: this.selectedIl.ad.trim(),
-            aktifMi: this.selectedIl.aktifMi
-        };
-
-        if (!payload.ad) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Il adi zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedIl.id ? this.service.updateIl(this.selectedIl.id, payload) : this.service.createIl(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedIl.id ? this.service.updateIl(this.selectedIl.id, payload) : this.service.createIl(payload);
 
         this.saving = true;
         save$
@@ -180,7 +177,7 @@ export class IlYonetimi implements OnDestroy {
                     this.messageService.add({
                         severity: 'success',
                         summary: 'Basarili',
-                        detail: this.isEditMode ? 'Il guncellendi.' : 'Il olusturuldu.'
+                        detail: this.dialogMode === 'edit' ? 'Il guncellendi.' : 'Il olusturuldu.'
                     });
                     this.cdr.detectChanges();
                 },

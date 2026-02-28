@@ -6,25 +6,24 @@ import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
+import { TesisDialog } from './tesis-dialog';
 import { TesisDto } from './tesis-yonetimi.dto';
 import { TesisYonetimiService } from './tesis-yonetimi.service';
 
 @Component({
     selector: 'app-tesis-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, TesisDialog],
     templateUrl: './tesis-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -41,7 +40,7 @@ export class TesisYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -90,36 +89,28 @@ export class TesisYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedTesis = this.getEmptyTesis();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(tesis: TesisDto): void {
         this.selectedTesis = { ...tesis };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveTesis(): void {
-        if (!this.canManage || this.saving) {
+    openView(tesis: TesisDto): void {
+        this.selectedTesis = { ...tesis };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    onDialogSave(payload: TesisDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: TesisDto = {
-            ad: this.selectedTesis.ad.trim(),
-            ilId: this.selectedTesis.ilId,
-            telefon: this.selectedTesis.telefon.trim(),
-            adres: this.selectedTesis.adres.trim(),
-            eposta: this.selectedTesis.eposta?.trim() || null,
-            aktifMi: this.selectedTesis.aktifMi
-        };
-
-        if (!payload.ad || !payload.ilId || !payload.telefon || !payload.adres) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Ad, il, telefon ve adres alanlari zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedTesis.id ? this.service.updateTesis(this.selectedTesis.id, payload) : this.service.createTesis(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedTesis.id ? this.service.updateTesis(this.selectedTesis.id, payload) : this.service.createTesis(payload);
 
         this.saving = true;
         save$
@@ -133,7 +124,7 @@ export class TesisYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Tesis guncellendi.' : 'Tesis olusturuldu.' });
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Tesis guncellendi.' : 'Tesis olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

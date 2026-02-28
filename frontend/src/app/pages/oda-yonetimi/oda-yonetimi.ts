@@ -6,27 +6,25 @@ import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
+import { OdaDialog } from './oda-dialog';
 import { OdaDto } from './oda-yonetimi.dto';
 import { OdaYonetimiService } from './oda-yonetimi.service';
 
 @Component({
     selector: 'app-oda-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaDialog],
     templateUrl: './oda-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -44,7 +42,7 @@ export class OdaYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -93,36 +91,28 @@ export class OdaYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedOda = this.getEmptyOda();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(oda: OdaDto): void {
         this.selectedOda = { ...oda };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveOda(): void {
-        if (!this.canManage || this.saving) {
+    openView(oda: OdaDto): void {
+        this.selectedOda = { ...oda };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    onDialogSave(payload: OdaDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: OdaDto = {
-            odaNo: this.selectedOda.odaNo.trim(),
-            binaId: this.selectedOda.binaId,
-            odaTipiId: this.selectedOda.odaTipiId,
-            katNo: this.selectedOda.katNo,
-            yatakSayisi: this.selectedOda.yatakSayisi ?? null,
-            aktifMi: this.selectedOda.aktifMi
-        };
-
-        if (!payload.odaNo || !payload.binaId || !payload.odaTipiId) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Oda no, bina ve oda tipi zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedOda.id ? this.service.updateOda(this.selectedOda.id, payload) : this.service.createOda(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedOda.id ? this.service.updateOda(this.selectedOda.id, payload) : this.service.createOda(payload);
 
         this.saving = true;
         save$
@@ -136,7 +126,7 @@ export class OdaYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Oda guncellendi.' : 'Oda olusturuldu.' });
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Oda guncellendi.' : 'Oda olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

@@ -6,28 +6,28 @@ import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
+import { OdaDialog } from '../oda-yonetimi/oda-dialog';
+import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { BinaDialog } from './bina-dialog';
 import { BinaDto } from './bina-yonetimi.dto';
 import { BinaYonetimiService } from './bina-yonetimi.service';
 
 @Component({
     selector: 'app-bina-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, BinaDialog, OdaDialog],
     templateUrl: './bina-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -44,7 +44,10 @@ export class BinaYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
+    odaViewMode: CrudDialogMode = 'view';
+    odaViewDialogVisible = false;
+    selectedOdaForView: OdaDto = this.getEmptyOdaForView();
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -53,6 +56,7 @@ export class BinaYonetimi implements OnDestroy {
     odalarByBinaId: Record<number, OdaDto[]> = {};
     alanlarByBinaId: Record<number, IsletmeAlaniDto[]> = {};
     detailLoadingByBinaId: Record<number, boolean> = {};
+    odaTipleri: OdaTipiDto[] = [];
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -155,34 +159,33 @@ export class BinaYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedBina = this.getEmptyBina();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(bina: BinaDto): void {
         this.selectedBina = { ...bina };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveBina(): void {
-        if (!this.canManage || this.saving) {
+    openView(bina: BinaDto): void {
+        this.selectedBina = { ...bina };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    openOdaView(oda: OdaDto): void {
+        this.selectedOdaForView = { ...oda };
+        this.odaViewDialogVisible = true;
+    }
+
+    onDialogSave(payload: BinaDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: BinaDto = {
-            ad: this.selectedBina.ad.trim(),
-            tesisId: this.selectedBina.tesisId,
-            katSayisi: this.selectedBina.katSayisi,
-            aktifMi: this.selectedBina.aktifMi
-        };
-
-        if (!payload.ad || !payload.tesisId || payload.katSayisi <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Ad, tesis ve pozitif kat sayisi zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedBina.id ? this.service.updateBina(this.selectedBina.id, payload) : this.service.createBina(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedBina.id ? this.service.updateBina(this.selectedBina.id, payload) : this.service.createBina(payload);
 
         this.saving = true;
         save$
@@ -196,7 +199,7 @@ export class BinaYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Bina guncellendi.' : 'Bina olusturuldu.' });
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Bina guncellendi.' : 'Bina olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -244,7 +247,8 @@ export class BinaYonetimi implements OnDestroy {
         this.loading = true;
         forkJoin({
             binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery),
-            tesisler: this.service.getTesisler()
+            tesisler: this.service.getTesisler(),
+            odaTipleri: this.service.getOdaTipleri()
         })
             .pipe(
                 finalize(() => {
@@ -253,7 +257,7 @@ export class BinaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ binalar, tesisler }) => {
+                next: ({ binalar, tesisler, odaTipleri }) => {
                     if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
                         this.pageNumber = binalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -265,6 +269,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.pageSize = binalar.pageSize;
                     this.totalRecords = binalar.totalCount;
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.expandedRowKeys = {};
                     this.odalarByBinaId = {};
                     this.alanlarByBinaId = {};
@@ -298,6 +303,17 @@ export class BinaYonetimi implements OnDestroy {
             ad: '',
             tesisId: 0,
             katSayisi: 1,
+            aktifMi: true
+        };
+    }
+
+    private getEmptyOdaForView(): OdaDto {
+        return {
+            odaNo: '',
+            binaId: 0,
+            odaTipiId: 0,
+            katNo: 0,
+            yatakSayisi: null,
             aktifMi: true
         };
     }

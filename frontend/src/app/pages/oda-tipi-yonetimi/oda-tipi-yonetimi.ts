@@ -6,24 +6,23 @@ import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
+import { OdaTipiDialog } from './oda-tipi-dialog';
 import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
 import { OdaTipiYonetimiService } from './oda-tipi-yonetimi.service';
 
 @Component({
     selector: 'app-oda-tipi-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaTipiDialog],
     templateUrl: './oda-tipi-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -39,7 +38,7 @@ export class OdaTipiYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -88,37 +87,28 @@ export class OdaTipiYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedOdaTipi = this.getEmptyOdaTipi();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(odaTipi: OdaTipiDto): void {
         this.selectedOdaTipi = { ...odaTipi };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveOdaTipi(): void {
-        if (!this.canManage || this.saving) {
+    openView(odaTipi: OdaTipiDto): void {
+        this.selectedOdaTipi = { ...odaTipi };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    onDialogSave(payload: OdaTipiDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: OdaTipiDto = {
-            ad: this.selectedOdaTipi.ad.trim(),
-            paylasimliMi: this.selectedOdaTipi.paylasimliMi,
-            kapasite: this.selectedOdaTipi.kapasite,
-            balkonVarMi: this.selectedOdaTipi.balkonVarMi,
-            klimaVarMi: this.selectedOdaTipi.klimaVarMi,
-            metrekare: this.selectedOdaTipi.metrekare ?? null,
-            aktifMi: this.selectedOdaTipi.aktifMi
-        };
-
-        if (!payload.ad || payload.kapasite <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Ad ve pozitif kapasite zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedOdaTipi.id ? this.service.updateOdaTipi(this.selectedOdaTipi.id, payload) : this.service.createOdaTipi(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedOdaTipi.id ? this.service.updateOdaTipi(this.selectedOdaTipi.id, payload) : this.service.createOdaTipi(payload);
 
         this.saving = true;
         save$
@@ -132,7 +122,7 @@ export class OdaTipiYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadOdaTipleri(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Oda tipi guncellendi.' : 'Oda tipi olusturuldu.' });
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Oda tipi guncellendi.' : 'Oda tipi olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

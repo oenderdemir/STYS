@@ -42,7 +42,7 @@
             <th>Kapasite</th>
             <th>Ozellikler</th>
             <th>Durum</th>
-            <th style="width: 12rem">Islem</th>
+            <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
 
@@ -59,8 +59,9 @@
             <td>{{ odaTipi.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
-                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(odaTipi)" />
+                    <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(odaTipi)" />
                     @if (canManage) {
+                        <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(odaTipi)" />
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteOdaTipi(odaTipi)" />
                     }
                 </div>
@@ -69,48 +70,4 @@
     </ng-template>
 </p-table>
 
-<p-dialog
-    [header]="isEditMode ? 'Oda Tipi Duzenle' : 'Yeni Oda Tipi'"
-    [(visible)]="dialogVisible"
-    [modal]="true"
-    [style]="{ width: '40rem', 'max-width': '95vw' }"
-    [breakpoints]="{ '960px': '95vw' }"
->
-    <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6">
-            <label for="ad" class="block font-medium mb-2">Ad</label>
-            <input id="ad" pInputText [(ngModel)]="selectedOdaTipi.ad" class="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="kapasite" class="block font-medium mb-2">Kapasite</label>
-            <p-inputnumber inputId="kapasite" [(ngModel)]="selectedOdaTipi.kapasite" [min]="1" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="metrekare" class="block font-medium mb-2">Metrekare</label>
-            <p-inputnumber inputId="metrekare" [(ngModel)]="selectedOdaTipi.metrekare" [min]="0" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="2" styleClass="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
-            <p-toggleswitch inputId="paylasimliMi" [(ngModel)]="selectedOdaTipi.paylasimliMi" [disabled]="!canManage || saving" />
-            <label for="paylasimliMi">Paylasimli</label>
-        </div>
-        <div class="col-span-12 md:col-span-4 flex items-center gap-3">
-            <p-toggleswitch inputId="balkonVarMi" [(ngModel)]="selectedOdaTipi.balkonVarMi" [disabled]="!canManage || saving" />
-            <label for="balkonVarMi">Balkon</label>
-        </div>
-        <div class="col-span-12 md:col-span-4 flex items-center gap-3">
-            <p-toggleswitch inputId="klimaVarMi" [(ngModel)]="selectedOdaTipi.klimaVarMi" [disabled]="!canManage || saving" />
-            <label for="klimaVarMi">Klima</label>
-        </div>
-        <div class="col-span-12 md:col-span-4 flex items-center gap-3">
-            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedOdaTipi.aktifMi" [disabled]="!canManage || saving" />
-            <label for="aktifMi">Aktif</label>
-        </div>
-    </div>
-
-    <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
-        @if (canManage) {
-            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveOdaTipi()" />
-        }
-    </ng-template>
-</p-dialog>
+<app-oda-tipi-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOdaTipi" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />

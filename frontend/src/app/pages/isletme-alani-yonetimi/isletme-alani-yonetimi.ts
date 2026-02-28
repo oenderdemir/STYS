@@ -6,25 +6,24 @@ import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { DialogModule } from 'primeng/dialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { IsletmeAlaniDialog } from './isletme-alani-dialog';
 import { IsletmeAlaniDto } from './isletme-alani-yonetimi.dto';
 import { IsletmeAlaniYonetimiService } from './isletme-alani-yonetimi.service';
 
 @Component({
     selector: 'app-isletme-alani-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, IsletmeAlaniDialog],
     templateUrl: './isletme-alani-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -41,7 +40,7 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
     loading = false;
     saving = false;
     dialogVisible = false;
-    isEditMode = false;
+    dialogMode: CrudDialogMode = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -90,33 +89,28 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
 
     openNew(): void {
         this.selectedAlan = this.getEmptyAlan();
-        this.isEditMode = false;
+        this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(alan: IsletmeAlaniDto): void {
         this.selectedAlan = { ...alan };
-        this.isEditMode = true;
+        this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    saveAlan(): void {
-        if (!this.canManage || this.saving) {
+    openView(alan: IsletmeAlaniDto): void {
+        this.selectedAlan = { ...alan };
+        this.dialogMode = 'view';
+        this.dialogVisible = true;
+    }
+
+    onDialogSave(payload: IsletmeAlaniDto): void {
+        if (this.saving) {
             return;
         }
 
-        const payload: IsletmeAlaniDto = {
-            ad: this.selectedAlan.ad.trim(),
-            binaId: this.selectedAlan.binaId,
-            aktifMi: this.selectedAlan.aktifMi
-        };
-
-        if (!payload.ad || !payload.binaId) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Alan adi ve bina secimi zorunludur.' });
-            return;
-        }
-
-        const save$: Observable<unknown> = this.isEditMode && this.selectedAlan.id ? this.service.updateAlan(this.selectedAlan.id, payload) : this.service.createAlan(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedAlan.id ? this.service.updateAlan(this.selectedAlan.id, payload) : this.service.createAlan(payload);
 
         this.saving = true;
         save$
@@ -130,7 +124,7 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.isEditMode ? 'Isletme alani guncellendi.' : 'Isletme alani olusturuldu.' });
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Isletme alani guncellendi.' : 'Isletme alani olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

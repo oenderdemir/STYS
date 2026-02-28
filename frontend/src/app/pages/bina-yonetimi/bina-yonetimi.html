@@ -44,7 +44,7 @@
             <th>Tesis</th>
             <th>Kat Sayisi</th>
             <th>Durum</th>
-            <th style="width: 12rem">Islem</th>
+            <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
 
@@ -59,8 +59,9 @@
             <td>{{ bina.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
-                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(bina)" />
+                    <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(bina)" />
                     @if (canManage) {
+                        <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(bina)" />
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteBina(bina)" />
                     }
                 </div>
@@ -84,9 +85,7 @@
                             } @else {
                                 <div class="flex flex-wrap gap-2">
                                     @for (oda of getOdalar(bina.id); track oda.id) {
-                                        <span class="px-2 py-1 border-round bg-surface-100">
-                                            {{ oda.odaNo }} ({{ oda.aktifMi ? 'Aktif' : 'Pasif' }})
-                                        </span>
+                                        <p-button [label]="oda.odaNo + ' (' + (oda.aktifMi ? 'Aktif' : 'Pasif') + ')'" size="small" severity="secondary" [outlined]="true" (onClick)="openOdaView(oda)" />
                                     }
                                 </div>
                             }
@@ -113,47 +112,5 @@
     </ng-template>
 </p-table>
 
-<p-dialog
-    [header]="isEditMode ? 'Bina Duzenle' : 'Yeni Bina'"
-    [(visible)]="dialogVisible"
-    [modal]="true"
-    [style]="{ width: '35rem', 'max-width': '95vw' }"
-    [breakpoints]="{ '960px': '95vw' }"
->
-    <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6">
-            <label for="ad" class="block font-medium mb-2">Bina Adi</label>
-            <input id="ad" pInputText [(ngModel)]="selectedBina.ad" class="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="tesisId" class="block font-medium mb-2">Tesis</label>
-            <p-select
-                inputId="tesisId"
-                [options]="tesisler"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedBina.tesisId"
-                [showClear]="true"
-                [filter]="true"
-                appendTo="body"
-                class="w-full"
-                [disabled]="!canManage || saving"
-            />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="katSayisi" class="block font-medium mb-2">Kat Sayisi</label>
-            <p-inputnumber inputId="katSayisi" [(ngModel)]="selectedBina.katSayisi" [min]="1" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
-            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedBina.aktifMi" [disabled]="!canManage || saving" />
-            <label for="aktifMi">Aktif</label>
-        </div>
-    </div>
-
-    <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
-        @if (canManage) {
-            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveBina()" />
-        }
-    </ng-template>
-</p-dialog>
+<app-bina-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedBina" [tesisler]="tesisler" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />
+<app-oda-dialog [(visible)]="odaViewDialogVisible" [mode]="odaViewMode" [model]="selectedOdaForView" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="false" [canManage]="false" />

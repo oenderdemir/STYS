@@ -43,7 +43,7 @@
             <th>Kat No</th>
             <th>Yatak Sayisi</th>
             <th>Durum</th>
-            <th style="width: 12rem">Islem</th>
+            <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
 
@@ -57,8 +57,9 @@
             <td>{{ oda.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
-                    <p-button [label]="canManage ? 'Duzenle' : 'Detay'" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(oda)" />
+                    <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(oda)" />
                     @if (canManage) {
+                        <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(oda)" />
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteOda(oda)" />
                     }
                 </div>
@@ -67,66 +68,4 @@
     </ng-template>
 </p-table>
 
-<p-dialog
-    [header]="isEditMode ? 'Oda Duzenle' : 'Yeni Oda'"
-    [(visible)]="dialogVisible"
-    [modal]="true"
-    [style]="{ width: '40rem', 'max-width': '95vw' }"
-    [breakpoints]="{ '960px': '95vw' }"
->
-    <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6">
-            <label for="odaNo" class="block font-medium mb-2">Oda No</label>
-            <input id="odaNo" pInputText [(ngModel)]="selectedOda.odaNo" class="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="katNo" class="block font-medium mb-2">Kat No</label>
-            <p-inputnumber inputId="katNo" [(ngModel)]="selectedOda.katNo" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="binaId" class="block font-medium mb-2">Bina</label>
-            <p-select
-                inputId="binaId"
-                [options]="binalar"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedOda.binaId"
-                [showClear]="true"
-                [filter]="true"
-                appendTo="body"
-                class="w-full"
-                [disabled]="!canManage || saving"
-            />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="odaTipiId" class="block font-medium mb-2">Oda Tipi</label>
-            <p-select
-                inputId="odaTipiId"
-                [options]="odaTipleri"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedOda.odaTipiId"
-                [showClear]="true"
-                [filter]="true"
-                appendTo="body"
-                class="w-full"
-                [disabled]="!canManage || saving"
-            />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label for="yatakSayisi" class="block font-medium mb-2">Yatak Sayisi</label>
-            <p-inputnumber inputId="yatakSayisi" [(ngModel)]="selectedOda.yatakSayisi" [min]="0" [useGrouping]="false" styleClass="w-full" [disabled]="!canManage || saving" />
-        </div>
-        <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
-            <p-toggleswitch inputId="aktifMi" [(ngModel)]="selectedOda.aktifMi" [disabled]="!canManage || saving" />
-            <label for="aktifMi">Aktif</label>
-        </div>
-    </div>
-
-    <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
-        @if (canManage) {
-            <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveOda()" />
-        }
-    </ng-template>
-</p-dialog>
+<app-oda-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOda" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" />

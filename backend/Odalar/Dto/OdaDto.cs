@@ -12,7 +12,7 @@ public class OdaDto : BaseRdbmsDto<int>
     public int BinaId { get; set; }
 
     [Required]
-    public int OdaTipiId { get; set; }
+    public int TesisOdaTipiId { get; set; }
 
     public int KatNo { get; set; }
 

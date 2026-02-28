@@ -6,6 +6,12 @@ namespace STYS.OdaTipleri.Dto;
 public class OdaTipiDto : BaseRdbmsDto<int>
 {
     [Required]
+    public int TesisId { get; set; }
+
+    [Required]
+    public int OdaSinifiId { get; set; }
+
+    [Required]
     public string Ad { get; set; } = string.Empty;
 
     public bool PaylasimliMi { get; set; }

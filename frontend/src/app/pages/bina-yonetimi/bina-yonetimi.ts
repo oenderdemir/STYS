@@ -347,7 +347,7 @@ export class BinaYonetimi implements OnDestroy {
         return {
             odaNo: '',
             binaId: 0,
-            odaTipiId: 0,
+            tesisOdaTipiId: 0,
             katNo: 0,
             yatakSayisi: null,
             aktifMi: true

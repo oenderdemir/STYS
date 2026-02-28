@@ -4,6 +4,7 @@ using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
+using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
 using STYS.OdaTipleri.Entities;
 using STYS.Tesisler.Entities;
@@ -27,6 +28,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Tesis> Tesisler => Set<Tesis>();
     public DbSet<Bina> Binalar => Set<Bina>();
     public DbSet<IsletmeAlani> IsletmeAlanlari => Set<IsletmeAlani>();
+    public DbSet<OdaSinifi> OdaSiniflari => Set<OdaSinifi>();
     public DbSet<OdaTipi> OdaTipleri => Set<OdaTipi>();
     public DbSet<Oda> Odalar => Set<Oda>();
 
@@ -110,14 +112,37 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<OdaTipi>(entity =>
+        modelBuilder.Entity<OdaSinifi>(entity =>
         {
-            entity.ToTable("OdaTipleri", "dbo");
+            entity.ToTable("OdaSiniflari", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.Metrekare).HasColumnType("decimal(10,2)");
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
             entity.HasIndex(x => x.Ad)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+        });
+
+        modelBuilder.Entity<OdaTipi>(entity =>
+        {
+            entity.ToTable("TesisOdaTipleri", "dbo");
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Metrekare).HasColumnType("decimal(10,2)");
+            entity.HasIndex(x => new { x.TesisId, x.Ad })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.OdaTipleri)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.OdaSinifi)
+                .WithMany(x => x.OdaTipleri)
+                .HasForeignKey(x => x.OdaSinifiId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Oda>(entity =>
@@ -133,9 +158,9 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey(x => x.BinaId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(x => x.OdaTipi)
+            entity.HasOne(x => x.TesisOdaTipi)
                 .WithMany(x => x.Odalar)
-                .HasForeignKey(x => x.OdaTipiId)
+                .HasForeignKey(x => x.TesisOdaTipiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

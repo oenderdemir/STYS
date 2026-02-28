@@ -12,6 +12,7 @@ import { Landing } from './app/pages/landing/landing';
 import { MenuYonetimi } from './app/pages/menu-yonetimi/menu-yonetimi';
 import { Notfound } from './app/pages/notfound/notfound';
 import { OdaTipiYonetimi } from './app/pages/oda-tipi-yonetimi/oda-tipi-yonetimi';
+import { OdaSinifiYonetimi } from './app/pages/oda-sinifi-yonetimi/oda-sinifi-yonetimi';
 import { OdaYonetimi } from './app/pages/oda-yonetimi/oda-yonetimi';
 import { RolYonetimi } from './app/pages/rol-yonetimi/rol-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -37,6 +38,7 @@ export const appRoutes: Routes = [
             { path: 'tesisler', component: TesisYonetimi },
             { path: 'binalar', component: BinaYonetimi },
             { path: 'isletme-alanlari', component: IsletmeAlaniYonetimi },
+            { path: 'oda-siniflari', component: OdaSinifiYonetimi },
             { path: 'oda-tipleri', component: OdaTipiYonetimi },
             { path: 'odalar', component: OdaYonetimi },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes') },

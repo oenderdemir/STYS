@@ -3,6 +3,7 @@ using STYS.Binalar.Repositories;
 using STYS.Odalar.Dto;
 using STYS.Odalar.Entities;
 using STYS.Odalar.Repositories;
+using STYS.OdaTipleri.Entities;
 using STYS.OdaTipleri.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -50,7 +51,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         return await base.UpdateAsync(dto);
     }
 
-    private async Task<STYS.OdaTipleri.Entities.OdaTipi> EnsureDependenciesAsync(OdaDto dto)
+    private async Task<OdaTipi> EnsureDependenciesAsync(OdaDto dto)
     {
         var bina = await _binaRepository.GetByIdAsync(dto.BinaId);
         if (bina is null)
@@ -63,15 +64,20 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
             throw new BaseException("Pasif bina altinda oda olusturulamaz veya guncellenemez.", 400);
         }
 
-        var odaTipi = await _odaTipiRepository.GetByIdAsync(dto.OdaTipiId);
+        var odaTipi = await _odaTipiRepository.GetByIdAsync(dto.TesisOdaTipiId);
         if (odaTipi is null)
         {
-            throw new BaseException("Secilen oda tipi bulunamadi.", 400);
+            throw new BaseException("Secilen tesis oda tipi bulunamadi.", 400);
         }
 
         if (!odaTipi.AktifMi)
         {
-            throw new BaseException("Pasif oda tipi secilemez.", 400);
+            throw new BaseException("Pasif tesis oda tipi secilemez.", 400);
+        }
+
+        if (odaTipi.TesisId != bina.TesisId)
+        {
+            throw new BaseException("Secilen oda tipi, odanin bulundugu tesis ile uyumlu degil.", 400);
         }
 
         return odaTipi;
@@ -132,9 +138,9 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
             throw new BaseException("Bina secimi zorunludur.", 400);
         }
 
-        if (dto.OdaTipiId <= 0)
+        if (dto.TesisOdaTipiId <= 0)
         {
-            throw new BaseException("Oda tipi secimi zorunludur.", 400);
+            throw new BaseException("Tesis oda tipi secimi zorunludur.", 400);
         }
 
         dto.OdaNo = dto.OdaNo.Trim();

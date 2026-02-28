@@ -3,7 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class OdaTipiYonetimiService {
@@ -36,6 +37,30 @@ export class OdaTipiYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getTesisler(): Observable<TesisDto[]> {
+        return this.http.get<ApiResponse<TesisDto[]>>(`${this.apiBaseUrl}/ui/tesis`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis listesi alinamadi.');
+            })
+        );
+    }
+
+    getOdaSiniflari(): Observable<OdaSinifiDto[]> {
+        return this.http.get<ApiResponse<OdaSinifiDto[]>>(`${this.apiBaseUrl}/ui/odasinifi`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda sinifi listesi alinamadi.');
             })
         );
     }

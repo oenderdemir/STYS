@@ -2,7 +2,7 @@ export interface OdaDto {
     id?: number | null;
     odaNo: string;
     binaId: number;
-    odaTipiId: number;
+    tesisOdaTipiId: number;
     katNo: number;
     yatakSayisi?: number | null;
     aktifMi: boolean;

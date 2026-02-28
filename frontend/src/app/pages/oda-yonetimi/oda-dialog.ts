@@ -48,6 +48,7 @@ import { OdaDto } from './oda-yonetimi.dto';
                         optionLabel="ad"
                         optionValue="id"
                         [(ngModel)]="workingModel.binaId"
+                        (ngModelChange)="onBinaChange()"
                         [showClear]="true"
                         [filter]="true"
                         appendTo="body"
@@ -56,13 +57,13 @@ import { OdaDto } from './oda-yonetimi.dto';
                     />
                 </div>
                 <div class="col-span-12 md:col-span-6">
-                    <label for="odaTipiId" class="block font-medium mb-2">Oda Tipi</label>
+                    <label for="tesisOdaTipiId" class="block font-medium mb-2">Oda Tipi</label>
                     <p-select
-                        inputId="odaTipiId"
-                        [options]="odaTipleri"
+                        inputId="tesisOdaTipiId"
+                        [options]="availableOdaTipleri"
                         optionLabel="ad"
                         optionValue="id"
-                        [(ngModel)]="workingModel.odaTipiId"
+                        [(ngModel)]="workingModel.tesisOdaTipiId"
                         [showClear]="true"
                         [filter]="true"
                         appendTo="body"
@@ -92,7 +93,7 @@ import { OdaDto } from './oda-yonetimi.dto';
 export class OdaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: OdaDto = { odaNo: '', binaId: 0, odaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
+    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
     @Input() binalar: BinaDto[] = [];
     @Input() odaTipleri: OdaTipiDto[] = [];
     @Input() saving = false;
@@ -102,7 +103,16 @@ export class OdaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<OdaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: OdaDto = { odaNo: '', binaId: 0, odaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
+    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
+
+    get availableOdaTipleri(): OdaTipiDto[] {
+        const tesisId = this.getSelectedTesisId();
+        if (!tesisId) {
+            return [];
+        }
+
+        return this.odaTipleri.filter((item) => item.tesisId === tesisId);
+    }
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -157,7 +167,7 @@ export class OdaDialog implements OnChanges {
     canSubmit(): boolean {
         return (this.workingModel.odaNo?.trim() ?? '').length > 0
             && !!this.workingModel.binaId
-            && !!this.workingModel.odaTipiId;
+            && !!this.workingModel.tesisOdaTipiId;
     }
 
     submit(): void {
@@ -169,11 +179,24 @@ export class OdaDialog implements OnChanges {
             id: this.workingModel.id ?? null,
             odaNo: this.workingModel.odaNo.trim(),
             binaId: this.workingModel.binaId,
-            odaTipiId: this.workingModel.odaTipiId,
+            tesisOdaTipiId: this.workingModel.tesisOdaTipiId,
             katNo: this.workingModel.katNo,
             yatakSayisi: this.workingModel.yatakSayisi ?? null,
             aktifMi: this.workingModel.aktifMi
         });
+    }
+
+    onBinaChange(): void {
+        const tesisId = this.getSelectedTesisId();
+        if (!tesisId) {
+            this.workingModel.tesisOdaTipiId = 0;
+            return;
+        }
+
+        const existsInTesis = this.odaTipleri.some((item) => item.id === this.workingModel.tesisOdaTipiId && item.tesisId === tesisId);
+        if (!existsInTesis) {
+            this.workingModel.tesisOdaTipiId = 0;
+        }
     }
 
     toggleLockMode(): void {
@@ -192,5 +215,10 @@ export class OdaDialog implements OnChanges {
 
     close(): void {
         this.visibleChange.emit(false);
+    }
+
+    private getSelectedTesisId(): number {
+        const selectedBina = this.binalar.find((item) => item.id === this.workingModel.binaId);
+        return selectedBina?.tesisId ?? 0;
     }
 }

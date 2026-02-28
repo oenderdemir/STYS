@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Binalar.Entities;
 using STYS.Iller.Entities;
+using STYS.OdaTipleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Tesisler.Entities;
@@ -29,4 +30,6 @@ public class Tesis : BaseEntity<int>
     public Il? Il { get; set; }
 
     public ICollection<Bina> Binalar { get; set; } = [];
+
+    public ICollection<OdaTipi> OdaTipleri { get; set; } = [];
 }

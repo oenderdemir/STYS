@@ -13,7 +13,7 @@ public class Oda : BaseEntity<int>
 
     public int BinaId { get; set; }
 
-    public int OdaTipiId { get; set; }
+    public int TesisOdaTipiId { get; set; }
 
     public int KatNo { get; set; }
 
@@ -23,5 +23,5 @@ public class Oda : BaseEntity<int>
 
     public Bina? Bina { get; set; }
 
-    public OdaTipi? OdaTipi { get; set; }
+    public OdaTipi? TesisOdaTipi { get; set; }
 }

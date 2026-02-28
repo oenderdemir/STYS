@@ -5,14 +5,16 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
-import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
 
 @Component({
     selector: 'app-oda-tipi-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToggleSwitchModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -29,6 +31,36 @@ import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
             }
 
             <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-12 md:col-span-6">
+                    <label for="tesisId" class="block font-medium mb-2">Tesis</label>
+                    <p-select
+                        inputId="tesisId"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="workingModel.tesisId"
+                        [showClear]="true"
+                        [filter]="true"
+                        appendTo="body"
+                        class="w-full"
+                        [disabled]="isReadOnly || saving"
+                    />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="odaSinifiId" class="block font-medium mb-2">Oda Sinifi</label>
+                    <p-select
+                        inputId="odaSinifiId"
+                        [options]="odaSiniflari"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="workingModel.odaSinifiId"
+                        [showClear]="true"
+                        [filter]="true"
+                        appendTo="body"
+                        class="w-full"
+                        [disabled]="isReadOnly || saving"
+                    />
+                </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="ad" class="block font-medium mb-2">Ad</label>
                     <input id="ad" pInputText [(ngModel)]="workingModel.ad" class="w-full" [disabled]="isReadOnly || saving" />
@@ -71,7 +103,9 @@ import { OdaTipiDto } from './oda-tipi-yonetimi.dto';
 export class OdaTipiDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: OdaTipiDto = { ad: '', paylasimliMi: false, kapasite: 1, balkonVarMi: false, klimaVarMi: false, metrekare: null, aktifMi: true };
+    @Input() model: OdaTipiDto = { tesisId: 0, odaSinifiId: 0, ad: '', paylasimliMi: false, kapasite: 1, balkonVarMi: false, klimaVarMi: false, metrekare: null, aktifMi: true };
+    @Input() tesisler: TesisDto[] = [];
+    @Input() odaSiniflari: OdaSinifiDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -79,7 +113,7 @@ export class OdaTipiDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<OdaTipiDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: OdaTipiDto = { ad: '', paylasimliMi: false, kapasite: 1, balkonVarMi: false, klimaVarMi: false, metrekare: null, aktifMi: true };
+    workingModel: OdaTipiDto = { tesisId: 0, odaSinifiId: 0, ad: '', paylasimliMi: false, kapasite: 1, balkonVarMi: false, klimaVarMi: false, metrekare: null, aktifMi: true };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -132,7 +166,10 @@ export class OdaTipiDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return (this.workingModel.ad?.trim() ?? '').length > 0 && (this.workingModel.kapasite ?? 0) > 0;
+        return !!this.workingModel.tesisId
+            && !!this.workingModel.odaSinifiId
+            && (this.workingModel.ad?.trim() ?? '').length > 0
+            && (this.workingModel.kapasite ?? 0) > 0;
     }
 
     submit(): void {
@@ -140,11 +177,13 @@ export class OdaTipiDialog implements OnChanges {
             return;
         }
 
-        this.save.emit({
-            id: this.workingModel.id ?? null,
-            ad: this.workingModel.ad.trim(),
-            paylasimliMi: this.workingModel.paylasimliMi,
-            kapasite: this.workingModel.kapasite,
+            this.save.emit({
+                id: this.workingModel.id ?? null,
+                tesisId: this.workingModel.tesisId,
+                odaSinifiId: this.workingModel.odaSinifiId,
+                ad: this.workingModel.ad.trim(),
+                paylasimliMi: this.workingModel.paylasimliMi,
+                kapasite: this.workingModel.kapasite,
             balkonVarMi: this.workingModel.balkonVarMi,
             klimaVarMi: this.workingModel.klimaVarMi,
             metrekare: this.workingModel.metrekare ?? null,

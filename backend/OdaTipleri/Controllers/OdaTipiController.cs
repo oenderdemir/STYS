@@ -31,9 +31,24 @@ public class OdaTipiController : UIController
         var normalizedQuery = query?.Trim();
         var result = await _odaTipiService.GetPagedAsync(
             request,
-            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery)
+                ? null
+                : x => x.Ad.Contains(normalizedQuery),
             orderBy: q => q.OrderBy(x => x.Ad));
         return Ok(result);
+    }
+
+    [HttpGet("by-tesis/{tesisId:int}")]
+    [Permission(StructurePermissions.OdaTipiYonetimi.View)]
+    public async Task<List<OdaTipiDto>> GetByTesis(int tesisId)
+    {
+        if (tesisId <= 0)
+        {
+            return [];
+        }
+
+        var odaTipleri = await _odaTipiService.WhereAsync(x => x.TesisId == tesisId);
+        return odaTipleri.OrderBy(x => x.Ad).ToList();
     }
 
     [HttpGet("{id:int}")]

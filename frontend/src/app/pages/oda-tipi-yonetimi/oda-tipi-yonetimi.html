@@ -37,6 +37,8 @@
 
     <ng-template #header>
         <tr>
+            <th>Tesis</th>
+            <th>Sinif</th>
             <th>Ad</th>
             <th>Paylasim</th>
             <th>Kapasite</th>
@@ -48,6 +50,8 @@
 
     <ng-template #body let-odaTipi>
         <tr>
+            <td>{{ getTesisAdi(odaTipi.tesisId) }}</td>
+            <td>{{ getOdaSinifiAdi(odaTipi.odaSinifiId) }}</td>
             <td>{{ odaTipi.ad }}</td>
             <td>{{ odaTipi.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}</td>
             <td>{{ odaTipi.kapasite }}</td>
@@ -70,4 +74,14 @@
     </ng-template>
 </p-table>
 
-<app-oda-tipi-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOdaTipi" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />
+<app-oda-tipi-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedOdaTipi"
+    [tesisler]="tesisler"
+    [odaSiniflari]="odaSiniflari"
+    [saving]="saving"
+    [canManage]="canManage"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>

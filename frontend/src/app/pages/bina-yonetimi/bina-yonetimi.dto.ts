@@ -4,4 +4,5 @@ export interface BinaDto {
     tesisId: number;
     katSayisi: number;
     aktifMi: boolean;
+    yoneticiUserIds?: string[] | null;
 }

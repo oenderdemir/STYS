@@ -8,6 +8,10 @@ public class TesisProfile : Profile
 {
     public TesisProfile()
     {
-        CreateMap<Tesis, TesisDto>().ReverseMap();
+        CreateMap<Tesis, TesisDto>()
+            .ForMember(dest => dest.YoneticiUserIds, opt => opt.MapFrom(src => src.Yoneticiler.Select(x => x.UserId)));
+
+        CreateMap<TesisDto, Tesis>()
+            .ForMember(dest => dest.Yoneticiler, opt => opt.Ignore());
     }
 }

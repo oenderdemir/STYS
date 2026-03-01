@@ -20,6 +20,8 @@ public class Bina : BaseEntity<int>
 
     public Tesis? Tesis { get; set; }
 
+    public ICollection<BinaYonetici> Yoneticiler { get; set; } = [];
+
     public ICollection<IsletmeAlani> IsletmeAlanlari { get; set; } = [];
 
     public ICollection<Oda> Odalar { get; set; } = [];

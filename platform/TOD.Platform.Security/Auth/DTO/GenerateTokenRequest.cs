@@ -2,6 +2,8 @@ namespace TOD.Platform.Security.Auth.DTO;
 
 public class GenerateTokenRequest
 {
+    public string UserId { get; set; } = string.Empty;
+
     public string UserName { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;

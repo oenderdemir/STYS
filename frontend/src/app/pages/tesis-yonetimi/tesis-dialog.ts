@@ -79,7 +79,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true };
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
     @Input() iller: IlDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
@@ -88,7 +88,7 @@ export class TesisDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true };
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -159,7 +159,8 @@ export class TesisDialog implements OnChanges {
             telefon: this.workingModel.telefon.trim(),
             adres: this.workingModel.adres.trim(),
             eposta: this.workingModel.eposta?.trim() || null,
-            aktifMi: this.workingModel.aktifMi
+            aktifMi: this.workingModel.aktifMi,
+            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? null
         });
     }
 

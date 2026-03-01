@@ -89,6 +89,7 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
 
         var generatedToken = await _tokenService.GenerateToken(new GenerateTokenRequest
         {
+            UserId = user.Id.ToString() ?? string.Empty,
             UserName = user.UserName,
             Name = user.Name ?? string.Empty,
             Surname = user.Surname ?? string.Empty,

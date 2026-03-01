@@ -224,7 +224,8 @@ export class TesisYonetimi implements OnDestroy {
             telefon: '',
             adres: '',
             eposta: null,
-            aktifMi: true
+            aktifMi: true,
+            yoneticiUserIds: null
         };
     }
 }

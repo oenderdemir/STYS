@@ -15,4 +15,6 @@ public class BinaDto : BaseRdbmsDto<int>
     public int KatSayisi { get; set; } = 1;
 
     public bool AktifMi { get; set; } = true;
+
+    public ICollection<Guid>? YoneticiUserIds { get; set; }
 }

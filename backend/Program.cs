@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
+using STYS.AccessScope;
 using STYS.Countries.Mapping;
 using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.AspNetCore;
@@ -44,6 +45,7 @@ builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfigurat
 
 builder.Services.AddDbContext<StysAppDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
+builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
 builder.Services.AddTodPlatformAuthorization();

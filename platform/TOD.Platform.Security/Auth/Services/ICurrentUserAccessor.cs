@@ -6,6 +6,7 @@ namespace TOD.Platform.Security.Auth.Services;
 public interface ICurrentUserAccessor
 {
     string? GetCurrentUserName();
+    Guid? GetCurrentUserId();
 }
 
 public class HttpContextCurrentUserAccessor : ICurrentUserAccessor
@@ -28,5 +29,21 @@ public class HttpContextCurrentUserAccessor : ICurrentUserAccessor
         return user.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? user.FindFirstValue("userName")
             ?? user.Identity?.Name;
+    }
+
+    public Guid? GetCurrentUserId()
+    {
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return null;
+        }
+
+        var rawUserId = user.FindFirstValue("userId")
+            ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        return Guid.TryParse(rawUserId, out var userId)
+            ? userId
+            : null;
     }
 }

@@ -346,7 +346,8 @@ export class BinaYonetimi implements OnDestroy {
             ad: '',
             tesisId: 0,
             katSayisi: 1,
-            aktifMi: true
+            aktifMi: true,
+            yoneticiUserIds: null
         };
     }
 

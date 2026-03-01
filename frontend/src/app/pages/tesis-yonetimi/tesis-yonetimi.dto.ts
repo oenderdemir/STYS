@@ -6,4 +6,5 @@ export interface TesisDto {
     adres: string;
     eposta?: string | null;
     aktifMi: boolean;
+    yoneticiUserIds?: string[] | null;
 }

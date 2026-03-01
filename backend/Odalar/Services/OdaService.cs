@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Linq.Expressions;
+using STYS.AccessScope;
 using STYS.Binalar.Repositories;
 using STYS.Odalar.Dto;
 using STYS.Odalar.Entities;
@@ -24,6 +25,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
     private readonly IOdaTipiRepository _odaTipiRepository;
     private readonly IOdaOzellikRepository _odaOzellikRepository;
     private readonly IOdaOzellikDegerRepository _odaOzellikDegerRepository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public OdaService(
         IOdaRepository odaRepository,
@@ -31,6 +33,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         IOdaTipiRepository odaTipiRepository,
         IOdaOzellikRepository odaOzellikRepository,
         IOdaOzellikDegerRepository odaOzellikDegerRepository,
+        IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(odaRepository, mapper)
     {
@@ -39,6 +42,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         _odaTipiRepository = odaTipiRepository;
         _odaOzellikRepository = odaOzellikRepository;
         _odaOzellikDegerRepository = odaOzellikDegerRepository;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public override async Task<OdaDto> AddAsync(OdaDto dto)
@@ -73,17 +77,18 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
             throw new BaseException("Oda id zorunludur.", 400);
         }
 
-        Normalize(dto);
-        var odaTipi = await EnsureDependenciesAsync(dto);
-        ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
-        await EnsureUniqueActiveRoomNoAsync(dto, dto.Id.Value);
-        var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
-
         var existingEntity = await _odaRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.OdaOzellikDegerleri));
         if (existingEntity is null)
         {
             throw new BaseException("Guncellenecek oda bulunamadi.", 404);
         }
+
+        await EnsureCanAccessBinaAsync(existingEntity.BinaId);
+        Normalize(dto);
+        var odaTipi = await EnsureDependenciesAsync(dto);
+        ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
+        await EnsureUniqueActiveRoomNoAsync(dto, dto.Id.Value);
+        var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
 
         existingEntity.IsDeleted = false;
         existingEntity.OdaNo = dto.OdaNo;
@@ -101,6 +106,18 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         return Mapper.Map<OdaDto>(existingEntity);
     }
 
+    public override async Task DeleteAsync(int id)
+    {
+        var existingEntity = await _odaRepository.GetByIdAsync(id);
+        if (existingEntity is null)
+        {
+            throw new BaseException("Silinecek oda bulunamadi.", 404);
+        }
+
+        await EnsureCanAccessBinaAsync(existingEntity.BinaId);
+        await base.DeleteAsync(id);
+    }
+
     private async Task<OdaTipi> EnsureDependenciesAsync(OdaDto dto)
     {
         var bina = await _binaRepository.GetByIdAsync(dto.BinaId);
@@ -113,6 +130,8 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         {
             throw new BaseException("Pasif bina altinda oda olusturulamaz veya guncellenemez.", 400);
         }
+
+        await EnsureCanAccessBinaAsync(bina.Id);
 
         var odaTipi = await _odaTipiRepository.GetByIdAsync(dto.TesisOdaTipiId, query => query.Include(x => x.OdaOzellikDegerleri));
         if (odaTipi is null)
@@ -358,19 +377,22 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
 
     public override async Task<OdaDto?> GetByIdAsync(int id, Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetByIdAsync(id, includeQuery);
     }
 
     public override async Task<IEnumerable<OdaDto>> GetAllAsync(Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetAllAsync(includeQuery);
     }
 
     public override async Task<IEnumerable<OdaDto>> WhereAsync(Expression<Func<Oda, bool>> predicate, Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.WhereAsync(predicate, includeQuery);
     }
 
@@ -380,7 +402,39 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         Func<IQueryable<Oda>, IQueryable<Oda>>? include = null,
         Func<IQueryable<Oda>, IOrderedQueryable<Oda>>? orderBy = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
+    private async Task EnsureCanAccessBinaAsync(int binaId)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (!scope.IsScoped)
+        {
+            return;
+        }
+
+        if (!scope.BinaIds.Contains(binaId))
+        {
+            throw new BaseException("Bu bina altinda islem yapma yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private static Func<IQueryable<Oda>, IQueryable<Oda>> BuildScopedIncludeQuery(
+        DomainAccessScope scope,
+        Func<IQueryable<Oda>, IQueryable<Oda>>? include)
+    {
+        return query =>
+        {
+            var result = include ?? (x => x.Include(y => y.OdaOzellikDegerleri));
+            var scopedQuery = result(query);
+            if (scope.IsScoped)
+            {
+                scopedQuery = scopedQuery.Where(x => scope.BinaIds.Contains(x.BinaId));
+            }
+
+            return scopedQuery;
+        };
     }
 }

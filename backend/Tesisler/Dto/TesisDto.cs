@@ -20,4 +20,6 @@ public class TesisDto : BaseRdbmsDto<int>
     public string? Eposta { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    public ICollection<Guid>? YoneticiUserIds { get; set; }
 }

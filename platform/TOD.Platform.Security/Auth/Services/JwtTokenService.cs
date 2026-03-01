@@ -37,6 +37,11 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.NameIdentifier, request.UserName)
         };
 
+        if (!string.IsNullOrWhiteSpace(request.UserId))
+        {
+            claims.Add(new Claim("userId", request.UserId));
+        }
+
         foreach (var permission in request.Permissions.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             claims.Add(new Claim("permission", permission));

@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Linq.Expressions;
+using STYS.AccessScope;
 using STYS.OdaOzellikleri;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaOzellikleri.Repositories;
@@ -23,6 +24,7 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
     private readonly ITesisRepository _tesisRepository;
     private readonly IOdaSinifiRepository _odaSinifiRepository;
     private readonly IOdaOzellikRepository _odaOzellikRepository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public OdaTipiService(
         IOdaTipiRepository odaTipiRepository,
@@ -30,6 +32,7 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
         ITesisRepository tesisRepository,
         IOdaSinifiRepository odaSinifiRepository,
         IOdaOzellikRepository odaOzellikRepository,
+        IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(odaTipiRepository, mapper)
     {
@@ -38,6 +41,7 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
         _tesisRepository = tesisRepository;
         _odaSinifiRepository = odaSinifiRepository;
         _odaOzellikRepository = odaOzellikRepository;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public override async Task<OdaTipiDto> AddAsync(OdaTipiDto dto)
@@ -69,16 +73,17 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
             throw new BaseException("Oda tipi id zorunludur.", 400);
         }
 
-        Normalize(dto);
-        await EnsureDependenciesAsync(dto);
-        await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
-        var normalizedFeatureValues = await NormalizeAndValidateFeatureValuesAsync(dto.OdaOzellikDegerleri);
-
         var existingEntity = await _odaTipiRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.OdaOzellikDegerleri));
         if (existingEntity is null)
         {
             throw new BaseException("Guncellenecek oda tipi bulunamadi.", 404);
         }
+
+        await EnsureCanAccessTesisAsync(existingEntity.TesisId);
+        Normalize(dto);
+        await EnsureDependenciesAsync(dto);
+        await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
+        var normalizedFeatureValues = await NormalizeAndValidateFeatureValuesAsync(dto.OdaOzellikDegerleri);
 
         existingEntity.IsDeleted = false;
         existingEntity.TesisId = dto.TesisId;
@@ -96,6 +101,18 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
         return Mapper.Map<OdaTipiDto>(existingEntity);
     }
 
+    public override async Task DeleteAsync(int id)
+    {
+        var existingEntity = await _odaTipiRepository.GetByIdAsync(id);
+        if (existingEntity is null)
+        {
+            throw new BaseException("Silinecek oda tipi bulunamadi.", 404);
+        }
+
+        await EnsureCanAccessTesisAsync(existingEntity.TesisId);
+        await base.DeleteAsync(id);
+    }
+
     private async Task EnsureDependenciesAsync(OdaTipiDto dto)
     {
         var tesis = await _tesisRepository.GetByIdAsync(dto.TesisId);
@@ -108,6 +125,8 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
         {
             throw new BaseException("Pasif tesis altinda oda tipi olusturulamaz veya guncellenemez.", 400);
         }
+
+        await EnsureCanAccessTesisAsync(dto.TesisId);
 
         var odaSinifi = await _odaSinifiRepository.GetByIdAsync(dto.OdaSinifiId);
         if (odaSinifi is null)
@@ -299,19 +318,22 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
 
     public override async Task<OdaTipiDto?> GetByIdAsync(int id, Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetByIdAsync(id, includeQuery);
     }
 
     public override async Task<IEnumerable<OdaTipiDto>> GetAllAsync(Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetAllAsync(includeQuery);
     }
 
     public override async Task<IEnumerable<OdaTipiDto>> WhereAsync(Expression<Func<OdaTipi, bool>> predicate, Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>>? include = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.WhereAsync(predicate, includeQuery);
     }
 
@@ -321,7 +343,39 @@ public class OdaTipiService : BaseRdbmsService<OdaTipiDto, OdaTipi, int>, IOdaTi
         Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>>? include = null,
         Func<IQueryable<OdaTipi>, IOrderedQueryable<OdaTipi>>? orderBy = null)
     {
-        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
+    private async Task EnsureCanAccessTesisAsync(int tesisId)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (!scope.IsScoped)
+        {
+            return;
+        }
+
+        if (!scope.TesisIds.Contains(tesisId))
+        {
+            throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private static Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>> BuildScopedIncludeQuery(
+        DomainAccessScope scope,
+        Func<IQueryable<OdaTipi>, IQueryable<OdaTipi>>? include)
+    {
+        return query =>
+        {
+            var result = include ?? (x => x.Include(y => y.OdaOzellikDegerleri));
+            var scopedQuery = result(query);
+            if (scope.IsScoped)
+            {
+                scopedQuery = scopedQuery.Where(x => scope.TesisIds.Contains(x.TesisId));
+            }
+
+            return scopedQuery;
+        };
     }
 }

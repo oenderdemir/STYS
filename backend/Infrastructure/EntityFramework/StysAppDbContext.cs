@@ -27,7 +27,9 @@ public class StysAppDbContext : DbContext
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Il> Iller => Set<Il>();
     public DbSet<Tesis> Tesisler => Set<Tesis>();
+    public DbSet<TesisYonetici> TesisYoneticileri => Set<TesisYonetici>();
     public DbSet<Bina> Binalar => Set<Bina>();
+    public DbSet<BinaYonetici> BinaYoneticileri => Set<BinaYonetici>();
     public DbSet<IsletmeAlani> IsletmeAlanlari => Set<IsletmeAlani>();
     public DbSet<OdaSinifi> OdaSiniflari => Set<OdaSinifi>();
     public DbSet<OdaOzellik> OdaOzellikleri => Set<OdaOzellik>();
@@ -88,6 +90,19 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<TesisYonetici>(entity =>
+        {
+            entity.ToTable("TesisYoneticileri", "dbo");
+            entity.HasIndex(x => new { x.TesisId, x.UserId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.Yoneticiler)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Bina>(entity =>
         {
             entity.ToTable("Binalar", "dbo");
@@ -99,6 +114,19 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany(x => x.Binalar)
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BinaYonetici>(entity =>
+        {
+            entity.ToTable("BinaYoneticileri", "dbo");
+            entity.HasIndex(x => new { x.BinaId, x.UserId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Bina)
+                .WithMany(x => x.Yoneticiler)
+                .HasForeignKey(x => x.BinaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

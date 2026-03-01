@@ -8,6 +8,10 @@ public class BinaProfile : Profile
 {
     public BinaProfile()
     {
-        CreateMap<Bina, BinaDto>().ReverseMap();
+        CreateMap<Bina, BinaDto>()
+            .ForMember(dest => dest.YoneticiUserIds, opt => opt.MapFrom(src => src.Yoneticiler.Select(x => x.UserId)));
+
+        CreateMap<BinaDto, Bina>()
+            .ForMember(dest => dest.Yoneticiler, opt => opt.Ignore());
     }
 }

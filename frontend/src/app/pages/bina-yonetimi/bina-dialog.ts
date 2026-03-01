@@ -72,7 +72,7 @@ import { BinaDto } from './bina-yonetimi.dto';
 export class BinaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true };
+    @Input() model: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
     @Input() tesisler: TesisDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
@@ -81,7 +81,7 @@ export class BinaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<BinaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true };
+    workingModel: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -149,7 +149,8 @@ export class BinaDialog implements OnChanges {
             ad: this.workingModel.ad.trim(),
             tesisId: this.workingModel.tesisId,
             katSayisi: this.workingModel.katSayisi,
-            aktifMi: this.workingModel.aktifMi
+            aktifMi: this.workingModel.aktifMi,
+            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? null
         });
     }
 

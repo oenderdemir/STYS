@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Binalar.Entities;
+using STYS.OdaOzellikleri.Entities;
 using STYS.OdaTipleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -24,4 +25,6 @@ public class Oda : BaseEntity<int>
     public Bina? Bina { get; set; }
 
     public OdaTipi? TesisOdaTipi { get; set; }
+
+    public ICollection<OdaOzellikDeger> OdaOzellikDegerleri { get; set; } = [];
 }

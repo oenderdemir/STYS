@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260228215135_SeedOdaOzellikMenuItem")]
+    partial class SeedOdaOzellikMenuItem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -396,6 +399,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("AktifMi")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("BalkonVarMi")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -413,6 +419,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Property<int>("Kapasite")
                         .HasColumnType("int");
+
+                    b.Property<bool>("KlimaVarMi")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("Metrekare")
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<int>("OdaSinifiId")
                         .HasColumnType("int");
@@ -440,56 +452,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("TesisOdaTipleri", "dbo");
                 });
 
-            modelBuilder.Entity("STYS.OdaTipleri.Entities.TesisOdaTipiOzellikDeger", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Deger")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("OdaOzellikId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TesisOdaTipiId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OdaOzellikId");
-
-                    b.HasIndex("TesisOdaTipiId", "OdaOzellikId")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.ToTable("TesisOdaTipiOzellikDegerleri", "dbo");
-                });
-
             modelBuilder.Entity("STYS.Odalar.Entities.Oda", b =>
                 {
                     b.Property<int>("Id")
@@ -499,6 +461,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("BalkonVarMiOverride")
                         .HasColumnType("bit");
 
                     b.Property<int>("BinaId")
@@ -516,11 +481,21 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("EkOzellikler")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<int>("KatNo")
                         .HasColumnType("int");
+
+                    b.Property<bool?>("KlimaVarMiOverride")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("MetrekareOverride")
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<string>("OdaNo")
                         .IsRequired()
@@ -673,25 +648,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Tesis");
                 });
 
-            modelBuilder.Entity("STYS.OdaTipleri.Entities.TesisOdaTipiOzellikDeger", b =>
-                {
-                    b.HasOne("STYS.OdaOzellikleri.Entities.OdaOzellik", "OdaOzellik")
-                        .WithMany()
-                        .HasForeignKey("OdaOzellikId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("STYS.OdaTipleri.Entities.OdaTipi", "TesisOdaTipi")
-                        .WithMany("OdaOzellikDegerleri")
-                        .HasForeignKey("TesisOdaTipiId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("OdaOzellik");
-
-                    b.Navigation("TesisOdaTipi");
-                });
-
             modelBuilder.Entity("STYS.Odalar.Entities.Oda", b =>
                 {
                     b.HasOne("STYS.Binalar.Entities.Bina", "Bina")
@@ -746,8 +702,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("STYS.OdaTipleri.Entities.OdaTipi", b =>
                 {
-                    b.Navigation("OdaOzellikDegerleri");
-
                     b.Navigation("Odalar");
                 });
 

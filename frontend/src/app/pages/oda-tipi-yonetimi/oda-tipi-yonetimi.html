@@ -55,11 +55,7 @@
             <td>{{ odaTipi.ad }}</td>
             <td>{{ odaTipi.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}</td>
             <td>{{ odaTipi.kapasite }}</td>
-            <td>
-                <span>{{ odaTipi.balkonVarMi ? 'Balkon' : '-' }}</span>
-                <span class="ml-2">{{ odaTipi.klimaVarMi ? 'Klima' : '-' }}</span>
-                <span class="ml-2">{{ odaTipi.metrekare ? odaTipi.metrekare + ' m2' : '-' }}</span>
-            </td>
+            <td>{{ getOdaTipiOzellikOzeti(odaTipi) }}</td>
             <td>{{ odaTipi.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
@@ -80,6 +76,7 @@
     [model]="selectedOdaTipi"
     [tesisler]="tesisler"
     [odaSiniflari]="odaSiniflari"
+    [odaOzellikleri]="odaOzellikleri"
     [saving]="saving"
     [canManage]="canManage"
     (save)="onDialogSave($event)"

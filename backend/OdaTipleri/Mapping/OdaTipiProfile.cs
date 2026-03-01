@@ -8,6 +8,7 @@ public class OdaTipiProfile : Profile
 {
     public OdaTipiProfile()
     {
+        CreateMap<TesisOdaTipiOzellikDeger, TesisOdaTipiOzellikDegerDto>().ReverseMap();
         CreateMap<OdaTipi, OdaTipiDto>().ReverseMap();
     }
 }

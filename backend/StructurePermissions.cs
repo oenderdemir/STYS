@@ -37,4 +37,10 @@ public static class StructurePermissions
         public const string View = "OdaYonetimi.View";
         public const string Manage = "OdaYonetimi.Manage";
     }
+
+    public static class OdaOzellikYonetimi
+    {
+        public const string View = "OdaOzellikYonetimi.View";
+        public const string Manage = "OdaOzellikYonetimi.Manage";
+    }
 }

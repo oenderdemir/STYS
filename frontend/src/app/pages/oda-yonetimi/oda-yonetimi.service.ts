@@ -4,6 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { OdaDto } from './oda-yonetimi.dto';
 
@@ -62,6 +63,18 @@ export class OdaYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getOdaOzellikleriActive(): Observable<OdaOzellikDto[]> {
+        return this.http.get<ApiResponse<OdaOzellikDto[]>>(`${this.apiBaseUrl}/ui/odaozellik/active`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda ozellik listesi alinamadi.');
             })
         );
     }

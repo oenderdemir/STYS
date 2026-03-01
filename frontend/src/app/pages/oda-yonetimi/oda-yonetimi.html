@@ -21,7 +21,7 @@
     [first]="(pageNumber - 1) * pageSize"
     [rowsPerPageOptions]="[10, 20, 50]"
     [totalRecords]="totalRecords"
-    [tableStyle]="{ 'min-width': '70rem' }"
+    [tableStyle]="{ 'min-width': '90rem' }"
     currentPageReportTemplate="{first} - {last} / {totalRecords}"
     [showCurrentPageReport]="true"
 >
@@ -42,6 +42,7 @@
             <th>Oda Tipi</th>
             <th>Kat No</th>
             <th>Yatak Sayisi</th>
+            <th>Dinamik Ozellikler</th>
             <th>Durum</th>
             <th style="width: 18rem">Islem</th>
         </tr>
@@ -54,6 +55,7 @@
             <td>{{ getOdaTipiAdi(oda.tesisOdaTipiId) }}</td>
             <td>{{ oda.katNo }}</td>
             <td>{{ oda.yatakSayisi ?? '-' }}</td>
+            <td>{{ getDinamikOzelliklerText(oda) }}</td>
             <td>{{ oda.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
@@ -68,4 +70,15 @@
     </ng-template>
 </p-table>
 
-<app-oda-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOda" [binalar]="binalar" [odaTipleri]="odaTipleri" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />
+<app-oda-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedOda"
+    [binalar]="binalar"
+    [odaTipleri]="odaTipleri"
+    [odaOzellikleri]="odaOzellikleri"
+    [saving]="saving"
+    [canManage]="canManage"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>

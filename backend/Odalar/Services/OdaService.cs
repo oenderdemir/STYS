@@ -1,10 +1,17 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Linq.Expressions;
 using STYS.Binalar.Repositories;
 using STYS.Odalar.Dto;
 using STYS.Odalar.Entities;
 using STYS.Odalar.Repositories;
+using STYS.OdaOzellikleri;
+using STYS.OdaOzellikleri.Entities;
+using STYS.OdaOzellikleri.Repositories;
 using STYS.OdaTipleri.Entities;
 using STYS.OdaTipleri.Repositories;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -15,17 +22,23 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
     private readonly IOdaRepository _odaRepository;
     private readonly IBinaRepository _binaRepository;
     private readonly IOdaTipiRepository _odaTipiRepository;
+    private readonly IOdaOzellikRepository _odaOzellikRepository;
+    private readonly IOdaOzellikDegerRepository _odaOzellikDegerRepository;
 
     public OdaService(
         IOdaRepository odaRepository,
         IBinaRepository binaRepository,
         IOdaTipiRepository odaTipiRepository,
+        IOdaOzellikRepository odaOzellikRepository,
+        IOdaOzellikDegerRepository odaOzellikDegerRepository,
         IMapper mapper)
         : base(odaRepository, mapper)
     {
         _odaRepository = odaRepository;
         _binaRepository = binaRepository;
         _odaTipiRepository = odaTipiRepository;
+        _odaOzellikRepository = odaOzellikRepository;
+        _odaOzellikDegerRepository = odaOzellikDegerRepository;
     }
 
     public override async Task<OdaDto> AddAsync(OdaDto dto)
@@ -34,7 +47,23 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         var odaTipi = await EnsureDependenciesAsync(dto);
         ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
         await EnsureUniqueActiveRoomNoAsync(dto, null);
-        return await base.AddAsync(dto);
+        var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
+        var defaultFeatureValues = GetDefaultFeatureValuesFromOdaTipi(odaTipi);
+        var finalFeatureValues = MergeDefaultAndInputFeatureValues(defaultFeatureValues, normalizedOdaOzellikDegerleri);
+
+        var entity = Mapper.Map<Oda>(dto);
+        entity.OdaOzellikDegerleri = finalFeatureValues
+            .Select(x => new OdaOzellikDeger
+            {
+                OdaOzellikId = x.OdaOzellikId,
+                Deger = x.Deger
+            })
+            .ToList();
+
+        await _odaRepository.AddAsync(entity);
+        await _odaRepository.SaveChangesAsync();
+
+        return Mapper.Map<OdaDto>(entity);
     }
 
     public override async Task<OdaDto> UpdateAsync(OdaDto dto)
@@ -48,7 +77,28 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         var odaTipi = await EnsureDependenciesAsync(dto);
         ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
         await EnsureUniqueActiveRoomNoAsync(dto, dto.Id.Value);
-        return await base.UpdateAsync(dto);
+        var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
+
+        var existingEntity = await _odaRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.OdaOzellikDegerleri));
+        if (existingEntity is null)
+        {
+            throw new BaseException("Guncellenecek oda bulunamadi.", 404);
+        }
+
+        existingEntity.IsDeleted = false;
+        existingEntity.OdaNo = dto.OdaNo;
+        existingEntity.BinaId = dto.BinaId;
+        existingEntity.TesisOdaTipiId = dto.TesisOdaTipiId;
+        existingEntity.KatNo = dto.KatNo;
+        existingEntity.YatakSayisi = dto.YatakSayisi;
+        existingEntity.AktifMi = dto.AktifMi;
+
+        SyncOdaOzellikDegerleri(existingEntity, normalizedOdaOzellikDegerleri);
+
+        _odaRepository.Update(existingEntity);
+        await _odaRepository.SaveChangesAsync();
+
+        return Mapper.Map<OdaDto>(existingEntity);
     }
 
     private async Task<OdaTipi> EnsureDependenciesAsync(OdaDto dto)
@@ -64,7 +114,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
             throw new BaseException("Pasif bina altinda oda olusturulamaz veya guncellenemez.", 400);
         }
 
-        var odaTipi = await _odaTipiRepository.GetByIdAsync(dto.TesisOdaTipiId);
+        var odaTipi = await _odaTipiRepository.GetByIdAsync(dto.TesisOdaTipiId, query => query.Include(x => x.OdaOzellikDegerleri));
         if (odaTipi is null)
         {
             throw new BaseException("Secilen tesis oda tipi bulunamadi.", 400);
@@ -144,5 +194,193 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         }
 
         dto.OdaNo = dto.OdaNo.Trim();
+        dto.OdaOzellikDegerleri ??= [];
+    }
+
+    private async Task<List<OdaOzellikDegerNormalized>> NormalizeAndValidateOdaOzellikDegerleriAsync(ICollection<OdaOzellikDegerDto>? odaOzellikDegerleri)
+    {
+        if (odaOzellikDegerleri is null || odaOzellikDegerleri.Count == 0)
+        {
+            return [];
+        }
+
+        var duplicateFeatureId = odaOzellikDegerleri
+            .GroupBy(x => x.OdaOzellikId)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .FirstOrDefault();
+
+        if (duplicateFeatureId > 0)
+        {
+            throw new BaseException("Ayni oda ozelligi bir odada bir kez secilebilir.", 400);
+        }
+
+        var odaOzellikleri = (await _odaOzellikRepository.GetAllAsync())
+            .ToDictionary(x => x.Id);
+
+        var normalizedValues = new List<OdaOzellikDegerNormalized>();
+
+        foreach (var odaOzellikDegeri in odaOzellikDegerleri)
+        {
+            if (odaOzellikDegeri.OdaOzellikId <= 0)
+            {
+                throw new BaseException("Oda ozellik secimi gecersiz.", 400);
+            }
+
+            if (!odaOzellikleri.TryGetValue(odaOzellikDegeri.OdaOzellikId, out var odaOzellik))
+            {
+                throw new BaseException("Secilen oda ozelligi bulunamadi.", 400);
+            }
+
+            var normalizedValue = NormalizeFeatureValue(odaOzellik, odaOzellikDegeri.Deger);
+            if (normalizedValue is null)
+            {
+                continue;
+            }
+
+            normalizedValues.Add(new OdaOzellikDegerNormalized(odaOzellikDegeri.OdaOzellikId, normalizedValue));
+        }
+
+        return normalizedValues;
+    }
+
+    private static string? NormalizeFeatureValue(OdaOzellik odaOzellik, string? rawValue)
+    {
+        var trimmed = rawValue?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        if (odaOzellik.VeriTipi == OdaOzellikVeriTipleri.Boolean)
+        {
+            if (trimmed == "1")
+            {
+                return bool.TrueString.ToLowerInvariant();
+            }
+
+            if (trimmed == "0")
+            {
+                return bool.FalseString.ToLowerInvariant();
+            }
+
+            if (bool.TryParse(trimmed, out var boolValue))
+            {
+                return boolValue ? bool.TrueString.ToLowerInvariant() : bool.FalseString.ToLowerInvariant();
+            }
+
+            throw new BaseException($"'{odaOzellik.Ad}' icin gecersiz boolean deger.", 400);
+        }
+
+        if (odaOzellik.VeriTipi == OdaOzellikVeriTipleri.Number)
+        {
+            if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantValue))
+            {
+                return invariantValue.ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.GetCultureInfo("tr-TR"), out var trValue))
+            {
+                return trValue.ToString(CultureInfo.InvariantCulture);
+            }
+
+            throw new BaseException($"'{odaOzellik.Ad}' icin gecersiz sayisal deger.", 400);
+        }
+
+        if (trimmed.Length > 512)
+        {
+            throw new BaseException($"'{odaOzellik.Ad}' icin girilen deger 512 karakteri asamaz.", 400);
+        }
+
+        return trimmed;
+    }
+
+    private void SyncOdaOzellikDegerleri(Oda entity, IReadOnlyCollection<OdaOzellikDegerNormalized> normalizedValues)
+    {
+        entity.OdaOzellikDegerleri ??= [];
+
+        var byFeatureId = entity.OdaOzellikDegerleri.ToDictionary(x => x.OdaOzellikId);
+        var desiredFeatureIds = normalizedValues.Select(x => x.OdaOzellikId).ToHashSet();
+
+        var valuesToDelete = entity.OdaOzellikDegerleri
+            .Where(x => !desiredFeatureIds.Contains(x.OdaOzellikId))
+            .ToList();
+
+        if (valuesToDelete.Count > 0)
+        {
+            _odaOzellikDegerRepository.DeleteRange(valuesToDelete);
+        }
+
+        foreach (var normalizedValue in normalizedValues)
+        {
+            if (byFeatureId.TryGetValue(normalizedValue.OdaOzellikId, out var existingValue))
+            {
+                existingValue.Deger = normalizedValue.Deger;
+                continue;
+            }
+
+            entity.OdaOzellikDegerleri.Add(new OdaOzellikDeger
+            {
+                OdaOzellikId = normalizedValue.OdaOzellikId,
+                Deger = normalizedValue.Deger
+            });
+        }
+    }
+
+    private sealed record OdaOzellikDegerNormalized(int OdaOzellikId, string Deger);
+
+    private static List<OdaOzellikDegerNormalized> GetDefaultFeatureValuesFromOdaTipi(OdaTipi odaTipi)
+    {
+        if (odaTipi.OdaOzellikDegerleri is null || odaTipi.OdaOzellikDegerleri.Count == 0)
+        {
+            return [];
+        }
+
+        return odaTipi.OdaOzellikDegerleri
+            .Where(x => !string.IsNullOrWhiteSpace(x.Deger))
+            .Select(x => new OdaOzellikDegerNormalized(x.OdaOzellikId, x.Deger!.Trim()))
+            .ToList();
+    }
+
+    private static List<OdaOzellikDegerNormalized> MergeDefaultAndInputFeatureValues(
+        IReadOnlyCollection<OdaOzellikDegerNormalized> defaultValues,
+        IReadOnlyCollection<OdaOzellikDegerNormalized> inputValues)
+    {
+        var merged = defaultValues.ToDictionary(x => x.OdaOzellikId, x => x.Deger);
+
+        foreach (var inputValue in inputValues)
+        {
+            merged[inputValue.OdaOzellikId] = inputValue.Deger;
+        }
+
+        return merged.Select(x => new OdaOzellikDegerNormalized(x.Key, x.Value)).ToList();
+    }
+
+    public override async Task<OdaDto?> GetByIdAsync(int id, Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
+    {
+        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        return await base.GetByIdAsync(id, includeQuery);
+    }
+
+    public override async Task<IEnumerable<OdaDto>> GetAllAsync(Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
+    {
+        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        return await base.GetAllAsync(includeQuery);
+    }
+
+    public override async Task<IEnumerable<OdaDto>> WhereAsync(Expression<Func<Oda, bool>> predicate, Func<IQueryable<Oda>, IQueryable<Oda>>? include = null)
+    {
+        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        return await base.WhereAsync(predicate, includeQuery);
+    }
+
+    public override async Task<PagedResult<OdaDto>> GetPagedAsync(
+        PagedRequest request,
+        Expression<Func<Oda, bool>>? predicate = null,
+        Func<IQueryable<Oda>, IQueryable<Oda>>? include = null,
+        Func<IQueryable<Oda>, IOrderedQueryable<Oda>>? orderBy = null)
+    {
+        var includeQuery = include ?? (query => query.Include(x => x.OdaOzellikDegerleri));
+        return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 }

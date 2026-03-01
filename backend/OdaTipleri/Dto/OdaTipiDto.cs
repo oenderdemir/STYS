@@ -19,11 +19,7 @@ public class OdaTipiDto : BaseRdbmsDto<int>
     [Range(1, int.MaxValue)]
     public int Kapasite { get; set; } = 1;
 
-    public bool BalkonVarMi { get; set; }
-
-    public bool KlimaVarMi { get; set; }
-
-    public decimal? Metrekare { get; set; }
-
     public bool AktifMi { get; set; } = true;
+
+    public ICollection<TesisOdaTipiOzellikDegerDto> OdaOzellikDegerleri { get; set; } = [];
 }

@@ -19,6 +19,7 @@ import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetim
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
 import { OdaDialog } from '../oda-yonetimi/oda-dialog';
 import { OdaYonetimiService } from '../oda-yonetimi/oda-yonetimi.service';
+import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { BinaDialog } from './bina-dialog';
@@ -60,6 +61,7 @@ export class BinaYonetimi implements OnDestroy {
     alanlarByBinaId: Record<number, IsletmeAlaniDto[]> = {};
     detailLoadingByBinaId: Record<number, boolean> = {};
     odaTipleri: OdaTipiDto[] = [];
+    odaOzellikleri: OdaOzellikDto[] = [];
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -183,7 +185,10 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     openOdaView(oda: OdaDto): void {
-        this.selectedOdaForView = { ...oda };
+        this.selectedOdaForView = {
+            ...oda,
+            odaOzellikDegerleri: (oda.odaOzellikDegerleri ?? []).map((item) => ({ ...item }))
+        };
         this.odaViewMode = 'view';
         this.odaViewDialogVisible = true;
     }
@@ -284,7 +289,8 @@ export class BinaYonetimi implements OnDestroy {
         forkJoin({
             binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery),
             tesisler: this.service.getTesisler(),
-            odaTipleri: this.service.getOdaTipleri()
+            odaTipleri: this.service.getOdaTipleri(),
+            odaOzellikleri: this.odaService.getOdaOzellikleriActive()
         })
             .pipe(
                 finalize(() => {
@@ -293,7 +299,7 @@ export class BinaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ binalar, tesisler, odaTipleri }) => {
+                next: ({ binalar, tesisler, odaTipleri, odaOzellikleri }) => {
                     if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
                         this.pageNumber = binalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -306,6 +312,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.totalRecords = binalar.totalCount;
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.expandedRowKeys = {};
                     this.odalarByBinaId = {};
                     this.alanlarByBinaId = {};
@@ -350,6 +357,7 @@ export class BinaYonetimi implements OnDestroy {
             tesisOdaTipiId: 0,
             katNo: 0,
             yatakSayisi: null,
+            odaOzellikDegerleri: [],
             aktifMi: true
         };
     }

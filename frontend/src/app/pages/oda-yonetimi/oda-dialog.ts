@@ -9,6 +9,7 @@ import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
+import { OdaOzellikDto, OdaOzellikVeriTipi } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { OdaDto } from './oda-yonetimi.dto';
 
@@ -21,7 +22,7 @@ import { OdaDto } from './oda-yonetimi.dto';
             [header]="dialogTitle"
             [visible]="visible"
             [modal]="true"
-            [style]="{ width: '40rem', 'max-width': '95vw' }"
+            [style]="{ width: '42rem', 'max-width': '95vw' }"
             [breakpoints]="{ '960px': '95vw' }"
             (onHide)="close()"
         >
@@ -75,7 +76,69 @@ import { OdaDto } from './oda-yonetimi.dto';
                     <label for="yatakSayisi" class="block font-medium mb-2">Yatak Sayisi</label>
                     <p-inputnumber inputId="yatakSayisi" [(ngModel)]="workingModel.yatakSayisi" [min]="0" [useGrouping]="false" styleClass="w-full" [disabled]="isReadOnly || saving" />
                 </div>
-                <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
+
+                <div class="col-span-12">
+                    <label class="block font-medium mb-2">Dinamik Oda Ozellikleri</label>
+                    @if (visibleOdaOzellikleri.length === 0) {
+                        <span class="text-color-secondary">Tanimli aktif oda ozelligi bulunmuyor.</span>
+                    } @else {
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; border: 1px solid var(--surface-border); border-radius: 8px; padding: 0.75rem; background: var(--surface-ground); max-height: 22rem; overflow: auto;">
+                            @for (group of groupedOdaOzellikleri; track group.key) {
+                                <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+                                        <i [class]="group.icon" style="color: var(--primary-color);"></i>
+                                        <span>{{ group.label }}</span>
+                                        <span class="text-sm text-color-secondary">({{ group.items.length }})</span>
+                                    </div>
+
+                                    <div class="grid grid-cols-12 gap-3">
+                                        @for (ozellik of group.items; track ozellik.id) {
+                                            <div class="col-span-12 md:col-span-6">
+                                                <div style="display: flex; flex-direction: column; gap: 0.45rem; padding: 0.55rem; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface-card);">
+                                                    <label class="font-medium">{{ ozellik.ad }}</label>
+
+                                                    @if (ozellik.veriTipi === 'boolean') {
+                                                        <p-select
+                                                            [options]="booleanFeatureOptions"
+                                                            optionLabel="label"
+                                                            optionValue="value"
+                                                            [ngModel]="getFeatureRawValue(ozellik.id ?? 0)"
+                                                            (ngModelChange)="setFeatureRawValue(ozellik.id ?? 0, $event)"
+                                                            appendTo="body"
+                                                            class="w-full"
+                                                            [disabled]="isReadOnly || saving"
+                                                        />
+                                                    } @else if (ozellik.veriTipi === 'number') {
+                                                        <p-inputnumber
+                                                            [ngModel]="getFeatureNumberValue(ozellik.id ?? 0)"
+                                                            (ngModelChange)="setFeatureNumberValue(ozellik.id ?? 0, $event)"
+                                                            mode="decimal"
+                                                            [minFractionDigits]="0"
+                                                            [maxFractionDigits]="2"
+                                                            styleClass="w-full"
+                                                            [disabled]="isReadOnly || saving"
+                                                        />
+                                                    } @else {
+                                                        <input
+                                                            pInputText
+                                                            [ngModel]="getFeatureRawValue(ozellik.id ?? 0)"
+                                                            (ngModelChange)="setFeatureRawValue(ozellik.id ?? 0, $event)"
+                                                            class="w-full"
+                                                            [placeholder]="ozellik.ad + ' giriniz...'"
+                                                            [disabled]="isReadOnly || saving"
+                                                        />
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-2">
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
@@ -93,9 +156,10 @@ import { OdaDto } from './oda-yonetimi.dto';
 export class OdaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
+    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, odaOzellikDegerleri: [], aktifMi: true };
     @Input() binalar: BinaDto[] = [];
     @Input() odaTipleri: OdaTipiDto[] = [];
+    @Input() odaOzellikleri: OdaOzellikDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -103,7 +167,33 @@ export class OdaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<OdaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, aktifMi: true };
+    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, odaOzellikDegerleri: [], aktifMi: true };
+    readonly booleanFeatureOptions: Array<{ label: string; value: string | null }> = [
+        { label: 'Belirtilmedi', value: null },
+        { label: 'Evet', value: 'true' },
+        { label: 'Hayir', value: 'false' }
+    ];
+    private readonly featureGroupDefinitions: Array<{ key: OdaOzellikVeriTipi; label: string; icon: string }> = [
+        { key: 'boolean', label: 'Secim Ozellikleri', icon: 'pi pi-check-square' },
+        { key: 'number', label: 'Sayisal Ozellikler', icon: 'pi pi-hashtag' },
+        { key: 'text', label: 'Metin Ozellikleri', icon: 'pi pi-align-left' }
+    ];
+
+    get visibleOdaOzellikleri(): OdaOzellikDto[] {
+        const selectedFeatureIds = new Set((this.workingModel.odaOzellikDegerleri ?? []).map((item) => item.odaOzellikId));
+        return [...this.odaOzellikleri]
+            .filter((item) => item.aktifMi || selectedFeatureIds.has(item.id ?? 0))
+            .sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+    }
+
+    get groupedOdaOzellikleri(): Array<{ key: OdaOzellikVeriTipi; label: string; icon: string; items: OdaOzellikDto[] }> {
+        return this.featureGroupDefinitions
+            .map((group) => ({
+                ...group,
+                items: this.visibleOdaOzellikleri.filter((item) => item.veriTipi === group.key)
+            }))
+            .filter((group) => group.items.length > 0);
+    }
 
     get availableOdaTipleri(): OdaTipiDto[] {
         const tesisId = this.getSelectedTesisId();
@@ -156,11 +246,11 @@ export class OdaDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
     }
 
@@ -182,6 +272,7 @@ export class OdaDialog implements OnChanges {
             tesisOdaTipiId: this.workingModel.tesisOdaTipiId,
             katNo: this.workingModel.katNo,
             yatakSayisi: this.workingModel.yatakSayisi ?? null,
+            odaOzellikDegerleri: this.getSanitizedFeatureValues(),
             aktifMi: this.workingModel.aktifMi
         });
     }
@@ -209,7 +300,7 @@ export class OdaDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = { ...this.model };
+        this.workingModel = this.cloneModel(this.model);
         this.modeChange.emit('view');
     }
 
@@ -220,5 +311,79 @@ export class OdaDialog implements OnChanges {
     private getSelectedTesisId(): number {
         const selectedBina = this.binalar.find((item) => item.id === this.workingModel.binaId);
         return selectedBina?.tesisId ?? 0;
+    }
+
+    getFeatureRawValue(ozellikId: number): string | null {
+        const value = this.workingModel.odaOzellikDegerleri.find((item) => item.odaOzellikId === ozellikId);
+        const normalized = value?.deger?.trim();
+        return normalized && normalized.length > 0 ? normalized : null;
+    }
+
+    setFeatureRawValue(ozellikId: number, rawValue: string | null | undefined): void {
+        const value = typeof rawValue === 'string' ? rawValue.trim() : null;
+        this.upsertFeatureValue(ozellikId, value && value.length > 0 ? value : null);
+    }
+
+    getFeatureNumberValue(ozellikId: number): number | null {
+        const rawValue = this.getFeatureRawValue(ozellikId);
+        if (!rawValue) {
+            return null;
+        }
+
+        const parsed = Number(rawValue);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    setFeatureNumberValue(ozellikId: number, value: number | null | undefined): void {
+        if (value === null || value === undefined) {
+            this.upsertFeatureValue(ozellikId, null);
+            return;
+        }
+
+        this.upsertFeatureValue(ozellikId, value.toString());
+    }
+
+    private upsertFeatureValue(ozellikId: number, value: string | null): void {
+        const existing = this.workingModel.odaOzellikDegerleri.find((item) => item.odaOzellikId === ozellikId);
+        if (!value) {
+            if (existing) {
+                this.workingModel.odaOzellikDegerleri = this.workingModel.odaOzellikDegerleri.filter((item) => item.odaOzellikId !== ozellikId);
+            }
+            return;
+        }
+
+        if (existing) {
+            existing.deger = value;
+            return;
+        }
+
+        this.workingModel.odaOzellikDegerleri = [
+            ...(this.workingModel.odaOzellikDegerleri ?? []),
+            { odaOzellikId: ozellikId, deger: value }
+        ];
+    }
+
+    private getSanitizedFeatureValues(): Array<{ odaOzellikId: number; deger: string }> {
+        const values = this.workingModel.odaOzellikDegerleri ?? [];
+        const uniqueByFeatureId = new Map<number, string>();
+
+        values.forEach((item) => {
+            const featureId = item.odaOzellikId;
+            const value = item.deger?.trim() ?? '';
+            if (!featureId || value.length === 0) {
+                return;
+            }
+
+            uniqueByFeatureId.set(featureId, value);
+        });
+
+        return Array.from(uniqueByFeatureId.entries()).map(([odaOzellikId, deger]) => ({ odaOzellikId, deger }));
+    }
+
+    private cloneModel(source: OdaDto): OdaDto {
+        return {
+            ...source,
+            odaOzellikDegerleri: (source.odaOzellikDegerleri ?? []).map((item) => ({ ...item }))
+        };
     }
 }

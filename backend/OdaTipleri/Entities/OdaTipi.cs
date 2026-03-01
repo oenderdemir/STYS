@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
 using STYS.Tesisler.Entities;
@@ -20,12 +21,6 @@ public class OdaTipi : BaseEntity<int>
 
     public int Kapasite { get; set; } = 1;
 
-    public bool BalkonVarMi { get; set; }
-
-    public bool KlimaVarMi { get; set; }
-
-    public decimal? Metrekare { get; set; }
-
     public bool AktifMi { get; set; } = true;
 
     public Tesis? Tesis { get; set; }
@@ -33,4 +28,6 @@ public class OdaTipi : BaseEntity<int>
     public OdaSinifi? OdaSinifi { get; set; }
 
     public ICollection<Oda> Odalar { get; set; } = [];
+
+    public ICollection<TesisOdaTipiOzellikDeger> OdaOzellikDegerleri { get; set; } = [];
 }

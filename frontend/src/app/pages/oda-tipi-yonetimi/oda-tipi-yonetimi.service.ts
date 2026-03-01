@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
+import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
 
@@ -61,6 +62,18 @@ export class OdaTipiYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda sinifi listesi alinamadi.');
+            })
+        );
+    }
+
+    getOdaOzellikleriForOdaTipi(): Observable<OdaOzellikDto[]> {
+        return this.http.get<ApiResponse<OdaOzellikDto[]>>(`${this.apiBaseUrl}/ui/odaozellik/active-for-odatipi`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda ozellik listesi alinamadi.');
             })
         );
     }

@@ -1,3 +1,8 @@
+export interface OdaOzellikDegerDto {
+    odaOzellikId: number;
+    deger?: string | null;
+}
+
 export interface OdaDto {
     id?: number | null;
     odaNo: string;
@@ -5,5 +10,6 @@ export interface OdaDto {
     tesisOdaTipiId: number;
     katNo: number;
     yatakSayisi?: number | null;
+    odaOzellikDegerleri: OdaOzellikDegerDto[];
     aktifMi: boolean;
 }

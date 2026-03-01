@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -15,32 +15,26 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
-import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
-import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
-import { OdaDialog } from './oda-dialog';
-import { OdaDto } from './oda-yonetimi.dto';
-import { OdaYonetimiService } from './oda-yonetimi.service';
+import { OdaOzellikDialog } from './oda-ozellik-dialog';
+import { OdaOzellikDto } from './oda-ozellik-yonetimi.dto';
+import { OdaOzellikYonetimiService } from './oda-ozellik-yonetimi.service';
 
 @Component({
-    selector: 'app-oda-yonetimi',
+    selector: 'app-oda-ozellik-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaDialog],
-    templateUrl: './oda-yonetimi.html',
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaOzellikDialog],
+    templateUrl: './oda-ozellik-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class OdaYonetimi implements OnDestroy {
-    private readonly service = inject(OdaYonetimiService);
+export class OdaOzellikYonetimi implements OnDestroy {
+    private readonly service = inject(OdaOzellikYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
 
-    odalar: OdaDto[] = [];
-    binalar: BinaDto[] = [];
-    odaTipleri: OdaTipiDto[] = [];
     odaOzellikleri: OdaOzellikDto[] = [];
-    selectedOda: OdaDto = this.getEmptyOda();
+    selectedOdaOzellik: OdaOzellikDto = this.getEmptyOdaOzellik();
     loading = false;
     saving = false;
     dialogVisible = false;
@@ -53,7 +47,7 @@ export class OdaYonetimi implements OnDestroy {
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
-        return this.authService.hasPermission('OdaYonetimi.Manage');
+        return this.authService.hasPermission('OdaOzellikYonetimi.Manage');
     }
 
     ngOnDestroy(): void {
@@ -69,7 +63,7 @@ export class OdaYonetimi implements OnDestroy {
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
-        this.loadData(this.pageNumber, this.pageSize);
+        this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
     }
 
     onSearchInput(event: Event): void {
@@ -82,39 +76,42 @@ export class OdaYonetimi implements OnDestroy {
 
         this.searchDebounceHandle = setTimeout(() => {
             this.pageNumber = 1;
-            this.loadData(this.pageNumber, this.pageSize);
+            this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
             this.searchDebounceHandle = null;
         }, 300);
     }
 
     refresh(): void {
-        this.loadData(this.pageNumber, this.pageSize);
+        this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
     }
 
     openNew(): void {
-        this.selectedOda = this.getEmptyOda();
+        this.selectedOdaOzellik = this.getEmptyOdaOzellik();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
-    openEdit(oda: OdaDto): void {
-        this.selectedOda = this.cloneOda(oda);
+    openEdit(odaOzellik: OdaOzellikDto): void {
+        this.selectedOdaOzellik = { ...odaOzellik };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    openView(oda: OdaDto): void {
-        this.selectedOda = this.cloneOda(oda);
+    openView(odaOzellik: OdaOzellikDto): void {
+        this.selectedOdaOzellik = { ...odaOzellik };
         this.dialogMode = 'view';
         this.dialogVisible = true;
     }
 
-    onDialogSave(payload: OdaDto): void {
+    onDialogSave(payload: OdaOzellikDto): void {
         if (this.saving) {
             return;
         }
 
-        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedOda.id ? this.service.updateOda(this.selectedOda.id, payload) : this.service.createOda(payload);
+        const save$: Observable<unknown> =
+            this.dialogMode === 'edit' && this.selectedOdaOzellik.id
+                ? this.service.updateOdaOzellik(this.selectedOdaOzellik.id, payload)
+                : this.service.createOdaOzellik(payload);
 
         this.saving = true;
         save$
@@ -127,8 +124,8 @@ export class OdaYonetimi implements OnDestroy {
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
-                    this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Oda guncellendi.' : 'Oda olusturuldu.' });
+                    this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Oda ozellik guncellendi.' : 'Oda ozellik olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -138,13 +135,13 @@ export class OdaYonetimi implements OnDestroy {
             });
     }
 
-    deleteOda(oda: OdaDto): void {
-        if (!this.canManage || !oda.id) {
+    deleteOdaOzellik(odaOzellik: OdaOzellikDto): void {
+        if (!this.canManage || !odaOzellik.id) {
             return;
         }
 
         this.confirmationService.confirm({
-            message: `"${oda.odaNo}" kaydini silmek istediginize emin misiniz?`,
+            message: `"${odaOzellik.ad}" kaydini silmek istediginize emin misiniz?`,
             header: 'Silme Onayi',
             icon: 'pi pi-exclamation-triangle',
             acceptButtonStyleClass: 'p-button-danger',
@@ -152,10 +149,10 @@ export class OdaYonetimi implements OnDestroy {
             acceptLabel: 'Evet',
             rejectLabel: 'Hayir',
             accept: () => {
-                this.service.deleteOda(oda.id!).subscribe({
+                this.service.deleteOdaOzellik(odaOzellik.id!).subscribe({
                     next: () => {
-                        this.loadData(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda silindi.' });
+                        this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
+                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda ozellik silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
@@ -167,41 +164,10 @@ export class OdaYonetimi implements OnDestroy {
         });
     }
 
-    getBinaAdi(binaId: number): string {
-        const bina = this.binalar.find((x) => x.id === binaId);
-        return bina?.ad ?? '-';
-    }
-
-    getOdaTipiAdi(tesisOdaTipiId: number): string {
-        const odaTipi = this.odaTipleri.find((x) => x.id === tesisOdaTipiId);
-        return odaTipi?.ad ?? '-';
-    }
-
-    getDinamikOzelliklerText(oda: OdaDto): string {
-        const values = oda.odaOzellikDegerleri ?? [];
-        if (values.length === 0) {
-            return '-';
-        }
-
-        const text = values
-            .map((value) => {
-                const feature = this.odaOzellikleri.find((item) => item.id === value.odaOzellikId);
-                const featureName = feature?.ad ?? `#${value.odaOzellikId}`;
-                return `${featureName}: ${this.formatFeatureValue(feature, value.deger ?? null)}`;
-            })
-            .join(', ');
-
-        return text.length > 0 ? text : '-';
-    }
-
-    private loadData(pageNumber: number, pageSize: number): void {
+    private loadOdaOzellikleri(pageNumber: number, pageSize: number): void {
         this.loading = true;
-        forkJoin({
-            odalar: this.service.getOdalarPaged(pageNumber, pageSize, this.searchQuery),
-            binalar: this.service.getBinalar(),
-            odaTipleri: this.service.getOdaTipleri(),
-            odaOzellikleri: this.service.getOdaOzellikleriActive()
-        })
+        this.service
+            .getOdaOzellikleriPaged(pageNumber, pageSize, this.searchQuery)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -209,20 +175,17 @@ export class OdaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ odalar, binalar, odaTipleri, odaOzellikleri }) => {
-                    if (odalar.totalCount > 0 && odalar.totalPages > 0 && pageNumber > odalar.totalPages) {
-                        this.pageNumber = odalar.totalPages;
-                        this.loadData(this.pageNumber, this.pageSize);
+                next: (pagedResponse) => {
+                    if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
+                        this.pageNumber = pagedResponse.totalPages;
+                        this.loadOdaOzellikleri(this.pageNumber, this.pageSize);
                         return;
                     }
 
-                    this.odalar = odalar.items;
-                    this.pageNumber = odalar.pageNumber;
-                    this.pageSize = odalar.pageSize;
-                    this.totalRecords = odalar.totalCount;
-                    this.binalar = [...binalar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
-                    this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
-                    this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.odaOzellikleri = pagedResponse.items;
+                    this.pageNumber = pagedResponse.pageNumber;
+                    this.pageSize = pagedResponse.pageSize;
+                    this.totalRecords = pagedResponse.totalCount;
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -247,41 +210,12 @@ export class OdaYonetimi implements OnDestroy {
         return 'Beklenmeyen bir hata olustu.';
     }
 
-    private getEmptyOda(): OdaDto {
+    private getEmptyOdaOzellik(): OdaOzellikDto {
         return {
-            odaNo: '',
-            binaId: 0,
-            tesisOdaTipiId: 0,
-            katNo: 0,
-            yatakSayisi: null,
-            odaOzellikDegerleri: [],
+            kod: '',
+            ad: '',
+            veriTipi: 'boolean',
             aktifMi: true
         };
-    }
-
-    private cloneOda(source: OdaDto): OdaDto {
-        return {
-            ...source,
-            odaOzellikDegerleri: (source.odaOzellikDegerleri ?? []).map((item) => ({ ...item }))
-        };
-    }
-
-    private formatFeatureValue(feature: OdaOzellikDto | undefined, value: string | null): string {
-        const normalizedValue = value?.trim() ?? '';
-        if (normalizedValue.length === 0) {
-            return '-';
-        }
-
-        if (feature?.veriTipi === 'boolean') {
-            if (normalizedValue === 'true') {
-                return 'Evet';
-            }
-
-            if (normalizedValue === 'false') {
-                return 'Hayir';
-            }
-        }
-
-        return normalizedValue;
     }
 }

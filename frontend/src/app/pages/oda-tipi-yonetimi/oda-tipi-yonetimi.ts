@@ -15,6 +15,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
+import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { OdaTipiDialog } from './oda-tipi-dialog';
 import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
@@ -37,6 +38,7 @@ export class OdaTipiYonetimi implements OnDestroy {
     odaTipleri: OdaTipiDto[] = [];
     tesisler: TesisDto[] = [];
     odaSiniflari: OdaSinifiDto[] = [];
+    odaOzellikleri: OdaOzellikDto[] = [];
     selectedOdaTipi: OdaTipiDto = this.getEmptyOdaTipi();
     loading = false;
     saving = false;
@@ -95,13 +97,13 @@ export class OdaTipiYonetimi implements OnDestroy {
     }
 
     openEdit(odaTipi: OdaTipiDto): void {
-        this.selectedOdaTipi = { ...odaTipi };
+        this.selectedOdaTipi = this.cloneOdaTipi(odaTipi);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
     openView(odaTipi: OdaTipiDto): void {
-        this.selectedOdaTipi = { ...odaTipi };
+        this.selectedOdaTipi = this.cloneOdaTipi(odaTipi);
         this.dialogMode = 'view';
         this.dialogVisible = true;
     }
@@ -169,7 +171,8 @@ export class OdaTipiYonetimi implements OnDestroy {
         forkJoin({
             odaTipleri: this.service.getOdaTipleriPaged(pageNumber, pageSize, this.searchQuery),
             tesisler: this.service.getTesisler(),
-            odaSiniflari: this.service.getOdaSiniflari()
+            odaSiniflari: this.service.getOdaSiniflari(),
+            odaOzellikleri: this.service.getOdaOzellikleriForOdaTipi()
         })
             .pipe(
                 finalize(() => {
@@ -178,7 +181,7 @@ export class OdaTipiYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ odaTipleri, tesisler, odaSiniflari }) => {
+                next: ({ odaTipleri, tesisler, odaSiniflari, odaOzellikleri }) => {
                     if (odaTipleri.totalCount > 0 && odaTipleri.totalPages > 0 && pageNumber > odaTipleri.totalPages) {
                         this.pageNumber = odaTipleri.totalPages;
                         this.loadOdaTipleri(this.pageNumber, this.pageSize);
@@ -191,6 +194,7 @@ export class OdaTipiYonetimi implements OnDestroy {
                     this.totalRecords = odaTipleri.totalCount;
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaSiniflari = [...odaSiniflari].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -222,11 +226,24 @@ export class OdaTipiYonetimi implements OnDestroy {
             ad: '',
             paylasimliMi: false,
             kapasite: 1,
-            balkonVarMi: false,
-            klimaVarMi: false,
-            metrekare: null,
+            odaOzellikDegerleri: [],
             aktifMi: true
         };
+    }
+
+    getOdaTipiOzellikOzeti(odaTipi: OdaTipiDto): string {
+        const values = odaTipi.odaOzellikDegerleri ?? [];
+        if (values.length === 0) {
+            return '-';
+        }
+
+        return values
+            .map((value) => {
+                const feature = this.odaOzellikleri.find((item) => item.id === value.odaOzellikId);
+                const featureName = feature?.ad ?? `#${value.odaOzellikId}`;
+                return `${featureName}: ${this.formatFeatureValue(feature, value.deger ?? null)}`;
+            })
+            .join(', ');
     }
 
     getTesisAdi(tesisId: number): string {
@@ -237,5 +254,31 @@ export class OdaTipiYonetimi implements OnDestroy {
     getOdaSinifiAdi(odaSinifiId: number): string {
         const odaSinifi = this.odaSiniflari.find((item) => item.id === odaSinifiId);
         return odaSinifi?.ad ?? '-';
+    }
+
+    private cloneOdaTipi(source: OdaTipiDto): OdaTipiDto {
+        return {
+            ...source,
+            odaOzellikDegerleri: (source.odaOzellikDegerleri ?? []).map((item) => ({ ...item }))
+        };
+    }
+
+    private formatFeatureValue(feature: OdaOzellikDto | undefined, value: string | null): string {
+        const normalizedValue = value?.trim() ?? '';
+        if (normalizedValue.length === 0) {
+            return '-';
+        }
+
+        if (feature?.veriTipi === 'boolean') {
+            if (normalizedValue === 'true') {
+                return 'Evet';
+            }
+
+            if (normalizedValue === 'false') {
+                return 'Hayir';
+            }
+        }
+
+        return normalizedValue;
     }
 }

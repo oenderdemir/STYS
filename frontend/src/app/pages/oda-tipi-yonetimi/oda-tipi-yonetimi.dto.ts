@@ -1,3 +1,8 @@
+export interface TesisOdaTipiOzellikDegerDto {
+    odaOzellikId: number;
+    deger?: string | null;
+}
+
 export interface OdaTipiDto {
     id?: number | null;
     tesisId: number;
@@ -5,9 +10,7 @@ export interface OdaTipiDto {
     ad: string;
     paylasimliMi: boolean;
     kapasite: number;
-    balkonVarMi: boolean;
-    klimaVarMi: boolean;
-    metrekare?: number | null;
+    odaOzellikDegerleri: TesisOdaTipiOzellikDegerDto[];
     aktifMi: boolean;
 }
 

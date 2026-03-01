@@ -5,7 +5,6 @@ import { MenuItemDto, MenuRoleDto } from './dto';
 import { AppMenuItem } from './models';
 import { MenuApiService } from './menu-api.service';
 
-const adminPermission = 'KullaniciTipi.Admin';
 
 @Injectable({ providedIn: 'root' })
 export class MenuRuntimeService {
@@ -165,10 +164,6 @@ export class MenuRuntimeService {
             return true;
         }
 
-        if (permissionSet.has(this.normalizePermission(adminPermission))) {
-            return true;
-        }
-
         return requiredPermissions.some((permission) => permissionSet.has(this.normalizePermission(permission)));
     }
 
@@ -231,3 +226,5 @@ export class MenuRuntimeService {
         return permission.trim().toLowerCase();
     }
 }
+
+

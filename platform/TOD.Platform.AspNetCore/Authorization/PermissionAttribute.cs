@@ -7,6 +7,8 @@ namespace TOD.Platform.AspNetCore.Authorization;
 public sealed class PermissionAttribute : Attribute, IAuthorizationFilter
 {
     private readonly string[] _permissions;
+    private const string ViewSuffix = ".View";
+    private const string ManageSuffix = ".Manage";
 
     public PermissionAttribute(params string[] permissions)
     {
@@ -30,14 +32,24 @@ public sealed class PermissionAttribute : Attribute, IAuthorizationFilter
         var userPermissions = user.Claims
             .Where(c => c.Type == "permission")
             .Select(c => c.Value)
-            .ToList();
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var hasRequiredPermission = _permissions.Any(p => userPermissions.Contains(p, StringComparer.OrdinalIgnoreCase));
-        var isAdmin = userPermissions.Any(p => p.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
+        var hasRequiredPermission = _permissions.Any(requiredPermission =>
+            GetAcceptedPermissions(requiredPermission).Any(userPermissions.Contains));
 
-        if (!hasRequiredPermission && !isAdmin)
+        if (!hasRequiredPermission)
         {
             context.Result = new ForbidResult();
+        }
+    }
+
+    private static IEnumerable<string> GetAcceptedPermissions(string requiredPermission)
+    {
+        yield return requiredPermission;
+
+        if (requiredPermission.EndsWith(ViewSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return requiredPermission[..^ViewSuffix.Length] + ManageSuffix;
         }
     }
 }

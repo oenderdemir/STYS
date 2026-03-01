@@ -20,6 +20,12 @@ public class RoleRepository : BaseRdbmsRepository<Role>, IRoleRepository
 
     public async Task<IEnumerable<Role>> GetViewRolesAsync()
     {
+        var menuRoles = await Where(x => x.Name == "Menu").ToListAsync();
+        if (menuRoles.Count > 0)
+        {
+            return menuRoles;
+        }
+
         return await Where(x => x.Name == "View").ToListAsync();
     }
 }

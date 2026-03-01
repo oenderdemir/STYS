@@ -84,6 +84,10 @@ export class MenuYonetimi implements OnInit {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedMenuItem = this.getEmptyMenuItem();
         this.selectedParentId = '';
         this.selectedRoleIds = [];
@@ -93,6 +97,10 @@ export class MenuYonetimi implements OnInit {
     }
 
     openNewChild(parentId: string | null | undefined): void {
+        if (!this.canManage) {
+            return;
+        }
+
         if (!parentId) {
             this.openNew();
             return;

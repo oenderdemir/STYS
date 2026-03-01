@@ -91,12 +91,20 @@ export class OdaTipiYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaTipi = this.getEmptyOdaTipi();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(odaTipi: OdaTipiDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaTipi = this.cloneOdaTipi(odaTipi);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -109,7 +117,7 @@ export class OdaTipiYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: OdaTipiDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

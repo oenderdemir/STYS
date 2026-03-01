@@ -86,12 +86,20 @@ export class OdaOzellikYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaOzellik = this.getEmptyOdaOzellik();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(odaOzellik: OdaOzellikDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaOzellik = { ...odaOzellik };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -104,7 +112,7 @@ export class OdaOzellikYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: OdaOzellikDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

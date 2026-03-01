@@ -61,6 +61,10 @@ export class RolYonetimi implements OnInit {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedRole = this.getEmptyRole();
         this.isEditMode = false;
         this.dialogVisible = true;

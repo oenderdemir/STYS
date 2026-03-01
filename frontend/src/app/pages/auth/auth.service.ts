@@ -169,7 +169,16 @@ export class AuthService {
 
     hasPermission(permission: string): boolean {
         const permissions = this.getUserPermissions();
-        return permissions.includes(permission) || permissions.includes('KullaniciTipi.Admin');
+        if (permissions.includes(permission)) {
+            return true;
+        }
+
+        if (permission.endsWith('.View')) {
+            const managePermission = `${permission.slice(0, -'.View'.length)}.Manage`;
+            return permissions.includes(managePermission);
+        }
+
+        return false;
     }
 
     resetInactivityTimer(): void {

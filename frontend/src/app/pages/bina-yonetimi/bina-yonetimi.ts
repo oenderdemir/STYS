@@ -169,12 +169,20 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedBina = this.getEmptyBina();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(bina: BinaDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedBina = this.cloneBina(bina);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -196,7 +204,7 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     onOdaDialogSave(payload: OdaDto): void {
-        if (this.odaViewSaving || this.odaViewMode !== 'edit' || !this.selectedOdaForView.id) {
+        if (this.odaViewSaving || this.odaViewMode !== 'edit' || !this.canManageOda || !this.selectedOdaForView.id) {
             return;
         }
 
@@ -224,7 +232,7 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: BinaDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

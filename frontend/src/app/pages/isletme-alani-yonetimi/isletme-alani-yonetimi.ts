@@ -88,12 +88,20 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedAlan = this.getEmptyAlan();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(alan: IsletmeAlaniDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedAlan = { ...alan };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -106,7 +114,7 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: IsletmeAlaniDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

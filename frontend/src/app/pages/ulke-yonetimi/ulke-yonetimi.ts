@@ -87,12 +87,20 @@ export class UlkeYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedUlke = this.getEmptyUlke();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(ulke: UlkeDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedUlke = { ...ulke };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -105,7 +113,7 @@ export class UlkeYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: UlkeDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

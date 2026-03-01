@@ -138,12 +138,20 @@ export class IlYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedIl = this.getEmptyIl();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(il: IlDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedIl = { ...il };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -156,7 +164,7 @@ export class IlYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: IlDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

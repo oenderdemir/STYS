@@ -90,12 +90,20 @@ export class TesisYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedTesis = this.getEmptyTesis();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(tesis: TesisDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedTesis = this.cloneTesis(tesis);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -108,7 +116,7 @@ export class TesisYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: TesisDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

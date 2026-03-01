@@ -86,12 +86,20 @@ export class OdaSinifiYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaSinifi = this.getEmptyOdaSinifi();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(odaSinifi: OdaSinifiDto): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedOdaSinifi = { ...odaSinifi };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -104,7 +112,7 @@ export class OdaSinifiYonetimi implements OnDestroy {
     }
 
     onDialogSave(payload: OdaSinifiDto): void {
-        if (this.saving) {
+        if (this.saving || !this.canManage) {
             return;
         }
 

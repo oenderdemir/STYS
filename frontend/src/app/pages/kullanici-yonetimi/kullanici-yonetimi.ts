@@ -75,6 +75,10 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedUser = this.getEmptyUser();
         this.selectedUserGroupIds = [];
         this.selectedRoleNames = [];

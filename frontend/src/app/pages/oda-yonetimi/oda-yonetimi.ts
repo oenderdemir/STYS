@@ -53,8 +53,7 @@ export class OdaYonetimi implements OnDestroy {
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canCreate(): boolean {
-        return this.authService.hasPermission('OdaYonetimi.Manage')
-            || this.authService.hasPermission('OdaYonetimi.Create');
+        return this.authService.hasPermission('OdaYonetimi.Manage');
     }
 
     get canEdit(): boolean {
@@ -62,8 +61,7 @@ export class OdaYonetimi implements OnDestroy {
     }
 
     get canDelete(): boolean {
-        return this.authService.hasPermission('OdaYonetimi.Manage')
-            || this.authService.hasPermission('OdaYonetimi.Delete');
+        return this.authService.hasPermission('OdaYonetimi.Manage');
     }
 
     ngOnDestroy(): void {

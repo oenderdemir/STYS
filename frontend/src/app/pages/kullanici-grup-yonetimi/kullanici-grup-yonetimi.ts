@@ -56,7 +56,7 @@ export class KullaniciGrupYonetimi implements OnInit {
     isEditMode = false;
 
     get canManage(): boolean {
-        return this.authService.hasPermission('UserGroupManagement.Manage') || this.authService.hasPermission('UserManagement.Manage');
+        return this.authService.hasPermission('UserGroupManagement.Manage');
     }
 
     ngOnInit(): void {
@@ -72,6 +72,10 @@ export class KullaniciGrupYonetimi implements OnInit {
     }
 
     openNew(): void {
+        if (!this.canManage) {
+            return;
+        }
+
         this.selectedUserGroup = this.getEmptyUserGroup();
         this.selectedRoleIds = [];
         this.isEditMode = false;

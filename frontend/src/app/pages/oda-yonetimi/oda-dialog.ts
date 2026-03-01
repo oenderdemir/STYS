@@ -161,7 +161,8 @@ export class OdaDialog implements OnChanges {
     @Input() odaTipleri: OdaTipiDto[] = [];
     @Input() odaOzellikleri: OdaOzellikDto[] = [];
     @Input() saving = false;
-    @Input() canManage = false;
+    @Input() canCreate = false;
+    @Input() canEdit = false;
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<OdaDto>();
@@ -205,15 +206,24 @@ export class OdaDialog implements OnChanges {
     }
 
     get isReadOnly(): boolean {
-        return this.mode === 'view' || !this.canManage;
+        if (this.mode === 'view') {
+            return true;
+        }
+
+        if (this.mode === 'create') {
+            return !this.canCreate;
+        }
+
+        return !this.canEdit;
     }
 
     get showSaveButton(): boolean {
-        return this.mode !== 'view' && this.canManage;
+        return (this.mode === 'create' && this.canCreate)
+            || (this.mode === 'edit' && this.canEdit);
     }
 
     get showLockToggle(): boolean {
-        return this.canManage && this.mode !== 'create';
+        return this.canEdit && this.mode !== 'create';
     }
 
     get lockIcon(): string {
@@ -261,7 +271,15 @@ export class OdaDialog implements OnChanges {
     }
 
     submit(): void {
-        if (!this.canManage || this.mode === 'view' || !this.canSubmit()) {
+        if (this.mode === 'view' || !this.canSubmit()) {
+            return;
+        }
+
+        if (this.mode === 'create' && !this.canCreate) {
+            return;
+        }
+
+        if (this.mode === 'edit' && !this.canEdit) {
             return;
         }
 
@@ -291,7 +309,7 @@ export class OdaDialog implements OnChanges {
     }
 
     toggleLockMode(): void {
-        if (!this.canManage || this.mode === 'create') {
+        if (!this.canEdit || this.mode === 'create') {
             return;
         }
 

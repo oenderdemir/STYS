@@ -5,8 +5,10 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { BinaDto } from './bina-yonetimi.dto';
@@ -14,7 +16,7 @@ import { BinaDto } from './bina-yonetimi.dto';
 @Component({
     selector: 'app-bina-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, MultiSelectModule, SelectModule, ToggleSwitchModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -58,6 +60,24 @@ import { BinaDto } from './bina-yonetimi.dto';
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
+                @if (canManage) {
+                    <div class="col-span-12">
+                        <label for="yoneticiUserIds" class="block font-medium mb-2">Bina Yoneticileri</label>
+                        <p-multiselect
+                            inputId="yoneticiUserIds"
+                            [options]="yoneticiSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="workingModel.yoneticiUserIds"
+                            [showClear]="true"
+                            [filter]="true"
+                            appendTo="body"
+                            placeholder="Yoneticileri secin"
+                            class="w-full"
+                            [disabled]="isReadOnly || saving"
+                        />
+                    </div>
+                }
             </div>
 
             <ng-template #footer>
@@ -74,6 +94,7 @@ export class BinaDialog implements OnChanges {
     @Input() mode: CrudDialogMode = 'create';
     @Input() model: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
     @Input() tesisler: TesisDto[] = [];
+    @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -82,6 +103,15 @@ export class BinaDialog implements OnChanges {
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
+
+    get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
+        return this.yoneticiAdaylari.map((item) => ({
+            value: item.id,
+            label: item.adSoyad && item.adSoyad.trim().length > 0
+                ? `${item.userName} - ${item.adSoyad}`
+                : item.userName
+        }));
+    }
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -125,11 +155,11 @@ export class BinaDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
     }
 
@@ -150,7 +180,7 @@ export class BinaDialog implements OnChanges {
             tesisId: this.workingModel.tesisId,
             katSayisi: this.workingModel.katSayisi,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? null
+            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? []
         });
     }
 
@@ -164,11 +194,18 @@ export class BinaDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = { ...this.model };
+        this.workingModel = this.cloneModel(this.model);
         this.modeChange.emit('view');
     }
 
     close(): void {
         this.visibleChange.emit(false);
+    }
+
+    private cloneModel(model: BinaDto): BinaDto {
+        return {
+            ...model,
+            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])]
+        };
     }
 }

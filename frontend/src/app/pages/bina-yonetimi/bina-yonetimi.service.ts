@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
+import { ManagerCandidateDto } from '../../core/identity';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
@@ -88,6 +89,18 @@ export class BinaYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getYoneticiAdaylari(): Observable<ManagerCandidateDto[]> {
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Yonetici aday listesi alinamadi.');
             })
         );
     }

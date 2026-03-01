@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
+import { ManagerCandidateDto } from '../../core/identity';
 import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
 import { TesisDto } from './tesis-yonetimi.dto';
 
@@ -49,6 +50,18 @@ export class TesisYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Il listesi alinamadi.');
+            })
+        );
+    }
+
+    getYoneticiAdaylari(): Observable<ManagerCandidateDto[]> {
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Yonetici aday listesi alinamadi.');
             })
         );
     }

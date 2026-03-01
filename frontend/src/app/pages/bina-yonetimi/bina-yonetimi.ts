@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -13,6 +13,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
@@ -43,6 +44,7 @@ export class BinaYonetimi implements OnDestroy {
 
     binalar: BinaDto[] = [];
     tesisler: TesisDto[] = [];
+    yoneticiAdaylari: ManagerCandidateDto[] = [];
     selectedBina: BinaDto = this.getEmptyBina();
     loading = false;
     saving = false;
@@ -173,13 +175,13 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     openEdit(bina: BinaDto): void {
-        this.selectedBina = { ...bina };
+        this.selectedBina = this.cloneBina(bina);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
     openView(bina: BinaDto): void {
-        this.selectedBina = { ...bina };
+        this.selectedBina = this.cloneBina(bina);
         this.dialogMode = 'view';
         this.dialogVisible = true;
     }
@@ -290,7 +292,8 @@ export class BinaYonetimi implements OnDestroy {
             binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery),
             tesisler: this.service.getTesisler(),
             odaTipleri: this.service.getOdaTipleri(),
-            odaOzellikleri: this.odaService.getOdaOzellikleriActive()
+            odaOzellikleri: this.odaService.getOdaOzellikleriActive(),
+            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -299,7 +302,7 @@ export class BinaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ binalar, tesisler, odaTipleri, odaOzellikleri }) => {
+                next: ({ binalar, tesisler, odaTipleri, odaOzellikleri, yoneticiAdaylari }) => {
                     if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
                         this.pageNumber = binalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -313,6 +316,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
                     this.expandedRowKeys = {};
                     this.odalarByBinaId = {};
                     this.alanlarByBinaId = {};
@@ -348,6 +352,13 @@ export class BinaYonetimi implements OnDestroy {
             katSayisi: 1,
             aktifMi: true,
             yoneticiUserIds: null
+        };
+    }
+
+    private cloneBina(source: BinaDto): BinaDto {
+        return {
+            ...source,
+            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])]
         };
     }
 

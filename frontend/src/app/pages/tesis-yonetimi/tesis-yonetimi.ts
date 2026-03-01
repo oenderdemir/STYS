@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -13,6 +13,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
@@ -36,6 +37,7 @@ export class TesisYonetimi implements OnDestroy {
 
     tesisler: TesisDto[] = [];
     iller: IlDto[] = [];
+    yoneticiAdaylari: ManagerCandidateDto[] = [];
     selectedTesis: TesisDto = this.getEmptyTesis();
     loading = false;
     saving = false;
@@ -94,13 +96,13 @@ export class TesisYonetimi implements OnDestroy {
     }
 
     openEdit(tesis: TesisDto): void {
-        this.selectedTesis = { ...tesis };
+        this.selectedTesis = this.cloneTesis(tesis);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
     openView(tesis: TesisDto): void {
-        this.selectedTesis = { ...tesis };
+        this.selectedTesis = this.cloneTesis(tesis);
         this.dialogMode = 'view';
         this.dialogVisible = true;
     }
@@ -172,7 +174,8 @@ export class TesisYonetimi implements OnDestroy {
         this.loading = true;
         forkJoin({
             tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery),
-            iller: this.service.getIller()
+            iller: this.service.getIller(),
+            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -181,7 +184,7 @@ export class TesisYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ tesisler, iller }) => {
+                next: ({ tesisler, iller, yoneticiAdaylari }) => {
                     if (tesisler.totalCount > 0 && tesisler.totalPages > 0 && pageNumber > tesisler.totalPages) {
                         this.pageNumber = tesisler.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -193,6 +196,7 @@ export class TesisYonetimi implements OnDestroy {
                     this.pageSize = tesisler.pageSize;
                     this.totalRecords = tesisler.totalCount;
                     this.iller = [...iller].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -226,6 +230,13 @@ export class TesisYonetimi implements OnDestroy {
             eposta: null,
             aktifMi: true,
             yoneticiUserIds: null
+        };
+    }
+
+    private cloneTesis(source: TesisDto): TesisDto {
+        return {
+            ...source,
+            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])]
         };
     }
 }

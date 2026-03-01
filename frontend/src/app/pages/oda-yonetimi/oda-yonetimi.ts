@@ -52,8 +52,18 @@ export class OdaYonetimi implements OnDestroy {
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
-    get canManage(): boolean {
+    get canCreate(): boolean {
+        return this.authService.hasPermission('OdaYonetimi.Manage')
+            || this.authService.hasPermission('OdaYonetimi.Create');
+    }
+
+    get canEdit(): boolean {
         return this.authService.hasPermission('OdaYonetimi.Manage');
+    }
+
+    get canDelete(): boolean {
+        return this.authService.hasPermission('OdaYonetimi.Manage')
+            || this.authService.hasPermission('OdaYonetimi.Delete');
     }
 
     ngOnDestroy(): void {
@@ -92,12 +102,20 @@ export class OdaYonetimi implements OnDestroy {
     }
 
     openNew(): void {
+        if (!this.canCreate) {
+            return;
+        }
+
         this.selectedOda = this.getEmptyOda();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
     openEdit(oda: OdaDto): void {
+        if (!this.canEdit) {
+            return;
+        }
+
         this.selectedOda = this.cloneOda(oda);
         this.dialogMode = 'edit';
         this.dialogVisible = true;
@@ -111,6 +129,14 @@ export class OdaYonetimi implements OnDestroy {
 
     onDialogSave(payload: OdaDto): void {
         if (this.saving) {
+            return;
+        }
+
+        if (this.dialogMode === 'create' && !this.canCreate) {
+            return;
+        }
+
+        if (this.dialogMode === 'edit' && !this.canEdit) {
             return;
         }
 
@@ -139,7 +165,7 @@ export class OdaYonetimi implements OnDestroy {
     }
 
     deleteOda(oda: OdaDto): void {
-        if (!this.canManage || !oda.id) {
+        if (!this.canDelete || !oda.id) {
             return;
         }
 

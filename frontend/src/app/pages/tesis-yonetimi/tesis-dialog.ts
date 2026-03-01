@@ -4,8 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
+import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
 import { TesisDto } from './tesis-yonetimi.dto';
@@ -13,7 +15,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
 @Component({
     selector: 'app-tesis-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, SelectModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, ToggleSwitchModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -65,6 +67,24 @@ import { TesisDto } from './tesis-yonetimi.dto';
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
+                @if (canManage) {
+                    <div class="col-span-12">
+                        <label for="yoneticiUserIds" class="block font-medium mb-2">Tesis Yoneticileri</label>
+                        <p-multiselect
+                            inputId="yoneticiUserIds"
+                            [options]="yoneticiSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="workingModel.yoneticiUserIds"
+                            [showClear]="true"
+                            [filter]="true"
+                            appendTo="body"
+                            placeholder="Yoneticileri secin"
+                            class="w-full"
+                            [disabled]="isReadOnly || saving"
+                        />
+                    </div>
+                }
             </div>
 
             <ng-template #footer>
@@ -81,6 +101,7 @@ export class TesisDialog implements OnChanges {
     @Input() mode: CrudDialogMode = 'create';
     @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
     @Input() iller: IlDto[] = [];
+    @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -89,6 +110,15 @@ export class TesisDialog implements OnChanges {
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
+
+    get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
+        return this.yoneticiAdaylari.map((item) => ({
+            value: item.id,
+            label: item.adSoyad && item.adSoyad.trim().length > 0
+                ? `${item.userName} - ${item.adSoyad}`
+                : item.userName
+        }));
+    }
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -132,11 +162,11 @@ export class TesisDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.cloneModel(this.model);
         }
     }
 
@@ -160,7 +190,7 @@ export class TesisDialog implements OnChanges {
             adres: this.workingModel.adres.trim(),
             eposta: this.workingModel.eposta?.trim() || null,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? null
+            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? []
         });
     }
 
@@ -174,11 +204,18 @@ export class TesisDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = { ...this.model };
+        this.workingModel = this.cloneModel(this.model);
         this.modeChange.emit('view');
     }
 
     close(): void {
         this.visibleChange.emit(false);
+    }
+
+    private cloneModel(model: TesisDto): TesisDto {
+        return {
+            ...model,
+            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])]
+        };
     }
 }

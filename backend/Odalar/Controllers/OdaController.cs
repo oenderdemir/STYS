@@ -63,7 +63,7 @@ public class OdaController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.OdaYonetimi.Manage)]
+    [Permission(StructurePermissions.OdaYonetimi.Manage, StructurePermissions.OdaYonetimi.Create)]
     public async Task<ActionResult<OdaDto>> Create([FromBody] OdaDto dto)
     {
         var created = await _odaService.AddAsync(dto);
@@ -80,7 +80,7 @@ public class OdaController : UIController
     }
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.OdaYonetimi.Manage)]
+    [Permission(StructurePermissions.OdaYonetimi.Manage, StructurePermissions.OdaYonetimi.Delete)]
     public async Task<IActionResult> Delete(int id)
     {
         await _odaService.DeleteAsync(id);

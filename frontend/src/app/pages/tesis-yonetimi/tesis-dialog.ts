@@ -84,6 +84,22 @@ import { TesisDto } from './tesis-yonetimi.dto';
                             [disabled]="isReadOnly || saving"
                         />
                     </div>
+                    <div class="col-span-12">
+                        <label for="resepsiyonistUserIds" class="block font-medium mb-2">Resepsiyonistler</label>
+                        <p-multiselect
+                            inputId="resepsiyonistUserIds"
+                            [options]="resepsiyonistSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="workingModel.resepsiyonistUserIds"
+                            [showClear]="true"
+                            [filter]="true"
+                            appendTo="body"
+                            placeholder="Resepsiyonistleri secin"
+                            class="w-full"
+                            [disabled]="isReadOnly || saving"
+                        />
+                    </div>
                 }
             </div>
 
@@ -99,9 +115,10 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
     @Input() iller: IlDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
+    @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -109,10 +126,19 @@ export class TesisDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null };
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
+            value: item.id,
+            label: item.adSoyad && item.adSoyad.trim().length > 0
+                ? `${item.userName} - ${item.adSoyad}`
+                : item.userName
+        }));
+    }
+
+    get resepsiyonistSecenekleri(): Array<{ label: string; value: string }> {
+        return this.resepsiyonistAdaylari.map((item) => ({
             value: item.id,
             label: item.adSoyad && item.adSoyad.trim().length > 0
                 ? `${item.userName} - ${item.adSoyad}`
@@ -190,7 +216,8 @@ export class TesisDialog implements OnChanges {
             adres: this.workingModel.adres.trim(),
             eposta: this.workingModel.eposta?.trim() || null,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? []
+            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? [],
+            resepsiyonistUserIds: this.workingModel.resepsiyonistUserIds ?? []
         });
     }
 
@@ -215,7 +242,8 @@ export class TesisDialog implements OnChanges {
     private cloneModel(model: TesisDto): TesisDto {
         return {
             ...model,
-            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])]
+            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])],
+            resepsiyonistUserIds: [...(model.resepsiyonistUserIds ?? [])]
         };
     }
 }

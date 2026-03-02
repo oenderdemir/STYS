@@ -101,10 +101,29 @@
             <label for="email" class="block font-medium mb-2">Email</label>
             <input id="email" pInputText [(ngModel)]="selectedUser.email" class="w-full" [disabled]="!canManage || saving" />
         </div>
+        @if (!isEditMode && isScopedTesisManager) {
+            <div class="col-span-12">
+                <label for="createTesisId" class="block font-medium mb-2">Tesis</label>
+                <p-select
+                    inputId="createTesisId"
+                    [options]="tesisler"
+                    optionLabel="ad"
+                    optionValue="id"
+                    [(ngModel)]="selectedTesisIdForCreate"
+                    [showClear]="true"
+                    [filter]="true"
+                    appendTo="body"
+                    class="w-full"
+                    placeholder="Tesis seciniz"
+                    [disabled]="!canManage || saving"
+                />
+            </div>
+        }
     </div>
 
     <p-divider />
 
+    @if (!isScopedTesisManager) {
     <div class="mb-4">
             <label for="userGroups" class="block font-medium mb-2">Kullanici Gruplari</label>
         <p-multiSelect
@@ -123,6 +142,7 @@
             (onChange)="onSelectedGroupsChange()"
         />
     </div>
+    }
 
     <div>
         <div class="font-medium mb-2">Roller</div>

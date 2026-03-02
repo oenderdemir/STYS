@@ -28,6 +28,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Il> Iller => Set<Il>();
     public DbSet<Tesis> Tesisler => Set<Tesis>();
     public DbSet<TesisYonetici> TesisYoneticileri => Set<TesisYonetici>();
+    public DbSet<TesisResepsiyonist> TesisResepsiyonistleri => Set<TesisResepsiyonist>();
     public DbSet<Bina> Binalar => Set<Bina>();
     public DbSet<BinaYonetici> BinaYoneticileri => Set<BinaYonetici>();
     public DbSet<IsletmeAlani> IsletmeAlanlari => Set<IsletmeAlani>();
@@ -99,6 +100,19 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.Tesis)
                 .WithMany(x => x.Yoneticiler)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TesisResepsiyonist>(entity =>
+        {
+            entity.ToTable("TesisResepsiyonistleri", "dbo");
+            entity.HasIndex(x => new { x.TesisId, x.UserId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.Resepsiyonistler)
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

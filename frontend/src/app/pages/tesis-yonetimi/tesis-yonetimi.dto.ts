@@ -7,4 +7,5 @@ export interface TesisDto {
     eposta?: string | null;
     aktifMi: boolean;
     yoneticiUserIds?: string[] | null;
+    resepsiyonistUserIds?: string[] | null;
 }

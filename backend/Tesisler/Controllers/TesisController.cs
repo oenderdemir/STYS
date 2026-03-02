@@ -3,6 +3,8 @@ using STYS.Tesisler.Dto;
 using STYS.Tesisler.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Identity;
+using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Tesisler.Controllers;
@@ -90,5 +92,13 @@ public class TesisController : UIController
     {
         await _tesisService.DeleteAsync(id);
         return Ok();
+    }
+
+    [HttpPost("{tesisId:int}/resepsiyonist-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateResepsiyonistUser(int tesisId, [FromBody] UserDto dto)
+    {
+        var created = await _tesisService.CreateResepsiyonistUserAsync(tesisId, dto);
+        return Ok(created);
     }
 }

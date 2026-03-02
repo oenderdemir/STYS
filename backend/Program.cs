@@ -6,6 +6,7 @@ using Serilog;
 using STYS.AccessScope;
 using STYS.Countries.Mapping;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Kullanicilar.Services;
 using STYS.YoneticiAdaylari.Services;
 using TOD.Platform.AspNetCore;
 using TOD.Platform.AspNetCore.Authorization;
@@ -13,6 +14,7 @@ using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
+using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Persistence.Rdbms.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +48,8 @@ builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfigurat
 
 builder.Services.AddDbContext<StysAppDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
+builder.Services.AddScoped<IUserService, StysScopedUserService>();
+builder.Services.AddScoped<IAccessScopeProvider, AccessScopeProvider>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IYoneticiAdayService, YoneticiAdayService>();
 

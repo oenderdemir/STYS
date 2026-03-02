@@ -22,4 +22,20 @@ public class YoneticiAdayController : UIController
         var result = await _yoneticiAdayService.GetAllAsync(cancellationToken);
         return Ok(result);
     }
+
+    [HttpGet("tesis-yoneticileri")]
+    [Permission(StructurePermissions.TesisYonetimi.Manage)]
+    public async Task<ActionResult<List<YoneticiAdayDto>>> GetTesisYoneticiAdaylari(CancellationToken cancellationToken)
+    {
+        var result = await _yoneticiAdayService.GetTesisYoneticiAdaylariAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("resepsiyonistler")]
+    [Permission(StructurePermissions.TesisYonetimi.Manage)]
+    public async Task<ActionResult<List<YoneticiAdayDto>>> GetResepsiyonistAdaylari(CancellationToken cancellationToken)
+    {
+        var result = await _yoneticiAdayService.GetResepsiyonistAdaylariAsync(cancellationToken);
+        return Ok(result);
+    }
 }

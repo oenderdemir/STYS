@@ -6,7 +6,11 @@ using STYS.Iller.Repositories;
 using STYS.Tesisler.Dto;
 using STYS.Tesisler.Entities;
 using STYS.Tesisler.Repositories;
+using TOD.Platform.Identity.Infrastructure.EntityFramework;
+using TOD.Platform.Identity.UserGroups.DTO;
+using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Repositories;
+using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -15,26 +19,80 @@ namespace STYS.Tesisler.Services;
 
 public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisService
 {
+    private const string ResepsiyonistGroupName = "ResepsiyonistGrubu";
+
     private readonly ITesisRepository _tesisRepository;
     private readonly ITesisYoneticiRepository _tesisYoneticiRepository;
+    private readonly ITesisResepsiyonistRepository _tesisResepsiyonistRepository;
     private readonly IIlRepository _ilRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IUserService _userService;
+    private readonly TodIdentityDbContext _identityDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
     public TesisService(
         ITesisRepository tesisRepository,
         ITesisYoneticiRepository tesisYoneticiRepository,
+        ITesisResepsiyonistRepository tesisResepsiyonistRepository,
         IIlRepository ilRepository,
         IUserRepository userRepository,
+        IUserService userService,
+        TodIdentityDbContext identityDbContext,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(tesisRepository, mapper)
     {
         _tesisRepository = tesisRepository;
         _tesisYoneticiRepository = tesisYoneticiRepository;
+        _tesisResepsiyonistRepository = tesisResepsiyonistRepository;
         _ilRepository = ilRepository;
         _userRepository = userRepository;
+        _userService = userService;
+        _identityDbContext = identityDbContext;
         _userAccessScopeService = userAccessScopeService;
+    }
+
+    public async Task<UserDto> CreateResepsiyonistUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var receptionistGroupId = await _identityDbContext.UserGroups
+            .Where(x => x.Name == ResepsiyonistGroupName)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        if (receptionistGroupId == Guid.Empty)
+        {
+            throw new BaseException("Resepsiyonist grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = receptionistGroupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Resepsiyonist olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SyncUserToSingleTesisAsync(created.Id.Value, tesisId);
+        return created;
     }
 
     public override async Task<TesisDto> AddAsync(TesisDto dto)
@@ -43,10 +101,17 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await EnsureIlRulesAsync(dto.IlId);
         await EnsureUniqueActiveNameAsync(dto, null);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: false);
+        var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: false);
 
         var entity = Mapper.Map<Tesis>(dto);
         entity.Yoneticiler = managerIds!
             .Select(x => new TesisYonetici
+            {
+                UserId = x
+            })
+            .ToList();
+        entity.Resepsiyonistler = receptionistIds!
+            .Select(x => new TesisResepsiyonist
             {
                 UserId = x
             })
@@ -65,7 +130,9 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Tesis id zorunludur.", 400);
         }
 
-        var existingEntity = await _tesisRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.Yoneticiler));
+        var existingEntity = await _tesisRepository.GetByIdAsync(dto.Id.Value, query => query
+            .Include(x => x.Yoneticiler)
+            .Include(x => x.Resepsiyonistler));
         if (existingEntity is null)
         {
             throw new BaseException("Guncellenecek tesis bulunamadi.", 404);
@@ -76,6 +143,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await EnsureIlRulesAsync(dto.IlId);
         await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: true);
+        var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: true);
 
         existingEntity.IsDeleted = false;
         existingEntity.Ad = dto.Ad;
@@ -88,6 +156,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         if (managerIds is not null)
         {
             SyncYoneticiler(existingEntity, managerIds);
+        }
+
+        if (receptionistIds is not null)
+        {
+            SyncResepsiyonistler(existingEntity, receptionistIds);
         }
 
         _tesisRepository.Update(existingEntity);
@@ -223,7 +296,9 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         return query =>
         {
             var result = include is null ? query : include(query);
-            result = result.Include(x => x.Yoneticiler);
+            result = result
+                .Include(x => x.Yoneticiler)
+                .Include(x => x.Resepsiyonistler);
 
             if (scope.IsScoped)
             {
@@ -267,6 +342,61 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         return normalizedManagerIds;
     }
 
+    private async Task<List<Guid>?> NormalizeAndValidateReceptionistIdsAsync(
+        ICollection<Guid>? receptionistUserIds,
+        bool preserveWhenNull)
+    {
+        if (receptionistUserIds is null)
+        {
+            return preserveWhenNull ? null : [];
+        }
+
+        var normalizedReceptionistIds = receptionistUserIds
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (normalizedReceptionistIds.Count == 0)
+        {
+            return [];
+        }
+
+        var existingUserIds = await _userRepository
+            .Where(x => normalizedReceptionistIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        var missingUserIds = normalizedReceptionistIds.Except(existingUserIds).ToList();
+        if (missingUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen resepsiyonistlerden en az biri bulunamadi.", 400);
+        }
+
+        var receptionistGroupId = await _identityDbContext.UserGroups
+            .Where(x => x.Name == ResepsiyonistGroupName)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        if (receptionistGroupId == Guid.Empty)
+        {
+            throw new BaseException("Resepsiyonist grubu bulunamadi.", 400);
+        }
+
+        var receptionistMembershipUserIds = await _identityDbContext.UserUserGroups
+            .Where(x => x.UserGroupId == receptionistGroupId && normalizedReceptionistIds.Contains(x.UserId))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        var invalidGroupUserIds = normalizedReceptionistIds.Except(receptionistMembershipUserIds).ToList();
+        if (invalidGroupUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen kullanicilar resepsiyonist grubunda olmalidir.", 400);
+        }
+
+        return normalizedReceptionistIds;
+    }
+
     private void SyncYoneticiler(Tesis entity, IReadOnlyCollection<Guid> managerUserIds)
     {
         entity.Yoneticiler ??= [];
@@ -295,5 +425,63 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
                 UserId = desiredUserId
             });
         }
+    }
+
+    private void SyncResepsiyonistler(Tesis entity, IReadOnlyCollection<Guid> receptionistUserIds)
+    {
+        entity.Resepsiyonistler ??= [];
+
+        var byUserId = entity.Resepsiyonistler.ToDictionary(x => x.UserId);
+        var desiredUserIds = receptionistUserIds.ToHashSet();
+
+        var toDelete = entity.Resepsiyonistler
+            .Where(x => !desiredUserIds.Contains(x.UserId))
+            .ToList();
+
+        if (toDelete.Count > 0)
+        {
+            _tesisResepsiyonistRepository.DeleteRange(toDelete);
+        }
+
+        foreach (var desiredUserId in desiredUserIds)
+        {
+            if (byUserId.ContainsKey(desiredUserId))
+            {
+                continue;
+            }
+
+            entity.Resepsiyonistler.Add(new TesisResepsiyonist
+            {
+                UserId = desiredUserId
+            });
+        }
+    }
+
+    private async Task SyncUserToSingleTesisAsync(Guid userId, int tesisId)
+    {
+        var existingAssignments = await _tesisResepsiyonistRepository
+            .Where(x => x.UserId == userId)
+            .ToListAsync();
+
+        var assignmentsToDelete = existingAssignments
+            .Where(x => x.TesisId != tesisId)
+            .ToList();
+
+        if (assignmentsToDelete.Count > 0)
+        {
+            _tesisResepsiyonistRepository.DeleteRange(assignmentsToDelete);
+        }
+
+        var hasSelectedTesisAssignment = existingAssignments.Any(x => x.TesisId == tesisId);
+        if (!hasSelectedTesisAssignment)
+        {
+            await _tesisResepsiyonistRepository.AddAsync(new TesisResepsiyonist
+            {
+                TesisId = tesisId,
+                UserId = userId
+            });
+        }
+
+        await _tesisResepsiyonistRepository.SaveChangesAsync();
     }
 }

@@ -38,6 +38,7 @@ export class TesisYonetimi implements OnDestroy {
     tesisler: TesisDto[] = [];
     iller: IlDto[] = [];
     yoneticiAdaylari: ManagerCandidateDto[] = [];
+    resepsiyonistAdaylari: ManagerCandidateDto[] = [];
     selectedTesis: TesisDto = this.getEmptyTesis();
     loading = false;
     saving = false;
@@ -183,7 +184,8 @@ export class TesisYonetimi implements OnDestroy {
         forkJoin({
             tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery),
             iller: this.service.getIller(),
-            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([])
+            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([]),
+            resepsiyonistAdaylari: this.canManage ? this.service.getResepsiyonistAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -192,7 +194,7 @@ export class TesisYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ tesisler, iller, yoneticiAdaylari }) => {
+                next: ({ tesisler, iller, yoneticiAdaylari, resepsiyonistAdaylari }) => {
                     if (tesisler.totalCount > 0 && tesisler.totalPages > 0 && pageNumber > tesisler.totalPages) {
                         this.pageNumber = tesisler.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -205,6 +207,7 @@ export class TesisYonetimi implements OnDestroy {
                     this.totalRecords = tesisler.totalCount;
                     this.iller = [...iller].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
+                    this.resepsiyonistAdaylari = [...resepsiyonistAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -237,14 +240,16 @@ export class TesisYonetimi implements OnDestroy {
             adres: '',
             eposta: null,
             aktifMi: true,
-            yoneticiUserIds: null
+            yoneticiUserIds: null,
+            resepsiyonistUserIds: null
         };
     }
 
     private cloneTesis(source: TesisDto): TesisDto {
         return {
             ...source,
-            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])]
+            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])],
+            resepsiyonistUserIds: [...(source.resepsiyonistUserIds ?? [])]
         };
     }
 }

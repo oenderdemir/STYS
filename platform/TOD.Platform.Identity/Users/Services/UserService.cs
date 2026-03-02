@@ -18,7 +18,11 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
     private readonly IUserGroupRepository _userGroupRepository;
     private readonly IPasswordHasher _passwordHasher;
 
-    public UserService(IUserRepository userRepository, IUserGroupRepository userGroupRepository, IPasswordHasher passwordHasher, IMapper mapper)
+    public UserService(
+        IUserRepository userRepository,
+        IUserGroupRepository userGroupRepository,
+        IPasswordHasher passwordHasher,
+        IMapper mapper)
         : base(userRepository, mapper)
     {
         _userGroupRepository = userGroupRepository;
@@ -112,7 +116,7 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
         return dto;
     }
 
-    public async Task ResetPasswordAsync(Guid id, UserResetPasswordDto dto)
+    public virtual async Task ResetPasswordAsync(Guid id, UserResetPasswordDto dto)
     {
         if (dto is null)
         {

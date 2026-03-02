@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -20,6 +20,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UserGroupRequestDto, UserGroupResponseDto } from '../../core/identity';
 import { AuthService } from '../auth';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { UserRequestDto, UserResetPasswordRequestDto, UserResponseDto } from './dto';
 import { KullaniciYonetimiService } from './kullanici-yonetimi.service';
 
@@ -45,8 +46,10 @@ export class KullaniciYonetimi implements OnInit {
 
     users: UserResponseDto[] = [];
     allUserGroups: UserGroupOption[] = [];
+    tesisler: TesisDto[] = [];
     selectedUser: UserResponseDto = this.getEmptyUser();
     selectedUserGroupIds: string[] = [];
+    selectedTesisIdForCreate: number | null = null;
     selectedRoleNames: string[] = [];
     loading = false;
     saving = false;
@@ -66,6 +69,12 @@ export class KullaniciYonetimi implements OnInit {
 
     get canManage(): boolean {
         return this.authService.hasPermission('UserManagement.Manage');
+    }
+
+    get isScopedTesisManager(): boolean {
+        return this.canManage
+            && this.authService.hasPermission('TesisYonetimi.Manage')
+            && !this.authService.hasPermission('KullaniciTipi.Admin');
     }
 
     ngOnInit(): void {
@@ -88,6 +97,7 @@ export class KullaniciYonetimi implements OnInit {
         this.selectedUser = this.getEmptyUser();
         this.selectedUserGroupIds = [];
         this.selectedRoleNames = [];
+        this.selectedTesisIdForCreate = null;
         this.isEditMode = false;
         this.dialogVisible = true;
     }
@@ -99,6 +109,7 @@ export class KullaniciYonetimi implements OnInit {
         };
         this.selectedUserGroupIds = this.selectedUser.userGroups.map((group) => group.id).filter((id): id is string => !!id);
         this.selectedRoleNames = this.extractRoleNames(this.selectedUser.userGroups);
+        this.selectedTesisIdForCreate = null;
         this.isEditMode = true;
         this.dialogVisible = true;
     }
@@ -134,8 +145,21 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
+        if (!this.isEditMode && this.isScopedTesisManager && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Eksik Bilgi',
+                detail: 'Resepsiyonist icin tesis secimi zorunludur.'
+            });
+            return;
+        }
+
         const request$: Observable<unknown> =
-            this.isEditMode && this.selectedUser.id ? this.service.updateUser(this.selectedUser.id, payload) : this.service.createUser(payload);
+            this.isEditMode && this.selectedUser.id
+                ? this.service.updateUser(this.selectedUser.id, payload)
+                : this.isScopedTesisManager && this.selectedTesisIdForCreate
+                    ? this.service.createResepsiyonistUserForTesis(this.selectedTesisIdForCreate, payload)
+                    : this.service.createUser(payload);
 
         this.saving = true;
         request$
@@ -325,7 +349,8 @@ export class KullaniciYonetimi implements OnInit {
         this.loading = true;
         forkJoin({
             users: this.service.getUsers(),
-            userGroups: this.service.getUserGroups()
+            userGroups: this.service.getUserGroups(),
+            tesisler: this.isScopedTesisManager ? this.service.getTesisler() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -334,9 +359,10 @@ export class KullaniciYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ users, userGroups }) => {
+                next: ({ users, userGroups, tesisler }) => {
                     this.users = users;
                     this.allUserGroups = userGroups.map((userGroup) => this.mapToUserGroupOption(userGroup));
+                    this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

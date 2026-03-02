@@ -55,13 +55,25 @@ export class TesisYonetimiService {
     }
 
     getYoneticiAdaylari(): Observable<ManagerCandidateDto[]> {
-        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday`).pipe(
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday/tesis-yoneticileri`).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Yonetici aday listesi alinamadi.');
+            })
+        );
+    }
+
+    getResepsiyonistAdaylari(): Observable<ManagerCandidateDto[]> {
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday/resepsiyonistler`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Resepsiyonist aday listesi alinamadi.');
             })
         );
     }

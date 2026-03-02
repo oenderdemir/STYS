@@ -189,13 +189,32 @@ public class YoneticiAdayService : IYoneticiAdayService
             return [];
         }
 
-        return await _stysDbContext.KullaniciTesisSahiplikleri
-            .Where(x => x.TesisId.HasValue)
-            .Where(x => scope.TesisIds.Contains(x.TesisId!.Value))
+        var ownershipRows = await _stysDbContext.KullaniciTesisSahiplikleri
             .Where(x => userIds.Contains(x.UserId))
-            .Select(x => x.UserId)
-            .Distinct()
+            .Select(x => new { x.UserId, x.TesisId })
             .ToListAsync(cancellationToken);
+
+        var rowsByUserId = ownershipRows
+            .GroupBy(x => x.UserId)
+            .ToDictionary(x => x.Key, x => x.Select(y => y.TesisId).ToList());
+
+        var allowedUserIds = new List<Guid>();
+        foreach (var userId in userIds)
+        {
+            if (!rowsByUserId.TryGetValue(userId, out var tesisIdsForUser))
+            {
+                // Eski verilerde sahiplik satiri olmayabilir; global kabul edilir.
+                allowedUserIds.Add(userId);
+                continue;
+            }
+
+            if (tesisIdsForUser.Any(tesisId => !tesisId.HasValue || scope.TesisIds.Contains(tesisId.Value)))
+            {
+                allowedUserIds.Add(userId);
+            }
+        }
+
+        return allowedUserIds.Distinct().ToList();
     }
 
     private async Task<List<Guid>> GetUserIdsByTargetGroupMarkerAsync(

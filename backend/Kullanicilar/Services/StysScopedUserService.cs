@@ -273,22 +273,21 @@ public class StysScopedUserService : BaseUserService
 
     private async Task<Dictionary<Guid, string>> GetManageableGroupPermissionMapAsync(CancellationToken cancellationToken)
     {
-        var groups = await _identityDbContext.UserGroups
-            .Select(group => new
+        var groupRoleRows = await _identityDbContext.UserGroupRoles
+            .Select(x => new
             {
-                group.Id,
-                Permissions = group.UserGroupRoles
-                    .Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}")
-                    .Distinct()
-                    .ToList()
+                x.UserGroupId,
+                x.Role.Domain,
+                x.Role.Name
             })
             .ToListAsync(cancellationToken);
 
         var result = new Dictionary<Guid, string>();
 
-        foreach (var group in groups)
+        foreach (var groupRoleRow in groupRoleRows.GroupBy(x => x.UserGroupId))
         {
-            var markerPermission = group.Permissions
+            var markerPermission = groupRoleRow
+                .Select(x => ToPermission(x.Domain, x.Name))
                 .FirstOrDefault(IsAssignableMarkerPermission);
 
             if (string.IsNullOrWhiteSpace(markerPermission))
@@ -296,7 +295,7 @@ public class StysScopedUserService : BaseUserService
                 continue;
             }
 
-            result[group.Id] = MapAssignableMarkerToActorPermission(markerPermission);
+            result[groupRoleRow.Key] = MapAssignableMarkerToActorPermission(markerPermission);
         }
 
         return result;
@@ -310,22 +309,30 @@ public class StysScopedUserService : BaseUserService
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var permissions = await _identityDbContext.UserUserGroups
+        var permissionRows = await _identityDbContext.UserUserGroups
             .Where(x => x.UserId == userId.Value)
-            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}"))
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => new { ugr.Role.Domain, ugr.Role.Name }))
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        return permissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var permissions = permissionRows
+            .Select(x => ToPermission(x.Domain, x.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return permissions;
     }
 
     private async Task<List<string>> GetTargetUserAssignableMarkersAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var userPermissions = await _identityDbContext.UserUserGroups
+        var permissionRows = await _identityDbContext.UserUserGroups
             .Where(x => x.UserId == userId)
-            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}"))
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => new { ugr.Role.Domain, ugr.Role.Name }))
             .Distinct()
             .ToListAsync(cancellationToken);
+
+        var userPermissions = permissionRows
+            .Select(x => ToPermission(x.Domain, x.Name))
+            .ToList();
 
         var markers = userPermissions
             .Where(IsAssignableMarkerPermission)
@@ -348,6 +355,11 @@ public class StysScopedUserService : BaseUserService
     private static bool IsAssignableMarkerPermission(string permission)
     {
         return AssignableMarkerPermissions.Any(x => string.Equals(x, permission, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ToPermission(string domain, string name)
+    {
+        return $"{domain}.{name}";
     }
 
     private static string MapAssignableMarkerToActorPermission(string markerPermission)

@@ -1,0 +1,1169 @@
+using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace STYS.Infrastructure.EntityFramework.Migrations
+{
+    /// <inheritdoc />
+    public partial class InitialScript : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.EnsureSchema(
+                name: "dbo");
+
+            migrationBuilder.CreateTable(
+                name: "Countries",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    Code = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Countries", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Iller",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Ad = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Iller", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OdaOzellikleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Kod = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    Ad = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    VeriTipi = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OdaOzellikleri", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OdaSiniflari",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Kod = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    Ad = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OdaSiniflari", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Tesisler",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Ad = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    IlId = table.Column<int>(type: "int", nullable: false),
+                    Telefon = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    Adres = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: false),
+                    Eposta = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Tesisler", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Tesisler_Iller_IlId",
+                        column: x => x.IlId,
+                        principalSchema: "dbo",
+                        principalTable: "Iller",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Binalar",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Ad = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    TesisId = table.Column<int>(type: "int", nullable: false),
+                    KatSayisi = table.Column<int>(type: "int", nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Binalar", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Binalar_Tesisler_TesisId",
+                        column: x => x.TesisId,
+                        principalSchema: "dbo",
+                        principalTable: "Tesisler",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "KullaniciTesisSahiplikleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    TesisId = table.Column<int>(type: "int", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_KullaniciTesisSahiplikleri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_KullaniciTesisSahiplikleri_Tesisler_TesisId",
+                        column: x => x.TesisId,
+                        principalSchema: "dbo",
+                        principalTable: "Tesisler",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TesisOdaTipleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TesisId = table.Column<int>(type: "int", nullable: false),
+                    OdaSinifiId = table.Column<int>(type: "int", nullable: false),
+                    Ad = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    PaylasimliMi = table.Column<bool>(type: "bit", nullable: false),
+                    Kapasite = table.Column<int>(type: "int", nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TesisOdaTipleri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TesisOdaTipleri_OdaSiniflari_OdaSinifiId",
+                        column: x => x.OdaSinifiId,
+                        principalSchema: "dbo",
+                        principalTable: "OdaSiniflari",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_TesisOdaTipleri_Tesisler_TesisId",
+                        column: x => x.TesisId,
+                        principalSchema: "dbo",
+                        principalTable: "Tesisler",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TesisResepsiyonistleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TesisId = table.Column<int>(type: "int", nullable: false),
+                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TesisResepsiyonistleri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TesisResepsiyonistleri_Tesisler_TesisId",
+                        column: x => x.TesisId,
+                        principalSchema: "dbo",
+                        principalTable: "Tesisler",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TesisYoneticileri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TesisId = table.Column<int>(type: "int", nullable: false),
+                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TesisYoneticileri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TesisYoneticileri_Tesisler_TesisId",
+                        column: x => x.TesisId,
+                        principalSchema: "dbo",
+                        principalTable: "Tesisler",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BinaYoneticileri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    BinaId = table.Column<int>(type: "int", nullable: false),
+                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BinaYoneticileri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_BinaYoneticileri_Binalar_BinaId",
+                        column: x => x.BinaId,
+                        principalSchema: "dbo",
+                        principalTable: "Binalar",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "IsletmeAlanlari",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Ad = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    BinaId = table.Column<int>(type: "int", nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_IsletmeAlanlari", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_IsletmeAlanlari_Binalar_BinaId",
+                        column: x => x.BinaId,
+                        principalSchema: "dbo",
+                        principalTable: "Binalar",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Odalar",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    OdaNo = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    BinaId = table.Column<int>(type: "int", nullable: false),
+                    TesisOdaTipiId = table.Column<int>(type: "int", nullable: false),
+                    KatNo = table.Column<int>(type: "int", nullable: false),
+                    AktifMi = table.Column<bool>(type: "bit", nullable: false),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Odalar", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Odalar_Binalar_BinaId",
+                        column: x => x.BinaId,
+                        principalSchema: "dbo",
+                        principalTable: "Binalar",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Odalar_TesisOdaTipleri_TesisOdaTipiId",
+                        column: x => x.TesisOdaTipiId,
+                        principalSchema: "dbo",
+                        principalTable: "TesisOdaTipleri",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TesisOdaTipiOzellikDegerleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    TesisOdaTipiId = table.Column<int>(type: "int", nullable: false),
+                    OdaOzellikId = table.Column<int>(type: "int", nullable: false),
+                    Deger = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TesisOdaTipiOzellikDegerleri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TesisOdaTipiOzellikDegerleri_OdaOzellikleri_OdaOzellikId",
+                        column: x => x.OdaOzellikId,
+                        principalSchema: "dbo",
+                        principalTable: "OdaOzellikleri",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_TesisOdaTipiOzellikDegerleri_TesisOdaTipleri_TesisOdaTipiId",
+                        column: x => x.TesisOdaTipiId,
+                        principalSchema: "dbo",
+                        principalTable: "TesisOdaTipleri",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OdaOzellikDegerleri",
+                schema: "dbo",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    OdaId = table.Column<int>(type: "int", nullable: false),
+                    OdaOzellikId = table.Column<int>(type: "int", nullable: false),
+                    Deger = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeletedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OdaOzellikDegerleri", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_OdaOzellikDegerleri_OdaOzellikleri_OdaOzellikId",
+                        column: x => x.OdaOzellikId,
+                        principalSchema: "dbo",
+                        principalTable: "OdaOzellikleri",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_OdaOzellikDegerleri_Odalar_OdaId",
+                        column: x => x.OdaId,
+                        principalSchema: "dbo",
+                        principalTable: "Odalar",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Binalar_TesisId_Ad",
+                schema: "dbo",
+                table: "Binalar",
+                columns: new[] { "TesisId", "Ad" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BinaYoneticileri_BinaId_UserId",
+                schema: "dbo",
+                table: "BinaYoneticileri",
+                columns: new[] { "BinaId", "UserId" },
+                unique: true,
+                filter: "[IsDeleted] = 0");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Countries_Code",
+                schema: "dbo",
+                table: "Countries",
+                column: "Code",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Iller_Ad",
+                schema: "dbo",
+                table: "Iller",
+                column: "Ad",
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_IsletmeAlanlari_BinaId_Ad",
+                schema: "dbo",
+                table: "IsletmeAlanlari",
+                columns: new[] { "BinaId", "Ad" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KullaniciTesisSahiplikleri_TesisId",
+                schema: "dbo",
+                table: "KullaniciTesisSahiplikleri",
+                column: "TesisId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KullaniciTesisSahiplikleri_UserId",
+                schema: "dbo",
+                table: "KullaniciTesisSahiplikleri",
+                column: "UserId",
+                unique: true,
+                filter: "[IsDeleted] = 0");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Odalar_BinaId_OdaNo",
+                schema: "dbo",
+                table: "Odalar",
+                columns: new[] { "BinaId", "OdaNo" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Odalar_TesisOdaTipiId",
+                schema: "dbo",
+                table: "Odalar",
+                column: "TesisOdaTipiId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaOzellikDegerleri_OdaId_OdaOzellikId",
+                schema: "dbo",
+                table: "OdaOzellikDegerleri",
+                columns: new[] { "OdaId", "OdaOzellikId" },
+                unique: true,
+                filter: "[IsDeleted] = 0");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaOzellikDegerleri_OdaOzellikId",
+                schema: "dbo",
+                table: "OdaOzellikDegerleri",
+                column: "OdaOzellikId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaOzellikleri_Ad",
+                schema: "dbo",
+                table: "OdaOzellikleri",
+                column: "Ad",
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaOzellikleri_Kod",
+                schema: "dbo",
+                table: "OdaOzellikleri",
+                column: "Kod",
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaSiniflari_Ad",
+                schema: "dbo",
+                table: "OdaSiniflari",
+                column: "Ad",
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OdaSiniflari_Kod",
+                schema: "dbo",
+                table: "OdaSiniflari",
+                column: "Kod",
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Tesisler_IlId_Ad",
+                schema: "dbo",
+                table: "Tesisler",
+                columns: new[] { "IlId", "Ad" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisOdaTipiOzellikDegerleri_OdaOzellikId",
+                schema: "dbo",
+                table: "TesisOdaTipiOzellikDegerleri",
+                column: "OdaOzellikId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisOdaTipiOzellikDegerleri_TesisOdaTipiId_OdaOzellikId",
+                schema: "dbo",
+                table: "TesisOdaTipiOzellikDegerleri",
+                columns: new[] { "TesisOdaTipiId", "OdaOzellikId" },
+                unique: true,
+                filter: "[IsDeleted] = 0");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisOdaTipleri_OdaSinifiId",
+                schema: "dbo",
+                table: "TesisOdaTipleri",
+                column: "OdaSinifiId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisOdaTipleri_TesisId_Ad",
+                schema: "dbo",
+                table: "TesisOdaTipleri",
+                columns: new[] { "TesisId", "Ad" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisResepsiyonistleri_TesisId_UserId",
+                schema: "dbo",
+                table: "TesisResepsiyonistleri",
+                columns: new[] { "TesisId", "UserId" },
+                unique: true,
+                filter: "[IsDeleted] = 0");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TesisYoneticileri_TesisId_UserId",
+                schema: "dbo",
+                table: "TesisYoneticileri",
+                columns: new[] { "TesisId", "UserId" },
+                unique: true,
+                filter: "[IsDeleted] = 0");
+            migrationBuilder.Sql("""
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET XACT_ABORT ON;
+BEGIN TRAN;
+ALTER TABLE [dbo].[BinaYoneticileri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[KullaniciTesisSahiplikleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisResepsiyonistleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisYoneticileri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaOzellikDegerleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisOdaTipiOzellikDegerleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Odalar] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[IsletmeAlanlari] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Binalar] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisOdaTipleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaOzellikleri] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaSiniflari] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Tesisler] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Iller] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Countries] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[MenuItemRoles] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserGroupRoles] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserUserGroups] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[MenuItems] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[Roles] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserGroups] NOCHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[Users] NOCHECK CONSTRAINT ALL;
+DELETE FROM [dbo].[BinaYoneticileri];
+DELETE FROM [dbo].[KullaniciTesisSahiplikleri];
+DELETE FROM [dbo].[TesisResepsiyonistleri];
+DELETE FROM [dbo].[TesisYoneticileri];
+DELETE FROM [dbo].[OdaOzellikDegerleri];
+DELETE FROM [dbo].[TesisOdaTipiOzellikDegerleri];
+DELETE FROM [dbo].[Odalar];
+DELETE FROM [dbo].[IsletmeAlanlari];
+DELETE FROM [dbo].[Binalar];
+DELETE FROM [dbo].[TesisOdaTipleri];
+DELETE FROM [dbo].[OdaOzellikleri];
+DELETE FROM [dbo].[OdaSiniflari];
+DELETE FROM [dbo].[Tesisler];
+DELETE FROM [dbo].[Iller];
+DELETE FROM [dbo].[Countries];
+DELETE FROM [TODBase].[MenuItemRoles];
+DELETE FROM [TODBase].[UserGroupRoles];
+DELETE FROM [TODBase].[UserUserGroups];
+DELETE FROM [TODBase].[MenuItems];
+DELETE FROM [TODBase].[Roles];
+DELETE FROM [TODBase].[UserGroups];
+DELETE FROM [TODBase].[Users];
+PRINT N'Seeding [TODBase].[Users]';
+INSERT INTO [TODBase].[Users] ([Id], [UserName], [NationalId], [FirstName], [LastName], [Email], [PasswordHash], [AvatarPath], [Status], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('44444444-4444-4444-4444-444444444401', N'admin', NULL, N'Sistem', N'Yöneticisi', N'admin@example.com', N'PBKDF2$100000$RFpRL3G82m+YFbhu6szuuQ==$QP5heD3o4rtZaopfF8Rll9kx0zqyz509E/CVrwbS3p4=', NULL, 0, 0, '2026-02-26T21:41:13.6237397', '2026-02-27T21:43:44.4361228', NULL, NULL, N'admin', NULL);
+PRINT N'Seeding [TODBase].[UserGroups]';
+INSERT INTO [TODBase].[UserGroups] ([Id], [Name], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('22222222-2222-2222-2222-222222222201', N'Yönetici Grubu', 0, '2026-02-26T21:41:13.6237397', '2026-03-01T19:46:29.9960990', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroups] ([Id], [Name], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('22222222-2222-2222-2222-222222222202', N'TesisYoneticiGrubu', 0, '2026-03-01T18:30:02.8289414', '2026-03-02T16:44:00.2339713', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroups] ([Id], [Name], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('22222222-2222-2222-2222-222222222203', N'BinaYoneticiGrubu', 0, '2026-03-01T18:30:02.8289414', '2026-03-02T19:56:09.1051860', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroups] ([Id], [Name], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('22222222-2222-2222-2222-222222222204', N'ResepsiyonistGrubu', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T13:29:54.6037824', NULL, NULL, N'admin', NULL);
+PRINT N'Seeding [TODBase].[Roles]';
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('b99a70d7-97d9-498a-83ab-0f9bce013480', N'Menu', N'UserGroupManagement', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111101', N'View', N'RoleManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111102', N'Manage', N'RoleManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111103', N'View', N'UserManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111104', N'Manage', N'UserManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111105', N'View', N'MenuManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111106', N'Manage', N'MenuManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111107', N'View', N'CountryManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111108', N'Manage', N'CountryManagement', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111109', N'Admin', N'KullaniciTipi', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111110', N'UIUser', N'KullaniciTipi', 0, '2026-02-27T07:43:46.4060809', '2026-02-27T07:43:46.4060809', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111111', N'ServiceUser', N'KullaniciTipi', 0, '2026-02-27T07:43:46.4060809', '2026-02-27T07:43:46.4060809', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111112', N'View', N'IlYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111113', N'Manage', N'IlYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111114', N'View', N'TesisYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111115', N'Manage', N'TesisYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111116', N'View', N'BinaYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111117', N'Manage', N'BinaYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111118', N'View', N'IsletmeAlaniYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111119', N'Manage', N'IsletmeAlaniYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111120', N'View', N'OdaTipiYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111121', N'Manage', N'OdaTipiYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111122', N'View', N'OdaYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111123', N'Manage', N'OdaYonetimi', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111124', N'View', N'OdaOzellikYonetimi', 0, '2026-02-28T21:54:06.1196558', '2026-02-28T21:54:06.1196558', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11111111-1111-1111-1111-111111111125', N'Manage', N'OdaOzellikYonetimi', 0, '2026-02-28T21:54:06.1196558', '2026-02-28T21:54:06.1196558', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('670a9441-30db-42ea-b60e-13228d1912a9', N'Menu', N'TesisYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('8de84f0f-ec6a-4d44-bb1c-679d1fa85ce6', N'Menu', N'OdaTipiYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('0e49d0f7-33bd-4ef5-96e7-692e6dd71da4', N'View', N'UserGroupManagement', 0, '2026-03-01T19:36:31.2438983', '2026-03-01T19:36:31.2438983', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('32db21c9-ae67-47fd-a59c-825c91f107db', N'BinaYoneticisiAtanabilir', N'KullaniciAtama', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('44ed58a1-4183-4fc8-94bb-84c2d8c3816b', N'Menu', N'IsletmeAlaniYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('bd2d2df2-1157-442d-9200-9916deaf0710', N'Menu', N'RoleManagement', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('3d50d1d7-7c2c-45b8-a300-a4c00ebd6508', N'Menu', N'OdaOzellikYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('34833fcc-8e2f-489c-aa8d-a537be32641e', N'Manage', N'UserGroupManagement', 0, '2026-03-01T19:36:31.2438983', '2026-03-01T19:36:31.2438983', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f6f3746f-f5ed-4b8e-8947-aeba91e9d398', N'Menu', N'CountryManagement', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6aeb612b-8520-4179-8805-bdd74513bc9d', N'Menu', N'MenuManagement', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('af60af32-9be4-4355-9fb9-c3596972075f', N'Menu', N'UserManagement', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('aec80af4-c0b9-4194-90ee-c556f6efd80e', N'TesisYoneticisiAtanabilir', N'KullaniciAtama', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('98106699-220a-4105-a4dd-cd4fa2dd00dc', N'ResepsiyonistAtanabilir', N'KullaniciAtama', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('897b7a32-aaf8-45d2-9b2f-d0126033fe71', N'Menu', N'BinaYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('a96b772f-151b-4c02-b578-d3935a8415d0', N'Menu', N'IlYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('e9808cec-687b-4b8d-b9a5-dfb15c23cb76', N'Menu', N'OdaYonetimi', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('0d8bd4f3-d82f-4f42-a8c9-e0e9f842320f', N'BinaYoneticisiAtayabilir', N'KullaniciAtama', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6953165a-3f01-4d05-965f-f1c302e34534', N'TesisYoneticisiAtayabilir', N'KullaniciAtama', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[Roles] ([Id], [Name], [Domain], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('3e1d1957-a384-441e-93d9-f1cf3d001e16', N'ResepsiyonistAtayabilir', N'KullaniciAtama', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+PRINT N'Seeding [TODBase].[MenuItems]';
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666601', N'Ana Menü', N'fa-solid fa-person-digging', N'', NULL, NULL, 999, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666602', N'Ülke Yönetimi', N'fa-solid fa-globe', N'ulkeler', NULL, '66666666-6666-6666-6666-666666666601', 0, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666603', N'Yetkilendirme', NULL, N'', NULL, NULL, 999, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666604', N'Yetkiler', N'fa-solid fa-drum', N'yetkiler', NULL, '66666666-6666-6666-6666-666666666603', 0, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666605', N'Kullanıcı Gruplar', N'fa-solid fa-people-roof', N'kullanici-gruplar', NULL, '66666666-6666-6666-6666-666666666603', 1, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666606', N'Kullanıcılar', N'fa-solid fa-user-tie', N'kullanicilar', NULL, '66666666-6666-6666-6666-666666666603', 2, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666607', N'Menüler', N'fa-solid fa-bars', N'menuler', NULL, '66666666-6666-6666-6666-666666666603', 3, 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666609', N'Il Yonetimi', N'fa-solid fa-map-location-dot', N'iller', NULL, '66666666-6666-6666-6666-666666666601', 1, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666610', N'Tesis Yonetimi', N'fa-solid fa-building', N'tesisler', NULL, '66666666-6666-6666-6666-666666666601', 2, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666611', N'Bina Yonetimi', N'fa-solid fa-city', N'binalar', NULL, '66666666-6666-6666-6666-666666666601', 3, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666612', N'Isletme Alanlari', N'fa-solid fa-store', N'isletme-alanlari', NULL, '66666666-6666-6666-6666-666666666601', 4, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666613', N'Oda Tipleri', N'fa-solid fa-bed', N'oda-tipleri', NULL, '66666666-6666-6666-6666-666666666601', 5, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666614', N'Odalar', N'fa-solid fa-door-closed', N'odalar', NULL, '66666666-6666-6666-6666-666666666601', 6, 0, '2026-02-27T23:10:36.9773826', '2026-02-27T23:10:36.9773826', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666615', N'Oda Siniflari', N'fa-solid fa-layer-group', N'oda-siniflari', NULL, '66666666-6666-6666-6666-666666666601', 7, 0, '2026-02-28T20:57:47.3373520', '2026-02-28T20:57:47.3373520', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [QueryParams], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('66666666-6666-6666-6666-666666666616', N'Oda Ozellikleri', N'fa-solid fa-sliders', N'oda-ozellikler', NULL, '66666666-6666-6666-6666-666666666601', 8, 0, '2026-02-28T21:54:06.1525607', '2026-02-28T21:54:06.1525607', NULL, NULL, NULL, NULL);
+PRINT N'Seeding [TODBase].[UserUserGroups]';
+INSERT INTO [TODBase].[UserUserGroups] ([Id], [UserId], [UserGroupId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('55555555-5555-5555-5555-555555555501', '44444444-4444-4444-4444-444444444401', '22222222-2222-2222-2222-222222222201', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+PRINT N'Seeding [TODBase].[UserGroupRoles]';
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('1e2df0b6-0d1a-4aac-3601-08de783169c4', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111121', 0, '2026-03-02T07:57:55.7194903', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('12acbdab-8ac1-48ee-3602-08de783169c4', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111114', 0, '2026-03-02T08:12:59.6204373', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('47c66d76-ffda-4261-eb92-08de784dd82c', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111120', 0, '2026-03-02T11:21:26.8435726', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('dc5b625c-b3db-4bb4-eb93-08de784dd82c', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111118', 0, '2026-03-02T11:22:11.5506767', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('a0734c21-e487-45ac-eb94-08de784dd82c', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111112', 0, '2026-03-02T11:23:07.9446754', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f1a3c6c7-605f-48b5-b53d-08de785fa53a', '22222222-2222-2222-2222-222222222202', 'aec80af4-c0b9-4194-90ee-c556f6efd80e', 0, '2026-03-02T13:28:52.2936493', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('89732a26-cb4b-4e3c-b53f-08de785fa53a', '22222222-2222-2222-2222-222222222204', '98106699-220a-4105-a4dd-cd4fa2dd00dc', 0, '2026-03-02T13:29:54.6037824', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('86de85cd-be16-4c6c-ba14-08de78791bfa', '22222222-2222-2222-2222-222222222202', '6953165a-3f01-4d05-965f-f1c302e34534', 0, '2026-03-02T16:31:09.0180256', '2026-03-02T16:34:07.8444530', NULL, N'admin', N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('07d425c9-9e45-45b0-b693-0e10c875f1ac', '22222222-2222-2222-2222-222222222201', '670a9441-30db-42ea-b60e-13228d1912a9', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('0e3d2740-9155-41b4-b4ff-13be7be8b551', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111120', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f5863463-6b68-4eb6-9761-193ac6408afe', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111110', 0, '2026-02-27T07:43:46.4060809', '2026-02-27T07:43:46.4060809', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('633a1a9f-2945-4825-9dd4-22e9c54e0d40', '22222222-2222-2222-2222-222222222202', 'a96b772f-151b-4c02-b578-d3935a8415d0', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('d93d598a-2116-430f-ad3b-26bfc2717473', '22222222-2222-2222-2222-222222222201', 'a96b772f-151b-4c02-b578-d3935a8415d0', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9b3aa9bd-6f24-443a-9861-2a1b1a1740f8', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111112', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('765da098-cd2c-4873-84af-2c04c1251150', '22222222-2222-2222-2222-222222222202', '0d8bd4f3-d82f-4f42-a8c9-e0e9f842320f', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T16:43:07.6135145', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333301', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111101', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333302', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111102', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333303', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111103', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333304', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111104', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333305', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111105', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333306', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111106', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333307', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111107', 0, '2026-02-26T21:41:13.6237397', '2026-03-01T19:46:29.9960990', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333308', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111108', 0, '2026-02-26T21:41:13.6237397', '2026-03-01T19:45:06.3065241', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('33333333-3333-3333-3333-333333333309', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111109', 0, '2026-02-26T21:41:13.6237397', '2026-02-26T21:41:13.6237397', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('eea48af6-32aa-4fd4-bbf4-3458e3be842c', '22222222-2222-2222-2222-222222222202', '670a9441-30db-42ea-b60e-13228d1912a9', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('c781a6c9-6e92-46db-b001-3923f4e85e9b', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111123', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('72ec65dc-580e-4519-b814-3eccb90f2db5', '22222222-2222-2222-2222-222222222202', '3d50d1d7-7c2c-45b8-a300-a4c00ebd6508', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6f2286a0-27fc-45b0-80db-43c357afb7fc', '22222222-2222-2222-2222-222222222201', '6953165a-3f01-4d05-965f-f1c302e34534', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('fa02d407-89f9-4e57-8f8c-46f17ee80807', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111117', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('fd9bc851-4992-492f-8ff2-471e2956f670', '22222222-2222-2222-2222-222222222202', '8de84f0f-ec6a-4d44-bb1c-679d1fa85ce6', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('80f72296-e393-456d-b052-4975c94157bb', '22222222-2222-2222-2222-222222222201', '0d8bd4f3-d82f-4f42-a8c9-e0e9f842320f', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6b2874bb-fff7-4612-9335-4a7a273c9e35', '22222222-2222-2222-2222-222222222201', '6aeb612b-8520-4179-8805-bdd74513bc9d', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('89449625-9072-4a40-ac9d-4cabcd4998f2', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111104', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('a6330718-4e0a-49b9-a1bf-4cbaf700a105', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111120', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('01a935fd-5070-472b-aab4-5469bc106a77', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111117', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('1bf537f2-d354-4c8d-89c7-55cd13e89ace', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111125', 0, '2026-02-28T21:54:06.1196558', '2026-02-28T21:54:06.1196558', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('7f0f171c-7474-4446-90cd-57924be2b1a4', '22222222-2222-2222-2222-222222222201', 'b99a70d7-97d9-498a-83ab-0f9bce013480', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('46a66e58-e706-4534-a209-5b1a03edf2b9', '22222222-2222-2222-2222-222222222202', '3e1d1957-a384-441e-93d9-f1cf3d001e16', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T16:34:07.8444530', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('2544699f-238d-4ae4-aa67-5be088fb855c', '22222222-2222-2222-2222-222222222203', '897b7a32-aaf8-45d2-9b2f-d0126033fe71', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('11fe34cd-8113-41f3-88be-5c4682667c5f', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111122', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('c6aea87f-779d-44c0-b712-622f08f4b26e', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111114', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f975b8a8-6056-4bf7-8a1f-65ad82323398', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111111', 0, '2026-02-27T07:43:46.4060809', '2026-02-27T07:43:46.4060809', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('496c3046-b66f-47fc-875a-68dcb0a5c82d', '22222222-2222-2222-2222-222222222201', '34833fcc-8e2f-489c-aa8d-a537be32641e', 0, '2026-03-01T19:36:31.2438983', '2026-03-01T19:36:31.2438983', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f6c183c0-3c82-415f-9a6f-6b6fd30c96f0', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111112', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('5c5ebd0d-118d-445f-8193-70091233239b', '22222222-2222-2222-2222-222222222202', 'af60af32-9be4-4355-9fb9-c3596972075f', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('009b3b82-780e-43bd-9c78-73f1721751b8', '22222222-2222-2222-2222-222222222201', '8de84f0f-ec6a-4d44-bb1c-679d1fa85ce6', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('370816f0-8f4f-45a1-b2f5-79891a088585', '22222222-2222-2222-2222-222222222201', 'bd2d2df2-1157-442d-9200-9916deaf0710', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('db823fb9-084d-4356-b8fa-7bb791038680', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111124', 0, '2026-02-28T21:54:06.1196558', '2026-02-28T21:54:06.1196558', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('ac525316-2b94-4ae1-bf0d-7bf3d19ab93a', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111116', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('980caec8-4422-47a6-9b51-834af734dde1', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111124', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('63a0899e-f6f9-40a7-8e02-85011fce468f', '22222222-2222-2222-2222-222222222201', '897b7a32-aaf8-45d2-9b2f-d0126033fe71', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('77a2150b-2aa9-472b-8524-86b09e5968db', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111122', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('73fd5d63-7f98-45cf-a596-88565b7ab3c8', '22222222-2222-2222-2222-222222222201', 'e9808cec-687b-4b8d-b9a5-dfb15c23cb76', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('7fb656f5-7346-4e0a-9023-905b3db591d8', '22222222-2222-2222-2222-222222222202', '897b7a32-aaf8-45d2-9b2f-d0126033fe71', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('da7cd214-4e9e-47e3-9f45-94ad0df75f95', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111116', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('204c145f-f41e-45a1-995e-9501d1cdcdbd', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111121', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('312ba4e7-a150-4ecc-9af1-95703b9bb997', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111116', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('429560e0-77e0-4f81-bfb3-9688a6a5af7d', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111115', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('5fa3596c-7bd9-404d-a90d-96e0de83b571', '22222222-2222-2222-2222-222222222201', '32db21c9-ae67-47fd-a59c-825c91f107db', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9d52d686-e9b0-4294-8025-97128dacdd4f', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111116', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('dafde787-4737-4601-9335-99aff3b241cd', '22222222-2222-2222-2222-222222222204', '670a9441-30db-42ea-b60e-13228d1912a9', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('c6afb5c5-6804-4155-ad32-a27dab46c542', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111120', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('b89d8fa3-1fe2-4778-97d8-a47174375d08', '22222222-2222-2222-2222-222222222201', 'af60af32-9be4-4355-9fb9-c3596972075f', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('2c96d280-bbae-4998-95f0-a81119f3f4f2', '22222222-2222-2222-2222-222222222201', '98106699-220a-4105-a4dd-cd4fa2dd00dc', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('5a64274f-b73e-43df-8ee6-aa5778dd0217', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111118', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('e5aee343-56b5-44a9-8897-ab4ce1765cc2', '22222222-2222-2222-2222-222222222202', '0e49d0f7-33bd-4ef5-96e7-692e6dd71da4', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('24a30909-e283-4d4b-a8da-ac48300d5c18', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111103', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('32365450-8cfb-4fae-81b4-aca60e06a4a4', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111114', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('8bc68ea9-b828-4d69-b9a2-ad359d2388d3', '22222222-2222-2222-2222-222222222203', '32db21c9-ae67-47fd-a59c-825c91f107db', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9d9989e1-47fb-4a24-8bde-afa2b85367a9', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111122', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('b37de618-a865-40d3-b62b-b49dc60699dc', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111123', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('604efb33-25f8-49d8-bd7b-b546f44ce834', '22222222-2222-2222-2222-222222222202', '44ed58a1-4183-4fc8-94bb-84c2d8c3816b', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('58498640-1570-4635-8249-b98943803751', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111124', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('c826877b-b114-4541-9515-bb461fec5544', '22222222-2222-2222-2222-222222222201', 'aec80af4-c0b9-4194-90ee-c556f6efd80e', 0, '2026-03-02T13:25:10.6136344', '2026-03-02T13:25:10.6136344', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('75752767-1d03-4427-84ca-bd324d0140fb', '22222222-2222-2222-2222-222222222201', '3d50d1d7-7c2c-45b8-a300-a4c00ebd6508', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('912f6211-0085-4d1c-9101-c66e36decc87', '22222222-2222-2222-2222-222222222204', '897b7a32-aaf8-45d2-9b2f-d0126033fe71', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('47e52424-bf12-44f2-b670-c81dc598eda3', '22222222-2222-2222-2222-222222222201', '0e49d0f7-33bd-4ef5-96e7-692e6dd71da4', 0, '2026-03-01T19:36:31.2438983', '2026-03-01T19:36:31.2438983', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('3fd29224-5dbe-4a12-8bf8-ccbead945c5c', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111122', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('055d27ee-387a-4e9a-af3c-cfab5dcf24f3', '22222222-2222-2222-2222-222222222204', '11111111-1111-1111-1111-111111111110', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('a40375a2-70be-4cc4-8372-d1f48cec2515', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111114', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('736bba1c-c188-4f88-aabf-d23261d09798', '22222222-2222-2222-2222-222222222201', 'f6f3746f-f5ed-4b8e-8947-aeba91e9d398', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T19:03:02.7638642', NULL, NULL, N'admin', NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('e9cb22a7-94a4-4453-91ef-d27e26d4e586', '22222222-2222-2222-2222-222222222204', 'e9808cec-687b-4b8d-b9a5-dfb15c23cb76', 0, '2026-03-02T08:53:46.4584349', '2026-03-02T08:53:46.4584349', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('7db9429e-d66d-4dbd-9f55-da19ab43f4fe', '22222222-2222-2222-2222-222222222201', '3e1d1957-a384-441e-93d9-f1cf3d001e16', 0, '2026-03-02T14:03:43.2249476', '2026-03-02T14:03:43.2249476', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('29ce0844-e5c6-4cf0-bd42-da2b50212e08', '22222222-2222-2222-2222-222222222201', '44ed58a1-4183-4fc8-94bb-84c2d8c3816b', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('1761eaf1-ffcc-4073-9090-dca2ad185064', '22222222-2222-2222-2222-222222222203', '11111111-1111-1111-1111-111111111110', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('978ccf92-6d62-4339-a341-dcdcc68cd82d', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111115', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('d8493913-4e6c-4c58-a072-de7c933e7972', '22222222-2222-2222-2222-222222222203', 'e9808cec-687b-4b8d-b9a5-dfb15c23cb76', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('bbd75780-8484-4811-ba0a-df992d04a239', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111118', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('5e5fd5b2-b868-474a-972a-e45e79fc18f7', '22222222-2222-2222-2222-222222222202', 'e9808cec-687b-4b8d-b9a5-dfb15c23cb76', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('ee2a1c7c-1698-482e-a75e-ea150c958702', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111123', 0, '2026-03-01T19:53:26.9784216', '2026-03-01T19:53:26.9784216', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('1e564b9f-cde6-4a26-a026-f2525b558774', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111119', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('7d3711b8-403f-4900-9639-fbcbd497d370', '22222222-2222-2222-2222-222222222201', '11111111-1111-1111-1111-111111111113', 0, '2026-02-27T22:51:41.0518514', '2026-02-27T22:51:41.0518514', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[UserGroupRoles] ([Id], [UserGroupId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('387f72b6-d407-4b99-9038-fdc06d648d9e', '22222222-2222-2222-2222-222222222202', '11111111-1111-1111-1111-111111111110', 0, '2026-03-01T18:30:02.8289414', '2026-03-01T18:30:02.8289414', NULL, NULL, NULL, NULL);
+PRINT N'Seeding [TODBase].[MenuItemRoles]';
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('37d8e66f-5a61-42d5-90c2-136ce899ca59', '66666666-6666-6666-6666-666666666612', '44ed58a1-4183-4fc8-94bb-84c2d8c3816b', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('65011a57-5b09-41ac-9cf0-1f515eac508a', '66666666-6666-6666-6666-666666666611', '897b7a32-aaf8-45d2-9b2f-d0126033fe71', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('2d4d8b74-be57-40bd-94b7-31de4cad7952', '66666666-6666-6666-6666-666666666614', 'e9808cec-687b-4b8d-b9a5-dfb15c23cb76', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('5f3cf638-1c79-4cd7-acdc-36b6cfe3416f', '66666666-6666-6666-6666-666666666610', '670a9441-30db-42ea-b60e-13228d1912a9', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('41696ac9-e58d-415b-aa93-437f0ae5cc69', '66666666-6666-6666-6666-666666666606', 'af60af32-9be4-4355-9fb9-c3596972075f', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('53eaa629-a31a-4710-a437-843a1bd6df09', '66666666-6666-6666-6666-666666666613', '8de84f0f-ec6a-4d44-bb1c-679d1fa85ce6', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9ef0300d-b04d-4b07-b904-8eb2e3f92755', '66666666-6666-6666-6666-666666666609', 'a96b772f-151b-4c02-b578-d3935a8415d0', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6935923e-e737-4000-bb6b-8edb76aaa3b6', '66666666-6666-6666-6666-666666666615', '8de84f0f-ec6a-4d44-bb1c-679d1fa85ce6', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('e48e71f6-c494-46b8-b1bf-b3196b6b230c', '66666666-6666-6666-6666-666666666605', 'b99a70d7-97d9-498a-83ab-0f9bce013480', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('954a703c-8817-4007-8a32-ba3ccd048a75', '66666666-6666-6666-6666-666666666616', '3d50d1d7-7c2c-45b8-a300-a4c00ebd6508', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('4a3c87f6-3fcd-431c-a259-c28098828bde', '66666666-6666-6666-6666-666666666602', 'f6f3746f-f5ed-4b8e-8947-aeba91e9d398', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('f5f05608-ae30-4b9e-acc7-dea3913ce6ae', '66666666-6666-6666-6666-666666666607', '6aeb612b-8520-4179-8805-bdd74513bc9d', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('dfdbd8ad-4475-4ede-9b51-ef60d4356d21', '66666666-6666-6666-6666-666666666604', 'bd2d2df2-1157-442d-9200-9916deaf0710', 0, '2026-03-01T18:57:00.7688916', '2026-03-01T18:57:00.7688916', NULL, NULL, NULL, NULL);
+PRINT N'Seeding [dbo].[Countries]';
+INSERT INTO [dbo].[Countries] ([Id], [Name], [Code], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9f8fd4a5-5685-4c80-8a64-4f636cce1002', N'Almanya', N'DE', 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Countries] ([Id], [Name], [Code], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9f8fd4a5-5685-4c80-8a64-4f636cce1003', N'Birlesik Krallik', N'GB', 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Countries] ([Id], [Name], [Code], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9f8fd4a5-5685-4c80-8a64-4f636cce1004', N'Fransa', N'FR', 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Countries] ([Id], [Name], [Code], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('9f8fd4a5-5685-4c80-8a64-4f636cce1005', N'Hollanda', N'NL', 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Countries] ([Id], [Name], [Code], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES ('6836e529-e8b6-41f1-a990-ebe51fb0eb0b', N'Türkiye', N'TR', 0, '2026-03-01T19:06:03.2464542', NULL, NULL, N'admin', NULL, NULL);
+PRINT N'Seeding [dbo].[Iller]';
+SET IDENTITY_INSERT [dbo].[Iller] ON;
+INSERT INTO [dbo].[Iller] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, N'Istanbul', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Iller] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, N'Ankara', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Iller] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, N'Izmir', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Iller] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, N'Antalya', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+SET IDENTITY_INSERT [dbo].[Iller] OFF;
+PRINT N'Seeding [dbo].[Tesisler]';
+SET IDENTITY_INSERT [dbo].[Tesisler] ON;
+INSERT INTO [dbo].[Tesisler] ([Id], [Ad], [IlId], [Telefon], [Adres], [Eposta], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (1, N'Marmara Yasam Kampusu', 2, N'+90 212 555 01 01', N'Atakoy Mahallesi 12. Sokak No:7 Bakirkoy/Istanbul', N'info@marmarayasam.test', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Tesisler] ([Id], [Ad], [IlId], [Telefon], [Adres], [Eposta], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, N'Anadolu Konukevi', 3, N'+90 312 555 02 02', N'Cankaya Cevre Yolu Caddesi No:15 Cankaya/Ankara', N'rezervasyon@anadolukonukevi.test', 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T19:49:25.9244473', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[Tesisler] ([Id], [Ad], [IlId], [Telefon], [Adres], [Eposta], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, N'Ege Egitim Tesisi', 4, N'+90 232 555 03 03', N'Kordonboyu Bulvari No:24 Konak/Izmir', N'iletisim@egeegitim.test', 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T16:46:03.2212614', NULL, N'migration_seed_domain_test_data', N'tesisYoneticisi', NULL);
+INSERT INTO [dbo].[Tesisler] ([Id], [Ad], [IlId], [Telefon], [Adres], [Eposta], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, N'Akdeniz Dinlenme Merkezi', 5, N'+90 242 555 04 04', N'Lara Turizm Yolu No:38 Muratpasa/Antalya', N'info@akdenizdinlenme.test', 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T19:50:15.4316194', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+SET IDENTITY_INSERT [dbo].[Tesisler] OFF;
+PRINT N'Seeding [dbo].[OdaSiniflari]';
+SET IDENTITY_INSERT [dbo].[OdaSiniflari] ON;
+INSERT INTO [dbo].[OdaSiniflari] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [Kod]) VALUES (1, N'Standart Tek Kisilik', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, N'SINIF_1');
+INSERT INTO [dbo].[OdaSiniflari] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [Kod]) VALUES (2, N'Standart Cift Kisilik', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, N'SINIF_2');
+INSERT INTO [dbo].[OdaSiniflari] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [Kod]) VALUES (3, N'Aile Odasi', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, N'SINIF_3');
+INSERT INTO [dbo].[OdaSiniflari] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [Kod]) VALUES (4, N'Deluxe Suite', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, N'SINIF_4');
+INSERT INTO [dbo].[OdaSiniflari] ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [Kod]) VALUES (5, N'Paylasimli Oda', 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, N'SINIF_5');
+SET IDENTITY_INSERT [dbo].[OdaSiniflari] OFF;
+PRINT N'Seeding [dbo].[OdaOzellikleri]';
+SET IDENTITY_INSERT [dbo].[OdaOzellikleri] ON;
+INSERT INTO [dbo].[OdaOzellikleri] ([Id], [Kod], [Ad], [VeriTipi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, N'BALKON_VAR_MI', N'Balkon Var Mi', N'boolean', 1, 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikleri] ([Id], [Kod], [Ad], [VeriTipi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, N'KLIMA_VAR_MI', N'Klima Var Mi', N'boolean', 1, 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikleri] ([Id], [Kod], [Ad], [VeriTipi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, N'METREKARE', N'Metrekare', N'number', 1, 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikleri] ([Id], [Kod], [Ad], [VeriTipi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (6, N'EK_OZELLIKLER', N'Ek Ozellikler', N'text', 1, 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikleri] ([Id], [Kod], [Ad], [VeriTipi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (7, N'YATAK_SAYISI', N'Yatak Sayisi', N'number', 1, 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+SET IDENTITY_INSERT [dbo].[OdaOzellikleri] OFF;
+PRINT N'Seeding [dbo].[TesisOdaTipleri]';
+SET IDENTITY_INSERT [dbo].[TesisOdaTipleri] ON;
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (1, 1, 1, N'Standart Tek Kisilik', 0, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, 1, 2, N'MYK Standart Cift Kisilik', 0, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T21:04:14.5118884', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, 1, 3, N'MYK Aile Odasi', 0, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T21:02:57.0727493', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, 1, 4, N'Deluxe Suite', 0, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, 1, 5, N'Paylasimli Oda', 0, 6, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (6, 2, 1, N'Standart Tek Kisilik', 0, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (7, 2, 2, N'Standart Cift Kisilik', 0, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (8, 2, 3, N'Aile Odasi', 0, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-01T17:21:51.7388038', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (9, 2, 4, N'Deluxe Suite', 0, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (10, 2, 5, N'Paylasimli Oda', 0, 6, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (11, 3, 1, N'Standart Tek Kisilik', 0, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (12, 3, 2, N'Standart Cift Kisilik', 0, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (13, 3, 3, N'Aile Odasi', 0, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (14, 3, 4, N'Deluxe Suite', 0, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (15, 3, 5, N'Paylasimli Oda', 0, 6, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (16, 4, 1, N'Standart Tek Kisilik', 0, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (17, 4, 2, N'Standart Cift Kisilik', 0, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (18, 4, 3, N'Aile Odasi', 0, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (19, 4, 4, N'Deluxe Suite', 0, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipleri] ([Id], [TesisId], [OdaSinifiId], [Ad], [PaylasimliMi], [Kapasite], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (20, 4, 5, N'Paylasimli Oda', 0, 6, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T20:39:28.3985906', NULL, N'migration_seed_domain_test_data', N'migration', NULL);
+SET IDENTITY_INSERT [dbo].[TesisOdaTipleri] OFF;
+PRINT N'Seeding [dbo].[Binalar]';
+SET IDENTITY_INSERT [dbo].[Binalar] ON;
+INSERT INTO [dbo].[Binalar] ([Id], [Ad], [TesisId], [KatSayisi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (1, N'A Blok', 1, 6, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T19:54:28.2083669', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[Binalar] ([Id], [Ad], [TesisId], [KatSayisi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, N'B Blok', 1, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T18:43:08.5306524', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[Binalar] ([Id], [Ad], [TesisId], [KatSayisi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, N'Merkez Blok', 2, 5, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[Binalar] ([Id], [Ad], [TesisId], [KatSayisi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, N'Deniz Blok', 3, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T18:38:40.7980363', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+INSERT INTO [dbo].[Binalar] ([Id], [Ad], [TesisId], [KatSayisi], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, N'Palmiye Blok', 4, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-02T18:38:46.5113461', NULL, N'migration_seed_domain_test_data', N'admin', NULL);
+SET IDENTITY_INSERT [dbo].[Binalar] OFF;
+PRINT N'Seeding [dbo].[IsletmeAlanlari]';
+SET IDENTITY_INSERT [dbo].[IsletmeAlanlari] ON;
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (1, N'Resepsiyon', 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, N'Toplanti Salonu', 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, N'Camasirhane', 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, N'Yemekhane', 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, N'Calisma Alani', 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+INSERT INTO [dbo].[IsletmeAlanlari] ([Id], [Ad], [BinaId], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (6, N'Fitness Salonu', 5, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL);
+SET IDENTITY_INSERT [dbo].[IsletmeAlanlari] OFF;
+PRINT N'Seeding [dbo].[Odalar]';
+SET IDENTITY_INSERT [dbo].[Odalar] ON;
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (1, N'101', 1, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 1);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (2, N'102', 1, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 2);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (3, N'201', 1, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 4);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (4, N'001', 2, 0, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T22:05:09.6803601', NULL, N'migration_seed_domain_test_data', N'admin', NULL, 5);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (5, N'103', 2, 1, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 2);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (6, N'301', 3, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-03-01T17:22:15.7677962', NULL, N'migration_seed_domain_test_data', N'admin', NULL, 8);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (7, N'302', 3, 3, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 6);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (8, N'201', 4, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 12);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (9, N'202', 4, 2, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 13);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (10, N'401', 5, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 19);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (11, N'402', 5, 4, 1, 0, '2026-02-28T17:52:05.2743698', '2026-02-28T17:52:05.2743698', NULL, N'migration_seed_domain_test_data', N'migration_seed_domain_test_data', NULL, 17);
+INSERT INTO [dbo].[Odalar] ([Id], [OdaNo], [BinaId], [KatNo], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy], [TesisOdaTipiId]) VALUES (12, N'te', 3, 1, 1, 0, '2026-03-01T17:23:28.1518304', '2026-03-01T17:24:14.5439511', NULL, N'admin', N'admin', NULL, 6);
+SET IDENTITY_INSERT [dbo].[Odalar] OFF;
+PRINT N'Seeding [dbo].[TesisOdaTipiOzellikDegerleri]';
+SET IDENTITY_INSERT [dbo].[TesisOdaTipiOzellikDegerleri] ON;
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (1, 1, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, 2, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, 3, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, 4, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, 5, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (6, 6, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (7, 7, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (8, 8, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (9, 9, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (10, 10, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (11, 11, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (12, 12, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (13, 13, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (14, 14, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (15, 15, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (16, 16, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (17, 17, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (18, 18, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (19, 19, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (20, 20, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (21, 1, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (22, 2, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (23, 3, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (24, 4, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (25, 5, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (26, 6, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (27, 7, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (28, 8, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (29, 9, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (30, 10, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (31, 11, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (32, 12, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (33, 13, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (34, 14, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (35, 15, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (36, 16, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (37, 17, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (38, 18, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (39, 19, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (40, 20, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (41, 1, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (42, 2, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (43, 3, 5, N'38.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (44, 4, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (45, 5, 5, N'46.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (46, 6, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (47, 7, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (48, 8, 5, N'48', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:21:51.7388038', NULL, N'migration', N'admin', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (49, 9, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (50, 10, 5, N'46.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (51, 11, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (52, 12, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (53, 13, 5, N'38.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (54, 14, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (55, 15, 5, N'46.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (56, 16, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (57, 17, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (58, 18, 5, N'38.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (59, 19, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[TesisOdaTipiOzellikDegerleri] ([Id], [TesisOdaTipiId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (60, 20, 5, N'46.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+SET IDENTITY_INSERT [dbo].[TesisOdaTipiOzellikDegerleri] OFF;
+PRINT N'Seeding [dbo].[OdaOzellikDegerleri]';
+SET IDENTITY_INSERT [dbo].[OdaOzellikDegerleri] ON;
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (2, 1, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (3, 2, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (4, 3, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (5, 4, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (6, 5, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (7, 6, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (8, 7, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (9, 8, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (10, 9, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (11, 10, 3, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (12, 11, 3, N'false', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (13, 1, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (14, 2, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (15, 3, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (16, 4, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (17, 5, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (18, 6, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (19, 7, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (20, 8, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (21, 9, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (22, 10, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (23, 11, 4, N'true', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (24, 1, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (25, 2, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (26, 3, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (27, 4, 5, N'46.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (28, 5, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (29, 6, 5, N'37', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:22:15.7677962', NULL, N'migration', N'admin', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (30, 7, 5, N'18.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (31, 8, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (32, 9, 5, N'38.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (33, 10, 5, N'42.50', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (34, 11, 5, N'24.00', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (35, 4, 6, N'test', 0, '2026-03-01T17:17:01.6477455', '2026-03-01T17:17:01.6477455', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (36, 12, 3, N'false', 0, '2026-03-01T17:23:28.1518304', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (37, 12, 4, N'true', 0, '2026-03-01T17:23:28.1518304', NULL, NULL, N'admin', NULL, NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (38, 12, 5, N'25', 0, '2026-03-01T17:23:28.1518304', '2026-03-01T17:24:14.5439511', NULL, N'admin', N'admin', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (39, 1, 7, N'1', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (40, 2, 7, N'2', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (41, 3, 7, N'3', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (42, 4, 7, N'6', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (43, 5, 7, N'2', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (44, 6, 7, N'4', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (45, 7, 7, N'1', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (46, 8, 7, N'2', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (47, 9, 7, N'4', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (48, 10, 7, N'3', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (49, 11, 7, N'2', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+INSERT INTO [dbo].[OdaOzellikDegerleri] ([Id], [OdaId], [OdaOzellikId], [Deger], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy]) VALUES (50, 12, 7, N'1', 0, '2026-03-02T20:09:44.3591286', '2026-03-02T20:09:44.3591286', NULL, N'migration', N'migration', NULL);
+SET IDENTITY_INSERT [dbo].[OdaOzellikDegerleri] OFF;
+PRINT N'Seeding [dbo].[TesisYoneticileri]';
+PRINT N'Seeding [dbo].[TesisResepsiyonistleri]';
+PRINT N'Seeding [dbo].[KullaniciTesisSahiplikleri]';
+PRINT N'Seeding [dbo].[BinaYoneticileri]';
+ALTER TABLE [dbo].[BinaYoneticileri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[KullaniciTesisSahiplikleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisResepsiyonistleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisYoneticileri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaOzellikDegerleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisOdaTipiOzellikDegerleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Odalar] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[IsletmeAlanlari] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Binalar] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[TesisOdaTipleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaOzellikleri] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[OdaSiniflari] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Tesisler] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Iller] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [dbo].[Countries] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[MenuItemRoles] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserGroupRoles] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserUserGroups] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[MenuItems] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[Roles] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[UserGroups] WITH CHECK CHECK CONSTRAINT ALL;
+ALTER TABLE [TODBase].[Users] WITH CHECK CHECK CONSTRAINT ALL;
+COMMIT TRAN;
+
+""");
+
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: "BinaYoneticileri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "Countries",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "IsletmeAlanlari",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "KullaniciTesisSahiplikleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "OdaOzellikDegerleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "TesisOdaTipiOzellikDegerleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "TesisResepsiyonistleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "TesisYoneticileri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "Odalar",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "OdaOzellikleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "Binalar",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "TesisOdaTipleri",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "OdaSiniflari",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "Tesisler",
+                schema: "dbo");
+
+            migrationBuilder.DropTable(
+                name: "Iller",
+                schema: "dbo");
+        }
+    }
+}

@@ -50,6 +50,17 @@ import { AuthService } from '../../pages/auth';
         </div>
 
         <div class="layout-topbar-actions">
+            @if (currentUserName) {
+                <div
+                    class="hidden lg:flex"
+                    style="align-items: center; gap: 0.45rem; padding: 0.4rem 0.75rem; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--surface-card); margin-right: 0.5rem;"
+                    [title]="currentUserName"
+                >
+                    <i class="pi pi-user" style="font-size: 0.9rem; color: var(--text-color-secondary);"></i>
+                    <span style="font-weight: 600; max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ currentUserName }}</span>
+                </div>
+            }
+
             <div class="layout-config-menu">
                 <button type="button" class="layout-topbar-action" (click)="toggleDarkMode()">
                     <i [ngClass]="{ 'pi ': true, 'pi-moon': layoutService.isDarkTheme(), 'pi-sun': !layoutService.isDarkTheme() }"></i>
@@ -84,9 +95,9 @@ import { AuthService } from '../../pages/auth';
                         <i class="pi pi-inbox"></i>
                         <span>Messages</span>
                     </button>
-                    <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)">
+                    <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)" [title]="currentUserName || 'Profile'">
                         <i class="pi pi-user"></i>
-                        <span>Profile</span>
+                        <span>{{ currentUserName || 'Profile' }}</span>
                     </button>
                     <p-menu #profileMenu [popup]="true" [model]="profileMenuItems"></p-menu>
                 </div>
@@ -175,6 +186,7 @@ export class AppTopbar {
     isForceChangePasswordMode = false;
     changePasswordError: string | null = null;
     changePasswordErrorDetails: string[] = [];
+    currentUserName: string | null = null;
 
     readonly profileMenuItems: MenuItem[] = [
         {
@@ -195,8 +207,10 @@ export class AppTopbar {
     constructor() {
         effect(() => {
             this.authService.sessionRevision();
+            this.currentUserName = this.authService.getCurrentUserName();
 
             if (!this.authService.isAuthenticated()) {
+                this.currentUserName = null;
                 this.closeAllOverlays();
                 return;
             }

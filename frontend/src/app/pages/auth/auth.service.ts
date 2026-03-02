@@ -181,6 +181,35 @@ export class AuthService {
         return false;
     }
 
+    getCurrentUserName(): string | null {
+        const token = this.getToken();
+        if (!token) {
+            return null;
+        }
+
+        const payload = this.decodeJwtPayload(token);
+        if (!payload) {
+            return null;
+        }
+
+        const userName = this.readClaimAsString(payload, 'userName');
+        if (userName) {
+            return userName;
+        }
+
+        const nameIdentifier = this.readClaimAsString(payload, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier');
+        if (nameIdentifier) {
+            return nameIdentifier;
+        }
+
+        const uniqueName = this.readClaimAsString(payload, 'unique_name');
+        if (uniqueName) {
+            return uniqueName;
+        }
+
+        return null;
+    }
+
     resetInactivityTimer(): void {
         if (!this.isAuthenticated()) {
             return;
@@ -253,6 +282,16 @@ export class AuthService {
         }
 
         return claimValue.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    }
+
+    private readClaimAsString(payload: Record<string, unknown>, claimName: string): string | null {
+        const claimValue = payload[claimName];
+        if (typeof claimValue !== 'string') {
+            return null;
+        }
+
+        const normalizedValue = claimValue.trim();
+        return normalizedValue.length > 0 ? normalizedValue : null;
     }
 
     private bumpSessionRevision(): void {

@@ -15,6 +15,8 @@ namespace STYS.Kullanicilar.Services;
 public class StysScopedUserService : BaseUserService
 {
     private const string ResepsiyonistGroupName = "ResepsiyonistGrubu";
+    private const string TesisYoneticiGroupName = "TesisYoneticiGrubu";
+    private const string BinaYoneticiGroupName = "BinaYoneticiGrubu";
 
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
@@ -74,11 +76,16 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            var receptionistGroupId = await GetRequiredGroupIdAsync(ResepsiyonistGroupName);
-            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
+            await ValidateScopedManagerGroupSelectionAsync(dto, CancellationToken.None);
         }
 
-        return await base.AddAsync(dto);
+        var created = await base.AddAsync(dto);
+        if (actorScope.IsTesisManagerScoped && created.Id.HasValue)
+        {
+            await EnsureOwnerRecordForScopedCreateAsync(created.Id.Value, actorScope, CancellationToken.None);
+        }
+
+        return created;
     }
 
     public override async Task<UserDto> UpdateAsync(UserDto dto)
@@ -91,9 +98,8 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            await EnsureScopedTesisManagerCanManageUserAsync(dto.Id.Value, actorScope);
-            var receptionistGroupId = await GetRequiredGroupIdAsync(ResepsiyonistGroupName);
-            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
+            await EnsureScopedManagerCanManageUserAsync(dto.Id.Value, actorScope);
+            await ValidateScopedManagerGroupSelectionAsync(dto, CancellationToken.None);
         }
 
         return await base.UpdateAsync(dto);
@@ -104,7 +110,7 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            await EnsureScopedTesisManagerCanManageUserAsync(id, actorScope);
+            await EnsureScopedManagerCanManageUserAsync(id, actorScope);
         }
 
         await base.ResetPasswordAsync(id, dto);
@@ -115,7 +121,7 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            await EnsureScopedTesisManagerCanManageUserAsync(id, actorScope);
+            await EnsureScopedManagerCanManageUserAsync(id, actorScope);
         }
 
         await base.DeleteAsync(id);
@@ -131,7 +137,7 @@ public class StysScopedUserService : BaseUserService
         }
     }
 
-    private async Task EnsureScopedTesisManagerCanManageUserAsync(
+    private async Task EnsureScopedManagerCanManageUserAsync(
         Guid targetUserId,
         UserActorScope actorScope,
         CancellationToken cancellationToken = default)
@@ -141,12 +147,15 @@ public class StysScopedUserService : BaseUserService
             return;
         }
 
-        var isResepsiyonist = await _identityDbContext.UserUserGroups
-            .AnyAsync(x => x.UserId == targetUserId && x.UserGroup.Name == ResepsiyonistGroupName, cancellationToken);
+        var managedGroupNames = GetScopedManageableGroupNames();
+        var isTargetInManageableGroup = await _identityDbContext.UserUserGroups
+            .AnyAsync(
+                x => x.UserId == targetUserId && managedGroupNames.Contains(x.UserGroup.Name),
+                cancellationToken);
 
-        if (!isResepsiyonist)
+        if (!isTargetInManageableGroup)
         {
-            throw new InvalidOperationException("Tesis yoneticisi yalnizca resepsiyonist kullanicilari yonetebilir.");
+            throw new InvalidOperationException("Bu kullanicinin grubu scoped yonetim kapsaminda degil.");
         }
 
         var ownerTesisId = await _stysDbContext.KullaniciTesisSahiplikleri
@@ -177,19 +186,101 @@ public class StysScopedUserService : BaseUserService
         throw new InvalidOperationException("Bu kullaniciyi yonetme yetkiniz bulunmuyor.");
     }
 
-    private async Task<Guid> GetRequiredGroupIdAsync(string groupName, CancellationToken cancellationToken = default)
+    private async Task ValidateScopedManagerGroupSelectionAsync(UserDto dto, CancellationToken cancellationToken)
     {
-        var groupId = await _identityDbContext.UserGroups
-            .Where(x => x.Name == groupName)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        var managedGroupIdByName = await GetScopedManageableGroupIdsByNameAsync(cancellationToken);
+        var managedGroupIds = managedGroupIdByName.Values.ToHashSet();
 
-        if (groupId == Guid.Empty)
+        if (managedGroupIds.Count == 0)
         {
-            throw new InvalidOperationException($"{groupName} bulunamadi.");
+            throw new InvalidOperationException("Scoped yonetim icin gerekli kullanici gruplari bulunamadi.");
         }
 
-        return groupId;
+        var requestedGroupIds = dto.UserGroups
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (requestedGroupIds.Count == 0)
+        {
+            var defaultGroupId = managedGroupIdByName[ResepsiyonistGroupName];
+            dto.UserGroups = [new UserGroupDto { Id = defaultGroupId }];
+            return;
+        }
+
+        var invalidGroupIds = requestedGroupIds
+            .Where(x => !managedGroupIds.Contains(x))
+            .ToList();
+
+        if (invalidGroupIds.Count > 0)
+        {
+            throw new InvalidOperationException("Scoped yonetici yalnizca resepsiyonist, bina yoneticisi veya tesis yoneticisi gruplarinda kullanici yonetebilir.");
+        }
+    }
+
+    private async Task EnsureOwnerRecordForScopedCreateAsync(
+        Guid userId,
+        UserActorScope actorScope,
+        CancellationToken cancellationToken)
+    {
+        if (actorScope.ManagedTesisIds.Count == 0)
+        {
+            return;
+        }
+
+        var ownerTesisId = actorScope.ManagedTesisIds.Min();
+        var existingOwner = await _stysDbContext.KullaniciTesisSahiplikleri
+            .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+        if (existingOwner is null)
+        {
+            await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
+            {
+                UserId = userId,
+                TesisId = ownerTesisId
+            }, cancellationToken);
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (!existingOwner.TesisId.HasValue)
+        {
+            existingOwner.TesisId = ownerTesisId;
+            _stysDbContext.KullaniciTesisSahiplikleri.Update(existingOwner);
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private async Task<Dictionary<string, Guid>> GetScopedManageableGroupIdsByNameAsync(CancellationToken cancellationToken)
+    {
+        var groupNames = GetScopedManageableGroupNames();
+        var groups = await _identityDbContext.UserGroups
+            .Where(x => groupNames.Contains(x.Name))
+            .Select(x => new { x.Name, x.Id })
+            .ToListAsync(cancellationToken);
+
+        var groupIdByName = groups.ToDictionary(x => x.Name, x => x.Id, StringComparer.OrdinalIgnoreCase);
+        foreach (var groupName in groupNames)
+        {
+            if (!groupIdByName.ContainsKey(groupName))
+            {
+                throw new InvalidOperationException($"{groupName} bulunamadi.");
+            }
+        }
+
+        return groupIdByName;
+    }
+
+    private static HashSet<string> GetScopedManageableGroupNames()
+    {
+        return
+        [
+            ResepsiyonistGroupName,
+            TesisYoneticiGroupName,
+            BinaYoneticiGroupName
+        ];
     }
 
 }

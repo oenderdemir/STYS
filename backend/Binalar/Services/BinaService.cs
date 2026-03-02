@@ -5,6 +5,7 @@ using STYS.AccessScope;
 using STYS.Binalar.Dto;
 using STYS.Binalar.Entities;
 using STYS.Binalar.Repositories;
+using STYS.Infrastructure.EntityFramework;
 using STYS.Tesisler.Repositories;
 using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Persistence.Rdbms.Paging;
@@ -20,12 +21,14 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
     private readonly ITesisRepository _tesisRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly StysAppDbContext _stysDbContext;
 
     public BinaService(
         IBinaRepository binaRepository,
         IBinaYoneticiRepository binaYoneticiRepository,
         ITesisRepository tesisRepository,
         IUserRepository userRepository,
+        StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(binaRepository, mapper)
@@ -34,6 +37,7 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         _binaYoneticiRepository = binaYoneticiRepository;
         _tesisRepository = tesisRepository;
         _userRepository = userRepository;
+        _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -54,6 +58,7 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
 
         await _binaRepository.AddAsync(entity);
         await _binaRepository.SaveChangesAsync();
+        await EnsureOwnerRecordsForAssignedUsersAsync(entity.TesisId, managerIds!);
 
         return Mapper.Map<BinaDto>(entity);
     }
@@ -76,6 +81,7 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         await EnsureTesisRulesAsync(dto.TesisId);
         await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: true);
+        List<Guid> previousManagerUserIds = [];
 
         existingEntity.IsDeleted = false;
         existingEntity.Ad = dto.Ad;
@@ -85,11 +91,19 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
 
         if (managerIds is not null)
         {
+            previousManagerUserIds = existingEntity.Yoneticiler
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToList();
             SyncYoneticiler(existingEntity, managerIds);
         }
 
         _binaRepository.Update(existingEntity);
         await _binaRepository.SaveChangesAsync();
+        if (managerIds is not null)
+        {
+            await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.TesisId, previousManagerUserIds, managerIds);
+        }
 
         return Mapper.Map<BinaDto>(existingEntity);
     }
@@ -285,5 +299,73 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
                 UserId = desiredUserId
             });
         }
+    }
+
+    private async Task EnsureOwnerRecordsForAssignedUsersAsync(int tesisId, IReadOnlyCollection<Guid> userIds)
+    {
+        if (userIds.Count == 0)
+        {
+            return;
+        }
+
+        var ownerUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => userIds.Contains(x.UserId))
+            .Select(x => x.UserId)
+            .ToListAsync();
+
+        var missingOwnerUserIds = userIds
+            .Where(x => !ownerUserIds.Contains(x))
+            .ToList();
+
+        if (missingOwnerUserIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var userId in missingOwnerUserIds)
+        {
+            await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
+            {
+                UserId = userId,
+                TesisId = null
+            });
+        }
+
+        await _stysDbContext.SaveChangesAsync();
+    }
+
+    private async Task ReconcileOwnerRecordsAfterScopedUserSyncAsync(
+        int tesisId,
+        IReadOnlyCollection<Guid> previousUserIds,
+        IReadOnlyCollection<Guid> desiredUserIds)
+    {
+        await EnsureOwnerRecordsForAssignedUsersAsync(tesisId, desiredUserIds);
+
+        var removedUserIds = previousUserIds
+            .Except(desiredUserIds)
+            .Distinct()
+            .ToList();
+
+        if (removedUserIds.Count == 0)
+        {
+            return;
+        }
+
+        var ownerRows = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => removedUserIds.Contains(x.UserId) && x.TesisId == tesisId)
+            .ToListAsync();
+
+        if (ownerRows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var ownerRow in ownerRows)
+        {
+            ownerRow.TesisId = null;
+            _stysDbContext.KullaniciTesisSahiplikleri.Update(ownerRow);
+        }
+
+        await _stysDbContext.SaveChangesAsync();
     }
 }

@@ -124,6 +124,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
         await _tesisRepository.AddAsync(entity);
         await _tesisRepository.SaveChangesAsync();
+        await EnsureOwnerRecordsForAssignedUsersAsync(entity.Id, managerIds!);
         await EnsureOwnerRecordsForAssignedUsersAsync(entity.Id, receptionistIds!);
 
         return Mapper.Map<TesisDto>(entity);
@@ -159,8 +160,13 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingEntity.Eposta = dto.Eposta;
         existingEntity.AktifMi = dto.AktifMi;
 
+        List<Guid> previousManagerUserIds = [];
         if (managerIds is not null)
         {
+            previousManagerUserIds = existingEntity.Yoneticiler
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToList();
             SyncYoneticiler(existingEntity, managerIds);
         }
 
@@ -174,12 +180,21 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             SyncResepsiyonistler(existingEntity, receptionistIds);
             _tesisRepository.Update(existingEntity);
             await _tesisRepository.SaveChangesAsync();
-            await ReconcileOwnerRecordsAfterReceptionistSyncAsync(existingEntity.Id, previousReceptionistUserIds, receptionistIds);
+            if (managerIds is not null)
+            {
+                await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousManagerUserIds, managerIds);
+            }
+
+            await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousReceptionistUserIds, receptionistIds);
             return Mapper.Map<TesisDto>(existingEntity);
         }
 
         _tesisRepository.Update(existingEntity);
         await _tesisRepository.SaveChangesAsync();
+        if (managerIds is not null)
+        {
+            await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousManagerUserIds, managerIds);
+        }
 
         return Mapper.Map<TesisDto>(existingEntity);
     }
@@ -557,15 +572,15 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await _stysDbContext.SaveChangesAsync();
     }
 
-    private async Task ReconcileOwnerRecordsAfterReceptionistSyncAsync(
+    private async Task ReconcileOwnerRecordsAfterScopedUserSyncAsync(
         int tesisId,
-        IReadOnlyCollection<Guid> previousReceptionistUserIds,
-        IReadOnlyCollection<Guid> desiredReceptionistUserIds)
+        IReadOnlyCollection<Guid> previousUserIds,
+        IReadOnlyCollection<Guid> desiredUserIds)
     {
-        await EnsureOwnerRecordsForAssignedUsersAsync(tesisId, desiredReceptionistUserIds);
+        await EnsureOwnerRecordsForAssignedUsersAsync(tesisId, desiredUserIds);
 
-        var removedUserIds = previousReceptionistUserIds
-            .Except(desiredReceptionistUserIds)
+        var removedUserIds = previousUserIds
+            .Except(desiredUserIds)
             .Distinct()
             .ToList();
 

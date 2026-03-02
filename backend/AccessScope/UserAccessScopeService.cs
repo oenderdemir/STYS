@@ -1,5 +1,9 @@
 namespace STYS.AccessScope;
 
+/// <summary>
+/// DomainAccessScope'e ihtiyaç duyan mevcut servisler için ince bir adapter katmanıdır.
+/// Asıl scope üretimi AccessScopeProvider içinde yapılır.
+/// </summary>
 public class UserAccessScopeService : IUserAccessScopeService
 {
     private readonly IAccessScopeProvider _accessScopeProvider;

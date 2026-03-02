@@ -9,7 +9,6 @@ export interface OdaDto {
     binaId: number;
     tesisOdaTipiId: number;
     katNo: number;
-    yatakSayisi?: number | null;
     odaOzellikDegerleri: OdaOzellikDegerDto[];
     aktifMi: boolean;
 }

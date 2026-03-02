@@ -1,5 +1,10 @@
 namespace STYS.AccessScope;
 
+/// <summary>
+/// Kullanıcının "hangi kullanıcılar üzerinde işlem yapabileceğini" tanımlar.
+/// Bu scope; özellikle kullanıcı yönetimi (create/update/delete/view user) tarafında actor-based filtreleme için kullanılır.
+/// DomainAccessScope'tan farkı, veri hiyerarşisini değil kullanıcı yönetim sorumluluk alanını taşımasıdır.
+/// </summary>
 public sealed class UserActorScope
 {
     private UserActorScope(

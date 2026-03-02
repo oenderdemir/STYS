@@ -18,8 +18,6 @@ public class Oda : BaseEntity<int>
 
     public int KatNo { get; set; }
 
-    public int? YatakSayisi { get; set; }
-
     public bool AktifMi { get; set; } = true;
 
     public Bina? Bina { get; set; }

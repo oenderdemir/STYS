@@ -41,7 +41,6 @@
             <th>Bina</th>
             <th>Oda Tipi</th>
             <th>Kat No</th>
-            <th>Yatak Sayisi</th>
             <th>Dinamik Ozellikler</th>
             <th>Durum</th>
             <th style="width: 18rem">Islem</th>
@@ -54,7 +53,6 @@
             <td>{{ getBinaAdi(oda.binaId) }}</td>
             <td>{{ getOdaTipiAdi(oda.tesisOdaTipiId) }}</td>
             <td>{{ oda.katNo }}</td>
-            <td>{{ oda.yatakSayisi ?? '-' }}</td>
             <td>{{ getDinamikOzelliklerText(oda) }}</td>
             <td>{{ oda.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>

@@ -1,5 +1,10 @@
 namespace STYS.AccessScope;
 
+/// <summary>
+/// Domain verisi filtreleme kapsamını taşır.
+/// Bu scope; il, tesis ve bina listelerinde hangi kayıtların görülebileceğini belirlemek için kullanılır.
+/// Kullanım amacı veri erişimidir (listeme/getir/sorgu filtreleri), kullanıcı CRUD yetki kapsamı değildir.
+/// </summary>
 public sealed class DomainAccessScope
 {
     private DomainAccessScope(bool isScoped, HashSet<int> ilIds, HashSet<int> tesisIds, HashSet<int> binaIds)

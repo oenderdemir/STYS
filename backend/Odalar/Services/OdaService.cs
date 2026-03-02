@@ -20,6 +20,8 @@ namespace STYS.Odalar.Services;
 
 public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
 {
+    private const string YatakSayisiOzellikKodu = "YATAK_SAYISI";
+
     private readonly IOdaRepository _odaRepository;
     private readonly IBinaRepository _binaRepository;
     private readonly IOdaTipiRepository _odaTipiRepository;
@@ -49,11 +51,11 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
     {
         Normalize(dto);
         var odaTipi = await EnsureDependenciesAsync(dto);
-        ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
         await EnsureUniqueActiveRoomNoAsync(dto, null);
         var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
         var defaultFeatureValues = GetDefaultFeatureValuesFromOdaTipi(odaTipi);
         var finalFeatureValues = MergeDefaultAndInputFeatureValues(defaultFeatureValues, normalizedOdaOzellikDegerleri);
+        await ValidateBedCountAsync(finalFeatureValues, odaTipi.Kapasite, odaTipi.PaylasimliMi);
 
         var entity = Mapper.Map<Oda>(dto);
         entity.OdaOzellikDegerleri = finalFeatureValues
@@ -86,16 +88,15 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         await EnsureCanAccessBinaAsync(existingEntity.BinaId);
         Normalize(dto);
         var odaTipi = await EnsureDependenciesAsync(dto);
-        ValidateBedCount(dto, odaTipi.Kapasite, odaTipi.PaylasimliMi);
         await EnsureUniqueActiveRoomNoAsync(dto, dto.Id.Value);
         var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
+        await ValidateBedCountAsync(normalizedOdaOzellikDegerleri, odaTipi.Kapasite, odaTipi.PaylasimliMi);
 
         existingEntity.IsDeleted = false;
         existingEntity.OdaNo = dto.OdaNo;
         existingEntity.BinaId = dto.BinaId;
         existingEntity.TesisOdaTipiId = dto.TesisOdaTipiId;
         existingEntity.KatNo = dto.KatNo;
-        existingEntity.YatakSayisi = dto.YatakSayisi;
         existingEntity.AktifMi = dto.AktifMi;
 
         SyncOdaOzellikDegerleri(existingEntity, normalizedOdaOzellikDegerleri);
@@ -172,16 +173,21 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         }
     }
 
-    private static void ValidateBedCount(OdaDto dto, int odaTipiKapasitesi, bool paylasimliMi)
+    private async Task ValidateBedCountAsync(
+        IReadOnlyCollection<OdaOzellikDegerNormalized> odaOzellikDegerleri,
+        int odaTipiKapasitesi,
+        bool paylasimliMi)
     {
+        var yatakSayisi = await GetBedCountFromDynamicFeaturesAsync(odaOzellikDegerleri);
+
         if (paylasimliMi)
         {
-            if (!dto.YatakSayisi.HasValue || dto.YatakSayisi.Value <= 0)
+            if (!yatakSayisi.HasValue || yatakSayisi.Value <= 0)
             {
                 throw new BaseException("Paylasimli oda icin yatak sayisi zorunludur.", 400);
             }
 
-            if (dto.YatakSayisi.Value > odaTipiKapasitesi)
+            if (yatakSayisi.Value > odaTipiKapasitesi)
             {
                 throw new BaseException("Yatak sayisi oda tipi kapasitesini asamaz.", 400);
             }
@@ -189,10 +195,47 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
             return;
         }
 
-        if (dto.YatakSayisi.HasValue && dto.YatakSayisi.Value <= 0)
+        if (yatakSayisi.HasValue && yatakSayisi.Value <= 0)
         {
             throw new BaseException("Yatak sayisi girilecekse sifirdan buyuk olmalidir.", 400);
         }
+    }
+
+    private async Task<int?> GetBedCountFromDynamicFeaturesAsync(IReadOnlyCollection<OdaOzellikDegerNormalized> odaOzellikDegerleri)
+    {
+        var yatakSayisiOzellik = (await _odaOzellikRepository.GetAllAsync())
+            .FirstOrDefault(x => string.Equals(x.Kod, YatakSayisiOzellikKodu, StringComparison.OrdinalIgnoreCase));
+
+        if (yatakSayisiOzellik is null)
+        {
+            return null;
+        }
+
+        var yatakSayisiDegeri = odaOzellikDegerleri
+            .FirstOrDefault(x => x.OdaOzellikId == yatakSayisiOzellik.Id)?
+            .Deger;
+
+        if (string.IsNullOrWhiteSpace(yatakSayisiDegeri))
+        {
+            return null;
+        }
+
+        if (!decimal.TryParse(yatakSayisiDegeri, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedValue))
+        {
+            throw new BaseException("Yatak sayisi ozelligi icin gecersiz sayisal deger.", 400);
+        }
+
+        if (parsedValue % 1 != 0)
+        {
+            throw new BaseException("Yatak sayisi tam sayi olmalidir.", 400);
+        }
+
+        if (parsedValue <= 0)
+        {
+            throw new BaseException("Yatak sayisi sifirdan buyuk olmalidir.", 400);
+        }
+
+        return Convert.ToInt32(parsedValue);
     }
 
     private static void Normalize(OdaDto dto)

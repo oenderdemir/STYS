@@ -8,6 +8,11 @@ using TOD.Platform.Security.Auth.Services;
 
 namespace STYS.AccessScope;
 
+/// <summary>
+/// DomainAccessScope ve UserActorScope değerlerini request bazında bir kez hesaplar
+/// ve aynı request içinde tekrar kullanım için cache'ler.
+/// Böylece scope üretimi tek yerde kalır ve servisler yalnızca IAccessScopeProvider çağırır.
+/// </summary>
 public class AccessScopeProvider : IAccessScopeProvider
 {
     private readonly StysAppDbContext _stysDbContext;

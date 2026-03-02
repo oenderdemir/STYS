@@ -277,7 +277,6 @@ export class OdaYonetimi implements OnDestroy {
             binaId: 0,
             tesisOdaTipiId: 0,
             katNo: 0,
-            yatakSayisi: null,
             odaOzellikDegerleri: [],
             aktifMi: true
         };

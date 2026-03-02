@@ -72,11 +72,6 @@ import { OdaDto } from './oda-yonetimi.dto';
                         [disabled]="isReadOnly || saving"
                     />
                 </div>
-                <div class="col-span-12 md:col-span-6">
-                    <label for="yatakSayisi" class="block font-medium mb-2">Yatak Sayisi</label>
-                    <p-inputnumber inputId="yatakSayisi" [(ngModel)]="workingModel.yatakSayisi" [min]="0" [useGrouping]="false" styleClass="w-full" [disabled]="isReadOnly || saving" />
-                </div>
-
                 <div class="col-span-12">
                     <label class="block font-medium mb-2">Dinamik Oda Ozellikleri</label>
                     @if (visibleOdaOzellikleri.length === 0) {
@@ -156,7 +151,7 @@ import { OdaDto } from './oda-yonetimi.dto';
 export class OdaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, odaOzellikDegerleri: [], aktifMi: true };
+    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, odaOzellikDegerleri: [], aktifMi: true };
     @Input() binalar: BinaDto[] = [];
     @Input() odaTipleri: OdaTipiDto[] = [];
     @Input() odaOzellikleri: OdaOzellikDto[] = [];
@@ -168,7 +163,7 @@ export class OdaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<OdaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, yatakSayisi: null, odaOzellikDegerleri: [], aktifMi: true };
+    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, odaOzellikDegerleri: [], aktifMi: true };
     readonly booleanFeatureOptions: Array<{ label: string; value: string | null }> = [
         { label: 'Belirtilmedi', value: null },
         { label: 'Evet', value: 'true' },
@@ -289,7 +284,6 @@ export class OdaDialog implements OnChanges {
             binaId: this.workingModel.binaId,
             tesisOdaTipiId: this.workingModel.tesisOdaTipiId,
             katNo: this.workingModel.katNo,
-            yatakSayisi: this.workingModel.yatakSayisi ?? null,
             odaOzellikDegerleri: this.getSanitizedFeatureValues(),
             aktifMi: this.workingModel.aktifMi
         });

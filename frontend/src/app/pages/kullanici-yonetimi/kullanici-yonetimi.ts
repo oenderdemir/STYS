@@ -30,6 +30,8 @@ interface UserGroupOption {
     roleNames: string[];
 }
 
+type ScopedCreateType = 'resepsiyonist' | 'binaYonetici' | null;
+
 @Component({
     selector: 'app-kullanici-yonetimi',
     standalone: true,
@@ -38,6 +40,8 @@ interface UserGroupOption {
     providers: [MessageService, ConfirmationService]
 })
 export class KullaniciYonetimi implements OnInit {
+    private static readonly ADMIN_ROLE = 'KullaniciTipi.Admin';
+
     private readonly service = inject(KullaniciYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
@@ -57,6 +61,7 @@ export class KullaniciYonetimi implements OnInit {
     dialogVisible = false;
     passwordDialogVisible = false;
     isEditMode = false;
+    scopedCreateType: ScopedCreateType = null;
     selectedPasswordUserId: string | null = null;
     selectedPasswordUserName = '';
     newPassword = '';
@@ -106,6 +111,7 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
+        this.scopedCreateType = null;
         this.selectedUser = this.getEmptyUser();
         this.selectedUserGroupIds = [];
         this.selectedRoleNames = [];
@@ -114,7 +120,16 @@ export class KullaniciYonetimi implements OnInit {
         this.dialogVisible = true;
     }
 
+    openNewResepsiyonist(): void {
+        this.openScopedCreate('resepsiyonist');
+    }
+
+    openNewBinaYoneticisi(): void {
+        this.openScopedCreate('binaYonetici');
+    }
+
     openEdit(user: UserResponseDto): void {
+        this.scopedCreateType = null;
         this.selectedUser = {
             ...user,
             userGroups: [...(user.userGroups ?? [])]
@@ -157,21 +172,27 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
-        const isResepsiyonistSelection = this.isResepsiyonistGroupSelected();
-        if (!this.isEditMode && this.isScopedTesisManager && isResepsiyonistSelection && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
+        if (!this.isEditMode && this.isScopedTesisManager && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Eksik Bilgi',
-                detail: 'Resepsiyonist icin tesis secimi zorunludur.'
+                detail: 'Tesis secimi zorunludur.'
             });
             return;
         }
 
+        const isScopedCreate = !this.isEditMode
+            && this.isScopedTesisManager
+            && !!this.selectedTesisIdForCreate
+            && (this.scopedCreateType === 'resepsiyonist' || this.scopedCreateType === 'binaYonetici');
+
         const request$: Observable<unknown> =
             this.isEditMode && this.selectedUser.id
                 ? this.service.updateUser(this.selectedUser.id, payload)
-                : this.isScopedTesisManager && isResepsiyonistSelection && this.selectedTesisIdForCreate
+                : isScopedCreate && this.scopedCreateType === 'resepsiyonist' && this.selectedTesisIdForCreate
                     ? this.service.createResepsiyonistUserForTesis(this.selectedTesisIdForCreate, payload)
+                    : isScopedCreate && this.scopedCreateType === 'binaYonetici' && this.selectedTesisIdForCreate
+                        ? this.service.createBinaYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
                     : this.service.createUser(payload);
 
         this.saving = true;
@@ -202,6 +223,14 @@ export class KullaniciYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    get showScopedCreateButtons(): boolean {
+        return this.canManage && this.isScopedTesisManager;
+    }
+
+    get showTesisSelectorForCreate(): boolean {
+        return !this.isEditMode && this.isScopedTesisManager;
     }
 
     deleteUser(user: UserResponseDto): void {
@@ -404,6 +433,10 @@ export class KullaniciYonetimi implements OnInit {
             return true;
         }
 
+        if (this.isAdminGroup(group.roleNames)) {
+            return false;
+        }
+
         const isTesisYoneticisiGroup = this.isTesisYoneticisiGroup(group.roleNames);
         const isBinaYoneticisiGroup = this.isBinaYoneticisiGroup(group.roleNames);
         const isResepsiyonistGroup = this.isResepsiyonistGroup(group.roleNames);
@@ -423,11 +456,52 @@ export class KullaniciYonetimi implements OnInit {
         return isTesisYoneticisiGroup || isBinaYoneticisiGroup || isResepsiyonistGroup;
     }
 
-    private isResepsiyonistGroupSelected(): boolean {
-        const selectedGroupSet = new Set(this.selectedUserGroupIds);
-        return this.allUserGroups
-            .filter((group) => selectedGroupSet.has(group.value))
-            .some((group) => this.isResepsiyonistGroup(group.roleNames));
+    private openScopedCreate(type: Exclude<ScopedCreateType, null>): void {
+        if (!this.canManage || !this.isScopedTesisManager) {
+            return;
+        }
+
+        const markerRole = type === 'resepsiyonist'
+            ? 'KullaniciAtama.ResepsiyonistAtanabilir'
+            : 'KullaniciAtama.BinaYoneticisiAtanabilir';
+
+        const groupId = this.findGroupIdByMarkerRole(markerRole);
+        if (!groupId) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Grup Bulunamadi',
+                detail: type === 'resepsiyonist'
+                    ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
+                    : 'Bina yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+            });
+            return;
+        }
+
+        this.scopedCreateType = type;
+        this.selectedUser = this.getEmptyUser();
+        this.selectedUserGroupIds = [groupId];
+        this.selectedRoleNames = this.extractSelectedRoleNames(this.selectedUserGroupIds);
+        this.selectedTesisIdForCreate = null;
+        this.isEditMode = false;
+        this.dialogVisible = true;
+    }
+
+    private findGroupIdByMarkerRole(markerRole: string): string | null {
+        const matchedGroup = this.allUserGroups.find(
+            (group) => group.roleNames.includes(markerRole) && !this.isAdminGroup(group.roleNames)
+        );
+        return matchedGroup?.value ?? null;
+    }
+
+    private extractSelectedRoleNames(selectedGroupIds: string[]): string[] {
+        const selectedGroupSet = new Set(selectedGroupIds);
+        return [
+            ...new Set(
+                this.allUserGroups
+                    .filter((groupOption) => selectedGroupSet.has(groupOption.value))
+                    .flatMap((groupOption) => groupOption.roleNames)
+            )
+        ].sort();
     }
 
     private isTesisYoneticisiGroup(roleNames: string[]): boolean {
@@ -440,6 +514,10 @@ export class KullaniciYonetimi implements OnInit {
 
     private isResepsiyonistGroup(roleNames: string[]): boolean {
         return roleNames.includes('KullaniciAtama.ResepsiyonistAtanabilir');
+    }
+
+    private isAdminGroup(roleNames: string[]): boolean {
+        return roleNames.includes(KullaniciYonetimi.ADMIN_ROLE);
     }
 
     private extractRoleNames(groups: UserGroupResponseDto[] | null | undefined): string[] {

@@ -8,4 +8,5 @@ namespace STYS.Tesisler.Services;
 public interface ITesisService : IBaseRdbmsService<TesisDto, Tesis, int>
 {
     Task<UserDto> CreateResepsiyonistUserAsync(int tesisId, UserDto dto);
+    Task<UserDto> CreateBinaYoneticisiUserAsync(int tesisId, UserDto dto);
 }

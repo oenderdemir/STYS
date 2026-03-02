@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 using STYS.AccessScope;
+using STYS.Infrastructure.EntityFramework;
 using STYS.Iller.Repositories;
 using STYS.Tesisler.Dto;
 using STYS.Tesisler.Entities;
@@ -20,6 +21,9 @@ namespace STYS.Tesisler.Services;
 
 public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisService
 {
+    private const string KullaniciTipiDomain = "KullaniciTipi";
+    private const string KullaniciTipiAdminRoleName = "Admin";
+
     private readonly ITesisRepository _tesisRepository;
     private readonly ITesisYoneticiRepository _tesisYoneticiRepository;
     private readonly ITesisResepsiyonistRepository _tesisResepsiyonistRepository;
@@ -27,6 +31,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     private readonly IUserRepository _userRepository;
     private readonly IUserService _userService;
     private readonly TodIdentityDbContext _identityDbContext;
+    private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
 
@@ -38,6 +43,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         IUserRepository userRepository,
         IUserService userService,
         TodIdentityDbContext identityDbContext,
+        StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
         ICurrentUserAccessor currentUserAccessor,
         IMapper mapper)
@@ -50,6 +56,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         _userRepository = userRepository;
         _userService = userService;
         _identityDbContext = identityDbContext;
+        _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
         _currentUserAccessor = currentUserAccessor;
     }
@@ -70,7 +77,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Secilen tesis bulunamadi.", 404);
         }
 
-        var receptionistGroupId = await GetResepsiyonistGroupIdAsync();
+        var receptionistGroupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir));
 
         if (receptionistGroupId == Guid.Empty)
         {
@@ -91,7 +99,50 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Resepsiyonist olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         await SyncUserToSingleTesisAsync(created.Id.Value, tesisId);
+        return created;
+    }
+
+    public async Task<UserDto> CreateBinaYoneticisiUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var binaYoneticiGroupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir));
+
+        if (binaYoneticiGroupId == Guid.Empty)
+        {
+            throw new BaseException("Bina yoneticisi grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = binaYoneticiGroupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Bina yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         return created;
     }
 
@@ -557,13 +608,42 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await _tesisResepsiyonistRepository.SaveChangesAsync();
     }
 
-    private async Task<Guid> GetResepsiyonistGroupIdAsync()
+    private async Task<Guid> GetGroupIdByMarkerAsync(string markerRoleName)
     {
         return await _identityDbContext.UserGroups
             .Where(x => x.UserGroupRoles.Any(ugr =>
                 (ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
-                 && ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir))))
+                 && ugr.Role.Name == markerRoleName)))
+            .Where(x => !x.UserGroupRoles.Any(ugr =>
+                ugr.Role.Domain == KullaniciTipiDomain
+                && ugr.Role.Name == KullaniciTipiAdminRoleName))
             .Select(x => x.Id)
             .FirstOrDefaultAsync();
+    }
+
+    private async Task SetOwnerTesisForCreatedUserAsync(Guid userId, int tesisId)
+    {
+        var existingOwner = await _stysDbContext.KullaniciTesisSahiplikleri
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (existingOwner is null)
+        {
+            await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
+            {
+                UserId = userId,
+                TesisId = tesisId
+            });
+            await _stysDbContext.SaveChangesAsync();
+            return;
+        }
+
+        if (existingOwner.TesisId == tesisId)
+        {
+            return;
+        }
+
+        existingOwner.TesisId = tesisId;
+        _stysDbContext.KullaniciTesisSahiplikleri.Update(existingOwner);
+        await _stysDbContext.SaveChangesAsync();
     }
 }

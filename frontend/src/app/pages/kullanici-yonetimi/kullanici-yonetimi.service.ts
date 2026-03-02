@@ -72,6 +72,18 @@ export class KullaniciYonetimiService {
         );
     }
 
+    createBinaYoneticisiUserForTesis(tesisId: number, payload: UserRequestDto): Observable<UserResponseDto> {
+        return this.http.post<ApiResponse<UserResponseDto>>(`${this.apiBaseUrl}/ui/tesis/${tesisId}/bina-yonetici-kullanici`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bina yoneticisi kullanici olusturulamadi.');
+            })
+        );
+    }
+
     updateUser(id: string, payload: UserRequestDto): Observable<void> {
         return this.http.put<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/user/${id}`, payload).pipe(
             map((responseEnvelope) => {

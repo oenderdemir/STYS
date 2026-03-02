@@ -3,7 +3,14 @@
 
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
-        @if (canManage) {
+        @if (showScopedCreateButtons) {
+            @if (canAssignResepsiyonist) {
+                <p-button label="Resepsiyonist Olustur" icon="pi pi-user-plus" class="mr-2" (onClick)="openNewResepsiyonist()" />
+            }
+            @if (canAssignBinaYoneticisi) {
+                <p-button label="Bina Yoneticisi Olustur" icon="pi pi-building" class="mr-2" (onClick)="openNewBinaYoneticisi()" />
+            }
+        } @else if (canManage) {
             <p-button label="Yeni Kullanici" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
         }
         <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
@@ -101,7 +108,7 @@
             <label for="email" class="block font-medium mb-2">Email</label>
             <input id="email" pInputText [(ngModel)]="selectedUser.email" class="w-full" [disabled]="!canManage || saving" />
         </div>
-        @if (!isEditMode && isScopedTesisManager) {
+        @if (showTesisSelectorForCreate) {
             <div class="col-span-12">
                 <label for="createTesisId" class="block font-medium mb-2">Tesis</label>
                 <p-select

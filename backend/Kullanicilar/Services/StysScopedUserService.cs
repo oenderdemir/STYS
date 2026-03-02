@@ -75,7 +75,8 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            await ValidateScopedManagerGroupSelectionAsync(dto);
+            var receptionistGroupId = await GetRequiredGroupIdAsync(ResepsiyonistGroupName);
+            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
         }
 
         var created = await base.AddAsync(dto);
@@ -99,6 +100,7 @@ public class StysScopedUserService : BaseUserService
         {
             await EnsureScopedManagerCanManageUserAsync(dto.Id.Value, actorScope);
             await ValidateScopedManagerGroupSelectionAsync(dto);
+            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
         }
 
         return await base.UpdateAsync(dto);
@@ -145,7 +147,6 @@ public class StysScopedUserService : BaseUserService
         {
             return;
         }
-
         var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
         var targetGroupTypeNames = await _identityDbContext.UserUserGroups
             .Where(x => x.UserId == targetUserId)
@@ -158,10 +159,11 @@ public class StysScopedUserService : BaseUserService
             .Select(x => x.Name)
             .Distinct()
             .ToListAsync(cancellationToken);
-
+            .AnyAsync(x => x.UserId == targetUserId && x.UserGroup.Name == ResepsiyonistGroupName, cancellationToken);
         if (targetGroupTypeNames.Count == 0)
-        {
+        if (!isResepsiyonist)
             throw new InvalidOperationException("Bu kullanici scoped yonetim kapsamindaki gruplarda degil.");
+            throw new InvalidOperationException("Tesis yoneticisi yalnizca resepsiyonist kullanicilari yonetebilir.");
         }
 
         var requiredPermissions = targetGroupTypeNames
@@ -205,14 +207,13 @@ public class StysScopedUserService : BaseUserService
 
         throw new InvalidOperationException("Bu kullaniciyi yonetme yetkiniz bulunmuyor.");
     }
-
     private async Task ValidateScopedManagerGroupSelectionAsync(UserDto dto, CancellationToken cancellationToken = default)
-    {
+    private async Task<Guid> GetRequiredGroupIdAsync(string groupName, CancellationToken cancellationToken = default)
         var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
         var manageableGroupPermissionMap = await GetManageableGroupPermissionMapAsync(cancellationToken);
 
         var requestedGroupIds = dto.UserGroups
-            .Select(x => x.Id)
+            .Where(x => x.Name == groupName)
             .Where(x => x.HasValue)
             .Select(x => x!.Value)
             .Distinct()
@@ -331,12 +332,12 @@ public class StysScopedUserService : BaseUserService
 
         return permissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
-
+            .FirstOrDefaultAsync(cancellationToken);
     private static bool HasPermission(IReadOnlySet<string> permissionSet, string permission)
     {
         return permissionSet.Contains(permission);
     }
-
+        }
     private static string MapGroupTypeNameToAssignmentPermission(string groupTypeName)
     {
         return groupTypeName switch
@@ -349,6 +350,7 @@ public class StysScopedUserService : BaseUserService
                 => StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
             _ => throw new InvalidOperationException("Desteklenmeyen kullanici grup tipi.")
         };
+        return groupId;
     }
 
 }

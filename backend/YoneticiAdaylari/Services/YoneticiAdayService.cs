@@ -145,16 +145,6 @@ public class YoneticiAdayService : IYoneticiAdayService
 
     private async Task<HashSet<Guid>> GetScopedUserIdsAsync(DomainAccessScope scope, CancellationToken cancellationToken)
     {
-        var allTesisManagerUserIds = await GetGroupUserIdsByGroupTypePermissionAsync(
-            nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi),
-            cancellationToken);
-        var allBinaManagerUserIds = await GetGroupUserIdsByGroupTypePermissionAsync(
-            nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi),
-            cancellationToken);
-        var allReceptionistUserIds = await GetGroupUserIdsByGroupTypePermissionAsync(
-            nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist),
-            cancellationToken);
-
         var tesisManagerUserIds = await _stysDbContext.TesisYoneticileri
             .Where(x => scope.TesisIds.Contains(x.TesisId))
             .Select(x => x.UserId)
@@ -195,60 +185,5 @@ public class YoneticiAdayService : IYoneticiAdayService
             .Concat(binaManagerUserIds)
             .Concat(ownerAllowedBinaManagerUserIds)
             .ToHashSet();
-    }
-
-    private async Task<List<Guid>> GetGroupUserIdsByGroupTypePermissionAsync(string groupTypeName, CancellationToken cancellationToken)
-    {
-        return await _identityDbContext.UserUserGroups
-            .Where(x => x.UserGroup.UserGroupRoles
-                .Any(ugr =>
-                    ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi)
-                    && ugr.Role.Name == groupTypeName))
-            .Select(x => x.UserId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-    }
-
-    private async Task<List<Guid>> GetOwnerAllowedUserIdsAsync(
-        IReadOnlyCollection<Guid> userIds,
-        DomainAccessScope scope,
-        CancellationToken cancellationToken)
-    {
-        if (userIds.Count == 0)
-        {
-            return [];
-        }
-
-        var ownerRows = await _stysDbContext.KullaniciTesisSahiplikleri
-            .Where(x => userIds.Contains(x.UserId))
-            .Select(x => new
-            {
-                x.UserId,
-                x.TesisId
-            })
-            .ToListAsync(cancellationToken);
-
-        var ownerByUserId = ownerRows
-            .GroupBy(x => x.UserId)
-            .ToDictionary(
-                x => x.Key,
-                x => x.Select(row => row.TesisId).FirstOrDefault());
-
-        return userIds
-            .Where(userId =>
-            {
-                if (!ownerByUserId.TryGetValue(userId, out var ownerTesisId))
-                {
-                    return true;
-                }
-
-                if (!ownerTesisId.HasValue)
-                {
-                    return true;
-                }
-
-                return scope.TesisIds.Contains(ownerTesisId.Value);
-            })
-            .ToList();
     }
 }

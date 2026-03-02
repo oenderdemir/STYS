@@ -20,7 +20,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UserGroupRequestDto, UserGroupResponseDto } from '../../core/identity';
 import { AuthService } from '../auth';
-import { UserRequestDto, UserResponseDto } from './dto';
+import { UserRequestDto, UserResetPasswordRequestDto, UserResponseDto } from './dto';
 import { KullaniciYonetimiService } from './kullanici-yonetimi.service';
 
 interface UserGroupOption {
@@ -50,8 +50,14 @@ export class KullaniciYonetimi implements OnInit {
     selectedRoleNames: string[] = [];
     loading = false;
     saving = false;
+    passwordSaving = false;
     dialogVisible = false;
+    passwordDialogVisible = false;
     isEditMode = false;
+    selectedPasswordUserId: string | null = null;
+    selectedPasswordUserName = '';
+    newPassword = '';
+    newPassword2 = '';
     readonly statusOptions = [
         { label: 'Standard', value: 'Standard' },
         { label: 'Must Change Password', value: 'MustChangePassword' },
@@ -196,6 +202,80 @@ export class KullaniciYonetimi implements OnInit {
                 });
             }
         });
+    }
+
+    openResetPassword(user: UserResponseDto): void {
+        if (!this.canManage || !user.id) {
+            return;
+        }
+
+        this.selectedPasswordUserId = user.id;
+        this.selectedPasswordUserName = user.userName;
+        this.newPassword = '';
+        this.newPassword2 = '';
+        this.passwordDialogVisible = true;
+    }
+
+    resetPassword(): void {
+        if (!this.canManage || this.passwordSaving || !this.selectedPasswordUserId) {
+            return;
+        }
+
+        if (this.newPassword.trim().length === 0 || this.newPassword2.trim().length === 0) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Eksik Bilgi',
+                detail: 'Yeni parola ve tekrari zorunludur.'
+            });
+            return;
+        }
+
+        if (this.newPassword !== this.newPassword2) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Parola Uyusmazligi',
+                detail: 'Yeni parola ve tekrari ayni olmalidir.'
+            });
+            return;
+        }
+
+        const payload: UserResetPasswordRequestDto = {
+            newPassword: this.newPassword,
+            newPassword2: this.newPassword2
+        };
+
+        this.passwordSaving = true;
+        this.service
+            .resetUserPassword(this.selectedPasswordUserId, payload)
+            .pipe(
+                finalize(() => {
+                    this.passwordSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.passwordDialogVisible = false;
+                    this.selectedPasswordUserId = null;
+                    this.selectedPasswordUserName = '';
+                    this.newPassword = '';
+                    this.newPassword2 = '';
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: 'Kullanici parolasi degistirildi. Kullanici ilk giriste parolasini degistirecek.'
+                    });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Hata',
+                        detail: this.resolveErrorMessage(error)
+                    });
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     getUserFullName(user: UserResponseDto): string {

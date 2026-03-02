@@ -63,4 +63,12 @@ public class UserController : UIController
         await _userService.DeleteAsync(id);
         return Ok();
     }
+
+    [HttpPut("{id:guid}/password")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<IActionResult> ResetPassword(Guid id, [FromBody] UserResetPasswordDto dto)
+    {
+        await _userService.ResetPasswordAsync(id, dto);
+        return Ok();
+    }
 }

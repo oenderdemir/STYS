@@ -4,7 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { UserGroupResponseDto } from '../../core/identity';
-import { UserRequestDto, UserResponseDto } from './dto';
+import { UserRequestDto, UserResetPasswordRequestDto, UserResponseDto } from './dto';
 
 @Injectable({ providedIn: 'root' })
 export class KullaniciYonetimiService {
@@ -55,6 +55,18 @@ export class KullaniciYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kullanici guncellenemedi.');
+            })
+        );
+    }
+
+    resetUserPassword(id: string, payload: UserResetPasswordRequestDto): Observable<void> {
+        return this.http.put<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/user/${id}/password`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success) {
+                    return;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kullanici parolasi degistirilemedi.');
             })
         );
     }

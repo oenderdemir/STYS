@@ -6,4 +6,5 @@ namespace TOD.Platform.Identity.Users.Services;
 
 public interface IUserService : IBaseRdbmsService<UserDto, User>
 {
+    Task ResetPasswordAsync(Guid id, UserResetPasswordDto dto);
 }

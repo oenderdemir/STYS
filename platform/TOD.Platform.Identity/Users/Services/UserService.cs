@@ -112,6 +112,36 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
         return dto;
     }
 
+    public async Task ResetPasswordAsync(Guid id, UserResetPasswordDto dto)
+    {
+        if (dto is null)
+        {
+            throw new InvalidOperationException("Password payload cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.NewPassword) || string.IsNullOrWhiteSpace(dto.NewPassword2))
+        {
+            throw new InvalidOperationException("New password is required.");
+        }
+
+        if (!string.Equals(dto.NewPassword, dto.NewPassword2, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("New passwords do not match.");
+        }
+
+        var user = await Repository.GetByIdAsync(id, q => q.IgnoreQueryFilters());
+        if (user is null)
+        {
+            throw new InvalidOperationException("User was not found.");
+        }
+
+        user.PasswordHash = _passwordHasher.Hash(dto.NewPassword);
+        user.Status = UserStatus.MustChangePassword;
+
+        Repository.Update(user);
+        await Repository.SaveChangesAsync();
+    }
+
     private static UserStatus ParseStatus(string? rawStatus)
     {
         if (string.IsNullOrWhiteSpace(rawStatus))

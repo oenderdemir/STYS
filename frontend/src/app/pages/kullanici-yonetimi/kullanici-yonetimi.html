@@ -64,6 +64,7 @@
                         (onClick)="openEdit(user)"
                     />
                     @if (canManage) {
+                        <p-button icon="pi pi-key" size="small" severity="contrast" [outlined]="true" (onClick)="openResetPassword(user)" />
                         <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteUser(user)" />
                     }
                 </div>
@@ -140,6 +141,36 @@
         <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="dialogVisible = false" />
         @if (canManage) {
             <p-button [label]="saving ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="saving" (onClick)="saveUser()" />
+        }
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Kullanici Parolasi Degistir"
+    [(visible)]="passwordDialogVisible"
+    [modal]="true"
+    [style]="{ width: '28rem', 'max-width': '95vw' }"
+    [breakpoints]="{ '960px': '90vw' }"
+>
+    <div class="mb-3 text-surface-600">
+        Kullanici: <strong>{{ selectedPasswordUserName }}</strong>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12">
+            <label for="newPassword" class="block font-medium mb-2">Yeni Parola</label>
+            <input id="newPassword" pInputText type="password" [(ngModel)]="newPassword" class="w-full" [disabled]="!canManage || passwordSaving" />
+        </div>
+        <div class="col-span-12">
+            <label for="newPassword2" class="block font-medium mb-2">Yeni Parola (Tekrar)</label>
+            <input id="newPassword2" pInputText type="password" [(ngModel)]="newPassword2" class="w-full" [disabled]="!canManage || passwordSaving" />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="passwordSaving" (onClick)="passwordDialogVisible = false" />
+        @if (canManage) {
+            <p-button [label]="passwordSaving ? 'Kaydediliyor...' : 'Parolayi Degistir'" icon="pi pi-check" [disabled]="passwordSaving" (onClick)="resetPassword()" />
         }
     </ng-template>
 </p-dialog>

@@ -20,6 +20,12 @@ public class StysScopedUserService : BaseUserService
         StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
         StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir
     ];
+    private static readonly string[] AssignableMarkerRoleNames =
+    [
+        nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir),
+        nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir),
+        nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
+    ];
 
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
@@ -53,7 +59,13 @@ public class StysScopedUserService : BaseUserService
 
         if (actorScope.IsTesisManagerScoped)
         {
-            query = query.Where(x => actorScope.VisibleUserIds.Contains(x.Id));
+            var manageableUserIds = await GetManageableUserIdsForScopedManagerAsync(actorScope);
+            if (manageableUserIds.Count == 0)
+            {
+                return [];
+            }
+
+            query = query.Where(x => manageableUserIds.Contains(x.Id));
         }
 
         var users = await query.ToListAsync();
@@ -86,9 +98,18 @@ public class StysScopedUserService : BaseUserService
 
         var created = await base.AddAsync(dto);
 
-        if (actorScope.IsTesisManagerScoped && created.Id.HasValue)
+        if (!created.Id.HasValue)
+        {
+            return created;
+        }
+
+        if (actorScope.IsTesisManagerScoped)
         {
             await EnsureOwnerRecordForScopedCreateAsync(created.Id.Value, actorScope, CancellationToken.None);
+        }
+        else
+        {
+            await EnsureOwnerRecordForUnscopedCreateAsync(created.Id.Value, CancellationToken.None);
         }
 
         return created;
@@ -271,6 +292,90 @@ public class StysScopedUserService : BaseUserService
         }
     }
 
+    private async Task EnsureOwnerRecordForUnscopedCreateAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var existingOwner = await _stysDbContext.KullaniciTesisSahiplikleri
+            .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+        if (existingOwner is not null)
+        {
+            return;
+        }
+
+        await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
+        {
+            UserId = userId,
+            TesisId = null
+        }, cancellationToken);
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<HashSet<Guid>> GetManageableUserIdsForScopedManagerAsync(
+        UserActorScope actorScope,
+        CancellationToken cancellationToken = default)
+    {
+        if (!actorScope.IsTesisManagerScoped || actorScope.ManagedTesisIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ownerScopedUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => x.TesisId.HasValue && actorScope.ManagedTesisIds.Contains(x.TesisId.Value))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (ownerScopedUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
+        var manageableMarkerRoleNames = GetManageableAssignableMarkerRoleNames(actorPermissions);
+        if (manageableMarkerRoleNames.Count == 0)
+        {
+            return [];
+        }
+
+        var markerRows = await _identityDbContext.UserUserGroups
+            .Where(x => ownerScopedUserIds.Contains(x.UserId))
+            .SelectMany(x => x.UserGroup.UserGroupRoles
+                .Where(ugr =>
+                    ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
+                    && AssignableMarkerRoleNames.Contains(ugr.Role.Name))
+                .Select(ugr => new
+                {
+                    x.UserId,
+                    MarkerRoleName = ugr.Role.Name
+                }))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var markersByUserId = markerRows
+            .GroupBy(x => x.UserId)
+            .ToDictionary(
+                x => x.Key,
+                x => x.Select(y => y.MarkerRoleName).ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+        var manageableUserIds = new HashSet<Guid>();
+        foreach (var userId in ownerScopedUserIds)
+        {
+            if (!markersByUserId.TryGetValue(userId, out var markerRoleNames) || markerRoleNames.Count == 0)
+            {
+                continue;
+            }
+
+            if (markerRoleNames.All(markerRoleName => manageableMarkerRoleNames.Contains(markerRoleName)))
+            {
+                manageableUserIds.Add(userId);
+            }
+        }
+
+        return manageableUserIds;
+    }
+
     private async Task<Dictionary<Guid, string>> GetManageableGroupPermissionMapAsync(CancellationToken cancellationToken)
     {
         var groupRoleRows = await _identityDbContext.UserGroupRoles
@@ -380,5 +485,27 @@ public class StysScopedUserService : BaseUserService
         }
 
         throw new InvalidOperationException("Desteklenmeyen atanabilir grup marker izni.");
+    }
+
+    private static HashSet<string> GetManageableAssignableMarkerRoleNames(IReadOnlySet<string> actorPermissions)
+    {
+        var manageableMarkerRoleNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir));
+        }
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir));
+        }
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir));
+        }
+
+        return manageableMarkerRoleNames;
     }
 }

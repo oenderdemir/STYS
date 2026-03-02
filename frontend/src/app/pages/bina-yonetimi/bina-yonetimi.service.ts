@@ -94,7 +94,7 @@ export class BinaYonetimiService {
     }
 
     getYoneticiAdaylari(): Observable<ManagerCandidateDto[]> {
-        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday`).pipe(
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday/bina-yoneticileri`).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;

@@ -71,6 +71,10 @@ export class BinaYonetimi implements OnDestroy {
         return this.authService.hasPermission('BinaYonetimi.Manage');
     }
 
+    get canAssignBinaYoneticisi(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.BinaYoneticisiAtayabilir');
+    }
+
     get canManageOda(): boolean {
         return this.authService.hasPermission('OdaYonetimi.Manage');
     }
@@ -301,7 +305,7 @@ export class BinaYonetimi implements OnDestroy {
             tesisler: this.service.getTesisler(),
             odaTipleri: this.service.getOdaTipleri(),
             odaOzellikleri: this.odaService.getOdaOzellikleriActive(),
-            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([])
+            yoneticiAdaylari: this.canManage && this.canAssignBinaYoneticisi ? this.service.getYoneticiAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {

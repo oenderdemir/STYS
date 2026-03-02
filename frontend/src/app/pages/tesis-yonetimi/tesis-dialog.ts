@@ -67,7 +67,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
-                @if (canManage) {
+                @if (canManage && canAssignTesisYoneticisi) {
                     <div class="col-span-12">
                         <label for="yoneticiUserIds" class="block font-medium mb-2">Tesis Yoneticileri</label>
                         <p-multiselect
@@ -84,6 +84,8 @@ import { TesisDto } from './tesis-yonetimi.dto';
                             [disabled]="isReadOnly || saving"
                         />
                     </div>
+                }
+                @if (canManage && canAssignResepsiyonist) {
                     <div class="col-span-12">
                         <label for="resepsiyonistUserIds" class="block font-medium mb-2">Resepsiyonistler</label>
                         <p-multiselect
@@ -121,6 +123,8 @@ export class TesisDialog implements OnChanges {
     @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
+    @Input() canAssignTesisYoneticisi = false;
+    @Input() canAssignResepsiyonist = false;
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<TesisDto>();
@@ -216,8 +220,8 @@ export class TesisDialog implements OnChanges {
             adres: this.workingModel.adres.trim(),
             eposta: this.workingModel.eposta?.trim() || null,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? [],
-            resepsiyonistUserIds: this.workingModel.resepsiyonistUserIds ?? []
+            yoneticiUserIds: this.canAssignTesisYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
+            resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null
         });
     }
 

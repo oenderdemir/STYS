@@ -107,7 +107,13 @@ public class AccessScopeProvider : IAccessScopeProvider
             .Distinct()
             .ToHashSet();
 
-        _domainAccessScope = await BuildDomainAccessScopeAsync(directTesisIds, directBinaIds, belongsToScopedGroup, cancellationToken);
+        var hasTesisLevelScope = directTesisIds.Count > 0;
+        _domainAccessScope = await BuildDomainAccessScopeAsync(
+            directTesisIds,
+            directBinaIds,
+            belongsToScopedGroup,
+            hasTesisLevelScope,
+            cancellationToken);
 
         if (!isTesisManager)
         {
@@ -116,7 +122,9 @@ public class AccessScopeProvider : IAccessScopeProvider
         }
 
         var managedBinaIds = await GetManagedBinaIdsForTesisManagerAsync(managedTesisIds, cancellationToken);
-        var visibleUserIds = await GetVisibleUserIdsForTesisManagerAsync(managedTesisIds, cancellationToken);
+        var visibleUserIds = await GetVisibleUserIdsForTesisManagerAsync(
+            managedTesisIds,
+            cancellationToken);
         visibleUserIds.Add(currentUserId);
 
         _userActorScope = UserActorScope.TesisManagerScoped(managedTesisIds, managedBinaIds, visibleUserIds);
@@ -126,6 +134,7 @@ public class AccessScopeProvider : IAccessScopeProvider
         HashSet<int> directTesisIds,
         IReadOnlyCollection<int> directBinaIds,
         bool belongsToScopedGroup,
+        bool hasTesisLevelScope,
         CancellationToken cancellationToken)
     {
         if (directTesisIds.Count == 0 && directBinaIds.Count == 0)
@@ -152,7 +161,7 @@ public class AccessScopeProvider : IAccessScopeProvider
             }
         }
 
-        if (tesisIds.Count > 0)
+        if (hasTesisLevelScope && tesisIds.Count > 0)
         {
             var binaIdsFromTesis = await _stysDbContext.Binalar
                 .Where(x => tesisIds.Contains(x.TesisId))
@@ -207,9 +216,16 @@ public class AccessScopeProvider : IAccessScopeProvider
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var ownerVisibleUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => x.TesisId.HasValue && managedTesisIdSet.Contains(x.TesisId.Value))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         return tesisManagerUserIds
             .Concat(binaManagerUserIds)
             .Concat(receptionistUserIds)
+            .Concat(ownerVisibleUserIds)
             .ToHashSet();
     }
 

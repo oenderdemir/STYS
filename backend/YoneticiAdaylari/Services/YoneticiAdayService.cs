@@ -80,6 +80,38 @@ public class YoneticiAdayService : IYoneticiAdayService
         return await QueryUsersAsCandidateDto(query, cancellationToken);
     }
 
+    public async Task<List<YoneticiAdayDto>> GetBinaYoneticiAdaylariAsync(CancellationToken cancellationToken = default)
+    {
+        var candidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(
+            StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
+            cancellationToken);
+
+        if (candidateUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            var visibleUserIds = await GetScopedUserIdsAsync(scope, cancellationToken);
+            candidateUserIds = candidateUserIds
+                .Where(visibleUserIds.Contains)
+                .ToList();
+        }
+
+        if (candidateUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var query = _userRepository
+            .Where(x => x.Status != UserStatus.Blocked)
+            .Where(x => candidateUserIds.Contains(x.Id));
+
+        return await QueryUsersAsCandidateDto(query, cancellationToken);
+    }
+
     public async Task<List<YoneticiAdayDto>> GetResepsiyonistAdaylariAsync(CancellationToken cancellationToken = default)
     {
         var receptionistCandidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(

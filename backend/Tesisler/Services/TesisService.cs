@@ -2,7 +2,6 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 using STYS.AccessScope;
-using STYS.Infrastructure.EntityFramework;
 using STYS.Iller.Repositories;
 using STYS.Tesisler.Dto;
 using STYS.Tesisler.Entities;
@@ -14,6 +13,7 @@ using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tesisler.Services;
@@ -27,8 +27,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     private readonly IUserRepository _userRepository;
     private readonly IUserService _userService;
     private readonly TodIdentityDbContext _identityDbContext;
-    private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
 
     public TesisService(
         ITesisRepository tesisRepository,
@@ -38,8 +38,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         IUserRepository userRepository,
         IUserService userService,
         TodIdentityDbContext identityDbContext,
-        StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
+        ICurrentUserAccessor currentUserAccessor,
         IMapper mapper)
         : base(tesisRepository, mapper)
     {
@@ -50,8 +50,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         _userRepository = userRepository;
         _userService = userService;
         _identityDbContext = identityDbContext;
-        _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
+        _currentUserAccessor = currentUserAccessor;
     }
 
     public async Task<UserDto> CreateResepsiyonistUserAsync(int tesisId, UserDto dto)
@@ -62,6 +62,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir);
 
         var tesis = await _tesisRepository.GetByIdAsync(tesisId);
         if (tesis is null)
@@ -91,7 +92,6 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         await SyncUserToSingleTesisAsync(created.Id.Value, tesisId);
-        await EnsureOwnerRecordExistsAsync(created.Id.Value, tesisId);
         return created;
     }
 
@@ -119,8 +119,6 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
         await _tesisRepository.AddAsync(entity);
         await _tesisRepository.SaveChangesAsync();
-        await EnsureOwnerRecordsForAssignedUsersAsync(entity.Id, managerIds!);
-        await EnsureOwnerRecordsForAssignedUsersAsync(entity.Id, receptionistIds!);
 
         return Mapper.Map<TesisDto>(entity);
     }
@@ -155,42 +153,21 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingEntity.Eposta = dto.Eposta;
         existingEntity.AktifMi = dto.AktifMi;
 
-        List<Guid> previousManagerUserIds = [];
         if (managerIds is not null)
         {
-            previousManagerUserIds = existingEntity.Yoneticiler
-                .Select(x => x.UserId)
-                .Distinct()
-                .ToList();
             SyncYoneticiler(existingEntity, managerIds);
         }
 
         if (receptionistIds is not null)
         {
-            var previousReceptionistUserIds = existingEntity.Resepsiyonistler
-                .Select(x => x.UserId)
-                .Distinct()
-                .ToList();
-
             SyncResepsiyonistler(existingEntity, receptionistIds);
             _tesisRepository.Update(existingEntity);
             await _tesisRepository.SaveChangesAsync();
-            if (managerIds is not null)
-            {
-                await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousManagerUserIds, managerIds);
-            }
-
-            await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousReceptionistUserIds, receptionistIds);
             return Mapper.Map<TesisDto>(existingEntity);
         }
 
         _tesisRepository.Update(existingEntity);
         await _tesisRepository.SaveChangesAsync();
-        if (managerIds is not null)
-        {
-            await ReconcileOwnerRecordsAfterScopedUserSyncAsync(existingEntity.Id, previousManagerUserIds, managerIds);
-        }
-
         return Mapper.Map<TesisDto>(existingEntity);
     }
 
@@ -338,6 +315,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         ICollection<Guid>? managerUserIds,
         bool preserveWhenNull)
     {
+        await EnsureCanAssignForPayloadAsync(managerUserIds, StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir, preserveWhenNull);
+
         if (managerUserIds is null)
         {
             return preserveWhenNull ? null : [];
@@ -364,6 +343,16 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Secilen yoneticilerden en az biri bulunamadi.", 400);
         }
 
+        var tesisYoneticiUserIds = await GetUsersMatchingMarkerAsync(
+            normalizedManagerIds,
+            nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir));
+
+        var invalidGroupUserIds = normalizedManagerIds.Except(tesisYoneticiUserIds).ToList();
+        if (invalidGroupUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen kullanicilar tesis yoneticisi atanabilir bir grupta olmalidir.", 400);
+        }
+
         return normalizedManagerIds;
     }
 
@@ -371,6 +360,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         ICollection<Guid>? receptionistUserIds,
         bool preserveWhenNull)
     {
+        await EnsureCanAssignForPayloadAsync(receptionistUserIds, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir, preserveWhenNull);
+
         if (receptionistUserIds is null)
         {
             return preserveWhenNull ? null : [];
@@ -397,18 +388,9 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Secilen resepsiyonistlerden en az biri bulunamadi.", 400);
         }
 
-        var receptionistGroupId = await GetResepsiyonistGroupIdAsync();
-
-        if (receptionistGroupId == Guid.Empty)
-        {
-            throw new BaseException("Resepsiyonist grubu bulunamadi.", 400);
-        }
-
-        var receptionistMembershipUserIds = await _identityDbContext.UserUserGroups
-            .Where(x => x.UserGroupId == receptionistGroupId && normalizedReceptionistIds.Contains(x.UserId))
-            .Select(x => x.UserId)
-            .Distinct()
-            .ToListAsync();
+        var receptionistMembershipUserIds = await GetUsersMatchingMarkerAsync(
+            normalizedReceptionistIds,
+            nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir));
 
         var invalidGroupUserIds = normalizedReceptionistIds.Except(receptionistMembershipUserIds).ToList();
         if (invalidGroupUserIds.Count > 0)
@@ -417,6 +399,74 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         return normalizedReceptionistIds;
+    }
+
+    private async Task EnsureCanAssignForPayloadAsync(
+        ICollection<Guid>? userIds,
+        string requiredPermission,
+        bool preserveWhenNull = false)
+    {
+        if (userIds is null)
+        {
+            if (preserveWhenNull)
+            {
+                return;
+            }
+
+            return;
+        }
+
+        await EnsureCurrentUserHasPermissionAsync(requiredPermission);
+    }
+
+    private async Task EnsureCurrentUserHasPermissionAsync(string requiredPermission, CancellationToken cancellationToken = default)
+    {
+        var permissionSet = await GetCurrentUserPermissionSetAsync();
+        if (permissionSet.Contains(requiredPermission))
+        {
+            return;
+        }
+
+        throw new BaseException("Bu islem icin gerekli kullanici atama yetkiniz bulunmuyor.", 403);
+    }
+
+    private async Task<HashSet<string>> GetCurrentUserPermissionSetAsync(CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserAccessor.GetCurrentUserId();
+        if (!userId.HasValue)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var rows = await _identityDbContext.UserUserGroups
+            .Where(x => x.UserId == userId.Value)
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => new { ugr.Role.Domain, ugr.Role.Name }))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(x => $"{x.Domain}.{x.Name}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<List<Guid>> GetUsersMatchingMarkerAsync(
+        IReadOnlyCollection<Guid> userIds,
+        string markerRoleName,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _identityDbContext.UserUserGroups
+            .Where(x => userIds.Contains(x.UserId))
+            .Where(x => x.UserGroup.UserGroupRoles.Any(ugr =>
+                ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
+                && ugr.Role.Name == markerRoleName))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
     }
 
     private void SyncYoneticiler(Tesis entity, IReadOnlyCollection<Guid> managerUserIds)
@@ -505,98 +555,6 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         await _tesisResepsiyonistRepository.SaveChangesAsync();
-    }
-
-    private async Task EnsureOwnerRecordExistsAsync(Guid userId, int tesisId)
-    {
-        var existingOwner = await _stysDbContext.KullaniciTesisSahiplikleri
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (existingOwner is not null)
-        {
-            if (!existingOwner.TesisId.HasValue)
-            {
-                existingOwner.TesisId = tesisId;
-                _stysDbContext.KullaniciTesisSahiplikleri.Update(existingOwner);
-                await _stysDbContext.SaveChangesAsync();
-            }
-            return;
-        }
-
-        await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
-        {
-            UserId = userId,
-            TesisId = tesisId
-        });
-        await _stysDbContext.SaveChangesAsync();
-    }
-
-    private async Task EnsureOwnerRecordsForAssignedUsersAsync(int tesisId, IReadOnlyCollection<Guid> receptionistUserIds)
-    {
-        if (receptionistUserIds.Count == 0)
-        {
-            return;
-        }
-
-        var ownerUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
-            .Where(x => receptionistUserIds.Contains(x.UserId))
-            .Select(x => x.UserId)
-            .ToListAsync();
-
-        var missingOwnerUserIds = receptionistUserIds
-            .Where(x => !ownerUserIds.Contains(x))
-            .ToList();
-
-        if (missingOwnerUserIds.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var userId in missingOwnerUserIds)
-        {
-            await _stysDbContext.KullaniciTesisSahiplikleri.AddAsync(new()
-            {
-                UserId = userId,
-                TesisId = null
-            });
-        }
-
-        await _stysDbContext.SaveChangesAsync();
-    }
-
-    private async Task ReconcileOwnerRecordsAfterScopedUserSyncAsync(
-        int tesisId,
-        IReadOnlyCollection<Guid> previousUserIds,
-        IReadOnlyCollection<Guid> desiredUserIds)
-    {
-        await EnsureOwnerRecordsForAssignedUsersAsync(tesisId, desiredUserIds);
-
-        var removedUserIds = previousUserIds
-            .Except(desiredUserIds)
-            .Distinct()
-            .ToList();
-
-        if (removedUserIds.Count == 0)
-        {
-            return;
-        }
-
-        var ownerRows = await _stysDbContext.KullaniciTesisSahiplikleri
-            .Where(x => removedUserIds.Contains(x.UserId) && x.TesisId == tesisId)
-            .ToListAsync();
-
-        if (ownerRows.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var ownerRow in ownerRows)
-        {
-            ownerRow.TesisId = null;
-            _stysDbContext.KullaniciTesisSahiplikleri.Update(ownerRow);
-        }
-
-        await _stysDbContext.SaveChangesAsync();
     }
 
     private async Task<Guid> GetResepsiyonistGroupIdAsync()

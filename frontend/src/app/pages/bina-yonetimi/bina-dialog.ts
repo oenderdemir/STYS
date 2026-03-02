@@ -60,7 +60,7 @@ import { BinaDto } from './bina-yonetimi.dto';
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
-                @if (canManage) {
+                @if (canManage && canAssignBinaYoneticisi) {
                     <div class="col-span-12">
                         <label for="yoneticiUserIds" class="block font-medium mb-2">Bina Yoneticileri</label>
                         <p-multiselect
@@ -97,6 +97,7 @@ export class BinaDialog implements OnChanges {
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
+    @Input() canAssignBinaYoneticisi = false;
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<BinaDto>();
@@ -180,7 +181,7 @@ export class BinaDialog implements OnChanges {
             tesisId: this.workingModel.tesisId,
             katSayisi: this.workingModel.katSayisi,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.workingModel.yoneticiUserIds ?? []
+            yoneticiUserIds: this.canAssignBinaYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null
         });
     }
 

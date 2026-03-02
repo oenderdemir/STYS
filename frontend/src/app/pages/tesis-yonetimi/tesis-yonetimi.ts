@@ -55,6 +55,14 @@ export class TesisYonetimi implements OnDestroy {
         return this.authService.hasPermission('TesisYonetimi.Manage');
     }
 
+    get canAssignTesisYoneticisi(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir');
+    }
+
+    get canAssignResepsiyonist(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.ResepsiyonistAtayabilir');
+    }
+
     ngOnDestroy(): void {
         if (this.searchDebounceHandle !== null) {
             clearTimeout(this.searchDebounceHandle);
@@ -184,8 +192,8 @@ export class TesisYonetimi implements OnDestroy {
         forkJoin({
             tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery),
             iller: this.service.getIller(),
-            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([]),
-            resepsiyonistAdaylari: this.canManage ? this.service.getResepsiyonistAdaylari() : of([])
+            yoneticiAdaylari: this.canManage && this.canAssignTesisYoneticisi ? this.service.getYoneticiAdaylari() : of([]),
+            resepsiyonistAdaylari: this.canManage && this.canAssignResepsiyonist ? this.service.getResepsiyonistAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {

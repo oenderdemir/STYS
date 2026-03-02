@@ -126,29 +126,52 @@ public class YoneticiAdayService : IYoneticiAdayService
 
         if (scope.IsScoped)
         {
-            var scopedReceptionistUserIds = await _stysDbContext.TesisResepsiyonistleri
-                .Where(x => scope.TesisIds.Contains(x.TesisId))
-                .Select(x => x.UserId)
-                .Distinct()
-                .ToListAsync(cancellationToken);
-
             var allReceptionistUserIds = await _identityDbContext.UserUserGroups
                 .Where(x => x.UserGroupId == receptionistGroupId)
                 .Select(x => x.UserId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
-            var assignedReceptionistUserIds = await _stysDbContext.TesisResepsiyonistleri
+            var scopedReceptionistUserIds = await _stysDbContext.TesisResepsiyonistleri
+                .Where(x => scope.TesisIds.Contains(x.TesisId))
                 .Select(x => x.UserId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
 
-            var unassignedReceptionistUserIds = allReceptionistUserIds
-                .Except(assignedReceptionistUserIds)
+            var ownerRows = await _stysDbContext.KullaniciTesisSahiplikleri
+                .Where(x => allReceptionistUserIds.Contains(x.UserId))
+                .Select(x => new
+                {
+                    x.UserId,
+                    x.TesisId
+                })
+                .ToListAsync(cancellationToken);
+
+            var ownerByUserId = ownerRows
+                .GroupBy(x => x.UserId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(row => row.TesisId).FirstOrDefault());
+
+            var ownerAllowedReceptionistUserIds = allReceptionistUserIds
+                .Where(userId =>
+                {
+                    if (!ownerByUserId.TryGetValue(userId, out var ownerTesisId))
+                    {
+                        return true;
+                    }
+
+                    if (!ownerTesisId.HasValue)
+                    {
+                        return true;
+                    }
+
+                    return scope.TesisIds.Contains(ownerTesisId.Value);
+                })
                 .ToList();
 
             var allowedReceptionistUserIds = scopedReceptionistUserIds
-                .Concat(unassignedReceptionistUserIds)
+                .Concat(ownerAllowedReceptionistUserIds)
                 .Distinct()
                 .ToList();
 

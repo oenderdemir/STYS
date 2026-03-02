@@ -4,6 +4,7 @@ using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
+using STYS.Kullanicilar.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
@@ -29,6 +30,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Tesis> Tesisler => Set<Tesis>();
     public DbSet<TesisYonetici> TesisYoneticileri => Set<TesisYonetici>();
     public DbSet<TesisResepsiyonist> TesisResepsiyonistleri => Set<TesisResepsiyonist>();
+    public DbSet<KullaniciTesisSahiplik> KullaniciTesisSahiplikleri => Set<KullaniciTesisSahiplik>();
     public DbSet<Bina> Binalar => Set<Bina>();
     public DbSet<BinaYonetici> BinaYoneticileri => Set<BinaYonetici>();
     public DbSet<IsletmeAlani> IsletmeAlanlari => Set<IsletmeAlani>();
@@ -113,6 +115,20 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.Tesis)
                 .WithMany(x => x.Resepsiyonistler)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KullaniciTesisSahiplik>(entity =>
+        {
+            entity.ToTable("KullaniciTesisSahiplikleri", "dbo");
+            entity.HasIndex(x => x.UserId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.TesisId);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

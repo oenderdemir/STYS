@@ -10,7 +10,7 @@ public class MenuItemProfile : Profile
     {
         CreateMap<MenuItem, MenuItemDto>()
             .ForMember(dest => dest.ParentId, opt => opt.MapFrom(src => src.ParentId))
-            .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.MenuItemRoles.Select(x => x.Role)))
+            .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.MenuItemRoles.Where(x => x.Role != null && x.Role.Name == "Menu").Select(x => x.Role)))
             .ReverseMap()
             .ForMember(dest => dest.Parent, opt => opt.Ignore())
             .ForMember(dest => dest.Items, opt => opt.Ignore())

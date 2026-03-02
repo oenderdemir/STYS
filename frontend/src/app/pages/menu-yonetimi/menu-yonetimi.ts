@@ -252,6 +252,7 @@ export class MenuYonetimi implements OnInit {
                     this.treeMenuItems = this.buildTree(this.menuItems);
                     this.parentMenuOptions = this.buildParentMenuOptions(this.selectedMenuItem.id ?? undefined);
                     this.allRoles = roles
+                        .filter((role) => (role.name ?? '').toLowerCase() === 'menu')
                         .map((role) => ({
                             id: role.id ?? '',
                             label: `${role.domain ?? '-'}.${role.name ?? '-'}`

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260302115815_RenameKullaniciTesisSahipliklariToSahiplikleri")]
+    partial class RenameKullaniciTesisSahipliklariToSahiplikleri
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -282,7 +285,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<int?>("TesisId")
+                    b.Property<int>("TesisId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -829,7 +832,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
                         .WithMany()
                         .HasForeignKey("TesisId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Tesis");
                 });

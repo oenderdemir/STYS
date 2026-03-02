@@ -52,7 +52,7 @@ public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuIte
         foreach (var roleId in dto.Roles?.Select(x => x.Id).Where(x => x.HasValue).Select(x => x!.Value).Distinct() ?? Enumerable.Empty<Guid>())
         {
             var role = await _roleRepository.GetByIdAsync(roleId);
-            if (role is null)
+            if (role is null || !string.Equals(role.Name, "Menu", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -90,12 +90,17 @@ public class MenuItemService : BaseRdbmsService<MenuItemDto, MenuItem>, IMenuIte
         menuItem.MenuOrder = dto.MenuOrder;
         menuItem.ParentId = dto.ParentId;
 
-        var desiredRoleIds = dto.Roles?
-            .Select(x => x.Id)
-            .Where(x => x.HasValue)
-            .Select(x => x!.Value)
-            .Distinct()
-            .ToHashSet() ?? new HashSet<Guid>();
+        var desiredRoleIds = new HashSet<Guid>();
+        foreach (var roleId in dto.Roles?.Select(x => x.Id).Where(x => x.HasValue).Select(x => x!.Value).Distinct() ?? Enumerable.Empty<Guid>())
+        {
+            var role = await _roleRepository.GetByIdAsync(roleId);
+            if (role is null || !string.Equals(role.Name, "Menu", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            desiredRoleIds.Add(roleId);
+        }
 
         var existingRoleIds = menuItem.MenuItemRoles.Select(x => x.RoleId).ToHashSet();
 

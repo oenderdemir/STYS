@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.UserGroups.Repositories;
@@ -15,6 +16,7 @@ public class StysScopedUserService : BaseUserService
 {
     private const string ResepsiyonistGroupName = "ResepsiyonistGrubu";
 
+    private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
 
@@ -22,11 +24,13 @@ public class StysScopedUserService : BaseUserService
         IUserRepository userRepository,
         IUserGroupRepository userGroupRepository,
         IPasswordHasher passwordHasher,
+        StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
         IAccessScopeProvider accessScopeProvider,
         AutoMapper.IMapper mapper)
         : base(userRepository, userGroupRepository, passwordHasher, mapper)
     {
+        _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;
         _accessScopeProvider = accessScopeProvider;
     }
@@ -115,6 +119,16 @@ public class StysScopedUserService : BaseUserService
         }
 
         await base.DeleteAsync(id);
+
+        var ownerRows = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => x.UserId == id)
+            .ToListAsync();
+
+        if (ownerRows.Count > 0)
+        {
+            _stysDbContext.KullaniciTesisSahiplikleri.RemoveRange(ownerRows);
+            await _stysDbContext.SaveChangesAsync();
+        }
     }
 
     private async Task EnsureScopedTesisManagerCanManageUserAsync(
@@ -133,6 +147,26 @@ public class StysScopedUserService : BaseUserService
         if (!isResepsiyonist)
         {
             throw new InvalidOperationException("Tesis yoneticisi yalnizca resepsiyonist kullanicilari yonetebilir.");
+        }
+
+        var ownerTesisId = await _stysDbContext.KullaniciTesisSahiplikleri
+            .Where(x => x.UserId == targetUserId)
+            .Select(x => x.TesisId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!ownerTesisId.HasValue)
+        {
+            throw new InvalidOperationException("Bu kullanici sahipsiz oldugu icin global kullanici bilgileri tesis yoneticisi tarafindan degistirilemez.");
+        }
+
+        if (ownerTesisId.Value <= 0)
+        {
+            throw new InvalidOperationException("Resepsiyonist icin sahip tesis bilgisi tanimli degil.");
+        }
+
+        if (!actorScope.ManagedTesisIds.Contains(ownerTesisId.Value))
+        {
+            throw new InvalidOperationException("Bu kullanicinin global bilgilerini duzenleme yetkiniz yok.");
         }
 
         if (actorScope.VisibleUserIds.Contains(targetUserId))

@@ -66,23 +66,21 @@ public class AccessScopeProvider : IAccessScopeProvider
 
         var currentUserId = userId.Value;
 
-        var groupTypeNames = await _identityDbContext.UserUserGroups
+        var scopedGroupMarkerPermissions = await _identityDbContext.UserUserGroups
             .Where(x => x.UserId == currentUserId)
-            .SelectMany(x => x.UserGroup.UserGroupRoles
-                .Where(ugr => ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi))
-                .Select(ugr => ugr.Role.Name))
-            .Where(x =>
-                x == nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi)
-                || x == nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi)
-                || x == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist))
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}"))
+            .Where(permission =>
+                permission == StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir
+                || permission == StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir
+                || permission == StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var groupTypeNameSet = groupTypeNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var isTesisManager = groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi));
-        var belongsToScopedGroup = groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi))
-            || groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi))
-            || groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist));
+        var groupMarkerSet = scopedGroupMarkerPermissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var isTesisManager = groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir);
+        var belongsToScopedGroup = isTesisManager
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir)
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir);
 
         var managedTesisIds = await _stysDbContext.TesisYoneticileri
             .Where(x => x.UserId == currentUserId)

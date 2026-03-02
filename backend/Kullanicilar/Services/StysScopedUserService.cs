@@ -14,6 +14,13 @@ namespace STYS.Kullanicilar.Services;
 
 public class StysScopedUserService : BaseUserService
 {
+    private static readonly string[] AssignableMarkerPermissions =
+    [
+        StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir,
+        StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
+        StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir
+    ];
+
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
@@ -56,7 +63,6 @@ public class StysScopedUserService : BaseUserService
     public override async Task<UserDto?> GetByIdAsync(Guid id, Func<IQueryable<User>, IQueryable<User>>? include = null)
     {
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
-
         if (actorScope.IsTesisManagerScoped && !actorScope.VisibleUserIds.Contains(id))
         {
             return null;
@@ -75,11 +81,11 @@ public class StysScopedUserService : BaseUserService
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
-            var receptionistGroupId = await GetRequiredGroupIdAsync(ResepsiyonistGroupName);
-            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
+            await ValidateScopedManagerGroupSelectionAsync(dto);
         }
 
         var created = await base.AddAsync(dto);
+
         if (actorScope.IsTesisManagerScoped && created.Id.HasValue)
         {
             await EnsureOwnerRecordForScopedCreateAsync(created.Id.Value, actorScope, CancellationToken.None);
@@ -100,7 +106,6 @@ public class StysScopedUserService : BaseUserService
         {
             await EnsureScopedManagerCanManageUserAsync(dto.Id.Value, actorScope);
             await ValidateScopedManagerGroupSelectionAsync(dto);
-            dto.UserGroups = [new UserGroupDto { Id = receptionistGroupId }];
         }
 
         return await base.UpdateAsync(dto);
@@ -147,31 +152,20 @@ public class StysScopedUserService : BaseUserService
         {
             return;
         }
+
         var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
-        var targetGroupTypeNames = await _identityDbContext.UserUserGroups
-            .Where(x => x.UserId == targetUserId)
-            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => new { ugr.Role.Domain, ugr.Role.Name }))
-            .Where(x =>
-                x.Domain == nameof(StructurePermissions.KullaniciGrupTipi)
-                && (x.Name == nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi)
-                    || x.Name == nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi)
-                    || x.Name == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist)))
-            .Select(x => x.Name)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-            .AnyAsync(x => x.UserId == targetUserId && x.UserGroup.Name == ResepsiyonistGroupName, cancellationToken);
-        if (targetGroupTypeNames.Count == 0)
-        if (!isResepsiyonist)
+        var targetAssignableMarkers = await GetTargetUserAssignableMarkersAsync(targetUserId, cancellationToken);
+        if (targetAssignableMarkers.Count == 0)
+        {
             throw new InvalidOperationException("Bu kullanici scoped yonetim kapsamindaki gruplarda degil.");
-            throw new InvalidOperationException("Tesis yoneticisi yalnizca resepsiyonist kullanicilari yonetebilir.");
         }
 
-        var requiredPermissions = targetGroupTypeNames
-            .Select(MapGroupTypeNameToAssignmentPermission)
-            .Distinct()
+        var requiredActorPermissions = targetAssignableMarkers
+            .Select(MapAssignableMarkerToActorPermission)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var missingPermissions = requiredPermissions
+        var missingPermissions = requiredActorPermissions
             .Where(permission => !HasPermission(actorPermissions, permission))
             .ToList();
 
@@ -190,30 +184,24 @@ public class StysScopedUserService : BaseUserService
             throw new InvalidOperationException("Bu kullanici sahipsiz oldugu icin global kullanici bilgileri tesis yoneticisi tarafindan degistirilemez.");
         }
 
-        if (ownerTesisId.Value <= 0)
-        {
-            throw new InvalidOperationException("Kullanici icin sahip tesis bilgisi tanimli degil.");
-        }
-
         if (!actorScope.ManagedTesisIds.Contains(ownerTesisId.Value))
         {
             throw new InvalidOperationException("Bu kullanicinin global bilgilerini duzenleme yetkiniz yok.");
         }
 
-        if (actorScope.VisibleUserIds.Contains(targetUserId))
+        if (!actorScope.VisibleUserIds.Contains(targetUserId))
         {
-            return;
+            throw new InvalidOperationException("Bu kullaniciyi yonetme yetkiniz bulunmuyor.");
         }
-
-        throw new InvalidOperationException("Bu kullaniciyi yonetme yetkiniz bulunmuyor.");
     }
+
     private async Task ValidateScopedManagerGroupSelectionAsync(UserDto dto, CancellationToken cancellationToken = default)
-    private async Task<Guid> GetRequiredGroupIdAsync(string groupName, CancellationToken cancellationToken = default)
+    {
         var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
         var manageableGroupPermissionMap = await GetManageableGroupPermissionMapAsync(cancellationToken);
 
         var requestedGroupIds = dto.UserGroups
-            .Where(x => x.Name == groupName)
+            .Select(x => x.Id)
             .Where(x => x.HasValue)
             .Select(x => x!.Value)
             .Distinct()
@@ -223,7 +211,7 @@ public class StysScopedUserService : BaseUserService
         {
             var defaultGroupId = manageableGroupPermissionMap
                 .Where(x => HasPermission(actorPermissions, x.Value))
-                .OrderByDescending(x => x.Value == StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
+                .OrderByDescending(x => string.Equals(x.Value, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir, StringComparison.OrdinalIgnoreCase))
                 .Select(x => x.Key)
                 .FirstOrDefault();
 
@@ -285,32 +273,30 @@ public class StysScopedUserService : BaseUserService
 
     private async Task<Dictionary<Guid, string>> GetManageableGroupPermissionMapAsync(CancellationToken cancellationToken)
     {
-        var markerRoles = await _identityDbContext.UserGroups
+        var groups = await _identityDbContext.UserGroups
             .Select(group => new
             {
                 group.Id,
-                MarkerPermissions = group.UserGroupRoles
-                    .Where(ugr => ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi))
-                    .Select(ugr => ugr.Role.Name)
-                    .Where(permission =>
-                        permission == nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi)
-                        || permission == nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi)
-                        || permission == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist))
+                Permissions = group.UserGroupRoles
+                    .Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}")
                     .Distinct()
                     .ToList()
             })
             .ToListAsync(cancellationToken);
 
         var result = new Dictionary<Guid, string>();
-        foreach (var group in markerRoles)
+
+        foreach (var group in groups)
         {
-            if (group.MarkerPermissions.Count == 0)
+            var markerPermission = group.Permissions
+                .FirstOrDefault(IsAssignableMarkerPermission);
+
+            if (string.IsNullOrWhiteSpace(markerPermission))
             {
                 continue;
             }
 
-            var firstMarker = group.MarkerPermissions[0];
-            result[group.Id] = MapGroupTypeNameToAssignmentPermission(firstMarker);
+            result[group.Id] = MapAssignableMarkerToActorPermission(markerPermission);
         }
 
         return result;
@@ -321,7 +307,7 @@ public class StysScopedUserService : BaseUserService
         var userId = _currentUserAccessor.GetCurrentUserId();
         if (!userId.HasValue)
         {
-            return [];
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         var permissions = await _identityDbContext.UserUserGroups
@@ -332,25 +318,55 @@ public class StysScopedUserService : BaseUserService
 
         return permissions.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
-            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<List<string>> GetTargetUserAssignableMarkersAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var userPermissions = await _identityDbContext.UserUserGroups
+            .Where(x => x.UserId == userId)
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => $"{ugr.Role.Domain}.{ugr.Role.Name}"))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var markers = userPermissions
+            .Where(IsAssignableMarkerPermission)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (markers.Count > 0)
+        {
+            return markers;
+        }
+
+        return [];
+    }
+
     private static bool HasPermission(IReadOnlySet<string> permissionSet, string permission)
     {
         return permissionSet.Contains(permission);
     }
-        }
-    private static string MapGroupTypeNameToAssignmentPermission(string groupTypeName)
+
+    private static bool IsAssignableMarkerPermission(string permission)
     {
-        return groupTypeName switch
-        {
-            var name when name == nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi)
-                => StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir,
-            var name when name == nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi)
-                => StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
-            var name when name == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist)
-                => StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
-            _ => throw new InvalidOperationException("Desteklenmeyen kullanici grup tipi.")
-        };
-        return groupId;
+        return AssignableMarkerPermissions.Any(x => string.Equals(x, permission, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static string MapAssignableMarkerToActorPermission(string markerPermission)
+    {
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir;
+        }
+
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir;
+        }
+
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir;
+        }
+
+        throw new InvalidOperationException("Desteklenmeyen atanabilir grup marker izni.");
+    }
 }

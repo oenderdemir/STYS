@@ -72,15 +72,15 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     get canAssignTesisYoneticisi(): boolean {
-        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtanabilir');
+        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir');
     }
 
     get canAssignBinaYoneticisi(): boolean {
-        return this.authService.hasPermission('KullaniciAtama.BinaYoneticisiAtanabilir');
+        return this.authService.hasPermission('KullaniciAtama.BinaYoneticisiAtayabilir');
     }
 
     get canAssignResepsiyonist(): boolean {
-        return this.authService.hasPermission('KullaniciAtama.ResepsiyonistAtanabilir');
+        return this.authService.hasPermission('KullaniciAtama.ResepsiyonistAtayabilir');
     }
 
     get isScopedTesisManager(): boolean {
@@ -404,9 +404,9 @@ export class KullaniciYonetimi implements OnInit {
             return true;
         }
 
-        const isTesisYoneticisiGroup = group.roleNames.includes('KullaniciGrupTipi.TesisYoneticisi');
-        const isBinaYoneticisiGroup = group.roleNames.includes('KullaniciGrupTipi.BinaYoneticisi');
-        const isResepsiyonistGroup = group.roleNames.includes('KullaniciGrupTipi.Resepsiyonist');
+        const isTesisYoneticisiGroup = this.isTesisYoneticisiGroup(group.roleNames);
+        const isBinaYoneticisiGroup = this.isBinaYoneticisiGroup(group.roleNames);
+        const isResepsiyonistGroup = this.isResepsiyonistGroup(group.roleNames);
 
         if (isTesisYoneticisiGroup && !this.canAssignTesisYoneticisi) {
             return false;
@@ -427,7 +427,19 @@ export class KullaniciYonetimi implements OnInit {
         const selectedGroupSet = new Set(this.selectedUserGroupIds);
         return this.allUserGroups
             .filter((group) => selectedGroupSet.has(group.value))
-            .some((group) => group.roleNames.includes('KullaniciGrupTipi.Resepsiyonist'));
+            .some((group) => this.isResepsiyonistGroup(group.roleNames));
+    }
+
+    private isTesisYoneticisiGroup(roleNames: string[]): boolean {
+        return roleNames.includes('KullaniciAtama.TesisYoneticisiAtanabilir');
+    }
+
+    private isBinaYoneticisiGroup(roleNames: string[]): boolean {
+        return roleNames.includes('KullaniciAtama.BinaYoneticisiAtanabilir');
+    }
+
+    private isResepsiyonistGroup(roleNames: string[]): boolean {
+        return roleNames.includes('KullaniciAtama.ResepsiyonistAtanabilir');
     }
 
     private extractRoleNames(groups: UserGroupResponseDto[] | null | undefined): string[] {

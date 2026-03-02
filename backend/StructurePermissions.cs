@@ -54,14 +54,11 @@ public static class StructurePermissions
     public static class KullaniciAtama
     {
         public const string TesisYoneticisiAtanabilir = "KullaniciAtama.TesisYoneticisiAtanabilir";
+        public const string TesisYoneticisiAtayabilir = "KullaniciAtama.TesisYoneticisiAtayabilir";
         public const string BinaYoneticisiAtanabilir = "KullaniciAtama.BinaYoneticisiAtanabilir";
+        public const string BinaYoneticisiAtayabilir = "KullaniciAtama.BinaYoneticisiAtayabilir";
         public const string ResepsiyonistAtanabilir = "KullaniciAtama.ResepsiyonistAtanabilir";
+        public const string ResepsiyonistAtayabilir = "KullaniciAtama.ResepsiyonistAtayabilir";
     }
 
-    public static class KullaniciGrupTipi
-    {
-        public const string TesisYoneticisi = "KullaniciGrupTipi.TesisYoneticisi";
-        public const string BinaYoneticisi = "KullaniciGrupTipi.BinaYoneticisi";
-        public const string Resepsiyonist = "KullaniciGrupTipi.Resepsiyonist";
-    }
 }

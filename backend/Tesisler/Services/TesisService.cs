@@ -69,12 +69,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Secilen tesis bulunamadi.", 404);
         }
 
-        var receptionistGroupId = await _identityDbContext.UserGroups
-            .Where(x => x.UserGroupRoles.Any(ugr =>
-                ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi)
-                && ugr.Role.Name == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist)))
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync();
+        var receptionistGroupId = await GetResepsiyonistGroupIdAsync();
 
         if (receptionistGroupId == Guid.Empty)
         {
@@ -402,12 +397,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Secilen resepsiyonistlerden en az biri bulunamadi.", 400);
         }
 
-        var receptionistGroupId = await _identityDbContext.UserGroups
-            .Where(x => x.UserGroupRoles.Any(ugr =>
-                ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi)
-                && ugr.Role.Name == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist)))
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync();
+        var receptionistGroupId = await GetResepsiyonistGroupIdAsync();
 
         if (receptionistGroupId == Guid.Empty)
         {
@@ -607,5 +597,15 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         await _stysDbContext.SaveChangesAsync();
+    }
+
+    private async Task<Guid> GetResepsiyonistGroupIdAsync()
+    {
+        return await _identityDbContext.UserGroups
+            .Where(x => x.UserGroupRoles.Any(ugr =>
+                (ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
+                 && ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir))))
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
     }
 }

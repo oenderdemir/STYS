@@ -50,4 +50,18 @@ public static class StructurePermissions
         public const string View = "OdaOzellikYonetimi.View";
         public const string Manage = "OdaOzellikYonetimi.Manage";
     }
+
+    public static class KullaniciAtama
+    {
+        public const string TesisYoneticisiAtanabilir = "KullaniciAtama.TesisYoneticisiAtanabilir";
+        public const string BinaYoneticisiAtanabilir = "KullaniciAtama.BinaYoneticisiAtanabilir";
+        public const string ResepsiyonistAtanabilir = "KullaniciAtama.ResepsiyonistAtanabilir";
+    }
+
+    public static class KullaniciGrupTipi
+    {
+        public const string TesisYoneticisi = "KullaniciGrupTipi.TesisYoneticisi";
+        public const string BinaYoneticisi = "KullaniciGrupTipi.BinaYoneticisi";
+        public const string Resepsiyonist = "KullaniciGrupTipi.Resepsiyonist";
+    }
 }

@@ -71,6 +71,18 @@ export class KullaniciYonetimi implements OnInit {
         return this.authService.hasPermission('UserManagement.Manage');
     }
 
+    get canAssignTesisYoneticisi(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtanabilir');
+    }
+
+    get canAssignBinaYoneticisi(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.BinaYoneticisiAtanabilir');
+    }
+
+    get canAssignResepsiyonist(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.ResepsiyonistAtanabilir');
+    }
+
     get isScopedTesisManager(): boolean {
         return this.canManage
             && this.authService.hasPermission('TesisYonetimi.Manage')
@@ -145,7 +157,8 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
-        if (!this.isEditMode && this.isScopedTesisManager && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
+        const isResepsiyonistSelection = this.isResepsiyonistGroupSelected();
+        if (!this.isEditMode && this.isScopedTesisManager && isResepsiyonistSelection && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Eksik Bilgi',
@@ -157,7 +170,7 @@ export class KullaniciYonetimi implements OnInit {
         const request$: Observable<unknown> =
             this.isEditMode && this.selectedUser.id
                 ? this.service.updateUser(this.selectedUser.id, payload)
-                : this.isScopedTesisManager && this.selectedTesisIdForCreate
+                : this.isScopedTesisManager && isResepsiyonistSelection && this.selectedTesisIdForCreate
                     ? this.service.createResepsiyonistUserForTesis(this.selectedTesisIdForCreate, payload)
                     : this.service.createUser(payload);
 
@@ -361,7 +374,9 @@ export class KullaniciYonetimi implements OnInit {
             .subscribe({
                 next: ({ users, userGroups, tesisler }) => {
                     this.users = users;
-                    this.allUserGroups = userGroups.map((userGroup) => this.mapToUserGroupOption(userGroup));
+                    this.allUserGroups = userGroups
+                        .map((userGroup) => this.mapToUserGroupOption(userGroup))
+                        .filter((groupOption) => this.canAssignGroup(groupOption));
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.cdr.detectChanges();
                 },
@@ -382,6 +397,37 @@ export class KullaniciYonetimi implements OnInit {
             value: userGroup.id ?? '',
             roleNames: this.extractRoleNames([userGroup])
         };
+    }
+
+    private canAssignGroup(group: UserGroupOption): boolean {
+        if (!this.isScopedTesisManager) {
+            return true;
+        }
+
+        const isTesisYoneticisiGroup = group.roleNames.includes('KullaniciGrupTipi.TesisYoneticisi');
+        const isBinaYoneticisiGroup = group.roleNames.includes('KullaniciGrupTipi.BinaYoneticisi');
+        const isResepsiyonistGroup = group.roleNames.includes('KullaniciGrupTipi.Resepsiyonist');
+
+        if (isTesisYoneticisiGroup && !this.canAssignTesisYoneticisi) {
+            return false;
+        }
+
+        if (isBinaYoneticisiGroup && !this.canAssignBinaYoneticisi) {
+            return false;
+        }
+
+        if (isResepsiyonistGroup && !this.canAssignResepsiyonist) {
+            return false;
+        }
+
+        return isTesisYoneticisiGroup || isBinaYoneticisiGroup || isResepsiyonistGroup;
+    }
+
+    private isResepsiyonistGroupSelected(): boolean {
+        const selectedGroupSet = new Set(this.selectedUserGroupIds);
+        return this.allUserGroups
+            .filter((group) => selectedGroupSet.has(group.value))
+            .some((group) => group.roleNames.includes('KullaniciGrupTipi.Resepsiyonist'));
     }
 
     private extractRoleNames(groups: UserGroupResponseDto[] | null | undefined): string[] {

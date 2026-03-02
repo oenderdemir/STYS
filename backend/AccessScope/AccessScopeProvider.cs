@@ -10,10 +10,6 @@ namespace STYS.AccessScope;
 
 public class AccessScopeProvider : IAccessScopeProvider
 {
-    private const string TesisYoneticiGroupName = "TesisYoneticiGrubu";
-    private const string BinaYoneticiGroupName = "BinaYoneticiGrubu";
-    private const string ResepsiyonistGroupName = "ResepsiyonistGrubu";
-
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
@@ -70,16 +66,23 @@ public class AccessScopeProvider : IAccessScopeProvider
 
         var currentUserId = userId.Value;
 
-        var groupNames = await _identityDbContext.UserUserGroups
+        var groupTypeNames = await _identityDbContext.UserUserGroups
             .Where(x => x.UserId == currentUserId)
-            .Select(x => x.UserGroup.Name)
+            .SelectMany(x => x.UserGroup.UserGroupRoles
+                .Where(ugr => ugr.Role.Domain == nameof(StructurePermissions.KullaniciGrupTipi))
+                .Select(ugr => ugr.Role.Name))
+            .Where(x =>
+                x == nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi)
+                || x == nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi)
+                || x == nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist))
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        var groupNameSet = groupNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var isTesisManager = groupNameSet.Contains(TesisYoneticiGroupName);
-        var belongsToScopedGroup = groupNameSet.Contains(TesisYoneticiGroupName)
-            || groupNameSet.Contains(BinaYoneticiGroupName)
-            || groupNameSet.Contains(ResepsiyonistGroupName);
+        var groupTypeNameSet = groupTypeNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var isTesisManager = groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi));
+        var belongsToScopedGroup = groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.TesisYoneticisi))
+            || groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.BinaYoneticisi))
+            || groupTypeNameSet.Contains(nameof(StructurePermissions.KullaniciGrupTipi.Resepsiyonist));
 
         var managedTesisIds = await _stysDbContext.TesisYoneticileri
             .Where(x => x.UserId == currentUserId)

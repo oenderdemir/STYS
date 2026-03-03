@@ -2,9 +2,12 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
+using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
+using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
+using STYS.MisafirTipleri.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
@@ -40,6 +43,12 @@ public class StysAppDbContext : DbContext
     public DbSet<OdaTipi> OdaTipleri => Set<OdaTipi>();
     public DbSet<TesisOdaTipiOzellikDeger> TesisOdaTipiOzellikDegerleri => Set<TesisOdaTipiOzellikDeger>();
     public DbSet<Oda> Odalar => Set<Oda>();
+    public DbSet<KonaklamaTipi> KonaklamaTipleri => Set<KonaklamaTipi>();
+    public DbSet<MisafirTipi> MisafirTipleri => Set<MisafirTipi>();
+    public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
+    public DbSet<IndirimKurali> IndirimKurallari => Set<IndirimKurali>();
+    public DbSet<IndirimKuraliMisafirTipi> IndirimKuraliMisafirTipleri => Set<IndirimKuraliMisafirTipi>();
+    public DbSet<IndirimKuraliKonaklamaTipi> IndirimKuraliKonaklamaTipleri => Set<IndirimKuraliKonaklamaTipi>();
 
     public override int SaveChanges()
     {
@@ -274,6 +283,111 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.OdaOzellik)
                 .WithMany(x => x.OdaDegerleri)
                 .HasForeignKey(x => x.OdaOzellikId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KonaklamaTipi>(entity =>
+        {
+            entity.ToTable("KonaklamaTipleri", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<MisafirTipi>(entity =>
+        {
+            entity.ToTable("MisafirTipleri", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<OdaFiyat>(entity =>
+        {
+            entity.ToTable("OdaFiyatlari", "dbo");
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Fiyat).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.TesisOdaTipiId, x.KonaklamaTipiId, x.MisafirTipiId, x.KisiSayisi, x.BaslangicTarihi, x.BitisTarihi })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.TesisOdaTipi)
+                .WithMany()
+                .HasForeignKey(x => x.TesisOdaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KonaklamaTipi)
+                .WithMany(x => x.OdaFiyatlari)
+                .HasForeignKey(x => x.KonaklamaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MisafirTipi)
+                .WithMany(x => x.OdaFiyatlari)
+                .HasForeignKey(x => x.MisafirTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<IndirimKurali>(entity =>
+        {
+            entity.ToTable("IndirimKurallari", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.IndirimTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.KapsamTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Deger).HasPrecision(18, 2);
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<IndirimKuraliMisafirTipi>(entity =>
+        {
+            entity.ToTable("IndirimKuraliMisafirTipleri", "dbo");
+            entity.HasIndex(x => new { x.IndirimKuraliId, x.MisafirTipiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.IndirimKurali)
+                .WithMany(x => x.MisafirTipiKisitlari)
+                .HasForeignKey(x => x.IndirimKuraliId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MisafirTipi)
+                .WithMany(x => x.IndirimKuralMisafirTipleri)
+                .HasForeignKey(x => x.MisafirTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<IndirimKuraliKonaklamaTipi>(entity =>
+        {
+            entity.ToTable("IndirimKuraliKonaklamaTipleri", "dbo");
+            entity.HasIndex(x => new { x.IndirimKuraliId, x.KonaklamaTipiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.IndirimKurali)
+                .WithMany(x => x.KonaklamaTipiKisitlari)
+                .HasForeignKey(x => x.IndirimKuraliId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KonaklamaTipi)
+                .WithMany(x => x.IndirimKuralKonaklamaTipleri)
+                .HasForeignKey(x => x.KonaklamaTipiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

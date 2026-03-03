@@ -1,0 +1,128 @@
+<p-toast />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+    <ng-template #end>
+        @if (canManage) {
+            <p-button label="Satir Ekle" icon="pi pi-plus" class="mr-2" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="addRow()" />
+            <p-button label="Kaydet" icon="pi pi-save" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="save()" />
+        }
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <h5 class="m-0 mb-3">Oda Fiyat Yonetimi</h5>
+
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="tesis" class="block font-medium mb-2">Tesis</label>
+            <p-select
+                inputId="tesis"
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedTesisId"
+                [disabled]="loadingReferences || loadingFiyatlar || saving"
+                [showClear]="false"
+                [appendTo]="'body'"
+                (onChange)="onTesisChange()"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="odaTipi" class="block font-medium mb-2">Tesis Oda Tipi</label>
+            <p-select
+                inputId="odaTipi"
+                class="w-full"
+                [options]="filteredOdaTipleri"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedOdaTipiId"
+                [disabled]="loadingReferences || loadingFiyatlar || saving"
+                [showClear]="false"
+                [appendTo]="'body'"
+                (onChange)="onOdaTipiChange()"
+            />
+        </div>
+    </div>
+</div>
+
+@if (!selectedOdaTipiId) {
+    <div class="card">
+        <span>Fiyatlari gormek ve duzenlemek icin once bir tesis oda tipi seciniz.</span>
+    </div>
+} @else {
+    <p-table [value]="fiyatSatirlari" [loading]="loadingReferences || loadingFiyatlar" [tableStyle]="{ 'min-width': '80rem' }">
+        <ng-template #header>
+            <tr>
+                <th>Konaklama Tipi</th>
+                <th>Misafir Tipi</th>
+                <th>Fiyat</th>
+                <th>Para Birimi</th>
+                <th>Baslangic</th>
+                <th>Bitis</th>
+                <th>Aktif</th>
+                @if (canManage) {
+                    <th style="width: 5rem">Islem</th>
+                }
+            </tr>
+        </ng-template>
+
+        <ng-template #body let-row let-rowIndex="rowIndex">
+            <tr>
+                <td>
+                    <p-select
+                        class="w-full"
+                        [options]="konaklamaTipleri"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="row.konaklamaTipiId"
+                        [appendTo]="'body'"
+                        [disabled]="!canManage || saving"
+                    />
+                </td>
+                <td>
+                    <p-select
+                        class="w-full"
+                        [options]="misafirTipleri"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="row.misafirTipiId"
+                        [appendTo]="'body'"
+                        [disabled]="!canManage || saving"
+                    />
+                </td>
+                <td>
+                    <input pInputText type="number" min="0" step="0.01" class="w-full" [(ngModel)]="row.fiyat" [disabled]="!canManage || saving" />
+                </td>
+                <td>
+                    <input pInputText maxlength="3" class="w-full" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || saving" />
+                </td>
+                <td>
+                    <input pInputText type="date" class="w-full" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || saving" />
+                </td>
+                <td>
+                    <input pInputText type="date" class="w-full" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || saving" />
+                </td>
+                <td>
+                    <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || saving" />
+                </td>
+                @if (canManage) {
+                    <td>
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="saving" (onClick)="removeRow(rowIndex)" />
+                    </td>
+                }
+            </tr>
+        </ng-template>
+
+        <ng-template #emptymessage>
+            <tr>
+                <td [attr.colspan]="canManage ? 8 : 7">
+                    Bu oda tipi icin fiyat kaydi bulunmuyor.
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+}

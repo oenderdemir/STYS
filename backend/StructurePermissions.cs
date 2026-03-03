@@ -51,6 +51,27 @@ public static class StructurePermissions
         public const string Manage = "OdaOzellikYonetimi.Manage";
     }
 
+    public static class OdaFiyatYonetimi
+    {
+        public const string Menu = "OdaFiyatYonetimi.Menu";
+        public const string View = "OdaFiyatYonetimi.View";
+        public const string Manage = "OdaFiyatYonetimi.Manage";
+    }
+
+    public static class KonaklamaTipiYonetimi
+    {
+        public const string Menu = "KonaklamaTipiYonetimi.Menu";
+        public const string View = "KonaklamaTipiYonetimi.View";
+        public const string Manage = "KonaklamaTipiYonetimi.Manage";
+    }
+
+    public static class MisafirTipiYonetimi
+    {
+        public const string Menu = "MisafirTipiYonetimi.Menu";
+        public const string View = "MisafirTipiYonetimi.View";
+        public const string Manage = "MisafirTipiYonetimi.Manage";
+    }
+
     public static class KullaniciAtama
     {
         public const string TesisYoneticisiAtanabilir = "KullaniciAtama.TesisYoneticisiAtanabilir";

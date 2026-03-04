@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Linq.Expressions;
 using STYS.Odalar.Dto;
+using STYS.Odalar.Entities;
 using STYS.Odalar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -26,12 +28,28 @@ public class OdaController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.OdaYonetimi.View)]
-    public async Task<ActionResult<PagedResult<OdaDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<OdaDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery(Name = "tesisId")] int? tesisId,
+        [FromQuery(Name = "binaId")] int? binaId)
     {
         var normalizedQuery = query?.Trim();
+        var normalizedTesisId = tesisId.HasValue && tesisId.Value > 0 ? tesisId.Value : (int?)null;
+        var normalizedBinaId = binaId.HasValue && binaId.Value > 0 ? binaId.Value : (int?)null;
+
+        Expression<Func<Oda, bool>>? predicate = null;
+        if (!string.IsNullOrWhiteSpace(normalizedQuery) || normalizedTesisId.HasValue || normalizedBinaId.HasValue)
+        {
+            predicate = x =>
+                (string.IsNullOrWhiteSpace(normalizedQuery) || x.OdaNo.Contains(normalizedQuery))
+                && (!normalizedBinaId.HasValue || x.BinaId == normalizedBinaId.Value)
+                && (!normalizedTesisId.HasValue || (x.Bina != null && x.Bina.TesisId == normalizedTesisId.Value));
+        }
+
         var result = await _odaService.GetPagedAsync(
             request,
-            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.OdaNo.Contains(normalizedQuery),
+            predicate: predicate,
             orderBy: q => q.OrderBy(x => x.OdaNo));
         return Ok(result);
     }

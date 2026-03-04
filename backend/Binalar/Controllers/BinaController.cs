@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Linq.Expressions;
 using STYS.Binalar.Dto;
+using STYS.Binalar.Entities;
 using STYS.Binalar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -26,12 +28,25 @@ public class BinaController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.BinaYonetimi.View)]
-    public async Task<ActionResult<PagedResult<BinaDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<BinaDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery(Name = "tesisId")] int? tesisId)
     {
         var normalizedQuery = query?.Trim();
+        var normalizedTesisId = tesisId.HasValue && tesisId.Value > 0 ? tesisId.Value : (int?)null;
+
+        Expression<Func<Bina, bool>>? predicate = null;
+        if (!string.IsNullOrWhiteSpace(normalizedQuery) || normalizedTesisId.HasValue)
+        {
+            predicate = x =>
+                (string.IsNullOrWhiteSpace(normalizedQuery) || x.Ad.Contains(normalizedQuery))
+                && (!normalizedTesisId.HasValue || x.TesisId == normalizedTesisId.Value);
+        }
+
         var result = await _binaService.GetPagedAsync(
             request,
-            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
+            predicate: predicate,
             orderBy: q => q.OrderBy(x => x.Ad));
         return Ok(result);
     }

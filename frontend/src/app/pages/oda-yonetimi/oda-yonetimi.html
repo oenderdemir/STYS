@@ -27,7 +27,40 @@
 >
     <ng-template #caption>
         <div class="flex items-center justify-between">
-            <h5 class="m-0">Oda Yonetimi</h5>
+            <div class="flex items-center gap-3">
+                <h5 class="m-0">Oda Yonetimi</h5>
+                <div class="flex items-center gap-2">
+                    <label for="odaTesisFilter" class="text-sm">Tesis</label>
+                    <p-select
+                        inputId="odaTesisFilter"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        appendTo="body"
+                        [filter]="true"
+                        [showClear]="false"
+                        styleClass="w-16rem"
+                        (ngModelChange)="onTesisFilterChange()"
+                    />
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="odaBinaFilter" class="text-sm">Bina</label>
+                    <p-select
+                        inputId="odaBinaFilter"
+                        [options]="filteredBinalar"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedBinaId"
+                        appendTo="body"
+                        [filter]="true"
+                        [showClear]="true"
+                        placeholder="Tum Binalar"
+                        styleClass="w-14rem"
+                        (ngModelChange)="onBinaFilterChange()"
+                    />
+                </div>
+            </div>
             <p-iconfield>
                 <p-inputicon styleClass="pi pi-search" />
                 <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ara..." (input)="onSearchInput($event)" />
@@ -74,8 +107,8 @@
     [(visible)]="dialogVisible"
     [mode]="dialogMode"
     [model]="selectedOda"
-    [binalar]="binalar"
-    [odaTipleri]="odaTipleri"
+    [binalar]="filteredBinalar"
+    [odaTipleri]="filteredOdaTipleri"
     [odaOzellikleri]="odaOzellikleri"
     [saving]="saving"
     [canCreate]="canCreate"

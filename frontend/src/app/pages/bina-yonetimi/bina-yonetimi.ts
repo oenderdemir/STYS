@@ -9,6 +9,7 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -30,7 +31,7 @@ import { BinaYonetimiService } from './bina-yonetimi.service';
 @Component({
     selector: 'app-bina-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, BinaDialog, OdaDialog],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, BinaDialog, OdaDialog],
     templateUrl: './bina-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -58,6 +59,7 @@ export class BinaYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    selectedTesisId: number | null = null;
     expandedRowKeys: Record<string, boolean> = {};
     odalarByBinaId: Record<number, OdaDto[]> = {};
     alanlarByBinaId: Record<number, IsletmeAlaniDto[]> = {};
@@ -111,6 +113,11 @@ export class BinaYonetimi implements OnDestroy {
     }
 
     refresh(): void {
+        this.loadData(this.pageNumber, this.pageSize);
+    }
+
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
         this.loadData(this.pageNumber, this.pageSize);
     }
 
@@ -178,6 +185,7 @@ export class BinaYonetimi implements OnDestroy {
         }
 
         this.selectedBina = this.getEmptyBina();
+        this.selectedBina.tesisId = this.selectedTesisId ?? 0;
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
@@ -301,7 +309,7 @@ export class BinaYonetimi implements OnDestroy {
     private loadData(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery),
+            binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery, this.selectedTesisId),
             tesisler: this.service.getTesisler(),
             odaTipleri: this.service.getOdaTipleri(),
             odaOzellikleri: this.odaService.getOdaOzellikleriActive(),
@@ -315,6 +323,29 @@ export class BinaYonetimi implements OnDestroy {
             )
             .subscribe({
                 next: ({ binalar, tesisler, odaTipleri, odaOzellikleri, yoneticiAdaylari }) => {
+                    const sortedTesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.tesisler = sortedTesisler;
+                    if (this.selectedTesisId && !sortedTesisler.some((item) => item.id === this.selectedTesisId)) {
+                        this.selectedTesisId = null;
+                    }
+
+                    if (!this.selectedTesisId && sortedTesisler.length > 0) {
+                        const firstTesisId = sortedTesisler[0].id ?? null;
+                        if (!firstTesisId || firstTesisId <= 0) {
+                            this.selectedTesisId = null;
+                        } else {
+                            this.selectedTesisId = firstTesisId;
+                            this.pageNumber = 1;
+                            this.loadData(this.pageNumber, this.pageSize);
+                            return;
+                        }
+                    }
+
+                    if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
+                        this.pageNumber = 1;
+                        this.loadData(this.pageNumber, this.pageSize);
+                        return;
+                    }
                     if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
                         this.pageNumber = binalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -325,7 +356,6 @@ export class BinaYonetimi implements OnDestroy {
                     this.pageNumber = binalar.pageNumber;
                     this.pageSize = binalar.pageSize;
                     this.totalRecords = binalar.totalCount;
-                    this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));

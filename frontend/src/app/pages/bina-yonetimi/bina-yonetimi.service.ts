@@ -15,11 +15,14 @@ export class BinaYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getBinalarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<BinaDto>> {
+    getBinalarPaged(pageNumber: number, pageSize: number, query: string, tesisId: number | null): Observable<PagedResponseDto<BinaDto>> {
         let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
         const normalizedQuery = query.trim();
         if (normalizedQuery.length > 0) {
             params = params.set('q', normalizedQuery);
+        }
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
         }
 
         return this.http.get<ApiResponse<PagedResponseDto<BinaDto>>>(`${this.apiBaseUrl}/ui/bina/paged`, { params }).pipe(

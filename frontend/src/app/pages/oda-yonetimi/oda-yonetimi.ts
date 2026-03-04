@@ -9,6 +9,7 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -18,6 +19,7 @@ import { AuthService } from '../auth';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
 import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { OdaDialog } from './oda-dialog';
 import { OdaDto } from './oda-yonetimi.dto';
 import { OdaYonetimiService } from './oda-yonetimi.service';
@@ -25,7 +27,7 @@ import { OdaYonetimiService } from './oda-yonetimi.service';
 @Component({
     selector: 'app-oda-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaDialog],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, OdaDialog],
     templateUrl: './oda-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -37,6 +39,7 @@ export class OdaYonetimi implements OnDestroy {
     private readonly cdr = inject(ChangeDetectorRef);
 
     odalar: OdaDto[] = [];
+    tesisler: TesisDto[] = [];
     binalar: BinaDto[] = [];
     odaTipleri: OdaTipiDto[] = [];
     odaOzellikleri: OdaOzellikDto[] = [];
@@ -49,6 +52,8 @@ export class OdaYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    selectedTesisId: number | null = null;
+    selectedBinaId: number | null = null;
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -99,12 +104,28 @@ export class OdaYonetimi implements OnDestroy {
         this.loadData(this.pageNumber, this.pageSize);
     }
 
+    onTesisFilterChange(): void {
+        const availableBinaIds = new Set(this.filteredBinalar.map((item) => item.id));
+        if (this.selectedBinaId && !availableBinaIds.has(this.selectedBinaId)) {
+            this.selectedBinaId = null;
+        }
+
+        this.pageNumber = 1;
+        this.loadData(this.pageNumber, this.pageSize);
+    }
+
+    onBinaFilterChange(): void {
+        this.pageNumber = 1;
+        this.loadData(this.pageNumber, this.pageSize);
+    }
+
     openNew(): void {
         if (!this.canCreate) {
             return;
         }
 
         this.selectedOda = this.getEmptyOda();
+        this.selectedOda.binaId = this.selectedBinaId ?? 0;
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
@@ -218,10 +239,27 @@ export class OdaYonetimi implements OnDestroy {
         return text.length > 0 ? text : '-';
     }
 
+    get filteredBinalar(): BinaDto[] {
+        if (!this.selectedTesisId) {
+            return this.binalar;
+        }
+
+        return this.binalar.filter((item) => item.tesisId === this.selectedTesisId);
+    }
+
+    get filteredOdaTipleri(): OdaTipiDto[] {
+        if (!this.selectedTesisId) {
+            return this.odaTipleri;
+        }
+
+        return this.odaTipleri.filter((item) => item.tesisId === this.selectedTesisId);
+    }
+
     private loadData(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            odalar: this.service.getOdalarPaged(pageNumber, pageSize, this.searchQuery),
+            odalar: this.service.getOdalarPaged(pageNumber, pageSize, this.searchQuery, this.selectedTesisId, this.selectedBinaId),
+            tesisler: this.service.getTesisler(),
             binalar: this.service.getBinalar(),
             odaTipleri: this.service.getOdaTipleri(),
             odaOzellikleri: this.service.getOdaOzellikleriActive()
@@ -233,7 +271,21 @@ export class OdaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ odalar, binalar, odaTipleri, odaOzellikleri }) => {
+                next: ({ odalar, tesisler, binalar, odaTipleri, odaOzellikleri }) => {
+                    const sortedTesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.tesisler = sortedTesisler;
+                    if (this.selectedTesisId && !sortedTesisler.some((item) => item.id === this.selectedTesisId)) {
+                        this.selectedTesisId = null;
+                    }
+
+                    if (!this.selectedTesisId && sortedTesisler.length > 0) {
+                        this.selectedTesisId = sortedTesisler[0].id ?? null;
+                        this.selectedBinaId = null;
+                        this.pageNumber = 1;
+                        this.loadData(this.pageNumber, this.pageSize);
+                        return;
+                    }
+
                     if (odalar.totalCount > 0 && odalar.totalPages > 0 && pageNumber > odalar.totalPages) {
                         this.pageNumber = odalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -245,6 +297,9 @@ export class OdaYonetimi implements OnDestroy {
                     this.pageSize = odalar.pageSize;
                     this.totalRecords = odalar.totalCount;
                     this.binalar = [...binalar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    if (this.selectedBinaId && !this.filteredBinalar.some((item) => item.id === this.selectedBinaId)) {
+                        this.selectedBinaId = null;
+                    }
                     this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.cdr.detectChanges();

@@ -29,7 +29,24 @@
 >
     <ng-template #caption>
         <div class="flex items-center justify-between">
-            <h5 class="m-0">Bina Yonetimi</h5>
+            <div class="flex items-center gap-3">
+                <h5 class="m-0">Bina Yonetimi</h5>
+                <div class="flex items-center gap-2">
+                    <label for="binaTesisFilter" class="text-sm">Tesis</label>
+                    <p-select
+                        inputId="binaTesisFilter"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        appendTo="body"
+                        [filter]="true"
+                        [showClear]="false"
+                        styleClass="w-16rem"
+                        (ngModelChange)="onTesisFilterChange()"
+                    />
+                </div>
+            </div>
             <p-iconfield>
                 <p-inputicon styleClass="pi pi-search" />
                 <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ara..." (input)="onSearchInput($event)" />

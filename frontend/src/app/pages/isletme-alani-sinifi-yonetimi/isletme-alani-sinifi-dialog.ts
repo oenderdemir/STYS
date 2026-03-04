@@ -4,22 +4,20 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
-import { IsletmeAlaniDto, IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi.dto';
+import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 
 @Component({
-    selector: 'app-isletme-alani-dialog',
+    selector: 'app-isletme-alani-sinifi-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, SelectModule, ToggleSwitchModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, ToggleSwitchModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
             [visible]="visible"
             [modal]="true"
-            [style]="{ width: '35rem', 'max-width': '95vw' }"
+            [style]="{ width: '36rem', 'max-width': '95vw' }"
             [breakpoints]="{ '960px': '95vw' }"
             (onHide)="close()"
         >
@@ -31,40 +29,14 @@ import { IsletmeAlaniDto, IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi
 
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 md:col-span-6">
-                    <label for="isletmeAlaniSinifiId" class="block font-medium mb-2">Sinif</label>
-                    <p-select
-                        inputId="isletmeAlaniSinifiId"
-                        [options]="siniflar"
-                        optionLabel="ad"
-                        optionValue="id"
-                        [(ngModel)]="workingModel.isletmeAlaniSinifiId"
-                        [showClear]="true"
-                        [filter]="true"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <label for="kod" class="block font-medium mb-2">Kod</label>
+                    <input id="kod" pInputText [(ngModel)]="workingModel.kod" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
-                    <label for="binaId" class="block font-medium mb-2">Bina</label>
-                    <p-select
-                        inputId="binaId"
-                        [options]="binalar"
-                        optionLabel="ad"
-                        optionValue="id"
-                        [(ngModel)]="workingModel.binaId"
-                        [showClear]="true"
-                        [filter]="true"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <label for="ad" class="block font-medium mb-2">Ad</label>
+                    <input id="ad" pInputText [(ngModel)]="workingModel.ad" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
-                <div class="col-span-12 md:col-span-6">
-                    <label for="ozelAd" class="block font-medium mb-2">Ozel Ad (Opsiyonel)</label>
-                    <input id="ozelAd" pInputText [(ngModel)]="workingModel.ozelAd" class="w-full" [disabled]="isReadOnly || saving" />
-                </div>
-                <div class="col-span-12 flex items-center gap-3">
+                <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
                 </div>
@@ -79,20 +51,18 @@ import { IsletmeAlaniDto, IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi
         </p-dialog>
     `
 })
-export class IsletmeAlaniDialog implements OnChanges {
+export class IsletmeAlaniSinifiDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: IsletmeAlaniDto = { ad: '', binaId: 0, isletmeAlaniSinifiId: 0, isletmeAlaniSinifiAd: null, ozelAd: null, aktifMi: true };
-    @Input() binalar: BinaDto[] = [];
-    @Input() siniflar: IsletmeAlaniSinifiDto[] = [];
+    @Input() model: IsletmeAlaniSinifiDto = { kod: '', ad: '', aktifMi: true };
     @Input() saving = false;
     @Input() canManage = false;
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
-    @Output() readonly save = new EventEmitter<IsletmeAlaniDto>();
+    @Output() readonly save = new EventEmitter<IsletmeAlaniSinifiDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: IsletmeAlaniDto = { ad: '', binaId: 0, isletmeAlaniSinifiId: 0, isletmeAlaniSinifiAd: null, ozelAd: null, aktifMi: true };
+    workingModel: IsletmeAlaniSinifiDto = { kod: '', ad: '', aktifMi: true };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -124,14 +94,14 @@ export class IsletmeAlaniDialog implements OnChanges {
 
     get dialogTitle(): string {
         if (this.mode === 'create') {
-            return 'Yeni Isletme Alani';
+            return 'Yeni Isletme Alani Sinifi';
         }
 
         if (this.mode === 'edit') {
-            return 'Isletme Alani Duzenle';
+            return 'Isletme Alani Sinifi Duzenle';
         }
 
-        return 'Isletme Alani Detay';
+        return 'Isletme Alani Sinifi Detay';
     }
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -145,7 +115,8 @@ export class IsletmeAlaniDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return !!this.workingModel.binaId && !!this.workingModel.isletmeAlaniSinifiId;
+        return (this.workingModel.kod?.trim() ?? '').length > 0
+            && (this.workingModel.ad?.trim() ?? '').length > 0;
     }
 
     submit(): void {
@@ -155,11 +126,8 @@ export class IsletmeAlaniDialog implements OnChanges {
 
         this.save.emit({
             id: this.workingModel.id ?? null,
-            ad: this.workingModel.ad?.trim() ?? '',
-            binaId: this.workingModel.binaId,
-            isletmeAlaniSinifiId: this.workingModel.isletmeAlaniSinifiId,
-            isletmeAlaniSinifiAd: this.workingModel.isletmeAlaniSinifiAd ?? null,
-            ozelAd: this.workingModel.ozelAd?.trim() ? this.workingModel.ozelAd.trim() : null,
+            kod: this.workingModel.kod.trim().toUpperCase(),
+            ad: this.workingModel.ad.trim(),
             aktifMi: this.workingModel.aktifMi
         });
     }

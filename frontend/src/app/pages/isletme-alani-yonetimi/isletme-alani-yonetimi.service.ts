@@ -4,7 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
-import { IsletmeAlaniDto } from './isletme-alani-yonetimi.dto';
+import { IsletmeAlaniDto, IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class IsletmeAlaniYonetimiService {
@@ -49,6 +49,73 @@ export class IsletmeAlaniYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bina listesi alinamadi.');
+            })
+        );
+    }
+
+    getSiniflar(onlyActive = true): Observable<IsletmeAlaniSinifiDto[]> {
+        const params = new HttpParams().set('onlyActive', onlyActive);
+        return this.http.get<ApiResponse<IsletmeAlaniSinifiDto[]>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinif listesi alinamadi.');
+            })
+        );
+    }
+
+    getSiniflarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<IsletmeAlaniSinifiDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        const normalizedQuery = query.trim();
+        if (normalizedQuery.length > 0) {
+            params = params.set('q', normalizedQuery);
+        }
+
+        return this.http.get<ApiResponse<PagedResponseDto<IsletmeAlaniSinifiDto>>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar/paged`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinif listesi alinamadi.');
+            })
+        );
+    }
+
+    createSinif(payload: IsletmeAlaniSinifiDto): Observable<IsletmeAlaniSinifiDto> {
+        return this.http.post<ApiResponse<IsletmeAlaniSinifiDto>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinifi olusturulamadi.');
+            })
+        );
+    }
+
+    updateSinif(id: number, payload: IsletmeAlaniSinifiDto): Observable<void> {
+        return this.http.put<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar/${id}`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success) {
+                    return;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinifi guncellenemedi.');
+            })
+        );
+    }
+
+    deleteSinif(id: number): Observable<void> {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar/${id}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success) {
+                    return;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinifi silinemedi.');
             })
         );
     }

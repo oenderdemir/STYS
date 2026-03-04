@@ -10,8 +10,9 @@ import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
+import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
-import { BinaDto } from './bina-yonetimi.dto';
+import { BinaDto, BinaIsletmeAlaniDto } from './bina-yonetimi.dto';
 
 @Component({
     selector: 'app-bina-dialog',
@@ -78,6 +79,50 @@ import { BinaDto } from './bina-yonetimi.dto';
                         />
                     </div>
                 }
+                <div class="col-span-12">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block font-medium">Isletme Alanlari</label>
+                        @if (!isReadOnly) {
+                            <p-button label="Alan Ekle" icon="pi pi-plus" size="small" [outlined]="true" (onClick)="addIsletmeAlaniRow()" />
+                        }
+                    </div>
+
+                    @if (workingModel.isletmeAlanlari && workingModel.isletmeAlanlari.length > 0) {
+                        <div class="grid grid-cols-12 gap-3">
+                            @for (alan of workingModel.isletmeAlanlari; track $index) {
+                                <div class="col-span-12 border-1 border-round p-3 surface-border">
+                                    <div class="grid grid-cols-12 gap-3 items-end">
+                                        <div class="col-span-12 md:col-span-5">
+                                            <label class="block text-sm mb-2">Sinif</label>
+                                            <p-select
+                                                [options]="isletmeAlaniSiniflari"
+                                                optionLabel="ad"
+                                                optionValue="id"
+                                                [(ngModel)]="alan.isletmeAlaniSinifiId"
+                                                [showClear]="true"
+                                                [filter]="true"
+                                                appendTo="body"
+                                                class="w-full"
+                                                [disabled]="isReadOnly || saving"
+                                            />
+                                        </div>
+                                        <div class="col-span-12 md:col-span-5">
+                                            <label class="block text-sm mb-2">Ozel Ad (Opsiyonel)</label>
+                                            <input pInputText [(ngModel)]="alan.ozelAd" class="w-full" [disabled]="isReadOnly || saving" />
+                                        </div>
+                                        <div class="col-span-12 md:col-span-2">
+                                            @if (!isReadOnly) {
+                                                <p-button icon="pi pi-trash" severity="danger" [outlined]="true" class="w-full" (onClick)="removeIsletmeAlaniRow($index)" />
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    } @else {
+                        <span class="text-color-secondary text-sm">Bu bina icin tanimli isletme alani bulunmuyor.</span>
+                    }
+                </div>
             </div>
 
             <ng-template #footer>
@@ -92,8 +137,9 @@ import { BinaDto } from './bina-yonetimi.dto';
 export class BinaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
+    @Input() model: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null, isletmeAlanlari: [] };
     @Input() tesisler: TesisDto[] = [];
+    @Input() isletmeAlaniSiniflari: IsletmeAlaniSinifiDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
@@ -103,7 +149,7 @@ export class BinaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<BinaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null };
+    workingModel: BinaDto = { ad: '', tesisId: 0, katSayisi: 1, aktifMi: true, yoneticiUserIds: null, isletmeAlanlari: [] };
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
@@ -165,9 +211,11 @@ export class BinaDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
+        const isletmeAlanlariValid = (this.workingModel.isletmeAlanlari ?? []).every((item) => !!item.isletmeAlaniSinifiId);
         return (this.workingModel.ad?.trim() ?? '').length > 0
             && !!this.workingModel.tesisId
-            && (this.workingModel.katSayisi ?? 0) > 0;
+            && (this.workingModel.katSayisi ?? 0) > 0
+            && isletmeAlanlariValid;
     }
 
     submit(): void {
@@ -181,7 +229,8 @@ export class BinaDialog implements OnChanges {
             tesisId: this.workingModel.tesisId,
             katSayisi: this.workingModel.katSayisi,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.canAssignBinaYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null
+            yoneticiUserIds: this.canAssignBinaYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
+            isletmeAlanlari: this.getSanitizedIsletmeAlanlari()
         });
     }
 
@@ -203,10 +252,43 @@ export class BinaDialog implements OnChanges {
         this.visibleChange.emit(false);
     }
 
+    addIsletmeAlaniRow(): void {
+        if (this.isReadOnly) {
+            return;
+        }
+
+        this.workingModel.isletmeAlanlari = [
+            ...(this.workingModel.isletmeAlanlari ?? []),
+            { isletmeAlaniSinifiId: 0, ozelAd: null, aktifMi: true }
+        ];
+    }
+
+    removeIsletmeAlaniRow(index: number): void {
+        if (this.isReadOnly) {
+            return;
+        }
+
+        this.workingModel.isletmeAlanlari = (this.workingModel.isletmeAlanlari ?? []).filter((_, i) => i !== index);
+    }
+
+    private getSanitizedIsletmeAlanlari(): BinaIsletmeAlaniDto[] {
+        const items = this.workingModel.isletmeAlanlari ?? [];
+        return items
+            .filter((item) => !!item.isletmeAlaniSinifiId && item.isletmeAlaniSinifiId > 0)
+            .map((item) => ({
+                id: item.id ?? null,
+                isletmeAlaniSinifiId: item.isletmeAlaniSinifiId,
+                isletmeAlaniSinifiAd: item.isletmeAlaniSinifiAd ?? null,
+                ozelAd: item.ozelAd?.trim() ? item.ozelAd.trim() : null,
+                aktifMi: item.aktifMi ?? true
+            }));
+    }
+
     private cloneModel(model: BinaDto): BinaDto {
         return {
             ...model,
-            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])]
+            yoneticiUserIds: [...(model.yoneticiUserIds ?? [])],
+            isletmeAlanlari: (model.isletmeAlanlari ?? []).map((item) => ({ ...item }))
         };
     }
 }

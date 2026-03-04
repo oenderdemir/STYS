@@ -5,6 +5,8 @@ using STYS.AccessScope;
 using STYS.Binalar.Dto;
 using STYS.Binalar.Entities;
 using STYS.Binalar.Repositories;
+using STYS.IsletmeAlanlari.Entities;
+using STYS.IsletmeAlanlari.Repositories;
 using STYS.Tesisler.Repositories;
 using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Persistence.Rdbms.Paging;
@@ -17,6 +19,8 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
 {
     private readonly IBinaRepository _binaRepository;
     private readonly IBinaYoneticiRepository _binaYoneticiRepository;
+    private readonly IIsletmeAlaniRepository _isletmeAlaniRepository;
+    private readonly IIsletmeAlaniSinifiRepository _isletmeAlaniSinifiRepository;
     private readonly ITesisRepository _tesisRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
@@ -24,6 +28,8 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
     public BinaService(
         IBinaRepository binaRepository,
         IBinaYoneticiRepository binaYoneticiRepository,
+        IIsletmeAlaniRepository isletmeAlaniRepository,
+        IIsletmeAlaniSinifiRepository isletmeAlaniSinifiRepository,
         ITesisRepository tesisRepository,
         IUserRepository userRepository,
         IUserAccessScopeService userAccessScopeService,
@@ -32,6 +38,8 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
     {
         _binaRepository = binaRepository;
         _binaYoneticiRepository = binaYoneticiRepository;
+        _isletmeAlaniRepository = isletmeAlaniRepository;
+        _isletmeAlaniSinifiRepository = isletmeAlaniSinifiRepository;
         _tesisRepository = tesisRepository;
         _userRepository = userRepository;
         _userAccessScopeService = userAccessScopeService;
@@ -43,12 +51,21 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         await EnsureTesisRulesAsync(dto.TesisId);
         await EnsureUniqueActiveNameAsync(dto, null);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: false);
+        var isletmeAlanlari = await NormalizeAndValidateIsletmeAlanlariAsync(dto.IsletmeAlanlari, preserveWhenNull: false);
 
         var entity = Mapper.Map<Bina>(dto);
         entity.Yoneticiler = managerIds!
             .Select(x => new BinaYonetici
             {
                 UserId = x
+            })
+            .ToList();
+        entity.IsletmeAlanlari = isletmeAlanlari!
+            .Select(x => new IsletmeAlani
+            {
+                IsletmeAlaniSinifiId = x.IsletmeAlaniSinifiId,
+                OzelAd = x.OzelAd,
+                AktifMi = x.AktifMi
             })
             .ToList();
 
@@ -65,7 +82,7 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
             throw new BaseException("Bina id zorunludur.", 400);
         }
 
-        var existingEntity = await _binaRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.Yoneticiler));
+        var existingEntity = await _binaRepository.GetByIdAsync(dto.Id.Value, query => query.Include(x => x.Yoneticiler).Include(x => x.IsletmeAlanlari));
         if (existingEntity is null)
         {
             throw new BaseException("Guncellenecek bina bulunamadi.", 404);
@@ -76,6 +93,7 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         await EnsureTesisRulesAsync(dto.TesisId);
         await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: true);
+        var isletmeAlanlari = await NormalizeAndValidateIsletmeAlanlariAsync(dto.IsletmeAlanlari, preserveWhenNull: true);
 
         existingEntity.IsDeleted = false;
         existingEntity.Ad = dto.Ad;
@@ -86,6 +104,11 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         if (managerIds is not null)
         {
             SyncYoneticiler(existingEntity, managerIds);
+        }
+
+        if (isletmeAlanlari is not null)
+        {
+            SyncIsletmeAlanlari(existingEntity, isletmeAlanlari);
         }
 
         _binaRepository.Update(existingEntity);
@@ -212,7 +235,10 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         return query =>
         {
             var result = include is null ? query : include(query);
-            result = result.Include(x => x.Yoneticiler);
+            result = result
+                .Include(x => x.Yoneticiler)
+                .Include(x => x.IsletmeAlanlari)
+                    .ThenInclude(x => x.IsletmeAlaniSinifi);
 
             if (scope.IsScoped)
             {
@@ -256,6 +282,53 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
         return normalizedManagerIds;
     }
 
+    private async Task<List<BinaIsletmeAlaniNormalized>?> NormalizeAndValidateIsletmeAlanlariAsync(
+        ICollection<BinaIsletmeAlaniDto>? isletmeAlanlari,
+        bool preserveWhenNull)
+    {
+        if (isletmeAlanlari is null)
+        {
+            return preserveWhenNull ? null : [];
+        }
+
+        var normalized = isletmeAlanlari
+            .Where(x => x.IsletmeAlaniSinifiId > 0)
+            .Select(x => new BinaIsletmeAlaniNormalized(
+                x.Id.HasValue && x.Id.Value > 0 ? x.Id.Value : null,
+                x.IsletmeAlaniSinifiId,
+                string.IsNullOrWhiteSpace(x.OzelAd) ? null : x.OzelAd.Trim(),
+                x.AktifMi))
+            .ToList();
+
+        if (normalized.Count == 0)
+        {
+            return [];
+        }
+
+        if (normalized.Any(x => x.Id.HasValue) && !preserveWhenNull)
+        {
+            throw new BaseException("Yeni bina olusturulurken isletme alani id gonderilemez.", 400);
+        }
+
+        var classIds = normalized
+            .Select(x => x.IsletmeAlaniSinifiId)
+            .Distinct()
+            .ToList();
+
+        var existingClassIds = await _isletmeAlaniSinifiRepository
+            .Where(x => classIds.Contains(x.Id) && x.AktifMi)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        var missingClassIds = classIds.Except(existingClassIds).ToList();
+        if (missingClassIds.Count > 0)
+        {
+            throw new BaseException("Secilen isletme alani siniflarindan en az biri bulunamadi veya pasif.", 400);
+        }
+
+        return normalized;
+    }
+
     private void SyncYoneticiler(Bina entity, IReadOnlyCollection<Guid> managerUserIds)
     {
         entity.Yoneticiler ??= [];
@@ -285,5 +358,53 @@ public class BinaService : BaseRdbmsService<BinaDto, Bina, int>, IBinaService
             });
         }
     }
+
+    private void SyncIsletmeAlanlari(Bina entity, IReadOnlyCollection<BinaIsletmeAlaniNormalized> isletmeAlanlari)
+    {
+        entity.IsletmeAlanlari ??= [];
+
+        var existingById = entity.IsletmeAlanlari.ToDictionary(x => x.Id);
+        var desiredExistingIds = isletmeAlanlari
+            .Where(x => x.Id.HasValue)
+            .Select(x => x.Id!.Value)
+            .ToHashSet();
+
+        var invalidIds = desiredExistingIds.Except(existingById.Keys).ToList();
+        if (invalidIds.Count > 0)
+        {
+            throw new BaseException("Gonderilen isletme alani kayitlarindan bazilari binaya ait degil.", 400);
+        }
+
+        var toDelete = entity.IsletmeAlanlari
+            .Where(x => !desiredExistingIds.Contains(x.Id))
+            .ToList();
+
+        if (toDelete.Count > 0)
+        {
+            _isletmeAlaniRepository.DeleteRange(toDelete);
+        }
+
+        foreach (var desired in isletmeAlanlari)
+        {
+            if (desired.Id.HasValue)
+            {
+                var existing = existingById[desired.Id.Value];
+                existing.OzelAd = desired.OzelAd;
+                existing.AktifMi = desired.AktifMi;
+                existing.IsletmeAlaniSinifiId = desired.IsletmeAlaniSinifiId;
+                existing.IsDeleted = false;
+                continue;
+            }
+
+            entity.IsletmeAlanlari.Add(new IsletmeAlani
+            {
+                IsletmeAlaniSinifiId = desired.IsletmeAlaniSinifiId,
+                OzelAd = desired.OzelAd,
+                AktifMi = desired.AktifMi
+            });
+        }
+    }
+
+    private sealed record BinaIsletmeAlaniNormalized(int? Id, int IsletmeAlaniSinifiId, string? OzelAd, bool AktifMi);
 
 }

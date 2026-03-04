@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -12,35 +12,29 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { Router } from '@angular/router';
 import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
-import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
-import { IsletmeAlaniDialog } from './isletme-alani-dialog';
-import { IsletmeAlaniDto } from './isletme-alani-yonetimi.dto';
-import { IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi.dto';
-import { IsletmeAlaniYonetimiService } from './isletme-alani-yonetimi.service';
+import { IsletmeAlaniSinifiDialog } from './isletme-alani-sinifi-dialog';
+import { IsletmeAlaniYonetimiService } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.service';
+import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 
 @Component({
-    selector: 'app-isletme-alani-yonetimi',
+    selector: 'app-isletme-alani-sinifi-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, IsletmeAlaniDialog],
-    templateUrl: './isletme-alani-yonetimi.html',
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, IsletmeAlaniSinifiDialog],
+    templateUrl: './isletme-alani-sinifi-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
-export class IsletmeAlaniYonetimi implements OnDestroy {
+export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
     private readonly service = inject(IsletmeAlaniYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
-    private readonly router = inject(Router);
 
-    alanlar: IsletmeAlaniDto[] = [];
-    binalar: BinaDto[] = [];
     siniflar: IsletmeAlaniSinifiDto[] = [];
-    selectedAlan: IsletmeAlaniDto = this.getEmptyAlan();
+    selectedSinif: IsletmeAlaniSinifiDto = this.getEmptySinif();
     loading = false;
     saving = false;
     dialogVisible = false;
@@ -56,10 +50,6 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
         return this.authService.hasPermission('IsletmeAlaniYonetimi.Manage');
     }
 
-    get canView(): boolean {
-        return this.canManage || this.authService.hasPermission('IsletmeAlaniYonetimi.View');
-    }
-
     ngOnDestroy(): void {
         if (this.searchDebounceHandle !== null) {
             clearTimeout(this.searchDebounceHandle);
@@ -73,7 +63,7 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
-        this.loadData(this.pageNumber, this.pageSize);
+        this.loadSiniflar(this.pageNumber, this.pageSize);
     }
 
     onSearchInput(event: Event): void {
@@ -86,21 +76,13 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
 
         this.searchDebounceHandle = setTimeout(() => {
             this.pageNumber = 1;
-            this.loadData(this.pageNumber, this.pageSize);
+            this.loadSiniflar(this.pageNumber, this.pageSize);
             this.searchDebounceHandle = null;
         }, 300);
     }
 
     refresh(): void {
-        this.loadData(this.pageNumber, this.pageSize);
-    }
-
-    openSinifYonetimi(): void {
-        if (!this.canView) {
-            return;
-        }
-
-        void this.router.navigate(['/isletme-alani-siniflari']);
+        this.loadSiniflar(this.pageNumber, this.pageSize);
     }
 
     openNew(): void {
@@ -108,33 +90,35 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
             return;
         }
 
-        this.selectedAlan = this.getEmptyAlan();
+        this.selectedSinif = this.getEmptySinif();
         this.dialogMode = 'create';
         this.dialogVisible = true;
     }
 
-    openEdit(alan: IsletmeAlaniDto): void {
+    openEdit(sinif: IsletmeAlaniSinifiDto): void {
         if (!this.canManage) {
             return;
         }
 
-        this.selectedAlan = { ...alan };
+        this.selectedSinif = { ...sinif };
         this.dialogMode = 'edit';
         this.dialogVisible = true;
     }
 
-    openView(alan: IsletmeAlaniDto): void {
-        this.selectedAlan = { ...alan };
+    openView(sinif: IsletmeAlaniSinifiDto): void {
+        this.selectedSinif = { ...sinif };
         this.dialogMode = 'view';
         this.dialogVisible = true;
     }
 
-    onDialogSave(payload: IsletmeAlaniDto): void {
+    onDialogSave(payload: IsletmeAlaniSinifiDto): void {
         if (this.saving || !this.canManage) {
             return;
         }
 
-        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedAlan.id ? this.service.updateAlan(this.selectedAlan.id, payload) : this.service.createAlan(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedSinif.id
+            ? this.service.updateSinif(this.selectedSinif.id, payload)
+            : this.service.createSinif(payload);
 
         this.saving = true;
         save$
@@ -147,8 +131,8 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
-                    this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Isletme alani guncellendi.' : 'Isletme alani olusturuldu.' });
+                    this.loadSiniflar(this.pageNumber, this.pageSize);
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Isletme alani sinifi guncellendi.' : 'Isletme alani sinifi olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -158,13 +142,13 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
             });
     }
 
-    deleteAlan(alan: IsletmeAlaniDto): void {
-        if (!this.canManage || !alan.id) {
+    deleteSinif(sinif: IsletmeAlaniSinifiDto): void {
+        if (!this.canManage || !sinif.id) {
             return;
         }
 
         this.confirmationService.confirm({
-            message: `"${alan.ad}" kaydini silmek istediginize emin misiniz?`,
+            message: `"${sinif.ad}" kaydini silmek istediginize emin misiniz?`,
             header: 'Silme Onayi',
             icon: 'pi pi-exclamation-triangle',
             acceptButtonStyleClass: 'p-button-danger',
@@ -172,10 +156,10 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
             acceptLabel: 'Evet',
             rejectLabel: 'Hayir',
             accept: () => {
-                this.service.deleteAlan(alan.id!).subscribe({
+                this.service.deleteSinif(sinif.id!).subscribe({
                     next: () => {
-                        this.loadData(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Isletme alani silindi.' });
+                        this.loadSiniflar(this.pageNumber, this.pageSize);
+                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Isletme alani sinifi silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
@@ -187,27 +171,10 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
         });
     }
 
-    getBinaAdi(binaId: number): string {
-        const bina = this.binalar.find((x) => x.id === binaId);
-        return bina?.ad ?? '-';
-    }
-
-    getSinifAdi(alan: IsletmeAlaniDto): string {
-        if (alan.isletmeAlaniSinifiAd && alan.isletmeAlaniSinifiAd.trim().length > 0) {
-            return alan.isletmeAlaniSinifiAd;
-        }
-
-        const sinif = this.siniflar.find((x) => x.id === alan.isletmeAlaniSinifiId);
-        return sinif?.ad ?? '-';
-    }
-
-    private loadData(pageNumber: number, pageSize: number): void {
+    private loadSiniflar(pageNumber: number, pageSize: number): void {
         this.loading = true;
-        forkJoin({
-            alanlar: this.service.getAlanlarPaged(pageNumber, pageSize, this.searchQuery),
-            binalar: this.service.getBinalar(),
-            siniflar: this.service.getSiniflar()
-        })
+        this.service
+            .getSiniflarPaged(pageNumber, pageSize, this.searchQuery)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -215,19 +182,17 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ alanlar, binalar, siniflar }) => {
-                    if (alanlar.totalCount > 0 && alanlar.totalPages > 0 && pageNumber > alanlar.totalPages) {
-                        this.pageNumber = alanlar.totalPages;
-                        this.loadData(this.pageNumber, this.pageSize);
+                next: (pagedResponse) => {
+                    if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
+                        this.pageNumber = pagedResponse.totalPages;
+                        this.loadSiniflar(this.pageNumber, this.pageSize);
                         return;
                     }
 
-                    this.alanlar = alanlar.items;
-                    this.pageNumber = alanlar.pageNumber;
-                    this.pageSize = alanlar.pageSize;
-                    this.totalRecords = alanlar.totalCount;
-                    this.binalar = [...binalar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
-                    this.siniflar = [...siniflar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.siniflar = pagedResponse.items;
+                    this.pageNumber = pagedResponse.pageNumber;
+                    this.pageSize = pagedResponse.pageSize;
+                    this.totalRecords = pagedResponse.totalCount;
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -252,13 +217,10 @@ export class IsletmeAlaniYonetimi implements OnDestroy {
         return 'Beklenmeyen bir hata olustu.';
     }
 
-    private getEmptyAlan(): IsletmeAlaniDto {
+    private getEmptySinif(): IsletmeAlaniSinifiDto {
         return {
+            kod: '',
             ad: '',
-            binaId: 0,
-            isletmeAlaniSinifiId: 0,
-            isletmeAlaniSinifiAd: null,
-            ozelAd: null,
             aktifMi: true
         };
     }

@@ -6,7 +6,7 @@ import { Dashboard } from './app/pages/dashboard/dashboard';
 import { Documentation } from './app/pages/documentation/documentation';
 import { IndirimKuraliYonetimi } from './app/pages/indirim-kurali-yonetimi/indirim-kurali-yonetimi';
 import { IlYonetimi } from './app/pages/il-yonetimi/il-yonetimi';
-import { IsletmeAlaniYonetimi } from './app/pages/isletme-alani-yonetimi/isletme-alani-yonetimi';
+import { IsletmeAlaniSinifiYonetimi } from './app/pages/isletme-alani-sinifi-yonetimi/isletme-alani-sinifi-yonetimi';
 import { KonaklamaTipiYonetimi } from './app/pages/konaklama-tipi-yonetimi/konaklama-tipi-yonetimi';
 import { KullaniciGrupYonetimi } from './app/pages/kullanici-grup-yonetimi/kullanici-grup-yonetimi';
 import { KullaniciYonetimi } from './app/pages/kullanici-yonetimi/kullanici-yonetimi';
@@ -42,7 +42,8 @@ export const appRoutes: Routes = [
             { path: 'iller', component: IlYonetimi },
             { path: 'tesisler', component: TesisYonetimi },
             { path: 'binalar', component: BinaYonetimi },
-            { path: 'isletme-alanlari', component: IsletmeAlaniYonetimi },
+            { path: 'isletme-alanlari', component: IsletmeAlaniSinifiYonetimi },
+            { path: 'isletme-alani-siniflari', component: IsletmeAlaniSinifiYonetimi },
             { path: 'oda-siniflari', component: OdaSinifiYonetimi },
             { path: 'oda-tipleri', component: OdaTipiYonetimi },
             { path: 'oda-ozellikler', component: OdaOzellikYonetimi },

@@ -5,6 +5,7 @@ import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api
 import { getApiBaseUrl } from '../../core/config';
 import { ManagerCandidateDto } from '../../core/identity';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
+import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
@@ -92,6 +93,19 @@ export class BinaYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getIsletmeAlaniSiniflari(onlyActive = true): Observable<IsletmeAlaniSinifiDto[]> {
+        const params = new HttpParams().set('onlyActive', onlyActive);
+        return this.http.get<ApiResponse<IsletmeAlaniSinifiDto[]>>(`${this.apiBaseUrl}/ui/isletmealani/siniflar`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Isletme alani sinif listesi alinamadi.');
             })
         );
     }

@@ -279,11 +279,16 @@ export class OdaYonetimi implements OnDestroy {
                     }
 
                     if (!this.selectedTesisId && sortedTesisler.length > 0) {
-                        this.selectedTesisId = sortedTesisler[0].id ?? null;
-                        this.selectedBinaId = null;
-                        this.pageNumber = 1;
-                        this.loadData(this.pageNumber, this.pageSize);
-                        return;
+                        const firstTesisId = sortedTesisler[0].id ?? null;
+                        if (!firstTesisId || firstTesisId <= 0) {
+                            this.selectedTesisId = null;
+                        } else {
+                            this.selectedTesisId = firstTesisId;
+                            this.selectedBinaId = null;
+                            this.pageNumber = 1;
+                            this.loadData(this.pageNumber, this.pageSize);
+                            return;
+                        }
                     }
 
                     if (odalar.totalCount > 0 && odalar.totalPages > 0 && pageNumber > odalar.totalPages) {

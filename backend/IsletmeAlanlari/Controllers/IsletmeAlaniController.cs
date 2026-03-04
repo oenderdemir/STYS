@@ -31,9 +31,70 @@ public class IsletmeAlaniController : UIController
         var normalizedQuery = query?.Trim();
         var result = await _isletmeAlaniService.GetPagedAsync(
             request,
-            predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
-            orderBy: q => q.OrderBy(x => x.Ad));
+            predicate: string.IsNullOrWhiteSpace(normalizedQuery)
+                ? null
+                : x =>
+                    (x.OzelAd != null && x.OzelAd.Contains(normalizedQuery))
+                    || (x.IsletmeAlaniSinifi != null && x.IsletmeAlaniSinifi.Ad.Contains(normalizedQuery)),
+            orderBy: q => q.OrderBy(x => x.OzelAd ?? (x.IsletmeAlaniSinifi != null ? x.IsletmeAlaniSinifi.Ad : string.Empty)));
         return Ok(result);
+    }
+
+    [HttpGet("siniflar")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.View)]
+    public async Task<List<IsletmeAlaniSinifiDto>> GetSiniflar([FromQuery] bool onlyActive = true, CancellationToken cancellationToken = default)
+    {
+        var siniflar = await _isletmeAlaniService.GetSiniflarAsync(onlyActive, cancellationToken);
+        return siniflar.OrderBy(x => x.Ad).ToList();
+    }
+
+    [HttpGet("siniflar/paged")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.View)]
+    public async Task<ActionResult<PagedResult<IsletmeAlaniSinifiDto>>> GetSiniflarPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _isletmeAlaniService.GetSiniflarPagedAsync(request, query, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("siniflar/{id:int}")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.View)]
+    public async Task<ActionResult<IsletmeAlaniSinifiDto>> GetSinifById(int id, CancellationToken cancellationToken = default)
+    {
+        var sinif = await _isletmeAlaniService.GetSinifByIdAsync(id, cancellationToken);
+        if (sinif is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(sinif);
+    }
+
+    [HttpPost("siniflar")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
+    public async Task<ActionResult<IsletmeAlaniSinifiDto>> CreateSinif([FromBody] IsletmeAlaniSinifiDto dto, CancellationToken cancellationToken = default)
+    {
+        var created = await _isletmeAlaniService.AddSinifAsync(dto, cancellationToken);
+        return CreatedAtAction(nameof(GetSinifById), new { id = created.Id }, created);
+    }
+
+    [HttpPut("siniflar/{id:int}")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
+    public async Task<ActionResult<IsletmeAlaniSinifiDto>> UpdateSinif(int id, [FromBody] IsletmeAlaniSinifiDto dto, CancellationToken cancellationToken = default)
+    {
+        dto.Id = id;
+        var updated = await _isletmeAlaniService.UpdateSinifAsync(dto, cancellationToken);
+        return Ok(updated);
+    }
+
+    [HttpDelete("siniflar/{id:int}")]
+    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
+    public async Task<IActionResult> DeleteSinif(int id, CancellationToken cancellationToken = default)
+    {
+        await _isletmeAlaniService.DeleteSinifAsync(id, cancellationToken);
+        return Ok();
     }
 
     [HttpGet("by-bina/{binaId:int}")]
@@ -62,28 +123,4 @@ public class IsletmeAlaniController : UIController
         return Ok(alan);
     }
 
-    [HttpPost]
-    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
-    public async Task<ActionResult<IsletmeAlaniDto>> Create([FromBody] IsletmeAlaniDto dto)
-    {
-        var created = await _isletmeAlaniService.AddAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
-
-    [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
-    public async Task<ActionResult<IsletmeAlaniDto>> Update(int id, [FromBody] IsletmeAlaniDto dto)
-    {
-        dto.Id = id;
-        var updated = await _isletmeAlaniService.UpdateAsync(dto);
-        return Ok(updated);
-    }
-
-    [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.IsletmeAlaniYonetimi.Manage)]
-    public async Task<IActionResult> Delete(int id)
-    {
-        await _isletmeAlaniService.DeleteAsync(id);
-        return Ok();
-    }
 }

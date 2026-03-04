@@ -17,4 +17,6 @@ public class BinaDto : BaseRdbmsDto<int>
     public bool AktifMi { get; set; } = true;
 
     public ICollection<Guid>? YoneticiUserIds { get; set; }
+
+    public ICollection<BinaIsletmeAlaniDto>? IsletmeAlanlari { get; set; }
 }

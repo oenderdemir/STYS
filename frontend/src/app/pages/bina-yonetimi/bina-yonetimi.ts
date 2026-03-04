@@ -18,6 +18,7 @@ import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { IsletmeAlaniDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
+import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-yonetimi.dto';
 import { OdaDto } from '../oda-yonetimi/oda-yonetimi.dto';
 import { OdaDialog } from '../oda-yonetimi/oda-dialog';
 import { OdaYonetimiService } from '../oda-yonetimi/oda-yonetimi.service';
@@ -25,7 +26,7 @@ import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto'
 import { OdaTipiDto } from '../oda-tipi-yonetimi/oda-tipi-yonetimi.dto';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { BinaDialog } from './bina-dialog';
-import { BinaDto } from './bina-yonetimi.dto';
+import { BinaDto, BinaIsletmeAlaniDto } from './bina-yonetimi.dto';
 import { BinaYonetimiService } from './bina-yonetimi.service';
 
 @Component({
@@ -64,6 +65,7 @@ export class BinaYonetimi implements OnDestroy {
     odalarByBinaId: Record<number, OdaDto[]> = {};
     alanlarByBinaId: Record<number, IsletmeAlaniDto[]> = {};
     detailLoadingByBinaId: Record<number, boolean> = {};
+    isletmeAlaniSiniflari: IsletmeAlaniSinifiDto[] = [];
     odaTipleri: OdaTipiDto[] = [];
     odaOzellikleri: OdaOzellikDto[] = [];
 
@@ -311,6 +313,7 @@ export class BinaYonetimi implements OnDestroy {
         forkJoin({
             binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery, this.selectedTesisId),
             tesisler: this.service.getTesisler(),
+            isletmeAlaniSiniflari: this.service.getIsletmeAlaniSiniflari(),
             odaTipleri: this.service.getOdaTipleri(),
             odaOzellikleri: this.odaService.getOdaOzellikleriActive(),
             yoneticiAdaylari: this.canManage && this.canAssignBinaYoneticisi ? this.service.getYoneticiAdaylari() : of([])
@@ -322,7 +325,7 @@ export class BinaYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ binalar, tesisler, odaTipleri, odaOzellikleri, yoneticiAdaylari }) => {
+                next: ({ binalar, tesisler, isletmeAlaniSiniflari, odaTipleri, odaOzellikleri, yoneticiAdaylari }) => {
                     const sortedTesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.tesisler = sortedTesisler;
                     if (this.selectedTesisId && !sortedTesisler.some((item) => item.id === this.selectedTesisId)) {
@@ -342,11 +345,6 @@ export class BinaYonetimi implements OnDestroy {
                     }
 
                     if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
-                        this.pageNumber = 1;
-                        this.loadData(this.pageNumber, this.pageSize);
-                        return;
-                    }
-                    if (binalar.totalCount > 0 && binalar.totalPages > 0 && pageNumber > binalar.totalPages) {
                         this.pageNumber = binalar.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
                         return;
@@ -356,6 +354,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.pageNumber = binalar.pageNumber;
                     this.pageSize = binalar.pageSize;
                     this.totalRecords = binalar.totalCount;
+                    this.isletmeAlaniSiniflari = [...isletmeAlaniSiniflari].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaTipleri = [...odaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.odaOzellikleri = [...odaOzellikleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
@@ -393,15 +392,21 @@ export class BinaYonetimi implements OnDestroy {
             tesisId: 0,
             katSayisi: 1,
             aktifMi: true,
-            yoneticiUserIds: null
+            yoneticiUserIds: null,
+            isletmeAlanlari: []
         };
     }
 
     private cloneBina(source: BinaDto): BinaDto {
         return {
             ...source,
-            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])]
+            yoneticiUserIds: [...(source.yoneticiUserIds ?? [])],
+            isletmeAlanlari: this.cloneIsletmeAlanlari(source.isletmeAlanlari)
         };
+    }
+
+    private cloneIsletmeAlanlari(source: BinaIsletmeAlaniDto[] | null | undefined): BinaIsletmeAlaniDto[] {
+        return (source ?? []).map((item) => ({ ...item }));
     }
 
     private getEmptyOdaForView(): OdaDto {

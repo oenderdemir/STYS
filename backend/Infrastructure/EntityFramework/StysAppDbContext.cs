@@ -36,6 +36,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KullaniciTesisSahiplik> KullaniciTesisSahiplikleri => Set<KullaniciTesisSahiplik>();
     public DbSet<Bina> Binalar => Set<Bina>();
     public DbSet<BinaYonetici> BinaYoneticileri => Set<BinaYonetici>();
+    public DbSet<IsletmeAlaniSinifi> IsletmeAlaniSiniflari => Set<IsletmeAlaniSinifi>();
     public DbSet<IsletmeAlani> IsletmeAlanlari => Set<IsletmeAlani>();
     public DbSet<OdaSinifi> OdaSiniflari => Set<OdaSinifi>();
     public DbSet<OdaOzellik> OdaOzellikleri => Set<OdaOzellik>();
@@ -172,15 +173,32 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<IsletmeAlani>(entity =>
         {
             entity.ToTable("IsletmeAlanlari", "dbo");
-            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
-            entity.HasIndex(x => new { x.BinaId, x.Ad })
-                .IsUnique()
+            entity.Property(x => x.OzelAd).HasMaxLength(200);
+            entity.HasIndex(x => new { x.BinaId, x.IsletmeAlaniSinifiId })
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
 
             entity.HasOne(x => x.Bina)
                 .WithMany(x => x.IsletmeAlanlari)
                 .HasForeignKey(x => x.BinaId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IsletmeAlaniSinifi)
+                .WithMany(x => x.IsletmeAlanlari)
+                .HasForeignKey(x => x.IsletmeAlaniSinifiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<IsletmeAlaniSinifi>(entity =>
+        {
+            entity.ToTable("IsletmeAlaniSiniflari", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<OdaSinifi>(entity =>

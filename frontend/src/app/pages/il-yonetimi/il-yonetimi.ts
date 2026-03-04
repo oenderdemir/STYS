@@ -13,7 +13,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
@@ -45,6 +45,8 @@ export class IlYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    sortBy = 'ad';
+    sortDir: SortDirection = 'asc';
     expandedRowKeys: Record<string, boolean> = {};
     tesislerByIlId: Record<number, TesisDto[]> = {};
     tesisLoadingByIlId: Record<number, boolean> = {};
@@ -66,8 +68,14 @@ export class IlYonetimi implements OnDestroy {
         const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
         const nextFirst = event.first && event.first >= 0 ? event.first : 0;
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
+        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
+            return;
+        }
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
+        this.sortBy = sort.sortBy;
+        this.sortDir = sort.sortDir;
         this.loadIller(this.pageNumber, this.pageSize);
     }
 
@@ -228,7 +236,7 @@ export class IlYonetimi implements OnDestroy {
     private loadIller(pageNumber: number, pageSize: number): void {
         this.loading = true;
         this.service
-            .getIllerPaged(pageNumber, pageSize, this.searchQuery)
+            .getIllerPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -279,3 +287,4 @@ export class IlYonetimi implements OnDestroy {
         };
     }
 }
+

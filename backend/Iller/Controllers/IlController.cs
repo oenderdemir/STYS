@@ -26,13 +26,23 @@ public class IlController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.IlYonetimi.View)]
-    public async Task<ActionResult<PagedResult<IlDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<IlDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: ad, aktifMi, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var result = await _ilService.GetPagedAsync(
             request,
             predicate: string.IsNullOrWhiteSpace(normalizedQuery) ? null : x => x.Ad.Contains(normalizedQuery),
-            orderBy: q => q.OrderBy(x => x.Ad));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -72,5 +82,24 @@ public class IlController : UIController
     {
         await _ilService.DeleteAsync(id);
         return Ok();
+    }
+
+    private static Func<IQueryable<STYS.Iller.Entities.Il>, IOrderedQueryable<STYS.Iller.Entities.Il>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "ad" => desc ? q => q.OrderByDescending(x => x.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id),
+            "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

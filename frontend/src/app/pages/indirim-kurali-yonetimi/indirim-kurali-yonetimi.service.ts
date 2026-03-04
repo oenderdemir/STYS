@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { IndirimKuraliDto, KonaklamaTipiLookupDto, MisafirTipiLookupDto } from './indirim-kurali-yonetimi.dto';
@@ -11,8 +11,8 @@ export class IndirimKuraliYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getIndirimKurallariPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<IndirimKuraliDto>> {
-        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getIndirimKurallariPaged(pageNumber: number, pageSize: number, query: string, sortBy: string, sortDir: SortDirection): Observable<PagedResponseDto<IndirimKuraliDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize).set('sortBy', sortBy).set('sortDir', sortDir);
         const normalizedQuery = query.trim();
         if (normalizedQuery.length > 0) {
             params = params.set('q', normalizedQuery);

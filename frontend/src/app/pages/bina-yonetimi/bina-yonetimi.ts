@@ -13,7 +13,7 @@ import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
@@ -60,6 +60,8 @@ export class BinaYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    sortBy = 'ad';
+    sortDir: SortDirection = 'asc';
     selectedTesisId: number | null = null;
     expandedRowKeys: Record<string, boolean> = {};
     odalarByBinaId: Record<number, OdaDto[]> = {};
@@ -94,8 +96,14 @@ export class BinaYonetimi implements OnDestroy {
         const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
         const nextFirst = event.first && event.first >= 0 ? event.first : 0;
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
+        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
+            return;
+        }
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
+        this.sortBy = sort.sortBy;
+        this.sortDir = sort.sortDir;
         this.loadData(this.pageNumber, this.pageSize);
     }
 
@@ -311,7 +319,7 @@ export class BinaYonetimi implements OnDestroy {
     private loadData(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery, this.selectedTesisId),
+            binalar: this.service.getBinalarPaged(pageNumber, pageSize, this.searchQuery, this.selectedTesisId, this.sortBy, this.sortDir),
             tesisler: this.service.getTesisler(),
             isletmeAlaniSiniflari: this.service.getIsletmeAlaniSiniflari(),
             odaTipleri: this.service.getOdaTipleri(),
@@ -420,3 +428,4 @@ export class BinaYonetimi implements OnDestroy {
         };
     }
 }
+

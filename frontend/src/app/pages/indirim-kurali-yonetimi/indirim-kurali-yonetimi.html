@@ -16,6 +16,7 @@
     dataKey="id"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
     [paginator]="true"
     [rows]="pageSize"
     [first]="(pageNumber - 1) * pageSize"
@@ -37,15 +38,15 @@
 
     <ng-template #header>
         <tr>
-            <th>Kod</th>
-            <th>Ad</th>
-            <th>Tip</th>
-            <th>Deger</th>
-            <th>Kapsam</th>
-            <th>Tesis</th>
-            <th>Tarih Araligi</th>
-            <th>Oncelik</th>
-            <th>Aktif</th>
+            <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
+            <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
+            <th pSortableColumn="indirimTipi">Tip <p-sortIcon field="indirimTipi" /></th>
+            <th pSortableColumn="deger">Deger <p-sortIcon field="deger" /></th>
+            <th pSortableColumn="kapsamTipi">Kapsam <p-sortIcon field="kapsamTipi" /></th>
+            <th pSortableColumn="tesisId">Tesis <p-sortIcon field="tesisId" /></th>
+            <th pSortableColumn="baslangicTarihi">Tarih Araligi <p-sortIcon field="baslangicTarihi" /></th>
+            <th pSortableColumn="oncelik">Oncelik <p-sortIcon field="oncelik" /></th>
+            <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
             <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
@@ -87,3 +88,4 @@
     (save)="onDialogSave($event)"
     (modeChange)="dialogMode = $event"
 />
+

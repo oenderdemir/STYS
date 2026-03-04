@@ -16,6 +16,7 @@
     dataKey="id"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
     [paginator]="true"
     [rows]="pageSize"
     [first]="(pageNumber - 1) * pageSize"
@@ -70,12 +71,12 @@
 
     <ng-template #header>
         <tr>
-            <th>Oda No</th>
-            <th>Bina</th>
-            <th>Oda Tipi</th>
-            <th>Kat No</th>
+            <th pSortableColumn="odaNo">Oda No <p-sortIcon field="odaNo" /></th>
+            <th pSortableColumn="binaId">Bina <p-sortIcon field="binaId" /></th>
+            <th pSortableColumn="tesisOdaTipiId">Oda Tipi <p-sortIcon field="tesisOdaTipiId" /></th>
+            <th pSortableColumn="katNo">Kat No <p-sortIcon field="katNo" /></th>
             <th>Dinamik Ozellikler</th>
-            <th>Durum</th>
+            <th pSortableColumn="aktifMi">Durum <p-sortIcon field="aktifMi" /></th>
             <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
@@ -116,3 +117,4 @@
     (save)="onDialogSave($event)"
     (modeChange)="dialogMode = $event"
 />
+

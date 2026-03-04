@@ -71,7 +71,11 @@ public class IsletmeAlaniService : BaseRdbmsService<IsletmeAlaniDto, IsletmeAlan
         return entities.Select(entity => Mapper.Map<IsletmeAlaniSinifiDto>(entity)).ToList();
     }
 
-    public async Task<PagedResult<IsletmeAlaniSinifiDto>> GetSiniflarPagedAsync(PagedRequest request, string? query, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<IsletmeAlaniSinifiDto>> GetSiniflarPagedAsync(
+        PagedRequest request,
+        string? query,
+        Func<IQueryable<IsletmeAlaniSinifi>, IOrderedQueryable<IsletmeAlaniSinifi>>? orderBy = null,
+        CancellationToken cancellationToken = default)
     {
         var normalizedQuery = query?.Trim();
         var predicate = string.IsNullOrWhiteSpace(normalizedQuery)
@@ -81,7 +85,7 @@ public class IsletmeAlaniService : BaseRdbmsService<IsletmeAlaniDto, IsletmeAlan
         var pagedEntities = await _isletmeAlaniSinifiRepository.GetPagedAsync(
             request,
             predicate: predicate,
-            orderBy: q => q.OrderBy(x => x.Ad));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
 
         return new PagedResult<IsletmeAlaniSinifiDto>(
             pagedEntities.Items.Select(entity => Mapper.Map<IsletmeAlaniSinifiDto>(entity)).ToList(),

@@ -13,7 +13,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
-import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import { UlkeDialog } from './ulke-dialog';
 import { UlkeDto } from './ulke-yonetimi.dto';
@@ -44,6 +44,8 @@ export class UlkeYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    sortBy = 'name';
+    sortDir: SortDirection = 'asc';
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -62,8 +64,14 @@ export class UlkeYonetimi implements OnDestroy {
         const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
         const nextFirst = event.first && event.first >= 0 ? event.first : 0;
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
+        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
+            return;
+        }
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
+        this.sortBy = sort.sortBy;
+        this.sortDir = sort.sortDir;
         this.loadUlkeler(this.pageNumber, this.pageSize);
     }
 
@@ -180,7 +188,7 @@ export class UlkeYonetimi implements OnDestroy {
     private loadUlkeler(pageNumber: number, pageSize: number): void {
         this.loading = true;
         this.service
-            .getUlkelerPaged(pageNumber, pageSize, this.searchQuery)
+            .getUlkelerPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir)
             .pipe(
                 finalize(() => {
                     this.loading = false;
@@ -230,3 +238,4 @@ export class UlkeYonetimi implements OnDestroy {
         };
     }
 }
+

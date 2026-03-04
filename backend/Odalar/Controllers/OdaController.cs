@@ -32,8 +32,16 @@ public class OdaController : UIController
         [FromQuery] PagedRequest request,
         [FromQuery(Name = "q")] string? query,
         [FromQuery(Name = "tesisId")] int? tesisId,
-        [FromQuery(Name = "binaId")] int? binaId)
+        [FromQuery(Name = "binaId")] int? binaId,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: odaNo, binaId, tesisOdaTipiId, katNo, aktifMi, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var normalizedTesisId = tesisId.HasValue && tesisId.Value > 0 ? tesisId.Value : (int?)null;
         var normalizedBinaId = binaId.HasValue && binaId.Value > 0 ? binaId.Value : (int?)null;
@@ -50,7 +58,7 @@ public class OdaController : UIController
         var result = await _odaService.GetPagedAsync(
             request,
             predicate: predicate,
-            orderBy: q => q.OrderBy(x => x.OdaNo));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.OdaNo).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -103,5 +111,27 @@ public class OdaController : UIController
     {
         await _odaService.DeleteAsync(id);
         return Ok();
+    }
+
+    private static Func<IQueryable<Oda>, IOrderedQueryable<Oda>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "odano" => desc ? q => q.OrderByDescending(x => x.OdaNo).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.OdaNo).ThenBy(x => x.Id),
+            "binaid" => desc ? q => q.OrderByDescending(x => x.BinaId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.BinaId).ThenBy(x => x.Id),
+            "tesisodatipiid" => desc ? q => q.OrderByDescending(x => x.TesisOdaTipiId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.TesisOdaTipiId).ThenBy(x => x.Id),
+            "katno" => desc ? q => q.OrderByDescending(x => x.KatNo).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KatNo).ThenBy(x => x.Id),
+            "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

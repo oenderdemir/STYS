@@ -18,6 +18,7 @@
     (onRowExpand)="onRowExpand($event)"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
     [paginator]="true"
     [rows]="pageSize"
     [first]="(pageNumber - 1) * pageSize"
@@ -57,10 +58,10 @@
     <ng-template #header>
         <tr>
             <th style="width: 4rem"></th>
-            <th>Bina Adi</th>
-            <th>Tesis</th>
-            <th>Kat Sayisi</th>
-            <th>Durum</th>
+            <th pSortableColumn="ad">Bina Adi <p-sortIcon field="ad" /></th>
+            <th pSortableColumn="tesisId">Tesis <p-sortIcon field="tesisId" /></th>
+            <th pSortableColumn="katSayisi">Kat Sayisi <p-sortIcon field="katSayisi" /></th>
+            <th pSortableColumn="aktifMi">Durum <p-sortIcon field="aktifMi" /></th>
             <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
@@ -155,3 +156,4 @@
     (save)="onOdaDialogSave($event)"
     (modeChange)="odaViewMode = $event"
 />
+

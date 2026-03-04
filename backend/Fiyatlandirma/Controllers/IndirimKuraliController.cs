@@ -26,15 +26,25 @@ public class IndirimKuraliController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.IndirimKuraliYonetimi.View)]
-    public async Task<ActionResult<PagedResult<IndirimKuraliDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<IndirimKuraliDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: kod, ad, indirimTipi, deger, kapsamTipi, tesisId, baslangicTarihi, bitisTarihi, oncelik, aktifMi, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var result = await _indirimKuraliService.GetPagedAsync(
             request,
             predicate: string.IsNullOrWhiteSpace(normalizedQuery)
                 ? null
                 : x => x.Ad.Contains(normalizedQuery) || x.Kod.Contains(normalizedQuery),
-            orderBy: q => q.OrderByDescending(x => x.Oncelik).ThenBy(x => x.Ad));
+            orderBy: orderBy ?? (q => q.OrderByDescending(x => x.Oncelik).ThenBy(x => x.Ad).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -74,5 +84,32 @@ public class IndirimKuraliController : UIController
     {
         await _indirimKuraliService.DeleteAsync(id);
         return Ok();
+    }
+
+    private static Func<IQueryable<STYS.Fiyatlandirma.Entities.IndirimKurali>, IOrderedQueryable<STYS.Fiyatlandirma.Entities.IndirimKurali>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "kod" => desc ? q => q.OrderByDescending(x => x.Kod).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Kod).ThenBy(x => x.Id),
+            "ad" => desc ? q => q.OrderByDescending(x => x.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id),
+            "indirimtipi" => desc ? q => q.OrderByDescending(x => x.IndirimTipi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.IndirimTipi).ThenBy(x => x.Id),
+            "deger" => desc ? q => q.OrderByDescending(x => x.Deger).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Deger).ThenBy(x => x.Id),
+            "kapsamtipi" => desc ? q => q.OrderByDescending(x => x.KapsamTipi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KapsamTipi).ThenBy(x => x.Id),
+            "tesisid" => desc ? q => q.OrderByDescending(x => x.TesisId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.TesisId).ThenBy(x => x.Id),
+            "baslangictarihi" => desc ? q => q.OrderByDescending(x => x.BaslangicTarihi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.BaslangicTarihi).ThenBy(x => x.Id),
+            "bitistarihi" => desc ? q => q.OrderByDescending(x => x.BitisTarihi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.BitisTarihi).ThenBy(x => x.Id),
+            "oncelik" => desc ? q => q.OrderByDescending(x => x.Oncelik).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Oncelik).ThenBy(x => x.Id),
+            "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

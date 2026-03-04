@@ -12,7 +12,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
@@ -48,6 +48,8 @@ export class TesisYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    sortBy = 'ad';
+    sortDir: SortDirection = 'asc';
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -74,8 +76,14 @@ export class TesisYonetimi implements OnDestroy {
         const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
         const nextFirst = event.first && event.first >= 0 ? event.first : 0;
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
+        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
+            return;
+        }
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
+        this.sortBy = sort.sortBy;
+        this.sortDir = sort.sortDir;
         this.loadData(this.pageNumber, this.pageSize);
     }
 
@@ -190,7 +198,7 @@ export class TesisYonetimi implements OnDestroy {
     private loadData(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery),
+            tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir),
             iller: this.service.getIller(),
             yoneticiAdaylari: this.canManage && this.canAssignTesisYoneticisi ? this.service.getYoneticiAdaylari() : of([]),
             resepsiyonistAdaylari: this.canManage && this.canAssignResepsiyonist ? this.service.getResepsiyonistAdaylari() : of([])
@@ -261,3 +269,4 @@ export class TesisYonetimi implements OnDestroy {
         };
     }
 }
+

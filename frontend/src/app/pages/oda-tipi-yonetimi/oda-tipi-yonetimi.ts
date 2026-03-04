@@ -12,7 +12,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { LazyLoadPayload, tryReadApiMessage } from '../../core/api';
+import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
 import { OdaOzellikDto } from '../oda-ozellik-yonetimi/oda-ozellik-yonetimi.dto';
@@ -48,6 +48,8 @@ export class OdaTipiYonetimi implements OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
+    sortBy = 'ad';
+    sortDir: SortDirection = 'asc';
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -66,8 +68,14 @@ export class OdaTipiYonetimi implements OnDestroy {
         const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
         const nextFirst = event.first && event.first >= 0 ? event.first : 0;
         const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
+        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
+        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
+            return;
+        }
         this.pageNumber = nextPageNumber;
         this.pageSize = nextPageSize;
+        this.sortBy = sort.sortBy;
+        this.sortDir = sort.sortDir;
         this.loadOdaTipleri(this.pageNumber, this.pageSize);
     }
 
@@ -177,7 +185,7 @@ export class OdaTipiYonetimi implements OnDestroy {
     private loadOdaTipleri(pageNumber: number, pageSize: number): void {
         this.loading = true;
         forkJoin({
-            odaTipleri: this.service.getOdaTipleriPaged(pageNumber, pageSize, this.searchQuery),
+            odaTipleri: this.service.getOdaTipleriPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir),
             tesisler: this.service.getTesisler(),
             odaSiniflari: this.service.getOdaSiniflari(),
             odaOzellikleri: this.service.getOdaOzellikleriForOdaTipi()
@@ -290,3 +298,4 @@ export class OdaTipiYonetimi implements OnDestroy {
         return normalizedValue;
     }
 }
+

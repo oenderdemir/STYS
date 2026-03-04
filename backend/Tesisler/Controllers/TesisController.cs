@@ -28,8 +28,18 @@ public class TesisController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.TesisYonetimi.View)]
-    public async Task<ActionResult<PagedResult<TesisDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<TesisDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: ad, ilId, telefon, adres, aktifMi, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var result = await _tesisService.GetPagedAsync(
             request,
@@ -39,7 +49,7 @@ public class TesisController : UIController
                     || x.Telefon.Contains(normalizedQuery)
                     || x.Adres.Contains(normalizedQuery)
                     || (x.Eposta != null && x.Eposta.Contains(normalizedQuery)),
-            orderBy: q => q.OrderBy(x => x.Ad));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -108,5 +118,27 @@ public class TesisController : UIController
     {
         var created = await _tesisService.CreateBinaYoneticisiUserAsync(tesisId, dto);
         return Ok(created);
+    }
+
+    private static Func<IQueryable<STYS.Tesisler.Entities.Tesis>, IOrderedQueryable<STYS.Tesisler.Entities.Tesis>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "ad" => desc ? q => q.OrderByDescending(x => x.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id),
+            "ilid" => desc ? q => q.OrderByDescending(x => x.IlId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.IlId).ThenBy(x => x.Id),
+            "telefon" => desc ? q => q.OrderByDescending(x => x.Telefon).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Telefon).ThenBy(x => x.Id),
+            "adres" => desc ? q => q.OrderByDescending(x => x.Adres).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Adres).ThenBy(x => x.Id),
+            "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

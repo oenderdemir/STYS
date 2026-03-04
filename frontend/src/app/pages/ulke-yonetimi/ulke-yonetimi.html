@@ -16,6 +16,7 @@
     dataKey="id"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
     [paginator]="true"
     [rows]="pageSize"
     [first]="(pageNumber - 1) * pageSize"
@@ -37,8 +38,8 @@
 
     <ng-template #header>
         <tr>
-            <th>Ulke Kodu</th>
-            <th>Ulke Adi</th>
+            <th pSortableColumn="code">Ulke Kodu <p-sortIcon field="code" /></th>
+            <th pSortableColumn="name">Ulke Adi <p-sortIcon field="name" /></th>
             <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
@@ -61,3 +62,4 @@
 </p-table>
 
 <app-ulke-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedUlke" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />
+

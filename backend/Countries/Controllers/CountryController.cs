@@ -27,15 +27,25 @@ public class CountryController : UIController
 
     [HttpGet("paged")]
     [Permission(CountryPermissions.View)]
-    public async Task<ActionResult<PagedResult<CountryDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
+    public async Task<ActionResult<PagedResult<CountryDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery(Name = "q")] string? query,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: code, name, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var result = await _countryService.GetPagedAsync(
             request,
             predicate: string.IsNullOrWhiteSpace(normalizedQuery)
                 ? null
                 : x => x.Name.Contains(normalizedQuery) || x.Code.Contains(normalizedQuery),
-            orderBy: q => q.OrderBy(x => x.Name));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.Name).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -109,5 +119,24 @@ public class CountryController : UIController
 
         var ids = await _countryService.AddRangeAsync(countries);
         return Ok(new { count = ids.Count, ids });
+    }
+
+    private static Func<IQueryable<STYS.Countries.Entities.Country>, IOrderedQueryable<STYS.Countries.Entities.Country>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "code" => desc ? q => q.OrderByDescending(x => x.Code).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Code).ThenBy(x => x.Id),
+            "name" => desc ? q => q.OrderByDescending(x => x.Name).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Name).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

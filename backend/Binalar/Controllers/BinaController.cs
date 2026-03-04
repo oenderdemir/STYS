@@ -31,8 +31,16 @@ public class BinaController : UIController
     public async Task<ActionResult<PagedResult<BinaDto>>> GetPaged(
         [FromQuery] PagedRequest request,
         [FromQuery(Name = "q")] string? query,
-        [FromQuery(Name = "tesisId")] int? tesisId)
+        [FromQuery(Name = "tesisId")] int? tesisId,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir = "asc")
     {
+        var orderBy = BuildOrderBy(sortBy, sortDir);
+        if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
+        {
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: ad, tesisId, katSayisi, aktifMi, id, createdAt.");
+        }
+
         var normalizedQuery = query?.Trim();
         var normalizedTesisId = tesisId.HasValue && tesisId.Value > 0 ? tesisId.Value : (int?)null;
 
@@ -47,7 +55,7 @@ public class BinaController : UIController
         var result = await _binaService.GetPagedAsync(
             request,
             predicate: predicate,
-            orderBy: q => q.OrderBy(x => x.Ad));
+            orderBy: orderBy ?? (q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
         return Ok(result);
     }
 
@@ -87,5 +95,26 @@ public class BinaController : UIController
     {
         await _binaService.DeleteAsync(id);
         return Ok();
+    }
+
+    private static Func<IQueryable<Bina>, IOrderedQueryable<Bina>>? BuildOrderBy(string? sortBy, string? sortDir)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return null;
+        }
+
+        var desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var normalized = sortBy.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "ad" => desc ? q => q.OrderByDescending(x => x.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id),
+            "tesisid" => desc ? q => q.OrderByDescending(x => x.TesisId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.TesisId).ThenBy(x => x.Id),
+            "katsayisi" => desc ? q => q.OrderByDescending(x => x.KatSayisi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KatSayisi).ThenBy(x => x.Id),
+            "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
+            "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
+            "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => null
+        };
     }
 }

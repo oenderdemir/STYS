@@ -16,6 +16,7 @@
     dataKey="id"
     [lazy]="true"
     (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
     [paginator]="true"
     [rows]="pageSize"
     [first]="(pageNumber - 1) * pageSize"
@@ -37,10 +38,10 @@
 
     <ng-template #header>
         <tr>
-            <th>Kod</th>
-            <th>Ad</th>
-            <th>Veri Tipi</th>
-            <th>Durum</th>
+            <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
+            <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
+            <th pSortableColumn="veriTipi">Veri Tipi <p-sortIcon field="veriTipi" /></th>
+            <th pSortableColumn="aktifMi">Durum <p-sortIcon field="aktifMi" /></th>
             <th style="width: 18rem">Islem</th>
         </tr>
     </ng-template>
@@ -65,3 +66,4 @@
 </p-table>
 
 <app-oda-ozellik-dialog [(visible)]="dialogVisible" [mode]="dialogMode" [model]="selectedOdaOzellik" [saving]="saving" [canManage]="canManage" (save)="onDialogSave($event)" (modeChange)="dialogMode = $event" />
+

@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
-import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../core/api';
+import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { BinaDto } from '../bina-yonetimi/bina-yonetimi.dto';
 import { IsletmeAlaniDto, IsletmeAlaniSinifiDto } from './isletme-alani-yonetimi.dto';
@@ -11,8 +11,8 @@ export class IsletmeAlaniYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAlanlarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<IsletmeAlaniDto>> {
-        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getAlanlarPaged(pageNumber: number, pageSize: number, query: string, sortBy: string, sortDir: SortDirection): Observable<PagedResponseDto<IsletmeAlaniDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize).set('sortBy', sortBy).set('sortDir', sortDir);
         const normalizedQuery = query.trim();
         if (normalizedQuery.length > 0) {
             params = params.set('q', normalizedQuery);
@@ -66,8 +66,8 @@ export class IsletmeAlaniYonetimiService {
         );
     }
 
-    getSiniflarPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<IsletmeAlaniSinifiDto>> {
-        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getSiniflarPaged(pageNumber: number, pageSize: number, query: string, sortBy: string, sortDir: SortDirection): Observable<PagedResponseDto<IsletmeAlaniSinifiDto>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize).set('sortBy', sortBy).set('sortDir', sortDir);
         const normalizedQuery = query.trim();
         if (normalizedQuery.length > 0) {
             params = params.set('q', normalizedQuery);

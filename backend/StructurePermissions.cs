@@ -72,6 +72,14 @@ public static class StructurePermissions
         public const string Manage = "MisafirTipiYonetimi.Manage";
     }
 
+    public static class IndirimKuraliYonetimi
+    {
+        public const string Menu = "IndirimKuraliYonetimi.Menu";
+        public const string View = "IndirimKuraliYonetimi.View";
+        public const string Manage = "IndirimKuraliYonetimi.Manage";
+        public const string SistemIndirimKuraliOlusturabilme = "IndirimKuraliYonetimi.SistemIndirimKuraliOlusturabilir";
+    }
+
     public static class KullaniciAtama
     {
         public const string TesisYoneticisiAtanabilir = "KullaniciAtama.TesisYoneticisiAtanabilir";

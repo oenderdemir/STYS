@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Fiyatlandirma.Dto;
@@ -9,6 +10,7 @@ using STYS.MisafirTipleri.Repositories;
 using STYS.Tesisler.Repositories;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Fiyatlandirma.Services;
@@ -20,6 +22,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
     private readonly IKonaklamaTipiRepository _konaklamaTipiRepository;
     private readonly ITesisRepository _tesisRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public IndirimKuraliService(
         IIndirimKuraliRepository indirimKuraliRepository,
@@ -27,6 +30,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         IKonaklamaTipiRepository konaklamaTipiRepository,
         ITesisRepository tesisRepository,
         IUserAccessScopeService userAccessScopeService,
+        IHttpContextAccessor httpContextAccessor,
         IMapper mapper)
         : base(indirimKuraliRepository, mapper)
     {
@@ -35,6 +39,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         _konaklamaTipiRepository = konaklamaTipiRepository;
         _tesisRepository = tesisRepository;
         _userAccessScopeService = userAccessScopeService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public override async Task<IndirimKuraliDto> AddAsync(IndirimKuraliDto dto)
@@ -191,15 +196,16 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
 
     private async Task EnsureCanManageExistingEntityAsync(IndirimKurali entity)
     {
+        if (entity.KapsamTipi.Equals(IndirimKapsamTipleri.Sistem, StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureCanManageSystemDiscountRules();
+            return;
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         if (!scope.IsScoped)
         {
             return;
-        }
-
-        if (entity.KapsamTipi.Equals(IndirimKapsamTipleri.Sistem, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new BaseException("Sistem geneli indirim kurallarini yonetme yetkiniz bulunmuyor.", 403);
         }
 
         if (!entity.TesisId.HasValue || !scope.TesisIds.Contains(entity.TesisId.Value))
@@ -210,21 +216,47 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
 
     private async Task EnsureManageScopeAsync(IndirimKuraliDto dto)
     {
+        if (dto.KapsamTipi.Equals(IndirimKapsamTipleri.Sistem, StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureCanManageSystemDiscountRules();
+            return;
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         if (!scope.IsScoped)
         {
             return;
         }
 
-        if (dto.KapsamTipi.Equals(IndirimKapsamTipleri.Sistem, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new BaseException("Sistem geneli indirim kurali olusturma/guncelleme yetkiniz bulunmuyor.", 403);
-        }
-
         if (!dto.TesisId.HasValue || !scope.TesisIds.Contains(dto.TesisId.Value))
         {
             throw new BaseException("Sadece yonettiginiz tesisler icin indirim kurali tanimlayabilirsiniz.", 403);
         }
+    }
+
+    private void EnsureCanManageSystemDiscountRules()
+    {
+        if (HasPermission(StructurePermissions.IndirimKuraliYonetimi.SistemIndirimKuraliOlusturabilme))
+        {
+            return;
+        }
+
+        throw new BaseException("Sistem geneli indirim kurallari icin yetkiniz bulunmuyor.", 403);
+    }
+
+    private bool HasPermission(string permission)
+    {
+        var claims = _httpContextAccessor.HttpContext?.User
+            .FindAll(TodPlatformAuthorizationConstants.PermissionClaimType)
+            .Select(x => x.Value)
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+
+        if (claims is null)
+        {
+            return false;
+        }
+
+        return claims.Any(x => x.Equals(permission, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task ValidateReferencesAsync(IndirimKuraliDto dto)

@@ -17,7 +17,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpGet]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.View)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.View)]
     public async Task<List<IndirimKuraliDto>> GetAll()
     {
         var items = await _indirimKuraliService.GetAllAsync();
@@ -25,7 +25,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpGet("paged")]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.View)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.View)]
     public async Task<ActionResult<PagedResult<IndirimKuraliDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery(Name = "q")] string? query)
     {
         var normalizedQuery = query?.Trim();
@@ -39,7 +39,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpGet("{id:int}")]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.View)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.View)]
     public async Task<ActionResult<IndirimKuraliDto>> GetById(int id)
     {
         var item = await _indirimKuraliService.GetByIdAsync(id);
@@ -52,7 +52,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.Manage)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.Manage)]
     public async Task<ActionResult<IndirimKuraliDto>> Create([FromBody] IndirimKuraliDto dto)
     {
         var created = await _indirimKuraliService.AddAsync(dto);
@@ -60,7 +60,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.Manage)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.Manage)]
     public async Task<ActionResult<IndirimKuraliDto>> Update(int id, [FromBody] IndirimKuraliDto dto)
     {
         dto.Id = id;
@@ -69,7 +69,7 @@ public class IndirimKuraliController : UIController
     }
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.OdaFiyatYonetimi.Manage)]
+    [Permission(StructurePermissions.IndirimKuraliYonetimi.Manage)]
     public async Task<IActionResult> Delete(int id)
     {
         await _indirimKuraliService.DeleteAsync(id);

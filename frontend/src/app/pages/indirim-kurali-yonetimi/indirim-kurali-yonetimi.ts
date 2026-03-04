@@ -54,7 +54,11 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     get canManage(): boolean {
-        return this.authService.hasPermission('OdaFiyatYonetimi.Manage');
+        return this.authService.hasPermission('IndirimKuraliYonetimi.Manage');
+    }
+
+    get canCreateSystemRule(): boolean {
+        return this.authService.hasPermission('IndirimKuraliYonetimi.SistemIndirimKuraliOlusturabilir');
     }
 
     ngOnInit(): void {

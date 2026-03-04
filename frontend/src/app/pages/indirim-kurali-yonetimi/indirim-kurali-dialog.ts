@@ -46,7 +46,7 @@ export interface SelectOption<T = string | number> {
 
                 <div class="col-span-12 md:col-span-4">
                     <label for="indirimTipi" class="block font-medium mb-2">Indirim Tipi</label>
-                    <p-select inputId="indirimTipi" class="w-full" [options]="indirimTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.indirimTipi" [disabled]="isReadOnly || saving" />
+                    <p-select inputId="indirimTipi" class="w-full" [options]="indirimTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.indirimTipi" [appendTo]="'body'" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="deger" class="block font-medium mb-2">Deger</label>
@@ -59,7 +59,7 @@ export interface SelectOption<T = string | number> {
 
                 <div class="col-span-12 md:col-span-4">
                     <label for="kapsamTipi" class="block font-medium mb-2">Kapsam</label>
-                    <p-select inputId="kapsamTipi" class="w-full" [options]="kapsamTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.kapsamTipi" [disabled]="isReadOnly || saving" (ngModelChange)="onKapsamTipiChanged()" />
+                    <p-select inputId="kapsamTipi" class="w-full" [options]="kapsamTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.kapsamTipi" [appendTo]="'body'" [disabled]="isReadOnly || saving || !canCreateSystemRule" (ngModelChange)="onKapsamTipiChanged()" />
                 </div>
                 <div class="col-span-12 md:col-span-8">
                     <label for="tesisId" class="block font-medium mb-2">Tesis</label>
@@ -70,6 +70,7 @@ export interface SelectOption<T = string | number> {
                         optionLabel="label"
                         optionValue="value"
                         [(ngModel)]="workingModel.tesisId"
+                        [appendTo]="'body'"
                         [disabled]="isReadOnly || saving || workingModel.kapsamTipi !== 'Tesis'"
                         [showClear]="workingModel.kapsamTipi === 'Tesis'"
                     />
@@ -93,6 +94,7 @@ export interface SelectOption<T = string | number> {
                         optionLabel="label"
                         optionValue="value"
                         [(ngModel)]="workingModel.misafirTipiIds"
+                        [appendTo]="'body'"
                         [disabled]="isReadOnly || saving"
                         [filter]="true"
                         [showClear]="true"
@@ -108,6 +110,7 @@ export interface SelectOption<T = string | number> {
                         optionLabel="label"
                         optionValue="value"
                         [(ngModel)]="workingModel.konaklamaTipiIds"
+                        [appendTo]="'body'"
                         [disabled]="isReadOnly || saving"
                         [filter]="true"
                         [showClear]="true"
@@ -140,6 +143,7 @@ export class IndirimKuraliDialog implements OnChanges {
     @Input() model: IndirimKuraliDto = this.emptyModel();
     @Input() saving = false;
     @Input() canManage = false;
+    @Input() canCreateSystemRule = false;
     @Input() tesisOptions: SelectOption<number>[] = [];
     @Input() misafirTipiOptions: SelectOption<number>[] = [];
     @Input() konaklamaTipiOptions: SelectOption<number>[] = [];
@@ -153,10 +157,14 @@ export class IndirimKuraliDialog implements OnChanges {
         { label: 'Tutar', value: 'Tutar' }
     ];
 
-    readonly kapsamTipiOptions: SelectOption<string>[] = [
-        { label: 'Sistem', value: 'Sistem' },
-        { label: 'Tesis', value: 'Tesis' }
-    ];
+    get kapsamTipiOptions(): SelectOption<string>[] {
+        const options: SelectOption<string>[] = [{ label: 'Tesis', value: 'Tesis' }];
+        if (this.canCreateSystemRule || this.workingModel.kapsamTipi === 'Sistem') {
+            options.unshift({ label: 'Sistem', value: 'Sistem' });
+        }
+
+        return options;
+    }
 
     workingModel: IndirimKuraliDto = this.emptyModel();
 
@@ -207,6 +215,10 @@ export class IndirimKuraliDialog implements OnChanges {
 
         if (changes['visible'] && this.visible) {
             this.workingModel = this.cloneModel(this.model);
+        }
+
+        if (!this.canCreateSystemRule && this.mode === 'create' && this.workingModel.kapsamTipi === 'Sistem') {
+            this.workingModel.kapsamTipi = 'Tesis';
         }
     }
 
@@ -291,7 +303,7 @@ export class IndirimKuraliDialog implements OnChanges {
             ad: source.ad ?? '',
             indirimTipi: source.indirimTipi ?? 'Yuzde',
             deger: source.deger ?? 0,
-            kapsamTipi: source.kapsamTipi ?? 'Sistem',
+            kapsamTipi: source.kapsamTipi ?? 'Tesis',
             tesisId: source.tesisId ?? null,
             baslangicTarihi: this.normalizeDateInput(source.baslangicTarihi),
             bitisTarihi: this.normalizeDateInput(source.bitisTarihi),
@@ -327,7 +339,7 @@ export class IndirimKuraliDialog implements OnChanges {
             ad: '',
             indirimTipi: 'Yuzde',
             deger: 0,
-            kapsamTipi: 'Sistem',
+            kapsamTipi: 'Tesis',
             tesisId: null,
             baslangicTarihi: today,
             bitisTarihi: today,

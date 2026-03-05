@@ -20,6 +20,7 @@ import { OdaSinifiYonetimi } from './app/pages/oda-sinifi-yonetimi/oda-sinifi-yo
 import { OdaOzellikYonetimi } from './app/pages/oda-ozellik-yonetimi/oda-ozellik-yonetimi';
 import { OdaYonetimi } from './app/pages/oda-yonetimi/oda-yonetimi';
 import { RolYonetimi } from './app/pages/rol-yonetimi/rol-yonetimi';
+import { RezervasyonYonetimi } from './app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
 
@@ -52,6 +53,7 @@ export const appRoutes: Routes = [
             { path: 'indirim-kurallari', component: IndirimKuraliYonetimi },
             { path: 'konaklama-tipleri', component: KonaklamaTipiYonetimi },
             { path: 'misafir-tipleri', component: MisafirTipiYonetimi },
+            { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes') },
             { path: 'documentation', component: Documentation },
             { path: 'pages', loadChildren: () => import('./app/pages/pages.routes') }

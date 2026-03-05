@@ -1,0 +1,434 @@
+<p-toast />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingReferences || loadingResults" (onClick)="refresh()" />
+    </ng-template>
+    <ng-template #end>
+        <p-button label="Uygun Odalari Listele" icon="pi pi-search" [disabled]="!canView || loadingReferences || loadingResults" (onClick)="search()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <h5 class="m-0 mb-3">Rezervasyon Yonetimi</h5>
+
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="rezTesis" class="block font-medium mb-2">Tesis</label>
+            <p-select
+                inputId="rezTesis"
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedTesisId"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="false"
+                [disabled]="loadingReferences || loadingResults"
+                (onChange)="onTesisChange()"
+            />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="rezOdaTipi" class="block font-medium mb-2">Oda Tipi (Opsiyonel)</label>
+            <p-select
+                inputId="rezOdaTipi"
+                class="w-full"
+                [options]="odaTipleri"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedOdaTipiId"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="true"
+                placeholder="Tum Oda Tipleri"
+                [disabled]="loadingReferences || loadingResults"
+            />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="rezMisafirTipi" class="block font-medium mb-2">Misafir Tipi</label>
+            <p-select
+                inputId="rezMisafirTipi"
+                class="w-full"
+                [options]="misafirTipleri"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedMisafirTipiId"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="false"
+                [disabled]="loadingReferences || loadingResults"
+            />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="rezKonaklamaTipi" class="block font-medium mb-2">Konaklama Tipi</label>
+            <p-select
+                inputId="rezKonaklamaTipi"
+                class="w-full"
+                [options]="konaklamaTipleri"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedKonaklamaTipiId"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="false"
+                [disabled]="loadingReferences || loadingResults"
+            />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+            <label for="rezKisiSayisi" class="block font-medium mb-2">Kisi Sayisi</label>
+            <input pInputText id="rezKisiSayisi" class="w-full" type="number" min="1" [(ngModel)]="kisiSayisi" [disabled]="loadingReferences || loadingResults" />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+            <label for="rezBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
+            <input pInputText id="rezBaslangic" class="w-full" type="datetime-local" [(ngModel)]="baslangicTarihi" [disabled]="loadingReferences || loadingResults" />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+            <label for="rezBitis" class="block font-medium mb-2">Bitis Tarihi</label>
+            <input pInputText id="rezBitis" class="w-full" type="datetime-local" [(ngModel)]="bitisTarihi" [disabled]="loadingReferences || loadingResults" />
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="misafirAdiSoyadi" class="block font-medium mb-2">Misafir Adi Soyadi</label>
+            <input pInputText id="misafirAdiSoyadi" class="w-full" [(ngModel)]="misafirAdiSoyadi" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="misafirTelefon" class="block font-medium mb-2">Misafir Telefon</label>
+            <input pInputText id="misafirTelefon" class="w-full" [(ngModel)]="misafirTelefon" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="misafirEposta" class="block font-medium mb-2">Misafir Eposta</label>
+            <input pInputText id="misafirEposta" class="w-full" [(ngModel)]="misafirEposta" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="tcKimlikNo" class="block font-medium mb-2">TC Kimlik No</label>
+            <input pInputText id="tcKimlikNo" class="w-full" [(ngModel)]="tcKimlikNo" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="pasaportNo" class="block font-medium mb-2">Pasaport No</label>
+            <input pInputText id="pasaportNo" class="w-full" [(ngModel)]="pasaportNo" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-9">
+            <label for="notlar" class="block font-medium mb-2">Notlar</label>
+            <input pInputText id="notlar" class="w-full" [(ngModel)]="notlar" [disabled]="loadingResults || saving" />
+        </div>
+    </div>
+</div>
+
+@if (loadingResults) {
+    <div class="card">Uygun konaklama senaryolari hesaplanıyor...</div>
+} @else if (senaryolar.length === 0) {
+    <div class="card">Kriterlere uygun konaklama senaryosu bulunamadi.</div>
+} @else {
+    <div class="grid grid-cols-12 gap-4">
+        @for (senaryo of senaryolar; track senaryo.senaryoKodu) {
+            <div class="col-span-12">
+                <div class="card">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h6 class="m-0">{{ senaryo.senaryoKodu }}</h6>
+                            <span class="text-sm">{{ senaryo.aciklama }}</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="text-sm">
+                                Oda: {{ senaryo.toplamOdaSayisi }} | Degisim: {{ senaryo.odaDegisimSayisi }}
+                            </div>
+                            <p-button
+                                [label]="formatCurrency(senaryo.toplamNihaiUcret, senaryo.paraBirimi)"
+                                icon="pi pi-money-bill"
+                                severity="secondary"
+                                [outlined]="true"
+                                size="small"
+                                [disabled]="loadingResults"
+                                (onClick)="openDiscountDialog(senaryo)"
+                            />
+                            @if (canManage) {
+                                <p-button
+                                    label="Bu Senaryo ile Rezerve Et"
+                                    icon="pi pi-check"
+                                    size="small"
+                                    [disabled]="saving"
+                                    (onClick)="reserveScenario(senaryo)"
+                                />
+                            }
+                        </div>
+                    </div>
+
+                    @for (segment of senaryo.segmentler; track $index) {
+                        <div class="mb-3">
+                            <div class="text-sm font-medium mb-2">
+                                Segment {{ $index + 1 }}:
+                                {{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}
+                            </div>
+                            <p-table [value]="segment.odaAtamalari" [tableStyle]="{ 'min-width': '60rem' }">
+                                <ng-template #header>
+                                    <tr>
+                                        <th>Oda No</th>
+                                        <th>Bina</th>
+                                        <th>Oda Tipi</th>
+                                        <th>Ayrilan Kisi</th>
+                                        <th>Kapasite</th>
+                                        <th>Paylasim</th>
+                                    </tr>
+                                </ng-template>
+                                <ng-template #body let-atama>
+                                    <tr>
+                                        <td>{{ atama.odaNo }}</td>
+                                        <td>{{ atama.binaAdi }}</td>
+                                        <td>{{ atama.odaTipiAdi }}</td>
+                                        <td>{{ atama.ayrilanKisiSayisi }}</td>
+                                        <td>{{ atama.kapasite }}</td>
+                                        <td>{{ atama.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}</td>
+                                    </tr>
+                                </ng-template>
+                            </p-table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="card mt-4">
+    <h5 class="m-0 mb-3">Kayitli Rezervasyonlar</h5>
+    @if (loadingRezervasyonlar) {
+        <div>Rezervasyon kayitlari yukleniyor...</div>
+    } @else {
+        <p-table [value]="rezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }">
+            <ng-template #header>
+                <tr>
+                    <th style="width: 4rem"></th>
+                    <th>Referans</th>
+                    <th>Misafir Ad Soyad</th>
+                    <th>TC Kimlik No</th>
+                    <th>Telefon</th>
+                    <th>Eposta</th>
+                    <th>Pasaport</th>
+                    <th>Kisi</th>
+                    <th>Giris</th>
+                    <th>Cikis</th>
+                    <th>Ucret</th>
+                    <th>Durum</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-kayit let-expanded="expanded">
+                <tr>
+                    <td>
+                        <p-button type="button" [pRowToggler]="kayit" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
+                    </td>
+                    <td>{{ kayit.referansNo }}</td>
+                    <td>{{ kayit.misafirAdiSoyadi }}</td>
+                    <td>{{ kayit.tcKimlikNo || '-' }}</td>
+                    <td>{{ kayit.misafirTelefon || '-' }}</td>
+                    <td>{{ kayit.misafirEposta || '-' }}</td>
+                    <td>{{ kayit.pasaportNo || '-' }}</td>
+                    <td>{{ kayit.kisiSayisi }}</td>
+                    <td>{{ formatDateTime(kayit.girisTarihi) }}</td>
+                    <td>{{ formatDateTime(kayit.cikisTarihi) }}</td>
+                    <td>
+                        <p-button
+                            [label]="formatCurrency(kayit.toplamUcret, kayit.paraBirimi)"
+                            icon="pi pi-receipt"
+                            severity="secondary"
+                            [text]="true"
+                            size="small"
+                            (onClick)="openRezervasyonUcretDetay(kayit)"
+                        />
+                    </td>
+                    <td>{{ kayit.rezervasyonDurumu }}</td>
+                </tr>
+            </ng-template>
+            <ng-template #expandedrow let-kayit>
+                <tr>
+                    <td colspan="12">
+                        <div class="p-3">
+                            @if (isRezervasyonDetayLoading(kayit.id)) {
+                                <span class="text-color-secondary">Rezervasyon detayi yukleniyor...</span>
+                            } @else if (!getRezervasyonDetay(kayit.id)) {
+                                <span class="text-color-secondary">Detay kaydi bulunamadi.</span>
+                            } @else {
+                                @for (segment of getRezervasyonDetay(kayit.id)!.segmentler; track segment.segmentSirasi) {
+                                    <div class="mb-3">
+                                        <div class="text-sm font-medium mb-2">
+                                            Segment {{ segment.segmentSirasi }}:
+                                            {{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}
+                                        </div>
+                                        <p-table [value]="segment.odaAtamalari" [tableStyle]="{ 'min-width': '56rem' }">
+                                            <ng-template #header>
+                                                <tr>
+                                                    <th>Oda No</th>
+                                                    <th>Bina</th>
+                                                    <th>Oda Tipi</th>
+                                                    <th>Ayrilan Kisi</th>
+                                                    <th>Kapasite</th>
+                                                    <th>Paylasim</th>
+                                                </tr>
+                                            </ng-template>
+                                            <ng-template #body let-atama>
+                                                <tr>
+                                                    <td>{{ atama.odaNo }}</td>
+                                                    <td>{{ atama.binaAdi }}</td>
+                                                    <td>{{ atama.odaTipiAdi }}</td>
+                                                    <td>{{ atama.ayrilanKisiSayisi }}</td>
+                                                    <td>{{ atama.kapasite }}</td>
+                                                    <td>{{ atama.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}</td>
+                                                </tr>
+                                            </ng-template>
+                                        </p-table>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+</div>
+
+<p-dialog
+    header="Rezervasyon Ucret Detayi"
+    [(visible)]="rezervasyonUcretDetayDialogVisible"
+    [modal]="true"
+    [style]="{ width: '42rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="closeRezervasyonUcretDetayDialog()"
+>
+    @if (rezervasyonUcretDetayRezervasyonId && isRezervasyonDetayLoading(rezervasyonUcretDetayRezervasyonId)) {
+        <div>Ucret detayi yukleniyor...</div>
+    } @else if (!rezervasyonUcretDetayRezervasyonId || !getSelectedRezervasyonUcretDetay()) {
+        <div>Ucret detayi bulunamadi.</div>
+    } @else {
+        <div class="text-sm mb-3">
+            <strong>Referans:</strong> {{ rezervasyonUcretDetayReferansNo }}
+        </div>
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Taban Ucret</div>
+                <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.toplamBazUcret, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Nihai Ucret</div>
+                <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.toplamUcret, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Toplam Indirim</div>
+                <div class="font-semibold">
+                    {{
+                        formatCurrency(
+                            getSelectedRezervasyonUcretDetay()!.toplamBazUcret - getSelectedRezervasyonUcretDetay()!.toplamUcret,
+                            getSelectedRezervasyonUcretDetay()!.paraBirimi
+                        )
+                    }}
+                </div>
+            </div>
+        </div>
+
+        @if (getSelectedRezervasyonUcretDetay()!.uygulananIndirimler.length === 0) {
+            <div class="text-color-secondary">Bu rezervasyona uygulanmis indirim bulunmuyor.</div>
+        } @else {
+            <p-table [value]="getSelectedRezervasyonUcretDetay()!.uygulananIndirimler" [tableStyle]="{ 'min-width': '32rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Kural</th>
+                        <th>Indirim Tutari</th>
+                        <th>Sonrasi Tutar</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-indirim>
+                    <tr>
+                        <td>{{ indirim.kuralAdi }}</td>
+                        <td>{{ formatCurrency(indirim.indirimTutari, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</td>
+                        <td>{{ formatCurrency(indirim.sonrasiTutar, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        }
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closeRezervasyonUcretDetayDialog()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Senaryo Fiyatlandirma ve Indirimler"
+    [(visible)]="discountDialogVisible"
+    [modal]="true"
+    [style]="{ width: '44rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="closeDiscountDialog()"
+>
+    @if (selectedScenarioForDiscount) {
+        <div class="text-sm mb-3">
+            <strong>{{ selectedScenarioForDiscount.senaryoKodu }}</strong> - {{ selectedScenarioForDiscount.aciklama }}
+        </div>
+    }
+
+    <div class="mb-3">
+        <label for="seciliIndirimler" class="block font-medium mb-2">Indirim Kurallari</label>
+        <p-multiSelect
+            inputId="seciliIndirimler"
+            class="w-full"
+            [options]="availableDiscountRules"
+            optionLabel="ad"
+            optionValue="id"
+            [(ngModel)]="selectedDiscountRuleIds"
+            [appendTo]="'body'"
+            [filter]="true"
+            [showClear]="true"
+            [disabled]="loadingDiscountRules || calculatingScenarioPrice"
+            display="chip"
+        />
+    </div>
+
+    @if (scenarioPriceBreakdown) {
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Baz Toplam</div>
+                <div class="font-semibold">{{ formatCurrency(scenarioPriceBreakdown.toplamBazUcret, scenarioPriceBreakdown.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Nihai Toplam</div>
+                <div class="font-semibold">{{ formatCurrency(scenarioPriceBreakdown.toplamNihaiUcret, scenarioPriceBreakdown.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Toplam Indirim</div>
+                <div class="font-semibold">
+                    {{ formatCurrency(scenarioPriceBreakdown.toplamBazUcret - scenarioPriceBreakdown.toplamNihaiUcret, scenarioPriceBreakdown.paraBirimi) }}
+                </div>
+            </div>
+        </div>
+
+        <p-table [value]="scenarioPriceBreakdown.uygulananIndirimler" [tableStyle]="{ 'min-width': '36rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Kural</th>
+                    <th>Indirim Tutari</th>
+                    <th>Sonrasi Tutar</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-indirim>
+                <tr>
+                    <td>{{ indirim.kuralAdi }}</td>
+                    <td>{{ formatCurrency(indirim.indirimTutari, scenarioPriceBreakdown.paraBirimi) }}</td>
+                    <td>{{ formatCurrency(indirim.sonrasiTutar, scenarioPriceBreakdown.paraBirimi) }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="calculatingScenarioPrice" (onClick)="closeDiscountDialog()" />
+        <p-button label="Indirimleri Uygula" icon="pi pi-check" [loading]="calculatingScenarioPrice" [disabled]="loadingDiscountRules" (onClick)="hesaplaSenaryoUcreti()" />
+    </ng-template>
+</p-dialog>

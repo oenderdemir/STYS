@@ -7,6 +7,8 @@ using STYS.AccessScope;
 using STYS.Countries.Mapping;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kullanicilar.Services;
+using STYS.Rezervasyonlar.Repositories;
+using STYS.Rezervasyonlar.Services;
 using STYS.YoneticiAdaylari.Services;
 using TOD.Platform.AspNetCore;
 using TOD.Platform.AspNetCore.Authorization;
@@ -52,6 +54,8 @@ builder.Services.AddScoped<IUserService, StysScopedUserService>();
 builder.Services.AddScoped<IAccessScopeProvider, AccessScopeProvider>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IYoneticiAdayService, YoneticiAdayService>();
+builder.Services.AddScoped<IRezervasyonRepository, RezervasyonRepository>();
+builder.Services.AddScoped<IRezervasyonService, RezervasyonService>();
 
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
 builder.Services.AddTodPlatformAuthorization();

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260305182555_RefactorRezervasyonBookingModel")]
+    partial class RefactorRezervasyonBookingModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1108,11 +1111,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("ParaBirimi")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("nvarchar(3)");
-
                     b.Property<string>("ReferansNo")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1129,17 +1127,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Property<int>("TesisId")
                         .HasColumnType("int");
-
-                    b.Property<decimal>("ToplamBazUcret")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ToplamUcret")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("UygulananIndirimlerJson")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");

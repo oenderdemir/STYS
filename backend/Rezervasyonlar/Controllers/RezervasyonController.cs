@@ -1,0 +1,122 @@
+using Microsoft.AspNetCore.Mvc;
+using STYS.Rezervasyonlar.Dto;
+using STYS.Rezervasyonlar.Services;
+using TOD.Platform.AspNetCore.Authorization;
+using TOD.Platform.AspNetCore.Controllers;
+
+namespace STYS.Rezervasyonlar.Controllers;
+
+public class RezervasyonController : UIController
+{
+    private readonly IRezervasyonService _rezervasyonService;
+
+    public RezervasyonController(IRezervasyonService rezervasyonService)
+    {
+        _rezervasyonService = rezervasyonService;
+    }
+
+    [HttpGet("tesisler")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonTesisDto>>> GetTesisler(CancellationToken cancellationToken)
+    {
+        var tesisler = await _rezervasyonService.GetErisilebilirTesislerAsync(cancellationToken);
+        return Ok(tesisler);
+    }
+
+    [HttpGet("oda-tipleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonOdaTipiDto>>> GetOdaTipleriByTesis([FromQuery] int tesisId, CancellationToken cancellationToken)
+    {
+        var odaTipleri = await _rezervasyonService.GetOdaTipleriByTesisAsync(tesisId, cancellationToken);
+        return Ok(odaTipleri);
+    }
+
+    [HttpGet("misafir-tipleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonMisafirTipiDto>>> GetMisafirTipleri(CancellationToken cancellationToken)
+    {
+        var misafirTipleri = await _rezervasyonService.GetMisafirTipleriAsync(cancellationToken);
+        return Ok(misafirTipleri);
+    }
+
+    [HttpGet("konaklama-tipleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonKonaklamaTipiDto>>> GetKonaklamaTipleri(CancellationToken cancellationToken)
+    {
+        var konaklamaTipleri = await _rezervasyonService.GetKonaklamaTipleriAsync(cancellationToken);
+        return Ok(konaklamaTipleri);
+    }
+
+    [HttpGet("indirim-kurallari")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonIndirimKuraliSecenekDto>>> GetIndirimKurallari(
+        [FromQuery] int tesisId,
+        [FromQuery] int misafirTipiId,
+        [FromQuery] int konaklamaTipiId,
+        [FromQuery] DateTime baslangicTarihi,
+        [FromQuery] DateTime bitisTarihi,
+        CancellationToken cancellationToken)
+    {
+        var indirimKurallari = await _rezervasyonService.GetUygulanabilirIndirimKurallariAsync(
+            tesisId,
+            misafirTipiId,
+            konaklamaTipiId,
+            baslangicTarihi,
+            bitisTarihi,
+            cancellationToken);
+        return Ok(indirimKurallari);
+    }
+
+    [HttpGet("kayitlar")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonListeDto>>> GetKayitlar([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var kayitlar = await _rezervasyonService.GetRezervasyonlarAsync(tesisId, cancellationToken);
+        return Ok(kayitlar);
+    }
+
+    [HttpGet("kayitlar/{rezervasyonId:int}/detay")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<RezervasyonDetayDto>> GetDetay([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var detay = await _rezervasyonService.GetRezervasyonDetayAsync(rezervasyonId, cancellationToken);
+        if (detay is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(detay);
+    }
+
+    [HttpPost("uygun-odalar")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<UygunOdaDto>>> GetUygunOdalar([FromBody] UygunOdaAramaRequestDto request, CancellationToken cancellationToken)
+    {
+        var uygunOdalar = await _rezervasyonService.GetUygunOdalarAsync(request, cancellationToken);
+        return Ok(uygunOdalar);
+    }
+
+    [HttpPost("senaryo-ara")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<KonaklamaSenaryoDto>>> GetKonaklamaSenaryolari([FromBody] KonaklamaSenaryoAramaRequestDto request, CancellationToken cancellationToken)
+    {
+        var senaryolar = await _rezervasyonService.GetKonaklamaSenaryolariAsync(request, cancellationToken);
+        return Ok(senaryolar);
+    }
+
+    [HttpPost("senaryo-fiyat-hesapla")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<SenaryoFiyatHesaplamaSonucuDto>> HesaplaSenaryoFiyati([FromBody] SenaryoFiyatHesaplaRequestDto request, CancellationToken cancellationToken)
+    {
+        var sonuc = await _rezervasyonService.HesaplaSenaryoFiyatiAsync(request, cancellationToken);
+        return Ok(sonuc);
+    }
+
+    [HttpPost]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKayitSonucDto>> Create([FromBody] RezervasyonKaydetRequestDto request, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetAsync(request, cancellationToken);
+        return Ok(result);
+    }
+}

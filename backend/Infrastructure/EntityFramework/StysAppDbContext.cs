@@ -12,6 +12,7 @@ using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
 using STYS.OdaTipleri.Entities;
+using STYS.Rezervasyonlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
@@ -50,6 +51,9 @@ public class StysAppDbContext : DbContext
     public DbSet<IndirimKurali> IndirimKurallari => Set<IndirimKurali>();
     public DbSet<IndirimKuraliMisafirTipi> IndirimKuraliMisafirTipleri => Set<IndirimKuraliMisafirTipi>();
     public DbSet<IndirimKuraliKonaklamaTipi> IndirimKuraliKonaklamaTipleri => Set<IndirimKuraliKonaklamaTipi>();
+    public DbSet<Rezervasyon> Rezervasyonlar => Set<Rezervasyon>();
+    public DbSet<RezervasyonSegment> RezervasyonSegmentleri => Set<RezervasyonSegment>();
+    public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
 
     public override int SaveChanges()
     {
@@ -406,6 +410,73 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KonaklamaTipi)
                 .WithMany(x => x.IndirimKuralKonaklamaTipleri)
                 .HasForeignKey(x => x.KonaklamaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Rezervasyon>(entity =>
+        {
+            entity.ToTable("Rezervasyonlar", "dbo");
+            entity.Property(x => x.ReferansNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.MisafirAdiSoyadi).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.MisafirTelefon).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.MisafirEposta).HasMaxLength(256);
+            entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
+            entity.Property(x => x.PasaportNo).HasMaxLength(32);
+            entity.Property(x => x.Notlar).HasMaxLength(1024);
+            entity.Property(x => x.ToplamBazUcret).HasPrecision(18, 2);
+            entity.Property(x => x.ToplamUcret).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.UygulananIndirimlerJson).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.RezervasyonDurumu).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => x.ReferansNo)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.GirisTarihi, x.CikisTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.RezervasyonDurumu)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonSegment>(entity =>
+        {
+            entity.ToTable("RezervasyonSegmentleri", "dbo");
+            entity.HasIndex(x => new { x.RezervasyonId, x.SegmentSirasi })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.BaslangicTarihi, x.BitisTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.Segmentler)
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonSegmentOdaAtama>(entity =>
+        {
+            entity.ToTable("RezervasyonSegmentOdaAtamalari", "dbo");
+            entity.Property(x => x.OdaNoSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.BinaAdiSnapshot).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.OdaTipiAdiSnapshot).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.RezervasyonSegmentId, x.OdaId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.OdaId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.RezervasyonSegment)
+                .WithMany(x => x.OdaAtamalari)
+                .HasForeignKey(x => x.RezervasyonSegmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Oda)
+                .WithMany()
+                .HasForeignKey(x => x.OdaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

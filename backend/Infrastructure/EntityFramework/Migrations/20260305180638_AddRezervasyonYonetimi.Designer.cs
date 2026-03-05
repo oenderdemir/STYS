@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260305180638_AddRezervasyonYonetimi")]
+    partial class AddRezervasyonYonetimi
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1086,60 +1089,21 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int>("KisiSayisi")
                         .HasColumnType("int");
 
-                    b.Property<string>("MisafirAdiSoyadi")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                    b.Property<int>("OdaId")
+                        .HasColumnType("int");
 
-                    b.Property<string>("MisafirEposta")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                    b.Property<string>("OdaNoSnapshot")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("MisafirTelefon")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<string>("Notlar")
-                        .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)");
-
-                    b.Property<string>("PasaportNo")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<string>("ParaBirimi")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("nvarchar(3)");
+                    b.Property<string>("OdaTipiAdiSnapshot")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.Property<string>("ReferansNo")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("RezervasyonDurumu")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<string>("TcKimlikNo")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.Property<int>("TesisId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("ToplamBazUcret")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ToplamUcret")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("UygulananIndirimlerJson")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -1153,137 +1117,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.HasIndex("RezervasyonDurumu")
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.HasIndex("TesisId", "GirisTarihi", "CikisTarihi")
+                    b.HasIndex("OdaId", "GirisTarihi", "CikisTarihi")
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("Rezervasyonlar", "dbo");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonSegment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("BaslangicTarihi")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("BitisTarihi")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("RezervasyonId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SegmentSirasi")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BaslangicTarihi", "BitisTarihi")
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.HasIndex("RezervasyonId", "SegmentSirasi")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.ToTable("RezervasyonSegmentleri", "dbo");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonSegmentOdaAtama", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AyrilanKisiSayisi")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BinaAdiSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("KapasiteSnapshot")
-                        .HasColumnType("int");
-
-                    b.Property<int>("OdaId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("OdaNoSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("OdaTipiAdiSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<bool>("PaylasimliMiSnapshot")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("RezervasyonSegmentId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OdaId")
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.HasIndex("RezervasyonSegmentId", "OdaId")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.ToTable("RezervasyonSegmentOdaAtamalari", "dbo");
                 });
 
             modelBuilder.Entity("STYS.Tesisler.Entities.Tesis", b =>
@@ -1641,43 +1478,13 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
                 {
-                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
-                        .WithMany()
-                        .HasForeignKey("TesisId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Tesis");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonSegment", b =>
-                {
-                    b.HasOne("STYS.Rezervasyonlar.Entities.Rezervasyon", "Rezervasyon")
-                        .WithMany("Segmentler")
-                        .HasForeignKey("RezervasyonId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Rezervasyon");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonSegmentOdaAtama", b =>
-                {
                     b.HasOne("STYS.Odalar.Entities.Oda", "Oda")
                         .WithMany()
                         .HasForeignKey("OdaId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("STYS.Rezervasyonlar.Entities.RezervasyonSegment", "RezervasyonSegment")
-                        .WithMany("OdaAtamalari")
-                        .HasForeignKey("RezervasyonSegmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.Navigation("Oda");
-
-                    b.Navigation("RezervasyonSegment");
                 });
 
             modelBuilder.Entity("STYS.Tesisler.Entities.Tesis", b =>
@@ -1773,16 +1580,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("STYS.Odalar.Entities.Oda", b =>
                 {
                     b.Navigation("OdaOzellikDegerleri");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
-                {
-                    b.Navigation("Segmentler");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonSegment", b =>
-                {
-                    b.Navigation("OdaAtamalari");
                 });
 
             modelBuilder.Entity("STYS.Tesisler.Entities.Tesis", b =>

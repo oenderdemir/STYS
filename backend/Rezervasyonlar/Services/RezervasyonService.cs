@@ -1203,16 +1203,29 @@ public class RezervasyonService : IRezervasyonService
             return null;
         }
 
-        var firstRoomIds = firstAllocations.Select(x => x.OdaId).OrderBy(x => x).ToArray();
-        var secondRoomIds = secondAllocations.Select(x => x.OdaId).OrderBy(x => x).ToArray();
-        var roomChanges = firstRoomIds.SequenceEqual(secondRoomIds) ? 0 : 1;
+        var firstPattern = firstAllocations
+            .OrderBy(x => x.OdaId)
+            .ThenBy(x => x.AyrilanKisiSayisi)
+            .Select(x => $"{x.OdaId}:{x.AyrilanKisiSayisi}")
+            .ToArray();
+        var secondPattern = secondAllocations
+            .OrderBy(x => x.OdaId)
+            .ThenBy(x => x.AyrilanKisiSayisi)
+            .Select(x => $"{x.OdaId}:{x.AyrilanKisiSayisi}")
+            .ToArray();
+
+        // Segmentler arasi oda/dağılım aynıysa segmentli senaryo anlamlı değildir.
+        if (firstPattern.SequenceEqual(secondPattern))
+        {
+            return null;
+        }
 
         return new KonaklamaSenaryoDto
         {
             SenaryoKodu = "SENARYO-X",
             Aciklama = "Iki segmentli konaklama (oda degisimi olabilir)",
             ToplamOdaSayisi = firstAllocations.Select(x => x.OdaId).Union(secondAllocations.Select(x => x.OdaId)).Count(),
-            OdaDegisimSayisi = roomChanges,
+            OdaDegisimSayisi = 1,
             Segmentler =
             [
                 new KonaklamaSenaryoSegmentDto

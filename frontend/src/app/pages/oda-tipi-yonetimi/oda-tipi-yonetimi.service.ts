@@ -12,11 +12,14 @@ export class OdaTipiYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getOdaTipleriPaged(pageNumber: number, pageSize: number, query: string, sortBy: string, sortDir: SortDirection): Observable<PagedResponseDto<OdaTipiDto>> {
+    getOdaTipleriPaged(pageNumber: number, pageSize: number, query: string, tesisId: number | null, sortBy: string, sortDir: SortDirection): Observable<PagedResponseDto<OdaTipiDto>> {
         let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize).set('sortBy', sortBy).set('sortDir', sortDir);
         const normalizedQuery = query.trim();
         if (normalizedQuery.length > 0) {
             params = params.set('q', normalizedQuery);
+        }
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
         }
 
         return this.http.get<ApiResponse<PagedResponseDto<OdaTipiDto>>>(`${this.apiBaseUrl}/ui/odatipi/paged`, { params }).pipe(

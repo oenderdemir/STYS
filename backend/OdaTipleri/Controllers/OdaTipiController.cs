@@ -29,6 +29,7 @@ public class OdaTipiController : UIController
     public async Task<ActionResult<PagedResult<OdaTipiDto>>> GetPaged(
         [FromQuery] PagedRequest request,
         [FromQuery(Name = "q")] string? query,
+        [FromQuery] int? tesisId,
         [FromQuery] string? sortBy,
         [FromQuery] string? sortDir = "asc")
     {
@@ -39,11 +40,27 @@ public class OdaTipiController : UIController
         }
 
         var normalizedQuery = query?.Trim();
+        System.Linq.Expressions.Expression<Func<STYS.OdaTipleri.Entities.OdaTipi, bool>>? predicate = null;
+        if (!string.IsNullOrWhiteSpace(normalizedQuery) && tesisId.HasValue && tesisId.Value > 0)
+        {
+            var localQuery = normalizedQuery;
+            var localTesisId = tesisId.Value;
+            predicate = x => x.TesisId == localTesisId && x.Ad.Contains(localQuery);
+        }
+        else if (!string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            var localQuery = normalizedQuery;
+            predicate = x => x.Ad.Contains(localQuery);
+        }
+        else if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            var localTesisId = tesisId.Value;
+            predicate = x => x.TesisId == localTesisId;
+        }
+
         var result = await _odaTipiService.GetPagedAsync(
             request,
-            predicate: string.IsNullOrWhiteSpace(normalizedQuery)
-                ? null
-                : x => x.Ad.Contains(normalizedQuery),
+            predicate: predicate,
             orderBy: orderBy ?? (q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
         return Ok(result);
     }

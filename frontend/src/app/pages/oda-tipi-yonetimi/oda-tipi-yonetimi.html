@@ -28,7 +28,25 @@
 >
     <ng-template #caption>
         <div class="flex items-center justify-between">
-            <h5 class="m-0">Oda Tipi Yonetimi</h5>
+            <div class="flex items-center gap-3">
+                <h5 class="m-0">Oda Tipi Yonetimi</h5>
+                <div class="flex items-center gap-2">
+                    <label for="odaTipiTesisFilter" class="text-sm">Tesis</label>
+                    <p-select
+                        inputId="odaTipiTesisFilter"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        appendTo="body"
+                        [filter]="true"
+                        [showClear]="true"
+                        placeholder="Tum Tesisler"
+                        styleClass="w-16rem"
+                        (ngModelChange)="onTesisFilterChange()"
+                    />
+                </div>
+            </div>
             <p-iconfield>
                 <p-inputicon styleClass="pi pi-search" />
                 <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ara..." (input)="onSearchInput($event)" />

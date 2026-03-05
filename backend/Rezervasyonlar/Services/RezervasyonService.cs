@@ -367,16 +367,7 @@ public class RezervasyonService : IRezervasyonService
         var distinct = scenarios
             .GroupBy(CreateScenarioKey)
             .Select(group => group.First())
-            .OrderBy(x => x.ToplamOdaSayisi)
-            .ThenBy(x => x.OdaDegisimSayisi)
-            .ThenBy(x => x.SenaryoKodu)
-            .Take(5)
             .ToList();
-
-        for (var i = 0; i < distinct.Count; i++)
-        {
-            distinct[i].SenaryoKodu = $"SENARYO-{i + 1}";
-        }
 
         foreach (var scenario in distinct)
         {
@@ -404,7 +395,20 @@ public class RezervasyonService : IRezervasyonService
             scenario.ParaBirimi = pricing.ParaBirimi;
         }
 
-        return distinct;
+        var sortedByPrice = distinct
+            .OrderBy(x => x.ToplamNihaiUcret)
+            .ThenBy(x => x.ToplamBazUcret)
+            .ThenBy(x => x.ToplamOdaSayisi)
+            .ThenBy(x => x.OdaDegisimSayisi)
+            .Take(5)
+            .ToList();
+
+        for (var i = 0; i < sortedByPrice.Count; i++)
+        {
+            sortedByPrice[i].SenaryoKodu = $"SENARYO-{i + 1}";
+        }
+
+        return sortedByPrice;
     }
 
     public Task<SenaryoFiyatHesaplamaSonucuDto> HesaplaSenaryoFiyatiAsync(SenaryoFiyatHesaplaRequestDto request, CancellationToken cancellationToken = default)

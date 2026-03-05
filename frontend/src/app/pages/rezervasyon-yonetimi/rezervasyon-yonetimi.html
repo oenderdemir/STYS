@@ -13,7 +13,7 @@
     <h5 class="m-0 mb-3">Rezervasyon Yonetimi</h5>
 
     <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="rezTesis" class="block font-medium mb-2">Tesis</label>
             <p-select
                 inputId="rezTesis"
@@ -30,7 +30,7 @@
             />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="rezOdaTipi" class="block font-medium mb-2">Oda Tipi (Opsiyonel)</label>
             <p-select
                 inputId="rezOdaTipi"
@@ -47,7 +47,7 @@
             />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="rezMisafirTipi" class="block font-medium mb-2">Misafir Tipi</label>
             <p-select
                 inputId="rezMisafirTipi"
@@ -63,7 +63,7 @@
             />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="rezKonaklamaTipi" class="block font-medium mb-2">Konaklama Tipi</label>
             <p-select
                 inputId="rezKonaklamaTipi"
@@ -79,24 +79,27 @@
             />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
             <label for="rezKisiSayisi" class="block font-medium mb-2">Kisi Sayisi</label>
             <input pInputText id="rezKisiSayisi" class="w-full" type="number" min="1" [(ngModel)]="kisiSayisi" [disabled]="loadingReferences || loadingResults" />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+        <div class="col-span-12 md:col-span-4 lg:col-span-5">
             <label for="rezBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
             <input pInputText id="rezBaslangic" class="w-full" type="datetime-local" [(ngModel)]="baslangicTarihi" [disabled]="loadingReferences || loadingResults" />
         </div>
 
-        <div class="col-span-12 md:col-span-6 lg:col-span-1">
+        <div class="col-span-12 md:col-span-4 lg:col-span-5">
             <label for="rezBitis" class="block font-medium mb-2">Bitis Tarihi</label>
             <input pInputText id="rezBitis" class="w-full" type="datetime-local" [(ngModel)]="bitisTarihi" [disabled]="loadingReferences || loadingResults" />
         </div>
     </div>
 
     <div class="grid grid-cols-12 gap-4 mt-4">
-        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="misafirAdiSoyadi" class="block font-medium mb-2">Misafir Adi Soyadi</label>
             <input pInputText id="misafirAdiSoyadi" class="w-full" [(ngModel)]="misafirAdiSoyadi" [disabled]="loadingResults || saving" />
         </div>
@@ -108,7 +111,7 @@
             <label for="misafirEposta" class="block font-medium mb-2">Misafir Eposta</label>
             <input pInputText id="misafirEposta" class="w-full" [(ngModel)]="misafirEposta" [disabled]="loadingResults || saving" />
         </div>
-        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="tcKimlikNo" class="block font-medium mb-2">TC Kimlik No</label>
             <input pInputText id="tcKimlikNo" class="w-full" [(ngModel)]="tcKimlikNo" [disabled]="loadingResults || saving" />
         </div>

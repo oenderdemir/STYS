@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
@@ -16,6 +16,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.Security", "platform\TOD.Platform.Security\TOD.Platform.Security.csproj", "{725F230F-948A-4BFE-AFF2-138DB5173D69}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TOD.Platform.Identity", "platform\TOD.Platform.Identity\TOD.Platform.Identity.csproj", "{DFB6151F-6BDE-4C5F-8E01-A966086FD168}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "STYS.Tests", "tests\STYS.Tests\STYS.Tests.csproj", "{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -99,6 +103,18 @@ Global
 		{DFB6151F-6BDE-4C5F-8E01-A966086FD168}.Release|x64.Build.0 = Release|Any CPU
 		{DFB6151F-6BDE-4C5F-8E01-A966086FD168}.Release|x86.ActiveCfg = Release|Any CPU
 		{DFB6151F-6BDE-4C5F-8E01-A966086FD168}.Release|x86.Build.0 = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|x64.Build.0 = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Debug|x86.Build.0 = Debug|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|x64.ActiveCfg = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|x64.Build.0 = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|x86.ActiveCfg = Release|Any CPU
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -109,6 +125,7 @@ Global
 		{FB01EAD3-72BD-45AB-9B2C-3B3E076B1ADD} = {E54149B9-7F22-367F-9CC5-FD829E3AA07B}
 		{725F230F-948A-4BFE-AFF2-138DB5173D69} = {E54149B9-7F22-367F-9CC5-FD829E3AA07B}
 		{DFB6151F-6BDE-4C5F-8E01-A966086FD168} = {E54149B9-7F22-367F-9CC5-FD829E3AA07B}
+		{ECD94B2B-955D-4A48-AB2E-DD3AEED71716} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {693B50AF-E74F-494C-9B81-93B237C623B3}

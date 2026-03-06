@@ -618,38 +618,45 @@ public class RezervasyonService : IRezervasyonService
         var currency = string.Empty;
         var baseTotal = 0m;
 
-        foreach (var segment in segmentler)
+        foreach (var chargeWindow in EnumerateChargeWindows(
+                     baslangicTarihi,
+                     bitisTarihi,
+                     tesisSaatleri.GirisSaati,
+                     tesisSaatleri.CikisSaati))
         {
-            foreach (var day in EnumerateChargeDays(
-                         segment.BaslangicTarihi,
-                         segment.BitisTarihi,
-                         tesisSaatleri.GirisSaati,
-                         tesisSaatleri.CikisSaati))
+            var aktifSegment = segmentler
+                .Where(x => x.BaslangicTarihi <= chargeWindow.WindowStart && x.BitisTarihi > chargeWindow.WindowStart)
+                .OrderByDescending(x => x.BaslangicTarihi)
+                .FirstOrDefault();
+
+            if (aktifSegment is null)
             {
-                foreach (var atama in segment.OdaAtamalari)
+                throw new BaseException($"Senaryo icin {chargeWindow.ChargeDay:yyyy-MM-dd} tarihinde aktif segment bulunamadi.", 400);
+            }
+
+            foreach (var atama in aktifSegment.OdaAtamalari)
+            {
+                var odaTipiId = roomTypeByRoomId[atama.OdaId];
+                var fiyat = fiyatKayitlari.FirstOrDefault(x =>
+                    x.TesisOdaTipiId == odaTipiId
+                    && x.BaslangicTarihi.Date <= chargeWindow.ChargeDay
+                    && x.BitisTarihi.Date >= chargeWindow.ChargeDay);
+
+                if (fiyat is null)
                 {
-                    var odaTipiId = roomTypeByRoomId[atama.OdaId];
-                    var fiyat = fiyatKayitlari.FirstOrDefault(x =>
-                        x.TesisOdaTipiId == odaTipiId
-                        && x.BaslangicTarihi.Date <= day
-                        && x.BitisTarihi.Date >= day);
-
-                    if (fiyat is null)
-                    {
-                        throw new BaseException($"Senaryo icin {day:yyyy-MM-dd} tarihinde uygun oda fiyati bulunamadi.", 400);
-                    }
-
-                    if (string.IsNullOrWhiteSpace(currency))
-                    {
-                        currency = fiyat.ParaBirimi;
-                    }
-                    else if (!currency.Equals(fiyat.ParaBirimi, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new BaseException("Senaryo fiyatlari birden fazla para birimi iceriyor.", 400);
-                    }
-
-                    baseTotal += fiyat.Fiyat * atama.AyrilanKisiSayisi;
+                    throw new BaseException($"Senaryo icin {chargeWindow.ChargeDay:yyyy-MM-dd} tarihinde uygun oda fiyati bulunamadi.", 400);
                 }
+
+                if (string.IsNullOrWhiteSpace(currency))
+                {
+                    currency = fiyat.ParaBirimi;
+                }
+                else if (!currency.Equals(fiyat.ParaBirimi, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BaseException("Senaryo fiyatlari birden fazla para birimi iceriyor.", 400);
+                }
+
+                baseTotal += fiyat.Fiyat * atama.AyrilanKisiSayisi;
             }
         }
 
@@ -766,7 +773,7 @@ public class RezervasyonService : IRezervasyonService
         return Math.Min(currentAmount, Math.Max(0, discount));
     }
 
-    private static IEnumerable<DateTime> EnumerateChargeDays(
+    private static IEnumerable<(DateTime ChargeDay, DateTime WindowStart)> EnumerateChargeWindows(
         DateTime baslangic,
         DateTime bitis,
         TimeSpan girisSaati,
@@ -784,7 +791,7 @@ public class RezervasyonService : IRezervasyonService
         // Ilk gun: giris saati -> ertesi gun cikis saati
         if (bitis > firstWindowStart && baslangic < firstWindowEnd)
         {
-            yield return startDate;
+            yield return (startDate, firstWindowStart);
         }
 
         // Sonraki gunler: cikis saati -> ertesi gun cikis saati
@@ -793,7 +800,7 @@ public class RezervasyonService : IRezervasyonService
             var windowEnd = windowStart.AddDays(1);
             if (bitis > windowStart && baslangic < windowEnd)
             {
-                yield return windowStart.Date;
+                yield return (windowStart.Date, windowStart);
             }
         }
     }

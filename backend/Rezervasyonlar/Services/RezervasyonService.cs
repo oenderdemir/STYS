@@ -590,6 +590,15 @@ public class RezervasyonService : IRezervasyonService
 
         var roomTypeIds = roomMaps.Select(x => x.OdaTipiId).Distinct().ToList();
         var roomTypeByRoomId = roomMaps.ToDictionary(x => x.OdaId, x => x.OdaTipiId);
+        var tesisSaatleri = await _stysDbContext.Tesisler
+            .Where(x => x.Id == tesisId)
+            .Select(x => new { x.GirisSaati, x.CikisSaati })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tesisSaatleri is null)
+        {
+            throw new BaseException("Tesis bulunamadi.", 404);
+        }
 
         var minDate = segmentler.Min(x => x.BaslangicTarihi).Date;
         var maxDate = segmentler.Max(x => x.BitisTarihi).Date;
@@ -611,7 +620,11 @@ public class RezervasyonService : IRezervasyonService
 
         foreach (var segment in segmentler)
         {
-            foreach (var day in EnumerateChargeDays(segment.BaslangicTarihi, segment.BitisTarihi))
+            foreach (var day in EnumerateChargeDays(
+                         segment.BaslangicTarihi,
+                         segment.BitisTarihi,
+                         tesisSaatleri.GirisSaati,
+                         tesisSaatleri.CikisSaati))
             {
                 foreach (var atama in segment.OdaAtamalari)
                 {
@@ -753,20 +766,35 @@ public class RezervasyonService : IRezervasyonService
         return Math.Min(currentAmount, Math.Max(0, discount));
     }
 
-    private static IEnumerable<DateTime> EnumerateChargeDays(DateTime baslangic, DateTime bitis)
+    private static IEnumerable<DateTime> EnumerateChargeDays(
+        DateTime baslangic,
+        DateTime bitis,
+        TimeSpan girisSaati,
+        TimeSpan cikisSaati)
     {
-        var start = baslangic.Date;
-        var end = bitis.Date;
-
-        if (end <= start)
+        if (bitis <= baslangic)
         {
-            yield return start;
             yield break;
         }
 
-        for (var day = start; day < end; day = day.AddDays(1))
+        var startDate = baslangic.Date;
+        var firstWindowStart = startDate.Add(girisSaati);
+        var firstWindowEnd = startDate.AddDays(1).Add(cikisSaati);
+
+        // Ilk gun: giris saati -> ertesi gun cikis saati
+        if (bitis > firstWindowStart && baslangic < firstWindowEnd)
         {
-            yield return day;
+            yield return startDate;
+        }
+
+        // Sonraki gunler: cikis saati -> ertesi gun cikis saati
+        for (var windowStart = firstWindowEnd; windowStart < bitis; windowStart = windowStart.AddDays(1))
+        {
+            var windowEnd = windowStart.AddDays(1);
+            if (bitis > windowStart && baslangic < windowEnd)
+            {
+                yield return windowStart.Date;
+            }
         }
     }
 

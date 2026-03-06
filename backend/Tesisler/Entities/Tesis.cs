@@ -25,6 +25,10 @@ public class Tesis : BaseEntity<int>
     [MaxLength(256)]
     public string? Eposta { get; set; }
 
+    public TimeSpan GirisSaati { get; set; } = new(14, 0, 0);
+
+    public TimeSpan CikisSaati { get; set; } = new(10, 0, 0);
+
     public bool AktifMi { get; set; } = true;
 
     public Il? Il { get; set; }

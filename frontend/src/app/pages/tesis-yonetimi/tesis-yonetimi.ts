@@ -255,6 +255,8 @@ export class TesisYonetimi implements OnDestroy {
             telefon: '',
             adres: '',
             eposta: null,
+            girisSaati: '14:00',
+            cikisSaati: '10:00',
             aktifMi: true,
             yoneticiUserIds: null,
             resepsiyonistUserIds: null
@@ -264,6 +266,8 @@ export class TesisYonetimi implements OnDestroy {
     private cloneTesis(source: TesisDto): TesisDto {
         return {
             ...source,
+            girisSaati: source.girisSaati ?? '14:00',
+            cikisSaati: source.cikisSaati ?? '10:00',
             yoneticiUserIds: [...(source.yoneticiUserIds ?? [])],
             resepsiyonistUserIds: [...(source.resepsiyonistUserIds ?? [])]
         };

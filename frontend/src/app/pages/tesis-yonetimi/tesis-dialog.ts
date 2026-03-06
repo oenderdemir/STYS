@@ -59,6 +59,14 @@ import { TesisDto } from './tesis-yonetimi.dto';
                     <label for="eposta" class="block font-medium mb-2">Eposta</label>
                     <input id="eposta" pInputText [(ngModel)]="workingModel.eposta" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
+                <div class="col-span-12 md:col-span-3">
+                    <label for="girisSaati" class="block font-medium mb-2">Giris Saati</label>
+                    <input id="girisSaati" pInputText type="time" [(ngModel)]="workingModel.girisSaati" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <label for="cikisSaati" class="block font-medium mb-2">Cikis Saati</label>
+                    <input id="cikisSaati" pInputText type="time" [(ngModel)]="workingModel.cikisSaati" class="w-full" [disabled]="isReadOnly || saving" />
+                </div>
                 <div class="col-span-12">
                     <label for="adres" class="block font-medium mb-2">Adres</label>
                     <input id="adres" pInputText [(ngModel)]="workingModel.adres" class="w-full" [disabled]="isReadOnly || saving" />
@@ -117,7 +125,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
     @Input() iller: IlDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
@@ -130,7 +138,7 @@ export class TesisDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
@@ -204,7 +212,9 @@ export class TesisDialog implements OnChanges {
         return (this.workingModel.ad?.trim() ?? '').length > 0
             && !!this.workingModel.ilId
             && (this.workingModel.telefon?.trim() ?? '').length > 0
-            && (this.workingModel.adres?.trim() ?? '').length > 0;
+            && (this.workingModel.adres?.trim() ?? '').length > 0
+            && (this.workingModel.girisSaati?.trim() ?? '').length > 0
+            && (this.workingModel.cikisSaati?.trim() ?? '').length > 0;
     }
 
     submit(): void {
@@ -219,6 +229,8 @@ export class TesisDialog implements OnChanges {
             telefon: this.workingModel.telefon.trim(),
             adres: this.workingModel.adres.trim(),
             eposta: this.workingModel.eposta?.trim() || null,
+            girisSaati: this.normalizeSaat(this.workingModel.girisSaati, '14:00'),
+            cikisSaati: this.normalizeSaat(this.workingModel.cikisSaati, '10:00'),
             aktifMi: this.workingModel.aktifMi,
             yoneticiUserIds: this.canAssignTesisYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
             resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null
@@ -246,8 +258,19 @@ export class TesisDialog implements OnChanges {
     private cloneModel(model: TesisDto): TesisDto {
         return {
             ...model,
+            girisSaati: this.normalizeSaat(model.girisSaati, '14:00'),
+            cikisSaati: this.normalizeSaat(model.cikisSaati, '10:00'),
             yoneticiUserIds: [...(model.yoneticiUserIds ?? [])],
             resepsiyonistUserIds: [...(model.resepsiyonistUserIds ?? [])]
         };
+    }
+
+    private normalizeSaat(value: string | null | undefined, fallback: string): string {
+        const normalized = (value ?? '').trim();
+        if (/^\d{2}:\d{2}$/.test(normalized)) {
+            return normalized;
+        }
+
+        return fallback;
     }
 }

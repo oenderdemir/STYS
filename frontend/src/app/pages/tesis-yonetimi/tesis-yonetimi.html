@@ -41,6 +41,8 @@
             <th pSortableColumn="ad">Tesis Adi <p-sortIcon field="ad" /></th>
             <th pSortableColumn="ilId">Il <p-sortIcon field="ilId" /></th>
             <th pSortableColumn="telefon">Telefon <p-sortIcon field="telefon" /></th>
+            <th pSortableColumn="girisSaati">Giris <p-sortIcon field="girisSaati" /></th>
+            <th pSortableColumn="cikisSaati">Cikis <p-sortIcon field="cikisSaati" /></th>
             <th pSortableColumn="adres">Adres <p-sortIcon field="adres" /></th>
             <th pSortableColumn="aktifMi">Durum <p-sortIcon field="aktifMi" /></th>
             <th style="width: 18rem">Islem</th>
@@ -52,6 +54,8 @@
             <td>{{ tesis.ad }}</td>
             <td>{{ getIlAdi(tesis.ilId) }}</td>
             <td>{{ tesis.telefon }}</td>
+            <td>{{ tesis.girisSaati }}</td>
+            <td>{{ tesis.cikisSaati }}</td>
             <td>{{ tesis.adres }}</td>
             <td>{{ tesis.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>

@@ -5,6 +5,8 @@ export interface TesisDto {
     telefon: string;
     adres: string;
     eposta?: string | null;
+    girisSaati: string;
+    cikisSaati: string;
     aktifMi: boolean;
     yoneticiUserIds?: string[] | null;
     resepsiyonistUserIds?: string[] | null;

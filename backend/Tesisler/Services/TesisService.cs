@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Linq.Expressions;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
@@ -202,6 +203,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingEntity.Telefon = dto.Telefon;
         existingEntity.Adres = dto.Adres;
         existingEntity.Eposta = dto.Eposta;
+        existingEntity.GirisSaati = ParseSaat(dto.GirisSaati, "Giris saati", new TimeSpan(14, 0, 0));
+        existingEntity.CikisSaati = ParseSaat(dto.CikisSaati, "Cikis saati", new TimeSpan(10, 0, 0));
         existingEntity.AktifMi = dto.AktifMi;
 
         if (managerIds is not null)
@@ -326,6 +329,23 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         dto.Telefon = dto.Telefon.Trim();
         dto.Adres = dto.Adres.Trim();
         dto.Eposta = string.IsNullOrWhiteSpace(dto.Eposta) ? null : dto.Eposta.Trim();
+        dto.GirisSaati = ParseSaat(dto.GirisSaati, "Giris saati", new TimeSpan(14, 0, 0)).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+        dto.CikisSaati = ParseSaat(dto.CikisSaati, "Cikis saati", new TimeSpan(10, 0, 0)).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+    }
+
+    private static TimeSpan ParseSaat(string? value, string fieldName, TimeSpan fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        if (TimeSpan.TryParseExact(value.Trim(), @"hh\:mm", CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new BaseException($"{fieldName} HH:mm formatinda olmalidir.", 400);
     }
 
     private async Task EnsureCanAccessTesisAsync(int tesisId)

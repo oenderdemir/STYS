@@ -96,6 +96,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Telefon).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Adres).HasMaxLength(512).IsRequired();
             entity.Property(x => x.Eposta).HasMaxLength(256);
+            entity.Property(x => x.GirisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(14, 0, 0));
+            entity.Property(x => x.CikisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(10, 0, 0));
 
             entity.HasIndex(x => new { x.IlId, x.Ad })
                 .IsUnique()

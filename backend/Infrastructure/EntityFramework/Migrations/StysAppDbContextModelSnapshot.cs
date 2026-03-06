@@ -1323,6 +1323,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<TimeSpan>("CikisSaati")
+                        .HasColumnType("time(0)")
+                        .HasDefaultValue(new TimeSpan(10, 0, 0));
+
+                    b.Property<TimeSpan>("GirisSaati")
+                        .HasColumnType("time(0)")
+                        .HasDefaultValue(new TimeSpan(14, 0, 0));
+
                     b.Property<int>("IlId")
                         .HasColumnType("int");
 

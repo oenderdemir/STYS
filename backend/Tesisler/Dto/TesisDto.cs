@@ -19,6 +19,12 @@ public class TesisDto : BaseRdbmsDto<int>
 
     public string? Eposta { get; set; }
 
+    [Required]
+    public string GirisSaati { get; set; } = "14:00";
+
+    [Required]
+    public string CikisSaati { get; set; } = "10:00";
+
     public bool AktifMi { get; set; } = true;
 
     public ICollection<Guid>? YoneticiUserIds { get; set; }

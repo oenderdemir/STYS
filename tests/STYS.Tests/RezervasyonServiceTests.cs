@@ -240,6 +240,61 @@ public class RezervasyonServiceTests
         Assert.Equal(5500m, roomSwitchScenario.ToplamNihaiUcret);
     }
 
+    [Fact]
+    public async Task SenaryoUretimi_StandartVePaylasimliOdadaTumSonuclariDogruDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedStandardAndSharedRoomsWithDifferentPricesAsync(dbContext);
+
+        await SeedExistingReservationAsync(
+            dbContext,
+            odaId: 100,
+            baslangic: new DateTime(2026, 3, 7, 14, 0, 0),
+            bitis: new DateTime(2026, 3, 10, 10, 0, 0),
+            kisiSayisi: 1,
+            rezervasyonId: 950,
+            odaNoSnapshot: "ODA-1");
+
+        await SeedExistingReservationAsync(
+            dbContext,
+            odaId: 101,
+            baslangic: new DateTime(2026, 3, 11, 14, 0, 0),
+            bitis: new DateTime(2026, 3, 12, 10, 0, 0),
+            kisiSayisi: 1,
+            rezervasyonId: 960,
+            odaNoSnapshot: "ODA-2");
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 12, 10, 0, 0)
+        });
+
+        Assert.Equal(2, scenarios.Count);
+        Assert.True(scenarios[0].ToplamNihaiUcret <= scenarios[1].ToplamNihaiUcret);
+
+        var fullStayScenario = scenarios[0];
+        Assert.Equal(0, fullStayScenario.OdaDegisimSayisi);
+        Assert.Single(fullStayScenario.Segmentler);
+        Assert.Single(fullStayScenario.Segmentler[0].OdaAtamalari);
+        Assert.Equal("ODA-2", fullStayScenario.Segmentler[0].OdaAtamalari[0].OdaNo);
+        Assert.Equal(2000m, fullStayScenario.ToplamBazUcret);
+        Assert.Equal(2000m, fullStayScenario.ToplamNihaiUcret);
+
+        var roomSwitchScenario = scenarios[1];
+        Assert.Equal(1, roomSwitchScenario.OdaDegisimSayisi);
+        Assert.Equal(2, roomSwitchScenario.Segmentler.Count);
+        Assert.Equal("ODA-2", roomSwitchScenario.Segmentler[0].OdaAtamalari[0].OdaNo);
+        Assert.Equal("ODA-1", roomSwitchScenario.Segmentler[1].OdaAtamalari[0].OdaNo);
+        Assert.Equal(2500m, roomSwitchScenario.ToplamBazUcret);
+        Assert.Equal(2500m, roomSwitchScenario.ToplamNihaiUcret);
+    }
+
     private static RezervasyonService CreateService(StysAppDbContext dbContext, DomainAccessScope? scope = null)
     {
         return new RezervasyonService(dbContext, new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()));
@@ -581,6 +636,104 @@ public class RezervasyonServiceTests
                 MisafirTipiId = 1,
                 KisiSayisi = 1,
                 Fiyat = 1500m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 3, 1),
+                BitisTarihi = new DateTime(2026, 3, 31),
+                AktifMi = true
+            });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedStandardAndSharedRoomsWithDifferentPricesAsync(StysAppDbContext dbContext)
+    {
+        await SeedLookupsAsync(dbContext);
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1,
+            Ad = "Test Tesis",
+            IlId = 1,
+            Telefon = "000",
+            Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0),
+            CikisSaati = new TimeSpan(10, 0, 0),
+            AktifMi = true
+        });
+
+        dbContext.Binalar.Add(new Bina
+        {
+            Id = 10,
+            TesisId = 1,
+            Ad = "Bina-1",
+            KatSayisi = 4,
+            AktifMi = true
+        });
+
+        dbContext.OdaTipleri.AddRange(
+            new OdaTipi
+            {
+                Id = 20,
+                TesisId = 1,
+                OdaSinifiId = 1,
+                Ad = "Standart",
+                Kapasite = 2,
+                PaylasimliMi = false,
+                AktifMi = true
+            },
+            new OdaTipi
+            {
+                Id = 21,
+                TesisId = 1,
+                OdaSinifiId = 1,
+                Ad = "Paylasimli",
+                Kapasite = 2,
+                PaylasimliMi = true,
+                AktifMi = true
+            });
+
+        dbContext.Odalar.AddRange(
+            new Oda
+            {
+                Id = 100,
+                OdaNo = "ODA-1",
+                BinaId = 10,
+                TesisOdaTipiId = 20,
+                KatNo = 1,
+                AktifMi = true
+            },
+            new Oda
+            {
+                Id = 101,
+                OdaNo = "ODA-2",
+                BinaId = 10,
+                TesisOdaTipiId = 21,
+                KatNo = 1,
+                AktifMi = true
+            });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat
+            {
+                Id = 1000,
+                TesisOdaTipiId = 20,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                Fiyat = 1000m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 3, 1),
+                BitisTarihi = new DateTime(2026, 3, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 1001,
+                TesisOdaTipiId = 21,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                Fiyat = 500m,
                 ParaBirimi = "TRY",
                 BaslangicTarihi = new DateTime(2026, 3, 1),
                 BitisTarihi = new DateTime(2026, 3, 31),

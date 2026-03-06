@@ -505,7 +505,7 @@ public class RezervasyonService : IRezervasyonService
             ToplamUcret = request.ToplamUcret,
             ParaBirimi = string.IsNullOrWhiteSpace(request.ParaBirimi) ? "TRY" : request.ParaBirimi.Trim().ToUpperInvariant(),
             UygulananIndirimlerJson = SerializeAppliedDiscounts(request.UygulananIndirimler),
-            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            RezervasyonDurumu = RezervasyonDurumlari.Taslak,
             AktifMi = true
         };
 

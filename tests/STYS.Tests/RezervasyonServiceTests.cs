@@ -63,6 +63,104 @@ public class RezervasyonServiceTests
         Assert.Equal("TRY", result.ParaBirimi);
     }
 
+    // Farkli tesis giris/cikis saat kombinasyonlarinda gece/adet bazli fiyat hesaplamasi dogru kalmali.
+    [Theory]
+    [MemberData(nameof(FarkliTesisSaatleriFiyatSenaryolari))]
+    public async Task HesaplaSenaryoFiyati_FarkliGirisCikisSaatlerindeDogruHesaplar(
+        TimeSpan girisSaati,
+        TimeSpan cikisSaati,
+        DateTime baslangic,
+        DateTime bitis,
+        int beklenenGeceSayisi)
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(
+            dbContext,
+            girisSaati: girisSaati,
+            cikisSaati: cikisSaati,
+            odaFiyati: 100m);
+
+        var service = CreateService(dbContext);
+        var result = await service.HesaplaSenaryoFiyatiAsync(new SenaryoFiyatHesaplaRequestDto
+        {
+            TesisId = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            Segmentler =
+            [
+                new SenaryoFiyatHesaplaSegmentDto
+                {
+                    BaslangicTarihi = baslangic,
+                    BitisTarihi = bitis,
+                    OdaAtamalari =
+                    [
+                        new SenaryoFiyatHesaplaOdaAtamaDto { OdaId = 100, AyrilanKisiSayisi = 1 }
+                    ]
+                }
+            ]
+        });
+
+        var beklenenToplam = beklenenGeceSayisi * 100m;
+        Assert.Equal(beklenenToplam, result.ToplamBazUcret);
+        Assert.Equal(beklenenToplam, result.ToplamNihaiUcret);
+        Assert.Equal("TRY", result.ParaBirimi);
+    }
+
+    public static IEnumerable<object[]> FarkliTesisSaatleriFiyatSenaryolari()
+    {
+        // 14:00 giris - 10:00 cikis: tam 1 gece
+        yield return
+        [
+            new TimeSpan(14, 0, 0),
+            new TimeSpan(10, 0, 0),
+            new DateTime(2026, 3, 7, 14, 0, 0),
+            new DateTime(2026, 3, 8, 10, 0, 0),
+            1
+        ];
+
+        // 14:00 giris - 10:00 cikis: gec baslangic + ertesi gun gec cikis => 2 gece
+        yield return
+        [
+            new TimeSpan(14, 0, 0),
+            new TimeSpan(10, 0, 0),
+            new DateTime(2026, 3, 7, 22, 30, 0),
+            new DateTime(2026, 3, 8, 22, 30, 0),
+            2
+        ];
+
+        // 16:00 giris - 11:00 cikis: onceki regression benzeri 2 gece
+        yield return
+        [
+            new TimeSpan(16, 0, 0),
+            new TimeSpan(11, 0, 0),
+            new DateTime(2026, 3, 5, 12, 0, 0),
+            new DateTime(2026, 3, 7, 10, 0, 0),
+            2
+        ];
+
+        // 12:00 giris - 12:00 cikis: tam 1 gece
+        yield return
+        [
+            new TimeSpan(12, 0, 0),
+            new TimeSpan(12, 0, 0),
+            new DateTime(2026, 3, 7, 12, 0, 0),
+            new DateTime(2026, 3, 8, 12, 0, 0),
+            1
+        ];
+
+        // 18:00 giris - 09:00 cikis: check-in oncesi saatten baslasa da 1 gece
+        yield return
+        [
+            new TimeSpan(18, 0, 0),
+            new TimeSpan(9, 0, 0),
+            new DateTime(2026, 3, 7, 8, 0, 0),
+            new DateTime(2026, 3, 8, 8, 0, 0),
+            1
+        ];
+    }
+
     // Rezervasyon girisi tesis giris saatinden sonra olsa da senaryo uretimi hata vermeden calismali.
     [Fact]
     public async Task SenaryoUretimi_GirisSaatindenSonraBaslayincaSenaryoUretebilir()

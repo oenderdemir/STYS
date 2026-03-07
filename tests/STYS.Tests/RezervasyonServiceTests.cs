@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 using STYS.Fiyatlandirma;
 using STYS.Fiyatlandirma.Dto;
 using STYS.AccessScope;
@@ -14,6 +16,7 @@ using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
 using STYS.Rezervasyonlar.Services;
 using STYS.Tesisler.Entities;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tests;
 
@@ -58,6 +61,34 @@ public class RezervasyonServiceTests
         Assert.Equal(200m, result.ToplamBazUcret);
         Assert.Equal(200m, result.ToplamNihaiUcret);
         Assert.Equal("TRY", result.ParaBirimi);
+    }
+
+    // Rezervasyon girisi tesis giris saatinden sonra olsa da senaryo uretimi hata vermeden calismali.
+    [Fact]
+    public async Task SenaryoUretimi_GirisSaatindenSonraBaslayincaSenaryoUretebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(
+            dbContext,
+            girisSaati: new TimeSpan(14, 0, 0),
+            cikisSaati: new TimeSpan(10, 0, 0),
+            odaFiyati: 1000m);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 7, 22, 37, 0),
+            BitisTarihi = new DateTime(2026, 3, 8, 22, 37, 0)
+        });
+
+        var firstScenario = Assert.Single(scenarios);
+        Assert.Single(firstScenario.Segmentler);
+        Assert.Equal(2000m, firstScenario.ToplamBazUcret);
+        Assert.Equal(2000m, firstScenario.ToplamNihaiUcret);
     }
 
     // Iki segmentte oda dagilimi degismiyorsa anlamsiz segmentli senaryo uretilmemeli.
@@ -518,6 +549,7 @@ public class RezervasyonServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        await SeedDiscountRulesForPricingAsync(dbContext);
 
         var service = CreateService(dbContext);
         var saveResult = await service.KaydetAsync(new RezervasyonKaydetRequestDto
@@ -636,9 +668,110 @@ public class RezervasyonServiceTests
         Assert.DoesNotContain(rules, x => x.Id == 5104);
     }
 
-    private static RezervasyonService CreateService(StysAppDbContext dbContext, DomainAccessScope? scope = null)
+    // Custom indirim izni olan kullanici, sistemde kayitli rule olmadan manuel indirimle rezervasyon kaydedebilmeli.
+    [Fact]
+    public async Task KaydetAsync_CustomIndirimYetkisiVarsaKaydedebilir()
     {
-        return new RezervasyonService(dbContext, new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()));
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+
+        var service = CreateService(
+            dbContext,
+            permissions: [StructurePermissions.RezervasyonYonetimi.CustomIndirimGirebilir]);
+
+        var request = BuildCustomDiscountSaveRequest();
+        var result = await service.KaydetAsync(request);
+        var detail = await service.GetRezervasyonDetayAsync(result.Id);
+
+        Assert.NotNull(detail);
+        var customDiscount = Assert.Single(detail!.UygulananIndirimler);
+        Assert.Equal(0, customDiscount.IndirimKuraliId);
+        Assert.Equal(300m, customDiscount.IndirimTutari);
+    }
+
+    // Custom indirim izni olmayan kullanici manuel indirimle rezervasyon kaydedememeli (403).
+    [Fact]
+    public async Task KaydetAsync_CustomIndirimYetkisiYoksaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var request = BuildCustomDiscountSaveRequest();
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetAsync(request));
+        Assert.Equal(403, exception.ErrorCode);
+    }
+
+    private static RezervasyonService CreateService(
+        StysAppDbContext dbContext,
+        DomainAccessScope? scope = null,
+        IReadOnlyCollection<string>? permissions = null)
+    {
+        var httpContextAccessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+
+        var claims = (permissions ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(x => new Claim("permission", x))
+            .ToList();
+
+        httpContextAccessor.HttpContext!.User = new ClaimsPrincipal(
+            new ClaimsIdentity(claims, authenticationType: claims.Count > 0 ? "TestAuth" : null));
+
+        return new RezervasyonService(
+            dbContext,
+            new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()),
+            httpContextAccessor);
+    }
+
+    private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()
+    {
+        return new RezervasyonKaydetRequestDto
+        {
+            TesisId = 1,
+            KisiSayisi = 1,
+            GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            CikisTarihi = new DateTime(2026, 3, 10, 10, 0, 0),
+            MisafirAdiSoyadi = "Custom Test Misafir",
+            MisafirTelefon = "5550000000",
+            MisafirEposta = null,
+            TcKimlikNo = null,
+            PasaportNo = null,
+            Notlar = "Custom indirim testi",
+            ToplamBazUcret = 1200m,
+            ToplamUcret = 900m,
+            ParaBirimi = "TRY",
+            UygulananIndirimler =
+            [
+                new UygulananIndirimDto
+                {
+                    IndirimKuraliId = 0,
+                    KuralAdi = "Manuel 300 TL",
+                    IndirimTutari = 300m,
+                    SonrasiTutar = 900m
+                }
+            ],
+            Segmentler =
+            [
+                new RezervasyonKaydetSegmentDto
+                {
+                    BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+                    BitisTarihi = new DateTime(2026, 3, 10, 10, 0, 0),
+                    OdaAtamalari =
+                    [
+                        new RezervasyonKaydetOdaAtamaDto
+                        {
+                            OdaId = 101,
+                            AyrilanKisiSayisi = 1
+                        }
+                    ]
+                }
+            ]
+        };
     }
 
     private static StysAppDbContext CreateDbContext()

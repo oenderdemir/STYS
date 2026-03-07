@@ -77,6 +77,7 @@ public static class StructurePermissions
         public const string Menu = "RezervasyonYonetimi.Menu";
         public const string View = "RezervasyonYonetimi.View";
         public const string Manage = "RezervasyonYonetimi.Manage";
+        public const string CustomIndirimGirebilir = "RezervasyonYonetimi.CustomIndirimGirebilir";
     }
 
     public static class IndirimKuraliYonetimi

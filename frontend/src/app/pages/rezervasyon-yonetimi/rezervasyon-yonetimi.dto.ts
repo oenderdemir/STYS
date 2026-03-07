@@ -1,6 +1,8 @@
 export interface RezervasyonTesisDto {
     id: number;
     ad: string;
+    girisSaati: string;
+    cikisSaati: string;
 }
 
 export interface RezervasyonOdaTipiDto {

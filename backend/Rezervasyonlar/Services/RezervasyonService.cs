@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using System.Text.Json;
 using STYS.AccessScope;
 using STYS.Fiyatlandirma.Dto;
@@ -7,6 +8,7 @@ using STYS.Fiyatlandirma;
 using STYS.Infrastructure.EntityFramework;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
+using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
@@ -15,13 +17,16 @@ public class RezervasyonService : IRezervasyonService
 {
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
-        IUserAccessScopeService userAccessScopeService)
+        IUserAccessScopeService userAccessScopeService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -41,7 +46,9 @@ public class RezervasyonService : IRezervasyonService
             .Select(x => new RezervasyonTesisDto
             {
                 Id = x.Id,
-                Ad = x.Ad
+                Ad = x.Ad,
+                GirisSaati = x.GirisSaati,
+                CikisSaati = x.CikisSaati
             })
             .ToListAsync(cancellationToken);
     }
@@ -428,6 +435,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateSaveRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await ValidateAppliedDiscountPermissionsAsync(request, cancellationToken);
 
         var distinctRoomIds = request.Segmentler
             .SelectMany(x => x.OdaAtamalari)
@@ -791,7 +799,8 @@ public class RezervasyonService : IRezervasyonService
         // Ilk gun: giris saati -> ertesi gun cikis saati
         if (bitis > firstWindowStart && baslangic < firstWindowEnd)
         {
-            yield return (startDate, firstWindowStart);
+            var effectiveStart = baslangic > firstWindowStart ? baslangic : firstWindowStart;
+            yield return (startDate, effectiveStart);
         }
 
         // Sonraki gunler: cikis saati -> ertesi gun cikis saati
@@ -800,7 +809,8 @@ public class RezervasyonService : IRezervasyonService
             var windowEnd = windowStart.AddDays(1);
             if (bitis > windowStart && baslangic < windowEnd)
             {
-                yield return (windowStart.Date, windowStart);
+                var effectiveStart = baslangic > windowStart ? baslangic : windowStart;
+                yield return (windowStart.Date, effectiveStart);
             }
         }
     }
@@ -958,7 +968,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         if (request.UygulananIndirimler.Any(x =>
-                x.IndirimKuraliId <= 0
+                x.IndirimKuraliId < 0
                 || string.IsNullOrWhiteSpace(x.KuralAdi)
                 || x.IndirimTutari < 0
                 || x.SonrasiTutar < 0))
@@ -1002,6 +1012,67 @@ public class RezervasyonService : IRezervasyonService
 
             previousEnd = segment.BitisTarihi;
         }
+    }
+
+    private async Task ValidateAppliedDiscountPermissionsAsync(RezervasyonKaydetRequestDto request, CancellationToken cancellationToken)
+    {
+        if (request.UygulananIndirimler.Count == 0)
+        {
+            return;
+        }
+
+        var customDiscounts = request.UygulananIndirimler
+            .Where(x => x.IndirimKuraliId == 0)
+            .ToList();
+
+        if (customDiscounts.Count > 0)
+        {
+            if (!HasPermission(StructurePermissions.RezervasyonYonetimi.CustomIndirimGirebilir))
+            {
+                throw new BaseException("Rezervasyon custom indirimi icin yetkiniz bulunmuyor.", 403);
+            }
+
+            if (customDiscounts.Any(x => x.IndirimTutari <= 0))
+            {
+                throw new BaseException("Custom indirim tutari sifirdan buyuk olmalidir.", 400);
+            }
+        }
+
+        var ruleIds = request.UygulananIndirimler
+            .Where(x => x.IndirimKuraliId > 0)
+            .Select(x => x.IndirimKuraliId)
+            .Distinct()
+            .ToList();
+
+        if (ruleIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingRuleIds = await _stysDbContext.IndirimKurallari
+            .Where(x => ruleIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        if (existingRuleIds.Count != ruleIds.Count)
+        {
+            throw new BaseException("Uygulanan indirim kayitlari gecersiz.", 400);
+        }
+    }
+
+    private bool HasPermission(string permission)
+    {
+        var claims = _httpContextAccessor.HttpContext?.User
+            .FindAll(TodPlatformAuthorizationConstants.PermissionClaimType)
+            .Select(x => x.Value)
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+
+        if (claims is null)
+        {
+            return false;
+        }
+
+        return claims.Any(x => x.Equals(permission, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<Dictionary<int, int>> GetCurrentOccupancyByRoomAsync(

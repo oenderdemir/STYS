@@ -52,6 +52,8 @@ export class RezervasyonYonetimi implements OnInit {
     detayLoadingByRezervasyonId: Record<number, boolean> = {};
     availableDiscountRules: RezervasyonIndirimKuraliSecenekDto[] = [];
     selectedDiscountRuleIds: number[] = [];
+    customDiscountAmount: number | null = null;
+    customDiscountDescription = '';
     scenarioPriceBreakdown: SenaryoFiyatHesaplamaSonucuDto | null = null;
     selectedScenarioForDiscount: KonaklamaSenaryoDto | null = null;
     discountDialogVisible = false;
@@ -79,6 +81,8 @@ export class RezervasyonYonetimi implements OnInit {
     loadingDiscountRules = false;
     calculatingScenarioPrice = false;
     saving = false;
+    private readonly defaultGirisSaati = '14:00';
+    private readonly defaultCikisSaati = '10:00';
 
     get canView(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.View');
@@ -86,6 +90,10 @@ export class RezervasyonYonetimi implements OnInit {
 
     get canManage(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.Manage');
+    }
+
+    get canApplyCustomDiscount(): boolean {
+        return this.authService.hasPermission('RezervasyonYonetimi.CustomIndirimGirebilir');
     }
 
     ngOnInit(): void {
@@ -115,6 +123,7 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        this.applySelectedTesisDateTimes();
         this.loadOdaTipleri(this.selectedTesisId, true);
         this.loadRezervasyonKayitlari(this.selectedTesisId);
     }
@@ -265,6 +274,8 @@ export class RezervasyonYonetimi implements OnInit {
         const mevcutIndirimler = [...(scenario.uygulananIndirimler ?? [])];
         this.selectedScenarioForDiscount = scenario;
         this.selectedDiscountRuleIds = [];
+        this.customDiscountAmount = null;
+        this.customDiscountDescription = '';
         this.scenarioPriceBreakdown = {
             toplamBazUcret: scenario.toplamBazUcret,
             toplamNihaiUcret: scenario.toplamNihaiUcret,
@@ -306,6 +317,11 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        if ((this.customDiscountAmount ?? 0) < 0) {
+            this.messageService.add({ severity: 'warn', summary: 'Gecersiz Tutar', detail: 'Custom indirim tutari sifirdan kucuk olamaz.' });
+            return;
+        }
+
         if (!this.selectedTesisId || !this.selectedMisafirTipiId || !this.selectedKonaklamaTipiId) {
             return;
         }
@@ -336,11 +352,12 @@ export class RezervasyonYonetimi implements OnInit {
             )
             .subscribe({
                 next: (result) => {
-                    this.scenarioPriceBreakdown = result;
-                    this.selectedScenarioForDiscount!.toplamBazUcret = result.toplamBazUcret;
-                    this.selectedScenarioForDiscount!.toplamNihaiUcret = result.toplamNihaiUcret;
-                    this.selectedScenarioForDiscount!.paraBirimi = result.paraBirimi;
-                    this.selectedScenarioForDiscount!.uygulananIndirimler = [...result.uygulananIndirimler];
+                    const withCustomDiscount = this.applyCustomDiscountIfNeeded(result);
+                    this.scenarioPriceBreakdown = withCustomDiscount;
+                    this.selectedScenarioForDiscount!.toplamBazUcret = withCustomDiscount.toplamBazUcret;
+                    this.selectedScenarioForDiscount!.toplamNihaiUcret = withCustomDiscount.toplamNihaiUcret;
+                    this.selectedScenarioForDiscount!.paraBirimi = withCustomDiscount.paraBirimi;
+                    this.selectedScenarioForDiscount!.uygulananIndirimler = [...withCustomDiscount.uygulananIndirimler];
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -355,7 +372,44 @@ export class RezervasyonYonetimi implements OnInit {
         this.selectedScenarioForDiscount = null;
         this.availableDiscountRules = [];
         this.selectedDiscountRuleIds = [];
+        this.customDiscountAmount = null;
+        this.customDiscountDescription = '';
         this.scenarioPriceBreakdown = null;
+    }
+
+    private applyCustomDiscountIfNeeded(result: SenaryoFiyatHesaplamaSonucuDto): SenaryoFiyatHesaplamaSonucuDto {
+        if (!this.canApplyCustomDiscount) {
+            return result;
+        }
+
+        const customAmount = Number(this.customDiscountAmount ?? 0);
+        if (!Number.isFinite(customAmount) || customAmount <= 0) {
+            return result;
+        }
+
+        const discountAmount = Math.min(result.toplamNihaiUcret, customAmount);
+        if (discountAmount <= 0) {
+            return result;
+        }
+
+        const afterDiscount = result.toplamNihaiUcret - discountAmount;
+        const customRuleName = this.customDiscountDescription.trim().length > 0
+            ? this.customDiscountDescription.trim()
+            : 'Custom Indirim';
+
+        return {
+            ...result,
+            toplamNihaiUcret: afterDiscount,
+            uygulananIndirimler: [
+                ...result.uygulananIndirimler,
+                {
+                    indirimKuraliId: 0,
+                    kuralAdi: customRuleName,
+                    indirimTutari: discountAmount,
+                    sonrasiTutar: afterDiscount
+                }
+            ]
+        };
     }
 
     openRezervasyonUcretDetay(kayit: RezervasyonListeDto): void {
@@ -439,6 +493,7 @@ export class RezervasyonYonetimi implements OnInit {
                     }
 
                     if (this.selectedTesisId && this.selectedTesisId > 0) {
+                        this.applySelectedTesisDateTimes();
                         this.loadOdaTipleri(this.selectedTesisId);
                         this.loadRezervasyonKayitlari(this.selectedTesisId);
                         return;
@@ -612,6 +667,48 @@ export class RezervasyonYonetimi implements OnInit {
         const hour = String(date.getHours()).padStart(2, '0');
         const minute = String(date.getMinutes()).padStart(2, '0');
         return `${year}-${month}-${day}T${hour}:${minute}`;
+    }
+
+    private applySelectedTesisDateTimes(): void {
+        const selectedTesis = this.tesisler.find((x) => x.id === this.selectedTesisId);
+        if (!selectedTesis) {
+            return;
+        }
+
+        const [girisSaat, girisDakika] = this.parseSaat(selectedTesis.girisSaati, this.defaultGirisSaati);
+        const [cikisSaat, cikisDakika] = this.parseSaat(selectedTesis.cikisSaati, this.defaultCikisSaati);
+
+        const baslangic = this.tryParseDate(this.baslangicTarihi) ?? new Date();
+        const bitis = this.tryParseDate(this.bitisTarihi) ?? new Date(baslangic.getTime() + 24 * 60 * 60 * 1000);
+
+        baslangic.setHours(girisSaat, girisDakika, 0, 0);
+        bitis.setHours(cikisSaat, cikisDakika, 0, 0);
+
+        if (bitis.getTime() <= baslangic.getTime()) {
+            bitis.setDate(bitis.getDate() + 1);
+        }
+
+        this.baslangicTarihi = this.toDateTimeLocalInput(baslangic);
+        this.bitisTarihi = this.toDateTimeLocalInput(bitis);
+    }
+
+    private parseSaat(source: string | null | undefined, fallback: string): [number, number] {
+        const normalized = (source && source.trim().length > 0 ? source : fallback).trim();
+        const [rawSaat, rawDakika] = normalized.split(':');
+        const saat = Number.parseInt(rawSaat ?? '', 10);
+        const dakika = Number.parseInt(rawDakika ?? '', 10);
+        const safeSaat = Number.isFinite(saat) && saat >= 0 && saat <= 23 ? saat : 0;
+        const safeDakika = Number.isFinite(dakika) && dakika >= 0 && dakika <= 59 ? dakika : 0;
+        return [safeSaat, safeDakika];
+    }
+
+    private tryParseDate(value: string): Date | null {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+
+        return date;
     }
 
     private resolveErrorMessage(error: unknown): string {

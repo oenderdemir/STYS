@@ -13,6 +13,7 @@ using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Entities;
+using STYS.SezonKurallari.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
@@ -51,6 +52,7 @@ public class StysAppDbContext : DbContext
     public DbSet<IndirimKurali> IndirimKurallari => Set<IndirimKurali>();
     public DbSet<IndirimKuraliMisafirTipi> IndirimKuraliMisafirTipleri => Set<IndirimKuraliMisafirTipi>();
     public DbSet<IndirimKuraliKonaklamaTipi> IndirimKuraliKonaklamaTipleri => Set<IndirimKuraliKonaklamaTipi>();
+    public DbSet<SezonKurali> SezonKurallari => Set<SezonKurali>();
     public DbSet<Rezervasyon> Rezervasyonlar => Set<Rezervasyon>();
     public DbSet<RezervasyonSegment> RezervasyonSegmentleri => Set<RezervasyonSegment>();
     public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
@@ -415,6 +417,23 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KonaklamaTipi)
                 .WithMany(x => x.IndirimKuralKonaklamaTipleri)
                 .HasForeignKey(x => x.KonaklamaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SezonKurali>(entity =>
+        {
+            entity.ToTable("SezonKurallari", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.TesisId, x.Kod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.BaslangicTarihi, x.BitisTarihi })
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -15,6 +15,7 @@ using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
 using STYS.Rezervasyonlar.Services;
+using STYS.SezonKurallari.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -236,6 +237,70 @@ public class RezervasyonServiceTests
         Assert.True(scenarios.Count >= 2);
         Assert.True(scenarios[0].ToplamNihaiUcret <= scenarios[1].ToplamNihaiUcret);
         Assert.Equal("ODA-B", scenarios[0].Segmentler[0].OdaAtamalari[0].OdaNo);
+    }
+
+    // Stop-sale aktif sezon kurali varsa ilgili tarih araliginda konaklama senaryosu uretimi engellenmeli.
+    [Fact]
+    public async Task SenaryoUretimi_StopSaleAktifseHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(dbContext, new TimeSpan(14, 0, 0), new TimeSpan(10, 0, 0), 250m);
+        await SeedSezonKuraliAsync(
+            dbContext,
+            id: 7001,
+            tesisId: 1,
+            kod: "STOP-MART",
+            ad: "Mart Stop Sale",
+            baslangic: new DateTime(2026, 3, 1),
+            bitis: new DateTime(2026, 3, 31),
+            minimumGece: 1,
+            stopSaleMi: true);
+
+        var service = CreateService(dbContext);
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 7, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 8, 10, 0, 0)
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+        Assert.Contains("stop-sale", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Sezon kuralindaki minimum gece kosulu saglanmiyorsa senaryo uretimi hata vermeli.
+    [Fact]
+    public async Task SenaryoUretimi_MinimumGeceSaglanmazsaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(dbContext, new TimeSpan(14, 0, 0), new TimeSpan(10, 0, 0), 250m);
+        await SeedSezonKuraliAsync(
+            dbContext,
+            id: 7002,
+            tesisId: 1,
+            kod: "MIN-3",
+            ad: "Minimum 3 Gece",
+            baslangic: new DateTime(2026, 3, 1),
+            bitis: new DateTime(2026, 3, 31),
+            minimumGece: 3,
+            stopSaleMi: false);
+
+        var service = CreateService(dbContext);
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 7, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 8, 10, 0, 0)
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+        Assert.Contains("minimum 3 gece", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     // Paylasimsiz bir oda cakisan rezervasyonla doluysa uygun oda listesine girmemeli.
@@ -1979,6 +2044,33 @@ public class RezervasyonServiceTests
             OdaTipiAdiSnapshot = "Standart",
             PaylasimliMiSnapshot = false,
             KapasiteSnapshot = 2
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedSezonKuraliAsync(
+        StysAppDbContext dbContext,
+        int id,
+        int tesisId,
+        string kod,
+        string ad,
+        DateTime baslangic,
+        DateTime bitis,
+        int minimumGece,
+        bool stopSaleMi)
+    {
+        dbContext.SezonKurallari.Add(new SezonKurali
+        {
+            Id = id,
+            TesisId = tesisId,
+            Kod = kod,
+            Ad = ad,
+            BaslangicTarihi = baslangic.Date,
+            BitisTarihi = bitis.Date,
+            MinimumGece = minimumGece,
+            StopSaleMi = stopSaleMi,
+            AktifMi = true
         });
 
         await dbContext.SaveChangesAsync();

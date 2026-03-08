@@ -740,6 +740,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await EnsureSeasonRuleComplianceAsync(request.TesisId, request.BaslangicTarihi, request.BitisTarihi, cancellationToken);
 
         if (request.OdaTipiId.HasValue && request.OdaTipiId.Value > 0)
         {
@@ -809,6 +810,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateScenarioRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await EnsureSeasonRuleComplianceAsync(request.TesisId, request.BaslangicTarihi, request.BitisTarihi, cancellationToken);
 
         var scenarios = new List<KonaklamaSenaryoDto>();
 
@@ -901,6 +903,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateSaveRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await EnsureSeasonRuleComplianceAsync(request.TesisId, request.GirisTarihi, request.CikisTarihi, cancellationToken);
         await ValidateAppliedDiscountPermissionsAsync(request, cancellationToken);
 
         var distinctRoomIds = request.Segmentler
@@ -1398,6 +1401,7 @@ public class RezervasyonService : IRezervasyonService
     {
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
         ValidatePricingRequest(tesisId, misafirTipiId, konaklamaTipiId, baslangicTarihi, bitisTarihi, segmentler);
+        await EnsureSeasonRuleComplianceAsync(tesisId, baslangicTarihi, bitisTarihi, cancellationToken);
 
         var roomIds = segmentler.SelectMany(x => x.OdaAtamalari).Select(x => x.OdaId).Distinct().ToList();
         var roomMaps = await (
@@ -1604,6 +1608,74 @@ public class RezervasyonService : IRezervasyonService
             : rule.Deger;
 
         return Math.Min(currentAmount, Math.Max(0, discount));
+    }
+
+    private async Task EnsureSeasonRuleComplianceAsync(
+        int tesisId,
+        DateTime baslangicTarihi,
+        DateTime bitisTarihi,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStart = baslangicTarihi.Date;
+        var normalizedEnd = bitisTarihi.Date;
+
+        var rules = await _stysDbContext.SezonKurallari
+            .Where(x =>
+                x.TesisId == tesisId
+                && x.AktifMi
+                && x.BaslangicTarihi <= normalizedEnd
+                && x.BitisTarihi >= normalizedStart)
+            .Select(x => new
+            {
+                x.StopSaleMi,
+                x.MinimumGece
+            })
+            .ToListAsync(cancellationToken);
+
+        if (rules.Count == 0)
+        {
+            return;
+        }
+
+        if (rules.Any(x => x.StopSaleMi))
+        {
+            throw new BaseException("Secilen tarih araliginda stop-sale aktif oldugu icin islem yapilamaz.", 400);
+        }
+
+        var requiredMinimumNight = rules
+            .Select(x => x.MinimumGece > 0 ? x.MinimumGece : 1)
+            .DefaultIfEmpty(1)
+            .Max();
+
+        var tesisSaatleri = await _stysDbContext.Tesisler
+            .Where(x => x.Id == tesisId)
+            .Select(x => new { x.GirisSaati, x.CikisSaati })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tesisSaatleri is null)
+        {
+            throw new BaseException("Tesis bulunamadi.", 404);
+        }
+
+        var geceSayisi = CalculateNightCount(
+            baslangicTarihi,
+            bitisTarihi,
+            tesisSaatleri.GirisSaati,
+            tesisSaatleri.CikisSaati);
+
+        if (geceSayisi < requiredMinimumNight)
+        {
+            throw new BaseException($"Secilen tarih araligi icin minimum {requiredMinimumNight} gece konaklama zorunludur.", 400);
+        }
+    }
+
+    private static int CalculateNightCount(
+        DateTime baslangicTarihi,
+        DateTime bitisTarihi,
+        TimeSpan girisSaati,
+        TimeSpan cikisSaati)
+    {
+        return EnumerateChargeWindows(baslangicTarihi, bitisTarihi, girisSaati, cikisSaati).Count();
     }
 
     private static IEnumerable<(DateTime ChargeDay, DateTime WindowStart)> EnumerateChargeWindows(

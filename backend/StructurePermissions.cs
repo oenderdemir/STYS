@@ -72,6 +72,13 @@ public static class StructurePermissions
         public const string Manage = "MisafirTipiYonetimi.Manage";
     }
 
+    public static class SezonYonetimi
+    {
+        public const string Menu = "SezonYonetimi.Menu";
+        public const string View = "SezonYonetimi.View";
+        public const string Manage = "SezonYonetimi.Manage";
+    }
+
     public static class RezervasyonYonetimi
     {
         public const string Menu = "RezervasyonYonetimi.Menu";

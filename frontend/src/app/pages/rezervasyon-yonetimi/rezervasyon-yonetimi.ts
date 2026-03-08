@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -37,7 +38,7 @@ import { RezervasyonYonetimiService } from './rezervasyon-yonetimi.service';
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-yonetimi.html',
     providers: [MessageService]
 })
@@ -1146,13 +1147,13 @@ export class RezervasyonYonetimi implements OnInit {
             case this.durumTaslak:
                 return 'Taslak';
             case this.durumOnayli:
-                return 'Onayli';
+                return 'Onaylı';
             case this.durumCheckInTamamlandi:
-                return 'Check-in';
+                return 'Giriş Yapıldı';
             case this.durumCheckOutTamamlandi:
-                return 'Check-out';
+                return 'Çıkış Yapıldı';
             case this.durumIptal:
-                return 'Iptal';
+                return 'İptal';
             default:
                 return durum;
         }

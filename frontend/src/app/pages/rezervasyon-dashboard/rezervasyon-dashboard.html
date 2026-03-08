@@ -1,0 +1,127 @@
+<p-toast />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Rezervasyon Yonetimi" icon="pi pi-calendar" severity="help" class="mr-2" [routerLink]="['/rezervasyon-yonetimi']" />
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingReferences || loadingDashboard" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <h5 class="m-0 mb-3">Rezervasyon Dashboard</h5>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="dashTesis" class="block font-medium mb-2">Tesis</label>
+            <p-select
+                inputId="dashTesis"
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedTesisId"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="false"
+                [disabled]="loadingReferences || loadingDashboard"
+                (onChange)="onTesisChange()"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="dashTarih" class="block font-medium mb-2">Tarih</label>
+            <input pInputText id="dashTarih" class="w-full" type="date" [(ngModel)]="selectedTarih" [disabled]="loadingReferences || loadingDashboard" (change)="onTarihChange()" />
+        </div>
+    </div>
+</div>
+
+@if (loadingDashboard) {
+    <div class="card">Dashboard verileri yukleniyor...</div>
+} @else if (!dashboard) {
+    <div class="card">Secili filtre icin dashboard verisi bulunamadi.</div>
+} @else {
+    <div class="grid grid-cols-12 gap-4 mb-4">
+        <div class="col-span-12 md:col-span-4">
+            <div class="card">
+                <div class="text-sm text-color-secondary mb-1">Toplam Oda</div>
+                <div class="text-2xl font-semibold">{{ dashboard.toplamOdaSayisi }}</div>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <div class="card">
+                <div class="text-sm text-color-secondary mb-1">Dolu Oda</div>
+                <div class="text-2xl font-semibold">{{ dashboard.doluOdaSayisi }}</div>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <div class="card">
+                <div class="text-sm text-color-secondary mb-1">Bos Oda</div>
+                <div class="text-2xl font-semibold">{{ dashboard.bosOdaSayisi }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-6">
+            <div class="card">
+                <h6 class="m-0 mb-3">Bugun Check-in Yapacaklar</h6>
+                @if (dashboard.bugunCheckInler.length === 0) {
+                    <div class="text-color-secondary">Bugun check-in kaydi yok.</div>
+                } @else {
+                    <p-table [value]="dashboard.bugunCheckInler" [tableStyle]="{ 'min-width': '40rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Referans</th>
+                                <th>Misafir</th>
+                                <th>Kisi</th>
+                                <th>Giris</th>
+                                <th>Durum</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-item>
+                            <tr>
+                                <td>{{ item.referansNo }}</td>
+                                <td>{{ item.misafirAdiSoyadi }}</td>
+                                <td>{{ item.kisiSayisi }}</td>
+                                <td>{{ formatDateTime(item.girisTarihi) }}</td>
+                                <td>
+                                    <p-tag [value]="getRezervasyonDurumLabel(item.rezervasyonDurumu)" [severity]="getRezervasyonDurumSeverity(item.rezervasyonDurumu)" [rounded]="true" />
+                                </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
+            </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-6">
+            <div class="card">
+                <h6 class="m-0 mb-3">Bugun Check-out Yapacaklar</h6>
+                @if (dashboard.bugunCheckOutlar.length === 0) {
+                    <div class="text-color-secondary">Bugun check-out kaydi yok.</div>
+                } @else {
+                    <p-table [value]="dashboard.bugunCheckOutlar" [tableStyle]="{ 'min-width': '40rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Referans</th>
+                                <th>Misafir</th>
+                                <th>Kisi</th>
+                                <th>Cikis</th>
+                                <th>Durum</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-item>
+                            <tr>
+                                <td>{{ item.referansNo }}</td>
+                                <td>{{ item.misafirAdiSoyadi }}</td>
+                                <td>{{ item.kisiSayisi }}</td>
+                                <td>{{ formatDateTime(item.cikisTarihi) }}</td>
+                                <td>
+                                    <p-tag [value]="getRezervasyonDurumLabel(item.rezervasyonDurumu)" [severity]="getRezervasyonDurumSeverity(item.rezervasyonDurumu)" [rounded]="true" />
+                                </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
+            </div>
+        </div>
+    </div>
+}

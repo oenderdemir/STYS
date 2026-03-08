@@ -2,6 +2,7 @@
 
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
+        <p-button label="Rezervasyon Dashboard" icon="pi pi-chart-bar" severity="help" class="mr-2" [routerLink]="['/rezervasyon-dashboard']" />
         <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingReferences || loadingResults" (onClick)="refresh()" />
     </ng-template>
     <ng-template #end>

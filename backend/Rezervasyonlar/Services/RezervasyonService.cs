@@ -202,6 +202,95 @@ public class RezervasyonService : IRezervasyonService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(int tesisId, DateTime? tarih, CancellationToken cancellationToken = default)
+    {
+        if (tesisId <= 0)
+        {
+            throw new BaseException("Gecersiz tesis id.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var gun = (tarih ?? DateTime.Today).Date;
+        var gunBaslangic = gun;
+        var ertesiGunBaslangic = gunBaslangic.AddDays(1);
+
+        var checkInler = await _stysDbContext.Rezervasyonlar
+            .Where(x =>
+                x.AktifMi
+                && x.TesisId == tesisId
+                && x.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                && x.GirisTarihi >= gunBaslangic
+                && x.GirisTarihi < ertesiGunBaslangic)
+            .OrderBy(x => x.GirisTarihi)
+            .ThenBy(x => x.Id)
+            .Select(x => new RezervasyonDashboardKayitDto
+            {
+                Id = x.Id,
+                ReferansNo = x.ReferansNo,
+                MisafirAdiSoyadi = x.MisafirAdiSoyadi,
+                KisiSayisi = x.KisiSayisi,
+                GirisTarihi = x.GirisTarihi,
+                CikisTarihi = x.CikisTarihi,
+                RezervasyonDurumu = x.RezervasyonDurumu
+            })
+            .ToListAsync(cancellationToken);
+
+        var checkOutlar = await _stysDbContext.Rezervasyonlar
+            .Where(x =>
+                x.AktifMi
+                && x.TesisId == tesisId
+                && x.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                && x.CikisTarihi >= gunBaslangic
+                && x.CikisTarihi < ertesiGunBaslangic)
+            .OrderBy(x => x.CikisTarihi)
+            .ThenBy(x => x.Id)
+            .Select(x => new RezervasyonDashboardKayitDto
+            {
+                Id = x.Id,
+                ReferansNo = x.ReferansNo,
+                MisafirAdiSoyadi = x.MisafirAdiSoyadi,
+                KisiSayisi = x.KisiSayisi,
+                GirisTarihi = x.GirisTarihi,
+                CikisTarihi = x.CikisTarihi,
+                RezervasyonDurumu = x.RezervasyonDurumu
+            })
+            .ToListAsync(cancellationToken);
+
+        var toplamOdaSayisi = await (
+            from oda in _stysDbContext.Odalar
+            join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
+            where oda.AktifMi
+                  && bina.AktifMi
+                  && bina.TesisId == tesisId
+            select oda.Id)
+            .CountAsync(cancellationToken);
+
+        var doluOdaSayisi = await (
+            from atama in _stysDbContext.RezervasyonSegmentOdaAtamalari
+            join segment in _stysDbContext.RezervasyonSegmentleri on atama.RezervasyonSegmentId equals segment.Id
+            join rezervasyon in _stysDbContext.Rezervasyonlar on segment.RezervasyonId equals rezervasyon.Id
+            where rezervasyon.AktifMi
+                  && rezervasyon.TesisId == tesisId
+                  && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                  && segment.BaslangicTarihi < ertesiGunBaslangic
+                  && segment.BitisTarihi > gunBaslangic
+            select atama.OdaId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        return new RezervasyonDashboardDto
+        {
+            TesisId = tesisId,
+            Tarih = gunBaslangic,
+            ToplamOdaSayisi = toplamOdaSayisi,
+            DoluOdaSayisi = doluOdaSayisi,
+            BosOdaSayisi = Math.Max(0, toplamOdaSayisi - doluOdaSayisi),
+            BugunCheckInler = checkInler,
+            BugunCheckOutlar = checkOutlar
+        };
+    }
+
     public async Task<RezervasyonDetayDto?> GetRezervasyonDetayAsync(int rezervasyonId, CancellationToken cancellationToken = default)
     {
         if (rezervasyonId <= 0)

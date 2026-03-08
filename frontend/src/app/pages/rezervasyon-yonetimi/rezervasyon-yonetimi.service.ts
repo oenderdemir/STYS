@@ -6,6 +6,7 @@ import { getApiBaseUrl } from '../../core/config';
 import {
     KonaklamaSenaryoAramaRequestDto,
     KonaklamaSenaryoDto,
+    RezervasyonDashboardDto,
     RezervasyonDetayDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
@@ -92,6 +93,23 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon kayitlari alinamadi.');
+            })
+        );
+    }
+
+    getGunlukDashboard(tesisId: number, tarih?: string): Observable<RezervasyonDashboardDto> {
+        let params = new HttpParams().set('tesisId', tesisId);
+        if (tarih && tarih.trim().length > 0) {
+            params = params.set('tarih', tarih);
+        }
+
+        return this.http.get<ApiResponse<RezervasyonDashboardDto>>(`${this.apiBaseUrl}/ui/rezervasyon/dashboard`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon dashboard verisi alinamadi.');
             })
         );
     }

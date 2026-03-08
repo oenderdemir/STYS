@@ -75,6 +75,17 @@ public class RezervasyonController : UIController
         return Ok(kayitlar);
     }
 
+    [HttpGet("dashboard")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<RezervasyonDashboardDto>> GetDashboard(
+        [FromQuery] int tesisId,
+        [FromQuery] DateTime? tarih,
+        CancellationToken cancellationToken)
+    {
+        var dashboard = await _rezervasyonService.GetGunlukDashboardAsync(tesisId, tarih, cancellationToken);
+        return Ok(dashboard);
+    }
+
     [HttpGet("kayitlar/{rezervasyonId:int}/detay")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<RezervasyonDetayDto>> GetDetay([FromRoute] int rezervasyonId, CancellationToken cancellationToken)

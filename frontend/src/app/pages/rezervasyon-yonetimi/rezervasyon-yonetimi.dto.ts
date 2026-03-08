@@ -182,6 +182,26 @@ export interface RezervasyonListeDto {
     konaklayanPlaniTamamlandi: boolean;
 }
 
+export interface RezervasyonDashboardKayitDto {
+    id: number;
+    referansNo: string;
+    misafirAdiSoyadi: string;
+    kisiSayisi: number;
+    girisTarihi: string;
+    cikisTarihi: string;
+    rezervasyonDurumu: string;
+}
+
+export interface RezervasyonDashboardDto {
+    tesisId: number;
+    tarih: string;
+    toplamOdaSayisi: number;
+    doluOdaSayisi: number;
+    bosOdaSayisi: number;
+    bugunCheckInler: RezervasyonDashboardKayitDto[];
+    bugunCheckOutlar: RezervasyonDashboardKayitDto[];
+}
+
 export interface RezervasyonDetayOdaAtamaDto {
     odaId: number;
     odaNo: string;

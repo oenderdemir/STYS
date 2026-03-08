@@ -1011,7 +1011,7 @@ public class RezervasyonServiceTests
         Assert.Equal(RezervasyonDurumlari.Onayli, updated.RezervasyonDurumu);
     }
 
-    // Check-in sonrasinda check-out basariyla tamamlanmali.
+    // Check-out icin odeme tamamlandiginda durum basariyla CheckOutTamamlandi olmali.
     [Fact]
     public async Task CheckOut_CheckInSonrasiDurumuGunceller()
     {
@@ -1020,11 +1020,33 @@ public class RezervasyonServiceTests
 
         var service = CreateService(dbContext);
         await service.TamamlaCheckInAsync(996);
+        await service.KaydetOdemeAsync(996, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 1000m,
+            OdemeTipi = OdemeTipleri.Nakit
+        });
         var result = await service.TamamlaCheckOutAsync(996);
 
         Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, result.RezervasyonDurumu);
         var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 996);
         Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, updated.RezervasyonDurumu);
+    }
+
+    // Check-in yapilsa bile kalan bakiye varsa check-out engellenmeli.
+    [Fact]
+    public async Task CheckOut_OdemeTamamlanmadiysaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9970, segmentId: 9971, withPlan: true);
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(9970);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckOutAsync(9970));
+
+        Assert.Equal(400, exception.ErrorCode);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 9970);
+        Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, updated.RezervasyonDurumu);
     }
 
     // Onayli rezervasyon iptal edildiginde durum Iptal olarak guncellenmeli.
@@ -1039,6 +1061,48 @@ public class RezervasyonServiceTests
 
         Assert.Equal(RezervasyonDurumlari.Iptal, result.RezervasyonDurumu);
         var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 998);
+        Assert.Equal(RezervasyonDurumlari.Iptal, updated.RezervasyonDurumu);
+    }
+
+    // Iptal durumundaki rezervasyonun odalari hala musaitse iptal geri alinarak Taslak'a donmeli.
+    [Fact]
+    public async Task IptalEt_IptalDurumundaMusaitseTaslagaDondurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1100, segmentId: 1101, withPlan: false);
+        var service = CreateService(dbContext);
+        await service.IptalEtAsync(1100);
+
+        var result = await service.IptalEtAsync(1100);
+
+        Assert.Equal(RezervasyonDurumlari.Taslak, result.RezervasyonDurumu);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 1100);
+        Assert.Equal(RezervasyonDurumlari.Taslak, updated.RezervasyonDurumu);
+    }
+
+    // Iptal durumundaki rezervasyonun odalari dolmussa iptal geri alma islemi engellenmeli.
+    [Fact]
+    public async Task IptalEt_IptalDurumundaOdalarDoluysaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1102, segmentId: 1103, withPlan: false);
+        var service = CreateService(dbContext);
+        await service.IptalEtAsync(1102);
+
+        await SeedExistingReservationAsync(
+            dbContext,
+            odaId: 101,
+            baslangic: new DateTime(2026, 3, 8, 14, 0, 0),
+            bitis: new DateTime(2026, 3, 9, 10, 0, 0),
+            kisiSayisi: 1,
+            rezervasyonId: 1200,
+            odaNoSnapshot: "A-102",
+            tesisId: 1);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.IptalEtAsync(1102));
+        Assert.Equal(400, exception.ErrorCode);
+
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 1102);
         Assert.Equal(RezervasyonDurumlari.Iptal, updated.RezervasyonDurumu);
     }
 
@@ -1066,21 +1130,25 @@ public class RezervasyonServiceTests
         Assert.Equal(OdemeTipleri.Nakit, firstPayment.OdemeTipi);
     }
 
-    // Check-in tamamlanmadan odeme alinmamali.
+    // Check-in oncesi (Onayli/Taslak) rezervasyonlarda da odeme alinabilmeli.
     [Fact]
-    public async Task KaydetOdeme_CheckInOlmadanHataVerir()
+    public async Task KaydetOdeme_CheckInOncesiOdemeAlir()
     {
         await using var dbContext = CreateDbContext();
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1002, segmentId: 1003, withPlan: true);
         var service = CreateService(dbContext);
 
-        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetOdemeAsync(1002, new RezervasyonOdemeKaydetRequestDto
+        var ozet = await service.KaydetOdemeAsync(1002, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 200m,
             OdemeTipi = OdemeTipleri.KrediKarti
-        }));
+        });
 
-        Assert.Equal(400, exception.ErrorCode);
+        Assert.Equal(1002, ozet.RezervasyonId);
+        Assert.Equal(200m, ozet.OdenenTutar);
+        Assert.Equal(800m, ozet.KalanTutar);
+        var firstPayment = Assert.Single(ozet.Odemeler);
+        Assert.Equal(OdemeTipleri.KrediKarti, firstPayment.OdemeTipi);
     }
 
     // Liste sonucunda check-in butonu icin kullanilan plan-tamamlandi bilgisi dogru hesaplanmali.

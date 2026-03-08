@@ -203,6 +203,7 @@
 
 <div class="card mt-4">
     <h5 class="m-0 mb-3">Kayitli Rezervasyonlar</h5>
+    <p-menu #rowActionsMenu [model]="rowActionItems" [popup]="true" [appendTo]="'body'"></p-menu>
     @if (loadingRezervasyonlar) {
         <div>Rezervasyon kayitlari yukleniyor...</div>
     } @else {
@@ -249,66 +250,27 @@
                         />
                     </td>
                     <td>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            @if (canManage) {
-                                <p-button
-                                    label="Plan"
-                                    icon="pi pi-users"
-                                    severity="secondary"
-                                    [text]="true"
-                                    size="small"
-                                    [disabled]="isCheckActionLoading(kayit.id)"
-                                    (onClick)="openKonaklayanPlaniDialog(kayit)"
-                                />
-                            }
-                            @if (canCompleteCheckIn(kayit)) {
-                                <p-button
-                                    label="Check-in"
-                                    icon="pi pi-arrow-right"
-                                    size="small"
-                                    [loading]="isCheckActionLoading(kayit.id)"
-                                    (onClick)="tamamlaCheckIn(kayit)"
-                                />
-                            }
-                            @if (canCompleteCheckOut(kayit)) {
-                                <p-button
-                                    label="Check-out"
-                                    icon="pi pi-arrow-left"
-                                    severity="secondary"
-                                    [outlined]="true"
-                                    size="small"
-                                    [loading]="isCheckActionLoading(kayit.id)"
-                                    (onClick)="tamamlaCheckOut(kayit)"
-                                />
-                            }
-                            @if (canOpenPaymentDialog(kayit)) {
-                                <p-button
-                                    label="Odeme"
-                                    icon="pi pi-credit-card"
-                                    severity="secondary"
-                                    [text]="true"
-                                    size="small"
-                                    [disabled]="isCheckActionLoading(kayit.id)"
-                                    (onClick)="openOdemeDialog(kayit)"
-                                />
-                            }
-                            @if (canCancelReservation(kayit)) {
-                                <p-button
-                                    label="Iptal"
-                                    icon="pi pi-times"
-                                    severity="danger"
-                                    [outlined]="true"
-                                    size="small"
-                                    [loading]="isCheckActionLoading(kayit.id)"
-                                    (onClick)="iptalEt(kayit)"
-                                />
-                            }
-                            @if (!canManage) {
-                                <span>-</span>
-                            }
-                        </div>
+                        @if (hasAnyRowAction(kayit)) {
+                            <p-button
+                                label="Islemler"
+                                icon="pi pi-ellipsis-v"
+                                severity="secondary"
+                                [text]="true"
+                                size="small"
+                                [disabled]="isCheckActionLoading(kayit.id)"
+                                (click)="openRowActionsMenu(rowActionsMenu, $event, kayit)"
+                            />
+                        } @else {
+                            <span>-</span>
+                        }
                     </td>
-                    <td>{{ kayit.rezervasyonDurumu }}</td>
+                    <td>
+                        <p-tag
+                            [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
+                            [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
+                            [rounded]="true"
+                        />
+                    </td>
                 </tr>
             </ng-template>
             <ng-template #expandedrow let-kayit>

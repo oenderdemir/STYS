@@ -1020,6 +1020,17 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Check-out icin once check-in tamamlanmalidir.", 400);
         }
 
+        var odenenTutar = await _stysDbContext.RezervasyonOdemeler
+            .Where(x => x.RezervasyonId == reservation.Id)
+            .Select(x => (decimal?)x.OdemeTutari)
+            .SumAsync(cancellationToken) ?? 0m;
+
+        var kalanTutar = reservation.ToplamUcret - odenenTutar;
+        if (kalanTutar > 0m)
+        {
+            throw new BaseException("Check-out icin once kalan odeme tamamlanmalidir.", 400);
+        }
+
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckOutTamamlandi;
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
@@ -1031,6 +1042,9 @@ public class RezervasyonService : IRezervasyonService
 
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
         {
+            await EnsureCanRevertCancellationAsync(reservation.Id, cancellationToken);
+            reservation.RezervasyonDurumu = RezervasyonDurumlari.Taslak;
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
             return ToSaveResult(reservation);
         }
 
@@ -1042,6 +1056,80 @@ public class RezervasyonService : IRezervasyonService
         reservation.RezervasyonDurumu = RezervasyonDurumlari.Iptal;
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
+    }
+
+    private async Task EnsureCanRevertCancellationAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var ownAssignments = await (
+            from atama in _stysDbContext.RezervasyonSegmentOdaAtamalari
+            join segment in _stysDbContext.RezervasyonSegmentleri on atama.RezervasyonSegmentId equals segment.Id
+            where segment.RezervasyonId == rezervasyonId
+            select new
+            {
+                atama.OdaId,
+                atama.AyrilanKisiSayisi,
+                atama.KapasiteSnapshot,
+                atama.PaylasimliMiSnapshot,
+                segment.BaslangicTarihi,
+                segment.BitisTarihi
+            })
+            .ToListAsync(cancellationToken);
+
+        if (ownAssignments.Count == 0)
+        {
+            throw new BaseException("Iptal geri alinamadi. Rezervasyon segment/oda bilgisi bulunamadi.", 400);
+        }
+
+        var roomIds = ownAssignments
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToList();
+
+        var minStart = ownAssignments.Min(x => x.BaslangicTarihi);
+        var maxEnd = ownAssignments.Max(x => x.BitisTarihi);
+
+        var overlaps = await (
+            from otherAtama in _stysDbContext.RezervasyonSegmentOdaAtamalari
+            join otherSegment in _stysDbContext.RezervasyonSegmentleri on otherAtama.RezervasyonSegmentId equals otherSegment.Id
+            join otherRezervasyon in _stysDbContext.Rezervasyonlar on otherSegment.RezervasyonId equals otherRezervasyon.Id
+            where otherRezervasyon.Id != rezervasyonId
+                  && otherRezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                  && roomIds.Contains(otherAtama.OdaId)
+                  && otherSegment.BaslangicTarihi < maxEnd
+                  && otherSegment.BitisTarihi > minStart
+            select new
+            {
+                otherAtama.OdaId,
+                otherAtama.AyrilanKisiSayisi,
+                otherSegment.BaslangicTarihi,
+                otherSegment.BitisTarihi
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var own in ownAssignments)
+        {
+            var occupied = overlaps
+                .Where(x => x.OdaId == own.OdaId
+                            && x.BaslangicTarihi < own.BitisTarihi
+                            && x.BitisTarihi > own.BaslangicTarihi)
+                .Sum(x => x.AyrilanKisiSayisi);
+
+            if (!own.PaylasimliMiSnapshot)
+            {
+                if (occupied > 0)
+                {
+                    throw new BaseException("Iptal geri alinamadi. En az bir segmentte oda musait degil.", 400);
+                }
+
+                continue;
+            }
+
+            var kalanKapasite = own.KapasiteSnapshot - occupied;
+            if (kalanKapasite < own.AyrilanKisiSayisi)
+            {
+                throw new BaseException("Iptal geri alinamadi. En az bir segmentte oda musait degil.", 400);
+            }
+        }
     }
 
     public async Task<RezervasyonOdemeOzetDto> GetOdemeOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default)
@@ -1091,12 +1179,6 @@ public class RezervasyonService : IRezervasyonService
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
         {
             throw new BaseException("Iptal edilen rezervasyona odeme eklenemez.", 400);
-        }
-
-        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi
-            && reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi)
-        {
-            throw new BaseException("Odeme islemi icin once check-in tamamlanmalidir.", 400);
         }
 
         var odenenTutar = await _stysDbContext.RezervasyonOdemeler

@@ -3,12 +3,14 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
-import { MessageService } from 'primeng/api';
+import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
+import { MenuModule } from 'primeng/menu';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
+import { TagModule } from 'primeng/tag';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -35,7 +37,7 @@ import { RezervasyonYonetimiService } from './rezervasyon-yonetimi.service';
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-yonetimi.html',
     providers: [MessageService]
 })
@@ -83,6 +85,7 @@ export class RezervasyonYonetimi implements OnInit {
         { label: 'Nakit', value: 'Nakit' },
         { label: 'Kredi Karti', value: 'KrediKarti' }
     ];
+    rowActionItems: MenuItem[] = [];
     checkActionLoadingByRezervasyonId: Record<number, boolean> = {};
 
     selectedTesisId: number | null = null;
@@ -511,6 +514,13 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (plan) => {
                     this.konaklayanPlan = plan;
+                    const rezervasyonId = this.konaklayanPlanRezervasyonId;
+                    if (rezervasyonId && rezervasyonId > 0) {
+                        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
+                        if (kayit) {
+                            kayit.konaklayanPlaniTamamlandi = this.isKonaklayanPlanComplete(plan);
+                        }
+                    }
                     this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
                     this.cdr.detectChanges();
                 },
@@ -519,6 +529,18 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private isKonaklayanPlanComplete(plan: RezervasyonKonaklayanPlanDto): boolean {
+        if (!plan || plan.segmentler.length === 0 || plan.konaklayanlar.length !== plan.kisiSayisi) {
+            return false;
+        }
+
+        const segmentIds = new Set(plan.segmentler.map((x) => x.segmentId));
+        return plan.konaklayanlar.every((kisi) =>
+            (kisi.adSoyad ?? '').trim().length > 0
+            && kisi.atamalar.length === segmentIds.size
+            && kisi.atamalar.every((atama) => segmentIds.has(atama.segmentId) && (atama.odaId ?? 0) > 0));
     }
 
     canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
@@ -531,7 +553,9 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     canCompleteCheckOut(kayit: RezervasyonListeDto): boolean {
-        return this.canManage && kayit.rezervasyonDurumu === this.durumCheckInTamamlandi;
+        return this.canManage
+            && kayit.rezervasyonDurumu === this.durumCheckInTamamlandi
+            && (kayit.kalanTutar ?? 0) <= 0;
     }
 
     isCheckActionLoading(rezervasyonId: number): boolean {
@@ -543,7 +567,7 @@ export class RezervasyonYonetimi implements OnInit {
             return false;
         }
 
-        return kayit.rezervasyonDurumu !== this.durumIptal && kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi;
+        return kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi;
     }
 
     canOpenPaymentDialog(kayit: RezervasyonListeDto): boolean {
@@ -551,7 +575,68 @@ export class RezervasyonYonetimi implements OnInit {
             return false;
         }
 
-        return kayit.rezervasyonDurumu === this.durumCheckInTamamlandi || kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi;
+        return kayit.rezervasyonDurumu !== this.durumIptal;
+    }
+
+    hasAnyRowAction(kayit: RezervasyonListeDto): boolean {
+        return this.getRowActions(kayit).length > 0;
+    }
+
+    getRowActions(kayit: RezervasyonListeDto): MenuItem[] {
+        if (!this.canManage) {
+            return [];
+        }
+
+        const items: MenuItem[] = [];
+
+        items.push({
+            label: 'Plan',
+            icon: 'pi pi-users',
+            command: () => this.openKonaklayanPlaniDialog(kayit)
+        });
+
+        if (this.canCompleteCheckIn(kayit)) {
+            items.push({
+                label: 'Check-in',
+                icon: 'pi pi-arrow-right',
+                command: () => this.tamamlaCheckIn(kayit)
+            });
+        }
+
+        if (this.canCompleteCheckOut(kayit)) {
+            items.push({
+                label: 'Check-out',
+                icon: 'pi pi-arrow-left',
+                command: () => this.tamamlaCheckOut(kayit)
+            });
+        }
+
+        if (this.canOpenPaymentDialog(kayit)) {
+            items.push({
+                label: 'Odeme',
+                icon: 'pi pi-credit-card',
+                command: () => this.openOdemeDialog(kayit)
+            });
+        }
+
+        if (this.canCancelReservation(kayit)) {
+            items.push({
+                label: kayit.rezervasyonDurumu === this.durumIptal ? 'Iptali Geri Al' : 'Iptal Et',
+                icon: 'pi pi-times',
+                command: () => this.iptalEt(kayit)
+            });
+        }
+
+        return items;
+    }
+
+    openRowActionsMenu(menu: { toggle: (event: Event) => void }, event: Event, kayit: RezervasyonListeDto): void {
+        if (this.isCheckActionLoading(kayit.id)) {
+            return;
+        }
+
+        this.rowActionItems = this.getRowActions(kayit);
+        menu.toggle(event);
     }
 
     tamamlaCheckIn(kayit: RezervasyonListeDto): void {
@@ -591,6 +676,15 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        const isRevert = kayit.rezervasyonDurumu === this.durumIptal;
+        const confirmationMessage = isRevert
+            ? 'Bu rezervasyonun iptalini geri alip Taslak durumuna donmek istediginize emin misiniz?'
+            : 'Bu rezervasyonu iptal etmek istediginize emin misiniz?';
+
+        if (!window.confirm(confirmationMessage)) {
+            return;
+        }
+
         this.checkActionLoadingByRezervasyonId[kayit.id] = true;
         this.service
             .iptalEt(kayit.id)
@@ -606,7 +700,9 @@ export class RezervasyonYonetimi implements OnInit {
                     this.messageService.add({
                         severity: 'success',
                         summary: 'Basarili',
-                        detail: `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
+                        detail: result.rezervasyonDurumu === this.durumIptal
+                            ? `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
+                            : `Rezervasyon iptali geri alindi. Referans: ${result.referansNo}`
                     });
                     this.cdr.detectChanges();
                 },
@@ -1043,6 +1139,40 @@ export class RezervasyonYonetimi implements OnInit {
         const safeValue = Number.isFinite(value) ? value : 0;
         const safeCurrency = (currency || 'TRY').toUpperCase();
         return `${safeValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${safeCurrency}`;
+    }
+
+    getRezervasyonDurumLabel(durum: string): string {
+        switch (durum) {
+            case this.durumTaslak:
+                return 'Taslak';
+            case this.durumOnayli:
+                return 'Onayli';
+            case this.durumCheckInTamamlandi:
+                return 'Check-in';
+            case this.durumCheckOutTamamlandi:
+                return 'Check-out';
+            case this.durumIptal:
+                return 'Iptal';
+            default:
+                return durum;
+        }
+    }
+
+    getRezervasyonDurumSeverity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+        switch (durum) {
+            case this.durumTaslak:
+                return 'secondary';
+            case this.durumOnayli:
+                return 'info';
+            case this.durumCheckInTamamlandi:
+                return 'warn';
+            case this.durumCheckOutTamamlandi:
+                return 'success';
+            case this.durumIptal:
+                return 'danger';
+            default:
+                return 'secondary';
+        }
     }
 
     private nowInput(): string {

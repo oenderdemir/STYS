@@ -220,6 +220,7 @@
                     <th>Giris</th>
                     <th>Cikis</th>
                     <th>Ucret</th>
+                    <th>Konaklayan Plani</th>
                     <th>Durum</th>
                 </tr>
             </ng-template>
@@ -247,12 +248,26 @@
                             (onClick)="openRezervasyonUcretDetay(kayit)"
                         />
                     </td>
+                    <td>
+                        @if (canManage) {
+                            <p-button
+                                label="Plan"
+                                icon="pi pi-users"
+                                severity="secondary"
+                                [text]="true"
+                                size="small"
+                                (onClick)="openKonaklayanPlaniDialog(kayit)"
+                            />
+                        } @else {
+                            -
+                        }
+                    </td>
                     <td>{{ kayit.rezervasyonDurumu }}</td>
                 </tr>
             </ng-template>
             <ng-template #expandedrow let-kayit>
                 <tr>
-                    <td colspan="12">
+                    <td colspan="13">
                         <div class="p-3">
                             @if (isRezervasyonDetayLoading(kayit.id)) {
                                 <span class="text-color-secondary">Rezervasyon detayi yukleniyor...</span>
@@ -360,6 +375,85 @@
 
     <ng-template #footer>
         <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closeRezervasyonUcretDetayDialog()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Konaklayan Plani"
+    [(visible)]="konaklayanPlanDialogVisible"
+    [modal]="true"
+    [style]="{ width: '72rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="closeKonaklayanPlaniDialog()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ konaklayanPlanReferansNo }}
+    </div>
+
+    @if (konaklayanPlanLoading) {
+        <div>Konaklayan plani yukleniyor...</div>
+    } @else if (!konaklayanPlan) {
+        <div>Konaklayan plani bulunamadi.</div>
+    } @else {
+        <p-table [value]="konaklayanPlan.konaklayanlar" [tableStyle]="{ 'min-width': '68rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Sira</th>
+                    <th>Ad Soyad</th>
+                    <th>TC Kimlik No</th>
+                    <th>Pasaport No</th>
+                    @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
+                        <th>
+                            Segment {{ segment.segmentSirasi }}
+                            <div class="text-xs font-normal text-color-secondary">
+                                {{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}
+                            </div>
+                        </th>
+                    }
+                </tr>
+            </ng-template>
+            <ng-template #body let-kisi>
+                <tr>
+                    <td>{{ kisi.siraNo }}</td>
+                    <td>
+                        <input pInputText class="w-full" [(ngModel)]="kisi.adSoyad" [disabled]="konaklayanPlanSaving" />
+                    </td>
+                    <td>
+                        <input pInputText class="w-full" [(ngModel)]="kisi.tcKimlikNo" [disabled]="konaklayanPlanSaving" />
+                    </td>
+                    <td>
+                        <input pInputText class="w-full" [(ngModel)]="kisi.pasaportNo" [disabled]="konaklayanPlanSaving" />
+                    </td>
+                    @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
+                        <td>
+                            <p-select
+                                class="w-full"
+                                [options]="getKonaklayanOdaSecenekleri(kisi, segment.segmentId)"
+                                optionLabel="label"
+                                optionValue="value"
+                                [appendTo]="'body'"
+                                [showClear]="true"
+                                placeholder="Oda Seciniz"
+                                [disabled]="konaklayanPlanSaving"
+                                [ngModel]="getKonaklayanAtamaOdaId(kisi, segment.segmentId)"
+                                (ngModelChange)="setKonaklayanAtamaOdaId(kisi, segment.segmentId, $event)"
+                            />
+                        </td>
+                    }
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="konaklayanPlanSaving" (onClick)="closeKonaklayanPlaniDialog()" />
+        <p-button
+            label="Plani Kaydet"
+            icon="pi pi-check"
+            [loading]="konaklayanPlanSaving"
+            [disabled]="!konaklayanPlan || konaklayanPlanLoading"
+            (onClick)="kaydetKonaklayanPlani()"
+        />
     </ng-template>
 </p-dialog>
 

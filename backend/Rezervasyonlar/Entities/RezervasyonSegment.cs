@@ -15,4 +15,6 @@ public class RezervasyonSegment : BaseEntity<int>
     public Rezervasyon? Rezervasyon { get; set; }
 
     public ICollection<RezervasyonSegmentOdaAtama> OdaAtamalari { get; set; } = [];
+
+    public ICollection<RezervasyonKonaklayanSegmentAtama> KonaklayanAtamalari { get; set; } = [];
 }

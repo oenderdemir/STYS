@@ -88,6 +88,30 @@ public class RezervasyonController : UIController
         return Ok(detay);
     }
 
+    [HttpGet("kayitlar/{rezervasyonId:int}/konaklayan-plani")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<RezervasyonKonaklayanPlanDto>> GetKonaklayanPlani([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var plan = await _rezervasyonService.GetKonaklayanPlaniAsync(rezervasyonId, cancellationToken);
+        if (plan is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(plan);
+    }
+
+    [HttpPut("kayitlar/{rezervasyonId:int}/konaklayan-plani")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKonaklayanPlanDto>> KaydetKonaklayanPlani(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonKonaklayanPlanKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var plan = await _rezervasyonService.KaydetKonaklayanPlaniAsync(rezervasyonId, request, cancellationToken);
+        return Ok(plan);
+    }
+
     [HttpPost("uygun-odalar")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<List<UygunOdaDto>>> GetUygunOdalar([FromBody] UygunOdaAramaRequestDto request, CancellationToken cancellationToken)

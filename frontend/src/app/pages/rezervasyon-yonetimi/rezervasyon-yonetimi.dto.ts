@@ -210,3 +210,56 @@ export interface RezervasyonDetayDto {
     uygulananIndirimler: UygulananIndirimDto[];
     segmentler: RezervasyonDetaySegmentDto[];
 }
+
+export interface RezervasyonKonaklayanPlanDto {
+    rezervasyonId: number;
+    kisiSayisi: number;
+    segmentler: RezervasyonKonaklayanSegmentDto[];
+    konaklayanlar: RezervasyonKonaklayanKisiDto[];
+}
+
+export interface RezervasyonKonaklayanSegmentDto {
+    segmentId: number;
+    segmentSirasi: number;
+    baslangicTarihi: string;
+    bitisTarihi: string;
+    odaSecenekleri: RezervasyonKonaklayanOdaSecenekDto[];
+}
+
+export interface RezervasyonKonaklayanOdaSecenekDto {
+    odaId: number;
+    odaNo: string;
+    binaAdi: string;
+    odaTipiAdi: string;
+    ayrilanKisiSayisi: number;
+}
+
+export interface RezervasyonKonaklayanKisiDto {
+    siraNo: number;
+    adSoyad: string;
+    tcKimlikNo: string | null;
+    pasaportNo: string | null;
+    atamalar: RezervasyonKonaklayanKisiAtamaDto[];
+}
+
+export interface RezervasyonKonaklayanKisiAtamaDto {
+    segmentId: number;
+    odaId: number | null;
+}
+
+export interface RezervasyonKonaklayanPlanKaydetRequestDto {
+    konaklayanlar: RezervasyonKonaklayanKisiKaydetDto[];
+}
+
+export interface RezervasyonKonaklayanKisiKaydetDto {
+    siraNo: number;
+    adSoyad: string;
+    tcKimlikNo: string | null;
+    pasaportNo: string | null;
+    atamalar: RezervasyonKonaklayanKisiAtamaKaydetDto[];
+}
+
+export interface RezervasyonKonaklayanKisiAtamaKaydetDto {
+    segmentId: number;
+    odaId: number | null;
+}

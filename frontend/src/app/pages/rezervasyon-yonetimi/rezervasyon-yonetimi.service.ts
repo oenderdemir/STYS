@@ -3,7 +3,25 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KonaklamaSenaryoAramaRequestDto, KonaklamaSenaryoDto, RezervasyonDetayDto, RezervasyonIndirimKuraliSecenekDto, RezervasyonKaydetRequestDto, RezervasyonKayitSonucDto, RezervasyonKonaklamaTipiDto, RezervasyonListeDto, RezervasyonMisafirTipiDto, RezervasyonOdaTipiDto, RezervasyonTesisDto, SenaryoFiyatHesaplaRequestDto, SenaryoFiyatHesaplamaSonucuDto, UygunOdaAramaRequestDto, UygunOdaDto } from './rezervasyon-yonetimi.dto';
+import {
+    KonaklamaSenaryoAramaRequestDto,
+    KonaklamaSenaryoDto,
+    RezervasyonDetayDto,
+    RezervasyonIndirimKuraliSecenekDto,
+    RezervasyonKaydetRequestDto,
+    RezervasyonKayitSonucDto,
+    RezervasyonKonaklamaTipiDto,
+    RezervasyonKonaklayanPlanDto,
+    RezervasyonKonaklayanPlanKaydetRequestDto,
+    RezervasyonListeDto,
+    RezervasyonMisafirTipiDto,
+    RezervasyonOdaTipiDto,
+    RezervasyonTesisDto,
+    SenaryoFiyatHesaplaRequestDto,
+    SenaryoFiyatHesaplamaSonucuDto,
+    UygunOdaAramaRequestDto,
+    UygunOdaDto
+} from './rezervasyon-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class RezervasyonYonetimiService {
@@ -84,6 +102,30 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon detayi alinamadi.');
+            })
+        );
+    }
+
+    getKonaklayanPlani(rezervasyonId: number): Observable<RezervasyonKonaklayanPlanDto> {
+        return this.http.get<ApiResponse<RezervasyonKonaklayanPlanDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/konaklayan-plani`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklayan plani alinamadi.');
+            })
+        );
+    }
+
+    saveKonaklayanPlani(rezervasyonId: number, request: RezervasyonKonaklayanPlanKaydetRequestDto): Observable<RezervasyonKonaklayanPlanDto> {
+        return this.http.put<ApiResponse<RezervasyonKonaklayanPlanDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/konaklayan-plani`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklayan plani kaydedilemedi.');
             })
         );
     }

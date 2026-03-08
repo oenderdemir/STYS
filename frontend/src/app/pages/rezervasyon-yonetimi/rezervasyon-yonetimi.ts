@@ -20,6 +20,9 @@ import {
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonKonaklamaTipiDto,
+    RezervasyonKonaklayanKisiDto,
+    RezervasyonKonaklayanPlanDto,
+    RezervasyonKonaklayanSegmentDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
     RezervasyonOdaTipiDto,
@@ -60,6 +63,12 @@ export class RezervasyonYonetimi implements OnInit {
     rezervasyonUcretDetayDialogVisible = false;
     rezervasyonUcretDetayRezervasyonId: number | null = null;
     rezervasyonUcretDetayReferansNo = '';
+    konaklayanPlanDialogVisible = false;
+    konaklayanPlanLoading = false;
+    konaklayanPlanSaving = false;
+    konaklayanPlanRezervasyonId: number | null = null;
+    konaklayanPlanReferansNo = '';
+    konaklayanPlan: RezervasyonKonaklayanPlanDto | null = null;
 
     selectedTesisId: number | null = null;
     selectedOdaTipiId: number | null = null;
@@ -433,6 +442,117 @@ export class RezervasyonYonetimi implements OnInit {
         return this.getRezervasyonDetay(this.rezervasyonUcretDetayRezervasyonId);
     }
 
+    openKonaklayanPlaniDialog(kayit: RezervasyonListeDto): void {
+        if (!this.canManage || !kayit?.id || kayit.id <= 0) {
+            return;
+        }
+
+        this.konaklayanPlanDialogVisible = true;
+        this.konaklayanPlanRezervasyonId = kayit.id;
+        this.konaklayanPlanReferansNo = kayit.referansNo;
+        this.konaklayanPlan = null;
+        this.loadKonaklayanPlani(kayit.id);
+    }
+
+    closeKonaklayanPlaniDialog(): void {
+        this.konaklayanPlanDialogVisible = false;
+        this.konaklayanPlanRezervasyonId = null;
+        this.konaklayanPlanReferansNo = '';
+        this.konaklayanPlan = null;
+        this.konaklayanPlanLoading = false;
+        this.konaklayanPlanSaving = false;
+    }
+
+    kaydetKonaklayanPlani(): void {
+        if (!this.canManage || !this.konaklayanPlanRezervasyonId || !this.konaklayanPlan) {
+            return;
+        }
+
+        this.konaklayanPlanSaving = true;
+        this.service
+            .saveKonaklayanPlani(this.konaklayanPlanRezervasyonId, {
+                konaklayanlar: this.konaklayanPlan.konaklayanlar.map((kisi) => ({
+                    siraNo: kisi.siraNo,
+                    adSoyad: (kisi.adSoyad ?? '').trim(),
+                    tcKimlikNo: this.normalizeOptional(kisi.tcKimlikNo ?? ''),
+                    pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
+                    atamalar: kisi.atamalar.map((atama) => ({
+                        segmentId: atama.segmentId,
+                        odaId: atama.odaId
+                    }))
+                }))
+            })
+            .pipe(
+                finalize(() => {
+                    this.konaklayanPlanSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (plan) => {
+                    this.konaklayanPlan = plan;
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getKonaklayanSegmentler(): RezervasyonKonaklayanSegmentDto[] {
+        return this.konaklayanPlan?.segmentler ?? [];
+    }
+
+    getKonaklayanOdaSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
+        const segment = this.konaklayanPlan?.segmentler.find((x) => x.segmentId === segmentId);
+        if (!segment) {
+            return [];
+        }
+
+        const currentSelection = this.getKonaklayanAtamaOdaId(kisi, segmentId);
+        return segment.odaSecenekleri
+            .filter((oda) => {
+                const selectedCount = this.getSegmentOdaSelectedCount(segmentId, oda.odaId);
+                if (currentSelection === oda.odaId) {
+                    return true;
+                }
+
+                return selectedCount < oda.ayrilanKisiSayisi;
+            })
+            .map((oda) => ({
+                value: oda.odaId,
+                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi)`
+            }));
+    }
+
+    getKonaklayanAtamaOdaId(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): number | null {
+        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
+        return atama?.odaId ?? null;
+    }
+
+    setKonaklayanAtamaOdaId(kisi: RezervasyonKonaklayanKisiDto, segmentId: number, odaId: number | null): void {
+        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
+        if (atama) {
+            atama.odaId = odaId;
+            return;
+        }
+
+        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId }];
+    }
+
+    private getSegmentOdaSelectedCount(segmentId: number, odaId: number): number {
+        if (!this.konaklayanPlan) {
+            return 0;
+        }
+
+        return this.konaklayanPlan.konaklayanlar.reduce((total, kisi) => {
+            const selectedOdaId = kisi.atamalar.find((x) => x.segmentId === segmentId)?.odaId;
+            return total + (selectedOdaId === odaId ? 1 : 0);
+        }, 0);
+    }
+
     getRezervasyonDetay(rezervasyonId: number | null | undefined): RezervasyonDetayDto | null {
         if (!rezervasyonId || rezervasyonId <= 0) {
             return null;
@@ -549,6 +669,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
+                    this.closeKonaklayanPlaniDialog();
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -557,6 +678,30 @@ export class RezervasyonYonetimi implements OnInit {
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
+                    this.closeKonaklayanPlaniDialog();
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadKonaklayanPlani(rezervasyonId: number): void {
+        this.konaklayanPlanLoading = true;
+        this.service
+            .getKonaklayanPlani(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.konaklayanPlanLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (plan) => {
+                    this.konaklayanPlan = plan;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.konaklayanPlan = null;
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }

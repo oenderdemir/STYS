@@ -54,6 +54,8 @@ public class StysAppDbContext : DbContext
     public DbSet<Rezervasyon> Rezervasyonlar => Set<Rezervasyon>();
     public DbSet<RezervasyonSegment> RezervasyonSegmentleri => Set<RezervasyonSegment>();
     public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
+    public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
+    public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
 
     public override int SaveChanges()
     {
@@ -473,6 +475,47 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.RezervasyonSegment)
                 .WithMany(x => x.OdaAtamalari)
+                .HasForeignKey(x => x.RezervasyonSegmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Oda)
+                .WithMany()
+                .HasForeignKey(x => x.OdaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonKonaklayan>(entity =>
+        {
+            entity.ToTable("RezervasyonKonaklayanlar", "dbo");
+            entity.Property(x => x.AdSoyad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
+            entity.Property(x => x.PasaportNo).HasMaxLength(32);
+            entity.HasIndex(x => new { x.RezervasyonId, x.SiraNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.Konaklayanlar)
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonKonaklayanSegmentAtama>(entity =>
+        {
+            entity.ToTable("RezervasyonKonaklayanSegmentAtamalari", "dbo");
+            entity.HasIndex(x => new { x.RezervasyonKonaklayanId, x.RezervasyonSegmentId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RezervasyonSegmentId, x.OdaId })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.RezervasyonKonaklayan)
+                .WithMany(x => x.SegmentAtamalari)
+                .HasForeignKey(x => x.RezervasyonKonaklayanId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RezervasyonSegment)
+                .WithMany(x => x.KonaklayanAtamalari)
                 .HasForeignKey(x => x.RezervasyonSegmentId)
                 .OnDelete(DeleteBehavior.Restrict);
 

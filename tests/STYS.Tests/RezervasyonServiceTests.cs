@@ -801,6 +801,171 @@ public class RezervasyonServiceTests
         Assert.Equal(403, exception.ErrorCode);
     }
 
+    // Konaklayan plani kaydedildiginde kisi ve oda atamalari rezervasyon bazinda geri okunabilmeli.
+    [Fact]
+    public async Task KonaklayanPlani_KaydedilipGeriOkunabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 980,
+            ReferansNo = "TEST-RZV-980",
+            TesisId = 1,
+            KisiSayisi = 2,
+            GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            CikisTarihi = new DateTime(2026, 3, 9, 10, 0, 0),
+            MisafirAdiSoyadi = "Test Lider",
+            MisafirTelefon = "000",
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        });
+
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment
+        {
+            Id = 981,
+            RezervasyonId = 980,
+            SegmentSirasi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 9, 10, 0, 0)
+        });
+
+        dbContext.RezervasyonSegmentOdaAtamalari.AddRange(
+            new RezervasyonSegmentOdaAtama
+            {
+                Id = 982,
+                RezervasyonSegmentId = 981,
+                OdaId = 101,
+                AyrilanKisiSayisi = 1,
+                OdaNoSnapshot = "A-102",
+                BinaAdiSnapshot = "A Blok",
+                OdaTipiAdiSnapshot = "Standart Double",
+                PaylasimliMiSnapshot = false,
+                KapasiteSnapshot = 2
+            },
+            new RezervasyonSegmentOdaAtama
+            {
+                Id = 983,
+                RezervasyonSegmentId = 981,
+                OdaId = 102,
+                AyrilanKisiSayisi = 1,
+                OdaNoSnapshot = "A-103",
+                BinaAdiSnapshot = "A Blok",
+                OdaTipiAdiSnapshot = "Deluxe Double",
+                PaylasimliMiSnapshot = false,
+                KapasiteSnapshot = 2
+            });
+
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var savedPlan = await service.KaydetKonaklayanPlaniAsync(980, new RezervasyonKonaklayanPlanKaydetRequestDto
+        {
+            Konaklayanlar =
+            [
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 1,
+                    AdSoyad = "Ali Kaya",
+                    TcKimlikNo = "11111111111",
+                    PasaportNo = null,
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 981, OdaId = 101 }]
+                },
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 2,
+                    AdSoyad = "Ayse Kaya",
+                    TcKimlikNo = "22222222222",
+                    PasaportNo = null,
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 981, OdaId = 102 }]
+                }
+            ]
+        });
+
+        Assert.Equal(2, savedPlan.Konaklayanlar.Count);
+        Assert.Equal(101, savedPlan.Konaklayanlar.Single(x => x.SiraNo == 1).Atamalar.Single().OdaId);
+        Assert.Equal(102, savedPlan.Konaklayanlar.Single(x => x.SiraNo == 2).Atamalar.Single().OdaId);
+
+        var loadedPlan = await service.GetKonaklayanPlaniAsync(980);
+        Assert.NotNull(loadedPlan);
+        Assert.Equal("Ali Kaya", loadedPlan!.Konaklayanlar.Single(x => x.SiraNo == 1).AdSoyad);
+    }
+
+    // Segmentte oda kapasitesi asilirsa ayni odaya fazla kisi atamasi engellenmeli.
+    [Fact]
+    public async Task KonaklayanPlani_KapasiteAsiminiEngeller()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 984,
+            ReferansNo = "TEST-RZV-984",
+            TesisId = 1,
+            KisiSayisi = 2,
+            GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            CikisTarihi = new DateTime(2026, 3, 9, 10, 0, 0),
+            MisafirAdiSoyadi = "Test Lider",
+            MisafirTelefon = "000",
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        });
+
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment
+        {
+            Id = 985,
+            RezervasyonId = 984,
+            SegmentSirasi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 9, 10, 0, 0)
+        });
+
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = 986,
+            RezervasyonSegmentId = 985,
+            OdaId = 101,
+            AyrilanKisiSayisi = 1,
+            OdaNoSnapshot = "A-102",
+            BinaAdiSnapshot = "A Blok",
+            OdaTipiAdiSnapshot = "Standart Double",
+            PaylasimliMiSnapshot = false,
+            KapasiteSnapshot = 2
+        });
+
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetKonaklayanPlaniAsync(984, new RezervasyonKonaklayanPlanKaydetRequestDto
+        {
+            Konaklayanlar =
+            [
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 1,
+                    AdSoyad = "Ali Kaya",
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 985, OdaId = 101 }]
+                },
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 2,
+                    AdSoyad = "Ayse Kaya",
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 985, OdaId = 101 }]
+                }
+            ]
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
     private static RezervasyonService CreateService(
         StysAppDbContext dbContext,
         DomainAccessScope? scope = null,

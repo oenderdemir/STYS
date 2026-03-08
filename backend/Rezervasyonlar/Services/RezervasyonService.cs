@@ -168,7 +168,7 @@ public class RezervasyonService : IRezervasyonService
             query = query.Where(x => x.TesisId == tesisId.Value);
         }
 
-        return await query
+        var kayitlar = await query
             .OrderByDescending(x => x.GirisTarihi)
             .ThenByDescending(x => x.Id)
             .Select(x => new RezervasyonListeDto
@@ -197,9 +197,27 @@ public class RezervasyonService : IRezervasyonService
                     && x.Konaklayanlar.Count() == x.KisiSayisi
                     && !x.Konaklayanlar.Any(k => k.AdSoyad == null || k.AdSoyad == string.Empty)
                     && !x.Konaklayanlar.Any(k => k.SegmentAtamalari.Count() != x.Segmentler.Count())
+                    ,
+                OdaDegisimiGerekli = false
             })
             .Take(200)
             .ToListAsync(cancellationToken);
+
+        if (kayitlar.Count == 0)
+        {
+            return kayitlar;
+        }
+
+        var affectedReservationIds = await GetReservationsRequiringRoomReassignmentAsync(
+            kayitlar.Select(x => x.Id).ToList(),
+            cancellationToken);
+
+        foreach (var kayit in kayitlar)
+        {
+            kayit.OdaDegisimiGerekli = affectedReservationIds.Contains(kayit.Id);
+        }
+
+        return kayitlar;
     }
 
     public async Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(int tesisId, DateTime? tarih, CancellationToken cancellationToken = default)
@@ -736,6 +754,289 @@ public class RezervasyonService : IRezervasyonService
                ?? throw new BaseException("Konaklayan plani kaydedildi ancak tekrar okunamadi.", 500);
     }
 
+    public async Task<RezervasyonOdaDegisimSecenekDto> GetOdaDegisimSecenekleriAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+        EnsureCanChangeRoomForReservationStatus(reservation.RezervasyonDurumu);
+
+        var assignments = await GetReservationSegmentAssignmentsAsync(rezervasyonId, cancellationToken);
+        if (assignments.Count == 0)
+        {
+            throw new BaseException("Rezervasyon segment/oda atama kaydi bulunamadi.", 400);
+        }
+
+        var problematicAssignmentIds = await (
+                from segment in _stysDbContext.RezervasyonSegmentleri
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                join blok in _stysDbContext.OdaKullanimBloklari on atama.OdaId equals blok.OdaId
+                where segment.RezervasyonId == rezervasyonId
+                      && blok.AktifMi
+                      && blok.BaslangicTarihi < segment.BitisTarihi
+                      && blok.BitisTarihi > segment.BaslangicTarihi
+                select atama.Id)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (problematicAssignmentIds.Count == 0)
+        {
+            return new RezervasyonOdaDegisimSecenekDto
+            {
+                RezervasyonId = reservation.Id,
+                ReferansNo = reservation.ReferansNo
+            };
+        }
+
+        var problematicSet = problematicAssignmentIds.ToHashSet();
+        var groupedBySegment = assignments
+            .GroupBy(x => x.SegmentId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        var kayitlar = new List<RezervasyonOdaDegisimKayitDto>();
+        foreach (var assignment in assignments.Where(x => problematicSet.Contains(x.RezervasyonSegmentOdaAtamaId)))
+        {
+            var segmentAssignments = groupedBySegment[assignment.SegmentId];
+            var adayOdalar = await GetReplacementCandidatesForAssignmentAsync(
+                reservation.Id,
+                reservation.TesisId,
+                assignment,
+                segmentAssignments,
+                cancellationToken);
+
+            kayitlar.Add(new RezervasyonOdaDegisimKayitDto
+            {
+                RezervasyonSegmentOdaAtamaId = assignment.RezervasyonSegmentOdaAtamaId,
+                SegmentId = assignment.SegmentId,
+                SegmentSirasi = assignment.SegmentSirasi,
+                BaslangicTarihi = assignment.BaslangicTarihi,
+                BitisTarihi = assignment.BitisTarihi,
+                AyrilanKisiSayisi = assignment.AyrilanKisiSayisi,
+                MevcutOdaId = assignment.OdaId,
+                MevcutOdaNo = assignment.OdaNo,
+                MevcutBinaAdi = assignment.BinaAdi,
+                MevcutOdaTipiAdi = assignment.OdaTipiAdi,
+                MevcutOdaPaylasimliMi = assignment.PaylasimliMi,
+                MevcutOdaKapasitesi = assignment.Kapasite,
+                ProblemliMi = true,
+                AdayOdalar = adayOdalar
+            });
+        }
+
+        return new RezervasyonOdaDegisimSecenekDto
+        {
+            RezervasyonId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            Kayitlar = kayitlar
+                .OrderBy(x => x.SegmentSirasi)
+                .ThenBy(x => x.RezervasyonSegmentOdaAtamaId)
+                .ToList()
+        };
+    }
+
+    public async Task<RezervasyonKayitSonucDto> KaydetOdaDegisimiAsync(int rezervasyonId, RezervasyonOdaDegisimKaydetRequestDto request, CancellationToken cancellationToken = default)
+    {
+        if (request.Atamalar.Count == 0)
+        {
+            throw new BaseException("Kaydedilecek oda degisimi bulunamadi.", 400);
+        }
+
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+        EnsureCanChangeRoomForReservationStatus(reservation.RezervasyonDurumu);
+
+        var assignments = await _stysDbContext.RezervasyonSegmentOdaAtamalari
+            .Include(x => x.RezervasyonSegment)
+            .Where(x => x.RezervasyonSegment != null && x.RezervasyonSegment.RezervasyonId == rezervasyonId)
+            .ToListAsync(cancellationToken);
+
+        if (assignments.Count == 0)
+        {
+            throw new BaseException("Rezervasyon segment/oda atama kaydi bulunamadi.", 400);
+        }
+
+        var requestMap = request.Atamalar
+            .GroupBy(x => x.RezervasyonSegmentOdaAtamaId)
+            .ToDictionary(x => x.Key, x => x.Last().YeniOdaId);
+
+        if (requestMap.Keys.Any(x => x <= 0) || requestMap.Values.Any(x => x <= 0))
+        {
+            throw new BaseException("Gecersiz oda degisimi talebi.", 400);
+        }
+
+        var assignmentById = assignments.ToDictionary(x => x.Id);
+        if (requestMap.Keys.Any(x => !assignmentById.ContainsKey(x)))
+        {
+            throw new BaseException("Degisimi istenen segment oda atamasi bulunamadi.", 404);
+        }
+
+        var changedAssignments = requestMap
+            .Where(x => assignmentById[x.Key].OdaId != x.Value)
+            .Select(x => new
+            {
+                AtamaId = x.Key,
+                YeniOdaId = x.Value
+            })
+            .ToList();
+
+        if (changedAssignments.Count == 0)
+        {
+            return ToSaveResult(reservation);
+        }
+
+        var finalRoomByAssignmentId = assignments.ToDictionary(x => x.Id, x => x.OdaId);
+        foreach (var changed in changedAssignments)
+        {
+            finalRoomByAssignmentId[changed.AtamaId] = changed.YeniOdaId;
+        }
+
+        var assignmentsBySegment = assignments
+            .GroupBy(x => x.RezervasyonSegmentId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var segmentGroup in assignmentsBySegment)
+        {
+            var selectedRoomIds = segmentGroup.Value
+                .Select(x => finalRoomByAssignmentId[x.Id])
+                .ToList();
+
+            if (selectedRoomIds.Distinct().Count() != selectedRoomIds.Count)
+            {
+                throw new BaseException("Ayni segmentte ayni oda birden fazla kez secilemez.", 400);
+            }
+        }
+
+        var allSelectedRoomIds = finalRoomByAssignmentId.Values
+            .Distinct()
+            .ToList();
+
+        var selectedRooms = await (
+                from oda in _stysDbContext.Odalar
+                join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
+                join roomType in _stysDbContext.OdaTipleri on oda.TesisOdaTipiId equals roomType.Id
+                where oda.AktifMi
+                      && bina.AktifMi
+                      && roomType.AktifMi
+                      && bina.TesisId == reservation.TesisId
+                      && allSelectedRoomIds.Contains(oda.Id)
+                select new OdaDegisimRoomInfo(
+                    oda.Id,
+                    oda.OdaNo,
+                    bina.Ad,
+                    roomType.Ad,
+                    roomType.Kapasite,
+                    roomType.PaylasimliMi))
+            .ToListAsync(cancellationToken);
+
+        if (selectedRooms.Count != allSelectedRoomIds.Count)
+        {
+            throw new BaseException("Secilen odalardan en az biri gecersiz veya rezervasyon tesisi disinda.", 400);
+        }
+
+        var roomInfoById = selectedRooms.ToDictionary(x => x.OdaId);
+        foreach (var segmentGroup in assignmentsBySegment.Values)
+        {
+            var segment = segmentGroup[0].RezervasyonSegment
+                          ?? throw new BaseException("Rezervasyon segment bilgisi eksik.", 400);
+
+            var selectedRoomIds = segmentGroup
+                .Select(x => finalRoomByAssignmentId[x.Id])
+                .Distinct()
+                .ToList();
+
+            var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
+                .Where(x =>
+                    x.AktifMi
+                    && selectedRoomIds.Contains(x.OdaId)
+                    && x.BaslangicTarihi < segment.BitisTarihi
+                    && x.BitisTarihi > segment.BaslangicTarihi)
+                .Select(x => x.OdaId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            if (blockedRoomIds.Count > 0)
+            {
+                var blockedRoomId = blockedRoomIds[0];
+                var blockedRoomNo = roomInfoById.TryGetValue(blockedRoomId, out var info)
+                    ? info.OdaNo
+                    : blockedRoomId.ToString();
+                throw new BaseException($"'{blockedRoomNo}' odasi icin secilen aralikta bakim/ariza kaydi mevcut.", 400);
+            }
+
+            var occupancyByRoom = await GetCurrentOccupancyByRoomAsync(
+                selectedRoomIds,
+                segment.BaslangicTarihi,
+                segment.BitisTarihi,
+                cancellationToken,
+                rezervasyonId);
+
+            foreach (var assignment in segmentGroup)
+            {
+                var roomId = finalRoomByAssignmentId[assignment.Id];
+                var roomInfo = roomInfoById[roomId];
+                var occupied = occupancyByRoom.TryGetValue(roomId, out var value) ? value : 0;
+                var assigned = assignment.AyrilanKisiSayisi;
+
+                if (!roomInfo.PaylasimliMi)
+                {
+                    if (occupied > 0)
+                    {
+                        throw new BaseException($"'{roomInfo.OdaNo}' odasi secilen tarih araliginda musait degil.", 400);
+                    }
+
+                    if (assigned > roomInfo.Kapasite)
+                    {
+                        throw new BaseException($"'{roomInfo.OdaNo}' odasi icin ayrilan kisi sayisi kapasiteyi asiyor.", 400);
+                    }
+
+                    continue;
+                }
+
+                var remaining = Math.Max(0, roomInfo.Kapasite - occupied);
+                if (assigned > remaining)
+                {
+                    throw new BaseException($"'{roomInfo.OdaNo}' odasi icin secilen aralikta yeterli kapasite yok.", 400);
+                }
+            }
+        }
+
+        var changedSegmentIds = new HashSet<int>();
+        foreach (var changed in changedAssignments)
+        {
+            var assignment = assignmentById[changed.AtamaId];
+            var selectedRoom = roomInfoById[changed.YeniOdaId];
+            assignment.OdaId = selectedRoom.OdaId;
+            assignment.OdaNoSnapshot = selectedRoom.OdaNo;
+            assignment.BinaAdiSnapshot = selectedRoom.BinaAdi;
+            assignment.OdaTipiAdiSnapshot = selectedRoom.OdaTipiAdi;
+            assignment.PaylasimliMiSnapshot = selectedRoom.PaylasimliMi;
+            assignment.KapasiteSnapshot = selectedRoom.Kapasite;
+            changedSegmentIds.Add(assignment.RezervasyonSegmentId);
+        }
+
+        if (changedSegmentIds.Count > 0)
+        {
+            var konaklayanAtamalari = await (
+                    from atama in _stysDbContext.RezervasyonKonaklayanSegmentAtamalari
+                    join konaklayan in _stysDbContext.RezervasyonKonaklayanlar on atama.RezervasyonKonaklayanId equals konaklayan.Id
+                    where konaklayan.RezervasyonId == rezervasyonId
+                          && changedSegmentIds.Contains(atama.RezervasyonSegmentId)
+                    select atama)
+                .ToListAsync(cancellationToken);
+
+            if (konaklayanAtamalari.Count > 0)
+            {
+                _stysDbContext.RezervasyonKonaklayanSegmentAtamalari.RemoveRange(konaklayanAtamalari);
+            }
+        }
+
+        await TryApplyPriceDecreaseAfterRoomChangeAsync(
+            reservation,
+            assignmentsBySegment,
+            finalRoomByAssignmentId,
+            cancellationToken);
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return ToSaveResult(reservation);
+    }
+
     public async Task<List<UygunOdaDto>> GetUygunOdalarAsync(UygunOdaAramaRequestDto request, CancellationToken cancellationToken = default)
     {
         ValidateRequest(request);
@@ -937,8 +1238,30 @@ public class RezervasyonService : IRezervasyonService
 
         foreach (var segment in request.Segmentler)
         {
+            var segmentRoomIds = segment.OdaAtamalari
+                .Select(x => x.OdaId)
+                .Distinct()
+                .ToList();
+
+            var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
+                .Where(x =>
+                    x.AktifMi
+                    && segmentRoomIds.Contains(x.OdaId)
+                    && x.BaslangicTarihi < segment.BitisTarihi
+                    && x.BitisTarihi > segment.BaslangicTarihi)
+                .Select(x => x.OdaId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            if (blockedRoomIds.Count > 0)
+            {
+                var blockedRoom = rooms.FirstOrDefault(x => x.OdaId == blockedRoomIds[0]);
+                var blockedRoomNo = blockedRoom?.OdaNo ?? blockedRoomIds[0].ToString();
+                throw new BaseException($"'{blockedRoomNo}' odasi icin secilen aralikta bakim/ariza kaydi mevcut.", 400);
+            }
+
             var occupancyByRoom = await GetCurrentOccupancyByRoomAsync(
-                segment.OdaAtamalari.Select(x => x.OdaId).Distinct().ToList(),
+                segmentRoomIds,
                 segment.BaslangicTarihi,
                 segment.BitisTarihi,
                 cancellationToken);
@@ -970,6 +1293,8 @@ public class RezervasyonService : IRezervasyonService
             ReferansNo = GenerateReferenceNo(),
             TesisId = request.TesisId,
             KisiSayisi = request.KisiSayisi,
+            MisafirTipiId = request.MisafirTipiId,
+            KonaklamaTipiId = request.KonaklamaTipiId,
             GirisTarihi = request.GirisTarihi,
             CikisTarihi = request.CikisTarihi,
             MisafirAdiSoyadi = request.MisafirAdiSoyadi.Trim(),
@@ -1088,6 +1413,8 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Check-in icin her konaklayana tum segmentlerde oda atanmalidir.", 400);
         }
 
+        await EnsureNoActiveRoomBlockForReservationAsync(rezervasyonId, cancellationToken);
+
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi;
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
@@ -1198,8 +1525,30 @@ public class RezervasyonService : IRezervasyonService
             })
             .ToListAsync(cancellationToken);
 
+        var activeBlocks = await _stysDbContext.OdaKullanimBloklari
+            .Where(x =>
+                x.AktifMi
+                && roomIds.Contains(x.OdaId)
+                && x.BaslangicTarihi < maxEnd
+                && x.BitisTarihi > minStart)
+            .Select(x => new
+            {
+                x.OdaId,
+                x.BaslangicTarihi,
+                x.BitisTarihi
+            })
+            .ToListAsync(cancellationToken);
+
         foreach (var own in ownAssignments)
         {
+            if (activeBlocks.Any(x =>
+                    x.OdaId == own.OdaId
+                    && x.BaslangicTarihi < own.BitisTarihi
+                    && x.BitisTarihi > own.BaslangicTarihi))
+            {
+                throw new BaseException("Iptal geri alinamadi. En az bir segmentte oda bakim/ariza nedeniyle musait degil.", 400);
+            }
+
             var occupied = overlaps
                 .Where(x => x.OdaId == own.OdaId
                             && x.BaslangicTarihi < own.BitisTarihi
@@ -1824,6 +2173,16 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Kisi sayisi sifirdan buyuk olmalidir.", 400);
         }
 
+        if (request.MisafirTipiId <= 0)
+        {
+            throw new BaseException("Misafir tipi secimi zorunludur.", 400);
+        }
+
+        if (request.KonaklamaTipiId <= 0)
+        {
+            throw new BaseException("Konaklama tipi secimi zorunludur.", 400);
+        }
+
         if (request.GirisTarihi >= request.CikisTarihi)
         {
             throw new BaseException("Giris tarihi cikis tarihinden kucuk olmalidir.", 400);
@@ -1957,6 +2316,94 @@ public class RezervasyonService : IRezervasyonService
         }
     }
 
+    private async Task TryApplyPriceDecreaseAfterRoomChangeAsync(
+        Rezervasyon reservation,
+        IReadOnlyDictionary<int, List<RezervasyonSegmentOdaAtama>> assignmentsBySegment,
+        IReadOnlyDictionary<int, int> finalRoomByAssignmentId,
+        CancellationToken cancellationToken)
+    {
+        if (!reservation.MisafirTipiId.HasValue || !reservation.KonaklamaTipiId.HasValue)
+        {
+            return;
+        }
+
+        var segmentDtos = assignmentsBySegment
+            .Select(group =>
+            {
+                var segment = group.Value[0].RezervasyonSegment
+                              ?? throw new BaseException("Rezervasyon segment bilgisi eksik.", 400);
+
+                return new SenaryoFiyatHesaplaSegmentDto
+                {
+                    BaslangicTarihi = segment.BaslangicTarihi,
+                    BitisTarihi = segment.BitisTarihi,
+                    OdaAtamalari = group.Value
+                        .Select(a => new SenaryoFiyatHesaplaOdaAtamaDto
+                        {
+                            OdaId = finalRoomByAssignmentId[a.Id],
+                            AyrilanKisiSayisi = a.AyrilanKisiSayisi
+                        })
+                        .ToList()
+                };
+            })
+            .OrderBy(x => x.BaslangicTarihi)
+            .ThenBy(x => x.BitisTarihi)
+            .ToList();
+
+        if (segmentDtos.Count == 0)
+        {
+            return;
+        }
+
+        var mevcutIndirimler = DeserializeAppliedDiscounts(reservation.UygulananIndirimlerJson);
+        var seciliKuralIds = mevcutIndirimler
+            .Where(x => x.IndirimKuraliId > 0)
+            .Select(x => x.IndirimKuraliId)
+            .Distinct()
+            .ToList();
+        var customIndirimToplami = mevcutIndirimler
+            .Where(x => x.IndirimKuraliId <= 0 && x.IndirimTutari > 0)
+            .Sum(x => x.IndirimTutari);
+
+        var fiyatSonucu = await CalculateScenarioPriceAsync(
+            reservation.TesisId,
+            reservation.MisafirTipiId.Value,
+            reservation.KonaklamaTipiId.Value,
+            reservation.GirisTarihi,
+            reservation.CikisTarihi,
+            segmentDtos,
+            seciliKuralIds,
+            cancellationToken);
+
+        var nihaiTutar = fiyatSonucu.ToplamNihaiUcret;
+        var guncelIndirimler = new List<UygulananIndirimDto>(fiyatSonucu.UygulananIndirimler);
+
+        if (customIndirimToplami > 0)
+        {
+            var uygulanacakCustomIndirim = Math.Min(customIndirimToplami, nihaiTutar);
+            if (uygulanacakCustomIndirim > 0)
+            {
+                nihaiTutar -= uygulanacakCustomIndirim;
+                guncelIndirimler.Add(new UygulananIndirimDto
+                {
+                    IndirimKuraliId = 0,
+                    KuralAdi = "Custom Indirim",
+                    IndirimTutari = uygulanacakCustomIndirim,
+                    SonrasiTutar = nihaiTutar
+                });
+            }
+        }
+
+        if (nihaiTutar >= reservation.ToplamUcret)
+        {
+            return;
+        }
+
+        reservation.ToplamBazUcret = Math.Min(reservation.ToplamBazUcret, fiyatSonucu.ToplamBazUcret);
+        reservation.ToplamUcret = nihaiTutar;
+        reservation.UygulananIndirimlerJson = SerializeAppliedDiscounts(guncelIndirimler);
+    }
+
     private bool HasPermission(string permission)
     {
         var claims = _httpContextAccessor.HttpContext?.User
@@ -1992,11 +2439,134 @@ public class RezervasyonService : IRezervasyonService
         throw new BaseException("Gecersiz odeme tipi.", 400);
     }
 
+    private static void EnsureCanChangeRoomForReservationStatus(string rezervasyonDurumu)
+    {
+        if (rezervasyonDurumu == RezervasyonDurumlari.Taslak || rezervasyonDurumu == RezervasyonDurumlari.Onayli)
+        {
+            return;
+        }
+
+        throw new BaseException("Bu rezervasyon durumu icin oda degisimi yapilamaz.", 400);
+    }
+
+    private async Task<List<OdaDegisimAssignmentInfo>> GetReservationSegmentAssignmentsAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        return await (
+                from segment in _stysDbContext.RezervasyonSegmentleri
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                where segment.RezervasyonId == rezervasyonId
+                orderby segment.SegmentSirasi, atama.Id
+                select new OdaDegisimAssignmentInfo(
+                    atama.Id,
+                    segment.Id,
+                    segment.SegmentSirasi,
+                    segment.BaslangicTarihi,
+                    segment.BitisTarihi,
+                    atama.AyrilanKisiSayisi,
+                    atama.OdaId,
+                    atama.OdaNoSnapshot,
+                    atama.BinaAdiSnapshot,
+                    atama.OdaTipiAdiSnapshot,
+                    atama.PaylasimliMiSnapshot,
+                    atama.KapasiteSnapshot))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<RezervasyonOdaDegisimAdayOdaDto>> GetReplacementCandidatesForAssignmentAsync(
+        int rezervasyonId,
+        int tesisId,
+        OdaDegisimAssignmentInfo assignment,
+        IReadOnlyCollection<OdaDegisimAssignmentInfo> segmentAssignments,
+        CancellationToken cancellationToken)
+    {
+        var candidateRooms = await (
+                from oda in _stysDbContext.Odalar
+                join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
+                join odaTipi in _stysDbContext.OdaTipleri on oda.TesisOdaTipiId equals odaTipi.Id
+                where oda.AktifMi
+                      && bina.AktifMi
+                      && odaTipi.AktifMi
+                      && bina.TesisId == tesisId
+                      && odaTipi.Kapasite >= assignment.AyrilanKisiSayisi
+                select new OdaDegisimRoomInfo(
+                    oda.Id,
+                    oda.OdaNo,
+                    bina.Ad,
+                    odaTipi.Ad,
+                    odaTipi.Kapasite,
+                    odaTipi.PaylasimliMi))
+            .ToListAsync(cancellationToken);
+
+        if (candidateRooms.Count == 0)
+        {
+            return [];
+        }
+
+        var roomIds = candidateRooms
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToList();
+
+        var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
+            .Where(x =>
+                x.AktifMi
+                && roomIds.Contains(x.OdaId)
+                && x.BaslangicTarihi < assignment.BitisTarihi
+                && x.BitisTarihi > assignment.BaslangicTarihi)
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var blockedRoomSet = blockedRoomIds.ToHashSet();
+
+        var occupancyByRoom = await GetCurrentOccupancyByRoomAsync(
+            roomIds,
+            assignment.BaslangicTarihi,
+            assignment.BitisTarihi,
+            cancellationToken,
+            rezervasyonId);
+
+        var segmentOccupiedByOtherAssignments = segmentAssignments
+            .Where(x => x.RezervasyonSegmentOdaAtamaId != assignment.RezervasyonSegmentOdaAtamaId)
+            .GroupBy(x => x.OdaId)
+            .ToDictionary(x => x.Key, x => x.Sum(y => y.AyrilanKisiSayisi));
+
+        return candidateRooms
+            .Where(room => !blockedRoomSet.Contains(room.OdaId))
+            .Select(room =>
+            {
+                var occupiedByOthers = occupancyByRoom.TryGetValue(room.OdaId, out var occupied) ? occupied : 0;
+                var occupiedInSegment = segmentOccupiedByOtherAssignments.TryGetValue(room.OdaId, out var segmentOccupied) ? segmentOccupied : 0;
+                var totalOccupied = occupiedByOthers + occupiedInSegment;
+                var remainingCapacity = room.PaylasimliMi
+                    ? Math.Max(0, room.Kapasite - totalOccupied)
+                    : totalOccupied > 0
+                        ? 0
+                        : room.Kapasite;
+
+                return new RezervasyonOdaDegisimAdayOdaDto
+                {
+                    OdaId = room.OdaId,
+                    OdaNo = room.OdaNo,
+                    BinaAdi = room.BinaAdi,
+                    OdaTipiAdi = room.OdaTipiAdi,
+                    PaylasimliMi = room.PaylasimliMi,
+                    Kapasite = room.Kapasite,
+                    KalanKapasite = remainingCapacity
+                };
+            })
+            .Where(x => x.KalanKapasite >= assignment.AyrilanKisiSayisi)
+            .OrderBy(x => x.BinaAdi)
+            .ThenBy(x => x.OdaNo)
+            .ThenBy(x => x.OdaId)
+            .ToList();
+    }
+
     private async Task<Dictionary<int, int>> GetCurrentOccupancyByRoomAsync(
         IReadOnlyCollection<int> roomIds,
         DateTime baslangic,
         DateTime bitis,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? excludeRezervasyonId = null)
     {
         if (roomIds.Count == 0)
         {
@@ -2009,6 +2579,7 @@ public class RezervasyonService : IRezervasyonService
             join rezervasyon in _stysDbContext.Rezervasyonlar on segment.RezervasyonId equals rezervasyon.Id
             where rezervasyon.AktifMi
                   && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                  && (!excludeRezervasyonId.HasValue || rezervasyon.Id != excludeRezervasyonId.Value)
                   && roomIds.Contains(atama.OdaId)
                   && segment.BaslangicTarihi < bitis
                   && segment.BitisTarihi > baslangic
@@ -2105,8 +2676,24 @@ public class RezervasyonService : IRezervasyonService
             return [];
         }
 
+        var candidateRoomIds = candidateRooms
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToList();
+
+        var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
+            .Where(x =>
+                x.AktifMi
+                && candidateRoomIds.Contains(x.OdaId)
+                && x.BaslangicTarihi < bitis
+                && x.BitisTarihi > baslangic)
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var blockedRoomSet = blockedRoomIds.ToHashSet();
+
         var occupancyByRoom = await GetCurrentOccupancyByRoomAsync(
-            candidateRooms.Select(x => x.OdaId).ToList(),
+            candidateRoomIds,
             baslangic,
             bitis,
             cancellationToken);
@@ -2114,6 +2701,11 @@ public class RezervasyonService : IRezervasyonService
         var result = new List<RoomAvailability>();
         foreach (var room in candidateRooms)
         {
+            if (blockedRoomSet.Contains(room.OdaId))
+            {
+                continue;
+            }
+
             var occupied = occupancyByRoom.TryGetValue(room.OdaId, out var value) ? value : 0;
             int remaining;
 
@@ -2144,6 +2736,63 @@ public class RezervasyonService : IRezervasyonService
         }
 
         return result;
+    }
+
+    private async Task<HashSet<int>> GetReservationsRequiringRoomReassignmentAsync(
+        IReadOnlyCollection<int> reservationIds,
+        CancellationToken cancellationToken)
+    {
+        if (reservationIds.Count == 0)
+        {
+            return [];
+        }
+
+        var affected = await (
+                from rezervasyon in _stysDbContext.Rezervasyonlar
+                join segment in _stysDbContext.RezervasyonSegmentleri on rezervasyon.Id equals segment.RezervasyonId
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                join blok in _stysDbContext.OdaKullanimBloklari on atama.OdaId equals blok.OdaId
+                where reservationIds.Contains(rezervasyon.Id)
+                      && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                      && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
+                      && blok.AktifMi
+                      && blok.BaslangicTarihi < segment.BitisTarihi
+                      && blok.BitisTarihi > segment.BaslangicTarihi
+                select rezervasyon.Id)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return affected.ToHashSet();
+    }
+
+    private async Task EnsureNoActiveRoomBlockForReservationAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var blockedAssignment = await (
+                from segment in _stysDbContext.RezervasyonSegmentleri
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                join blok in _stysDbContext.OdaKullanimBloklari on atama.OdaId equals blok.OdaId
+                where segment.RezervasyonId == rezervasyonId
+                      && blok.AktifMi
+                      && blok.BaslangicTarihi < segment.BitisTarihi
+                      && blok.BitisTarihi > segment.BaslangicTarihi
+                orderby segment.BaslangicTarihi, atama.OdaId
+                select new
+                {
+                    atama.OdaNoSnapshot,
+                    blok.BlokTipi,
+                    blok.BaslangicTarihi,
+                    blok.BitisTarihi
+                })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (blockedAssignment is null)
+        {
+            return;
+        }
+
+        throw new BaseException(
+            $"Check-in icin oda degisimi gereklidir. '{blockedAssignment.OdaNoSnapshot}' odasi icin {blockedAssignment.BlokTipi} kaydi mevcut ({blockedAssignment.BaslangicTarihi:dd.MM.yyyy HH:mm} - {blockedAssignment.BitisTarihi:dd.MM.yyyy HH:mm}).",
+            400);
     }
 
     private static List<KonaklamaSenaryoDto> BuildSingleSegmentVariants(
@@ -2378,4 +3027,26 @@ public class RezervasyonService : IRezervasyonService
         string OdaTipiAdi,
         int Kapasite,
         bool PaylasimliMi);
+
+    private sealed record OdaDegisimRoomInfo(
+        int OdaId,
+        string OdaNo,
+        string BinaAdi,
+        string OdaTipiAdi,
+        int Kapasite,
+        bool PaylasimliMi);
+
+    private sealed record OdaDegisimAssignmentInfo(
+        int RezervasyonSegmentOdaAtamaId,
+        int SegmentId,
+        int SegmentSirasi,
+        DateTime BaslangicTarihi,
+        DateTime BitisTarihi,
+        int AyrilanKisiSayisi,
+        int OdaId,
+        string OdaNo,
+        string BinaAdi,
+        string OdaTipiAdi,
+        bool PaylasimliMi,
+        int Kapasite);
 }

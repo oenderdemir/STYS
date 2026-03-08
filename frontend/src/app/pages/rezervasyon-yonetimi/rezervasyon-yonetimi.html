@@ -265,15 +265,20 @@
                             <span>-</span>
                         }
                     </td>
-                    <td>
-                        <p-tag
-                            [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
-                            [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
-                            [rounded]="true"
-                        />
-                    </td>
-                </tr>
-            </ng-template>
+	                    <td>
+	                        <div class="flex flex-col gap-1">
+	                            <p-tag
+	                                [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
+	                                [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
+	                                [rounded]="true"
+	                            />
+	                            @if (kayit.odaDegisimiGerekli) {
+	                                <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
+	                            }
+	                        </div>
+	                    </td>
+	                </tr>
+	            </ng-template>
             <ng-template #expandedrow let-kayit>
                 <tr>
                     <td colspan="13">
@@ -462,6 +467,81 @@
             [loading]="konaklayanPlanSaving"
             [disabled]="!konaklayanPlan || konaklayanPlanLoading"
             (onClick)="kaydetKonaklayanPlani()"
+        />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Oda Degisimi"
+    [(visible)]="odaDegisimDialogVisible"
+    [modal]="true"
+    [style]="{ width: '68rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="closeOdaDegisimDialog()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ odaDegisimReferansNo }}
+    </div>
+
+    @if (odaDegisimLoading) {
+        <div>Oda degisim secenekleri yukleniyor...</div>
+    } @else if (!odaDegisimSecenekleri || odaDegisimSecenekleri.kayitlar.length === 0) {
+        <div>Bu rezervasyon icin oda degisimi gerektiren kayit bulunmuyor.</div>
+    } @else {
+        <p-table [value]="odaDegisimSecenekleri.kayitlar" [tableStyle]="{ 'min-width': '64rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Segment</th>
+                    <th>Mevcut Oda</th>
+                    <th>Ayrilan Kisi</th>
+                    <th>Yeni Oda</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-kayit>
+                <tr>
+                    <td>
+                        <div class="font-medium">Segment {{ kayit.segmentSirasi }}</div>
+                        <div class="text-xs text-color-secondary">
+                            {{ formatDateTime(kayit.baslangicTarihi) }} - {{ formatDateTime(kayit.bitisTarihi) }}
+                        </div>
+                    </td>
+                    <td>
+                        <div>{{ kayit.mevcutOdaNo }} - {{ kayit.mevcutBinaAdi }}</div>
+                        <div class="text-xs text-color-secondary">
+                            {{ kayit.mevcutOdaTipiAdi }} | {{ kayit.mevcutOdaPaylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}
+                        </div>
+                    </td>
+                    <td>{{ kayit.ayrilanKisiSayisi }}</td>
+                    <td>
+                        @if (kayit.adayOdalar.length === 0) {
+                            <span class="text-red-500">Uygun alternatif oda bulunamadi.</span>
+                        } @else {
+                            <p-select
+                                class="w-full"
+                                [options]="getOdaDegisimAdayOptions(kayit)"
+                                optionLabel="label"
+                                optionValue="value"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="odaDegisimSaving"
+                                [ngModel]="getOdaDegisimSeciliOdaId(kayit)"
+                                (ngModelChange)="setOdaDegisimSeciliOdaId(kayit, $event)"
+                            />
+                        }
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="odaDegisimSaving" (onClick)="closeOdaDegisimDialog()" />
+        <p-button
+            label="Degisikligi Kaydet"
+            icon="pi pi-check"
+            [loading]="odaDegisimSaving"
+            [disabled]="!canKaydetOdaDegisimi()"
+            (onClick)="kaydetOdaDegisimi()"
         />
     </ng-template>
 </p-dialog>

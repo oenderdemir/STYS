@@ -14,6 +14,10 @@ public class Rezervasyon : BaseEntity<int>
 
     public int KisiSayisi { get; set; } = 1;
 
+    public int? MisafirTipiId { get; set; }
+
+    public int? KonaklamaTipiId { get; set; }
+
     public DateTime GirisTarihi { get; set; }
 
     public DateTime CikisTarihi { get; set; }

@@ -79,6 +79,13 @@ public static class StructurePermissions
         public const string Manage = "SezonYonetimi.Manage";
     }
 
+    public static class OdaKullanimBlokYonetimi
+    {
+        public const string Menu = "OdaKullanimBlokYonetimi.Menu";
+        public const string View = "OdaKullanimBlokYonetimi.View";
+        public const string Manage = "OdaKullanimBlokYonetimi.Manage";
+    }
+
     public static class RezervasyonYonetimi
     {
         public const string Menu = "RezervasyonYonetimi.Menu";

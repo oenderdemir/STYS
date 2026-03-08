@@ -11,6 +11,12 @@ public class RezervasyonKaydetRequestDto
     [Range(1, int.MaxValue)]
     public int KisiSayisi { get; set; } = 1;
 
+    [Range(1, int.MaxValue)]
+    public int MisafirTipiId { get; set; }
+
+    [Range(1, int.MaxValue)]
+    public int KonaklamaTipiId { get; set; }
+
     [Required]
     public DateTime GirisTarihi { get; set; }
 

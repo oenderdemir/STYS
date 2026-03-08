@@ -124,6 +124,25 @@ public class RezervasyonController : UIController
         return Ok(plan);
     }
 
+    [HttpGet("kayitlar/{rezervasyonId:int}/oda-degisim-secenekleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdaDegisimSecenekDto>> GetOdaDegisimSecenekleri([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetOdaDegisimSecenekleriAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("kayitlar/{rezervasyonId:int}/oda-degisim")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKayitSonucDto>> KaydetOdaDegisimi(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonOdaDegisimKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetOdaDegisimiAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("uygun-odalar")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<List<UygunOdaDto>>> GetUygunOdalar([FromBody] UygunOdaAramaRequestDto request, CancellationToken cancellationToken)

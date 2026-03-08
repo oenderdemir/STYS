@@ -1,0 +1,121 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Bakim/Ariza Kaydi" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    [value]="kayitlar"
+    [loading]="loading"
+    dataKey="id"
+    [lazy]="true"
+    (onLazyLoad)="onLazyLoad($event)"
+    sortMode="single"
+    [paginator]="true"
+    [rows]="pageSize"
+    [first]="(pageNumber - 1) * pageSize"
+    [rowsPerPageOptions]="[10, 20, 50]"
+    [totalRecords]="totalRecords"
+    [tableStyle]="{ 'min-width': '76rem' }"
+    currentPageReportTemplate="{first} - {last} / {totalRecords}"
+    [showCurrentPageReport]="true"
+>
+    <ng-template #caption>
+        <div class="flex flex-wrap gap-3 items-center justify-between">
+            <h5 class="m-0">Oda Bakim/Ariza Yonetimi</h5>
+            <div class="flex flex-wrap gap-2 items-center">
+                <p-select
+                    [options]="tesisOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="selectedTesisId"
+                    [showClear]="true"
+                    placeholder="Tum Tesisler"
+                    styleClass="min-w-52"
+                    [appendTo]="'body'"
+                    (ngModelChange)="onTesisFilterChanged()"
+                />
+                <p-select
+                    [options]="odaOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="selectedOdaId"
+                    [showClear]="true"
+                    placeholder="Tum Odalar"
+                    styleClass="min-w-56"
+                    [appendTo]="'body'"
+                    [filter]="true"
+                    (ngModelChange)="onOdaFilterChanged()"
+                />
+                <p-select
+                    [options]="blokTipiOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="selectedBlokTipi"
+                    [showClear]="true"
+                    placeholder="Tum Tipler"
+                    styleClass="min-w-40"
+                    [appendTo]="'body'"
+                    (ngModelChange)="onBlokTipiFilterChanged()"
+                />
+                <p-iconfield>
+                    <p-inputicon styleClass="pi pi-search" />
+                    <input pInputText type="text" [ngModel]="searchQuery" placeholder="Aciklama ara..." (input)="onSearchInput($event)" />
+                </p-iconfield>
+            </div>
+        </div>
+    </ng-template>
+
+    <ng-template #header>
+        <tr>
+            <th pSortableColumn="tesisId">Tesis <p-sortIcon field="tesisId" /></th>
+            <th pSortableColumn="odaId">Oda <p-sortIcon field="odaId" /></th>
+            <th pSortableColumn="blokTipi">Blok Tipi <p-sortIcon field="blokTipi" /></th>
+            <th pSortableColumn="baslangicTarihi">Baslangic <p-sortIcon field="baslangicTarihi" /></th>
+            <th pSortableColumn="bitisTarihi">Bitis <p-sortIcon field="bitisTarihi" /></th>
+            <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
+            <th>Aciklama</th>
+            <th style="width: 18rem">Islem</th>
+        </tr>
+    </ng-template>
+
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ getTesisLabel(item.tesisId) }}</td>
+            <td>{{ getOdaLabel(item.odaId) }}</td>
+            <td>{{ item.blokTipi }}</td>
+            <td>{{ item.baslangicTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+            <td>{{ item.bitisTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+            <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>
+            <td>{{ item.aciklama || '-' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(item)" />
+                    @if (canManage) {
+                        <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<app-oda-kullanim-blok-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedModel"
+    [saving]="saving"
+    [canManage]="canManage"
+    [selectedTesisId]="selectedTesisId"
+    [odaSecenekleri]="odaSecenekleri"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>
+

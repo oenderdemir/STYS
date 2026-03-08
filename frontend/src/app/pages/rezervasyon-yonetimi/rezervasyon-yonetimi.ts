@@ -29,6 +29,8 @@ import {
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
     RezervasyonOdemeOzetDto,
+    RezervasyonOdaDegisimKayitDto,
+    RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplamaSonucuDto
@@ -82,6 +84,13 @@ export class RezervasyonYonetimi implements OnInit {
     odemeTutari: number | null = null;
     odemeTipi = 'Nakit';
     odemeAciklama = '';
+    odaDegisimDialogVisible = false;
+    odaDegisimLoading = false;
+    odaDegisimSaving = false;
+    odaDegisimRezervasyonId: number | null = null;
+    odaDegisimReferansNo = '';
+    odaDegisimSecenekleri: RezervasyonOdaDegisimSecenekDto | null = null;
+    odaDegisimSecimleri: Record<number, number> = {};
     readonly odemeTipleri = [
         { label: 'Nakit', value: 'Nakit' },
         { label: 'Kredi Karti', value: 'KrediKarti' }
@@ -249,6 +258,8 @@ export class RezervasyonYonetimi implements OnInit {
         const payload: RezervasyonKaydetRequestDto = {
             tesisId: this.selectedTesisId,
             kisiSayisi: this.kisiSayisi,
+            misafirTipiId: this.selectedMisafirTipiId!,
+            konaklamaTipiId: this.selectedKonaklamaTipiId!,
             girisTarihi: this.toIsoDate(this.baslangicTarihi),
             cikisTarihi: this.toIsoDate(this.bitisTarihi),
             misafirAdiSoyadi: this.misafirAdiSoyadi.trim(),
@@ -550,6 +561,7 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         return kayit.konaklayanPlaniTamamlandi
+            && !kayit.odaDegisimiGerekli
             && (kayit.rezervasyonDurumu === this.durumTaslak || kayit.rezervasyonDurumu === this.durumOnayli);
     }
 
@@ -579,6 +591,15 @@ export class RezervasyonYonetimi implements OnInit {
         return kayit.rezervasyonDurumu !== this.durumIptal;
     }
 
+    canOpenOdaDegisimDialog(kayit: RezervasyonListeDto): boolean {
+        if (!this.canManage) {
+            return false;
+        }
+
+        return kayit.odaDegisimiGerekli
+            && (kayit.rezervasyonDurumu === this.durumTaslak || kayit.rezervasyonDurumu === this.durumOnayli);
+    }
+
     hasAnyRowAction(kayit: RezervasyonListeDto): boolean {
         return this.getRowActions(kayit).length > 0;
     }
@@ -595,6 +616,14 @@ export class RezervasyonYonetimi implements OnInit {
             icon: 'pi pi-users',
             command: () => this.openKonaklayanPlaniDialog(kayit)
         });
+
+        if (this.canOpenOdaDegisimDialog(kayit)) {
+            items.push({
+                label: 'Oda Degistir',
+                icon: 'pi pi-sync',
+                command: () => this.openOdaDegisimDialog(kayit)
+            });
+        }
 
         if (this.canCompleteCheckIn(kayit)) {
             items.push({
@@ -712,6 +741,128 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    openOdaDegisimDialog(kayit: RezervasyonListeDto): void {
+        if (!this.canOpenOdaDegisimDialog(kayit) || this.odaDegisimLoading) {
+            return;
+        }
+
+        this.odaDegisimDialogVisible = true;
+        this.odaDegisimRezervasyonId = kayit.id;
+        this.odaDegisimReferansNo = kayit.referansNo;
+        this.odaDegisimSecenekleri = null;
+        this.odaDegisimSecimleri = {};
+        this.odaDegisimLoading = true;
+
+        this.service
+            .getOdaDegisimSecenekleri(kayit.id)
+            .pipe(
+                finalize(() => {
+                    this.odaDegisimLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.odaDegisimSecenekleri = result;
+                    this.odaDegisimSecimleri = {};
+                    for (const kayitSecenegi of result.kayitlar) {
+                        const firstCandidate = kayitSecenegi.adayOdalar[0];
+                        if (firstCandidate && firstCandidate.odaId > 0) {
+                            this.odaDegisimSecimleri[kayitSecenegi.rezervasyonSegmentOdaAtamaId] = firstCandidate.odaId;
+                        }
+                    }
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.odaDegisimSecenekleri = null;
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    closeOdaDegisimDialog(): void {
+        this.odaDegisimDialogVisible = false;
+        this.odaDegisimLoading = false;
+        this.odaDegisimSaving = false;
+        this.odaDegisimRezervasyonId = null;
+        this.odaDegisimReferansNo = '';
+        this.odaDegisimSecenekleri = null;
+        this.odaDegisimSecimleri = {};
+    }
+
+    kaydetOdaDegisimi(): void {
+        if (!this.odaDegisimRezervasyonId || !this.odaDegisimSecenekleri || !this.canKaydetOdaDegisimi()) {
+            return;
+        }
+
+        this.odaDegisimSaving = true;
+        this.service
+            .saveOdaDegisimi(this.odaDegisimRezervasyonId, {
+                atamalar: this.odaDegisimSecenekleri.kayitlar.map((item) => ({
+                    rezervasyonSegmentOdaAtamaId: item.rezervasyonSegmentOdaAtamaId,
+                    yeniOdaId: this.getOdaDegisimSeciliOdaId(item)
+                }))
+            })
+            .pipe(
+                finalize(() => {
+                    this.odaDegisimSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    const kayit = this.rezervasyonKayitlari.find((x) => x.id === result.id);
+                    if (kayit) {
+                        kayit.odaDegisimiGerekli = false;
+                    }
+
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: `Oda degisimi kaydedildi. Referans: ${result.referansNo}`
+                    });
+
+                    const selectedTesis = this.selectedTesisId && this.selectedTesisId > 0 ? this.selectedTesisId : null;
+                    this.loadRezervasyonKayitlari(selectedTesis);
+                    this.closeOdaDegisimDialog();
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getOdaDegisimAdayOptions(kayit: RezervasyonOdaDegisimKayitDto): { label: string; value: number }[] {
+        return kayit.adayOdalar.map((aday) => ({
+            value: aday.odaId,
+            label: `${aday.odaNo} - ${aday.binaAdi} (${aday.odaTipiAdi}, kalan ${aday.kalanKapasite})`
+        }));
+    }
+
+    getOdaDegisimSeciliOdaId(kayit: RezervasyonOdaDegisimKayitDto): number {
+        return this.odaDegisimSecimleri[kayit.rezervasyonSegmentOdaAtamaId] ?? 0;
+    }
+
+    setOdaDegisimSeciliOdaId(kayit: RezervasyonOdaDegisimKayitDto, odaId: number): void {
+        this.odaDegisimSecimleri[kayit.rezervasyonSegmentOdaAtamaId] = odaId;
+    }
+
+    canKaydetOdaDegisimi(): boolean {
+        if (this.odaDegisimLoading || this.odaDegisimSaving || !this.odaDegisimSecenekleri) {
+            return false;
+        }
+
+        if (this.odaDegisimSecenekleri.kayitlar.length === 0) {
+            return false;
+        }
+
+        return this.odaDegisimSecenekleri.kayitlar.every((kayit) =>
+            kayit.adayOdalar.length > 0 && this.getOdaDegisimSeciliOdaId(kayit) > 0);
     }
 
     openOdemeDialog(kayit: RezervasyonListeDto): void {
@@ -986,6 +1137,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
                     this.closeKonaklayanPlaniDialog();
+                    this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
                     this.cdr.detectChanges();
                 },
@@ -997,6 +1149,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
                     this.closeKonaklayanPlaniDialog();
+                    this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();

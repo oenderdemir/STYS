@@ -719,6 +719,8 @@ public class RezervasyonServiceTests
         {
             TesisId = 1,
             KisiSayisi = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
             GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
             CikisTarihi = new DateTime(2026, 3, 12, 10, 0, 0),
             MisafirAdiSoyadi = "Test Misafir",
@@ -1338,6 +1340,8 @@ public class RezervasyonServiceTests
         {
             TesisId = 1,
             KisiSayisi = 1,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
             GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
             CikisTarihi = new DateTime(2026, 3, 10, 10, 0, 0),
             MisafirAdiSoyadi = "Custom Test Misafir",

@@ -18,6 +18,8 @@ import {
     RezervasyonMisafirTipiDto,
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
+    RezervasyonOdaDegisimKaydetRequestDto,
+    RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplaRequestDto,
@@ -176,6 +178,30 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklayan plani kaydedilemedi.');
+            })
+        );
+    }
+
+    getOdaDegisimSecenekleri(rezervasyonId: number): Observable<RezervasyonOdaDegisimSecenekDto> {
+        return this.http.get<ApiResponse<RezervasyonOdaDegisimSecenekDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/oda-degisim-secenekleri`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda degisim secenekleri alinamadi.');
+            })
+        );
+    }
+
+    saveOdaDegisimi(rezervasyonId: number, request: RezervasyonOdaDegisimKaydetRequestDto): Observable<RezervasyonKayitSonucDto> {
+        return this.http.put<ApiResponse<RezervasyonKayitSonucDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/oda-degisim`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda degisimi kaydedilemedi.');
             })
         );
     }

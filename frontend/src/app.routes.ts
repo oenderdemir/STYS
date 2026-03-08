@@ -15,6 +15,7 @@ import { MenuYonetimi } from './app/pages/menu-yonetimi/menu-yonetimi';
 import { MisafirTipiYonetimi } from './app/pages/misafir-tipi-yonetimi/misafir-tipi-yonetimi';
 import { Notfound } from './app/pages/notfound/notfound';
 import { OdaFiyatYonetimi } from './app/pages/oda-fiyat-yonetimi/oda-fiyat-yonetimi';
+import { OdaKullanimBlokYonetimi } from './app/pages/oda-kullanim-blok-yonetimi/oda-kullanim-blok-yonetimi';
 import { OdaTipiYonetimi } from './app/pages/oda-tipi-yonetimi/oda-tipi-yonetimi';
 import { OdaSinifiYonetimi } from './app/pages/oda-sinifi-yonetimi/oda-sinifi-yonetimi';
 import { OdaOzellikYonetimi } from './app/pages/oda-ozellik-yonetimi/oda-ozellik-yonetimi';
@@ -52,6 +53,7 @@ export const appRoutes: Routes = [
             { path: 'oda-ozellikler', component: OdaOzellikYonetimi },
             { path: 'odalar', component: OdaYonetimi },
             { path: 'oda-fiyatlari', component: OdaFiyatYonetimi },
+            { path: 'oda-bakim-ariza', component: OdaKullanimBlokYonetimi },
             { path: 'indirim-kurallari', component: IndirimKuraliYonetimi },
             { path: 'konaklama-tipleri', component: KonaklamaTipiYonetimi },
             { path: 'misafir-tipleri', component: MisafirTipiYonetimi },

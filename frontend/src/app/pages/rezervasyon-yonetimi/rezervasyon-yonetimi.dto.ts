@@ -141,6 +141,8 @@ export interface RezervasyonKaydetSegmentDto {
 export interface RezervasyonKaydetRequestDto {
     tesisId: number;
     kisiSayisi: number;
+    misafirTipiId: number;
+    konaklamaTipiId: number;
     girisTarihi: string;
     cikisTarihi: string;
     misafirAdiSoyadi: string;
@@ -180,6 +182,7 @@ export interface RezervasyonListeDto {
     paraBirimi: string;
     rezervasyonDurumu: string;
     konaklayanPlaniTamamlandi: boolean;
+    odaDegisimiGerekli: boolean;
 }
 
 export interface RezervasyonDashboardKayitDto {
@@ -285,6 +288,48 @@ export interface RezervasyonKonaklayanKisiKaydetDto {
 export interface RezervasyonKonaklayanKisiAtamaKaydetDto {
     segmentId: number;
     odaId: number | null;
+}
+
+export interface RezervasyonOdaDegisimAdayOdaDto {
+    odaId: number;
+    odaNo: string;
+    binaAdi: string;
+    odaTipiAdi: string;
+    paylasimliMi: boolean;
+    kapasite: number;
+    kalanKapasite: number;
+}
+
+export interface RezervasyonOdaDegisimKayitDto {
+    rezervasyonSegmentOdaAtamaId: number;
+    segmentId: number;
+    segmentSirasi: number;
+    baslangicTarihi: string;
+    bitisTarihi: string;
+    ayrilanKisiSayisi: number;
+    mevcutOdaId: number;
+    mevcutOdaNo: string;
+    mevcutBinaAdi: string;
+    mevcutOdaTipiAdi: string;
+    mevcutOdaPaylasimliMi: boolean;
+    mevcutOdaKapasitesi: number;
+    problemliMi: boolean;
+    adayOdalar: RezervasyonOdaDegisimAdayOdaDto[];
+}
+
+export interface RezervasyonOdaDegisimSecenekDto {
+    rezervasyonId: number;
+    referansNo: string;
+    kayitlar: RezervasyonOdaDegisimKayitDto[];
+}
+
+export interface RezervasyonOdaDegisimKaydetAtamaDto {
+    rezervasyonSegmentOdaAtamaId: number;
+    yeniOdaId: number;
+}
+
+export interface RezervasyonOdaDegisimKaydetRequestDto {
+    atamalar: RezervasyonOdaDegisimKaydetAtamaDto[];
 }
 
 export interface RezervasyonOdemeDto {

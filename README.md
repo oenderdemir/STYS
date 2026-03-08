@@ -69,6 +69,7 @@ note right
 Musait oda havuzu:
 - Oda/Bina/OdaTipi aktif
 - Tesis ve opsiyonel OdaTipi filtresi
+- Aktif OdaKullanimBlok kaydi olanlar dislanir
 - Mevcut doluluk dusulur
 - Paylasimli odada kalan kapasite dikkate alinir
 end note
@@ -108,5 +109,148 @@ endwhile
 :return sortedByPrice;
 stop
 
+@enduml
+```
+
+## Oda Degisimi ve Ucret Kurali (PlantUML)
+
+```plantuml
+@startuml
+title Oda Degisimi Akisi\n(GetOdaDegisimSecenekleriAsync + KaydetOdaDegisimiAsync)
+
+skinparam Shadowing false
+skinparam ActivityBorderColor #4b5563
+skinparam ActivityBackgroundColor #f8fafc
+skinparam ArrowColor #334155
+skinparam NoteBackgroundColor #ecfeff
+skinparam NoteBorderColor #06b6d4
+
+start
+
+:Rezervasyonu scope ile bul;
+if (Durum Taslak/Onayli mi?) then (Hayir)
+  :400 Hata\n"Bu rezervasyon durumu icin oda degisimi yapilamaz";
+  stop
+endif
+
+partition "Secenekleri Getir" {
+  :Segment + Oda atamalarini oku;
+  :Aktif blokla cakisan atamalari bul;
+  if (Problemli atama yok) then (Evet)
+    :Bos liste don;
+    stop
+  endif
+
+  while (Her problemli atama)
+    :Ayni tesis icin aday odalari topla;
+    note right
+    Filtreler:
+    - Oda/Bina/OdaTipi aktif
+    - Kapasite >= AyrilanKisiSayisi
+    - Aktif OdaKullanimBlok cakismasi yok
+    - Diger rezervasyon dolulugu + ayni segment diger atamalar
+    - Kalan kapasite yeterli
+    end note
+    :Aday oda listesini DTO'ya yaz;
+  endwhile
+
+  :Secenek DTO'sunu don;
+}
+
+partition "Degisikligi Kaydet" {
+  :Istenen yeni oda secimlerini al;
+  if (Ayni segmentte ayni oda iki kez secildi mi?) then (Evet)
+    :400 Hata;
+    stop
+  endif
+
+  :Son secimlere gore blok/doluluk/kapasite kontrolu;
+  if (Uygun degil) then (Evet)
+    :400 Hata;
+    stop
+  endif
+
+  :RezervasyonSegmentOdaAtama kayitlarini guncelle;
+  :Snapshot alanlarini guncelle\n(OdaNo/Bina/OdaTipi/Paylasim/Kapasite);
+  :Degisen segmentlerin konaklayan atamalarini temizle;
+
+  if (Rezervasyonda MisafirTipiId ve KonaklamaTipiId var mi?) then (Evet)
+    :Yeni oda dagilimiyla fiyati yeniden hesapla;
+    if (Yeni nihai ucret < Mevcut toplam ucret?) then (Evet)
+      :ToplamUcret'i yeni degere indir;
+      :ToplamBazUcret'i min(mevcut, yeni baz) yap;
+      :Indirim kirilimini yeniden yaz;
+    else (Hayir)
+      :Mevcut fiyati koru\n(artis yansitilmaz);
+    endif
+  endif
+
+  :SaveChanges;
+  :Kayit sonucunu don;
+}
+
+stop
+@enduml
+```
+
+## Arizali Oda Sureci (PlantUML)
+
+```plantuml
+@startuml
+title Arizali Oda Sureci\n(OdaKullanimBlok + Rezervasyon etkisi)
+
+skinparam Shadowing false
+skinparam ActivityBorderColor #4b5563
+skinparam ActivityBackgroundColor #f8fafc
+skinparam ArrowColor #334155
+skinparam NoteBackgroundColor #fef2f2
+skinparam NoteBorderColor #ef4444
+
+start
+
+partition "Bakim/Ariza Kaydi" {
+  :Kullanici Oda Kullanim Blok ekranindan\nAriza kaydi girer;
+  :Validate\n(Oda, Tesis scope, Baslangic<Bitis, AktifMi);
+  :Kaydi olustur\nBlokTipi=Ariza, AktifMi=true;
+}
+
+partition "Rezervasyona Etki" {
+  :Rezervasyon listesi yenilenir;
+  :GetReservationsRequiringRoomReassignmentAsync;
+  if (Rezervasyon segmenti\nblokla cakisiyor mu?) then (Evet)
+    :OdaDegisimiGerekli=true;
+  else (Hayir)
+    :Normal akis;
+  endif
+}
+
+partition "Check-in Koruma" {
+  :Check-in denemesi;
+  :EnsureNoActiveRoomBlockForReservationAsync;
+  if (Aktif blok var mi?) then (Evet)
+    :400 Hata\n"Check-in icin oda degisimi gereklidir";
+    note right
+    Bu adim, arizali odanin\nfiziksel kullanimini engeller.
+    end note
+  else (Hayir)
+    :Check-in devam eder;
+  endif
+}
+
+partition "Operasyonel Cozum" {
+  :Oda degisim secenekleri acilir;
+  :Uygun alternatif oda secilir;
+  :KaydetOdaDegisimiAsync;
+  :Segment oda snapshotlari guncellenir;
+  :Degisen segmentte konaklayan atamalari temizlenir\n(plan yeniden girilir);
+  :Gerekirse fiyat guncellenir\n(sadece asagi yonlu);
+}
+
+partition "Kapanis" {
+  :Ariza kaydi pasife alinabilir\nveya bitis tarihi gecer;
+  :Sonraki rezervasyon aramalarinda oda tekrar musait olabilir;
+}
+
+stop
 @enduml
 ```

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260308183025_AddOdaKullanimBlokYonetimi")]
+    partial class AddOdaKullanimBlokYonetimi
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1150,9 +1153,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int>("KisiSayisi")
                         .HasColumnType("int");
 
-                    b.Property<int?>("KonaklamaTipiId")
-                        .HasColumnType("int");
-
                     b.Property<string>("MisafirAdiSoyadi")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1166,9 +1166,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
-
-                    b.Property<int?>("MisafirTipiId")
-                        .HasColumnType("int");
 
                     b.Property<string>("Notlar")
                         .HasMaxLength(1024)

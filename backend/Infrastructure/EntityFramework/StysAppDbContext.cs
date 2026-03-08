@@ -8,6 +8,7 @@ using STYS.IsletmeAlanlari.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
 using STYS.MisafirTipleri.Entities;
+using STYS.OdaKullanimBloklari.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
 using STYS.Odalar.Entities;
@@ -53,6 +54,7 @@ public class StysAppDbContext : DbContext
     public DbSet<IndirimKuraliMisafirTipi> IndirimKuraliMisafirTipleri => Set<IndirimKuraliMisafirTipi>();
     public DbSet<IndirimKuraliKonaklamaTipi> IndirimKuraliKonaklamaTipleri => Set<IndirimKuraliKonaklamaTipi>();
     public DbSet<SezonKurali> SezonKurallari => Set<SezonKurali>();
+    public DbSet<OdaKullanimBlok> OdaKullanimBloklari => Set<OdaKullanimBlok>();
     public DbSet<Rezervasyon> Rezervasyonlar => Set<Rezervasyon>();
     public DbSet<RezervasyonSegment> RezervasyonSegmentleri => Set<RezervasyonSegment>();
     public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
@@ -434,6 +436,27 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OdaKullanimBlok>(entity =>
+        {
+            entity.ToTable("OdaKullanimBloklari", "dbo");
+            entity.Property(x => x.BlokTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => new { x.TesisId, x.OdaId, x.BaslangicTarihi, x.BitisTarihi })
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+            entity.HasIndex(x => x.OdaId)
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Oda)
+                .WithMany()
+                .HasForeignKey(x => x.OdaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

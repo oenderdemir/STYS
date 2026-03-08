@@ -35,4 +35,6 @@ public class RezervasyonListeDto
     public string RezervasyonDurumu { get; set; } = string.Empty;
 
     public bool KonaklayanPlaniTamamlandi { get; set; }
+
+    public bool OdaDegisimiGerekli { get; set; }
 }

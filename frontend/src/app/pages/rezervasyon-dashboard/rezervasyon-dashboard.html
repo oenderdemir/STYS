@@ -33,6 +33,57 @@
     </div>
 </div>
 
+<div class="card mb-4">
+    <h5 class="m-0 mb-3">Odeme Raporu Export</h5>
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 lg:col-span-5">
+            <label for="reportTesisler" class="block font-medium mb-2">Tesisler</label>
+            <p-multiSelect
+                inputId="reportTesisler"
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="reportSelectedTesisIds"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="true"
+                placeholder="Tesis seciniz"
+                [disabled]="loadingReferences || exportingExcel || exportingPdf"
+                display="chip"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="reportBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
+            <input pInputText id="reportBaslangic" class="w-full" type="date" [(ngModel)]="reportBaslangicTarihi" [disabled]="exportingExcel || exportingPdf" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-2">
+            <label for="reportBitis" class="block font-medium mb-2">Bitis Tarihi</label>
+            <input pInputText id="reportBitis" class="w-full" type="date" [(ngModel)]="reportBitisTarihi" [disabled]="exportingExcel || exportingPdf" />
+        </div>
+        <div class="col-span-12 lg:col-span-2 flex items-end gap-2">
+            <p-button
+                label="Excel"
+                icon="pi pi-file-excel"
+                severity="success"
+                [outlined]="true"
+                [loading]="exportingExcel"
+                [disabled]="!canManage || exportingPdf"
+                (onClick)="exportOdemeRaporuExcel()"
+            />
+            <p-button
+                label="PDF"
+                icon="pi pi-file-pdf"
+                severity="danger"
+                [outlined]="true"
+                [loading]="exportingPdf"
+                [disabled]="!canManage || exportingExcel"
+                (onClick)="exportOdemeRaporuPdf()"
+            />
+        </div>
+    </div>
+</div>
+
 @if (loadingDashboard) {
     <div class="card">Dashboard verileri yukleniyor...</div>
 } @else if (!dashboard) {

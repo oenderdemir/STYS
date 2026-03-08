@@ -1300,6 +1300,92 @@ public class RezervasyonService : IRezervasyonService
         return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
     }
 
+    public async Task<OdemeRaporDto> GetOdemeRaporuAsync(
+        IReadOnlyCollection<int> tesisIds,
+        DateTime baslangicTarihi,
+        DateTime bitisTarihi,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTesisIds = tesisIds
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        if (normalizedTesisIds.Count == 0)
+        {
+            throw new BaseException("En az bir tesis secimi zorunludur.", 400);
+        }
+
+        var rangeStart = baslangicTarihi.Date;
+        var rangeEndExclusive = bitisTarihi.Date.AddDays(1);
+        if (rangeStart >= rangeEndExclusive)
+        {
+            throw new BaseException("Baslangic tarihi bitis tarihinden buyuk olamaz.", 400);
+        }
+
+        foreach (var tesisId in normalizedTesisIds)
+        {
+            await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        }
+
+        var rawRows = await _stysDbContext.RezervasyonOdemeler
+            .Where(x =>
+                x.Rezervasyon != null
+                && x.Rezervasyon.AktifMi
+                && normalizedTesisIds.Contains(x.Rezervasyon.TesisId)
+                && x.OdemeTarihi >= rangeStart
+                && x.OdemeTarihi < rangeEndExclusive)
+            .Select(x => new
+            {
+                x.RezervasyonId,
+                x.OdemeTutari,
+                x.CreatedBy,
+                RezervasyonNo = x.Rezervasyon!.ReferansNo,
+                x.Rezervasyon.ToplamBazUcret,
+                x.Rezervasyon.ToplamUcret,
+                TesisId = x.Rezervasyon.TesisId,
+                TesisAdi = x.Rezervasyon.Tesis!.Ad
+            })
+            .ToListAsync(cancellationToken);
+
+        var reportRows = rawRows
+            .GroupBy(x => new
+            {
+                x.RezervasyonId,
+                x.RezervasyonNo,
+                x.ToplamBazUcret,
+                x.ToplamUcret,
+                x.TesisId,
+                x.TesisAdi
+            })
+            .Select(group => new OdemeRaporSatirDto
+            {
+                TesisId = group.Key.TesisId,
+                TesisAdi = group.Key.TesisAdi,
+                RezervasyonNo = group.Key.RezervasyonNo,
+                OdemeYapan = string.Join(", ", group
+                    .Select(x => x.CreatedBy)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct()
+                    .DefaultIfEmpty("-")),
+                ToplamBazUcret = group.Key.ToplamBazUcret,
+                ToplamIndirim = Math.Max(0m, group.Key.ToplamBazUcret - group.Key.ToplamUcret),
+                ToplamOdeme = group.Sum(x => x.OdemeTutari)
+            })
+            .OrderBy(x => x.TesisAdi)
+            .ThenBy(x => x.RezervasyonNo)
+            .ToList();
+
+        return new OdemeRaporDto
+        {
+            TesisIds = normalizedTesisIds,
+            BaslangicTarihi = rangeStart,
+            BitisTarihi = bitisTarihi.Date,
+            Satirlar = reportRows,
+            ToplamGelir = reportRows.Sum(x => x.ToplamOdeme)
+        };
+    }
+
     private async Task<SenaryoFiyatHesaplamaSonucuDto> CalculateScenarioPriceAsync(
         int tesisId,
         int misafirTipiId,

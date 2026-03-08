@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Rezervasyonlar.Dto;
+using STYS.Rezervasyonlar.Reporting;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -196,5 +197,33 @@ public class RezervasyonController : UIController
     {
         var result = await _rezervasyonService.KaydetOdemeAsync(rezervasyonId, request, cancellationToken);
         return Ok(result);
+    }
+
+    [HttpGet("odeme-raporu/excel")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<IActionResult> ExportOdemeRaporuExcel(
+        [FromQuery] int[] tesisIds,
+        [FromQuery] DateTime baslangicTarihi,
+        [FromQuery] DateTime bitisTarihi,
+        CancellationToken cancellationToken)
+    {
+        var report = await _rezervasyonService.GetOdemeRaporuAsync(tesisIds, baslangicTarihi, bitisTarihi, cancellationToken);
+        var fileBytes = OdemeRaporExportBuilder.BuildExcel(report);
+        var fileName = $"odeme-raporu-{baslangicTarihi:yyyyMMdd}-{bitisTarihi:yyyyMMdd}.xls";
+        return File(fileBytes, "application/vnd.ms-excel", fileName);
+    }
+
+    [HttpGet("odeme-raporu/pdf")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<IActionResult> ExportOdemeRaporuPdf(
+        [FromQuery] int[] tesisIds,
+        [FromQuery] DateTime baslangicTarihi,
+        [FromQuery] DateTime bitisTarihi,
+        CancellationToken cancellationToken)
+    {
+        var report = await _rezervasyonService.GetOdemeRaporuAsync(tesisIds, baslangicTarihi, bitisTarihi, cancellationToken);
+        var fileBytes = OdemeRaporExportBuilder.BuildPdf(report);
+        var fileName = $"odeme-raporu-{baslangicTarihi:yyyyMMdd}-{bitisTarihi:yyyyMMdd}.pdf";
+        return File(fileBytes, "application/pdf", fileName);
     }
 }

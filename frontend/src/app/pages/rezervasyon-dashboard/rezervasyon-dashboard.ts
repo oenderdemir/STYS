@@ -7,6 +7,7 @@ import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -20,7 +21,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
 @Component({
     selector: 'app-rezervasyon-dashboard',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
     providers: [MessageService]
 })
@@ -33,10 +34,15 @@ export class RezervasyonDashboard implements OnInit {
     tesisler: RezervasyonTesisDto[] = [];
     selectedTesisId: number | null = null;
     selectedTarih = this.todayInput();
+    reportSelectedTesisIds: number[] = [];
+    reportBaslangicTarihi = this.firstDayOfMonthInput();
+    reportBitisTarihi = this.todayInput();
     dashboard: RezervasyonDashboardDto | null = null;
 
     loadingReferences = false;
     loadingDashboard = false;
+    exportingExcel = false;
+    exportingPdf = false;
 
     private readonly durumTaslak = 'Taslak';
     private readonly durumOnayli = 'Onayli';
@@ -46,6 +52,10 @@ export class RezervasyonDashboard implements OnInit {
 
     get canView(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.View');
+    }
+
+    get canManage(): boolean {
+        return this.authService.hasPermission('RezervasyonYonetimi.Manage');
     }
 
     ngOnInit(): void {
@@ -67,6 +77,14 @@ export class RezervasyonDashboard implements OnInit {
 
     onTarihChange(): void {
         this.loadDashboard();
+    }
+
+    exportOdemeRaporuExcel(): void {
+        this.exportOdemeRapor('excel');
+    }
+
+    exportOdemeRaporuPdf(): void {
+        this.exportOdemeRapor('pdf');
     }
 
     formatDateTime(value: string): string {
@@ -133,11 +151,16 @@ export class RezervasyonDashboard implements OnInit {
                         this.selectedTesisId = this.tesisler[0].id;
                     }
 
+                    if (this.reportSelectedTesisIds.length === 0 && this.selectedTesisId) {
+                        this.reportSelectedTesisIds = [this.selectedTesisId];
+                    }
+
                     this.loadDashboard();
                 },
                 error: (error: unknown) => {
                     this.tesisler = [];
                     this.selectedTesisId = null;
+                    this.reportSelectedTesisIds = [];
                     this.dashboard = null;
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
@@ -184,6 +207,70 @@ export class RezervasyonDashboard implements OnInit {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    private firstDayOfMonthInput(): string {
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}-01`;
+    }
+
+    private exportOdemeRapor(format: 'excel' | 'pdf'): void {
+        if (!this.canManage) {
+            return;
+        }
+
+        if (this.reportSelectedTesisIds.length === 0) {
+            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Rapor icin en az bir tesis seciniz.' });
+            return;
+        }
+
+        if (!this.reportBaslangicTarihi || !this.reportBitisTarihi || this.reportBaslangicTarihi > this.reportBitisTarihi) {
+            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Gecerli bir tarih araligi seciniz.' });
+            return;
+        }
+
+        if (format === 'excel') {
+            this.exportingExcel = true;
+        } else {
+            this.exportingPdf = true;
+        }
+
+        const export$ = format === 'excel'
+            ? this.service.exportOdemeRaporuExcel(this.reportSelectedTesisIds, this.reportBaslangicTarihi, this.reportBitisTarihi)
+            : this.service.exportOdemeRaporuPdf(this.reportSelectedTesisIds, this.reportBaslangicTarihi, this.reportBitisTarihi);
+
+        export$
+            .pipe(
+                finalize(() => {
+                    this.exportingExcel = false;
+                    this.exportingPdf = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (blob) => {
+                    const extension = format === 'excel' ? 'xls' : 'pdf';
+                    const fileName = `odeme-raporu-${this.reportBaslangicTarihi}-${this.reportBitisTarihi}.${extension}`;
+                    this.downloadBlob(blob, fileName);
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Rapor indirildi.' });
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                }
+            });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
     }
 
     private resolveErrorMessage(error: unknown): string {

@@ -114,6 +114,36 @@ export class RezervasyonYonetimiService {
         );
     }
 
+    exportOdemeRaporuExcel(tesisIds: number[], baslangicTarihi: string, bitisTarihi: string): Observable<Blob> {
+        let params = new HttpParams()
+            .set('baslangicTarihi', baslangicTarihi)
+            .set('bitisTarihi', bitisTarihi);
+
+        for (const tesisId of tesisIds) {
+            params = params.append('tesisIds', tesisId);
+        }
+
+        return this.http.get(`${this.apiBaseUrl}/ui/rezervasyon/odeme-raporu/excel`, {
+            params,
+            responseType: 'blob'
+        });
+    }
+
+    exportOdemeRaporuPdf(tesisIds: number[], baslangicTarihi: string, bitisTarihi: string): Observable<Blob> {
+        let params = new HttpParams()
+            .set('baslangicTarihi', baslangicTarihi)
+            .set('bitisTarihi', bitisTarihi);
+
+        for (const tesisId of tesisIds) {
+            params = params.append('tesisIds', tesisId);
+        }
+
+        return this.http.get(`${this.apiBaseUrl}/ui/rezervasyon/odeme-raporu/pdf`, {
+            params,
+            responseType: 'blob'
+        });
+    }
+
     getRezervasyonDetay(rezervasyonId: number): Observable<RezervasyonDetayDto> {
         return this.http.get<ApiResponse<RezervasyonDetayDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/detay`).pipe(
             map((responseEnvelope) => {

@@ -47,4 +47,6 @@ public interface IRezervasyonService
     Task<RezervasyonOdemeOzetDto> GetOdemeOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
     Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<OdemeRaporDto> GetOdemeRaporuAsync(IReadOnlyCollection<int> tesisIds, DateTime baslangicTarihi, DateTime bitisTarihi, CancellationToken cancellationToken = default);
 }

@@ -15,6 +15,8 @@ import {
     RezervasyonKonaklayanPlanKaydetRequestDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
+    RezervasyonOdemeKaydetRequestDto,
+    RezervasyonOdemeOzetDto,
     RezervasyonOdaTipiDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplaRequestDto,
@@ -199,6 +201,66 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon kaydedilemedi.');
+            })
+        );
+    }
+
+    tamamlaCheckIn(rezervasyonId: number): Observable<RezervasyonKayitSonucDto> {
+        return this.http.post<ApiResponse<RezervasyonKayitSonucDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/check-in`, {}).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Check-in tamamlanamadi.');
+            })
+        );
+    }
+
+    tamamlaCheckOut(rezervasyonId: number): Observable<RezervasyonKayitSonucDto> {
+        return this.http.post<ApiResponse<RezervasyonKayitSonucDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/check-out`, {}).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Check-out tamamlanamadi.');
+            })
+        );
+    }
+
+    iptalEt(rezervasyonId: number): Observable<RezervasyonKayitSonucDto> {
+        return this.http.post<ApiResponse<RezervasyonKayitSonucDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/iptal`, {}).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon iptal edilemedi.');
+            })
+        );
+    }
+
+    getOdemeOzeti(rezervasyonId: number): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.get<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/odeme-ozeti`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme ozeti alinamadi.');
+            })
+        );
+    }
+
+    kaydetOdeme(rezervasyonId: number, request: RezervasyonOdemeKaydetRequestDto): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.post<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/odemeler`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme kaydedilemedi.');
             })
         );
     }

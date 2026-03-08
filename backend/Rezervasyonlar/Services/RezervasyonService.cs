@@ -185,8 +185,18 @@ public class RezervasyonService : IRezervasyonService
                 GirisTarihi = x.GirisTarihi,
                 CikisTarihi = x.CikisTarihi,
                 ToplamUcret = x.ToplamUcret,
+                OdenenTutar = x.Odemeler
+                    .Select(o => (decimal?)o.OdemeTutari)
+                    .Sum() ?? 0m,
+                KalanTutar = x.ToplamUcret - (x.Odemeler
+                    .Select(o => (decimal?)o.OdemeTutari)
+                    .Sum() ?? 0m),
                 ParaBirimi = x.ParaBirimi,
-                RezervasyonDurumu = x.RezervasyonDurumu
+                RezervasyonDurumu = x.RezervasyonDurumu,
+                KonaklayanPlaniTamamlandi = x.Segmentler.Count() > 0
+                    && x.Konaklayanlar.Count() == x.KisiSayisi
+                    && !x.Konaklayanlar.Any(k => k.AdSoyad == null || k.AdSoyad == string.Empty)
+                    && !x.Konaklayanlar.Any(k => k.SegmentAtamalari.Count() != x.Segmentler.Count())
             })
             .Take(200)
             .ToListAsync(cancellationToken);
@@ -928,6 +938,197 @@ public class RezervasyonService : IRezervasyonService
         };
     }
 
+    public async Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.CheckInTamamlandi)
+        {
+            return ToSaveResult(reservation);
+        }
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.CheckOutTamamlandi)
+        {
+            throw new BaseException("Check-out tamamlanmis rezervasyon icin check-in yapilamaz.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
+        {
+            throw new BaseException("Iptal edilen rezervasyon icin check-in yapilamaz.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.Taslak
+            && reservation.RezervasyonDurumu != RezervasyonDurumlari.Onayli)
+        {
+            throw new BaseException("Bu rezervasyon durumu icin check-in islemi yapilamaz.", 400);
+        }
+
+        var segmentCount = await _stysDbContext.RezervasyonSegmentleri
+            .Where(x => x.RezervasyonId == rezervasyonId)
+            .CountAsync(cancellationToken);
+
+        if (segmentCount <= 0)
+        {
+            throw new BaseException("Check-in icin rezervasyon segmentleri bulunamadi.", 400);
+        }
+
+        var guestInfos = await _stysDbContext.RezervasyonKonaklayanlar
+            .Where(x => x.RezervasyonId == rezervasyonId)
+            .Select(x => new
+            {
+                x.AdSoyad,
+                AtamaCount = x.SegmentAtamalari.Count
+            })
+            .ToListAsync(cancellationToken);
+
+        if (guestInfos.Count != reservation.KisiSayisi)
+        {
+            throw new BaseException("Check-in icin tum konaklayanlarin plani tamamlanmalidir.", 400);
+        }
+
+        if (guestInfos.Any(x => string.IsNullOrWhiteSpace(x.AdSoyad)))
+        {
+            throw new BaseException("Check-in icin konaklayan ad soyad bilgileri zorunludur.", 400);
+        }
+
+        if (guestInfos.Any(x => x.AtamaCount != segmentCount))
+        {
+            throw new BaseException("Check-in icin her konaklayana tum segmentlerde oda atanmalidir.", 400);
+        }
+
+        reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi;
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return ToSaveResult(reservation);
+    }
+
+    public async Task<RezervasyonKayitSonucDto> TamamlaCheckOutAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.CheckOutTamamlandi)
+        {
+            return ToSaveResult(reservation);
+        }
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
+        {
+            throw new BaseException("Iptal edilen rezervasyon icin check-out yapilamaz.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi)
+        {
+            throw new BaseException("Check-out icin once check-in tamamlanmalidir.", 400);
+        }
+
+        reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckOutTamamlandi;
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return ToSaveResult(reservation);
+    }
+
+    public async Task<RezervasyonKayitSonucDto> IptalEtAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
+        {
+            return ToSaveResult(reservation);
+        }
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.CheckOutTamamlandi)
+        {
+            throw new BaseException("Check-out tamamlanmis rezervasyon iptal edilemez.", 400);
+        }
+
+        reservation.RezervasyonDurumu = RezervasyonDurumlari.Iptal;
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return ToSaveResult(reservation);
+    }
+
+    public async Task<RezervasyonOdemeOzetDto> GetOdemeOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        var odemeler = await _stysDbContext.RezervasyonOdemeler
+            .Where(x => x.RezervasyonId == reservation.Id)
+            .OrderByDescending(x => x.OdemeTarihi)
+            .ThenByDescending(x => x.Id)
+            .Select(x => new RezervasyonOdemeDto
+            {
+                Id = x.Id,
+                OdemeTarihi = x.OdemeTarihi,
+                OdemeTutari = x.OdemeTutari,
+                ParaBirimi = x.ParaBirimi,
+                OdemeTipi = x.OdemeTipi,
+                Aciklama = x.Aciklama
+            })
+            .ToListAsync(cancellationToken);
+
+        var odenenTutar = odemeler.Sum(x => x.OdemeTutari);
+        var kalanTutar = Math.Max(0m, reservation.ToplamUcret - odenenTutar);
+
+        return new RezervasyonOdemeOzetDto
+        {
+            RezervasyonId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            ToplamUcret = reservation.ToplamUcret,
+            OdenenTutar = odenenTutar,
+            KalanTutar = kalanTutar,
+            ParaBirimi = reservation.ParaBirimi,
+            Odemeler = odemeler
+        };
+    }
+
+    public async Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default)
+    {
+        if (request.OdemeTutari <= 0)
+        {
+            throw new BaseException("Odeme tutari sifirdan buyuk olmalidir.", 400);
+        }
+
+        var normalizedOdemeTipi = NormalizeOdemeTipi(request.OdemeTipi);
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
+        {
+            throw new BaseException("Iptal edilen rezervasyona odeme eklenemez.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi
+            && reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi)
+        {
+            throw new BaseException("Odeme islemi icin once check-in tamamlanmalidir.", 400);
+        }
+
+        var odenenTutar = await _stysDbContext.RezervasyonOdemeler
+            .Where(x => x.RezervasyonId == reservation.Id)
+            .Select(x => (decimal?)x.OdemeTutari)
+            .SumAsync(cancellationToken) ?? 0m;
+
+        var kalanTutar = reservation.ToplamUcret - odenenTutar;
+        if (kalanTutar <= 0)
+        {
+            throw new BaseException("Rezervasyonun odeme bakiyesi bulunmuyor.", 400);
+        }
+
+        if (request.OdemeTutari > kalanTutar)
+        {
+            throw new BaseException("Odeme tutari kalan bakiyeden buyuk olamaz.", 400);
+        }
+
+        await _stysDbContext.RezervasyonOdemeler.AddAsync(new RezervasyonOdeme
+        {
+            RezervasyonId = reservation.Id,
+            OdemeTarihi = DateTime.UtcNow,
+            OdemeTutari = request.OdemeTutari,
+            ParaBirimi = reservation.ParaBirimi,
+            OdemeTipi = normalizedOdemeTipi,
+            Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim()
+        }, cancellationToken);
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
+    }
+
     private async Task<SenaryoFiyatHesaplamaSonucuDto> CalculateScenarioPriceAsync(
         int tesisId,
         int misafirTipiId,
@@ -1442,6 +1643,26 @@ public class RezervasyonService : IRezervasyonService
         return claims.Any(x => x.Equals(permission, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static string NormalizeOdemeTipi(string? odemeTipi)
+    {
+        if (string.IsNullOrWhiteSpace(odemeTipi))
+        {
+            throw new BaseException("Odeme tipi zorunludur.", 400);
+        }
+
+        if (odemeTipi.Equals(OdemeTipleri.Nakit, StringComparison.OrdinalIgnoreCase))
+        {
+            return OdemeTipleri.Nakit;
+        }
+
+        if (odemeTipi.Equals(OdemeTipleri.KrediKarti, StringComparison.OrdinalIgnoreCase))
+        {
+            return OdemeTipleri.KrediKarti;
+        }
+
+        throw new BaseException("Gecersiz odeme tipi.", 400);
+    }
+
     private async Task<Dictionary<int, int>> GetCurrentOccupancyByRoomAsync(
         IReadOnlyCollection<int> roomIds,
         DateTime baslangic,
@@ -1778,6 +1999,35 @@ public class RezervasyonService : IRezervasyonService
         {
             throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
         }
+    }
+
+    private async Task<Rezervasyon> GetScopedReservationForManageAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        if (rezervasyonId <= 0)
+        {
+            throw new BaseException("Gecersiz rezervasyon id.", 400);
+        }
+
+        var reservation = await _stysDbContext.Rezervasyonlar
+            .FirstOrDefaultAsync(x => x.Id == rezervasyonId, cancellationToken);
+
+        if (reservation is null)
+        {
+            throw new BaseException("Rezervasyon bulunamadi.", 404);
+        }
+
+        await EnsureCanAccessTesisAsync(reservation.TesisId, cancellationToken);
+        return reservation;
+    }
+
+    private static RezervasyonKayitSonucDto ToSaveResult(Rezervasyon reservation)
+    {
+        return new RezervasyonKayitSonucDto
+        {
+            Id = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            RezervasyonDurumu = reservation.RezervasyonDurumu
+        };
     }
 
     private sealed record RoomAvailability(

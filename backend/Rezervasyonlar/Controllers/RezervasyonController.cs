@@ -143,4 +143,47 @@ public class RezervasyonController : UIController
         var result = await _rezervasyonService.KaydetAsync(request, cancellationToken);
         return Ok(result);
     }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/check-in")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKayitSonucDto>> TamamlaCheckIn([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.TamamlaCheckInAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/check-out")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKayitSonucDto>> TamamlaCheckOut([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.TamamlaCheckOutAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/iptal")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonKayitSonucDto>> IptalEt([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.IptalEtAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("kayitlar/{rezervasyonId:int}/odeme-ozeti")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> GetOdemeOzeti([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/odemeler")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> KaydetOdeme(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonOdemeKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetOdemeAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
 }

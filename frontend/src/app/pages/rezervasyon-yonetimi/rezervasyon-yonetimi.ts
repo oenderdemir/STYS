@@ -25,6 +25,7 @@ import {
     RezervasyonKonaklayanSegmentDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
+    RezervasyonOdemeOzetDto,
     RezervasyonOdaTipiDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplamaSonucuDto
@@ -69,6 +70,20 @@ export class RezervasyonYonetimi implements OnInit {
     konaklayanPlanRezervasyonId: number | null = null;
     konaklayanPlanReferansNo = '';
     konaklayanPlan: RezervasyonKonaklayanPlanDto | null = null;
+    odemeDialogVisible = false;
+    odemeLoading = false;
+    odemeSaving = false;
+    odemeRezervasyonId: number | null = null;
+    odemeReferansNo = '';
+    odemeOzeti: RezervasyonOdemeOzetDto | null = null;
+    odemeTutari: number | null = null;
+    odemeTipi = 'Nakit';
+    odemeAciklama = '';
+    readonly odemeTipleri = [
+        { label: 'Nakit', value: 'Nakit' },
+        { label: 'Kredi Karti', value: 'KrediKarti' }
+    ];
+    checkActionLoadingByRezervasyonId: Record<number, boolean> = {};
 
     selectedTesisId: number | null = null;
     selectedOdaTipiId: number | null = null;
@@ -92,6 +107,11 @@ export class RezervasyonYonetimi implements OnInit {
     saving = false;
     private readonly defaultGirisSaati = '14:00';
     private readonly defaultCikisSaati = '10:00';
+    private readonly durumTaslak = 'Taslak';
+    private readonly durumOnayli = 'Onayli';
+    private readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
+    private readonly durumCheckOutTamamlandi = 'CheckOutTamamlandi';
+    private readonly durumIptal = 'Iptal';
 
     get canView(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.View');
@@ -501,6 +521,204 @@ export class RezervasyonYonetimi implements OnInit {
             });
     }
 
+    canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
+        if (!this.canManage) {
+            return false;
+        }
+
+        return kayit.konaklayanPlaniTamamlandi
+            && (kayit.rezervasyonDurumu === this.durumTaslak || kayit.rezervasyonDurumu === this.durumOnayli);
+    }
+
+    canCompleteCheckOut(kayit: RezervasyonListeDto): boolean {
+        return this.canManage && kayit.rezervasyonDurumu === this.durumCheckInTamamlandi;
+    }
+
+    isCheckActionLoading(rezervasyonId: number): boolean {
+        return this.checkActionLoadingByRezervasyonId[rezervasyonId] ?? false;
+    }
+
+    canCancelReservation(kayit: RezervasyonListeDto): boolean {
+        if (!this.canManage) {
+            return false;
+        }
+
+        return kayit.rezervasyonDurumu !== this.durumIptal && kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi;
+    }
+
+    canOpenPaymentDialog(kayit: RezervasyonListeDto): boolean {
+        if (!this.canManage) {
+            return false;
+        }
+
+        return kayit.rezervasyonDurumu === this.durumCheckInTamamlandi || kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi;
+    }
+
+    tamamlaCheckIn(kayit: RezervasyonListeDto): void {
+        if (!this.canCompleteCheckIn(kayit) || this.isCheckActionLoading(kayit.id)) {
+            return;
+        }
+
+        this.checkActionLoadingByRezervasyonId[kayit.id] = true;
+        this.service
+            .tamamlaCheckIn(kayit.id)
+            .pipe(
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[kayit.id] = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: `Check-in tamamlandi. Referans: ${result.referansNo}`
+                    });
+                    this.openOdemeDialog(kayit);
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    iptalEt(kayit: RezervasyonListeDto): void {
+        if (!this.canCancelReservation(kayit) || this.isCheckActionLoading(kayit.id)) {
+            return;
+        }
+
+        this.checkActionLoadingByRezervasyonId[kayit.id] = true;
+        this.service
+            .iptalEt(kayit.id)
+            .pipe(
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[kayit.id] = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
+                    });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    openOdemeDialog(kayit: RezervasyonListeDto): void {
+        if (!this.canOpenPaymentDialog(kayit)) {
+            return;
+        }
+
+        this.odemeDialogVisible = true;
+        this.odemeRezervasyonId = kayit.id;
+        this.odemeReferansNo = kayit.referansNo;
+        this.odemeOzeti = null;
+        this.odemeTutari = null;
+        this.odemeTipi = 'Nakit';
+        this.odemeAciklama = '';
+        this.loadOdemeOzeti(kayit.id);
+    }
+
+    closeOdemeDialog(): void {
+        this.odemeDialogVisible = false;
+        this.odemeLoading = false;
+        this.odemeSaving = false;
+        this.odemeRezervasyonId = null;
+        this.odemeReferansNo = '';
+        this.odemeOzeti = null;
+        this.odemeTutari = null;
+        this.odemeTipi = 'Nakit';
+        this.odemeAciklama = '';
+    }
+
+    kaydetOdeme(): void {
+        if (!this.odemeRezervasyonId || !this.odemeOzeti || this.odemeSaving) {
+            return;
+        }
+
+        const tutar = Number(this.odemeTutari ?? 0);
+        if (!Number.isFinite(tutar) || tutar <= 0) {
+            this.messageService.add({ severity: 'warn', summary: 'Gecersiz Tutar', detail: 'Odeme tutari sifirdan buyuk olmalidir.' });
+            return;
+        }
+
+        this.odemeSaving = true;
+        this.service
+            .kaydetOdeme(this.odemeRezervasyonId, {
+                odemeTutari: tutar,
+                odemeTipi: this.odemeTipi,
+                aciklama: this.normalizeOptional(this.odemeAciklama)
+            })
+            .pipe(
+                finalize(() => {
+                    this.odemeSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.odemeOzeti = result;
+                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    this.odemeAciklama = '';
+                    const kayit = this.rezervasyonKayitlari.find((x) => x.id === result.rezervasyonId);
+                    if (kayit) {
+                        kayit.odenenTutar = result.odenenTutar;
+                        kayit.kalanTutar = result.kalanTutar;
+                    }
+                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Odeme kaydedildi.' });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    tamamlaCheckOut(kayit: RezervasyonListeDto): void {
+        if (!this.canCompleteCheckOut(kayit) || this.isCheckActionLoading(kayit.id)) {
+            return;
+        }
+
+        this.checkActionLoadingByRezervasyonId[kayit.id] = true;
+        this.service
+            .tamamlaCheckOut(kayit.id)
+            .pipe(
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[kayit.id] = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Basarili',
+                        detail: `Check-out tamamlandi. Referans: ${result.referansNo}`
+                    });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
     getKonaklayanSegmentler(): RezervasyonKonaklayanSegmentDto[] {
         return this.konaklayanPlan?.segmentler ?? [];
     }
@@ -665,20 +883,24 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (items) => {
                     this.rezervasyonKayitlari = items;
+                    this.checkActionLoadingByRezervasyonId = {};
                     this.expandedRowKeys = {};
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
                     this.closeKonaklayanPlaniDialog();
+                    this.closeOdemeDialog();
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
                     this.rezervasyonKayitlari = [];
+                    this.checkActionLoadingByRezervasyonId = {};
                     this.expandedRowKeys = {};
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
                     this.closeKonaklayanPlaniDialog();
+                    this.closeOdemeDialog();
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
@@ -702,6 +924,35 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.konaklayanPlan = null;
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadOdemeOzeti(rezervasyonId: number): void {
+        this.odemeLoading = true;
+        this.service
+            .getOdemeOzeti(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.odemeLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (ozet) => {
+                    this.odemeOzeti = ozet;
+                    this.odemeTutari = ozet.kalanTutar > 0 ? ozet.kalanTutar : null;
+                    const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
+                    if (kayit) {
+                        kayit.odenenTutar = ozet.odenenTutar;
+                        kayit.kalanTutar = ozet.kalanTutar;
+                    }
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.odemeOzeti = null;
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
@@ -765,6 +1016,18 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private updateRezervasyonDurumu(rezervasyonId: number, durum: string): void {
+        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
+        if (kayit) {
+            kayit.rezervasyonDurumu = durum;
+        }
+
+        const detay = this.rezervasyonDetayById[rezervasyonId];
+        if (detay) {
+            detay.rezervasyonDurumu = durum;
+        }
     }
 
     formatDateTime(value: string): string {

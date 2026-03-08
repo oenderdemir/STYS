@@ -59,4 +59,6 @@ public class Rezervasyon : BaseEntity<int>
     public ICollection<RezervasyonSegment> Segmentler { get; set; } = [];
 
     public ICollection<RezervasyonKonaklayan> Konaklayanlar { get; set; } = [];
+
+    public ICollection<RezervasyonOdeme> Odemeler { get; set; } = [];
 }

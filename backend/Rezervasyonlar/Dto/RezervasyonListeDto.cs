@@ -26,7 +26,13 @@ public class RezervasyonListeDto
 
     public decimal ToplamUcret { get; set; }
 
+    public decimal OdenenTutar { get; set; }
+
+    public decimal KalanTutar { get; set; }
+
     public string ParaBirimi { get; set; } = "TRY";
 
     public string RezervasyonDurumu { get; set; } = string.Empty;
+
+    public bool KonaklayanPlaniTamamlandi { get; set; }
 }

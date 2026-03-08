@@ -35,4 +35,14 @@ public interface IRezervasyonService
     Task<RezervasyonKonaklayanPlanDto?> GetKonaklayanPlaniAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
     Task<RezervasyonKonaklayanPlanDto> KaydetKonaklayanPlaniAsync(int rezervasyonId, RezervasyonKonaklayanPlanKaydetRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonKayitSonucDto> TamamlaCheckOutAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonKayitSonucDto> IptalEtAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonOdemeOzetDto> GetOdemeOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default);
 }

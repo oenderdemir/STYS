@@ -966,6 +966,214 @@ public class RezervasyonServiceTests
         Assert.Equal(400, exception.ErrorCode);
     }
 
+    // Check-in, konaklayan plani tamamlanmadan yapilamamali.
+    [Fact]
+    public async Task CheckIn_KonaklayanPlaniEksikseHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 990, segmentId: 991, withPlan: false);
+
+        var service = CreateService(dbContext);
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckInAsync(990));
+
+        Assert.Equal(400, exception.ErrorCode);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 990);
+        Assert.Equal(RezervasyonDurumlari.Onayli, updated.RezervasyonDurumu);
+    }
+
+    // Konaklayan plani tamamsa check-in durumu basariyla guncellenmeli.
+    [Fact]
+    public async Task CheckIn_KonaklayanPlaniTamamsaDurumuGunceller()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 992, segmentId: 993, withPlan: true);
+
+        var service = CreateService(dbContext);
+        var result = await service.TamamlaCheckInAsync(992);
+
+        Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, result.RezervasyonDurumu);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 992);
+        Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, updated.RezervasyonDurumu);
+    }
+
+    // Check-out isleminden once rezervasyon check-in durumuna alinmis olmali.
+    [Fact]
+    public async Task CheckOut_CheckInOlmadanHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 994, segmentId: 995, withPlan: true);
+
+        var service = CreateService(dbContext);
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckOutAsync(994));
+
+        Assert.Equal(400, exception.ErrorCode);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 994);
+        Assert.Equal(RezervasyonDurumlari.Onayli, updated.RezervasyonDurumu);
+    }
+
+    // Check-in sonrasinda check-out basariyla tamamlanmali.
+    [Fact]
+    public async Task CheckOut_CheckInSonrasiDurumuGunceller()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 996, segmentId: 997, withPlan: true);
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(996);
+        var result = await service.TamamlaCheckOutAsync(996);
+
+        Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, result.RezervasyonDurumu);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 996);
+        Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, updated.RezervasyonDurumu);
+    }
+
+    // Onayli rezervasyon iptal edildiginde durum Iptal olarak guncellenmeli.
+    [Fact]
+    public async Task IptalEt_OnayliRezervasyonDurumunuIptaleCeker()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 998, segmentId: 999, withPlan: false);
+        var service = CreateService(dbContext);
+
+        var result = await service.IptalEtAsync(998);
+
+        Assert.Equal(RezervasyonDurumlari.Iptal, result.RezervasyonDurumu);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 998);
+        Assert.Equal(RezervasyonDurumlari.Iptal, updated.RezervasyonDurumu);
+    }
+
+    // Check-in tamamlanmis rezervasyon icin odeme kaydi eklenebilmeli ve kalan tutar azaltilmali.
+    [Fact]
+    public async Task KaydetOdeme_CheckInSonrasiOdemeAlir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1000, segmentId: 1001, withPlan: true);
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1000);
+
+        var ozet = await service.KaydetOdemeAsync(1000, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 300m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            Aciklama = "Pesin odeme"
+        });
+
+        Assert.Equal(1000, ozet.RezervasyonId);
+        Assert.Equal(1000m, ozet.ToplamUcret);
+        Assert.Equal(300m, ozet.OdenenTutar);
+        Assert.Equal(700m, ozet.KalanTutar);
+        var firstPayment = Assert.Single(ozet.Odemeler);
+        Assert.Equal(OdemeTipleri.Nakit, firstPayment.OdemeTipi);
+    }
+
+    // Check-in tamamlanmadan odeme alinmamali.
+    [Fact]
+    public async Task KaydetOdeme_CheckInOlmadanHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1002, segmentId: 1003, withPlan: true);
+        var service = CreateService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetOdemeAsync(1002, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 200m,
+            OdemeTipi = OdemeTipleri.KrediKarti
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
+    // Liste sonucunda check-in butonu icin kullanilan plan-tamamlandi bilgisi dogru hesaplanmali.
+    [Fact]
+    public async Task RezervasyonListesi_KonaklayanPlaniTamamlandiBilgisiniDogruDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1004, segmentId: 1005, withPlan: true);
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1006, segmentId: 1007, withPlan: false);
+        var service = CreateService(dbContext);
+
+        var list = await service.GetRezervasyonlarAsync(1);
+        var planned = Assert.Single(list, x => x.Id == 1004);
+        var unplanned = Assert.Single(list, x => x.Id == 1006);
+
+        Assert.True(planned.KonaklayanPlaniTamamlandi);
+        Assert.False(unplanned.KonaklayanPlaniTamamlandi);
+    }
+
+    private static async Task SeedReservationForCheckFlowAsync(
+        StysAppDbContext dbContext,
+        int rezervasyonId,
+        int segmentId,
+        bool withPlan)
+    {
+        if (!await dbContext.Tesisler.AnyAsync())
+        {
+            await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        }
+
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = rezervasyonId,
+            ReferansNo = $"TEST-RZV-{rezervasyonId}",
+            TesisId = 1,
+            KisiSayisi = 1,
+            GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            CikisTarihi = new DateTime(2026, 3, 9, 10, 0, 0),
+            MisafirAdiSoyadi = "Check Test",
+            MisafirTelefon = "000",
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        });
+
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment
+        {
+            Id = segmentId,
+            RezervasyonId = rezervasyonId,
+            SegmentSirasi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 9, 10, 0, 0)
+        });
+
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = segmentId + 1,
+            RezervasyonSegmentId = segmentId,
+            OdaId = 101,
+            AyrilanKisiSayisi = 1,
+            OdaNoSnapshot = "A-102",
+            BinaAdiSnapshot = "A Blok",
+            OdaTipiAdiSnapshot = "Standart Double",
+            PaylasimliMiSnapshot = false,
+            KapasiteSnapshot = 2
+        });
+
+        if (withPlan)
+        {
+            dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan
+            {
+                Id = rezervasyonId + 1000,
+                RezervasyonId = rezervasyonId,
+                SiraNo = 1,
+                AdSoyad = "Ali Check",
+                TcKimlikNo = "11111111111",
+                PasaportNo = null
+            });
+
+            dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
+            {
+                Id = rezervasyonId + 1001,
+                RezervasyonKonaklayanId = rezervasyonId + 1000,
+                RezervasyonSegmentId = segmentId,
+                OdaId = 101
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+    }
+
     private static RezervasyonService CreateService(
         StysAppDbContext dbContext,
         DomainAccessScope? scope = null,

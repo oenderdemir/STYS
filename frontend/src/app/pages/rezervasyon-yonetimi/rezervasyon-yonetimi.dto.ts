@@ -175,8 +175,11 @@ export interface RezervasyonListeDto {
     girisTarihi: string;
     cikisTarihi: string;
     toplamUcret: number;
+    odenenTutar: number;
+    kalanTutar: number;
     paraBirimi: string;
     rezervasyonDurumu: string;
+    konaklayanPlaniTamamlandi: boolean;
 }
 
 export interface RezervasyonDetayOdaAtamaDto {
@@ -262,4 +265,29 @@ export interface RezervasyonKonaklayanKisiKaydetDto {
 export interface RezervasyonKonaklayanKisiAtamaKaydetDto {
     segmentId: number;
     odaId: number | null;
+}
+
+export interface RezervasyonOdemeDto {
+    id: number;
+    odemeTarihi: string;
+    odemeTutari: number;
+    paraBirimi: string;
+    odemeTipi: string;
+    aciklama: string | null;
+}
+
+export interface RezervasyonOdemeOzetDto {
+    rezervasyonId: number;
+    referansNo: string;
+    toplamUcret: number;
+    odenenTutar: number;
+    kalanTutar: number;
+    paraBirimi: string;
+    odemeler: RezervasyonOdemeDto[];
+}
+
+export interface RezervasyonOdemeKaydetRequestDto {
+    odemeTutari: number;
+    odemeTipi: string;
+    aciklama: string | null;
 }

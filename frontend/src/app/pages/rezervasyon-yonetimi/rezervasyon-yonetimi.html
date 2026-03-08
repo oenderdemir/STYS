@@ -220,7 +220,7 @@
                     <th>Giris</th>
                     <th>Cikis</th>
                     <th>Ucret</th>
-                    <th>Konaklayan Plani</th>
+                    <th>Islemler</th>
                     <th>Durum</th>
                 </tr>
             </ng-template>
@@ -249,18 +249,64 @@
                         />
                     </td>
                     <td>
-                        @if (canManage) {
-                            <p-button
-                                label="Plan"
-                                icon="pi pi-users"
-                                severity="secondary"
-                                [text]="true"
-                                size="small"
-                                (onClick)="openKonaklayanPlaniDialog(kayit)"
-                            />
-                        } @else {
-                            -
-                        }
+                        <div class="flex items-center gap-2 flex-wrap">
+                            @if (canManage) {
+                                <p-button
+                                    label="Plan"
+                                    icon="pi pi-users"
+                                    severity="secondary"
+                                    [text]="true"
+                                    size="small"
+                                    [disabled]="isCheckActionLoading(kayit.id)"
+                                    (onClick)="openKonaklayanPlaniDialog(kayit)"
+                                />
+                            }
+                            @if (canCompleteCheckIn(kayit)) {
+                                <p-button
+                                    label="Check-in"
+                                    icon="pi pi-arrow-right"
+                                    size="small"
+                                    [loading]="isCheckActionLoading(kayit.id)"
+                                    (onClick)="tamamlaCheckIn(kayit)"
+                                />
+                            }
+                            @if (canCompleteCheckOut(kayit)) {
+                                <p-button
+                                    label="Check-out"
+                                    icon="pi pi-arrow-left"
+                                    severity="secondary"
+                                    [outlined]="true"
+                                    size="small"
+                                    [loading]="isCheckActionLoading(kayit.id)"
+                                    (onClick)="tamamlaCheckOut(kayit)"
+                                />
+                            }
+                            @if (canOpenPaymentDialog(kayit)) {
+                                <p-button
+                                    label="Odeme"
+                                    icon="pi pi-credit-card"
+                                    severity="secondary"
+                                    [text]="true"
+                                    size="small"
+                                    [disabled]="isCheckActionLoading(kayit.id)"
+                                    (onClick)="openOdemeDialog(kayit)"
+                                />
+                            }
+                            @if (canCancelReservation(kayit)) {
+                                <p-button
+                                    label="Iptal"
+                                    icon="pi pi-times"
+                                    severity="danger"
+                                    [outlined]="true"
+                                    size="small"
+                                    [loading]="isCheckActionLoading(kayit.id)"
+                                    (onClick)="iptalEt(kayit)"
+                                />
+                            }
+                            @if (!canManage) {
+                                <span>-</span>
+                            }
+                        </div>
                     </td>
                     <td>{{ kayit.rezervasyonDurumu }}</td>
                 </tr>
@@ -556,5 +602,94 @@
     <ng-template #footer>
         <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="calculatingScenarioPrice" (onClick)="closeDiscountDialog()" />
         <p-button label="Indirimleri Uygula" icon="pi pi-check" [loading]="calculatingScenarioPrice" [disabled]="loadingDiscountRules" (onClick)="hesaplaSenaryoUcreti()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Rezervasyon Odemeleri"
+    [(visible)]="odemeDialogVisible"
+    [modal]="true"
+    [style]="{ width: '42rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="closeOdemeDialog()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ odemeReferansNo }}
+    </div>
+
+    @if (odemeLoading) {
+        <div>Odeme ozeti yukleniyor...</div>
+    } @else if (!odemeOzeti) {
+        <div>Odeme bilgisi bulunamadi.</div>
+    } @else {
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Toplam</div>
+                <div class="font-semibold">{{ formatCurrency(odemeOzeti.toplamUcret, odemeOzeti.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Odenen</div>
+                <div class="font-semibold">{{ formatCurrency(odemeOzeti.odenenTutar, odemeOzeti.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Kalan</div>
+                <div class="font-semibold">{{ formatCurrency(odemeOzeti.kalanTutar, odemeOzeti.paraBirimi) }}</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4">
+                <label for="odemeTutari" class="block font-medium mb-2">Odeme Tutari</label>
+                <input pInputText id="odemeTutari" class="w-full" type="number" min="0" step="0.01" [(ngModel)]="odemeTutari" [disabled]="odemeSaving" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label for="odemeTipi" class="block font-medium mb-2">Odeme Tipi</label>
+                <p-select
+                    inputId="odemeTipi"
+                    class="w-full"
+                    [options]="odemeTipleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [appendTo]="'body'"
+                    [showClear]="false"
+                    [disabled]="odemeSaving"
+                    [(ngModel)]="odemeTipi"
+                />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label for="odemeAciklama" class="block font-medium mb-2">Aciklama</label>
+                <input pInputText id="odemeAciklama" class="w-full" [(ngModel)]="odemeAciklama" [disabled]="odemeSaving" />
+            </div>
+        </div>
+
+        <p-table [value]="odemeOzeti.odemeler" [tableStyle]="{ 'min-width': '34rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Tarih</th>
+                    <th>Tip</th>
+                    <th>Tutar</th>
+                    <th>Aciklama</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-odeme>
+                <tr>
+                    <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
+                    <td>{{ odeme.odemeTipi }}</td>
+                    <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
+                    <td>{{ odeme.aciklama || '-' }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="odemeSaving" (onClick)="closeOdemeDialog()" />
+        <p-button
+            label="Odeme Kaydet"
+            icon="pi pi-check"
+            [loading]="odemeSaving"
+            [disabled]="!odemeOzeti || odemeLoading || (odemeOzeti && odemeOzeti.kalanTutar <= 0)"
+            (onClick)="kaydetOdeme()"
+        />
     </ng-template>
 </p-dialog>

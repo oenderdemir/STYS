@@ -56,6 +56,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
     public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
+    public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
 
     public override int SaveChanges()
     {
@@ -522,6 +523,22 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Oda)
                 .WithMany()
                 .HasForeignKey(x => x.OdaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonOdeme>(entity =>
+        {
+            entity.ToTable("RezervasyonOdemeler", "dbo");
+            entity.Property(x => x.OdemeTutari).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.OdemeTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => new { x.RezervasyonId, x.OdemeTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.Odemeler)
+                .HasForeignKey(x => x.RezervasyonId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

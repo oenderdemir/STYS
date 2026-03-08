@@ -20,6 +20,7 @@ import { AuthService } from '../auth';
 import {
     KonaklamaSenaryoDto,
     RezervasyonDetayDto,
+    RezervasyonDegisiklikGecmisiDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonKonaklamaTipiDto,
@@ -36,6 +37,16 @@ import {
     SenaryoFiyatHesaplamaSonucuDto
 } from './rezervasyon-yonetimi.dto';
 import { RezervasyonYonetimiService } from './rezervasyon-yonetimi.service';
+
+interface DegisiklikPayloadTableColumn {
+    field: string;
+    header: string;
+}
+
+interface DegisiklikPayloadTableData {
+    columns: DegisiklikPayloadTableColumn[];
+    rows: Record<string, string>[];
+}
 
 @Component({
     selector: 'app-rezervasyon-yonetimi',
@@ -69,6 +80,17 @@ export class RezervasyonYonetimi implements OnInit {
     rezervasyonUcretDetayDialogVisible = false;
     rezervasyonUcretDetayRezervasyonId: number | null = null;
     rezervasyonUcretDetayReferansNo = '';
+    degisiklikGecmisiDialogVisible = false;
+    degisiklikGecmisiLoading = false;
+    degisiklikGecmisiRezervasyonId: number | null = null;
+    degisiklikGecmisiReferansNo = '';
+    degisiklikGecmisiKayitlari: RezervasyonDegisiklikGecmisiDto[] = [];
+    degisiklikPayloadDialogVisible = false;
+    degisiklikPayloadDialogTitle = '';
+    degisiklikPayloadDialogContent = '';
+    degisiklikPayloadDialogMode: 'table' | 'json' = 'table';
+    degisiklikPayloadTableColumns: DegisiklikPayloadTableColumn[] = [];
+    degisiklikPayloadTableRows: Record<string, string>[] = [];
     konaklayanPlanDialogVisible = false;
     konaklayanPlanLoading = false;
     konaklayanPlanSaving = false;
@@ -477,6 +499,283 @@ export class RezervasyonYonetimi implements OnInit {
         return this.getRezervasyonDetay(this.rezervasyonUcretDetayRezervasyonId);
     }
 
+    openDegisiklikGecmisiDialog(kayit: RezervasyonListeDto): void {
+        if (!this.canView || !kayit?.id || kayit.id <= 0) {
+            return;
+        }
+
+        this.degisiklikGecmisiDialogVisible = true;
+        this.degisiklikGecmisiRezervasyonId = kayit.id;
+        this.degisiklikGecmisiReferansNo = kayit.referansNo;
+        this.degisiklikGecmisiKayitlari = [];
+        this.loadDegisiklikGecmisi(kayit.id);
+    }
+
+    closeDegisiklikGecmisiDialog(): void {
+        this.degisiklikGecmisiDialogVisible = false;
+        this.degisiklikGecmisiLoading = false;
+        this.degisiklikGecmisiRezervasyonId = null;
+        this.degisiklikGecmisiReferansNo = '';
+        this.degisiklikGecmisiKayitlari = [];
+        this.closeDegisiklikPayloadDialog();
+    }
+
+    getGecmisIslemLabel(islemTipi: string): string {
+        switch (islemTipi) {
+            case 'RezervasyonOlusturuldu':
+                return 'Rezervasyon Oluşturuldu';
+            case 'KonaklayanPlaniKaydedildi':
+                return 'Konaklayan Planı Kaydedildi';
+            case 'OdaDegisimiYapildi':
+                return 'Oda Değişimi Yapıldı';
+            case 'CheckInTamamlandi':
+                return 'Check-in Tamamlandı';
+            case 'CheckOutTamamlandi':
+                return 'Check-out Tamamlandı';
+            case 'IptalEdildi':
+                return 'Rezervasyon İptal Edildi';
+            case 'IptalGeriAlindi':
+                return 'İptal Geri Alındı';
+            case 'OdemeKaydedildi':
+                return 'Ödeme Kaydedildi';
+            default:
+                return islemTipi;
+        }
+    }
+
+    formatJsonForDisplay(value: string | null | undefined): string {
+        if (!value || value.trim().length === 0) {
+            return '-';
+        }
+
+        try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+        } catch {
+            return value;
+        }
+    }
+
+    hasJsonPayload(value: string | null | undefined): boolean {
+        return !!value && value.trim().length > 0 && value.trim() !== '[]' && value.trim() !== '{}';
+    }
+
+    openDegisiklikPayloadDialog(kayit: RezervasyonDegisiklikGecmisiDto, payloadType: 'onceki' | 'yeni'): void {
+        const payload = payloadType === 'onceki' ? kayit.oncekiDegerJson : kayit.yeniDegerJson;
+        if (!this.hasJsonPayload(payload)) {
+            return;
+        }
+        const payloadValue = payload ?? '';
+
+        this.degisiklikPayloadDialogTitle = `${this.getGecmisIslemLabel(kayit.islemTipi)} - ${payloadType === 'onceki' ? 'Onceki Deger' : 'Yeni Deger'}`;
+        const parsedPayload = this.tryParseJson(payloadValue);
+        const tableData = this.tryBuildKonaklayanPlaniTableData(parsedPayload) ?? this.tryBuildGenericTableData(parsedPayload);
+
+        if (tableData) {
+            this.degisiklikPayloadDialogMode = 'table';
+            this.degisiklikPayloadTableColumns = tableData.columns;
+            this.degisiklikPayloadTableRows = tableData.rows;
+            this.degisiklikPayloadDialogContent = '';
+        } else {
+            this.degisiklikPayloadDialogMode = 'json';
+            this.degisiklikPayloadTableColumns = [];
+            this.degisiklikPayloadTableRows = [];
+            this.degisiklikPayloadDialogContent = this.formatJsonForDisplay(payloadValue);
+        }
+        this.degisiklikPayloadDialogVisible = true;
+    }
+
+    closeDegisiklikPayloadDialog(): void {
+        this.degisiklikPayloadDialogVisible = false;
+        this.degisiklikPayloadDialogTitle = '';
+        this.degisiklikPayloadDialogContent = '';
+        this.degisiklikPayloadDialogMode = 'table';
+        this.degisiklikPayloadTableColumns = [];
+        this.degisiklikPayloadTableRows = [];
+    }
+
+    getDegisiklikOzet(kayit: RezervasyonDegisiklikGecmisiDto): string {
+        const oncekiVar = this.hasJsonPayload(kayit.oncekiDegerJson);
+        const yeniVar = this.hasJsonPayload(kayit.yeniDegerJson);
+
+        if (!oncekiVar && !yeniVar) {
+            return 'Detay yok';
+        }
+
+        if (oncekiVar && yeniVar) {
+            return 'Onceki + Yeni';
+        }
+
+        return oncekiVar ? 'Sadece Onceki' : 'Sadece Yeni';
+    }
+
+    private tryParseJson(value: string): unknown {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return null;
+        }
+    }
+
+    private tryBuildKonaklayanPlaniTableData(payload: unknown): DegisiklikPayloadTableData | null {
+        if (!Array.isArray(payload) || payload.length === 0) {
+            return null;
+        }
+
+        const items = payload.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x));
+        if (items.length !== payload.length) {
+            return null;
+        }
+
+        const rows: Record<string, string>[] = [];
+        for (const item of items) {
+            const siraNo = this.readUnknown(item, ['SiraNo', 'siraNo']);
+            const adSoyad = this.readUnknown(item, ['AdSoyad', 'adSoyad']);
+            const tcKimlikNo = this.readUnknown(item, ['TcKimlikNo', 'tcKimlikNo']);
+            const pasaportNo = this.readUnknown(item, ['PasaportNo', 'pasaportNo']);
+            const atamalarUnknown = this.readUnknown(item, ['Atamalar', 'atamalar']);
+
+            if (typeof siraNo === 'undefined' || typeof adSoyad === 'undefined' || !Array.isArray(atamalarUnknown)) {
+                return null;
+            }
+
+            const atamaOzetleri = atamalarUnknown
+                .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object' && !Array.isArray(a))
+                .map((atama) => {
+                    const segmentId = this.readUnknown(atama, ['RezervasyonSegmentId', 'rezervasyonSegmentId', 'SegmentId', 'segmentId']);
+                    const odaId = this.readUnknown(atama, ['OdaId', 'odaId']);
+                    return `Segment ${this.toDisplayString(segmentId)} -> Oda ${this.toDisplayString(odaId)}`;
+                });
+
+            rows.push({
+                siraNo: this.toDisplayString(siraNo),
+                adSoyad: this.toDisplayString(adSoyad),
+                tcKimlikNo: this.toDisplayString(tcKimlikNo),
+                pasaportNo: this.toDisplayString(pasaportNo),
+                atamalar: atamaOzetleri.length > 0 ? atamaOzetleri.join('\n') : '-'
+            });
+        }
+
+        return {
+            columns: [
+                { field: 'siraNo', header: 'Sıra' },
+                { field: 'adSoyad', header: 'Ad Soyad' },
+                { field: 'tcKimlikNo', header: 'TC Kimlik No' },
+                { field: 'pasaportNo', header: 'Pasaport No' },
+                { field: 'atamalar', header: 'Atamalar' }
+            ],
+            rows
+        };
+    }
+
+    private tryBuildGenericTableData(payload: unknown): DegisiklikPayloadTableData | null {
+        if (Array.isArray(payload)) {
+            if (payload.length === 0) {
+                return {
+                    columns: [{ field: 'bilgi', header: 'Bilgi' }],
+                    rows: [{ bilgi: 'Kayıt yok' }]
+                };
+            }
+
+            const objectItems = payload.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x));
+            if (objectItems.length === payload.length) {
+                const keys = Array.from(
+                    new Set(objectItems.flatMap((x) => Object.keys(x)))
+                );
+
+                return {
+                    columns: keys.map((key) => ({ field: key, header: this.toDisplayHeader(key) })),
+                    rows: objectItems.map((item) => {
+                        const row: Record<string, string> = {};
+                        for (const key of keys) {
+                            row[key] = this.toDisplayString(item[key]);
+                        }
+                        return row;
+                    })
+                };
+            }
+
+            return {
+                columns: [{ field: 'deger', header: 'Deger' }],
+                rows: payload.map((x) => ({ deger: this.toDisplayString(x) }))
+            };
+        }
+
+        if (payload && typeof payload === 'object') {
+            const obj = payload as Record<string, unknown>;
+            const rows = Object.keys(obj).map((key) => ({
+                alan: this.toDisplayHeader(key),
+                deger: this.toDisplayString(obj[key])
+            }));
+
+            return {
+                columns: [
+                    { field: 'alan', header: 'Alan' },
+                    { field: 'deger', header: 'Deger' }
+                ],
+                rows
+            };
+        }
+
+        if (typeof payload !== 'undefined' && payload !== null) {
+            return {
+                columns: [{ field: 'deger', header: 'Deger' }],
+                rows: [{ deger: this.toDisplayString(payload) }]
+            };
+        }
+
+        return null;
+    }
+
+    private readUnknown(source: Record<string, unknown>, keys: string[]): unknown {
+        for (const key of keys) {
+            if (Object.prototype.hasOwnProperty.call(source, key)) {
+                return source[key];
+            }
+        }
+
+        return undefined;
+    }
+
+    private toDisplayHeader(value: string): string {
+        return value
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/_/g, ' ')
+            .replace(/^\w/, (x) => x.toUpperCase());
+    }
+
+    private toDisplayString(value: unknown): string {
+        if (value === null || typeof value === 'undefined') {
+            return '-';
+        }
+
+        if (typeof value === 'string') {
+            return value.trim().length > 0 ? value : '-';
+        }
+
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+
+        if (Array.isArray(value)) {
+            if (value.length === 0) {
+                return '-';
+            }
+
+            const primitiveArray = value.every((x) => x === null || ['string', 'number', 'boolean'].includes(typeof x));
+            if (primitiveArray) {
+                return value.map((x) => this.toDisplayString(x)).join(', ');
+            }
+
+            return `${value.length} kayıt`;
+        }
+
+        if (typeof value === 'object') {
+            return JSON.stringify(value);
+        }
+
+        return String(value);
+    }
+
     openKonaklayanPlaniDialog(kayit: RezervasyonListeDto): void {
         if (!this.canManage || !kayit?.id || kayit.id <= 0) {
             return;
@@ -605,11 +904,19 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     getRowActions(kayit: RezervasyonListeDto): MenuItem[] {
-        if (!this.canManage) {
-            return [];
+        const items: MenuItem[] = [];
+
+        if (this.canView) {
+            items.push({
+                label: 'Gecmis',
+                icon: 'pi pi-history',
+                command: () => this.openDegisiklikGecmisiDialog(kayit)
+            });
         }
 
-        const items: MenuItem[] = [];
+        if (!this.canManage) {
+            return items;
+        }
 
         items.push({
             label: 'Plan',
@@ -1136,6 +1443,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
+                    this.closeDegisiklikGecmisiDialog();
                     this.closeKonaklayanPlaniDialog();
                     this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
@@ -1148,9 +1456,33 @@ export class RezervasyonYonetimi implements OnInit {
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
                     this.closeRezervasyonUcretDetayDialog();
+                    this.closeDegisiklikGecmisiDialog();
                     this.closeKonaklayanPlaniDialog();
                     this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadDegisiklikGecmisi(rezervasyonId: number): void {
+        this.degisiklikGecmisiLoading = true;
+        this.service
+            .getDegisiklikGecmisi(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.degisiklikGecmisiLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (items) => {
+                    this.degisiklikGecmisiKayitlari = items;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.degisiklikGecmisiKayitlari = [];
                     this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }

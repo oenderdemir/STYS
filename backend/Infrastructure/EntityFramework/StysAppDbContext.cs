@@ -58,6 +58,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Rezervasyon> Rezervasyonlar => Set<Rezervasyon>();
     public DbSet<RezervasyonSegment> RezervasyonSegmentleri => Set<RezervasyonSegment>();
     public DbSet<RezervasyonSegmentOdaAtama> RezervasyonSegmentOdaAtamalari => Set<RezervasyonSegmentOdaAtama>();
+    public DbSet<RezervasyonDegisiklikGecmisi> RezervasyonDegisiklikGecmisleri => Set<RezervasyonDegisiklikGecmisi>();
     public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
@@ -524,6 +525,22 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Oda)
                 .WithMany()
                 .HasForeignKey(x => x.OdaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonDegisiklikGecmisi>(entity =>
+        {
+            entity.ToTable("RezervasyonDegisiklikGecmisleri", "dbo");
+            entity.Property(x => x.IslemTipi).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.OncekiDegerJson).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.YeniDegerJson).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => new { x.RezervasyonId, x.CreatedAt })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.DegisiklikGecmisiKayitlari)
+                .HasForeignKey(x => x.RezervasyonId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

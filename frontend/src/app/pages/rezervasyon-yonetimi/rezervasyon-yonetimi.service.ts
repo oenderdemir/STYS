@@ -7,6 +7,7 @@ import {
     KonaklamaSenaryoAramaRequestDto,
     KonaklamaSenaryoDto,
     RezervasyonDashboardDto,
+    RezervasyonDegisiklikGecmisiDto,
     RezervasyonDetayDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
@@ -154,6 +155,18 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon detayi alinamadi.');
+            })
+        );
+    }
+
+    getDegisiklikGecmisi(rezervasyonId: number): Observable<RezervasyonDegisiklikGecmisiDto[]> {
+        return this.http.get<ApiResponse<RezervasyonDegisiklikGecmisiDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/degisiklik-gecmisi`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon degisiklik gecmisi alinamadi.');
             })
         );
     }

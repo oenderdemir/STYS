@@ -237,6 +237,16 @@ export interface RezervasyonDetayDto {
     segmentler: RezervasyonDetaySegmentDto[];
 }
 
+export interface RezervasyonDegisiklikGecmisiDto {
+    id: number;
+    islemTipi: string;
+    aciklama: string | null;
+    oncekiDegerJson: string | null;
+    yeniDegerJson: string | null;
+    createdAt: string;
+    createdBy: string;
+}
+
 export interface RezervasyonKonaklayanPlanDto {
     rezervasyonId: number;
     kisiSayisi: number;

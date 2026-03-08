@@ -393,6 +393,117 @@
 </p-dialog>
 
 <p-dialog
+    header="Rezervasyon Degisiklik Gecmisi"
+    [(visible)]="degisiklikGecmisiDialogVisible"
+    [modal]="true"
+    [style]="{ width: '72rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="closeDegisiklikGecmisiDialog()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ degisiklikGecmisiReferansNo }}
+    </div>
+
+    @if (degisiklikGecmisiLoading) {
+        <div>Degisiklik gecmisi yukleniyor...</div>
+    } @else if (degisiklikGecmisiKayitlari.length === 0) {
+        <div>Bu rezervasyon icin degisiklik gecmisi kaydi bulunamadi.</div>
+    } @else {
+        <p-table
+            [value]="degisiklikGecmisiKayitlari"
+            [tableStyle]="{ 'min-width': '64rem' }"
+            [rows]="10"
+            [paginator]="degisiklikGecmisiKayitlari.length > 10"
+            [showCurrentPageReport]="degisiklikGecmisiKayitlari.length > 10"
+            currentPageReportTemplate="{first} - {last} / {totalRecords}"
+            stripedRows
+        >
+            <ng-template #header>
+                <tr>
+                    <th style="width: 12rem">Tarih</th>
+                    <th style="width: 14rem">Islem</th>
+                    <th style="width: 10rem">Yapan</th>
+                    <th>Aciklama</th>
+                    <th style="width: 10rem">Degisiklik</th>
+                    <th style="width: 13rem">Detay</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-kayit>
+                <tr>
+                    <td>{{ formatDateTime(kayit.createdAt) }}</td>
+                    <td>{{ getGecmisIslemLabel(kayit.islemTipi) }}</td>
+                    <td>{{ kayit.createdBy || '-' }}</td>
+                    <td>{{ kayit.aciklama || '-' }}</td>
+                    <td>{{ getDegisiklikOzet(kayit) }}</td>
+                    <td>
+                        <div class="flex gap-2">
+                            <p-button
+                                label="Onceki"
+                                icon="pi pi-eye"
+                                size="small"
+                                [text]="true"
+                                [disabled]="!hasJsonPayload(kayit.oncekiDegerJson)"
+                                (onClick)="openDegisiklikPayloadDialog(kayit, 'onceki')"
+                            />
+                            <p-button
+                                label="Yeni"
+                                icon="pi pi-eye"
+                                size="small"
+                                [text]="true"
+                                [disabled]="!hasJsonPayload(kayit.yeniDegerJson)"
+                                (onClick)="openDegisiklikPayloadDialog(kayit, 'yeni')"
+                            />
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closeDegisiklikGecmisiDialog()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    [header]="degisiklikPayloadDialogTitle"
+    [(visible)]="degisiklikPayloadDialogVisible"
+    [modal]="true"
+    [style]="{ width: '52rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="closeDegisiklikPayloadDialog()"
+>
+    @if (degisiklikPayloadDialogMode === 'table') {
+        <p-table [value]="degisiklikPayloadTableRows" [tableStyle]="{ 'min-width': '44rem' }" [rows]="10" [paginator]="degisiklikPayloadTableRows.length > 10" stripedRows>
+            <ng-template #header>
+                <tr>
+                    @for (column of degisiklikPayloadTableColumns; track column.field) {
+                        <th>{{ column.header }}</th>
+                    }
+                </tr>
+            </ng-template>
+            <ng-template #body let-row>
+                <tr>
+                    @for (column of degisiklikPayloadTableColumns; track column.field) {
+                        <td>
+                            <span class="whitespace-pre-line">{{ row[column.field] }}</span>
+                        </td>
+                    }
+                </tr>
+            </ng-template>
+        </p-table>
+    } @else {
+        <div class="border-1 surface-border border-round p-3 overflow-auto" style="max-height: 60vh">
+            <pre class="m-0 text-xs">{{ degisiklikPayloadDialogContent }}</pre>
+        </div>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closeDegisiklikPayloadDialog()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
     header="Konaklayan Plani"
     [(visible)]="konaklayanPlanDialogVisible"
     [modal]="true"

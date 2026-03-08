@@ -100,6 +100,14 @@ public class RezervasyonController : UIController
         return Ok(detay);
     }
 
+    [HttpGet("kayitlar/{rezervasyonId:int}/degisiklik-gecmisi")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<List<RezervasyonDegisiklikGecmisiDto>>> GetDegisiklikGecmisi([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetDegisiklikGecmisiAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("kayitlar/{rezervasyonId:int}/konaklayan-plani")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<RezervasyonKonaklayanPlanDto>> GetKonaklayanPlani([FromRoute] int rezervasyonId, CancellationToken cancellationToken)

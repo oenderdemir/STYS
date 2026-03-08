@@ -388,6 +388,32 @@ public class RezervasyonService : IRezervasyonService
         };
     }
 
+    public async Task<List<RezervasyonDegisiklikGecmisiDto>> GetDegisiklikGecmisiAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        if (rezervasyonId <= 0)
+        {
+            throw new BaseException("Gecersiz rezervasyon id.", 400);
+        }
+
+        await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        return await _stysDbContext.RezervasyonDegisiklikGecmisleri
+            .Where(x => x.RezervasyonId == rezervasyonId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Select(x => new RezervasyonDegisiklikGecmisiDto
+            {
+                Id = x.Id,
+                IslemTipi = x.IslemTipi,
+                Aciklama = x.Aciklama,
+                OncekiDegerJson = x.OncekiDegerJson,
+                YeniDegerJson = x.YeniDegerJson,
+                CreatedAt = x.CreatedAt ?? DateTime.MinValue,
+                CreatedBy = x.CreatedBy ?? string.Empty
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<RezervasyonKonaklayanPlanDto?> GetKonaklayanPlaniAsync(int rezervasyonId, CancellationToken cancellationToken = default)
     {
         if (rezervasyonId <= 0)
@@ -716,6 +742,27 @@ public class RezervasyonService : IRezervasyonService
             .Where(x => x.RezervasyonId == rezervasyonId)
             .ToListAsync(cancellationToken);
 
+        var oldPlanSnapshot = existingGuests
+            .OrderBy(x => x.SiraNo)
+            .Select(x => new
+            {
+                x.SiraNo,
+                x.AdSoyad,
+                x.TcKimlikNo,
+                x.PasaportNo,
+                Atamalar = existingAssignments
+                    .Where(a => a.RezervasyonKonaklayanId == x.Id)
+                    .OrderBy(a => a.RezervasyonSegmentId)
+                    .ThenBy(a => a.OdaId)
+                    .Select(a => new
+                    {
+                        a.RezervasyonSegmentId,
+                        a.OdaId
+                    })
+                    .ToList()
+            })
+            .ToList();
+
         if (existingGuests.Count > 0)
         {
             _stysDbContext.RezervasyonKonaklayanlar.RemoveRange(existingGuests);
@@ -747,6 +794,32 @@ public class RezervasyonService : IRezervasyonService
                 });
             }
         }
+
+        var newPlanSnapshot = sortedGuests
+            .Select(x => new
+            {
+                x.SiraNo,
+                AdSoyad = x.AdSoyad.Trim(),
+                TcKimlikNo = string.IsNullOrWhiteSpace(x.TcKimlikNo) ? null : x.TcKimlikNo.Trim(),
+                PasaportNo = string.IsNullOrWhiteSpace(x.PasaportNo) ? null : x.PasaportNo.Trim(),
+                Atamalar = x.Atamalar
+                    .OrderBy(a => a.SegmentId)
+                    .ThenBy(a => a.OdaId)
+                    .Select(a => new
+                    {
+                        RezervasyonSegmentId = a.SegmentId,
+                        OdaId = a.OdaId
+                    })
+                    .ToList()
+            })
+            .ToList();
+
+        AppendHistoryEntry(
+            rezervasyonId,
+            RezervasyonGecmisIslemTipleri.KonaklayanPlaniKaydedildi,
+            "Konaklayan plani kaydedildi.",
+            oldPlanSnapshot,
+            newPlanSnapshot);
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
 
@@ -880,6 +953,28 @@ public class RezervasyonService : IRezervasyonService
         {
             return ToSaveResult(reservation);
         }
+
+        var oldAssignmentsSnapshot = changedAssignments
+            .Select(x =>
+            {
+                var assignment = assignmentById[x.AtamaId];
+                return new
+                {
+                    RezervasyonSegmentOdaAtamaId = assignment.Id,
+                    assignment.RezervasyonSegmentId,
+                    SegmentSirasi = assignment.RezervasyonSegment?.SegmentSirasi ?? 0,
+                    assignment.OdaId,
+                    assignment.OdaNoSnapshot,
+                    assignment.BinaAdiSnapshot,
+                    assignment.OdaTipiAdiSnapshot,
+                    assignment.AyrilanKisiSayisi,
+                    assignment.KapasiteSnapshot,
+                    assignment.PaylasimliMiSnapshot
+                };
+            })
+            .OrderBy(x => x.RezervasyonSegmentId)
+            .ThenBy(x => x.RezervasyonSegmentOdaAtamaId)
+            .ToList();
 
         var finalRoomByAssignmentId = assignments.ToDictionary(x => x.Id, x => x.OdaId);
         foreach (var changed in changedAssignments)
@@ -1032,6 +1127,35 @@ public class RezervasyonService : IRezervasyonService
             assignmentsBySegment,
             finalRoomByAssignmentId,
             cancellationToken);
+
+        var newAssignmentsSnapshot = changedAssignments
+            .Select(x =>
+            {
+                var assignment = assignmentById[x.AtamaId];
+                return new
+                {
+                    RezervasyonSegmentOdaAtamaId = assignment.Id,
+                    assignment.RezervasyonSegmentId,
+                    SegmentSirasi = assignment.RezervasyonSegment?.SegmentSirasi ?? 0,
+                    assignment.OdaId,
+                    assignment.OdaNoSnapshot,
+                    assignment.BinaAdiSnapshot,
+                    assignment.OdaTipiAdiSnapshot,
+                    assignment.AyrilanKisiSayisi,
+                    assignment.KapasiteSnapshot,
+                    assignment.PaylasimliMiSnapshot
+                };
+            })
+            .OrderBy(x => x.RezervasyonSegmentId)
+            .ThenBy(x => x.RezervasyonSegmentOdaAtamaId)
+            .ToList();
+
+        AppendHistoryEntry(
+            rezervasyonId,
+            RezervasyonGecmisIslemTipleri.OdaDegisimiYapildi,
+            $"{changedAssignments.Count} segment oda atamasi degistirildi.",
+            oldAssignmentsSnapshot,
+            newAssignmentsSnapshot);
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
@@ -1344,6 +1468,25 @@ public class RezervasyonService : IRezervasyonService
             reservation.Segmentler.Add(segment);
         }
 
+        AppendHistoryEntry(
+            reservation,
+            RezervasyonGecmisIslemTipleri.RezervasyonOlusturuldu,
+            "Rezervasyon olusturuldu.",
+            null,
+            new
+            {
+                reservation.ReferansNo,
+                reservation.TesisId,
+                reservation.KisiSayisi,
+                reservation.GirisTarihi,
+                reservation.CikisTarihi,
+                reservation.ToplamBazUcret,
+                reservation.ToplamUcret,
+                SegmentSayisi = reservation.Segmentler.Count,
+                OdaAtamaSayisi = reservation.Segmentler.Sum(x => x.OdaAtamalari.Count),
+                reservation.RezervasyonDurumu
+            });
+
         await _stysDbContext.Rezervasyonlar.AddAsync(reservation, cancellationToken);
         await _stysDbContext.SaveChangesAsync(cancellationToken);
 
@@ -1415,7 +1558,14 @@ public class RezervasyonService : IRezervasyonService
 
         await EnsureNoActiveRoomBlockForReservationAsync(rezervasyonId, cancellationToken);
 
+        var previousStatus = reservation.RezervasyonDurumu;
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi;
+        AppendHistoryEntry(
+            rezervasyonId,
+            RezervasyonGecmisIslemTipleri.CheckInTamamlandi,
+            "Check-in islemi tamamlandi.",
+            new { RezervasyonDurumu = previousStatus },
+            new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
     }
@@ -1450,7 +1600,14 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Check-out icin once kalan odeme tamamlanmalidir.", 400);
         }
 
+        var previousStatus = reservation.RezervasyonDurumu;
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckOutTamamlandi;
+        AppendHistoryEntry(
+            rezervasyonId,
+            RezervasyonGecmisIslemTipleri.CheckOutTamamlandi,
+            "Check-out islemi tamamlandi.",
+            new { RezervasyonDurumu = previousStatus },
+            new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
     }
@@ -1462,7 +1619,14 @@ public class RezervasyonService : IRezervasyonService
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
         {
             await EnsureCanRevertCancellationAsync(reservation.Id, cancellationToken);
+            var previousStatus = reservation.RezervasyonDurumu;
             reservation.RezervasyonDurumu = RezervasyonDurumlari.Taslak;
+            AppendHistoryEntry(
+                reservation.Id,
+                RezervasyonGecmisIslemTipleri.IptalGeriAlindi,
+                "Rezervasyon iptali geri alindi.",
+                new { RezervasyonDurumu = previousStatus },
+                new { RezervasyonDurumu = reservation.RezervasyonDurumu });
             await _stysDbContext.SaveChangesAsync(cancellationToken);
             return ToSaveResult(reservation);
         }
@@ -1472,7 +1636,14 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Check-out tamamlanmis rezervasyon iptal edilemez.", 400);
         }
 
+        var statusBeforeCancellation = reservation.RezervasyonDurumu;
         reservation.RezervasyonDurumu = RezervasyonDurumlari.Iptal;
+        AppendHistoryEntry(
+            reservation.Id,
+            RezervasyonGecmisIslemTipleri.IptalEdildi,
+            "Rezervasyon iptal edildi.",
+            new { RezervasyonDurumu = statusBeforeCancellation },
+            new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
     }
@@ -1638,6 +1809,9 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Odeme tutari kalan bakiyeden buyuk olamaz.", 400);
         }
 
+        var yeniOdenenTutar = odenenTutar + request.OdemeTutari;
+        var yeniKalanTutar = Math.Max(0m, reservation.ToplamUcret - yeniOdenenTutar);
+
         await _stysDbContext.RezervasyonOdemeler.AddAsync(new RezervasyonOdeme
         {
             RezervasyonId = reservation.Id,
@@ -1647,6 +1821,24 @@ public class RezervasyonService : IRezervasyonService
             OdemeTipi = normalizedOdemeTipi,
             Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim()
         }, cancellationToken);
+
+        AppendHistoryEntry(
+            rezervasyonId,
+            RezervasyonGecmisIslemTipleri.OdemeKaydedildi,
+            "Rezervasyona odeme eklendi.",
+            new
+            {
+                OdenenTutar = odenenTutar,
+                KalanTutar = kalanTutar
+            },
+            new
+            {
+                OdemeTutari = request.OdemeTutari,
+                OdemeTipi = normalizedOdemeTipi,
+                Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim(),
+                OdenenTutar = yeniOdenenTutar,
+                KalanTutar = yeniKalanTutar
+            });
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
@@ -2625,6 +2817,62 @@ public class RezervasyonService : IRezervasyonService
         {
             return [];
         }
+    }
+
+    private void AppendHistoryEntry(
+        Rezervasyon reservation,
+        string islemTipi,
+        string? aciklama,
+        object? oncekiDeger,
+        object? yeniDeger)
+    {
+        reservation.DegisiklikGecmisiKayitlari.Add(CreateHistoryEntry(
+            islemTipi,
+            aciklama,
+            oncekiDeger,
+            yeniDeger));
+    }
+
+    private void AppendHistoryEntry(
+        int rezervasyonId,
+        string islemTipi,
+        string? aciklama,
+        object? oncekiDeger,
+        object? yeniDeger)
+    {
+        _stysDbContext.RezervasyonDegisiklikGecmisleri.Add(CreateHistoryEntry(
+            islemTipi,
+            aciklama,
+            oncekiDeger,
+            yeniDeger,
+            rezervasyonId));
+    }
+
+    private static RezervasyonDegisiklikGecmisi CreateHistoryEntry(
+        string islemTipi,
+        string? aciklama,
+        object? oncekiDeger,
+        object? yeniDeger,
+        int? rezervasyonId = null)
+    {
+        return new RezervasyonDegisiklikGecmisi
+        {
+            RezervasyonId = rezervasyonId.GetValueOrDefault(),
+            IslemTipi = islemTipi,
+            Aciklama = aciklama,
+            OncekiDegerJson = SerializeHistoryPayload(oncekiDeger),
+            YeniDegerJson = SerializeHistoryPayload(yeniDeger)
+        };
+    }
+
+    private static string? SerializeHistoryPayload(object? payload)
+    {
+        if (payload is null)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(payload);
     }
 
     private async Task<List<RoomAvailability>> GetRoomAvailabilitiesAsync(

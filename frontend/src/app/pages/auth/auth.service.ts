@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { map, Observable } from 'rxjs';
+import { catchError, finalize, map, Observable, of, shareReplay, tap } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl, getSessionInactivityTimeoutMs } from '../../core/config';
 import { ChangePasswordRequestDto, LoginRequestDto, LoginResponseDto } from './dto';
@@ -16,6 +16,7 @@ export class AuthService {
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    private refreshInFlight$: Observable<LoginResponseDto> | null = null;
     readonly sessionRevision = signal(0);
 
     constructor() {
@@ -29,7 +30,7 @@ export class AuthService {
             password
         };
 
-        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/login`, request).pipe(
+        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/login`, request, { withCredentials: true }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
@@ -47,7 +48,7 @@ export class AuthService {
             newPassword2
         };
 
-        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/changepassword`, request).pipe(
+        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/changepassword`, request, { withCredentials: true }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
@@ -56,6 +57,31 @@ export class AuthService {
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Change password request failed.');
             })
         );
+    }
+
+    refreshSession(): Observable<LoginResponseDto> {
+        if (this.refreshInFlight$) {
+            return this.refreshInFlight$;
+        }
+
+        this.refreshInFlight$ = this.http
+            .post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/refresh`, {}, { withCredentials: true })
+            .pipe(
+                map((responseEnvelope) => {
+                    if (responseEnvelope.success && responseEnvelope.data) {
+                        return responseEnvelope.data;
+                    }
+
+                    throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Refresh token request failed.');
+                }),
+                tap((response) => this.storeSession(response)),
+                finalize(() => {
+                    this.refreshInFlight$ = null;
+                }),
+                shareReplay(1)
+            );
+
+        return this.refreshInFlight$;
     }
 
     storeSession(response: LoginResponseDto): void {
@@ -82,6 +108,10 @@ export class AuthService {
         const reason = options?.reason;
         const preserveReturnUrl = options?.preserveReturnUrl ?? true;
         const currentUrl = this.router.url;
+        this.http
+            .post(`${this.apiBaseUrl}/auth/auth/logout`, {}, { withCredentials: true })
+            .pipe(catchError(() => of(null)))
+            .subscribe();
 
         this.clearSession();
 

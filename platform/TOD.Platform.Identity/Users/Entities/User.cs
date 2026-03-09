@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using TOD.Platform.Identity.RefreshTokens.Entities;
 using TOD.Platform.Identity.Common.Enums;
 using TOD.Platform.Identity.UserUserGroups.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
@@ -26,5 +27,9 @@ public class User : BaseEntity<Guid>
 
     public UserStatus Status { get; set; } = UserStatus.MustChangePassword;
 
+    public int TokenVersion { get; set; } = 0;
+
     public ICollection<UserUserGroup> UserUserGroups { get; set; } = new List<UserUserGroup>();
+
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

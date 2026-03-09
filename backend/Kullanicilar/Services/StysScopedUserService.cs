@@ -4,6 +4,7 @@ using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.UserGroups.Repositories;
+using TOD.Platform.Identity.Security.Services;
 using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Entities;
 using TOD.Platform.Identity.Users.Repositories;
@@ -36,12 +37,13 @@ public class StysScopedUserService : BaseUserService
         IUserRepository userRepository,
         IUserGroupRepository userGroupRepository,
         IPasswordHasher passwordHasher,
+        ITokenInvalidationService tokenInvalidationService,
         StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
         IAccessScopeProvider accessScopeProvider,
         ICurrentUserAccessor currentUserAccessor,
         AutoMapper.IMapper mapper)
-        : base(userRepository, userGroupRepository, passwordHasher, mapper)
+        : base(userRepository, userGroupRepository, passwordHasher, tokenInvalidationService, mapper)
     {
         _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;

@@ -15,4 +15,6 @@ public class IdentityUser<TKey> where TKey : struct
     public string? Email { get; set; }
 
     public string? Status { get; set; }
+
+    public int TokenVersion { get; set; }
 }

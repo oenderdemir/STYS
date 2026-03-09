@@ -8,7 +8,9 @@ public interface IAuthenticationService<TKey> where TKey : struct
 
     Task<LoginResponseDto> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default);
 
-    Task<LoginResponseDto> LogoutAsync();
+    Task<LoginResponseDto> RefreshAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<LoginResponseDto> LogoutAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IAuthenticationService : IAuthenticationService<Guid>

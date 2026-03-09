@@ -1,5 +1,7 @@
 using TOD.Platform.Security.Auth.DTO;
 using TOD.Platform.Security.Auth.Models;
+using TOD.Platform.Security.Auth.Options;
+using Microsoft.Extensions.Options;
 
 namespace TOD.Platform.Security.Auth.Services;
 
@@ -9,17 +11,20 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
     private readonly IJwtTokenService _tokenService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IOptions<JwtTokenOptions> _jwtTokenOptions;
 
     public AuthenticationService(
         IIdentityStore<TKey> identityStore,
         IJwtTokenService tokenService,
         ICurrentUserAccessor currentUserAccessor,
-        IPasswordHasher passwordHasher)
+        IPasswordHasher passwordHasher,
+        IOptions<JwtTokenOptions> jwtTokenOptions)
     {
         _identityStore = identityStore;
         _tokenService = tokenService;
         _currentUserAccessor = currentUserAccessor;
         _passwordHasher = passwordHasher;
+        _jwtTokenOptions = jwtTokenOptions;
     }
 
     public async Task<LoginResponseDto> ChangePassword(ChangePasswordRequestDto model, CancellationToken cancellationToken = default)
@@ -49,7 +54,7 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
         var newPasswordHash = _passwordHasher.Hash(model.NewPassword);
         await _identityStore.UpdatePasswordHashAsync(user.Id, newPasswordHash, cancellationToken);
 
-        return await LogoutAsync();
+        return await LogoutAsync(cancellationToken);
     }
 
     public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default)
@@ -70,7 +75,71 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             return CreateUnauthorizedResponse();
         }
 
-        var permissions = await _identityStore.GetPermissionsAsync(user.Id, cancellationToken);
+        var normalizedPermissions = await GetValidatedPermissionsAsync(user.Id, cancellationToken);
+
+        return await CreateAuthenticatedResponseAsync(
+            user,
+            normalizedPermissions,
+            issueNewRefreshToken: true,
+            existingRefreshToken: null,
+            existingRefreshTokenExpireDate: null,
+            cancellationToken);
+    }
+
+    public async Task<LoginResponseDto> RefreshAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return CreateUnauthorizedResponse();
+        }
+
+        var now = DateTime.UtcNow;
+        var rotatedRefreshToken = await _identityStore.RotateRefreshTokenAsync(
+            request.RefreshToken,
+            now,
+            now.AddDays(_jwtTokenOptions.Value.RefreshTokenExpirationDays),
+            cancellationToken);
+
+        if (rotatedRefreshToken.Status != RefreshTokenRotationStatus.Rotated)
+        {
+            return CreateUnauthorizedResponse();
+        }
+
+        var user = await _identityStore.FindByIdAsync(rotatedRefreshToken.UserId, cancellationToken);
+        if (user is null)
+        {
+            return CreateUnauthorizedResponse();
+        }
+
+        var normalizedPermissions = await GetValidatedPermissionsAsync(user.Id, cancellationToken);
+
+        return await CreateAuthenticatedResponseAsync(
+            user,
+            normalizedPermissions,
+            issueNewRefreshToken: false,
+            existingRefreshToken: rotatedRefreshToken.RefreshToken,
+            existingRefreshTokenExpireDate: rotatedRefreshToken.ExpiresAt,
+            cancellationToken);
+    }
+
+    public async Task<LoginResponseDto> LogoutAsync(CancellationToken cancellationToken = default)
+    {
+        var currentUserId = _currentUserAccessor.GetCurrentUserId();
+        if (typeof(TKey) == typeof(Guid) && currentUserId.HasValue)
+        {
+            await _identityStore.RevokeAllRefreshTokensAsync(
+                (TKey)(object)currentUserId.Value,
+                DateTime.UtcNow,
+                "User logout",
+                cancellationToken);
+        }
+
+        return CreateUnauthorizedResponse();
+    }
+
+    private async Task<List<string>> GetValidatedPermissionsAsync(TKey userId, CancellationToken cancellationToken)
+    {
+        var permissions = await _identityStore.GetPermissionsAsync(userId, cancellationToken);
         var normalizedPermissions = permissions
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
@@ -87,6 +156,17 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
                 $"Invalid permission format. Permissions must be in 'Domain.Name' format. Invalid values: {string.Join(", ", invalidPermissions)}");
         }
 
+        return normalizedPermissions;
+    }
+
+    private async Task<LoginResponseDto> CreateAuthenticatedResponseAsync(
+        IdentityUser<TKey> user,
+        List<string> normalizedPermissions,
+        bool issueNewRefreshToken,
+        string? existingRefreshToken,
+        DateTime? existingRefreshTokenExpireDate,
+        CancellationToken cancellationToken)
+    {
         var generatedToken = await _tokenService.GenerateToken(new GenerateTokenRequest
         {
             UserId = user.Id.ToString() ?? string.Empty,
@@ -94,26 +174,38 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             Name = user.Name ?? string.Empty,
             Surname = user.Surname ?? string.Empty,
             Email = user.Email ?? string.Empty,
-            Permissions = normalizedPermissions
+            Permissions = normalizedPermissions,
+            TokenVersion = user.TokenVersion
         }, cancellationToken);
+
+        string refreshToken;
+        DateTime? refreshTokenExpireDate;
+
+        if (issueNewRefreshToken)
+        {
+            var issuedRefreshToken = await _identityStore.IssueRefreshTokenAsync(
+                user.Id,
+                DateTime.UtcNow.AddDays(_jwtTokenOptions.Value.RefreshTokenExpirationDays),
+                cancellationToken);
+
+            refreshToken = issuedRefreshToken.RefreshToken;
+            refreshTokenExpireDate = issuedRefreshToken.ExpiresAt;
+        }
+        else
+        {
+            refreshToken = existingRefreshToken ?? string.Empty;
+            refreshTokenExpireDate = existingRefreshTokenExpireDate;
+        }
 
         return new LoginResponseDto
         {
             AuthenticateResult = true,
             AuthToken = generatedToken.Token,
             AccessTokenExpireDate = generatedToken.TokenExpireDate,
+            RefreshToken = refreshToken,
+            RefreshTokenExpireDate = refreshTokenExpireDate,
             UserStatus = user.Status
         };
-    }
-
-    public Task<LoginResponseDto> LogoutAsync()
-    {
-        return Task.FromResult(new LoginResponseDto
-        {
-            AuthenticateResult = false,
-            AuthToken = string.Empty,
-            AccessTokenExpireDate = DateTime.UtcNow
-        });
     }
 
     private static LoginResponseDto CreateUnauthorizedResponse()
@@ -122,7 +214,9 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
         {
             AuthenticateResult = false,
             AuthToken = string.Empty,
-            AccessTokenExpireDate = DateTime.UtcNow
+            AccessTokenExpireDate = DateTime.UtcNow,
+            RefreshToken = string.Empty,
+            RefreshTokenExpireDate = null
         };
     }
 
@@ -144,8 +238,9 @@ public class AuthenticationService : AuthenticationService<Guid>, IAuthenticatio
         IIdentityStore<Guid> identityStore,
         IJwtTokenService tokenService,
         ICurrentUserAccessor currentUserAccessor,
-        IPasswordHasher passwordHasher)
-        : base(identityStore, tokenService, currentUserAccessor, passwordHasher)
+        IPasswordHasher passwordHasher,
+        IOptions<JwtTokenOptions> jwtTokenOptions)
+        : base(identityStore, tokenService, currentUserAccessor, passwordHasher, jwtTokenOptions)
     {
     }
 }

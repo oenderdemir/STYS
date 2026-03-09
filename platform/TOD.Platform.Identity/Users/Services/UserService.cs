@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using TOD.Platform.Identity.Common.Enums;
 using TOD.Platform.Identity.UserGroups.Repositories;
+using TOD.Platform.Identity.Security.Services;
 using TOD.Platform.Identity.UserUserGroups.Entities;
 using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Entities;
@@ -17,16 +18,19 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
 
     private readonly IUserGroupRepository _userGroupRepository;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ITokenInvalidationService _tokenInvalidationService;
 
     public UserService(
         IUserRepository userRepository,
         IUserGroupRepository userGroupRepository,
         IPasswordHasher passwordHasher,
+        ITokenInvalidationService tokenInvalidationService,
         IMapper mapper)
         : base(userRepository, mapper)
     {
         _userGroupRepository = userGroupRepository;
         _passwordHasher = passwordHasher;
+        _tokenInvalidationService = tokenInvalidationService;
     }
 
     public override async Task<UserDto> AddAsync(UserDto dto)
@@ -112,6 +116,7 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
 
         Repository.Update(user);
         await Repository.SaveChangesAsync();
+        await _tokenInvalidationService.InvalidateUserAsync(user.Id, "User updated", CancellationToken.None);
 
         return dto;
     }
@@ -144,6 +149,7 @@ public class UserService : BaseRdbmsService<UserDto, User>, IUserService
 
         Repository.Update(user);
         await Repository.SaveChangesAsync();
+        await _tokenInvalidationService.InvalidateUserAsync(user.Id, "User password reset", CancellationToken.None);
     }
 
     private static UserStatus ParseStatus(string? rawStatus)

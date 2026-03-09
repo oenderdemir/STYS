@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TOD.Platform.Identity.Roles.Controllers;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Infrastructure.Stores;
+using TOD.Platform.Identity.RefreshTokens.Services;
+using TOD.Platform.Identity.Security.Services;
 using TOD.Platform.Persistence.Rdbms.Extensions;
 using TOD.Platform.Security;
 
@@ -31,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
         services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(DependencyInjection).Assembly);
+        services.AddScoped<ITokenInvalidationService, TokenInvalidationService>();
+        services.AddHostedService<RefreshTokenCleanupHostedService>();
 
         services.AddControllers()
             .AddApplicationPart(typeof(RoleController).Assembly);

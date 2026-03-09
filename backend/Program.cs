@@ -57,7 +57,7 @@ builder.Services.AddScoped<IYoneticiAdayService, YoneticiAdayService>();
 builder.Services.AddScoped<IRezervasyonRepository, RezervasyonRepository>();
 builder.Services.AddScoped<IRezervasyonService, RezervasyonService>();
 
-builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration);
+builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddTodPlatformAuthorization();
 builder.Services.AddTodPlatformRateLimiting(builder.Configuration);
 builder.Services.AddCors(options =>
@@ -71,7 +71,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:4201",
                 "https://localhost:4201")
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 

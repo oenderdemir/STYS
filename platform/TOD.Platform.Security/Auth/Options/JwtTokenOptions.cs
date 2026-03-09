@@ -10,5 +10,13 @@ public class JwtTokenOptions
 
     public string? Audience { get; set; }
 
-    public int AccessTokenExpirationHours { get; set; } = 8;
+    public int AccessTokenExpirationMinutes { get; set; } = 30;
+
+    public int RefreshTokenExpirationDays { get; set; } = 7;
+
+    public int RefreshTokenRetentionDays { get; set; } = 30;
+
+    public int RefreshTokenCleanupIntervalHours { get; set; } = 24;
+
+    public int RefreshTokenCleanupStartupDelayMinutes { get; set; } = 2;
 }

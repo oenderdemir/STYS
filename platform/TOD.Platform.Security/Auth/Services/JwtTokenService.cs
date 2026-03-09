@@ -27,6 +27,8 @@ public class JwtTokenService : IJwtTokenService
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Key));
         var now = DateTime.UtcNow;
+        var expiresAt = now.AddMinutes(options.AccessTokenExpirationMinutes);
+        var jti = Guid.NewGuid().ToString("N");
 
         var claims = new List<Claim>
         {
@@ -34,7 +36,9 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.Name, request.Name),
             new(ClaimTypes.Email, request.Email),
             new(ClaimTypes.Surname, request.Surname),
-            new(ClaimTypes.NameIdentifier, request.UserName)
+            new(ClaimTypes.NameIdentifier, request.UserName),
+            new(JwtRegisteredClaimNames.Jti, jti),
+            new("tokenVersion", request.TokenVersion.ToString())
         };
 
         if (!string.IsNullOrWhiteSpace(request.UserId))
@@ -52,7 +56,7 @@ public class JwtTokenService : IJwtTokenService
             audience: options.Audience,
             claims: claims,
             notBefore: now,
-            expires: now.AddHours(options.AccessTokenExpirationHours),
+            expires: expiresAt,
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 
         var token = new JwtSecurityTokenHandler().WriteToken(jwt);
@@ -60,7 +64,8 @@ public class JwtTokenService : IJwtTokenService
         return Task.FromResult(new GenerateTokenResponse
         {
             Token = token,
-            TokenExpireDate = now.AddHours(options.AccessTokenExpirationHours)
+            TokenExpireDate = expiresAt,
+            Jti = jti
         });
     }
 }

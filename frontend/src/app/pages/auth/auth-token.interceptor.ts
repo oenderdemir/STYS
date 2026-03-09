@@ -1,6 +1,6 @@
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, throwError } from 'rxjs';
+import { catchError, switchMap, throwError } from 'rxjs';
 import { getApiBaseUrl } from '../../core/config';
 import { AuthService } from './auth.service';
 
@@ -10,10 +10,13 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
     const normalizedUrl = request.url.toLowerCase();
     const isBackendRequest = isBackendApiRequest(normalizedUrl, apiBaseUrl);
     const isAuthRequest = normalizedUrl.includes('/auth/auth/login');
+    const isRefreshRequest = normalizedUrl.includes('/auth/auth/refresh');
+    const isLogoutRequest = normalizedUrl.includes('/auth/auth/logout');
     const isChangePasswordRequest = normalizedUrl.includes('/auth/auth/changepassword');
+    const hasRetryMarker = request.headers.has('x-auth-refreshed');
     const token = authService.getToken();
 
-    if (isBackendRequest && !isAuthRequest && !token) {
+    if (isBackendRequest && !isAuthRequest && !isRefreshRequest && !isLogoutRequest && !token) {
         authService.logout({ reason: 'unauthorized', preserveReturnUrl: false });
         return throwError(() =>
             new HttpErrorResponse({
@@ -28,7 +31,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
     }
 
     const requestWithAuthorization =
-        !isAuthRequest && token && !request.headers.has('Authorization')
+        !isAuthRequest && !isRefreshRequest && token && !request.headers.has('Authorization')
             ? request.clone({
                   setHeaders: {
                       Authorization: `Bearer ${token}`
@@ -38,9 +41,37 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
 
     return next(requestWithAuthorization).pipe(
         catchError((error: unknown) => {
-            if (error instanceof HttpErrorResponse && !isAuthRequest && authService.getToken()) {
-                const isUnauthorized = error.status === 401 || error.status === 0;
+            if (error instanceof HttpErrorResponse && !isAuthRequest && !isRefreshRequest && !isLogoutRequest && authService.getToken()) {
+                const isUnauthorized = error.status === 401;
                 const shouldAutoLogout = !isChangePasswordRequest;
+                if (isUnauthorized && shouldAutoLogout && !hasRetryMarker) {
+                    const retryRequest = requestWithAuthorization.clone({
+                        setHeaders: {
+                            'x-auth-refreshed': '1'
+                        }
+                    });
+
+                    return authService.refreshSession().pipe(
+                        switchMap((response) => {
+                            const retryToken = response.authToken || authService.getToken();
+                            const retriedWithToken =
+                                retryToken && !retryRequest.headers.has('Authorization')
+                                    ? retryRequest.clone({
+                                          setHeaders: {
+                                              Authorization: `Bearer ${retryToken}`
+                                          }
+                                      })
+                                    : retryRequest;
+
+                            return next(retriedWithToken);
+                        }),
+                        catchError((refreshError: unknown) => {
+                            authService.logout({ reason: looksLikeExpiredToken(error) ? 'expired' : 'unauthorized' });
+                            return throwError(() => refreshError);
+                        })
+                    );
+                }
+
                 if (isUnauthorized && shouldAutoLogout) {
                     authService.logout({ reason: looksLikeExpiredToken(error) ? 'expired' : 'unauthorized' });
                 }

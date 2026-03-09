@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TOD.Platform.Identity.MenuItemRoles.Entities;
 using TOD.Platform.Identity.MenuItems.Entities;
 using TOD.Platform.Identity.Roles.Entities;
+using TOD.Platform.Identity.RefreshTokens.Entities;
 using TOD.Platform.Identity.UserGroupRoles.Entities;
 using TOD.Platform.Identity.UserGroups.Entities;
 using TOD.Platform.Identity.Users.Entities;
@@ -35,6 +36,8 @@ public class TodIdentityDbContext : DbContext
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
 
     public DbSet<MenuItemRole> MenuItemRoles => Set<MenuItemRole>();
+
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public override int SaveChanges()
     {
@@ -125,6 +128,20 @@ public class TodIdentityDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => new { x.MenuItemId, x.RoleId }).IsUnique();
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.Property(x => x.TokenHash).HasMaxLength(128);
+            entity.Property(x => x.ReplacedByTokenHash).HasMaxLength(512);
+            entity.Property(x => x.RevokeReason).HasMaxLength(256);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.ExpiresAt });
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.RefreshTokens)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

@@ -8,5 +8,9 @@ public class LoginResponseDto
 
     public DateTime AccessTokenExpireDate { get; set; }
 
+    public string RefreshToken { get; set; } = string.Empty;
+
+    public DateTime? RefreshTokenExpireDate { get; set; }
+
     public string? UserStatus { get; set; }
 }

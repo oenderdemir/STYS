@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TOD.Platform.SharedKernel\TOD.Platform.SharedKernel.csproj" />
+    <ProjectReference Include="..\TOD.Platform.Security\TOD.Platform.Security.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

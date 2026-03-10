@@ -29,6 +29,39 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
     standalone: true,
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
+    styles: [`
+        .dash-hero {
+            background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 45%, #ecfdf5 100%);
+            border: 1px solid #dbeafe;
+        }
+
+        .kpi-card {
+            border: 1px solid;
+            border-radius: 0.75rem;
+            padding: 0.9rem;
+            min-height: 8.25rem;
+        }
+
+        .kpi-card--blue {
+            background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+            border-color: #bfdbfe;
+        }
+
+        .kpi-card--violet {
+            background: linear-gradient(180deg, #f5f3ff 0%, #faf9ff 100%);
+            border-color: #ddd6fe;
+        }
+
+        .kpi-card--emerald {
+            background: linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%);
+            border-color: #a7f3d0;
+        }
+
+        .kpi-card--amber {
+            background: linear-gradient(180deg, #fffbeb 0%, #fffef8 100%);
+            border-color: #fcd34d;
+        }
+    `],
     providers: [MessageService]
 })
 export class RezervasyonDashboard implements OnInit {
@@ -42,6 +75,13 @@ export class RezervasyonDashboard implements OnInit {
     selectedTarih = this.todayInput();
     kpiBaslangicTarihi = this.firstDayOfMonthInput();
     kpiBitisTarihi = this.todayInput();
+    selectedKpiDonemi: 'thisMonth' | 'last7' | 'last30' | 'custom' = 'thisMonth';
+    readonly kpiDonemleri = [
+        { label: 'Bu Ay', value: 'thisMonth' },
+        { label: 'Son 7 Gun', value: 'last7' },
+        { label: 'Son 30 Gun', value: 'last30' },
+        { label: 'Ozel Aralik', value: 'custom' }
+    ];
     reportSelectedTesisIds: number[] = [];
     reportBaslangicTarihi = this.firstDayOfMonthInput();
     reportBitisTarihi = this.todayInput();
@@ -84,8 +124,15 @@ export class RezervasyonDashboard implements OnInit {
     }
 
     onTarihChange(): void {
-        if (this.selectedTarih && this.selectedTarih.trim().length > 0) {
-            this.kpiBitisTarihi = this.selectedTarih;
+        if (this.selectedKpiDonemi !== 'custom') {
+            this.applyKpiDonemiPreset();
+        }
+        this.loadDashboard();
+    }
+
+    onKpiDonemiChange(): void {
+        if (this.selectedKpiDonemi !== 'custom') {
+            this.applyKpiDonemiPreset();
         }
         this.loadDashboard();
     }
@@ -309,7 +356,7 @@ export class RezervasyonDashboard implements OnInit {
                     }
 
                     if (this.selectedTarih && this.selectedTarih.trim().length > 0) {
-                        this.kpiBitisTarihi = this.selectedTarih;
+                        this.applyKpiDonemiPreset();
                     }
 
                     this.loadDashboard();
@@ -405,6 +452,46 @@ export class RezervasyonDashboard implements OnInit {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         return `${year}-${month}-01`;
+    }
+
+    private applyKpiDonemiPreset(): void {
+        const selectedDate = this.parseDateInputOrToday(this.selectedTarih);
+        if (this.selectedKpiDonemi === 'thisMonth') {
+            this.kpiBaslangicTarihi = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-01`;
+            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+            return;
+        }
+
+        if (this.selectedKpiDonemi === 'last7') {
+            const start = new Date(selectedDate);
+            start.setDate(start.getDate() - 6);
+            this.kpiBaslangicTarihi = this.toInputDate(start);
+            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+            return;
+        }
+
+        if (this.selectedKpiDonemi === 'last30') {
+            const start = new Date(selectedDate);
+            start.setDate(start.getDate() - 29);
+            this.kpiBaslangicTarihi = this.toInputDate(start);
+            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+        }
+    }
+
+    private parseDateInputOrToday(value: string): Date {
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return new Date();
+        }
+
+        return parsed;
+    }
+
+    private toInputDate(date: Date): string {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     private exportOdemeRapor(format: 'excel' | 'pdf'): void {

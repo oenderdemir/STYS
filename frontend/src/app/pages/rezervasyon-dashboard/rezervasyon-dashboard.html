@@ -7,10 +7,10 @@
     </ng-template>
 </p-toolbar>
 
-<div class="card mb-4">
+<div class="card mb-4 dash-hero">
     <h5 class="m-0 mb-3">Rezervasyon Dashboard</h5>
     <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="dashTesis" class="block font-medium mb-2">Tesis</label>
             <p-select
                 inputId="dashTesis"
@@ -26,35 +26,54 @@
                 (onChange)="onTesisChange()"
             />
         </div>
-        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="dashTarih" class="block font-medium mb-2">Tarih</label>
             <input pInputText id="dashTarih" class="w-full" type="date" [(ngModel)]="selectedTarih" [disabled]="loadingReferences || loadingDashboard" (change)="onTarihChange()" />
         </div>
-        <div class="col-span-12 md:col-span-6 lg:col-span-3">
-            <label for="kpiBaslangic" class="block font-medium mb-2">KPI Baslangic</label>
-            <input
-                pInputText
-                id="kpiBaslangic"
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="kpiDonemi" class="block font-medium mb-2">KPI Donemi</label>
+            <p-select
+                inputId="kpiDonemi"
                 class="w-full"
-                type="date"
-                [(ngModel)]="kpiBaslangicTarihi"
+                [options]="kpiDonemleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedKpiDonemi"
+                [showClear]="false"
                 [disabled]="loadingReferences || loadingDashboard"
-                (change)="onKpiRangeChange()"
-            />
-        </div>
-        <div class="col-span-12 md:col-span-6 lg:col-span-3">
-            <label for="kpiBitis" class="block font-medium mb-2">KPI Bitis</label>
-            <input
-                pInputText
-                id="kpiBitis"
-                class="w-full"
-                type="date"
-                [(ngModel)]="kpiBitisTarihi"
-                [disabled]="loadingReferences || loadingDashboard"
-                (change)="onKpiRangeChange()"
+                (onChange)="onKpiDonemiChange()"
             />
         </div>
     </div>
+
+    @if (selectedKpiDonemi === 'custom') {
+        <div class="grid grid-cols-12 gap-4 mt-3">
+            <div class="col-span-12 md:col-span-6">
+                <label for="kpiBaslangic" class="block font-medium mb-2">KPI Baslangic</label>
+                <input
+                    pInputText
+                    id="kpiBaslangic"
+                    class="w-full"
+                    type="date"
+                    [(ngModel)]="kpiBaslangicTarihi"
+                    [disabled]="loadingReferences || loadingDashboard"
+                    (change)="onKpiRangeChange()"
+                />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label for="kpiBitis" class="block font-medium mb-2">KPI Bitis</label>
+                <input
+                    pInputText
+                    id="kpiBitis"
+                    class="w-full"
+                    type="date"
+                    [(ngModel)]="kpiBitisTarihi"
+                    [disabled]="loadingReferences || loadingDashboard"
+                    (change)="onKpiRangeChange()"
+                />
+            </div>
+        </div>
+    }
 </div>
 
 <div class="card mb-4">
@@ -134,8 +153,8 @@
         </div>
     </div>
 
-    <div class="card mb-4">
-        <h6 class="m-0 mb-3">KPI Ozeti</h6>
+    <div class="card mb-4 dash-hero">
+        <h6 class="m-0 mb-3">Performans Ozeti</h6>
         <div class="text-sm text-color-secondary mb-3">
             Aralik: {{ dashboard.kpiBaslangicTarihi | date:'dd.MM.yyyy' }} - {{ dashboard.kpiBitisTarihi | date:'dd.MM.yyyy' }}
             ({{ getKpiOzet().tarihAraligiGunSayisi }} gun)
@@ -143,19 +162,19 @@
 
         <div class="grid grid-cols-12 gap-4">
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
-                    <div class="text-xs text-color-secondary mb-1">ADR</div>
+                <div class="kpi-card kpi-card--blue">
+                    <div class="text-xs text-color-secondary mb-1">Ortalama Gunluk Gelir (ADR)</div>
                     <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().adr) }} TRY</div>
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
-                    <div class="text-xs text-color-secondary mb-1">RevPAR</div>
+                <div class="kpi-card kpi-card--violet">
+                    <div class="text-xs text-color-secondary mb-1">Satilabilir Oda Basina Gelir (RevPAR)</div>
                     <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().revPar) }} TRY</div>
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--emerald">
                     <div class="text-xs text-color-secondary mb-1">Doluluk Orani</div>
                     <div class="text-xl font-semibold">{{ formatPercent(getKpiOzet().dolulukOraniYuzde) }}</div>
                     <div class="mt-2 mb-1">
@@ -188,13 +207,13 @@
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--amber">
                     <div class="text-xs text-color-secondary mb-1">Iptal Orani</div>
                     <div class="text-xl font-semibold">{{ formatPercent(getKpiOzet().iptalOraniYuzde) }}</div>
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--emerald">
                     <div class="text-xs text-color-secondary mb-1">Toplam Gelir</div>
                     <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().toplamGelir) }} TRY</div>
                     <div class="mt-2 mb-1">
@@ -227,19 +246,19 @@
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--blue">
                     <div class="text-xs text-color-secondary mb-1">Toplam Rezervasyon</div>
                     <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().toplamRezervasyonSayisi) }}</div>
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--violet">
                     <div class="text-xs text-color-secondary mb-1">Satilan Gece</div>
                     <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().satilanGeceSayisi) }} / {{ formatNumber(getKpiOzet().toplamGeceSayisi) }}</div>
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
-                <div class="border-1 surface-border border-round p-3">
+                <div class="kpi-card kpi-card--amber">
                     <div class="text-xs text-color-secondary mb-1">Iptal Rezervasyon</div>
                     <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().iptalRezervasyonSayisi) }}</div>
                 </div>

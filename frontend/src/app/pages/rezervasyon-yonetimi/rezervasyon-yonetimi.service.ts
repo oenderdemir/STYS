@@ -101,10 +101,21 @@ export class RezervasyonYonetimiService {
         );
     }
 
-    getGunlukDashboard(tesisId: number, tarih?: string): Observable<RezervasyonDashboardDto> {
+    getGunlukDashboard(
+        tesisId: number,
+        tarih?: string,
+        kpiBaslangicTarihi?: string,
+        kpiBitisTarihi?: string
+    ): Observable<RezervasyonDashboardDto> {
         let params = new HttpParams().set('tesisId', tesisId);
         if (tarih && tarih.trim().length > 0) {
             params = params.set('tarih', tarih);
+        }
+        if (kpiBaslangicTarihi && kpiBaslangicTarihi.trim().length > 0) {
+            params = params.set('kpiBaslangicTarihi', kpiBaslangicTarihi);
+        }
+        if (kpiBitisTarihi && kpiBitisTarihi.trim().length > 0) {
+            params = params.set('kpiBitisTarihi', kpiBitisTarihi);
         }
 
         return this.http.get<ApiResponse<RezervasyonDashboardDto>>(`${this.apiBaseUrl}/ui/rezervasyon/dashboard`, { params }).pipe(

@@ -10,7 +10,7 @@
 <div class="card mb-4">
     <h5 class="m-0 mb-3">Rezervasyon Dashboard</h5>
     <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="dashTesis" class="block font-medium mb-2">Tesis</label>
             <p-select
                 inputId="dashTesis"
@@ -26,9 +26,33 @@
                 (onChange)="onTesisChange()"
             />
         </div>
-        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="dashTarih" class="block font-medium mb-2">Tarih</label>
             <input pInputText id="dashTarih" class="w-full" type="date" [(ngModel)]="selectedTarih" [disabled]="loadingReferences || loadingDashboard" (change)="onTarihChange()" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="kpiBaslangic" class="block font-medium mb-2">KPI Baslangic</label>
+            <input
+                pInputText
+                id="kpiBaslangic"
+                class="w-full"
+                type="date"
+                [(ngModel)]="kpiBaslangicTarihi"
+                [disabled]="loadingReferences || loadingDashboard"
+                (change)="onKpiRangeChange()"
+            />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="kpiBitis" class="block font-medium mb-2">KPI Bitis</label>
+            <input
+                pInputText
+                id="kpiBitis"
+                class="w-full"
+                type="date"
+                [(ngModel)]="kpiBitisTarihi"
+                [disabled]="loadingReferences || loadingDashboard"
+                (change)="onKpiRangeChange()"
+            />
         </div>
     </div>
 </div>
@@ -106,6 +130,171 @@
             <div class="card">
                 <div class="text-sm text-color-secondary mb-1">Bos Oda</div>
                 <div class="text-2xl font-semibold">{{ dashboard.bosOdaSayisi }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <h6 class="m-0 mb-3">KPI Ozeti</h6>
+        <div class="text-sm text-color-secondary mb-3">
+            Aralik: {{ dashboard.kpiBaslangicTarihi | date:'dd.MM.yyyy' }} - {{ dashboard.kpiBitisTarihi | date:'dd.MM.yyyy' }}
+            ({{ getKpiOzet().tarihAraligiGunSayisi }} gun)
+        </div>
+
+        <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">ADR</div>
+                    <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().adr) }} TRY</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">RevPAR</div>
+                    <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().revPar) }} TRY</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Doluluk Orani</div>
+                    <div class="text-xl font-semibold">{{ formatPercent(getKpiOzet().dolulukOraniYuzde) }}</div>
+                    <div class="mt-2 mb-1">
+                        <svg viewBox="0 0 100 24" class="w-full" style="height: 2rem;">
+                            <polyline
+                                [attr.points]="getTrendPoints('doluluk')"
+                                fill="none"
+                                stroke="#4f46e5"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            @for (marker of getTrendMarkerItems('doluluk'); track $index) {
+                                <circle
+                                    [attr.cx]="marker.x"
+                                    [attr.cy]="marker.y"
+                                    r="1.8"
+                                    fill="#4f46e5"
+                                >
+                                    <title>{{ marker.tooltip }}</title>
+                                </circle>
+                            }
+                        </svg>
+                    </div>
+                    <div class="flex justify-between text-xs text-color-secondary mb-1">
+                        <span>{{ getTrendStartLabel() }}</span>
+                        <span>{{ getTrendEndLabel() }}</span>
+                    </div>
+                    <div class="text-xs text-color-secondary">Trend: {{ getTrendValuesPreview('doluluk') }}</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Iptal Orani</div>
+                    <div class="text-xl font-semibold">{{ formatPercent(getKpiOzet().iptalOraniYuzde) }}</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Toplam Gelir</div>
+                    <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().toplamGelir) }} TRY</div>
+                    <div class="mt-2 mb-1">
+                        <svg viewBox="0 0 100 24" class="w-full" style="height: 2rem;">
+                            <polyline
+                                [attr.points]="getTrendPoints('gelir')"
+                                fill="none"
+                                stroke="#0f766e"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            @for (marker of getTrendMarkerItems('gelir'); track $index) {
+                                <circle
+                                    [attr.cx]="marker.x"
+                                    [attr.cy]="marker.y"
+                                    r="1.8"
+                                    fill="#0f766e"
+                                >
+                                    <title>{{ marker.tooltip }}</title>
+                                </circle>
+                            }
+                        </svg>
+                    </div>
+                    <div class="flex justify-between text-xs text-color-secondary mb-1">
+                        <span>{{ getTrendStartLabel() }}</span>
+                        <span>{{ getTrendEndLabel() }}</span>
+                    </div>
+                    <div class="text-xs text-color-secondary">Trend: {{ getTrendValuesPreview('gelir') }}</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Toplam Rezervasyon</div>
+                    <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().toplamRezervasyonSayisi) }}</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Satilan Gece</div>
+                    <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().satilanGeceSayisi) }} / {{ formatNumber(getKpiOzet().toplamGeceSayisi) }}</div>
+                </div>
+            </div>
+            <div class="col-span-12 sm:col-span-6 lg:col-span-3">
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="text-xs text-color-secondary mb-1">Iptal Rezervasyon</div>
+                    <div class="text-xl font-semibold">{{ formatNumber(getKpiOzet().iptalRezervasyonSayisi) }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mb-4">
+        <div class="col-span-12 xl:col-span-6">
+            <div class="card">
+                <h6 class="m-0 mb-3">Odeme Tipine Gore Gelir</h6>
+                @if (dashboard.odemeTipineGoreGelirKirilimi.length === 0) {
+                    <div class="text-color-secondary">Secili aralikta odeme kaydi bulunamadi.</div>
+                } @else {
+                    <p-table [value]="dashboard.odemeTipineGoreGelirKirilimi" [tableStyle]="{ 'min-width': '24rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Odeme Tipi</th>
+                                <th>Tutar</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-item>
+                            <tr>
+                                <td>{{ item.etiket }}</td>
+                                <td>{{ formatMoney(item.tutar) }} TRY</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
+            </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-6">
+            <div class="card">
+                <h6 class="m-0 mb-3">Duruma Gore Rezervasyon Dagilimi</h6>
+                @if (dashboard.durumaGoreRezervasyonKirilimi.length === 0) {
+                    <div class="text-color-secondary">Secili aralikta rezervasyon kaydi bulunamadi.</div>
+                } @else {
+                    <p-table [value]="dashboard.durumaGoreRezervasyonKirilimi" [tableStyle]="{ 'min-width': '24rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Durum</th>
+                                <th>Adet</th>
+                                <th>Oran</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-item>
+                            <tr>
+                                <td>{{ getRezervasyonDurumLabel(item.etiket) }}</td>
+                                <td>{{ formatNumber(item.tutar) }}</td>
+                                <td>{{ getDurumKirilimiOran(item) }}</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
             </div>
         </div>
     </div>

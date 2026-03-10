@@ -221,7 +221,12 @@ public class RezervasyonService : IRezervasyonService
         return kayitlar;
     }
 
-    public async Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(int tesisId, DateTime? tarih, CancellationToken cancellationToken = default)
+    public async Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(
+        int tesisId,
+        DateTime? tarih,
+        DateTime? kpiBaslangicTarihi,
+        DateTime? kpiBitisTarihi,
+        CancellationToken cancellationToken = default)
     {
         if (tesisId <= 0)
         {
@@ -230,9 +235,21 @@ public class RezervasyonService : IRezervasyonService
 
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
 
-        var gun = (tarih ?? DateTime.Today).Date;
-        var gunBaslangic = gun;
+        var gunBaslangic = (tarih ?? DateTime.Today).Date;
         var ertesiGunBaslangic = gunBaslangic.AddDays(1);
+        var kpiBaslangic = (kpiBaslangicTarihi ?? new DateTime(gunBaslangic.Year, gunBaslangic.Month, 1)).Date;
+        var kpiBitis = (kpiBitisTarihi ?? gunBaslangic).Date;
+        var kpiBitisExclusive = kpiBitis.AddDays(1);
+
+        if (kpiBaslangic >= kpiBitisExclusive)
+        {
+            throw new BaseException("KPI baslangic tarihi, bitis tarihinden buyuk olamaz.", 400);
+        }
+
+        if ((kpiBitisExclusive - kpiBaslangic).TotalDays > 366)
+        {
+            throw new BaseException("KPI tarih araligi en fazla 366 gun olabilir.", 400);
+        }
 
         var checkInler = await _stysDbContext.Rezervasyonlar
             .Where(x =>
@@ -298,13 +315,155 @@ public class RezervasyonService : IRezervasyonService
             .Distinct()
             .CountAsync(cancellationToken);
 
+        var kpiRezervasyonlar = await _stysDbContext.Rezervasyonlar
+            .Where(x =>
+                x.AktifMi
+                && x.TesisId == tesisId
+                && x.GirisTarihi < kpiBitisExclusive
+                && x.CikisTarihi > kpiBaslangic)
+            .Select(x => new
+            {
+                x.Id,
+                x.RezervasyonDurumu,
+                x.GirisTarihi,
+                x.CikisTarihi
+            })
+            .ToListAsync(cancellationToken);
+
+        var toplamRezervasyonSayisi = kpiRezervasyonlar.Count;
+        var iptalRezervasyonSayisi = kpiRezervasyonlar.Count(x => x.RezervasyonDurumu == RezervasyonDurumlari.Iptal);
+        var satilanGeceSayisi = kpiRezervasyonlar
+            .Where(x => x.RezervasyonDurumu != RezervasyonDurumlari.Iptal)
+            .Sum(x => CalculateOverlapNights(x.GirisTarihi, x.CikisTarihi, kpiBaslangic, kpiBitisExclusive));
+        var tarihAraligiGunSayisi = Math.Max(1, (kpiBitisExclusive - kpiBaslangic).Days);
+        var toplamGeceSayisi = Math.Max(0, toplamOdaSayisi) * tarihAraligiGunSayisi;
+
+        var kpiOdemeToplami = await _stysDbContext.RezervasyonOdemeler
+            .Where(x =>
+                x.Rezervasyon != null
+                && x.Rezervasyon.AktifMi
+                && x.Rezervasyon.TesisId == tesisId
+                && x.OdemeTarihi >= kpiBaslangic
+                && x.OdemeTarihi < kpiBitisExclusive)
+            .SumAsync(x => (decimal?)x.OdemeTutari, cancellationToken) ?? 0m;
+
+        var gunlukGelirMap = await _stysDbContext.RezervasyonOdemeler
+            .Where(x =>
+                x.Rezervasyon != null
+                && x.Rezervasyon.AktifMi
+                && x.Rezervasyon.TesisId == tesisId
+                && x.OdemeTarihi >= kpiBaslangic
+                && x.OdemeTarihi < kpiBitisExclusive)
+            .GroupBy(x => x.OdemeTarihi.Date)
+            .Select(group => new
+            {
+                Tarih = group.Key,
+                Tutar = group.Sum(x => x.OdemeTutari)
+            })
+            .ToDictionaryAsync(x => x.Tarih, x => x.Tutar, cancellationToken);
+
+        var odemeTipineGoreGelirKirilimi = await _stysDbContext.RezervasyonOdemeler
+            .Where(x =>
+                x.Rezervasyon != null
+                && x.Rezervasyon.AktifMi
+                && x.Rezervasyon.TesisId == tesisId
+                && x.OdemeTarihi >= kpiBaslangic
+                && x.OdemeTarihi < kpiBitisExclusive)
+            .GroupBy(x => x.OdemeTipi)
+            .Select(group => new RezervasyonGelirKirilimDto
+            {
+                Etiket = group.Key,
+                Tutar = group.Sum(x => x.OdemeTutari)
+            })
+            .OrderByDescending(x => x.Tutar)
+            .ThenBy(x => x.Etiket)
+            .ToListAsync(cancellationToken);
+
+        var durumaGoreRezervasyonKirilimi = kpiRezervasyonlar
+            .GroupBy(x => x.RezervasyonDurumu)
+            .Select(group => new RezervasyonGelirKirilimDto
+            {
+                Etiket = group.Key,
+                Tutar = group.Count()
+            })
+            .OrderByDescending(x => x.Tutar)
+            .ThenBy(x => x.Etiket)
+            .ToList();
+
+        var iptalOraniYuzde = toplamRezervasyonSayisi == 0
+            ? 0m
+            : Math.Round((decimal)iptalRezervasyonSayisi * 100m / toplamRezervasyonSayisi, 2, MidpointRounding.AwayFromZero);
+
+        var dolulukOraniYuzde = toplamGeceSayisi == 0
+            ? 0m
+            : Math.Round((decimal)satilanGeceSayisi * 100m / toplamGeceSayisi, 2, MidpointRounding.AwayFromZero);
+
+        var adr = satilanGeceSayisi == 0
+            ? 0m
+            : Math.Round(kpiOdemeToplami / satilanGeceSayisi, 2, MidpointRounding.AwayFromZero);
+
+        var revPar = toplamGeceSayisi == 0
+            ? 0m
+            : Math.Round(kpiOdemeToplami / toplamGeceSayisi, 2, MidpointRounding.AwayFromZero);
+
+        var kpiTrendGunluk = new List<RezervasyonKpiTrendGunDto>(tarihAraligiGunSayisi);
+        for (var offset = 0; offset < tarihAraligiGunSayisi; offset++)
+        {
+            var gun = kpiBaslangic.AddDays(offset);
+            var gunBitisExclusive = gun.AddDays(1);
+
+            var gunlukRezervasyonlar = kpiRezervasyonlar
+                .Where(x => x.GirisTarihi < gunBitisExclusive && x.CikisTarihi > gun)
+                .ToList();
+
+            var gunlukRezervasyonSayisi = gunlukRezervasyonlar.Count(x => x.RezervasyonDurumu != RezervasyonDurumlari.Iptal);
+            var gunlukIptalSayisi = gunlukRezervasyonlar.Count(x => x.RezervasyonDurumu == RezervasyonDurumlari.Iptal);
+            var gunlukSatilanGece = gunlukRezervasyonlar
+                .Where(x => x.RezervasyonDurumu != RezervasyonDurumlari.Iptal)
+                .Sum(x => CalculateOverlapNights(x.GirisTarihi, x.CikisTarihi, gun, gunBitisExclusive));
+
+            var gunlukDolulukOrani = toplamOdaSayisi == 0
+                ? 0m
+                : Math.Round((decimal)gunlukSatilanGece * 100m / toplamOdaSayisi, 2, MidpointRounding.AwayFromZero);
+
+            var gunlukGelir = gunlukGelirMap.TryGetValue(gun, out var gelir) ? gelir : 0m;
+
+            kpiTrendGunluk.Add(new RezervasyonKpiTrendGunDto
+            {
+                Tarih = gun,
+                Gelir = gunlukGelir,
+                RezervasyonSayisi = gunlukRezervasyonSayisi,
+                IptalSayisi = gunlukIptalSayisi,
+                SatilanGeceSayisi = gunlukSatilanGece,
+                DolulukOraniYuzde = gunlukDolulukOrani
+            });
+        }
+
         return new RezervasyonDashboardDto
         {
             TesisId = tesisId,
             Tarih = gunBaslangic,
+            KpiBaslangicTarihi = kpiBaslangic,
+            KpiBitisTarihi = kpiBitis,
             ToplamOdaSayisi = toplamOdaSayisi,
             DoluOdaSayisi = doluOdaSayisi,
             BosOdaSayisi = Math.Max(0, toplamOdaSayisi - doluOdaSayisi),
+            KpiOzet = new RezervasyonKpiOzetDto
+            {
+                TarihAraligiGunSayisi = tarihAraligiGunSayisi,
+                ToplamRezervasyonSayisi = toplamRezervasyonSayisi,
+                IptalRezervasyonSayisi = iptalRezervasyonSayisi,
+                IptalOraniYuzde = iptalOraniYuzde,
+                ToplamGeceSayisi = toplamGeceSayisi,
+                SatilanGeceSayisi = satilanGeceSayisi,
+                DolulukOraniYuzde = dolulukOraniYuzde,
+                ToplamGelir = kpiOdemeToplami,
+                Adr = adr,
+                RevPar = revPar
+            },
+            OdemeTipineGoreGelirKirilimi = odemeTipineGoreGelirKirilimi,
+            DurumaGoreRezervasyonKirilimi = durumaGoreRezervasyonKirilimi,
+            KpiTrendGunluk = kpiTrendGunluk,
             BugunCheckInler = checkInler,
             BugunCheckOutlar = checkOutlar
         };
@@ -3314,6 +3473,19 @@ public class RezervasyonService : IRezervasyonService
             });
 
         return string.Join("|", segmentKeys);
+    }
+
+    private static int CalculateOverlapNights(DateTime girisTarihi, DateTime cikisTarihi, DateTime aralikBaslangic, DateTime aralikBitisExclusive)
+    {
+        var overlapStart = girisTarihi > aralikBaslangic ? girisTarihi : aralikBaslangic;
+        var overlapEnd = cikisTarihi < aralikBitisExclusive ? cikisTarihi : aralikBitisExclusive;
+
+        if (overlapEnd <= overlapStart)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, (int)Math.Ceiling((overlapEnd - overlapStart).TotalDays));
     }
 
     private async Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken)

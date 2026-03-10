@@ -15,7 +15,13 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import { RezervasyonDashboardDto, RezervasyonTesisDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
+import {
+    RezervasyonDashboardDto,
+    RezervasyonGelirKirilimDto,
+    RezervasyonKpiTrendGunDto,
+    RezervasyonKpiOzetDto,
+    RezervasyonTesisDto
+} from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
 
 @Component({
@@ -34,6 +40,8 @@ export class RezervasyonDashboard implements OnInit {
     tesisler: RezervasyonTesisDto[] = [];
     selectedTesisId: number | null = null;
     selectedTarih = this.todayInput();
+    kpiBaslangicTarihi = this.firstDayOfMonthInput();
+    kpiBitisTarihi = this.todayInput();
     reportSelectedTesisIds: number[] = [];
     reportBaslangicTarihi = this.firstDayOfMonthInput();
     reportBitisTarihi = this.todayInput();
@@ -76,6 +84,13 @@ export class RezervasyonDashboard implements OnInit {
     }
 
     onTarihChange(): void {
+        if (this.selectedTarih && this.selectedTarih.trim().length > 0) {
+            this.kpiBitisTarihi = this.selectedTarih;
+        }
+        this.loadDashboard();
+    }
+
+    onKpiRangeChange(): void {
         this.loadDashboard();
     }
 
@@ -94,6 +109,144 @@ export class RezervasyonDashboard implements OnInit {
         }
 
         return date.toLocaleString('tr-TR');
+    }
+
+    formatNumber(value: number): string {
+        const safeValue = Number.isFinite(value) ? value : 0;
+        return safeValue.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    formatPercent(value: number): string {
+        const safeValue = Number.isFinite(value) ? value : 0;
+        return `${safeValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+    }
+
+    formatMoney(value: number): string {
+        const safeValue = Number.isFinite(value) ? value : 0;
+        return safeValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    getKpiOzet(): RezervasyonKpiOzetDto {
+        return this.dashboard?.kpiOzet ?? {
+            tarihAraligiGunSayisi: 0,
+            toplamRezervasyonSayisi: 0,
+            iptalRezervasyonSayisi: 0,
+            iptalOraniYuzde: 0,
+            toplamGeceSayisi: 0,
+            satilanGeceSayisi: 0,
+            dolulukOraniYuzde: 0,
+            toplamGelir: 0,
+            adr: 0,
+            revPar: 0
+        };
+    }
+
+    getDurumKirilimiToplam(): number {
+        return (this.dashboard?.durumaGoreRezervasyonKirilimi ?? []).reduce((toplam, item) => toplam + (Number.isFinite(item.tutar) ? item.tutar : 0), 0);
+    }
+
+    getDurumKirilimiOran(item: RezervasyonGelirKirilimDto): string {
+        const toplam = this.getDurumKirilimiToplam();
+        if (toplam <= 0) {
+            return this.formatPercent(0);
+        }
+
+        return this.formatPercent((item.tutar * 100) / toplam);
+    }
+
+    getKpiTrend(): RezervasyonKpiTrendGunDto[] {
+        return this.dashboard?.kpiTrendGunluk ?? [];
+    }
+
+    getTrendPoints(type: 'gelir' | 'doluluk'): string {
+        const values = this.getKpiTrendValues(type);
+        if (values.length === 0) {
+            return '';
+        }
+
+        if (values.length === 1) {
+            const y = this.clampSparklineY(values[0], values[0], values[0]);
+            return `2,${y} 98,${y}`;
+        }
+
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const width = 96;
+        const height = 24;
+        const step = width / (values.length - 1);
+
+        return values
+            .map((value, index) => {
+                const x = 2 + (step * index);
+                const y = this.clampSparklineY(value, min, max, height);
+                return `${x.toFixed(2)},${y.toFixed(2)}`;
+            })
+            .join(' ');
+    }
+
+    getTrendMarkerItems(type: 'gelir' | 'doluluk'): Array<{ x: number; y: number; tooltip: string }> {
+        const trend = this.getKpiTrend();
+        if (trend.length === 0) {
+            return [];
+        }
+
+        const values = this.getKpiTrendValues(type);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const width = 96;
+        const height = 24;
+        const step = trend.length > 1 ? width / (trend.length - 1) : 0;
+
+        return trend.map((item, index) => {
+            const value = type === 'gelir' ? item.gelir : item.dolulukOraniYuzde;
+            const safeValue = Number.isFinite(value) ? value : 0;
+            const x = trend.length > 1 ? 2 + (step * index) : 50;
+            const y = this.clampSparklineY(safeValue, min, max, height);
+            const valueText = type === 'gelir'
+                ? `${this.formatMoney(safeValue)} TRY`
+                : this.formatPercent(safeValue);
+
+            return {
+                x,
+                y,
+                tooltip: `${this.formatShortDate(item.tarih)} - ${valueText}`
+            };
+        });
+    }
+
+    getTrendStartLabel(): string {
+        const trend = this.getKpiTrend();
+        if (trend.length === 0) {
+            return '-';
+        }
+
+        return this.formatShortDate(trend[0].tarih);
+    }
+
+    getTrendEndLabel(): string {
+        const trend = this.getKpiTrend();
+        if (trend.length === 0) {
+            return '-';
+        }
+
+        return this.formatShortDate(trend[trend.length - 1].tarih);
+    }
+
+    getTrendValuesPreview(type: 'gelir' | 'doluluk'): string {
+        const values = this.getKpiTrendValues(type);
+        if (values.length === 0) {
+            return '-';
+        }
+
+        const first = values[0];
+        const last = values[values.length - 1];
+        const diff = last - first;
+        const sign = diff >= 0 ? '+' : '';
+        if (type === 'gelir') {
+            return `${sign}${this.formatMoney(diff)} TRY`;
+        }
+
+        return `${sign}${this.formatPercent(diff)}`;
     }
 
     getRezervasyonDurumLabel(durum: string): string {
@@ -155,6 +308,10 @@ export class RezervasyonDashboard implements OnInit {
                         this.reportSelectedTesisIds = [this.selectedTesisId];
                     }
 
+                    if (this.selectedTarih && this.selectedTarih.trim().length > 0) {
+                        this.kpiBitisTarihi = this.selectedTarih;
+                    }
+
                     this.loadDashboard();
                 },
                 error: (error: unknown) => {
@@ -166,6 +323,36 @@ export class RezervasyonDashboard implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private getKpiTrendValues(type: 'gelir' | 'doluluk'): number[] {
+        const trend = this.getKpiTrend();
+        if (trend.length === 0) {
+            return [];
+        }
+
+        return trend.map((item) => {
+            const value = type === 'gelir' ? item.gelir : item.dolulukOraniYuzde;
+            return Number.isFinite(value) ? value : 0;
+        });
+    }
+
+    private clampSparklineY(value: number, min: number, max: number, height = 24): number {
+        if (max <= min) {
+            return height / 2;
+        }
+
+        const normalized = (value - min) / (max - min);
+        return 2 + ((1 - normalized) * (height - 4));
+    }
+
+    private formatShortDate(value: string): string {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+
+        return date.toLocaleDateString('tr-TR');
     }
 
     private loadDashboard(): void {
@@ -181,7 +368,11 @@ export class RezervasyonDashboard implements OnInit {
 
         this.loadingDashboard = true;
         this.service
-            .getGunlukDashboard(this.selectedTesisId, this.selectedTarih)
+            .getGunlukDashboard(
+                this.selectedTesisId,
+                this.selectedTarih,
+                this.kpiBaslangicTarihi,
+                this.kpiBitisTarihi)
             .pipe(
                 finalize(() => {
                     this.loadingDashboard = false;

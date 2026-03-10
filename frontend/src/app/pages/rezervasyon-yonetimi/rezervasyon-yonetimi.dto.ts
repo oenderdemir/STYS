@@ -211,12 +211,45 @@ export interface RezervasyonDashboardKayitDto {
     rezervasyonDurumu: string;
 }
 
+export interface RezervasyonKpiOzetDto {
+    tarihAraligiGunSayisi: number;
+    toplamRezervasyonSayisi: number;
+    iptalRezervasyonSayisi: number;
+    iptalOraniYuzde: number;
+    toplamGeceSayisi: number;
+    satilanGeceSayisi: number;
+    dolulukOraniYuzde: number;
+    toplamGelir: number;
+    adr: number;
+    revPar: number;
+}
+
+export interface RezervasyonGelirKirilimDto {
+    etiket: string;
+    tutar: number;
+}
+
+export interface RezervasyonKpiTrendGunDto {
+    tarih: string;
+    gelir: number;
+    rezervasyonSayisi: number;
+    iptalSayisi: number;
+    satilanGeceSayisi: number;
+    dolulukOraniYuzde: number;
+}
+
 export interface RezervasyonDashboardDto {
     tesisId: number;
     tarih: string;
+    kpiBaslangicTarihi: string;
+    kpiBitisTarihi: string;
     toplamOdaSayisi: number;
     doluOdaSayisi: number;
     bosOdaSayisi: number;
+    kpiOzet: RezervasyonKpiOzetDto;
+    odemeTipineGoreGelirKirilimi: RezervasyonGelirKirilimDto[];
+    durumaGoreRezervasyonKirilimi: RezervasyonGelirKirilimDto[];
+    kpiTrendGunluk: RezervasyonKpiTrendGunDto[];
     bugunCheckInler: RezervasyonDashboardKayitDto[];
     bugunCheckOutlar: RezervasyonDashboardKayitDto[];
 }

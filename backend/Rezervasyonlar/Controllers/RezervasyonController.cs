@@ -81,9 +81,16 @@ public class RezervasyonController : UIController
     public async Task<ActionResult<RezervasyonDashboardDto>> GetDashboard(
         [FromQuery] int tesisId,
         [FromQuery] DateTime? tarih,
+        [FromQuery] DateTime? kpiBaslangicTarihi,
+        [FromQuery] DateTime? kpiBitisTarihi,
         CancellationToken cancellationToken)
     {
-        var dashboard = await _rezervasyonService.GetGunlukDashboardAsync(tesisId, tarih, cancellationToken);
+        var dashboard = await _rezervasyonService.GetGunlukDashboardAsync(
+            tesisId,
+            tarih,
+            kpiBaslangicTarihi,
+            kpiBitisTarihi,
+            cancellationToken);
         return Ok(dashboard);
     }
 

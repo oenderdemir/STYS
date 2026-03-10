@@ -162,13 +162,7 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
     private menuReopenHandle: ReturnType<typeof setTimeout> | null = null;
-    private readonly roomImageUrls: string[] = [
-        'demo/images/galleria/galleria2.jpg',
-        'demo/images/galleria/galleria5.jpg',
-        'demo/images/galleria/galleria8.jpg',
-        'demo/images/galleria/galleria11.jpg',
-        'demo/images/galleria/galleria14.jpg'
-    ];
+    private readonly roomImageUrl = 'demo/images/galleria/galleria2.jpg';
 
     get canView(): boolean {
         return this.authService.hasPermission('OdaTemizlikYonetimi.View');
@@ -296,8 +290,8 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
     }
 
     getRoomImageUrl(item: OdaTemizlikKayitDto): string {
-        const index = Math.abs(item.odaId) % this.roomImageUrls.length;
-        return this.roomImageUrls[index];
+        void item;
+        return this.roomImageUrl;
     }
 
     onRoomImageError(event: Event): void {

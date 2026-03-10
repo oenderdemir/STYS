@@ -1,0 +1,80 @@
+<p-toast />
+<p-menu #cardMenu [popup]="true" [model]="rowActionItems" [appendTo]="'body'"></p-menu>
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <div class="flex flex-wrap gap-2 items-center justify-between">
+        <h5 class="m-0">Oda Temizlik Yonetimi</h5>
+        <div class="flex flex-wrap gap-2 items-center">
+            <p-select
+                [options]="tesisOptions"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedTesisId"
+                [showClear]="true"
+                placeholder="Tum Tesisler"
+                styleClass="min-w-52"
+                [appendTo]="'body'"
+                (ngModelChange)="onTesisChanged()"
+            />
+            <p-select
+                [options]="durumOptions"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedDurum"
+                [showClear]="false"
+                placeholder="Durum"
+                styleClass="min-w-72"
+                [appendTo]="'body'"
+                (ngModelChange)="onDurumChanged()"
+            />
+            <p-iconfield>
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" [ngModel]="searchQuery" placeholder="Oda/Bina/Tesis ara..." (input)="onSearchInput($event)" />
+            </p-iconfield>
+        </div>
+    </div>
+</div>
+
+@if (loading) {
+    <div class="card">Yukleniyor...</div>
+} @else if (kayitlar.length === 0) {
+    <div class="card">Secilen filtrede bekleyen oda bulunamadi.</div>
+} @else {
+    <div class="room-grid">
+        @for (item of kayitlar; track item.odaId) {
+            <div class="room-card">
+                <div class="room-image" [ngClass]="getRoomImageClass(item)" (click)="openCardMenu($event, item)">
+                    <img class="room-photo" [src]="getRoomImageUrl(item)" [alt]="item.odaNo + ' oda gorseli'" (error)="onRoomImageError($event)" />
+                    <div class="room-overlay"></div>
+                    <i class="pi pi-ellipsis-v room-menu-indicator"></i>
+                    <div class="room-number">{{ item.odaNo }}</div>
+                </div>
+                <div class="room-content">
+                    <div class="room-title">{{ item.tesisAdi }} / {{ item.binaAdi }}</div>
+                    <div>{{ item.odaTipiAdi }}</div>
+                    <div class="flex items-center justify-between mt-2">
+                        <p-tag [value]="item.temizlikDurumu" [severity]="getDurumSeverity(item.temizlikDurumu)" />
+                        @if (canManage) {
+                            <span class="text-sm text-color-secondary">Resme tikla</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<p-paginator
+    class="mt-4"
+    [rows]="pageSize"
+    [first]="(pageNumber - 1) * pageSize"
+    [totalRecords]="totalRecords"
+    [rowsPerPageOptions]="[12, 24, 48]"
+    (onPageChange)="onPageChange($event)"
+/>

@@ -11,6 +11,7 @@ using STYS.MisafirTipleri.Entities;
 using STYS.OdaKullanimBloklari.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
+using STYS.Odalar;
 using STYS.Odalar.Entities;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Entities;
@@ -265,6 +266,10 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("Odalar", "dbo");
             entity.Property(x => x.OdaNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.TemizlikDurumu)
+                .HasMaxLength(32)
+                .IsRequired()
+                .HasDefaultValue(OdaTemizlikDurumlari.Hazir);
             entity.HasIndex(x => new { x.BinaId, x.OdaNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");

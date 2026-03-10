@@ -164,6 +164,22 @@ export interface RezervasyonKayitSonucDto {
     rezervasyonDurumu: string;
 }
 
+export interface RezervasyonCheckInUyariDto {
+    odaId: number;
+    odaNo: string;
+    binaAdi: string;
+    temizlikDurumu: string;
+    mesaj: string;
+    engelleyiciMi: boolean;
+}
+
+export interface RezervasyonCheckInKontrolDto {
+    rezervasyonId: number;
+    referansNo: string;
+    checkInYapilabilir: boolean;
+    uyarilar: RezervasyonCheckInUyariDto[];
+}
+
 export interface RezervasyonListeDto {
     id: number;
     referansNo: string;

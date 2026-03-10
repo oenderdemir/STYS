@@ -1095,6 +1095,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("TemizlikDurumu")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasDefaultValue("Hazir");
+
                     b.Property<int>("TesisOdaTipiId")
                         .HasColumnType("int");
 

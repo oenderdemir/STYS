@@ -11,6 +11,7 @@ import {
     RezervasyonDetayDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
+    RezervasyonCheckInKontrolDto,
     RezervasyonKayitSonucDto,
     RezervasyonKonaklamaTipiDto,
     RezervasyonKonaklayanPlanDto,
@@ -300,6 +301,18 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Check-in tamamlanamadi.');
+            })
+        );
+    }
+
+    getCheckInKontrol(rezervasyonId: number): Observable<RezervasyonCheckInKontrolDto> {
+        return this.http.get<ApiResponse<RezervasyonCheckInKontrolDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/check-in-kontrol`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Check-in kontrolu alinamadi.');
             })
         );
     }

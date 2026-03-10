@@ -191,6 +191,14 @@ public class RezervasyonController : UIController
         return Ok(result);
     }
 
+    [HttpGet("kayitlar/{rezervasyonId:int}/check-in-kontrol")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonCheckInKontrolDto>> GetCheckInKontrol([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetCheckInKontrolAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("kayitlar/{rezervasyonId:int}/check-out")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
     public async Task<ActionResult<RezervasyonKayitSonucDto>> TamamlaCheckOut([FromRoute] int rezervasyonId, CancellationToken cancellationToken)

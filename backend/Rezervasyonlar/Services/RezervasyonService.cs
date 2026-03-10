@@ -6,6 +6,7 @@ using STYS.Fiyatlandirma.Dto;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
@@ -1557,6 +1558,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         await EnsureNoActiveRoomBlockForReservationAsync(rezervasyonId, cancellationToken);
+        await EnsureRoomsReadyForCheckInAsync(rezervasyonId, cancellationToken);
 
         var previousStatus = reservation.RezervasyonDurumu;
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi;
@@ -1568,6 +1570,21 @@ public class RezervasyonService : IRezervasyonService
             new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
+    }
+
+    public async Task<RezervasyonCheckInKontrolDto> GetCheckInKontrolAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+        var warnings = await GetCheckInWarningsAsync(rezervasyonId, cancellationToken);
+        var hasBlockingWarnings = warnings.Any(x => x.EngelleyiciMi);
+
+        return new RezervasyonCheckInKontrolDto
+        {
+            RezervasyonId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            CheckInYapilabilir = !hasBlockingWarnings,
+            Uyarilar = warnings
+        };
     }
 
     public async Task<RezervasyonKayitSonucDto> TamamlaCheckOutAsync(int rezervasyonId, CancellationToken cancellationToken = default)
@@ -1602,6 +1619,7 @@ public class RezervasyonService : IRezervasyonService
 
         var previousStatus = reservation.RezervasyonDurumu;
         reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckOutTamamlandi;
+        await MarkReservationRoomsAsDirtyAsync(reservation.Id, cancellationToken);
         AppendHistoryEntry(
             rezervasyonId,
             RezervasyonGecmisIslemTipleri.CheckOutTamamlandi,
@@ -1610,6 +1628,86 @@ public class RezervasyonService : IRezervasyonService
             new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         return ToSaveResult(reservation);
+    }
+
+    private async Task MarkReservationRoomsAsDirtyAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var roomIds = await (
+                from segment in _stysDbContext.RezervasyonSegmentleri
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                where segment.RezervasyonId == rezervasyonId
+                select atama.OdaId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (roomIds.Count == 0)
+        {
+            return;
+        }
+
+        var rooms = await _stysDbContext.Odalar
+            .Where(x => roomIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var room in rooms)
+        {
+            room.TemizlikDurumu = OdaTemizlikDurumlari.Kirli;
+        }
+    }
+
+    private async Task EnsureRoomsReadyForCheckInAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var blockingWarnings = (await GetCheckInWarningsAsync(rezervasyonId, cancellationToken))
+            .Where(x => x.EngelleyiciMi)
+            .ToList();
+
+        if (blockingWarnings.Count == 0)
+        {
+            return;
+        }
+
+        var roomSummary = string.Join(", ", blockingWarnings
+            .Select(x => $"{x.OdaNo} - {x.BinaAdi} ({x.TemizlikDurumu})"));
+
+        throw new BaseException(
+            $"Check-in engellendi. Hazir olmayan odalar var: {roomSummary}.",
+            400);
+    }
+
+    private async Task<List<RezervasyonCheckInUyariDto>> GetCheckInWarningsAsync(int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var roomInfos = await (
+                from segment in _stysDbContext.RezervasyonSegmentleri
+                join atama in _stysDbContext.RezervasyonSegmentOdaAtamalari on segment.Id equals atama.RezervasyonSegmentId
+                join oda in _stysDbContext.Odalar on atama.OdaId equals oda.Id
+                join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
+                where segment.RezervasyonId == rezervasyonId
+                select new
+                {
+                    OdaId = oda.Id,
+                    OdaNo = atama.OdaNoSnapshot,
+                    BinaAdi = atama.BinaAdiSnapshot,
+                    oda.TemizlikDurumu
+                })
+            .ToListAsync(cancellationToken);
+
+        return roomInfos
+            .GroupBy(x => x.OdaId)
+            .Select(group => group.First())
+            .Where(x => !string.Equals(x.TemizlikDurumu, OdaTemizlikDurumlari.Hazir, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.BinaAdi)
+            .ThenBy(x => x.OdaNo)
+            .ThenBy(x => x.OdaId)
+            .Select(x => new RezervasyonCheckInUyariDto
+            {
+                OdaId = x.OdaId,
+                OdaNo = x.OdaNo,
+                BinaAdi = x.BinaAdi,
+                TemizlikDurumu = x.TemizlikDurumu,
+                Mesaj = "Oda check-in icin hazir degil.",
+                EngelleyiciMi = true
+            })
+            .ToList();
     }
 
     public async Task<RezervasyonKayitSonucDto> IptalEtAsync(int rezervasyonId, CancellationToken cancellationToken = default)

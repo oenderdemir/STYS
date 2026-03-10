@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { EMPTY, finalize, forkJoin, Observable, switchMap } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -19,10 +19,12 @@ import { tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
 import {
     KonaklamaSenaryoDto,
+    RezervasyonCheckInKontrolDto,
     RezervasyonDetayDto,
     RezervasyonDegisiklikGecmisiDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
+    RezervasyonKayitSonucDto,
     RezervasyonKonaklamaTipiDto,
     RezervasyonKonaklayanKisiDto,
     RezervasyonKonaklayanPlanDto,
@@ -983,8 +985,9 @@ export class RezervasyonYonetimi implements OnInit {
 
         this.checkActionLoadingByRezervasyonId[kayit.id] = true;
         this.service
-            .tamamlaCheckIn(kayit.id)
+            .getCheckInKontrol(kayit.id)
             .pipe(
+                switchMap((kontrol) => this.executeCheckInIfAllowed(kayit, kontrol)),
                 finalize(() => {
                     this.checkActionLoadingByRezervasyonId[kayit.id] = false;
                     this.cdr.detectChanges();
@@ -1006,6 +1009,28 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private executeCheckInIfAllowed(kayit: RezervasyonListeDto, kontrol: RezervasyonCheckInKontrolDto): Observable<RezervasyonKayitSonucDto> {
+        if (kontrol.uyarilar.length > 0) {
+            const warningDetail = kontrol.uyarilar
+                .map((x) => `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})`)
+                .join(', ');
+
+            this.messageService.add({
+                severity: kontrol.checkInYapilabilir ? 'warn' : 'error',
+                summary: kontrol.checkInYapilabilir ? 'Uyari' : 'Check-in Engellendi',
+                detail: kontrol.checkInYapilabilir
+                    ? `Oda durumu uyarisi: ${warningDetail}`
+                    : `Hazir olmayan odalar var: ${warningDetail}`
+            });
+        }
+
+        if (!kontrol.checkInYapilabilir) {
+            return EMPTY as Observable<RezervasyonKayitSonucDto>;
+        }
+
+        return this.service.tamamlaCheckIn(kayit.id);
     }
 
     iptalEt(kayit: RezervasyonListeDto): void {

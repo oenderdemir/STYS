@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Odalar;
 using STYS.Binalar.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaTipleri.Entities;
@@ -19,6 +20,10 @@ public class Oda : BaseEntity<int>
     public int KatNo { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    [Required]
+    [MaxLength(32)]
+    public string TemizlikDurumu { get; set; } = OdaTemizlikDurumlari.Hazir;
 
     public Bina? Bina { get; set; }
 

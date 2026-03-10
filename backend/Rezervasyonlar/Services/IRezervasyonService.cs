@@ -46,6 +46,8 @@ public interface IRezervasyonService
 
     Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
+    Task<RezervasyonCheckInKontrolDto> GetCheckInKontrolAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+
     Task<RezervasyonKayitSonucDto> TamamlaCheckOutAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
     Task<RezervasyonKayitSonucDto> IptalEtAsync(int rezervasyonId, CancellationToken cancellationToken = default);

@@ -156,11 +156,11 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadIndirimKurallari(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Indirim kurali guncellendi.' : 'Indirim kurali olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Indirim kurali guncellendi.' : 'Indirim kurali olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -183,11 +183,11 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
                 this.service.deleteIndirimKurali(item.id!).subscribe({
                     next: () => {
                         this.loadIndirimKurallari(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Indirim kurali silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Indirim kurali silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -224,7 +224,7 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                 this.cdr.detectChanges();
             }
         });
@@ -267,7 +267,7 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -344,3 +344,4 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

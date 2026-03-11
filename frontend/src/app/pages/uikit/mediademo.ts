@@ -110,13 +110,14 @@ export class MediaDemo implements OnInit {
     getSeverity(status: string) {
         switch (status) {
             case 'INSTOCK':
-                return 'success';
+                return UiSeverity.Success;
             case 'LOWSTOCK':
-                return 'warn';
+                return UiSeverity.Warn;
             case 'OUTOFSTOCK':
-                return 'danger';
+                return UiSeverity.Danger;
             default:
-                return 'success';
+                return UiSeverity.Success;
         }
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

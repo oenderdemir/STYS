@@ -159,7 +159,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -242,12 +242,12 @@ export class BinaYonetimi implements OnDestroy {
             .subscribe({
                 next: () => {
                     this.odaViewDialogVisible = false;
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda guncellendi.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Oda guncellendi.' });
                     this.loadData(this.pageNumber, this.pageSize);
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -272,11 +272,11 @@ export class BinaYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Bina guncellendi.' : 'Bina olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Bina guncellendi.' : 'Bina olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -299,11 +299,11 @@ export class BinaYonetimi implements OnDestroy {
                 this.service.deleteBina(bina.id!).subscribe({
                     next: () => {
                         this.loadData(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Bina silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Bina silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -373,7 +373,7 @@ export class BinaYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -429,3 +429,4 @@ export class BinaYonetimi implements OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

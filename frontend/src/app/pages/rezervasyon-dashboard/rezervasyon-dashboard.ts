@@ -316,17 +316,17 @@ export class RezervasyonDashboard implements OnInit {
     getRezervasyonDurumSeverity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
         switch (durum) {
             case this.durumTaslak:
-                return 'secondary';
+                return UiSeverity.Secondary;
             case this.durumOnayli:
-                return 'info';
+                return UiSeverity.Info;
             case this.durumCheckInTamamlandi:
-                return 'warn';
+                return UiSeverity.Warn;
             case this.durumCheckOutTamamlandi:
-                return 'success';
+                return UiSeverity.Success;
             case this.durumIptal:
-                return 'danger';
+                return UiSeverity.Danger;
             default:
-                return 'secondary';
+                return UiSeverity.Secondary;
         }
     }
 
@@ -366,7 +366,7 @@ export class RezervasyonDashboard implements OnInit {
                     this.selectedTesisId = null;
                     this.reportSelectedTesisIds = [];
                     this.dashboard = null;
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -433,7 +433,7 @@ export class RezervasyonDashboard implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.dashboard = null;
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -500,12 +500,12 @@ export class RezervasyonDashboard implements OnInit {
         }
 
         if (this.reportSelectedTesisIds.length === 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Rapor icin en az bir tesis seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Rapor icin en az bir tesis seciniz.' });
             return;
         }
 
         if (!this.reportBaslangicTarihi || !this.reportBitisTarihi || this.reportBaslangicTarihi > this.reportBitisTarihi) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Gecerli bir tarih araligi seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Gecerli bir tarih araligi seciniz.' });
             return;
         }
 
@@ -532,10 +532,10 @@ export class RezervasyonDashboard implements OnInit {
                     const extension = format === 'excel' ? 'xls' : 'pdf';
                     const fileName = `odeme-raporu-${this.reportBaslangicTarihi}-${this.reportBitisTarihi}.${extension}`;
                     this.downloadBlob(blob, fileName);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Rapor indirildi.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Rapor indirildi.' });
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                 }
             });
     }
@@ -566,3 +566,4 @@ export class RezervasyonDashboard implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

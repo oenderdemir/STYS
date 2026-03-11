@@ -139,7 +139,7 @@ export class MenuYonetimi implements OnInit {
         const label = this.selectedMenuItem.label.trim();
         if (!label) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Menu label zorunludur.'
             });
@@ -175,7 +175,7 @@ export class MenuYonetimi implements OnInit {
                     this.loadMenuItems();
                     this.menuRuntimeService.refreshMenu();
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: this.isEditMode ? 'Menu guncellendi.' : 'Menu eklendi.'
                     });
@@ -183,7 +183,7 @@ export class MenuYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -211,7 +211,7 @@ export class MenuYonetimi implements OnInit {
                         this.loadMenuItems();
                         this.menuRuntimeService.refreshMenu();
                         this.messageService.add({
-                            severity: 'success',
+                            severity: UiSeverity.Success,
                             summary: 'Basarili',
                             detail: 'Menu silindi.'
                         });
@@ -219,7 +219,7 @@ export class MenuYonetimi implements OnInit {
                     },
                     error: (error: unknown) => {
                         this.messageService.add({
-                            severity: 'error',
+                            severity: UiSeverity.Error,
                             summary: 'Hata',
                             detail: this.resolveErrorMessage(error)
                         });
@@ -263,7 +263,7 @@ export class MenuYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -282,7 +282,7 @@ export class MenuYonetimi implements OnInit {
             },
             error: (error: unknown) => {
                 this.messageService.add({
-                    severity: 'error',
+                    severity: UiSeverity.Error,
                     summary: 'Hata',
                     detail: this.resolveErrorMessage(error)
                 });
@@ -370,3 +370,4 @@ export class MenuYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

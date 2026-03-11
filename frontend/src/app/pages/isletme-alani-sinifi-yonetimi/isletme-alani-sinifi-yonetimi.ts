@@ -140,11 +140,11 @@ export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadSiniflar(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Isletme alani sinifi guncellendi.' : 'Isletme alani sinifi olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Isletme alani sinifi guncellendi.' : 'Isletme alani sinifi olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -167,11 +167,11 @@ export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
                 this.service.deleteSinif(sinif.id!).subscribe({
                     next: () => {
                         this.loadSiniflar(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Isletme alani sinifi silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Isletme alani sinifi silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -204,7 +204,7 @@ export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -234,3 +234,4 @@ export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

@@ -100,7 +100,7 @@ export class KullaniciGrupYonetimi implements OnInit {
         const name = this.selectedUserGroup.name.trim();
         if (!name) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Grup adi zorunludur.'
             });
@@ -131,7 +131,7 @@ export class KullaniciGrupYonetimi implements OnInit {
                     this.dialogVisible = false;
                     this.loadUserGroups();
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: this.isEditMode ? 'Grup guncellendi.' : 'Yeni grup eklendi.'
                     });
@@ -139,7 +139,7 @@ export class KullaniciGrupYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -166,7 +166,7 @@ export class KullaniciGrupYonetimi implements OnInit {
                     next: () => {
                         this.loadUserGroups();
                         this.messageService.add({
-                            severity: 'success',
+                            severity: UiSeverity.Success,
                             summary: 'Basarili',
                             detail: 'Grup silindi.'
                         });
@@ -174,7 +174,7 @@ export class KullaniciGrupYonetimi implements OnInit {
                     },
                     error: (error: unknown) => {
                         this.messageService.add({
-                            severity: 'error',
+                            severity: UiSeverity.Error,
                             summary: 'Hata',
                             detail: this.resolveErrorMessage(error)
                         });
@@ -225,7 +225,7 @@ export class KullaniciGrupYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -242,7 +242,7 @@ export class KullaniciGrupYonetimi implements OnInit {
             },
             error: (error: unknown) => {
                 this.messageService.add({
-                    severity: 'error',
+                    severity: UiSeverity.Error,
                     summary: 'Hata',
                     detail: this.resolveErrorMessage(error)
                 });
@@ -273,3 +273,4 @@ export class KullaniciGrupYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using System.Text.Json;
 using STYS.AccessScope;
+using STYS.Bildirimler;
+using STYS.Bildirimler.Dto;
+using STYS.Bildirimler.Services;
 using STYS.Fiyatlandirma.Dto;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma;
@@ -19,15 +22,18 @@ public class RezervasyonService : IRezervasyonService
 {
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IBildirimService _bildirimService;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
+        IBildirimService bildirimService,
         IHttpContextAccessor httpContextAccessor)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
+        _bildirimService = bildirimService;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -1318,6 +1324,19 @@ public class RezervasyonService : IRezervasyonService
             newAssignmentsSnapshot);
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        await _bildirimService.PublishToTesisUsersAsync(
+            reservation.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "OdaDegisimi",
+                Baslik = "Rezervasyonda Oda Degisimi",
+                Mesaj = $"{reservation.ReferansNo} rezervasyonu icin {changedAssignments.Count} segmentte oda degisimi kaydedildi.",
+                Severity = BildirimSeverityleri.Warn,
+                Link = "/rezervasyon-yonetimi"
+            },
+            cancellationToken);
+
         return ToSaveResult(reservation);
     }
 
@@ -1728,6 +1747,19 @@ public class RezervasyonService : IRezervasyonService
             new { RezervasyonDurumu = previousStatus },
             new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        await _bildirimService.PublishToTesisUsersAsync(
+            reservation.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "CheckIn",
+                Baslik = "Check-in Tamamlandi",
+                Mesaj = $"{reservation.ReferansNo} referansli rezervasyon icin check-in islemi tamamlandi.",
+                Severity = BildirimSeverityleri.Success,
+                Link = "/rezervasyon-yonetimi"
+            },
+            cancellationToken);
+
         return ToSaveResult(reservation);
     }
 
@@ -1786,6 +1818,19 @@ public class RezervasyonService : IRezervasyonService
             new { RezervasyonDurumu = previousStatus },
             new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        await _bildirimService.PublishToTesisUsersAsync(
+            reservation.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "CheckOut",
+                Baslik = "Check-out Tamamlandi",
+                Mesaj = $"{reservation.ReferansNo} referansli rezervasyon icin check-out tamamlandi. Ilgili odalar kirli durumuna alindi.",
+                Severity = BildirimSeverityleri.Info,
+                Link = "/rezervasyon-yonetimi"
+            },
+            cancellationToken);
+
         return ToSaveResult(reservation);
     }
 
@@ -1827,6 +1872,26 @@ public class RezervasyonService : IRezervasyonService
 
         var roomSummary = string.Join(", ", blockingWarnings
             .Select(x => $"{x.OdaNo} - {x.BinaAdi} ({x.TemizlikDurumu})"));
+
+        var reservationInfo = await _stysDbContext.Rezervasyonlar
+            .Where(x => x.Id == rezervasyonId)
+            .Select(x => new { x.TesisId, x.ReferansNo })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (reservationInfo is not null)
+        {
+            await _bildirimService.PublishToTesisUsersAsync(
+                reservationInfo.TesisId,
+                new BildirimOlusturRequestDto
+                {
+                    Tip = "TemizlikGecikmesi",
+                    Baslik = "Check-in Temizlik Nedeniyle Engellendi",
+                    Mesaj = $"{reservationInfo.ReferansNo} rezervasyonu icin hazir olmayan oda(lar) var: {roomSummary}.",
+                    Severity = BildirimSeverityleri.Warn,
+                    Link = "/oda-temizlik-yonetimi"
+                },
+                cancellationToken);
+        }
 
         throw new BaseException(
             $"Check-in engellendi. Hazir olmayan odalar var: {roomSummary}.",
@@ -2098,6 +2163,19 @@ public class RezervasyonService : IRezervasyonService
             });
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        await _bildirimService.PublishToTesisUsersAsync(
+            reservation.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "Odeme",
+                Baslik = "Rezervasyon Odemesi Alindi",
+                Mesaj = $"{reservation.ReferansNo} rezervasyonu icin {request.OdemeTutari:N2} {reservation.ParaBirimi} odeme kaydedildi.",
+                Severity = BildirimSeverityleri.Info,
+                Link = "/rezervasyon-yonetimi"
+            },
+            cancellationToken);
+
         return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
     }
 

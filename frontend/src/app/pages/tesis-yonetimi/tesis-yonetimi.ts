@@ -151,11 +151,11 @@ export class TesisYonetimi implements OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadData(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Tesis guncellendi.' : 'Tesis olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Tesis guncellendi.' : 'Tesis olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -178,11 +178,11 @@ export class TesisYonetimi implements OnDestroy {
                 this.service.deleteTesis(tesis.id!).subscribe({
                     next: () => {
                         this.loadData(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Tesis silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Tesis silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -227,7 +227,7 @@ export class TesisYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -274,3 +274,4 @@ export class TesisYonetimi implements OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

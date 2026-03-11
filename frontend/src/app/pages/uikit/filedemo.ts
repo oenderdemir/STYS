@@ -43,10 +43,11 @@ export class FileDemo {
             this.uploadedFiles.push(file);
         }
 
-        this.messageService.add({ severity: 'info', summary: 'Success', detail: 'File Uploaded' });
+        this.messageService.add({ severity: UiSeverity.Info, summary: 'Success', detail: 'File Uploaded' });
     }
 
     onBasicUpload() {
-        this.messageService.add({ severity: 'info', summary: 'Success', detail: 'File Uploaded with Basic Mode' });
+        this.messageService.add({ severity: UiSeverity.Info, summary: 'Success', detail: 'File Uploaded with Basic Mode' });
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

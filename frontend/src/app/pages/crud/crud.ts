@@ -289,7 +289,7 @@ export class Crud implements OnInit {
                 this.products.set(this.products().filter((val) => !this.selectedProducts?.includes(val)));
                 this.selectedProducts = null;
                 this.messageService.add({
-                    severity: 'success',
+                    severity: UiSeverity.Success,
                     summary: 'Successful',
                     detail: 'Products Deleted',
                     life: 3000
@@ -312,7 +312,7 @@ export class Crud implements OnInit {
                 this.products.set(this.products().filter((val) => val.id !== product.id));
                 this.product = {};
                 this.messageService.add({
-                    severity: 'success',
+                    severity: UiSeverity.Success,
                     summary: 'Successful',
                     detail: 'Product Deleted',
                     life: 3000
@@ -345,13 +345,13 @@ export class Crud implements OnInit {
     getSeverity(status: string) {
         switch (status) {
             case 'INSTOCK':
-                return 'success';
+                return UiSeverity.Success;
             case 'LOWSTOCK':
-                return 'warn';
+                return UiSeverity.Warn;
             case 'OUTOFSTOCK':
-                return 'danger';
+                return UiSeverity.Danger;
             default:
-                return 'info';
+                return UiSeverity.Info;
         }
     }
 
@@ -363,7 +363,7 @@ export class Crud implements OnInit {
                 _products[this.findIndexById(this.product.id)] = this.product;
                 this.products.set([..._products]);
                 this.messageService.add({
-                    severity: 'success',
+                    severity: UiSeverity.Success,
                     summary: 'Successful',
                     detail: 'Product Updated',
                     life: 3000
@@ -372,7 +372,7 @@ export class Crud implements OnInit {
                 this.product.id = this.createId();
                 this.product.image = 'product-placeholder.svg';
                 this.messageService.add({
-                    severity: 'success',
+                    severity: UiSeverity.Success,
                     summary: 'Successful',
                     detail: 'Product Created',
                     life: 3000
@@ -385,3 +385,4 @@ export class Crud implements OnInit {
         }
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

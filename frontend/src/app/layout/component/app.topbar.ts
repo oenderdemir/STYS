@@ -5,8 +5,9 @@ import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { Menu, MenuModule } from 'primeng/menu';
+import { Popover, PopoverModule } from 'primeng/popover';
 import { PasswordModule } from 'primeng/password';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { StyleClassModule } from 'primeng/styleclass';
 import { ToastModule } from 'primeng/toast';
@@ -15,14 +16,92 @@ import { ApiErrorItem, tryReadApiMessage } from '../../core/api';
 import { AppConfigurator } from './app.configurator';
 import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
+import { NotificationService } from '../../core/notifications/notification.service';
+import { NotificationSeverityValues, NotificationViewModel } from '../../core/notifications/notification.model';
 
 @Component({
     selector: 'app-topbar',
     standalone: true,
-    imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, DialogModule, PasswordModule, ButtonModule, ToastModule],
+    imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, PopoverModule, DialogModule, PasswordModule, ButtonModule, ToastModule],
     providers: [MessageService],
+    styles: [
+        `
+            .topbar-notification-pulse {
+                animation: topbarNotificationPulse 1.1s ease-in-out 3;
+            }
+
+            .topbar-notification-alert {
+                position: absolute;
+                top: -0.2rem;
+                left: -0.15rem;
+                width: 1.05rem;
+                height: 1.05rem;
+                border-radius: 999px;
+                background: #ff6b00;
+                color: #ffffff;
+                font-size: 0.75rem;
+                font-weight: 800;
+                line-height: 1.05rem;
+                text-align: center;
+                border: 2px solid var(--surface-card);
+                box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.25);
+                animation: topbarNotificationAlertPulse 1.1s ease-in-out infinite;
+            }
+
+            .topbar-envelope-unread {
+                color: var(--green-500);
+            }
+
+            .topbar-unread-badge {
+                position: absolute;
+                top: -0.15rem;
+                right: -0.2rem;
+                min-width: 1.25rem;
+                height: 1.25rem;
+                padding: 0 0.3rem;
+                border-radius: 999px;
+                background: var(--red-500);
+                color: #fff;
+                font-size: 0.7rem;
+                line-height: 1.25rem;
+                text-align: center;
+                font-weight: 700;
+                z-index: 5;
+                border: 2px solid var(--surface-card);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+                pointer-events: none;
+            }
+
+            @keyframes topbarNotificationPulse {
+                0% {
+                    transform: scale(1);
+                }
+                50% {
+                    transform: scale(1.15);
+                }
+                100% {
+                    transform: scale(1);
+                }
+            }
+
+            @keyframes topbarNotificationAlertPulse {
+                0% {
+                    transform: scale(1);
+                    box-shadow: 0 0 0 0 rgba(255, 107, 0, 0.4);
+                }
+                70% {
+                    transform: scale(1.08);
+                    box-shadow: 0 0 0 8px rgba(255, 107, 0, 0);
+                }
+                100% {
+                    transform: scale(1);
+                    box-shadow: 0 0 0 0 rgba(255, 107, 0, 0);
+                }
+            }
+        `
+    ],
     template: ` <div class="layout-topbar">
-            <p-toast />
+            <p-toast position="bottom-right" [baseZIndex]="20000" />
         <div class="layout-topbar-logo-container">
             <button class="layout-menu-button layout-topbar-action" (click)="layoutService.onMenuToggle()">
                 <i class="pi pi-bars"></i>
@@ -91,10 +170,67 @@ import { AuthService } from '../../pages/auth';
                         <i class="pi pi-calendar"></i>
                         <span>Calendar</span>
                     </button>
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-inbox"></i>
-                        <span>Messages</span>
+                    <button type="button" class="layout-topbar-action relative" (click)="toggleNotificationPopover($event)">
+                        <i
+                            class="pi pi-envelope"
+                            [ngClass]="{ 'topbar-notification-pulse': hasNewNotificationCue, 'topbar-envelope-unread': unreadCount() > 0 }"
+                            [style.color]="unreadCount() > 0 ? '#22c55e' : null"
+                        ></i>
+                        @if (hasNewNotificationCue) {
+                            <span class="topbar-notification-alert">!</span>
+                        }
+                        @if (unreadCount() > 0) {
+                            <span class="topbar-unread-badge">
+                                {{ unreadBadgeText() }}
+                            </span>
+                        }
+                        <span>Bildirimler</span>
                     </button>
+                    <p-popover #notificationPopover [appendTo]="'body'" [style]="{ width: '26rem', 'max-width': '92vw' }">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="pi pi-bell"></i>
+                                <span style="font-weight: 700;">Bildirimler</span>
+                            </div>
+                            <button
+                                type="button"
+                                class="p-button p-button-text p-button-sm"
+                                (click)="markAllNotificationsAsRead()"
+                                [disabled]="unreadCount() === 0"
+                            >
+                                Tumunu Okundu Yap
+                            </button>
+                        </div>
+
+                        @if (notifications().length === 0) {
+                            <div style="padding: 1.25rem 0.5rem; color: var(--text-color-secondary); text-align: center;">
+                                Yeni bildirim bulunmuyor.
+                            </div>
+                        } @else {
+                            <div style="max-height: 24rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                                @for (item of notifications(); track item.id) {
+                                    <button
+                                        type="button"
+                                        (click)="onNotificationClick(item)"
+                                        [ngStyle]="notificationCardStyle(item)"
+                                    >
+                                        <div style="display: flex; align-items: start; justify-content: space-between; gap: 0.5rem;">
+                                            <strong style="display: block; font-size: 0.9rem;">{{ item.baslik }}</strong>
+                                            @if (!item.isRead) {
+                                                <span style="display: inline-flex; width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--primary-color); margin-top: 0.25rem;"></span>
+                                            }
+                                        </div>
+                                        <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.84rem; line-height: 1.25;">
+                                            {{ item.mesaj }}
+                                        </div>
+                                        <div style="margin-top: 0.45rem; color: var(--text-color-secondary); font-size: 0.76rem;">
+                                            {{ formatNotificationDate(item.createdAt) }}
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </p-popover>
                     <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)" [title]="currentUserName || 'Profile'">
                         <i class="pi pi-user"></i>
                         <span>{{ currentUserName || 'Profile' }}</span>
@@ -173,9 +309,12 @@ import { AuthService } from '../../pages/auth';
 export class AppTopbar {
     layoutService = inject(LayoutService);
     private readonly authService = inject(AuthService);
+    private readonly router = inject(Router);
+    private readonly notificationService = inject(NotificationService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
     @ViewChild('profileMenu') private profileMenu?: Menu;
+    @ViewChild('notificationPopover') private notificationPopover?: Popover;
 
     changePasswordDialogVisible = false;
     changePasswordErrorDialogVisible = false;
@@ -187,6 +326,11 @@ export class AppTopbar {
     changePasswordError: string | null = null;
     changePasswordErrorDetails: string[] = [];
     currentUserName: string | null = null;
+    readonly notifications = this.notificationService.notifications;
+    readonly unreadCount = this.notificationService.unreadCount;
+    readonly lastRealtimeNotification = this.notificationService.lastRealtimeNotification;
+    hasNewNotificationCue = false;
+    private lastRealtimeNotificationId: number | null = null;
 
     readonly profileMenuItems: MenuItem[] = [
         {
@@ -211,6 +355,8 @@ export class AppTopbar {
 
             if (!this.authService.isAuthenticated()) {
                 this.currentUserName = null;
+                this.hasNewNotificationCue = false;
+                this.lastRealtimeNotificationId = null;
                 this.closeAllOverlays();
                 return;
             }
@@ -226,6 +372,122 @@ export class AppTopbar {
                 this.isForceChangePasswordMode = false;
                 this.cdr.detectChanges();
             }
+        });
+
+        effect(() => {
+            const incoming = this.lastRealtimeNotification();
+            if (!incoming || !this.authService.isAuthenticated()) {
+                return;
+            }
+
+            if (this.lastRealtimeNotificationId === incoming.id) {
+                return;
+            }
+
+            this.lastRealtimeNotificationId = incoming.id;
+            this.hasNewNotificationCue = true;
+            this.messageService.add({
+                severity: this.mapToastSeverity(incoming.severity),
+                summary: incoming.baslik || 'Yeni Bildirim',
+                detail: incoming.mesaj,
+                life: 4500
+            });
+        });
+    }
+
+    unreadBadgeText(): string {
+        const value = this.unreadCount();
+        return value > 99 ? '99+' : value.toString();
+    }
+
+    toggleNotificationPopover(event: Event): void {
+        this.hasNewNotificationCue = false;
+        void this.notificationService.reload();
+        this.notificationPopover?.toggle(event);
+    }
+
+    onNotificationClick(item: NotificationViewModel): void {
+        if (!item.isRead) {
+            this.notificationService.markAsRead(item.id).subscribe({
+                next: () => this.notificationService.applyRead(item.id),
+                error: () => {
+                    // No-op
+                }
+            });
+        }
+
+        if (item.link && item.link.trim().length > 0) {
+            this.profileMenu?.hide();
+            this.notificationPopover?.hide();
+            void this.router.navigateByUrl(item.link);
+        }
+    }
+
+    markAllNotificationsAsRead(): void {
+        this.notificationService.markAllAsRead().subscribe({
+            next: () => this.notificationService.applyReadAll(),
+            error: () => {
+                // No-op
+            }
+        });
+    }
+
+    notificationBorderColor(severity: string): string {
+        const normalized = (severity ?? '').trim().toLowerCase();
+        switch (normalized) {
+            case NotificationSeverityValues.Success:
+                return 'var(--green-500)';
+            case NotificationSeverityValues.Warn:
+                return 'var(--orange-500)';
+            case NotificationSeverityValues.Error:
+            case NotificationSeverityValues.Danger:
+                return 'var(--red-500)';
+            default:
+                return 'var(--blue-500)';
+        }
+    }
+
+    private mapToastSeverity(severity: string): 'success' | 'info' | 'warn' | 'error' {
+        const normalized = (severity ?? '').trim().toLowerCase();
+        switch (normalized) {
+            case NotificationSeverityValues.Success:
+                return NotificationSeverityValues.Success;
+            case NotificationSeverityValues.Warn:
+            case 'warning':
+                return NotificationSeverityValues.Warn;
+            case NotificationSeverityValues.Error:
+            case NotificationSeverityValues.Danger:
+                return NotificationSeverityValues.Error;
+            default:
+                return NotificationSeverityValues.Info;
+        }
+    }
+
+    notificationCardStyle(item: NotificationViewModel): Record<string, string> {
+        return {
+            textAlign: 'left',
+            border: '1px solid var(--surface-border)',
+            borderLeft: '4px solid',
+            borderLeftColor: this.notificationBorderColor(item.severity),
+            background: item.isRead ? 'var(--surface-ground)' : 'var(--surface-card)',
+            borderRadius: '0.65rem',
+            padding: '0.65rem 0.75rem',
+            cursor: 'pointer',
+            width: '100%'
+        };
+    }
+
+    formatNotificationDate(value: Date): string {
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+            return '';
+        }
+
+        return value.toLocaleString('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
         });
     }
 
@@ -285,7 +547,7 @@ export class AppTopbar {
                     this.isForceChangePasswordMode = false;
                     this.changePasswordDialogVisible = false;
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: 'Sifre degistirildi. Lutfen tekrar giris yapin.'
                     });
@@ -319,6 +581,7 @@ export class AppTopbar {
 
     private closeAllOverlays(): void {
         this.profileMenu?.hide();
+        this.notificationPopover?.hide();
         this.changePasswordDialogVisible = false;
         this.changePasswordErrorDialogVisible = false;
         this.changePasswordErrorDetails = [];
@@ -400,3 +663,4 @@ export class AppTopbar {
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

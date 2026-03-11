@@ -200,32 +200,32 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         if (!this.selectedTesisId || this.selectedTesisId <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Lutfen bir tesis seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir tesis seciniz.' });
             return;
         }
 
         if (!this.selectedMisafirTipiId || this.selectedMisafirTipiId <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Lutfen bir misafir tipi seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir misafir tipi seciniz.' });
             return;
         }
 
         if (!this.selectedKonaklamaTipiId || this.selectedKonaklamaTipiId <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Lutfen bir konaklama tipi seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir konaklama tipi seciniz.' });
             return;
         }
 
         if (this.kisiSayisi <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Kisi sayisi sifirdan buyuk olmalidir.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kisi sayisi sifirdan buyuk olmalidir.' });
             return;
         }
 
         if (!this.baslangicTarihi || !this.bitisTarihi) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Baslangic ve bitis tarihi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Baslangic ve bitis tarihi zorunludur.' });
             return;
         }
 
         if (new Date(this.baslangicTarihi).getTime() >= new Date(this.bitisTarihi).getTime()) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Baslangic tarihi bitis tarihinden kucuk olmalidir.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Baslangic tarihi bitis tarihinden kucuk olmalidir.' });
             return;
         }
 
@@ -253,7 +253,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.senaryolar = [];
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -265,17 +265,17 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         if (!this.selectedTesisId || this.selectedTesisId <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Tesis secimi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis secimi zorunludur.' });
             return;
         }
 
         if (!this.misafirAdiSoyadi.trim()) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Misafir adi soyadi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Misafir adi soyadi zorunludur.' });
             return;
         }
 
         if (!this.misafirTelefon.trim()) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Misafir telefonu zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Misafir telefonu zorunludur.' });
             return;
         }
 
@@ -318,7 +318,7 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (result) => {
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: `Rezervasyon kaydedildi. Referans: ${result.referansNo}`
                     });
@@ -327,7 +327,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -335,7 +335,7 @@ export class RezervasyonYonetimi implements OnInit {
 
     openDiscountDialog(scenario: KonaklamaSenaryoDto): void {
         if (!this.selectedTesisId || !this.selectedMisafirTipiId || !this.selectedKonaklamaTipiId) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Tesis, misafir tipi ve konaklama tipi secimi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis, misafir tipi ve konaklama tipi secimi zorunludur.' });
             return;
         }
 
@@ -374,7 +374,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.availableDiscountRules = [];
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -386,7 +386,7 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         if ((this.customDiscountAmount ?? 0) < 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Gecersiz Tutar', detail: 'Custom indirim tutari sifirdan kucuk olamaz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Tutar', detail: 'Custom indirim tutari sifirdan kucuk olamaz.' });
             return;
         }
 
@@ -429,7 +429,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -834,11 +834,11 @@ export class RezervasyonYonetimi implements OnInit {
                             kayit.konaklayanPlaniTamamlandi = this.isKonaklayanPlanComplete(plan);
                         }
                     }
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -997,7 +997,7 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (result) => {
                     this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: `Check-in tamamlandi. Referans: ${result.referansNo}`
                     });
@@ -1005,7 +1005,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1060,7 +1060,7 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (result) => {
                     this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: result.rezervasyonDurumu === this.durumIptal
                             ? `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
@@ -1069,7 +1069,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1109,7 +1109,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.odaDegisimSecenekleri = null;
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1152,7 +1152,7 @@ export class RezervasyonYonetimi implements OnInit {
                     }
 
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: `Oda degisimi kaydedildi. Referans: ${result.referansNo}`
                     });
@@ -1163,7 +1163,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1231,7 +1231,7 @@ export class RezervasyonYonetimi implements OnInit {
 
         const tutar = Number(this.odemeTutari ?? 0);
         if (!Number.isFinite(tutar) || tutar <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Gecersiz Tutar', detail: 'Odeme tutari sifirdan buyuk olmalidir.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Tutar', detail: 'Odeme tutari sifirdan buyuk olmalidir.' });
             return;
         }
 
@@ -1258,11 +1258,11 @@ export class RezervasyonYonetimi implements OnInit {
                         kayit.odenenTutar = result.odenenTutar;
                         kayit.kalanTutar = result.kalanTutar;
                     }
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Odeme kaydedildi.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1286,14 +1286,14 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (result) => {
                     this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: `Check-out tamamlandi. Referans: ${result.referansNo}`
                     });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1444,7 +1444,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.expandedRowKeys = {};
                     this.rezervasyonDetayById = {};
                     this.detayLoadingByRezervasyonId = {};
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1485,7 +1485,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.closeKonaklayanPlaniDialog();
                     this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1508,7 +1508,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.degisiklikGecmisiKayitlari = [];
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1531,7 +1531,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.konaklayanPlan = null;
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1560,7 +1560,7 @@ export class RezervasyonYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.odemeOzeti = null;
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1586,7 +1586,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1619,7 +1619,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.odaTipleri = [];
                     this.selectedOdaTipiId = null;
                     this.senaryolar = [];
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -1672,17 +1672,17 @@ export class RezervasyonYonetimi implements OnInit {
     getRezervasyonDurumSeverity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
         switch (durum) {
             case this.durumTaslak:
-                return 'secondary';
+                return UiSeverity.Secondary;
             case this.durumOnayli:
-                return 'info';
+                return UiSeverity.Info;
             case this.durumCheckInTamamlandi:
-                return 'warn';
+                return UiSeverity.Warn;
             case this.durumCheckOutTamamlandi:
-                return 'success';
+                return UiSeverity.Success;
             case this.durumIptal:
-                return 'danger';
+                return UiSeverity.Danger;
             default:
-                return 'secondary';
+                return UiSeverity.Secondary;
         }
     }
 
@@ -1775,3 +1775,4 @@ export class RezervasyonYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

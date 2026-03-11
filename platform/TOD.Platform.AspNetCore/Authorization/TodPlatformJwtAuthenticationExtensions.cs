@@ -55,6 +55,22 @@ public static class TodPlatformJwtAuthenticationExtensions
 
             options.Events = new JwtBearerEvents
             {
+                OnMessageReceived = context =>
+                {
+                    if (!string.IsNullOrWhiteSpace(context.Token))
+                    {
+                        return Task.CompletedTask;
+                    }
+
+                    var accessToken = context.Request.Query["access_token"].ToString();
+                    var requestPath = context.HttpContext.Request.Path;
+                    if (!string.IsNullOrWhiteSpace(accessToken) && requestPath.StartsWithSegments("/ui"))
+                    {
+                        context.Token = accessToken;
+                    }
+
+                    return Task.CompletedTask;
+                },
                 OnTokenValidated = async context =>
                 {
                     var rawUserId = context.Principal?.FindFirstValue("userId");

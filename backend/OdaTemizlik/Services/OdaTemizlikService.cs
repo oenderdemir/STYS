@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Bildirimler;
+using STYS.Bildirimler.Dto;
+using STYS.Bildirimler.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Odalar;
 using STYS.OdaTemizlik.Dto;
@@ -12,13 +15,16 @@ public class OdaTemizlikService : IOdaTemizlikService
 {
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IBildirimService _bildirimService;
 
     public OdaTemizlikService(
         StysAppDbContext stysDbContext,
-        IUserAccessScopeService userAccessScopeService)
+        IUserAccessScopeService userAccessScopeService,
+        IBildirimService bildirimService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
+        _bildirimService = bildirimService;
     }
 
     public async Task<List<OdaTemizlikTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -157,6 +163,18 @@ public class OdaTemizlikService : IOdaTemizlikService
         room.Oda.TemizlikDurumu = OdaTemizlikDurumlari.Temizleniyor;
         await _stysDbContext.SaveChangesAsync(cancellationToken);
 
+        await _bildirimService.PublishToTesisUsersAsync(
+            room.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "TemizlikBasladi",
+                Baslik = "Oda Temizligi Basladi",
+                Mesaj = $"{room.BinaAdi} / {room.Oda.OdaNo} odasi icin temizlik islemi baslatildi.",
+                Severity = BildirimSeverityleri.Info,
+                Link = "/oda-temizlik-yonetimi"
+            },
+            cancellationToken);
+
         return ToDto(room);
     }
 
@@ -171,6 +189,18 @@ public class OdaTemizlikService : IOdaTemizlikService
 
         room.Oda.TemizlikDurumu = OdaTemizlikDurumlari.Hazir;
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        await _bildirimService.PublishToTesisUsersAsync(
+            room.TesisId,
+            new BildirimOlusturRequestDto
+            {
+                Tip = "TemizlikTamamlandi",
+                Baslik = "Oda Temizligi Tamamlandi",
+                Mesaj = $"{room.BinaAdi} / {room.Oda.OdaNo} odasi check-in icin hazir duruma getirildi.",
+                Severity = BildirimSeverityleri.Success,
+                Link = "/oda-temizlik-yonetimi"
+            },
+            cancellationToken);
 
         return ToDto(room);
     }

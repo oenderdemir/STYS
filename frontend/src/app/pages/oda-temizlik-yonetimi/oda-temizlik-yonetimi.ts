@@ -263,18 +263,18 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
 
     getDurumSeverity(durum: string): 'danger' | 'warn' | 'success' | 'secondary' {
         if (durum === 'Kirli') {
-            return 'danger';
+            return UiSeverity.Danger;
         }
 
         if (durum === 'Temizleniyor') {
-            return 'warn';
+            return UiSeverity.Warn;
         }
 
         if (durum === 'Hazir') {
-            return 'success';
+            return UiSeverity.Success;
         }
 
-        return 'secondary';
+        return UiSeverity.Secondary;
     }
 
     getRoomImageClass(item: OdaTemizlikKayitDto): string {
@@ -354,11 +354,11 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
             )
             .subscribe({
                 next: () => {
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: `${item.odaNo} icin temizlik baslatildi.` });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: `${item.odaNo} icin temizlik baslatildi.` });
                     this.loadPaged();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -380,11 +380,11 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
             )
             .subscribe({
                 next: () => {
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: `${item.odaNo} oda hazir durumuna alindi.` });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: `${item.odaNo} oda hazir durumuna alindi.` });
                     this.loadPaged();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -417,7 +417,7 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
                     this.loadPaged();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -460,7 +460,7 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -488,3 +488,4 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
         };
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

@@ -143,14 +143,14 @@ export class UlkeYonetimi implements OnDestroy {
                     this.dialogVisible = false;
                     this.loadUlkeler(this.pageNumber, this.pageSize);
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: this.dialogMode === 'edit' ? 'Ulke guncellendi.' : 'Ulke olusturuldu.'
                     });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -173,11 +173,11 @@ export class UlkeYonetimi implements OnDestroy {
                 this.service.deleteUlke(ulke.id!).subscribe({
                     next: () => {
                         this.loadUlkeler(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Ulke silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Ulke silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -210,7 +210,7 @@ export class UlkeYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -239,3 +239,4 @@ export class UlkeYonetimi implements OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

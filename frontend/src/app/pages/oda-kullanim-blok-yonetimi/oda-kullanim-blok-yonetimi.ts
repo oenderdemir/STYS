@@ -144,7 +144,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
         }
 
         if (!this.selectedTesisId || this.selectedTesisId <= 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Lutfen once tesis seciniz.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen once tesis seciniz.' });
             return;
         }
 
@@ -200,11 +200,11 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadPaged();
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Kayit guncellendi.' : 'Kayit olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Kayit guncellendi.' : 'Kayit olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -227,11 +227,11 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
                 this.service.delete(item.id!).subscribe({
                     next: () => {
                         this.loadPaged();
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Kayit silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -274,7 +274,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
                     this.loadOdalarForSelectedTesis(true);
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -310,7 +310,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
                 this.odaSecenekleri = [];
                 this.odaOptions = [];
                 this.selectedOdaId = null;
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                 this.cdr.detectChanges();
             }
         });
@@ -345,7 +345,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -398,3 +398,4 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
     }
 }
 
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

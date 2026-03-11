@@ -3,6 +3,7 @@
         "target": "https://localhost:7160",
         "secure": false,
         "changeOrigin": true,
+        "ws": true,
         "followRedirects": true,
         "pathRewrite": {
             "^/api": ""

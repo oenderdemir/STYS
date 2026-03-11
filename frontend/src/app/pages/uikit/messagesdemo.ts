@@ -69,7 +69,7 @@ export class MessagesDemo {
 
     showInfoViaToast() {
         this.service.add({
-            severity: 'info',
+            severity: UiSeverity.Info,
             summary: 'Info Message',
             detail: 'PrimeNG rocks'
         });
@@ -77,7 +77,7 @@ export class MessagesDemo {
 
     showWarnViaToast() {
         this.service.add({
-            severity: 'warn',
+            severity: UiSeverity.Warn,
             summary: 'Warn Message',
             detail: 'There are unsaved changes'
         });
@@ -85,7 +85,7 @@ export class MessagesDemo {
 
     showErrorViaToast() {
         this.service.add({
-            severity: 'error',
+            severity: UiSeverity.Error,
             summary: 'Error Message',
             detail: 'Validation failed'
         });
@@ -93,9 +93,10 @@ export class MessagesDemo {
 
     showSuccessViaToast() {
         this.service.add({
-            severity: 'success',
+            severity: UiSeverity.Success,
             summary: 'Success Message',
             detail: 'Message sent'
         });
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

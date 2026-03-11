@@ -165,7 +165,7 @@ export class KullaniciYonetimi implements OnInit {
 
         if (!payload.userName) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Kullanici adi zorunludur.'
             });
@@ -174,7 +174,7 @@ export class KullaniciYonetimi implements OnInit {
 
         if (!this.isEditMode && this.isScopedTesisManager && (!this.selectedTesisIdForCreate || this.selectedTesisIdForCreate <= 0)) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Tesis secimi zorunludur.'
             });
@@ -208,7 +208,7 @@ export class KullaniciYonetimi implements OnInit {
                     this.dialogVisible = false;
                     this.loadData();
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: this.isEditMode ? 'Kullanici guncellendi.' : 'Kullanici olusturuldu.'
                     });
@@ -216,7 +216,7 @@ export class KullaniciYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -251,7 +251,7 @@ export class KullaniciYonetimi implements OnInit {
                     next: () => {
                         this.loadData();
                         this.messageService.add({
-                            severity: 'success',
+                            severity: UiSeverity.Success,
                             summary: 'Basarili',
                             detail: 'Kullanici silindi.'
                         });
@@ -259,7 +259,7 @@ export class KullaniciYonetimi implements OnInit {
                     },
                     error: (error: unknown) => {
                         this.messageService.add({
-                            severity: 'error',
+                            severity: UiSeverity.Error,
                             summary: 'Hata',
                             detail: this.resolveErrorMessage(error)
                         });
@@ -289,7 +289,7 @@ export class KullaniciYonetimi implements OnInit {
 
         if (this.newPassword.trim().length === 0 || this.newPassword2.trim().length === 0) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Yeni parola ve tekrari zorunludur.'
             });
@@ -298,7 +298,7 @@ export class KullaniciYonetimi implements OnInit {
 
         if (this.newPassword !== this.newPassword2) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Parola Uyusmazligi',
                 detail: 'Yeni parola ve tekrari ayni olmalidir.'
             });
@@ -327,7 +327,7 @@ export class KullaniciYonetimi implements OnInit {
                     this.newPassword = '';
                     this.newPassword2 = '';
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: 'Kullanici parolasi degistirildi. Kullanici ilk giriste parolasini degistirecek.'
                     });
@@ -335,7 +335,7 @@ export class KullaniciYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -361,30 +361,30 @@ export class KullaniciYonetimi implements OnInit {
     getStatusSeverity(status: string): 'success' | 'warn' | 'danger' | 'info' {
         const normalizedStatus = status.trim().toLowerCase();
         if (normalizedStatus.includes('active') || normalizedStatus.includes('aktif')) {
-            return 'success';
+            return UiSeverity.Success;
         }
 
         if (normalizedStatus.includes('passive') || normalizedStatus.includes('pasif')) {
-            return 'danger';
+            return UiSeverity.Danger;
         }
 
         if (normalizedStatus.includes('change')) {
-            return 'warn';
+            return UiSeverity.Warn;
         }
 
         if (normalizedStatus.includes('standard')) {
-            return 'success';
+            return UiSeverity.Success;
         }
 
         if (normalizedStatus.includes('mustchangepassword')) {
-            return 'warn';
+            return UiSeverity.Warn;
         }
 
         if (normalizedStatus.includes('blocked')) {
-            return 'danger';
+            return UiSeverity.Danger;
         }
 
-        return 'info';
+        return UiSeverity.Info;
     }
 
     private loadData(): void {
@@ -411,7 +411,7 @@ export class KullaniciYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -468,7 +468,7 @@ export class KullaniciYonetimi implements OnInit {
         const groupId = this.findGroupIdByMarkerRole(markerRole);
         if (!groupId) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Grup Bulunamadi',
                 detail: type === 'resepsiyonist'
                     ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
@@ -568,3 +568,4 @@ export class KullaniciYonetimi implements OnInit {
         };
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

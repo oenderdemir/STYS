@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
 using STYS.Fiyatlandirma.Entities;
@@ -63,6 +64,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
+    public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
 
     public override int SaveChanges()
     {
@@ -604,6 +606,20 @@ public class StysAppDbContext : DbContext
                 .WithMany(x => x.Odemeler)
                 .HasForeignKey(x => x.RezervasyonId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Bildirim>(entity =>
+        {
+            entity.ToTable("Bildirimler", "dbo");
+            entity.Property(x => x.Tip).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Baslik).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Mesaj).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Link).HasMaxLength(256);
+            entity.Property(x => x.Severity).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAt })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt })
+                .HasFilter("[IsDeleted] = 0");
         });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())

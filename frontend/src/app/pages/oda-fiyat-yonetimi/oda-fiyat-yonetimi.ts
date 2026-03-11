@@ -109,7 +109,7 @@ export class OdaFiyatYonetimi implements OnInit {
 
         const validationError = this.validateRows();
         if (validationError) {
-            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: validationError });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: validationError });
             return;
         }
 
@@ -138,11 +138,11 @@ export class OdaFiyatYonetimi implements OnInit {
             .subscribe({
                 next: (items) => {
                     this.fiyatSatirlari = items.map((item) => this.toFormRow(item));
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Oda fiyatlari kaydedildi.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Oda fiyatlari kaydedildi.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -189,7 +189,7 @@ export class OdaFiyatYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -217,7 +217,7 @@ export class OdaFiyatYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.fiyatSatirlari = [];
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -319,3 +319,4 @@ export class OdaFiyatYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

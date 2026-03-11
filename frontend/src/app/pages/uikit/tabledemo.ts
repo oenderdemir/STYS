@@ -531,24 +531,24 @@ export class TableDemo implements OnInit {
             case 'INSTOCK':
             case 'DELIVERED':
             case 'delivered':
-                return 'success';
+                return UiSeverity.Success;
 
             case 'negotiation':
             case 'lowstock':
             case 'LOWSTOCK':
             case 'PENDING':
             case 'pending':
-                return 'warn';
+                return UiSeverity.Warn;
 
             case 'unqualified':
             case 'outofstock':
             case 'OUTOFSTOCK':
             case 'CANCELLED':
             case 'cancelled':
-                return 'danger';
+                return UiSeverity.Danger;
 
             default:
-                return 'info';
+                return UiSeverity.Info;
         }
     }
 
@@ -566,3 +566,4 @@ export class TableDemo implements OnInit {
         return total;
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

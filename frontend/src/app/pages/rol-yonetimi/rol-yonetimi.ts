@@ -89,7 +89,7 @@ export class RolYonetimi implements OnInit {
         const name = this.selectedRole.name.trim();
         if (!domain || !name) {
             this.messageService.add({
-                severity: 'warn',
+                severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Domain ve Ad alanlari zorunludur.'
             });
@@ -112,7 +112,7 @@ export class RolYonetimi implements OnInit {
                     this.dialogVisible = false;
                     this.loadRoles();
                     this.messageService.add({
-                        severity: 'success',
+                        severity: UiSeverity.Success,
                         summary: 'Basarili',
                         detail: this.isEditMode ? 'Rol guncellendi.' : 'Rol eklendi.'
                     });
@@ -120,7 +120,7 @@ export class RolYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -151,7 +151,7 @@ export class RolYonetimi implements OnInit {
                     next: () => {
                         this.loadRoles();
                         this.messageService.add({
-                            severity: 'success',
+                            severity: UiSeverity.Success,
                             summary: 'Basarili',
                             detail: 'Rol silindi.'
                         });
@@ -159,7 +159,7 @@ export class RolYonetimi implements OnInit {
                     },
                     error: (error: unknown) => {
                         this.messageService.add({
-                            severity: 'error',
+                            severity: UiSeverity.Error,
                             summary: 'Hata',
                             detail: this.resolveErrorMessage(error)
                         });
@@ -187,7 +187,7 @@ export class RolYonetimi implements OnInit {
                 },
                 error: (error: unknown) => {
                     this.messageService.add({
-                        severity: 'error',
+                        severity: UiSeverity.Error,
                         summary: 'Hata',
                         detail: this.resolveErrorMessage(error)
                     });
@@ -218,3 +218,4 @@ export class RolYonetimi implements OnInit {
         };
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

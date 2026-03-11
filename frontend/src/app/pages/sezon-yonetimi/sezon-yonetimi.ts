@@ -161,11 +161,11 @@ export class SezonYonetimi implements OnInit, OnDestroy {
                 next: () => {
                     this.dialogVisible = false;
                     this.loadPaged();
-                    this.messageService.add({ severity: 'success', summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Sezon kurali guncellendi.' : 'Sezon kurali olusturuldu.' });
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Sezon kurali guncellendi.' : 'Sezon kurali olusturuldu.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -188,11 +188,11 @@ export class SezonYonetimi implements OnInit, OnDestroy {
                 this.service.delete(item.id!).subscribe({
                     next: () => {
                         this.loadPaged();
-                        this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Sezon kurali silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Sezon kurali silindi.' });
                         this.cdr.detectChanges();
                     },
                     error: (error: unknown) => {
-                        this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                         this.cdr.detectChanges();
                     }
                 });
@@ -223,7 +223,7 @@ export class SezonYonetimi implements OnInit, OnDestroy {
                     this.loadPaged();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -254,7 +254,7 @@ export class SezonYonetimi implements OnInit, OnDestroy {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
             });
@@ -288,3 +288,4 @@ export class SezonYonetimi implements OnInit, OnDestroy {
         };
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

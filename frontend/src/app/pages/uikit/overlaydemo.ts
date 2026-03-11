@@ -180,7 +180,7 @@ export class OverlayDemo implements OnInit {
             icon: 'pi pi-exclamation-triangle',
             rejectButtonProps: {
                 label: 'Cancel',
-                severity: 'secondary',
+                severity: UiSeverity.Secondary,
                 outlined: true
             },
             acceptButtonProps: {
@@ -188,14 +188,14 @@ export class OverlayDemo implements OnInit {
             },
             accept: () => {
                 this.messageService.add({
-                    severity: 'info',
+                    severity: UiSeverity.Info,
                     summary: 'Confirmed',
                     detail: 'You have accepted'
                 });
             },
             reject: () => {
                 this.messageService.add({
-                    severity: 'error',
+                    severity: UiSeverity.Error,
                     summary: 'Rejected',
                     detail: 'You have rejected'
                 });
@@ -218,7 +218,7 @@ export class OverlayDemo implements OnInit {
     onProductSelect(op: Popover, event: any) {
         op.hide();
         this.messageService.add({
-            severity: 'info',
+            severity: UiSeverity.Info,
             summary: 'Product Selected',
             detail: event?.data.name,
             life: 3000
@@ -233,3 +233,4 @@ export class OverlayDemo implements OnInit {
         this.displayConfirmation = false;
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

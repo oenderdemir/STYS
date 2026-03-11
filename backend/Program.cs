@@ -4,6 +4,8 @@ using Microsoft.OpenApi;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using STYS.AccessScope;
+using STYS.Bildirimler.Hubs;
+using STYS.Bildirimler.Services;
 using STYS.Countries.Mapping;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kullanicilar.Services;
@@ -58,6 +60,8 @@ builder.Services.AddScoped<IYoneticiAdayService, YoneticiAdayService>();
 builder.Services.AddScoped<IOdaTemizlikService, OdaTemizlikService>();
 builder.Services.AddScoped<IRezervasyonRepository, RezervasyonRepository>();
 builder.Services.AddScoped<IRezervasyonService, RezervasyonService>();
+builder.Services.AddScoped<IBildirimService, BildirimService>();
+builder.Services.AddSignalR();
 
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddTodPlatformAuthorization();
@@ -123,6 +127,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapTodPlatformHealthChecks();
 app.MapControllers();
+app.MapHub<BildirimHub>(BildirimHub.HubRoute)
+    .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
 
 
 

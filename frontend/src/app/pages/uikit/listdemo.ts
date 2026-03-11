@@ -202,16 +202,17 @@ export class ListDemo {
     getSeverity(product: Product) {
         switch (product.inventoryStatus) {
             case 'INSTOCK':
-                return 'success';
+                return UiSeverity.Success;
 
             case 'LOWSTOCK':
-                return 'warn';
+                return UiSeverity.Warn;
 
             case 'OUTOFSTOCK':
-                return 'danger';
+                return UiSeverity.Danger;
 
             default:
-                return 'info';
+                return UiSeverity.Info;
         }
     }
 }
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

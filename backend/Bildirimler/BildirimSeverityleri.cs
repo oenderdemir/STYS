@@ -8,6 +8,8 @@ public static class BildirimSeverityleri
     public const string Error = "error";
     public const string Danger = "danger";
 
+    public static readonly IReadOnlyList<string> TumDegerler = [Info, Success, Warn, Error, Danger];
+
     public static string Normalize(string? severity)
     {
         if (string.IsNullOrWhiteSpace(severity))
@@ -27,5 +29,22 @@ public static class BildirimSeverityleri
             _ => Info
         };
     }
-}
 
+    public static bool IsAtLeast(string incomingSeverity, string minimumSeverity)
+    {
+        return Rank(Normalize(incomingSeverity)) >= Rank(Normalize(minimumSeverity));
+    }
+
+    private static int Rank(string severity)
+    {
+        return severity switch
+        {
+            Info => 0,
+            Success => 1,
+            Warn => 2,
+            Error => 3,
+            Danger => 4,
+            _ => 0
+        };
+    }
+}

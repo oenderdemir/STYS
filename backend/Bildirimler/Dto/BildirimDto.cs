@@ -9,6 +9,7 @@ public class BildirimDto
     public string Baslik { get; set; } = string.Empty;
     public string Mesaj { get; set; } = string.Empty;
     public string? Link { get; set; }
+    public string? KaynakUserAdi { get; set; }
     public string Severity { get; set; } = BildirimSeverityleri.Info;
     public bool IsRead { get; set; }
     public DateTime CreatedAt { get; set; }

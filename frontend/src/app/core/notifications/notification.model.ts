@@ -14,6 +14,7 @@ export interface NotificationDto {
     baslik: string;
     mesaj: string;
     link?: string | null;
+    kaynakUserAdi?: string | null;
     severity: NotificationSeverity | string;
     isRead: boolean;
     createdAt: string;
@@ -25,6 +26,7 @@ export interface NotificationViewModel {
     baslik: string;
     mesaj: string;
     link?: string | null;
+    kaynakUserAdi?: string | null;
     severity: NotificationSeverity | string;
     isRead: boolean;
     createdAt: Date;

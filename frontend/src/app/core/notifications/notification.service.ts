@@ -6,6 +6,7 @@ import { getApiBaseUrl } from '../config';
 import { ApiResponse, tryReadApiMessage } from '../api';
 import { AuthService } from '../../pages/auth';
 import { NotificationDto, NotificationViewModel } from './notification.model';
+import { NotificationPreferenceDto, UpdateNotificationPreferenceRequestDto } from './notification-preference.model';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
@@ -93,6 +94,30 @@ export class NotificationService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tum bildirimler okundu olarak isaretlenemedi.');
+            })
+        );
+    }
+
+    getPreferences() {
+        return this.http.get<ApiResponse<NotificationPreferenceDto>>(`${this.apiBaseUrl}/ui/bildirim/tercih`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bildirim tercihleri alinamadi.');
+            })
+        );
+    }
+
+    updatePreferences(request: UpdateNotificationPreferenceRequestDto) {
+        return this.http.put<ApiResponse<NotificationPreferenceDto>>(`${this.apiBaseUrl}/ui/bildirim/tercih`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bildirim tercihleri guncellenemedi.');
             })
         );
     }
@@ -214,6 +239,7 @@ export class NotificationService {
             baslik: dto.baslik,
             mesaj: dto.mesaj,
             link: dto.link,
+            kaynakUserAdi: dto.kaynakUserAdi,
             severity: dto.severity,
             isRead: dto.isRead,
             createdAt: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate

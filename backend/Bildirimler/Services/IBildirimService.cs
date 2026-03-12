@@ -6,6 +6,8 @@ public interface IBildirimService
 {
     Task<List<BildirimDto>> GetCurrentUserBildirimlerAsync(int take = 20, CancellationToken cancellationToken = default);
     Task<int> GetCurrentUserUnreadCountAsync(CancellationToken cancellationToken = default);
+    Task<BildirimTercihDto> GetCurrentUserTercihAsync(CancellationToken cancellationToken = default);
+    Task<BildirimTercihDto> UpdateCurrentUserTercihAsync(BildirimTercihGuncelleRequestDto request, CancellationToken cancellationToken = default);
     Task MarkAsReadAsync(int bildirimId, CancellationToken cancellationToken = default);
     Task MarkAllAsReadAsync(CancellationToken cancellationToken = default);
     Task PublishToTesisUsersAsync(int tesisId, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default);

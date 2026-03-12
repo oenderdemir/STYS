@@ -65,6 +65,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
+    public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
     public override int SaveChanges()
     {
@@ -615,10 +616,22 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Baslik).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Mesaj).HasMaxLength(1024).IsRequired();
             entity.Property(x => x.Link).HasMaxLength(256);
+            entity.Property(x => x.KaynakUserAdi).HasMaxLength(128);
             entity.Property(x => x.Severity).HasMaxLength(16).IsRequired();
             entity.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAt })
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.UserId, x.CreatedAt })
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<BildirimTercih>(entity =>
+        {
+            entity.ToTable("BildirimTercihleri", "dbo");
+            entity.Property(x => x.MinimumSeverity).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.IzinliTiplerJson).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.IzinliKaynaklarJson).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => x.UserId)
+                .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
         });
 

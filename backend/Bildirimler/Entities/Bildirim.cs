@@ -6,6 +6,7 @@ namespace STYS.Bildirimler.Entities;
 public class Bildirim : BaseEntity<int>
 {
     public Guid UserId { get; set; }
+    public Guid? KaynakUserId { get; set; }
 
     [Required]
     [MaxLength(64)]
@@ -21,6 +22,9 @@ public class Bildirim : BaseEntity<int>
 
     [MaxLength(256)]
     public string? Link { get; set; }
+
+    [MaxLength(128)]
+    public string? KaynakUserAdi { get; set; }
 
     [Required]
     [MaxLength(16)]

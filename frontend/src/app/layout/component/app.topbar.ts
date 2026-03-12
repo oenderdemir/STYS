@@ -3,11 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
 import { Menu, MenuModule } from 'primeng/menu';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { Popover, PopoverModule } from 'primeng/popover';
 import { PasswordModule } from 'primeng/password';
 import { Router, RouterModule } from '@angular/router';
+import { SelectModule } from 'primeng/select';
 import { CommonModule } from '@angular/common';
 import { StyleClassModule } from 'primeng/styleclass';
 import { ToastModule } from 'primeng/toast';
@@ -18,11 +21,13 @@ import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
 import { NotificationService } from '../../core/notifications/notification.service';
 import { NotificationSeverityValues, NotificationViewModel } from '../../core/notifications/notification.model';
+import { NotificationPreferenceDto } from '../../core/notifications/notification-preference.model';
+import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 
 @Component({
     selector: 'app-topbar',
     standalone: true,
-    imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, PopoverModule, DialogModule, PasswordModule, ButtonModule, ToastModule],
+    imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, PopoverModule, DialogModule, PasswordModule, ButtonModule, ToastModule, CheckboxModule, MultiSelectModule, SelectModule],
     providers: [MessageService],
     styles: [
         `
@@ -223,6 +228,11 @@ import { NotificationSeverityValues, NotificationViewModel } from '../../core/no
                                         <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.84rem; line-height: 1.25;">
                                             {{ item.mesaj }}
                                         </div>
+                                        @if (item.kaynakUserAdi) {
+                                            <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.76rem;">
+                                                Kaynak: {{ item.kaynakUserAdi }}
+                                            </div>
+                                        }
                                         <div style="margin-top: 0.45rem; color: var(--text-color-secondary); font-size: 0.76rem;">
                                             {{ formatNotificationDate(item.createdAt) }}
                                         </div>
@@ -241,9 +251,84 @@ import { NotificationSeverityValues, NotificationViewModel } from '../../core/no
         </div>
     </div>
 
-	    <p-dialog
-        [header]="isForceChangePasswordMode ? 'Zorunlu Sifre Degistirme' : 'Sifre Degistir'"
-        [(visible)]="changePasswordDialogVisible"
+        <p-dialog
+            header="Bildirim Tercihleri"
+            [(visible)]="notificationPreferenceDialogVisible"
+            [modal]="true"
+            [style]="{ width: '36rem', 'max-width': '96vw' }"
+            [breakpoints]="{ '960px': '96vw' }"
+        >
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center gap-2">
+                    <p-checkbox
+                        inputId="notificationActive"
+                        [binary]="true"
+                        [(ngModel)]="notificationPreferences.bildirimlerAktifMi"
+                        [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences"
+                    />
+                    <label for="notificationActive" class="font-medium">Bildirimleri Aktif Tut</label>
+                </div>
+
+                <div>
+                    <label class="block font-medium mb-2">Minimum Severity</label>
+                    <p-select
+                        [options]="notificationSeverityOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="notificationPreferences.minimumSeverity"
+                        [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences || !notificationPreferences.bildirimlerAktifMi"
+                        appendTo="body"
+                        class="w-full"
+                    />
+                </div>
+
+                <div>
+                    <label class="block font-medium mb-2">Bildirim Tipleri (bos ise tumu)</label>
+                    <p-multiselect
+                        [options]="notificationPreferences.mevcutTipler"
+                        [(ngModel)]="notificationPreferences.izinliTipler"
+                        [filter]="true"
+                        [showClear]="true"
+                        [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences || !notificationPreferences.bildirimlerAktifMi"
+                        appendTo="body"
+                        styleClass="w-full"
+                        placeholder="Tum tipler"
+                    />
+                </div>
+
+                <div>
+                    <label class="block font-medium mb-2">Kaynak Kullanici (bos ise tumu)</label>
+                    <p-multiselect
+                        [options]="notificationPreferences.mevcutKaynaklar"
+                        [(ngModel)]="notificationPreferences.izinliKaynaklar"
+                        [filter]="true"
+                        [showClear]="true"
+                        [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences || !notificationPreferences.bildirimlerAktifMi"
+                        appendTo="body"
+                        styleClass="w-full"
+                        placeholder="Tum kaynaklar"
+                    />
+                </div>
+
+                @if (notificationPreferencesError) {
+                    <small class="text-red-500">{{ notificationPreferencesError }}</small>
+                }
+            </div>
+
+            <ng-template #footer>
+                <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="isSavingNotificationPreferences" (onClick)="notificationPreferenceDialogVisible = false" />
+                <p-button
+                    [label]="isSavingNotificationPreferences ? 'Kaydediliyor...' : 'Kaydet'"
+                    icon="pi pi-check"
+                    [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences"
+                    (onClick)="saveNotificationPreferences()"
+                />
+            </ng-template>
+        </p-dialog>
+
+		    <p-dialog
+	        [header]="isForceChangePasswordMode ? 'Zorunlu Sifre Degistirme' : 'Sifre Degistir'"
+	        [(visible)]="changePasswordDialogVisible"
         [modal]="true"
         [closable]="!isForceChangePasswordMode"
         [closeOnEscape]="!isForceChangePasswordMode"
@@ -326,6 +411,25 @@ export class AppTopbar {
     changePasswordError: string | null = null;
     changePasswordErrorDetails: string[] = [];
     currentUserName: string | null = null;
+    notificationPreferenceDialogVisible = false;
+    isLoadingNotificationPreferences = false;
+    isSavingNotificationPreferences = false;
+    notificationPreferencesError: string | null = null;
+    notificationPreferences: NotificationPreferenceDto = {
+        bildirimlerAktifMi: true,
+        minimumSeverity: NotificationSeverityValues.Info,
+        izinliTipler: [],
+        izinliKaynaklar: [],
+        mevcutTipler: [],
+        mevcutKaynaklar: []
+    };
+    readonly notificationSeverityOptions = [
+        { label: 'Bilgi', value: NotificationSeverityValues.Info },
+        { label: 'Basarili', value: NotificationSeverityValues.Success },
+        { label: 'Uyari', value: NotificationSeverityValues.Warn },
+        { label: 'Hata', value: NotificationSeverityValues.Error },
+        { label: 'Kritik', value: NotificationSeverityValues.Danger }
+    ];
     readonly notifications = this.notificationService.notifications;
     readonly unreadCount = this.notificationService.unreadCount;
     readonly lastRealtimeNotification = this.notificationService.lastRealtimeNotification;
@@ -333,6 +437,11 @@ export class AppTopbar {
     private lastRealtimeNotificationId: number | null = null;
 
     readonly profileMenuItems: MenuItem[] = [
+        {
+            label: 'Bildirim Tercihleri',
+            icon: 'pi pi-sliders-h',
+            command: () => this.openNotificationPreferencesDialog()
+        },
         {
             label: 'Sifre Degistir',
             icon: 'pi pi-key',
@@ -432,6 +541,49 @@ export class AppTopbar {
         });
     }
 
+    openNotificationPreferencesDialog(): void {
+        this.profileMenu?.hide();
+        this.notificationPreferencesError = null;
+        this.notificationPreferenceDialogVisible = true;
+        this.loadNotificationPreferences();
+    }
+
+    saveNotificationPreferences(): void {
+        if (this.isSavingNotificationPreferences) {
+            return;
+        }
+
+        this.notificationPreferencesError = null;
+        this.isSavingNotificationPreferences = true;
+
+        this.notificationService
+            .updatePreferences({
+                bildirimlerAktifMi: this.notificationPreferences.bildirimlerAktifMi,
+                minimumSeverity: this.notificationPreferences.minimumSeverity,
+                izinliTipler: [...(this.notificationPreferences.izinliTipler ?? [])],
+                izinliKaynaklar: [...(this.notificationPreferences.izinliKaynaklar ?? [])]
+            })
+            .pipe(
+                finalize(() => {
+                    this.isSavingNotificationPreferences = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.notificationPreferences = this.normalizeNotificationPreferences(result);
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Basarili',
+                        detail: 'Bildirim tercihleri guncellendi.'
+                    });
+                },
+                error: (error: unknown) => {
+                    this.notificationPreferencesError = this.resolveErrorMessage(error);
+                }
+            });
+    }
+
     notificationBorderColor(severity: string): string {
         const normalized = (severity ?? '').trim().toLowerCase();
         switch (normalized) {
@@ -461,6 +613,42 @@ export class AppTopbar {
             default:
                 return NotificationSeverityValues.Info;
         }
+    }
+
+    private loadNotificationPreferences(): void {
+        this.isLoadingNotificationPreferences = true;
+        this.notificationService
+            .getPreferences()
+            .pipe(
+                finalize(() => {
+                    this.isLoadingNotificationPreferences = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.notificationPreferences = this.normalizeNotificationPreferences(result);
+                },
+                error: (error: unknown) => {
+                    this.notificationPreferencesError = this.resolveErrorMessage(error);
+                }
+            });
+    }
+
+    private normalizeNotificationPreferences(value: NotificationPreferenceDto): NotificationPreferenceDto {
+        const mevcutTipler = [...new Set((value.mevcutTipler ?? []).map((x) => x?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'tr'));
+        const mevcutKaynaklar = [...new Set((value.mevcutKaynaklar ?? []).map((x) => x?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'tr'));
+        const izinliTipler = [...new Set((value.izinliTipler ?? []).map((x) => x?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'tr'));
+        const izinliKaynaklar = [...new Set((value.izinliKaynaklar ?? []).map((x) => x?.trim()).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, 'tr'));
+
+        return {
+            bildirimlerAktifMi: value.bildirimlerAktifMi ?? true,
+            minimumSeverity: value.minimumSeverity ?? NotificationSeverityValues.Info,
+            mevcutTipler,
+            mevcutKaynaklar,
+            izinliTipler,
+            izinliKaynaklar
+        };
     }
 
     notificationCardStyle(item: NotificationViewModel): Record<string, string> {
@@ -663,4 +851,3 @@ export class AppTopbar {
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

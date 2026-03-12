@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using STYS.Bildirimler.Dto;
@@ -43,6 +44,7 @@ public class BildirimService : IBildirimService
                 Baslik = x.Baslik,
                 Mesaj = x.Mesaj,
                 Link = x.Link,
+                KaynakUserAdi = x.KaynakUserAdi,
                 Severity = x.Severity,
                 IsRead = x.IsRead,
                 CreatedAt = x.CreatedAt ?? DateTime.UtcNow
@@ -55,6 +57,62 @@ public class BildirimService : IBildirimService
         var currentUserId = GetCurrentUserIdOrThrow();
         return await _stysDbContext.Bildirimler
             .CountAsync(x => x.UserId == currentUserId && !x.IsRead, cancellationToken);
+    }
+
+    public async Task<BildirimTercihDto> GetCurrentUserTercihAsync(CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserIdOrThrow();
+        var tercih = await _stysDbContext.BildirimTercihleri
+            .FirstOrDefaultAsync(x => x.UserId == currentUserId, cancellationToken);
+
+        var mevcutTipler = await _stysDbContext.Bildirimler
+            .Where(x => x.UserId == currentUserId)
+            .Select(x => x.Tip)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+
+        var mevcutKaynaklar = await _stysDbContext.Bildirimler
+            .Where(x => x.UserId == currentUserId && x.KaynakUserAdi != null && x.KaynakUserAdi != string.Empty)
+            .Select(x => x.KaynakUserAdi!)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+
+        return new BildirimTercihDto
+        {
+            BildirimlerAktifMi = tercih?.BildirimlerAktifMi ?? true,
+            MinimumSeverity = tercih?.MinimumSeverity ?? BildirimSeverityleri.Info,
+            IzinliTipler = DeserializeStringList(tercih?.IzinliTiplerJson),
+            IzinliKaynaklar = DeserializeStringList(tercih?.IzinliKaynaklarJson),
+            MevcutTipler = mevcutTipler,
+            MevcutKaynaklar = mevcutKaynaklar
+        };
+    }
+
+    public async Task<BildirimTercihDto> UpdateCurrentUserTercihAsync(BildirimTercihGuncelleRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserIdOrThrow();
+        var tercih = await _stysDbContext.BildirimTercihleri
+            .FirstOrDefaultAsync(x => x.UserId == currentUserId, cancellationToken);
+
+        tercih ??= new BildirimTercih
+        {
+            UserId = currentUserId
+        };
+
+        tercih.BildirimlerAktifMi = request.BildirimlerAktifMi;
+        tercih.MinimumSeverity = BildirimSeverityleri.Normalize(request.MinimumSeverity);
+        tercih.IzinliTiplerJson = SerializeStringListOrNull(request.IzinliTipler);
+        tercih.IzinliKaynaklarJson = SerializeStringListOrNull(request.IzinliKaynaklar);
+
+        if (tercih.Id <= 0)
+        {
+            await _stysDbContext.BildirimTercihleri.AddAsync(tercih, cancellationToken);
+        }
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return await GetCurrentUserTercihAsync(cancellationToken);
     }
 
     public async Task MarkAsReadAsync(int bildirimId, CancellationToken cancellationToken = default)
@@ -165,8 +223,30 @@ public class BildirimService : IBildirimService
         var normalizedLink = string.IsNullOrWhiteSpace(request.Link)
             ? null
             : request.Link.Trim();
+        var normalizedSourceName = NormalizeOrFallback(
+            request.KaynakUserAdi,
+            _currentUserAccessor.GetCurrentUserName() ?? "System");
+        var sourceUserId = request.KaynakUserId ?? _currentUserAccessor.GetCurrentUserId();
 
-        var entities = normalizedUserIds
+        var tercihler = await _stysDbContext.BildirimTercihleri
+            .Where(x => normalizedUserIds.Contains(x.UserId))
+            .ToDictionaryAsync(x => x.UserId, cancellationToken);
+
+        var hedefUserIds = normalizedUserIds
+            .Where(userId => CanReceiveByPreference(
+                userId,
+                normalizedType,
+                normalizedSeverity,
+                normalizedSourceName,
+                tercihler))
+            .ToList();
+
+        if (hedefUserIds.Count == 0)
+        {
+            return;
+        }
+
+        var entities = hedefUserIds
             .Select(userId => new Bildirim
             {
                 UserId = userId,
@@ -174,6 +254,8 @@ public class BildirimService : IBildirimService
                 Baslik = normalizedTitle,
                 Mesaj = normalizedMessage,
                 Link = normalizedLink,
+                KaynakUserId = sourceUserId,
+                KaynakUserAdi = normalizedSourceName,
                 Severity = normalizedSeverity,
                 IsRead = false
             })
@@ -191,6 +273,7 @@ public class BildirimService : IBildirimService
                 Baslik = entity.Baslik,
                 Mesaj = entity.Mesaj,
                 Link = entity.Link,
+                KaynakUserAdi = entity.KaynakUserAdi,
                 Severity = entity.Severity,
                 IsRead = entity.IsRead,
                 CreatedAt = entity.CreatedAt ?? DateTime.UtcNow
@@ -213,6 +296,87 @@ public class BildirimService : IBildirimService
         return currentUserId.Value;
     }
 
+    private static bool CanReceiveByPreference(
+        Guid userId,
+        string notificationType,
+        string notificationSeverity,
+        string notificationSource,
+        IReadOnlyDictionary<Guid, BildirimTercih> tercihler)
+    {
+        if (!tercihler.TryGetValue(userId, out var tercih))
+        {
+            return true;
+        }
+
+        if (!tercih.BildirimlerAktifMi)
+        {
+            return false;
+        }
+
+        if (!BildirimSeverityleri.IsAtLeast(notificationSeverity, tercih.MinimumSeverity))
+        {
+            return false;
+        }
+
+        var izinliTipler = DeserializeStringList(tercih.IzinliTiplerJson);
+        if (izinliTipler.Count > 0 && !izinliTipler.Contains(notificationType, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var izinliKaynaklar = DeserializeStringList(tercih.IzinliKaynaklarJson);
+        if (izinliKaynaklar.Count > 0 && !izinliKaynaklar.Contains(notificationSource, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static List<string> DeserializeStringList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            return NormalizeStringList(values);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static string? SerializeStringListOrNull(IEnumerable<string>? items)
+    {
+        var normalized = NormalizeStringList(items);
+        if (normalized.Count == 0)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(normalized);
+    }
+
+    private static List<string> NormalizeStringList(IEnumerable<string>? items)
+    {
+        if (items is null)
+        {
+            return [];
+        }
+
+        return items
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+    }
+
     private static string NormalizeOrFallback(string? value, string fallback)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -222,5 +386,4 @@ public class BildirimService : IBildirimService
 
         return value.Trim();
     }
-
 }

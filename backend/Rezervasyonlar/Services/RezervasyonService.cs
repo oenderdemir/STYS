@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using System.Data;
 using System.Text.Json;
 using STYS.AccessScope;
 using STYS.Bildirimler;
@@ -1516,6 +1517,12 @@ public class RezervasyonService : IRezervasyonService
             .Distinct()
             .ToList();
 
+        // Ayni odalara eszamanli rezervasyon yazimlarinda race condition olmamasi icin
+        // DB transaction + applock ile kritik bolgeyi serialize ediyoruz.
+        await using var transaction = await _stysDbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        await AcquireRoomApplicationLocksAsync(distinctRoomIds, cancellationToken);
+
         var rooms = await (
             from oda in _stysDbContext.Odalar
             join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
@@ -1668,13 +1675,9 @@ public class RezervasyonService : IRezervasyonService
 
         await _stysDbContext.Rezervasyonlar.AddAsync(reservation, cancellationToken);
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
-        return new RezervasyonKayitSonucDto
-        {
-            Id = reservation.Id,
-            ReferansNo = reservation.ReferansNo,
-            RezervasyonDurumu = reservation.RezervasyonDurumu
-        };
+        return ToSaveResult(reservation);
     }
 
     public async Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default)
@@ -1940,6 +1943,16 @@ public class RezervasyonService : IRezervasyonService
 
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
         {
+            var ownRoomIds = await _stysDbContext.RezervasyonSegmentOdaAtamalari
+                .Where(x => x.RezervasyonSegment != null && x.RezervasyonSegment.RezervasyonId == reservation.Id)
+                .Select(x => x.OdaId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            // Iptal geri alma sirasinda da ayni odalara paralel rezervasyon yazimlarini serialize et.
+            await using var transaction = await _stysDbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            await AcquireRoomApplicationLocksAsync(ownRoomIds, cancellationToken);
+
             await EnsureCanRevertCancellationAsync(reservation.Id, cancellationToken);
             var previousStatus = reservation.RezervasyonDurumu;
             reservation.RezervasyonDurumu = RezervasyonDurumlari.Taslak;
@@ -1950,6 +1963,7 @@ public class RezervasyonService : IRezervasyonService
                 new { RezervasyonDurumu = previousStatus },
                 new { RezervasyonDurumu = reservation.RezervasyonDurumu });
             await _stysDbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return ToSaveResult(reservation);
         }
 
@@ -2964,6 +2978,32 @@ public class RezervasyonService : IRezervasyonService
         }
 
         throw new BaseException("Gecersiz odeme tipi.", 400);
+    }
+
+    private async Task AcquireRoomApplicationLocksAsync(
+        IReadOnlyCollection<int> roomIds,
+        CancellationToken cancellationToken)
+    {
+        if (roomIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var roomId in roomIds.Where(x => x > 0).Distinct().OrderBy(x => x))
+        {
+            var resource = $"stys:rezervasyon:oda:{roomId}";
+            var lockResult = await _stysDbContext.Database
+                .SqlQueryRaw<int>(
+                    "DECLARE @result int; EXEC @result = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = {1}; SELECT @result;",
+                    resource,
+                    15000)
+                .SingleAsync(cancellationToken);
+
+            if (lockResult < 0)
+            {
+                throw new BaseException($"'{roomId}' numarali oda icin kilit alinamadi. Lutfen islemi tekrar deneyin.", 409);
+            }
+        }
     }
 
     private static void EnsureCanChangeRoomForReservationStatus(string rezervasyonDurumu)

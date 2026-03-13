@@ -27,6 +27,7 @@ import {
     RezervasyonKayitSonucDto,
     RezervasyonKonaklamaTipiDto,
     RezervasyonKonaklayanKisiDto,
+    RezervasyonKonaklayanOdaSecenekDto,
     RezervasyonKonaklayanPlanDto,
     RezervasyonKonaklayanSegmentDto,
     RezervasyonListeDto,
@@ -645,7 +646,11 @@ export class RezervasyonYonetimi implements OnInit {
                 .map((atama) => {
                     const segmentId = this.readUnknown(atama, ['RezervasyonSegmentId', 'rezervasyonSegmentId', 'SegmentId', 'segmentId']);
                     const odaId = this.readUnknown(atama, ['OdaId', 'odaId']);
-                    return `Segment ${this.toDisplayString(segmentId)} -> Oda ${this.toDisplayString(odaId)}`;
+                    const yatakNo = this.readUnknown(atama, ['YatakNo', 'yatakNo']);
+                    const yatakText = typeof yatakNo === 'undefined' || yatakNo === null
+                        ? ''
+                        : ` (Yatak ${this.toDisplayString(yatakNo)})`;
+                    return `Segment ${this.toDisplayString(segmentId)} -> Oda ${this.toDisplayString(odaId)}${yatakText}`;
                 });
 
             rows.push({
@@ -814,7 +819,8 @@ export class RezervasyonYonetimi implements OnInit {
                     pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
                     atamalar: kisi.atamalar.map((atama) => ({
                         segmentId: atama.segmentId,
-                        odaId: atama.odaId
+                        odaId: atama.odaId,
+                        yatakNo: atama.yatakNo
                     }))
                 }))
             })
@@ -853,7 +859,23 @@ export class RezervasyonYonetimi implements OnInit {
         return plan.konaklayanlar.every((kisi) =>
             (kisi.adSoyad ?? '').trim().length > 0
             && kisi.atamalar.length === segmentIds.size
-            && kisi.atamalar.every((atama) => segmentIds.has(atama.segmentId) && (atama.odaId ?? 0) > 0));
+            && kisi.atamalar.every((atama) => {
+                if (!segmentIds.has(atama.segmentId) || (atama.odaId ?? 0) <= 0) {
+                    return false;
+                }
+
+                const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(atama.segmentId, atama.odaId);
+                if (!odaSecenegi) {
+                    return false;
+                }
+
+                if (!odaSecenegi.paylasimliMi) {
+                    return true;
+                }
+
+                const yatakNo = atama.yatakNo ?? 0;
+                return yatakNo > 0 && yatakNo <= odaSecenegi.ayrilanKisiSayisi;
+            }));
     }
 
     canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
@@ -1321,7 +1343,7 @@ export class RezervasyonYonetimi implements OnInit {
             })
             .map((oda) => ({
                 value: oda.odaId,
-                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi)`
+                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi, ${oda.paylasimliMi ? 'paylasimli' : 'paylasimsiz'})`
             }));
     }
 
@@ -1330,14 +1352,71 @@ export class RezervasyonYonetimi implements OnInit {
         return atama?.odaId ?? null;
     }
 
+    getKonaklayanAtamaYatakNo(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): number | null {
+        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
+        return atama?.yatakNo ?? null;
+    }
+
+    isKonaklayanYatakSecimiGerekli(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): boolean {
+        const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
+        if (!odaId || odaId <= 0) {
+            return false;
+        }
+
+        const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
+        return !!odaSecenegi?.paylasimliMi;
+    }
+
+    getKonaklayanYatakSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
+        const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
+        if (!odaId || odaId <= 0) {
+            return [];
+        }
+
+        const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
+        if (!odaSecenegi || !odaSecenegi.paylasimliMi || odaSecenegi.ayrilanKisiSayisi <= 0) {
+            return [];
+        }
+
+        const currentYatakNo = this.getKonaklayanAtamaYatakNo(kisi, segmentId);
+        const selectedBeds = this.getSegmentOdaSelectedBeds(segmentId, odaId);
+        const options: { label: string; value: number }[] = [];
+        for (let bedNo = 1; bedNo <= odaSecenegi.ayrilanKisiSayisi; bedNo++) {
+            if (currentYatakNo === bedNo || !selectedBeds.has(bedNo)) {
+                options.push({ label: `Yatak ${bedNo}`, value: bedNo });
+            }
+        }
+
+        return options;
+    }
+
     setKonaklayanAtamaOdaId(kisi: RezervasyonKonaklayanKisiDto, segmentId: number, odaId: number | null): void {
         const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
         if (atama) {
             atama.odaId = odaId;
+            const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
+            if (!odaSecenegi || !odaSecenegi.paylasimliMi) {
+                atama.yatakNo = null;
+                return;
+            }
+
+            if ((atama.yatakNo ?? 0) <= 0 || (atama.yatakNo ?? 0) > odaSecenegi.ayrilanKisiSayisi) {
+                atama.yatakNo = null;
+            }
             return;
         }
 
-        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId }];
+        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId, yatakNo: null }];
+    }
+
+    setKonaklayanAtamaYatakNo(kisi: RezervasyonKonaklayanKisiDto, segmentId: number, yatakNo: number | null): void {
+        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
+        if (atama) {
+            atama.yatakNo = yatakNo;
+            return;
+        }
+
+        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId: null, yatakNo }];
     }
 
     private getSegmentOdaSelectedCount(segmentId: number, odaId: number): number {
@@ -1349,6 +1428,31 @@ export class RezervasyonYonetimi implements OnInit {
             const selectedOdaId = kisi.atamalar.find((x) => x.segmentId === segmentId)?.odaId;
             return total + (selectedOdaId === odaId ? 1 : 0);
         }, 0);
+    }
+
+    private getSegmentOdaSelectedBeds(segmentId: number, odaId: number): Set<number> {
+        if (!this.konaklayanPlan) {
+            return new Set<number>();
+        }
+
+        const selected = this.konaklayanPlan.konaklayanlar
+            .map((kisi) => kisi.atamalar.find((x) => x.segmentId === segmentId))
+            .filter((atama) => atama?.odaId === odaId && (atama?.yatakNo ?? 0) > 0)
+            .map((atama) => atama!.yatakNo!) as number[];
+        return new Set(selected);
+    }
+
+    private getKonaklayanSegmentOdaSecenegi(segmentId: number, odaId: number | null | undefined): RezervasyonKonaklayanOdaSecenekDto | null {
+        if (!odaId || odaId <= 0 || !this.konaklayanPlan) {
+            return null;
+        }
+
+        const segment = this.konaklayanPlan.segmentler.find((x) => x.segmentId === segmentId);
+        if (!segment) {
+            return null;
+        }
+
+        return segment.odaSecenekleri.find((x) => x.odaId === odaId) ?? null;
     }
 
     getRezervasyonDetay(rezervasyonId: number | null | undefined): RezervasyonDetayDto | null {

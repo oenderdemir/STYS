@@ -576,6 +576,9 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.RezervasyonSegmentId, x.OdaId })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RezervasyonSegmentId, x.OdaId, x.YatakNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [YatakNo] IS NOT NULL");
 
             entity.HasOne(x => x.RezervasyonKonaklayan)
                 .WithMany(x => x.SegmentAtamalari)

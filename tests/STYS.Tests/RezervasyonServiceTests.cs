@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using STYS.Fiyatlandirma;
 using STYS.Fiyatlandirma.Dto;
 using STYS.AccessScope;
 using STYS.Binalar.Entities;
+using STYS.Bildirimler.Dto;
+using STYS.Bildirimler.Services;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri.Entities;
@@ -1033,6 +1036,77 @@ public class RezervasyonServiceTests
         Assert.Equal(400, exception.ErrorCode);
     }
 
+    // Paylasimli odada ayni yatak birden fazla kisiye atanamamali.
+    [Fact]
+    public async Task KonaklayanPlani_PaylasimliOdadaAyniYatagiBirdenFazlaKisiyeAtamayiEngeller()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 987,
+            ReferansNo = "TEST-RZV-987",
+            TesisId = 1,
+            KisiSayisi = 2,
+            GirisTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            CikisTarihi = new DateTime(2026, 3, 9, 10, 0, 0),
+            MisafirAdiSoyadi = "Test Lider",
+            MisafirTelefon = "000",
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        });
+
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment
+        {
+            Id = 988,
+            RezervasyonId = 987,
+            SegmentSirasi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 9, 10, 0, 0)
+        });
+
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = 989,
+            RezervasyonSegmentId = 988,
+            OdaId = 101,
+            AyrilanKisiSayisi = 2,
+            OdaNoSnapshot = "A-102",
+            BinaAdiSnapshot = "A Blok",
+            OdaTipiAdiSnapshot = "Paylasimli Oda",
+            PaylasimliMiSnapshot = true,
+            KapasiteSnapshot = 4
+        });
+
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetKonaklayanPlaniAsync(987, new RezervasyonKonaklayanPlanKaydetRequestDto
+        {
+            Konaklayanlar =
+            [
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 1,
+                    AdSoyad = "Ali Kaya",
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 988, OdaId = 101, YatakNo = 1 }]
+                },
+                new RezervasyonKonaklayanKisiKaydetDto
+                {
+                    SiraNo = 2,
+                    AdSoyad = "Ayse Kaya",
+                    Atamalar = [new RezervasyonKonaklayanKisiAtamaKaydetDto { SegmentId = 988, OdaId = 101, YatakNo = 1 }]
+                }
+            ]
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
     // Check-in, konaklayan plani tamamlanmadan yapilamamali.
     [Fact]
     public async Task CheckIn_KonaklayanPlaniEksikseHataVerir()
@@ -1331,6 +1405,7 @@ public class RezervasyonServiceTests
         return new RezervasyonService(
             dbContext,
             new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()),
+            new FakeBildirimService(),
             httpContextAccessor);
     }
 
@@ -1386,6 +1461,7 @@ public class RezervasyonServiceTests
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
             .UseInMemoryDatabase($"stys-tests-{Guid.NewGuid():N}")
+            .ConfigureWarnings(x => x.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new StysAppDbContext(options);
@@ -2119,5 +2195,32 @@ public class RezervasyonServiceTests
         {
             return Task.FromResult(_scope);
         }
+    }
+
+    private sealed class FakeBildirimService : IBildirimService
+    {
+        public Task<List<BildirimDto>> GetCurrentUserBildirimlerAsync(int take = 20, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<BildirimDto>());
+
+        public Task<int> GetCurrentUserUnreadCountAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+
+        public Task<BildirimTercihDto> GetCurrentUserTercihAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new BildirimTercihDto());
+
+        public Task<BildirimTercihDto> UpdateCurrentUserTercihAsync(BildirimTercihGuncelleRequestDto request, CancellationToken cancellationToken = default)
+            => Task.FromResult(new BildirimTercihDto());
+
+        public Task MarkAsReadAsync(int bildirimId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task MarkAllAsReadAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishToTesisUsersAsync(int tesisId, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PublishToUsersAsync(IEnumerable<Guid> userIds, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

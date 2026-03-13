@@ -35,6 +35,8 @@ public class RezervasyonKonaklayanOdaSecenekDto
     public string OdaTipiAdi { get; set; } = string.Empty;
 
     public int AyrilanKisiSayisi { get; set; }
+
+    public bool PaylasimliMi { get; set; }
 }
 
 public class RezervasyonKonaklayanKisiDto
@@ -55,4 +57,6 @@ public class RezervasyonKonaklayanKisiAtamaDto
     public int SegmentId { get; set; }
 
     public int? OdaId { get; set; }
+
+    public int? YatakNo { get; set; }
 }

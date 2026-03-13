@@ -11,6 +11,8 @@ public class RezervasyonKonaklayanSegmentAtama : BaseEntity<int>
 
     public int OdaId { get; set; }
 
+    public int? YatakNo { get; set; }
+
     public RezervasyonKonaklayan? RezervasyonKonaklayan { get; set; }
 
     public RezervasyonSegment? RezervasyonSegment { get; set; }

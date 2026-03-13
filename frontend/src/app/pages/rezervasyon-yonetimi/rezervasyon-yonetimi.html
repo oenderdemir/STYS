@@ -556,6 +556,20 @@
                                 [ngModel]="getKonaklayanAtamaOdaId(kisi, segment.segmentId)"
                                 (ngModelChange)="setKonaklayanAtamaOdaId(kisi, segment.segmentId, $event)"
                             />
+                            @if (isKonaklayanYatakSecimiGerekli(kisi, segment.segmentId)) {
+                                <p-select
+                                    class="w-full mt-2"
+                                    [options]="getKonaklayanYatakSecenekleri(kisi, segment.segmentId)"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    [appendTo]="'body'"
+                                    [showClear]="true"
+                                    placeholder="Yatak Seciniz"
+                                    [disabled]="konaklayanPlanSaving"
+                                    [ngModel]="getKonaklayanAtamaYatakNo(kisi, segment.segmentId)"
+                                    (ngModelChange)="setKonaklayanAtamaYatakNo(kisi, segment.segmentId, $event)"
+                                />
+                            }
                         </td>
                     }
                 </tr>

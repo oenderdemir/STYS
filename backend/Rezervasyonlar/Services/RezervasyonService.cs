@@ -623,7 +623,8 @@ public class RezervasyonService : IRezervasyonService
                                 a.OdaNoSnapshot,
                                 a.BinaAdiSnapshot,
                                 a.OdaTipiAdiSnapshot,
-                                a.AyrilanKisiSayisi
+                                a.AyrilanKisiSayisi,
+                                a.PaylasimliMiSnapshot
                             })
                             .ToList()
                     })
@@ -641,7 +642,8 @@ public class RezervasyonService : IRezervasyonService
                             .Select(a => new
                             {
                                 a.RezervasyonSegmentId,
-                                a.OdaId
+                                a.OdaId,
+                                a.YatakNo
                             })
                             .ToList()
                     })
@@ -668,7 +670,8 @@ public class RezervasyonService : IRezervasyonService
                         OdaNo = o.OdaNoSnapshot,
                         BinaAdi = o.BinaAdiSnapshot,
                         OdaTipiAdi = o.OdaTipiAdiSnapshot,
-                        AyrilanKisiSayisi = o.AyrilanKisiSayisi
+                        AyrilanKisiSayisi = o.AyrilanKisiSayisi,
+                        PaylasimliMi = o.PaylasimliMiSnapshot
                     })
                     .ToList()
             })
@@ -684,13 +687,18 @@ public class RezervasyonService : IRezervasyonService
                 var atamaBySegment = k.Atamalar
                     .Where(a => segmentIds.Contains(a.RezervasyonSegmentId))
                     .GroupBy(a => a.RezervasyonSegmentId)
-                    .ToDictionary(g => g.Key, g => (int?)g.First().OdaId);
+                    .ToDictionary(g => g.Key, g =>
+                    {
+                        var first = g.First();
+                        return (OdaId: (int?)first.OdaId, first.YatakNo);
+                    });
 
                 var normalizedAtamalar = segments
                     .Select(s => new RezervasyonKonaklayanKisiAtamaDto
                     {
                         SegmentId = s.SegmentId,
-                        OdaId = atamaBySegment.TryGetValue(s.SegmentId, out var odaId) ? odaId : null
+                        OdaId = atamaBySegment.TryGetValue(s.SegmentId, out var atama) ? atama.OdaId : null,
+                        YatakNo = atamaBySegment.TryGetValue(s.SegmentId, out var yatakAtama) ? yatakAtama.YatakNo : null
                     })
                     .ToList();
 
@@ -719,7 +727,8 @@ public class RezervasyonService : IRezervasyonService
                         .Select(s => new RezervasyonKonaklayanKisiAtamaDto
                         {
                             SegmentId = s.SegmentId,
-                            OdaId = null
+                            OdaId = null,
+                            YatakNo = null
                         })
                         .ToList()
                 });
@@ -742,7 +751,8 @@ public class RezervasyonService : IRezervasyonService
                         .Select(s => new RezervasyonKonaklayanKisiAtamaDto
                         {
                             SegmentId = s.SegmentId,
-                            OdaId = null
+                            OdaId = null,
+                            YatakNo = null
                         })
                         .ToList()
                 });
@@ -794,7 +804,7 @@ public class RezervasyonService : IRezervasyonService
                     {
                         SegmentId = s.Id,
                         OdaKapasiteleri = s.OdaAtamalari
-                            .Select(a => new { a.OdaId, a.AyrilanKisiSayisi })
+                            .Select(a => new { a.OdaId, a.AyrilanKisiSayisi, a.PaylasimliMiSnapshot })
                             .ToList()
                     })
                     .ToList()
@@ -844,14 +854,19 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Tum konaklayanlar icin ad soyad bilgisi zorunludur.", 400);
         }
 
-        var odaKapasiteBySegment = reservationRaw.Segmentler
+        var odaBilgiBySegment = reservationRaw.Segmentler
             .ToDictionary(
                 x => x.SegmentId,
                 x => x.OdaKapasiteleri
                     .GroupBy(y => y.OdaId)
-                    .ToDictionary(g => g.Key, g => g.Sum(z => z.AyrilanKisiSayisi)));
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (
+                            AssignedCapacity: g.Sum(z => z.AyrilanKisiSayisi),
+                            PaylasimliMi: g.Any(z => z.PaylasimliMiSnapshot))));
 
         var occupancyCounter = new Dictionary<(int SegmentId, int OdaId), int>();
+        var bedOccupancyCounter = new HashSet<(int SegmentId, int OdaId, int YatakNo)>();
 
         foreach (var guest in sortedGuests)
         {
@@ -876,8 +891,8 @@ public class RezervasyonService : IRezervasyonService
                     throw new BaseException("Her segment icin oda secimi zorunludur.", 400);
                 }
 
-                var segmentOdaKapasitesi = odaKapasiteBySegment[atama.SegmentId];
-                if (!segmentOdaKapasitesi.TryGetValue(atama.OdaId.Value, out var assignedCapacity))
+                var segmentOdaBilgisi = odaBilgiBySegment[atama.SegmentId];
+                if (!segmentOdaBilgisi.TryGetValue(atama.OdaId.Value, out var odaBilgisi))
                 {
                     throw new BaseException("Secilen oda ilgili segmentte mevcut degil.", 400);
                 }
@@ -886,9 +901,28 @@ public class RezervasyonService : IRezervasyonService
                 var current = occupancyCounter.TryGetValue(key, out var count) ? count : 0;
                 occupancyCounter[key] = current + 1;
 
-                if (occupancyCounter[key] > assignedCapacity)
+                if (occupancyCounter[key] > odaBilgisi.AssignedCapacity)
                 {
                     throw new BaseException("Secilen oda icin kisi kapasitesi asildi.", 400);
+                }
+
+                if (odaBilgisi.PaylasimliMi)
+                {
+                    if (!atama.YatakNo.HasValue || atama.YatakNo.Value <= 0)
+                    {
+                        throw new BaseException("Paylasimli oda icin yatak secimi zorunludur.", 400);
+                    }
+
+                    if (atama.YatakNo.Value > odaBilgisi.AssignedCapacity)
+                    {
+                        throw new BaseException("Secilen yatak numarasi gecersiz.", 400);
+                    }
+
+                    var bedKey = (atama.SegmentId, atama.OdaId.Value, atama.YatakNo.Value);
+                    if (!bedOccupancyCounter.Add(bedKey))
+                    {
+                        throw new BaseException("Ayni segmentte ayni yatak birden fazla kisiye atanamaz.", 400);
+                    }
                 }
             }
         }
@@ -924,7 +958,8 @@ public class RezervasyonService : IRezervasyonService
                     .Select(a => new
                     {
                         a.RezervasyonSegmentId,
-                        a.OdaId
+                        a.OdaId,
+                        a.YatakNo
                     })
                     .ToList()
             })
@@ -953,11 +988,13 @@ public class RezervasyonService : IRezervasyonService
             var guestEntity = guestsBySira[guest.SiraNo];
             foreach (var atama in guest.Atamalar)
             {
+                var odaBilgisi = odaBilgiBySegment[atama.SegmentId][atama.OdaId!.Value];
                 _stysDbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
                 {
                     RezervasyonKonaklayan = guestEntity,
                     RezervasyonSegmentId = atama.SegmentId,
-                    OdaId = atama.OdaId!.Value
+                    OdaId = atama.OdaId!.Value,
+                    YatakNo = odaBilgisi.PaylasimliMi ? atama.YatakNo : null
                 });
             }
         }
@@ -975,7 +1012,10 @@ public class RezervasyonService : IRezervasyonService
                     .Select(a => new
                     {
                         RezervasyonSegmentId = a.SegmentId,
-                        OdaId = a.OdaId
+                        OdaId = a.OdaId,
+                        YatakNo = a.OdaId.HasValue && a.OdaId.Value > 0
+                            ? (odaBilgiBySegment[a.SegmentId][a.OdaId.Value].PaylasimliMi ? a.YatakNo : null)
+                            : null
                     })
                     .ToList()
             })
@@ -2984,7 +3024,7 @@ public class RezervasyonService : IRezervasyonService
         IReadOnlyCollection<int> roomIds,
         CancellationToken cancellationToken)
     {
-        if (roomIds.Count == 0)
+        if (roomIds.Count == 0 || !_stysDbContext.Database.IsRelational())
         {
             return;
         }

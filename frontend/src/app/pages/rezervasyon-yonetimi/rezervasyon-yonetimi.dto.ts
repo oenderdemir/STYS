@@ -317,6 +317,7 @@ export interface RezervasyonKonaklayanOdaSecenekDto {
     binaAdi: string;
     odaTipiAdi: string;
     ayrilanKisiSayisi: number;
+    paylasimliMi: boolean;
 }
 
 export interface RezervasyonKonaklayanKisiDto {
@@ -330,6 +331,7 @@ export interface RezervasyonKonaklayanKisiDto {
 export interface RezervasyonKonaklayanKisiAtamaDto {
     segmentId: number;
     odaId: number | null;
+    yatakNo: number | null;
 }
 
 export interface RezervasyonKonaklayanPlanKaydetRequestDto {
@@ -347,6 +349,7 @@ export interface RezervasyonKonaklayanKisiKaydetDto {
 export interface RezervasyonKonaklayanKisiAtamaKaydetDto {
     segmentId: number;
     odaId: number | null;
+    yatakNo: number | null;
 }
 
 export interface RezervasyonOdaDegisimAdayOdaDto {

@@ -31,4 +31,6 @@ public class RezervasyonKonaklayanKisiAtamaKaydetDto
     public int SegmentId { get; set; }
 
     public int? OdaId { get; set; }
+
+    public int? YatakNo { get; set; }
 }

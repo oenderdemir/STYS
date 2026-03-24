@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.EkHizmetler.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -49,6 +50,9 @@ public class Rezervasyon : BaseEntity<int>
     [MaxLength(32)]
     public string? PasaportNo { get; set; }
 
+    [MaxLength(16)]
+    public string? MisafirCinsiyeti { get; set; }
+
     [MaxLength(1024)]
     public string? Notlar { get; set; }
 
@@ -65,6 +69,8 @@ public class Rezervasyon : BaseEntity<int>
     public ICollection<RezervasyonKonaklayan> Konaklayanlar { get; set; } = [];
 
     public ICollection<RezervasyonOdeme> Odemeler { get; set; } = [];
+
+    public ICollection<RezervasyonEkHizmet> EkHizmetler { get; set; } = [];
 
     public ICollection<RezervasyonDegisiklikGecmisi> DegisiklikGecmisiKayitlari { get; set; } = [];
 }

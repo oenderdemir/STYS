@@ -4,6 +4,7 @@ import { AppLayout } from './app/layout/component/app.layout';
 import { BinaYonetimi } from './app/pages/bina-yonetimi/bina-yonetimi';
 import { Dashboard } from './app/pages/dashboard/dashboard';
 import { Documentation } from './app/pages/documentation/documentation';
+import { EkHizmetYonetimi } from './app/pages/ek-hizmet-yonetimi/ek-hizmet-yonetimi';
 import { IndirimKuraliYonetimi } from './app/pages/indirim-kurali-yonetimi/indirim-kurali-yonetimi';
 import { IlYonetimi } from './app/pages/il-yonetimi/il-yonetimi';
 import { IsletmeAlaniSinifiYonetimi } from './app/pages/isletme-alani-sinifi-yonetimi/isletme-alani-sinifi-yonetimi';
@@ -54,6 +55,7 @@ export const appRoutes: Routes = [
             { path: 'oda-ozellikler', component: OdaOzellikYonetimi },
             { path: 'odalar', component: OdaYonetimi },
             { path: 'oda-fiyatlari', component: OdaFiyatYonetimi },
+            { path: 'ek-hizmetler', component: EkHizmetYonetimi },
             { path: 'oda-bakim-ariza', component: OdaKullanimBlokYonetimi },
             { path: 'oda-temizlik-yonetimi', component: OdaTemizlikYonetimi },
             { path: 'indirim-kurallari', component: IndirimKuraliYonetimi },

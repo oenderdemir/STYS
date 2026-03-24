@@ -10,4 +10,7 @@ public static class RezervasyonGecmisIslemTipleri
     public const string IptalEdildi = "IptalEdildi";
     public const string IptalGeriAlindi = "IptalGeriAlindi";
     public const string OdemeKaydedildi = "OdemeKaydedildi";
+    public const string EkHizmetEklendi = "EkHizmetEklendi";
+    public const string EkHizmetGuncellendi = "EkHizmetGuncellendi";
+    public const string EkHizmetSilindi = "EkHizmetSilindi";
 }

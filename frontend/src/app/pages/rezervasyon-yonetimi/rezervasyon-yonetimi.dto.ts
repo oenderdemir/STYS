@@ -39,6 +39,7 @@ export interface KonaklamaSenaryoAramaRequestDto {
     kisiSayisi: number;
     baslangicTarihi: string;
     bitisTarihi: string;
+    konaklayanCinsiyetleri: Array<string | null>;
 }
 
 export interface KonaklamaSenaryoOdaAtamaDto {
@@ -150,6 +151,7 @@ export interface RezervasyonKaydetRequestDto {
     misafirEposta: string | null;
     tcKimlikNo: string | null;
     pasaportNo: string | null;
+    misafirCinsiyeti: string | null;
     notlar: string | null;
     toplamBazUcret: number;
     toplamUcret: number;
@@ -189,6 +191,7 @@ export interface RezervasyonListeDto {
     misafirEposta: string | null;
     tcKimlikNo: string | null;
     pasaportNo: string | null;
+    misafirCinsiyeti: string | null;
     kisiSayisi: number;
     girisTarihi: string;
     cikisTarihi: string;
@@ -276,13 +279,18 @@ export interface RezervasyonDetayDto {
     referansNo: string;
     tesisId: number;
     rezervasyonDurumu: string;
+    misafirAdiSoyadi: string;
+    misafirCinsiyeti: string | null;
     kisiSayisi: number;
     girisTarihi: string;
     cikisTarihi: string;
+    konaklamaUcreti: number;
+    ekHizmetToplami: number;
     toplamBazUcret: number;
     toplamUcret: number;
     paraBirimi: string;
     uygulananIndirimler: UygulananIndirimDto[];
+    ekHizmetler: RezervasyonEkHizmetDto[];
     segmentler: RezervasyonDetaySegmentDto[];
 }
 
@@ -325,6 +333,7 @@ export interface RezervasyonKonaklayanKisiDto {
     adSoyad: string;
     tcKimlikNo: string | null;
     pasaportNo: string | null;
+    cinsiyet: string | null;
     atamalar: RezervasyonKonaklayanKisiAtamaDto[];
 }
 
@@ -343,6 +352,7 @@ export interface RezervasyonKonaklayanKisiKaydetDto {
     adSoyad: string;
     tcKimlikNo: string | null;
     pasaportNo: string | null;
+    cinsiyet: string | null;
     atamalar: RezervasyonKonaklayanKisiAtamaKaydetDto[];
 }
 
@@ -360,6 +370,13 @@ export interface RezervasyonOdaDegisimAdayOdaDto {
     paylasimliMi: boolean;
     kapasite: number;
     kalanKapasite: number;
+    onerilenYatakNolari: number[];
+}
+
+export interface RezervasyonOdaDegisimKonaklayanDto {
+    siraNo: number;
+    adSoyad: string;
+    mevcutYatakNo: number | null;
 }
 
 export interface RezervasyonOdaDegisimKayitDto {
@@ -376,6 +393,7 @@ export interface RezervasyonOdaDegisimKayitDto {
     mevcutOdaPaylasimliMi: boolean;
     mevcutOdaKapasitesi: number;
     problemliMi: boolean;
+    tasinacakKonaklayanlar: RezervasyonOdaDegisimKonaklayanDto[];
     adayOdalar: RezervasyonOdaDegisimAdayOdaDto[];
 }
 
@@ -406,15 +424,68 @@ export interface RezervasyonOdemeDto {
 export interface RezervasyonOdemeOzetDto {
     rezervasyonId: number;
     referansNo: string;
+    konaklamaUcreti: number;
+    ekHizmetToplami: number;
     toplamUcret: number;
     odenenTutar: number;
     kalanTutar: number;
     paraBirimi: string;
+    ekHizmetler: RezervasyonEkHizmetDto[];
     odemeler: RezervasyonOdemeDto[];
 }
 
 export interface RezervasyonOdemeKaydetRequestDto {
     odemeTutari: number;
     odemeTipi: string;
+    aciklama: string | null;
+}
+
+export interface RezervasyonEkHizmetDto {
+    id: number;
+    rezervasyonKonaklayanId: number;
+    ekHizmetTarifeId: number;
+    konaklayanAdiSoyadi: string;
+    tarifeAdi: string;
+    hizmetTarihi: string;
+    miktar: number;
+    birimAdi: string;
+    birimFiyat: number;
+    toplamTutar: number;
+    paraBirimi: string;
+    odaNo: string;
+    binaAdi: string;
+    yatakNo: number | null;
+    aciklama: string | null;
+}
+
+export interface RezervasyonEkHizmetMisafirSecenekDto {
+    rezervasyonKonaklayanId: number;
+    siraNo: number;
+    adSoyad: string;
+}
+
+export interface RezervasyonEkHizmetTarifeSecenekDto {
+    id: number;
+    ad: string;
+    aciklama: string | null;
+    birimAdi: string;
+    birimFiyat: number;
+    paraBirimi: string;
+    baslangicTarihi: string;
+    bitisTarihi: string;
+}
+
+export interface RezervasyonEkHizmetSecenekleriDto {
+    rezervasyonId: number;
+    referansNo: string;
+    misafirler: RezervasyonEkHizmetMisafirSecenekDto[];
+    tarifeler: RezervasyonEkHizmetTarifeSecenekDto[];
+}
+
+export interface RezervasyonEkHizmetKaydetRequestDto {
+    rezervasyonKonaklayanId: number;
+    ekHizmetTarifeId: number;
+    hizmetTarihi: string;
+    miktar: number;
     aciklama: string | null;
 }

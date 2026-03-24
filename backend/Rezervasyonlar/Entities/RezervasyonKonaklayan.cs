@@ -19,6 +19,9 @@ public class RezervasyonKonaklayan : BaseEntity<int>
     [MaxLength(32)]
     public string? PasaportNo { get; set; }
 
+    [MaxLength(16)]
+    public string? Cinsiyet { get; set; }
+
     public Rezervasyon? Rezervasyon { get; set; }
 
     public ICollection<RezervasyonKonaklayanSegmentAtama> SegmentAtamalari { get; set; } = [];

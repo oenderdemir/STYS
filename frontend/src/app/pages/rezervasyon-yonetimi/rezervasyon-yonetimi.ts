@@ -15,13 +15,20 @@ import { TagModule } from 'primeng/tag';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../core/api';
+import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
+import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
     KonaklamaSenaryoDto,
     RezervasyonCheckInKontrolDto,
     RezervasyonDetayDto,
     RezervasyonDegisiklikGecmisiDto,
+    RezervasyonEkHizmetDto,
+    RezervasyonEkHizmetMisafirSecenekDto,
+    RezervasyonEkHizmetSecenekleriDto,
+    RezervasyonEkHizmetTarifeSecenekDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonKayitSonucDto,
@@ -34,6 +41,8 @@ import {
     RezervasyonMisafirTipiDto,
     RezervasyonOdemeOzetDto,
     RezervasyonOdaDegisimKayitDto,
+    RezervasyonOdaDegisimAdayOdaDto,
+    RezervasyonOdaDegisimKonaklayanDto,
     RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
     RezervasyonTesisDto,
@@ -54,7 +63,7 @@ interface DegisiklikPayloadTableData {
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
     templateUrl: './rezervasyon-yonetimi.html',
     providers: [MessageService]
 })
@@ -100,12 +109,24 @@ export class RezervasyonYonetimi implements OnInit {
     konaklayanPlanRezervasyonId: number | null = null;
     konaklayanPlanReferansNo = '';
     konaklayanPlan: RezervasyonKonaklayanPlanDto | null = null;
+    readonly konaklayanCinsiyetSecenekleri = [
+        { label: 'Kadin', value: KonaklayanCinsiyetleri.Kadin },
+        { label: 'Erkek', value: KonaklayanCinsiyetleri.Erkek }
+    ];
     odemeDialogVisible = false;
     odemeLoading = false;
     odemeSaving = false;
     odemeRezervasyonId: number | null = null;
     odemeReferansNo = '';
     odemeOzeti: RezervasyonOdemeOzetDto | null = null;
+    odemeEkHizmetSecenekleri: RezervasyonEkHizmetSecenekleriDto | null = null;
+    selectedEkHizmetKonaklayanId: number | null = null;
+    selectedEkHizmetTarifeId: number | null = null;
+    ekHizmetTarihi = '';
+    ekHizmetMiktar: number | null = 1;
+    ekHizmetAciklama = '';
+    ekHizmetSaving = false;
+    editingEkHizmetId: number | null = null;
     odemeTutari: number | null = null;
     odemeTipi = 'Nakit';
     odemeAciklama = '';
@@ -114,6 +135,7 @@ export class RezervasyonYonetimi implements OnInit {
     odaDegisimSaving = false;
     odaDegisimRezervasyonId: number | null = null;
     odaDegisimReferansNo = '';
+    odaDegisimRezervasyonDurumu: string | null = null;
     odaDegisimSecenekleri: RezervasyonOdaDegisimSecenekDto | null = null;
     odaDegisimSecimleri: Record<number, number> = {};
     readonly odemeTipleri = [
@@ -128,6 +150,7 @@ export class RezervasyonYonetimi implements OnInit {
     selectedMisafirTipiId: number | null = null;
     selectedKonaklamaTipiId: number | null = null;
     kisiSayisi = 1;
+    senaryoKonaklayanCinsiyetleri: Array<string | null> = [null];
     baslangicTarihi = this.nowInput();
     bitisTarihi = this.tomorrowInput();
     misafirAdiSoyadi = '';
@@ -135,6 +158,7 @@ export class RezervasyonYonetimi implements OnInit {
     misafirEposta = '';
     tcKimlikNo = '';
     pasaportNo = '';
+    misafirCinsiyeti: string | null = null;
     notlar = '';
 
     loadingReferences = false;
@@ -161,6 +185,48 @@ export class RezervasyonYonetimi implements OnInit {
 
     get canApplyCustomDiscount(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.CustomIndirimGirebilir');
+    }
+
+    get ekHizmetMisafirSecenekleri(): RezervasyonEkHizmetMisafirSecenekDto[] {
+        return this.odemeEkHizmetSecenekleri?.misafirler ?? [];
+    }
+
+    get ekHizmetTarifeSecenekleri(): RezervasyonEkHizmetTarifeSecenekDto[] {
+        return this.odemeEkHizmetSecenekleri?.tarifeler ?? [];
+    }
+
+    get canModifyEkHizmet(): boolean {
+        const durum = this.getSelectedOdemeRezervasyonDurumu();
+        return !!this.odemeOzeti && durum !== this.durumCheckOutTamamlandi && durum !== this.durumIptal;
+    }
+
+    get ekHizmetBilgiMesaji(): string | null {
+        const reason = this.getEkHizmetModificationDisabledReason();
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemleri yalnizca goruntulenebilir.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyonda ek hizmet kalemleri yalnizca goruntulenebilir.';
+        }
+
+        if ((this.odemeOzeti?.odenenTutar ?? 0) > 0) {
+            return 'Odeme alinmis rezervasyonda ek hizmet eklenebilir. Ancak silme veya tutar dusuren guncelleme fazla tahsilat olusturacaksa engellenir.';
+        }
+
+        return null;
+    }
+
+    get odaDegisimBilgiMesaji(): string | null {
+        if (this.odaDegisimRezervasyonDurumu === this.durumCheckInTamamlandi) {
+            return 'Bu rezervasyon check-in yapmis durumda. Oda degisimi kaydedildiginde ilgili konaklayan atamalari yeni odaya otomatik tasinacaktir.';
+        }
+
+        if (this.odaDegisimRezervasyonDurumu === this.durumTaslak || this.odaDegisimRezervasyonDurumu === this.durumOnayli) {
+            return 'Bu ekran check-in oncesi planlanan oda atamasini gucellemek icin kullanilir.';
+        }
+
+        return null;
     }
 
     ngOnInit(): void {
@@ -220,6 +286,12 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        this.syncSenaryoKonaklayanCinsiyetleri();
+        if (this.senaryoKonaklayanCinsiyetleri.some((x) => !x)) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen senaryo aramasi icin tum konaklayanlarin cinsiyetini seciniz.' });
+            return;
+        }
+
         if (!this.baslangicTarihi || !this.bitisTarihi) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Baslangic ve bitis tarihi zorunludur.' });
             return;
@@ -239,7 +311,8 @@ export class RezervasyonYonetimi implements OnInit {
                 konaklamaTipiId: this.selectedKonaklamaTipiId,
                 kisiSayisi: this.kisiSayisi,
                 baslangicTarihi: this.toIsoDate(this.baslangicTarihi),
-                bitisTarihi: this.toIsoDate(this.bitisTarihi)
+                bitisTarihi: this.toIsoDate(this.bitisTarihi),
+                konaklayanCinsiyetleri: this.senaryoKonaklayanCinsiyetleri.map((x) => this.normalizeOptional(x ?? ''))
             })
             .pipe(
                 finalize(() => {
@@ -258,6 +331,58 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    onKisiSayisiChange(): void {
+        if (!Number.isFinite(this.kisiSayisi)) {
+            this.kisiSayisi = 1;
+        }
+
+        this.kisiSayisi = Math.max(1, Math.trunc(this.kisiSayisi));
+        this.syncSenaryoKonaklayanCinsiyetleri();
+    }
+
+    getSenaryoKonaklayanCinsiyetLabel(index: number): string {
+        return `${index + 1}. Kisi`;
+    }
+
+    onSenaryoKonaklayanCinsiyetChange(index: number): void {
+        if (index === 0 && !this.misafirCinsiyeti) {
+            this.misafirCinsiyeti = this.senaryoKonaklayanCinsiyetleri[0] ?? null;
+        }
+    }
+
+    getScenarioSharedRoomGenderBadgeLabel(scenario: KonaklamaSenaryoDto): string | null {
+        if (!this.hasSharedRoomUsage(scenario)) {
+            return null;
+        }
+
+        const normalizedGenders = this.senaryoKonaklayanCinsiyetleri.filter((x): x is string => !!x);
+        const uniqueGenders = [...new Set(normalizedGenders)];
+        if (uniqueGenders.length === 1) {
+            return `Paylasimli Oda / ${uniqueGenders[0]} uyumlu`;
+        }
+
+        return 'Paylasimli Oda / Cinsiyet uyumu saglandi';
+    }
+
+    getScenarioSharedRoomGenderBadgeSeverity(scenario: KonaklamaSenaryoDto): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+        return this.hasSharedRoomUsage(scenario) ? UiSeverity.Success : UiSeverity.Secondary;
+    }
+
+    private syncSenaryoKonaklayanCinsiyetleri(): void {
+        const targetCount = Math.max(1, Math.trunc(this.kisiSayisi || 1));
+        if (this.senaryoKonaklayanCinsiyetleri.length === targetCount) {
+            if (!this.misafirCinsiyeti && this.senaryoKonaklayanCinsiyetleri.length > 0) {
+                this.misafirCinsiyeti = this.senaryoKonaklayanCinsiyetleri[0];
+            }
+            return;
+        }
+
+        this.senaryoKonaklayanCinsiyetleri = Array.from({ length: targetCount }, (_, index) => this.senaryoKonaklayanCinsiyetleri[index] ?? null);
+        if (!this.misafirCinsiyeti && this.senaryoKonaklayanCinsiyetleri.length > 0) {
+            this.misafirCinsiyeti = this.senaryoKonaklayanCinsiyetleri[0];
+        }
     }
 
     reserveScenario(scenario: KonaklamaSenaryoDto): void {
@@ -292,6 +417,7 @@ export class RezervasyonYonetimi implements OnInit {
             misafirEposta: this.normalizeOptional(this.misafirEposta),
             tcKimlikNo: this.normalizeOptional(this.tcKimlikNo),
             pasaportNo: this.normalizeOptional(this.pasaportNo),
+            misafirCinsiyeti: this.misafirCinsiyeti ?? this.senaryoKonaklayanCinsiyetleri[0] ?? null,
             notlar: this.normalizeOptional(this.notlar),
             toplamBazUcret: Number.isFinite(scenario.toplamBazUcret) ? scenario.toplamBazUcret : scenario.toplamNihaiUcret,
             toplamUcret: Number.isFinite(scenario.toplamNihaiUcret) ? scenario.toplamNihaiUcret : 0,
@@ -633,6 +759,7 @@ export class RezervasyonYonetimi implements OnInit {
         for (const item of items) {
             const siraNo = this.readUnknown(item, ['SiraNo', 'siraNo']);
             const adSoyad = this.readUnknown(item, ['AdSoyad', 'adSoyad']);
+            const cinsiyet = this.readUnknown(item, ['Cinsiyet', 'cinsiyet']);
             const tcKimlikNo = this.readUnknown(item, ['TcKimlikNo', 'tcKimlikNo']);
             const pasaportNo = this.readUnknown(item, ['PasaportNo', 'pasaportNo']);
             const atamalarUnknown = this.readUnknown(item, ['Atamalar', 'atamalar']);
@@ -656,6 +783,7 @@ export class RezervasyonYonetimi implements OnInit {
             rows.push({
                 siraNo: this.toDisplayString(siraNo),
                 adSoyad: this.toDisplayString(adSoyad),
+                cinsiyet: this.toDisplayString(cinsiyet),
                 tcKimlikNo: this.toDisplayString(tcKimlikNo),
                 pasaportNo: this.toDisplayString(pasaportNo),
                 atamalar: atamaOzetleri.length > 0 ? atamaOzetleri.join('\n') : '-'
@@ -666,6 +794,7 @@ export class RezervasyonYonetimi implements OnInit {
             columns: [
                 { field: 'siraNo', header: 'Sıra' },
                 { field: 'adSoyad', header: 'Ad Soyad' },
+                { field: 'cinsiyet', header: 'Cinsiyet' },
                 { field: 'tcKimlikNo', header: 'TC Kimlik No' },
                 { field: 'pasaportNo', header: 'Pasaport No' },
                 { field: 'atamalar', header: 'Atamalar' }
@@ -817,6 +946,7 @@ export class RezervasyonYonetimi implements OnInit {
                     adSoyad: (kisi.adSoyad ?? '').trim(),
                     tcKimlikNo: this.normalizeOptional(kisi.tcKimlikNo ?? ''),
                     pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
+                    cinsiyet: this.normalizeOptional(kisi.cinsiyet ?? ''),
                     atamalar: kisi.atamalar.map((atama) => ({
                         segmentId: atama.segmentId,
                         odaId: atama.odaId,
@@ -879,19 +1009,11 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
-        if (!this.canManage) {
-            return false;
-        }
-
-        return kayit.konaklayanPlaniTamamlandi
-            && !kayit.odaDegisimiGerekli
-            && (kayit.rezervasyonDurumu === this.durumTaslak || kayit.rezervasyonDurumu === this.durumOnayli);
+        return this.getCheckInDisabledReason(kayit) === null;
     }
 
     canCompleteCheckOut(kayit: RezervasyonListeDto): boolean {
-        return this.canManage
-            && kayit.rezervasyonDurumu === this.durumCheckInTamamlandi
-            && (kayit.kalanTutar ?? 0) <= 0;
+        return this.getCheckOutDisabledReason(kayit) === null;
     }
 
     isCheckActionLoading(rezervasyonId: number): boolean {
@@ -903,28 +1025,278 @@ export class RezervasyonYonetimi implements OnInit {
             return false;
         }
 
-        return kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi;
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return true;
+        }
+
+        return kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi && (kayit.odenenTutar ?? 0) <= 0;
+    }
+
+    getCheckInDisabledReason(kayit: RezervasyonListeDto): string | null {
+        if (!this.canManage) {
+            return 'Yonetim yetkisi yok';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
+            return 'Check-out tamamlandi';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return 'Iptal edildi';
+        }
+
+        if (kayit.rezervasyonDurumu !== this.durumTaslak && kayit.rezervasyonDurumu !== this.durumOnayli) {
+            return 'Durum uygun degil';
+        }
+
+        if (!kayit.konaklayanPlaniTamamlandi) {
+            return 'Plan eksik';
+        }
+
+        if (kayit.odaDegisimiGerekli) {
+            return 'Oda degisimi gerekli';
+        }
+
+        return null;
+    }
+
+    getCheckInDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getCheckInDisabledReason(kayit);
+        if (reason === 'Plan eksik') {
+            return 'Check-in icin once konaklayan plani ve oda atamalari tamamlanmalidir.';
+        }
+
+        if (reason === 'Oda degisimi gerekli') {
+            return 'Bu rezervasyonda ariza veya blokaj nedeniyle oda degisimi gerektigi icin once yeni oda atanmalidir.';
+        }
+
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyon icin tekrar check-in yapilamaz.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyon icin check-in yapilamaz.';
+        }
+
+        if (reason === 'Durum uygun degil') {
+            return 'Check-in yalnizca Taslak veya Onayli durumundaki rezervasyonlarda baslatilabilir.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Check-in islemi su anda baslatilamaz.';
+    }
+
+    getCheckOutDisabledReason(kayit: RezervasyonListeDto): string | null {
+        if (!this.canManage) {
+            return 'Yonetim yetkisi yok';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return 'Iptal edildi';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
+            return 'Check-out tamamlandi';
+        }
+
+        if (kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi) {
+            return 'Once check-in yapilmali';
+        }
+
+        if ((kayit.kalanTutar ?? 0) > 0) {
+            return 'Kalan odeme var';
+        }
+
+        return null;
+    }
+
+    getCheckOutDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getCheckOutDisabledReason(kayit);
+        if (reason === 'Kalan odeme var') {
+            return `Check-out icin once kalan odeme tamamlanmalidir. Kalan tutar: ${this.formatCurrency(kayit.kalanTutar ?? 0, kayit.paraBirimi)}.`;
+        }
+
+        if (reason === 'Once check-in yapilmali') {
+            return 'Check-out yapabilmek icin once check-in tamamlanmis olmalidir.';
+        }
+
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyon yeniden kapatilamaz.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyon icin check-out yapilamaz.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Check-out islemi su anda baslatilamaz.';
+    }
+
+    getCancelReservationDisabledReason(kayit: RezervasyonListeDto): string | null {
+        if (!this.canManage) {
+            return 'Yonetim yetkisi yok';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return null;
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
+            return 'Check-out tamamlandi';
+        }
+
+        if ((kayit.odenenTutar ?? 0) > 0) {
+            return 'Odeme alindi';
+        }
+
+        return null;
+    }
+
+    getCancelReservationDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getCancelReservationDisabledReason(kayit);
+        if (reason === 'Odeme alindi') {
+            return 'Bu rezervasyon icin odeme alindigi icin dogrudan iptal edilemez. Once iade veya mahsup islemi yapilmalidir.';
+        }
+
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyon iptal edilemez.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Rezervasyon iptal edilemez.';
     }
 
     canOpenPaymentDialog(kayit: RezervasyonListeDto): boolean {
-        if (!this.canManage) {
-            return false;
-        }
-
-        return kayit.rezervasyonDurumu !== this.durumIptal;
+        return this.getPaymentDisabledReason(kayit) === null;
     }
 
     canOpenOdaDegisimDialog(kayit: RezervasyonListeDto): boolean {
+        return this.getRoomChangeDisabledReason(kayit) === null;
+    }
+
+    getPaymentDisabledReason(kayit: RezervasyonListeDto): string | null {
         if (!this.canManage) {
-            return false;
+            return 'Yonetim yetkisi yok';
         }
 
-        return kayit.odaDegisimiGerekli
-            && (kayit.rezervasyonDurumu === this.durumTaslak || kayit.rezervasyonDurumu === this.durumOnayli);
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return 'Iptal edildi';
+        }
+
+        return null;
+    }
+
+    getPaymentDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getPaymentDisabledReason(kayit);
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyon icin odeme islemi yapilamaz.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Odeme islemi su anda acilamaz.';
+    }
+
+    getRoomChangeDisabledReason(kayit: RezervasyonListeDto): string | null {
+        if (!this.canManage) {
+            return 'Yonetim yetkisi yok';
+        }
+
+        if (!kayit.odaDegisimiGerekli) {
+            return 'Aktif ihtiyac yok';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumIptal) {
+            return 'Iptal edildi';
+        }
+
+        if (kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
+            return 'Check-out tamamlandi';
+        }
+
+        if (
+            kayit.rezervasyonDurumu !== this.durumTaslak
+            && kayit.rezervasyonDurumu !== this.durumOnayli
+            && kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi
+        ) {
+            return 'Durum uygun degil';
+        }
+
+        return null;
+    }
+
+    getRoomChangeDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getRoomChangeDisabledReason(kayit);
+        if (reason === 'Aktif ihtiyac yok') {
+            return 'Bu rezervasyon icin aktif oda degisimi ihtiyaci bulunmuyor.';
+        }
+
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyonda oda degisimi yapilamaz.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyonda oda degisimi yapilamaz.';
+        }
+
+        if (reason === 'Durum uygun degil') {
+            return 'Oda degisimi yalnizca Taslak, Onayli veya Check-in Tamamlandi durumlarindaki rezervasyonlarda yapilabilir.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Oda degisimi islemi su anda acilamaz.';
     }
 
     hasAnyRowAction(kayit: RezervasyonListeDto): boolean {
         return this.getRowActions(kayit).length > 0;
+    }
+
+    getRowActionDisabledMessages(kayit: RezervasyonListeDto): string[] {
+        const messages: string[] = [];
+        const paymentReason = this.getPaymentDisabledReason(kayit);
+        if (paymentReason) {
+            messages.push(`Odeme: ${this.getPaymentDisabledMessage(kayit)}`);
+        }
+
+        const roomChangeReason = this.getRoomChangeDisabledReason(kayit);
+        if (roomChangeReason) {
+            messages.push(`Oda degistir: ${this.getRoomChangeDisabledMessage(kayit)}`);
+        }
+
+        const checkInReason = this.getCheckInDisabledReason(kayit);
+        if (checkInReason) {
+            messages.push(`Check-in: ${this.getCheckInDisabledMessage(kayit)}`);
+        }
+
+        const checkOutReason = this.getCheckOutDisabledReason(kayit);
+        if (checkOutReason) {
+            messages.push(`Check-out: ${this.getCheckOutDisabledMessage(kayit)}`);
+        }
+
+        const cancelReason = this.getCancelReservationDisabledReason(kayit);
+        if (cancelReason) {
+            messages.push(`Iptal: ${this.getCancelReservationDisabledMessage(kayit)}`);
+        }
+
+        return messages;
+    }
+
+    getRowActionDisabledTooltip(kayit: RezervasyonListeDto): string {
+        return this.getRowActionDisabledMessages(kayit).join(' | ');
     }
 
     getRowActions(kayit: RezervasyonListeDto): MenuItem[] {
@@ -948,45 +1320,51 @@ export class RezervasyonYonetimi implements OnInit {
             command: () => this.openKonaklayanPlaniDialog(kayit)
         });
 
-        if (this.canOpenOdaDegisimDialog(kayit)) {
-            items.push({
-                label: 'Oda Degistir',
-                icon: 'pi pi-sync',
-                command: () => this.openOdaDegisimDialog(kayit)
-            });
-        }
+        const roomChangeDisabledReason = this.getRoomChangeDisabledReason(kayit);
+        items.push({
+            label: roomChangeDisabledReason ? `Oda Degistir (${roomChangeDisabledReason})` : 'Oda Degistir',
+            icon: 'pi pi-sync',
+            disabled: roomChangeDisabledReason !== null,
+            command: () => this.openOdaDegisimDialog(kayit)
+        });
 
-        if (this.canCompleteCheckIn(kayit)) {
-            items.push({
-                label: 'Check-in',
-                icon: 'pi pi-arrow-right',
-                command: () => this.tamamlaCheckIn(kayit)
-            });
-        }
+        const checkInDisabledReason = this.getCheckInDisabledReason(kayit);
+        items.push({
+            label: checkInDisabledReason ? `Check-in (${checkInDisabledReason})` : 'Check-in',
+            icon: 'pi pi-arrow-right',
+            disabled: checkInDisabledReason !== null,
+            command: () => this.tamamlaCheckIn(kayit)
+        });
 
-        if (this.canCompleteCheckOut(kayit)) {
-            items.push({
-                label: 'Check-out',
-                icon: 'pi pi-arrow-left',
-                command: () => this.tamamlaCheckOut(kayit)
-            });
-        }
+        const checkOutDisabledReason = this.getCheckOutDisabledReason(kayit);
+        items.push({
+            label: checkOutDisabledReason ? `Check-out (${checkOutDisabledReason})` : 'Check-out',
+            icon: 'pi pi-arrow-left',
+            disabled: checkOutDisabledReason !== null,
+            command: () => this.tamamlaCheckOut(kayit)
+        });
 
-        if (this.canOpenPaymentDialog(kayit)) {
-            items.push({
-                label: 'Odeme',
-                icon: 'pi pi-credit-card',
-                command: () => this.openOdemeDialog(kayit)
-            });
-        }
+        const paymentDisabledReason = this.getPaymentDisabledReason(kayit);
+        items.push({
+            label: paymentDisabledReason ? `Odeme (${paymentDisabledReason})` : 'Odeme',
+            icon: 'pi pi-credit-card',
+            disabled: paymentDisabledReason !== null,
+            command: () => this.openOdemeDialog(kayit)
+        });
 
-        if (this.canCancelReservation(kayit)) {
-            items.push({
-                label: kayit.rezervasyonDurumu === this.durumIptal ? 'Iptali Geri Al' : 'Iptal Et',
-                icon: 'pi pi-times',
-                command: () => this.iptalEt(kayit)
-            });
-        }
+        const cancelDisabledReason = this.getCancelReservationDisabledReason(kayit);
+        const cancelActionLabel = kayit.rezervasyonDurumu === this.durumIptal
+            ? 'Iptali Geri Al'
+            : cancelDisabledReason
+                ? `Iptal Et (${cancelDisabledReason})`
+                : 'Iptal Et';
+
+        items.push({
+            label: cancelActionLabel,
+            icon: 'pi pi-times',
+            disabled: cancelDisabledReason !== null,
+            command: () => this.iptalEt(kayit)
+        });
 
         return items;
     }
@@ -1105,6 +1483,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odaDegisimDialogVisible = true;
         this.odaDegisimRezervasyonId = kayit.id;
         this.odaDegisimReferansNo = kayit.referansNo;
+        this.odaDegisimRezervasyonDurumu = kayit.rezervasyonDurumu;
         this.odaDegisimSecenekleri = null;
         this.odaDegisimSecimleri = {};
         this.odaDegisimLoading = true;
@@ -1143,6 +1522,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odaDegisimSaving = false;
         this.odaDegisimRezervasyonId = null;
         this.odaDegisimReferansNo = '';
+        this.odaDegisimRezervasyonDurumu = null;
         this.odaDegisimSecenekleri = null;
         this.odaDegisimSecimleri = {};
     }
@@ -1194,8 +1574,35 @@ export class RezervasyonYonetimi implements OnInit {
     getOdaDegisimAdayOptions(kayit: RezervasyonOdaDegisimKayitDto): { label: string; value: number }[] {
         return kayit.adayOdalar.map((aday) => ({
             value: aday.odaId,
-            label: `${aday.odaNo} - ${aday.binaAdi} (${aday.odaTipiAdi}, kalan ${aday.kalanKapasite})`
+            label: `${aday.odaNo} - ${aday.binaAdi} (${aday.odaTipiAdi}, kalan ${aday.kalanKapasite}${aday.paylasimliMi && aday.onerilenYatakNolari.length > 0 ? `, yatak ${aday.onerilenYatakNolari.join(', ')}` : ''})`
         }));
+    }
+
+    getSelectedOdaDegisimAday(kayit: RezervasyonOdaDegisimKayitDto): RezervasyonOdaDegisimAdayOdaDto | null {
+        const seciliOdaId = this.getOdaDegisimSeciliOdaId(kayit);
+        if (seciliOdaId <= 0) {
+            return null;
+        }
+
+        return kayit.adayOdalar.find((x) => x.odaId === seciliOdaId) ?? null;
+    }
+
+    getOdaDegisimKonaklayanOnerileri(
+        kayit: RezervasyonOdaDegisimKayitDto,
+        aday: RezervasyonOdaDegisimAdayOdaDto | null
+    ): Array<{ konaklayan: RezervasyonOdaDegisimKonaklayanDto; onerilenYatakNo: number | null }> {
+        if (!aday) {
+            return [];
+        }
+
+        return kayit.tasinacakKonaklayanlar.map((konaklayan, index) => ({
+            konaklayan,
+            onerilenYatakNo: aday.paylasimliMi ? (aday.onerilenYatakNolari[index] ?? null) : null
+        }));
+    }
+
+    getTasinacakKonaklayanAdlari(kayit: RezervasyonOdaDegisimKayitDto): string {
+        return kayit.tasinacakKonaklayanlar.map((x) => x.adSoyad).join(', ');
     }
 
     getOdaDegisimSeciliOdaId(kayit: RezervasyonOdaDegisimKayitDto): number {
@@ -1231,19 +1638,154 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeTutari = null;
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
+        this.odemeEkHizmetSecenekleri = null;
+        this.selectedEkHizmetKonaklayanId = null;
+        this.selectedEkHizmetTarifeId = null;
+        this.ekHizmetTarihi = this.getDefaultEkHizmetTarihi(kayit.id);
+        this.ekHizmetMiktar = 1;
+        this.ekHizmetAciklama = '';
+        this.editingEkHizmetId = null;
         this.loadOdemeOzeti(kayit.id);
+        this.loadEkHizmetSecenekleri(kayit.id);
     }
 
     closeOdemeDialog(): void {
         this.odemeDialogVisible = false;
         this.odemeLoading = false;
         this.odemeSaving = false;
+        this.ekHizmetSaving = false;
         this.odemeRezervasyonId = null;
         this.odemeReferansNo = '';
         this.odemeOzeti = null;
+        this.odemeEkHizmetSecenekleri = null;
+        this.selectedEkHizmetKonaklayanId = null;
+        this.selectedEkHizmetTarifeId = null;
+        this.ekHizmetTarihi = '';
+        this.ekHizmetMiktar = 1;
+        this.ekHizmetAciklama = '';
+        this.editingEkHizmetId = null;
         this.odemeTutari = null;
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
+    }
+
+    kaydetEkHizmet(): void {
+        if (!this.odemeRezervasyonId || !this.odemeOzeti || this.ekHizmetSaving) {
+            return;
+        }
+
+        if (!this.selectedEkHizmetKonaklayanId || this.selectedEkHizmetKonaklayanId <= 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir konaklayan seciniz.' });
+            return;
+        }
+
+        if (!this.selectedEkHizmetTarifeId || this.selectedEkHizmetTarifeId <= 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir ek hizmet seciniz.' });
+            return;
+        }
+
+        const miktar = Number(this.ekHizmetMiktar ?? 0);
+        if (!Number.isFinite(miktar) || miktar <= 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Miktar', detail: 'Miktar sifirdan buyuk olmalidir.' });
+            return;
+        }
+
+        if (!this.ekHizmetTarihi) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Hizmet tarihi zorunludur.' });
+            return;
+        }
+
+        this.ekHizmetSaving = true;
+        const request = {
+            rezervasyonKonaklayanId: this.selectedEkHizmetKonaklayanId,
+            ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
+            hizmetTarihi: this.toIsoDate(this.ekHizmetTarihi),
+            miktar,
+            aciklama: this.normalizeOptional(this.ekHizmetAciklama)
+        };
+
+        const request$ = this.editingEkHizmetId
+            ? this.service.guncelleEkHizmet(this.odemeRezervasyonId, this.editingEkHizmetId, request)
+            : this.service.kaydetEkHizmet(this.odemeRezervasyonId, request);
+
+        request$
+            .pipe(
+                finalize(() => {
+                    this.ekHizmetSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.odemeOzeti = result;
+                    this.applyOdemeOzetiToRezervasyon(result);
+                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    const message = this.editingEkHizmetId
+                        ? 'Ek hizmet kaydi guncellendi.'
+                        : 'Ek hizmet hesaba eklendi.';
+                    this.resetEkHizmetForm();
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: message });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    duzenleEkHizmet(hizmet: RezervasyonEkHizmetDto): void {
+        if (this.getEkHizmetEditDisabledReason(hizmet) !== null) {
+            return;
+        }
+
+        this.editingEkHizmetId = hizmet.id;
+        this.selectedEkHizmetKonaklayanId = hizmet.rezervasyonKonaklayanId;
+        this.selectedEkHizmetTarifeId = hizmet.ekHizmetTarifeId;
+        this.ekHizmetTarihi = this.toDateTimeLocalInputValue(hizmet.hizmetTarihi);
+        this.ekHizmetMiktar = hizmet.miktar;
+        this.ekHizmetAciklama = hizmet.aciklama ?? '';
+    }
+
+    ekHizmetDuzenlemeyiIptalEt(): void {
+        this.resetEkHizmetForm();
+    }
+
+    silEkHizmet(hizmet: RezervasyonEkHizmetDto): void {
+        if (!this.odemeRezervasyonId || this.getEkHizmetDeleteDisabledReason(hizmet) !== null || this.ekHizmetSaving) {
+            return;
+        }
+
+        if (!window.confirm(`'${hizmet.tarifeAdi}' ek hizmet kaydi silinsin mi?`)) {
+            return;
+        }
+
+        this.ekHizmetSaving = true;
+        this.service
+            .silEkHizmet(this.odemeRezervasyonId, hizmet.id)
+            .pipe(
+                finalize(() => {
+                    this.ekHizmetSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.odemeOzeti = result;
+                    this.applyOdemeOzetiToRezervasyon(result);
+                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    if (this.editingEkHizmetId === hizmet.id) {
+                        this.resetEkHizmetForm();
+                    }
+
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Ek hizmet kaydi silindi.' });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     kaydetOdeme(): void {
@@ -1275,11 +1817,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.odemeOzeti = result;
                     this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
                     this.odemeAciklama = '';
-                    const kayit = this.rezervasyonKayitlari.find((x) => x.id === result.rezervasyonId);
-                    if (kayit) {
-                        kayit.odenenTutar = result.odenenTutar;
-                        kayit.kalanTutar = result.kalanTutar;
-                    }
+                    this.applyOdemeOzetiToRezervasyon(result);
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
                     this.cdr.detectChanges();
                 },
@@ -1655,11 +2193,11 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (ozet) => {
                     this.odemeOzeti = ozet;
                     this.odemeTutari = ozet.kalanTutar > 0 ? ozet.kalanTutar : null;
-                    const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
-                    if (kayit) {
-                        kayit.odenenTutar = ozet.odenenTutar;
-                        kayit.kalanTutar = ozet.kalanTutar;
+                    if (ozet.odemeler.length > 0 && this.editingEkHizmetId) {
+                        this.resetEkHizmetForm();
                     }
+
+                    this.applyOdemeOzetiToRezervasyon(ozet);
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -1668,6 +2206,169 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private loadEkHizmetSecenekleri(rezervasyonId: number): void {
+        this.service.getEkHizmetSecenekleri(rezervasyonId).subscribe({
+            next: (result) => {
+                this.odemeEkHizmetSecenekleri = result;
+                if (!this.selectedEkHizmetKonaklayanId || !result.misafirler.some((x) => x.rezervasyonKonaklayanId === this.selectedEkHizmetKonaklayanId)) {
+                    this.selectedEkHizmetKonaklayanId = result.misafirler[0]?.rezervasyonKonaklayanId ?? null;
+                }
+
+                if (!this.selectedEkHizmetTarifeId || !result.tarifeler.some((x) => x.id === this.selectedEkHizmetTarifeId)) {
+                    this.selectedEkHizmetTarifeId = result.tarifeler[0]?.id ?? null;
+                }
+
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.odemeEkHizmetSecenekleri = null;
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private applyOdemeOzetiToRezervasyon(ozet: RezervasyonOdemeOzetDto): void {
+        const kayit = this.rezervasyonKayitlari.find((x) => x.id === ozet.rezervasyonId);
+        if (kayit) {
+            kayit.toplamUcret = ozet.toplamUcret;
+            kayit.odenenTutar = ozet.odenenTutar;
+            kayit.kalanTutar = ozet.kalanTutar;
+        }
+
+        const detay = this.rezervasyonDetayById[ozet.rezervasyonId];
+        if (detay) {
+            detay.konaklamaUcreti = ozet.konaklamaUcreti;
+            detay.ekHizmetToplami = ozet.ekHizmetToplami;
+            detay.toplamUcret = ozet.toplamUcret;
+            detay.ekHizmetler = [...ozet.ekHizmetler];
+        }
+    }
+
+    private getSelectedEkHizmetTarife(): RezervasyonEkHizmetTarifeSecenekDto | null {
+        if (!this.selectedEkHizmetTarifeId) {
+            return null;
+        }
+
+        return this.ekHizmetTarifeSecenekleri.find((x) => x.id === this.selectedEkHizmetTarifeId) ?? null;
+    }
+
+    private getDefaultEkHizmetTarihi(rezervasyonId: number): string {
+        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
+        if (!kayit) {
+            return this.nowInput();
+        }
+
+        const now = new Date();
+        const giris = new Date(kayit.girisTarihi);
+        const cikis = new Date(kayit.cikisTarihi);
+        const value = now >= giris && now <= cikis ? now : giris;
+        return new Date(value.getTime() - value.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+
+    private getSelectedOdemeRezervasyonDurumu(): string | null {
+        if (!this.odemeRezervasyonId) {
+            return null;
+        }
+
+        return this.rezervasyonKayitlari.find((x) => x.id === this.odemeRezervasyonId)?.rezervasyonDurumu ?? null;
+    }
+
+    private getEkHizmetModificationDisabledReason(): string | null {
+        if (!this.odemeOzeti) {
+            return 'Odeme ozeti yok';
+        }
+
+        const durum = this.getSelectedOdemeRezervasyonDurumu();
+        if (durum === this.durumCheckOutTamamlandi) {
+            return 'Check-out tamamlandi';
+        }
+
+        if (durum === this.durumIptal) {
+            return 'Iptal edildi';
+        }
+
+        return null;
+    }
+
+    getEkHizmetEditDisabledReason(_hizmet: RezervasyonEkHizmetDto): string | null {
+        return this.getEkHizmetModificationDisabledReason();
+    }
+
+    getEkHizmetEditDisabledMessage(hizmet: RezervasyonEkHizmetDto): string {
+        const reason = this.getEkHizmetEditDisabledReason(hizmet);
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemi guncellenemez.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyonda ek hizmet kalemi guncellenemez.';
+        }
+
+        if (reason === 'Odeme ozeti yok') {
+            return 'Ek hizmet islemi icin odeme ozeti yuklenemedi.';
+        }
+
+        return 'Ek hizmet kalemi guncellenemez.';
+    }
+
+    getEkHizmetDeleteDisabledReason(hizmet: RezervasyonEkHizmetDto): string | null {
+        const reservationReason = this.getEkHizmetModificationDisabledReason();
+        if (reservationReason) {
+            return reservationReason;
+        }
+
+        if (!this.odemeOzeti) {
+            return 'Odeme ozeti yok';
+        }
+
+        const kalanTutar = this.odemeOzeti.kalanTutar ?? 0;
+        if (kalanTutar <= 0) {
+            return 'Odeme bakiyesi sifirlandi';
+        }
+
+        if (hizmet.toplamTutar > kalanTutar) {
+            return 'Fazla odeme olusur';
+        }
+
+        return null;
+    }
+
+    getEkHizmetDeleteDisabledMessage(hizmet: RezervasyonEkHizmetDto): string {
+        const reason = this.getEkHizmetDeleteDisabledReason(hizmet);
+        if (reason === 'Check-out tamamlandi') {
+            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemi silinemez.';
+        }
+
+        if (reason === 'Iptal edildi') {
+            return 'Iptal edilen rezervasyonda ek hizmet kalemi silinemez.';
+        }
+
+        if (reason === 'Odeme bakiyesi sifirlandi') {
+            return 'Odeme bakiyesi sifirlandigi icin bu ek hizmet kalemi silinemez.';
+        }
+
+        if (reason === 'Fazla odeme olusur') {
+            return `Bu kalem silinirse tahsil edilen tutar yeni toplamdan buyuk kalir. Kalan tutar: ${this.formatCurrency(this.odemeOzeti?.kalanTutar ?? 0, this.odemeOzeti?.paraBirimi ?? 'TRY')}.`;
+        }
+
+        if (reason === 'Odeme ozeti yok') {
+            return 'Ek hizmet islemi icin odeme ozeti yuklenemedi.';
+        }
+
+        return 'Ek hizmet kalemi silinemez.';
+    }
+
+    private resetEkHizmetForm(): void {
+        this.editingEkHizmetId = null;
+        this.ekHizmetMiktar = 1;
+        this.ekHizmetAciklama = '';
+
+        if (this.odemeRezervasyonId) {
+            this.ekHizmetTarihi = this.getDefaultEkHizmetTarihi(this.odemeRezervasyonId);
+        }
     }
 
     private loadRezervasyonDetay(rezervasyonId: number): void {
@@ -1813,6 +2514,10 @@ export class RezervasyonYonetimi implements OnInit {
         return normalized.length > 0 ? normalized : null;
     }
 
+    private hasSharedRoomUsage(scenario: KonaklamaSenaryoDto): boolean {
+        return scenario.segmentler.some((segment) => segment.odaAtamalari.some((assignment) => assignment.paylasimliMi));
+    }
+
     private toDateTimeLocalInput(date: Date): string {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1820,6 +2525,15 @@ export class RezervasyonYonetimi implements OnInit {
         const hour = String(date.getHours()).padStart(2, '0');
         const minute = String(date.getMinutes()).padStart(2, '0');
         return `${year}-${month}-${day}T${hour}:${minute}`;
+    }
+
+    private toDateTimeLocalInputValue(value: string): string {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+
+        return this.toDateTimeLocalInput(date);
     }
 
     private applySelectedTesisDateTimes(): void {
@@ -1879,4 +2593,3 @@ export class RezervasyonYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

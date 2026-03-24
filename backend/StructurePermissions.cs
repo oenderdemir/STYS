@@ -58,6 +58,13 @@ public static class StructurePermissions
         public const string Manage = "OdaFiyatYonetimi.Manage";
     }
 
+    public static class EkHizmetYonetimi
+    {
+        public const string Menu = "EkHizmetYonetimi.Menu";
+        public const string View = "EkHizmetYonetimi.View";
+        public const string Manage = "EkHizmetYonetimi.Manage";
+    }
+
     public static class KonaklamaTipiYonetimi
     {
         public const string Menu = "KonaklamaTipiYonetimi.Menu";

@@ -15,5 +15,6 @@ public class RezervasyonOdaDegisimAdayOdaDto
     public int Kapasite { get; set; }
 
     public int KalanKapasite { get; set; }
-}
 
+    public List<int> OnerilenYatakNolari { get; set; } = [];
+}

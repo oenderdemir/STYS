@@ -18,6 +18,8 @@ public class RezervasyonListeDto
 
     public string? PasaportNo { get; set; }
 
+    public string? MisafirCinsiyeti { get; set; }
+
     public int KisiSayisi { get; set; }
 
     public DateTime GirisTarihi { get; set; }

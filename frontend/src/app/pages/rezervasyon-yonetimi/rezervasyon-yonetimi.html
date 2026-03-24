@@ -85,7 +85,7 @@
     <div class="grid grid-cols-12 gap-4 mt-4">
         <div class="col-span-12 md:col-span-4 lg:col-span-2">
             <label for="rezKisiSayisi" class="block font-medium mb-2">Kisi Sayisi</label>
-            <input pInputText id="rezKisiSayisi" class="w-full" type="number" min="1" [(ngModel)]="kisiSayisi" [disabled]="loadingReferences || loadingResults" />
+            <input pInputText id="rezKisiSayisi" class="w-full" type="number" min="1" [(ngModel)]="kisiSayisi" (ngModelChange)="onKisiSayisiChange()" [disabled]="loadingReferences || loadingResults" />
         </div>
 
         <div class="col-span-12 md:col-span-4 lg:col-span-5">
@@ -100,9 +100,50 @@
     </div>
 
     <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Konaklayan Cinsiyetleri</label>
+            <div class="grid grid-cols-12 gap-3">
+                @for (cinsiyet of senaryoKonaklayanCinsiyetleri; track $index) {
+                    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+                        <label class="block text-sm mb-2">{{ getSenaryoKonaklayanCinsiyetLabel($index) }}</label>
+                        <p-select
+                            class="w-full"
+                            [options]="konaklayanCinsiyetSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [appendTo]="'body'"
+                            [showClear]="true"
+                            placeholder="Cinsiyet"
+                            [disabled]="loadingReferences || loadingResults"
+                            [(ngModel)]="senaryoKonaklayanCinsiyetleri[$index]"
+                            (ngModelChange)="onSenaryoKonaklayanCinsiyetChange($index)"
+                        />
+                    </div>
+                }
+            </div>
+            <small class="text-color-secondary">Paylasimli odalarda ilk yerlesen cinsiyete gore uygunluk hesaplanir.</small>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
         <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="misafirAdiSoyadi" class="block font-medium mb-2">Misafir Adi Soyadi</label>
             <input pInputText id="misafirAdiSoyadi" class="w-full" [(ngModel)]="misafirAdiSoyadi" [disabled]="loadingResults || saving" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-3">
+            <label for="misafirCinsiyeti" class="block font-medium mb-2">Misafir Cinsiyeti</label>
+            <p-select
+                inputId="misafirCinsiyeti"
+                class="w-full"
+                [options]="konaklayanCinsiyetSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [appendTo]="'body'"
+                [showClear]="true"
+                placeholder="Cinsiyet"
+                [disabled]="loadingResults || saving"
+                [(ngModel)]="misafirCinsiyeti"
+            />
         </div>
         <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="misafirTelefon" class="block font-medium mb-2">Misafir Telefon</label>
@@ -140,6 +181,15 @@
                         <div>
                             <h6 class="m-0">{{ senaryo.senaryoKodu }}</h6>
                             <span class="text-sm">{{ senaryo.aciklama }}</span>
+                            @if (getScenarioSharedRoomGenderBadgeLabel(senaryo); as badgeLabel) {
+                                <div class="mt-2">
+                                    <p-tag
+                                        [value]="badgeLabel"
+                                        [severity]="getScenarioSharedRoomGenderBadgeSeverity(senaryo)"
+                                        [rounded]="true"
+                                    />
+                                </div>
+                            }
                         </div>
                         <div class="flex items-center gap-3">
                             <div class="text-sm">
@@ -214,6 +264,7 @@
                     <th style="width: 4rem"></th>
                     <th>Referans</th>
                     <th>Misafir Ad Soyad</th>
+                    <th>Cinsiyet</th>
                     <th>TC Kimlik No</th>
                     <th>Telefon</th>
                     <th>Eposta</th>
@@ -233,6 +284,7 @@
                     </td>
                     <td>{{ kayit.referansNo }}</td>
                     <td>{{ kayit.misafirAdiSoyadi }}</td>
+                    <td>{{ kayit.misafirCinsiyeti || '-' }}</td>
                     <td>{{ kayit.tcKimlikNo || '-' }}</td>
                     <td>{{ kayit.misafirTelefon || '-' }}</td>
                     <td>{{ kayit.misafirEposta || '-' }}</td>
@@ -252,15 +304,23 @@
                     </td>
                     <td>
                         @if (hasAnyRowAction(kayit)) {
-                            <p-button
-                                label="Islemler"
-                                icon="pi pi-ellipsis-v"
-                                severity="secondary"
-                                [text]="true"
-                                size="small"
-                                [disabled]="isCheckActionLoading(kayit.id)"
-                                (click)="openRowActionsMenu(rowActionsMenu, $event, kayit)"
-                            />
+                            <div class="flex items-center gap-1">
+                                <p-button
+                                    label="Islemler"
+                                    icon="pi pi-ellipsis-v"
+                                    severity="secondary"
+                                    [text]="true"
+                                    size="small"
+                                    [disabled]="isCheckActionLoading(kayit.id)"
+                                    (click)="openRowActionsMenu(rowActionsMenu, $event, kayit)"
+                                />
+                                @if (getRowActionDisabledMessages(kayit).length > 0) {
+                                    <i
+                                        class="pi pi-info-circle text-color-secondary cursor-help"
+                                        [pTooltip]="getRowActionDisabledTooltip(kayit)"
+                                        tooltipPosition="top"></i>
+                                }
+                            </div>
                         } @else {
                             <span>-</span>
                         }
@@ -281,7 +341,7 @@
 	            </ng-template>
             <ng-template #expandedrow let-kayit>
                 <tr>
-                    <td colspan="13">
+                    <td colspan="14">
                         <div class="p-3">
                             @if (isRezervasyonDetayLoading(kayit.id)) {
                                 <span class="text-color-secondary">Rezervasyon detayi yukleniyor...</span>
@@ -344,12 +404,36 @@
             <strong>Referans:</strong> {{ rezervasyonUcretDetayReferansNo }}
         </div>
         <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-xs text-color-secondary">Misafir</div>
+                <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.misafirAdiSoyadi }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-3">
+                <div class="text-xs text-color-secondary">Cinsiyet</div>
+                <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.misafirCinsiyeti || '-' }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-3">
+                <div class="text-xs text-color-secondary">Kisi Sayisi</div>
+                <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.kisiSayisi }}</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 mb-3">
             <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Taban Ucret</div>
                 <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.toplamBazUcret, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
             </div>
             <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Nihai Ucret</div>
+                <div class="text-xs text-color-secondary">Konaklama Ucreti</div>
+                <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.konaklamaUcreti, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Ek Hizmet Toplami</div>
+                <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.ekHizmetToplami, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Nihai Toplam</div>
                 <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.toplamUcret, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
             </div>
             <div class="col-span-12 md:col-span-4">
@@ -357,7 +441,7 @@
                 <div class="font-semibold">
                     {{
                         formatCurrency(
-                            getSelectedRezervasyonUcretDetay()!.toplamBazUcret - getSelectedRezervasyonUcretDetay()!.toplamUcret,
+                            getSelectedRezervasyonUcretDetay()!.toplamBazUcret - getSelectedRezervasyonUcretDetay()!.konaklamaUcreti,
                             getSelectedRezervasyonUcretDetay()!.paraBirimi
                         )
                     }}
@@ -385,6 +469,34 @@
                 </ng-template>
             </p-table>
         }
+
+        <div class="mt-4">
+            <h6 class="m-0 mb-2">Ek Hizmetler</h6>
+            @if (getSelectedRezervasyonUcretDetay()!.ekHizmetler.length === 0) {
+                <div class="text-color-secondary">Bu rezervasyona eklenmis ek hizmet bulunmuyor.</div>
+            } @else {
+                <p-table [value]="getSelectedRezervasyonUcretDetay()!.ekHizmetler" [tableStyle]="{ 'min-width': '48rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Konaklayan</th>
+                            <th>Hizmet</th>
+                            <th>Konum</th>
+                            <th>Tutar</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-hizmet>
+                        <tr>
+                            <td>{{ formatDateTime(hizmet.hizmetTarihi) }}</td>
+                            <td>{{ hizmet.konaklayanAdiSoyadi }}</td>
+                            <td>{{ hizmet.tarifeAdi }} ({{ hizmet.miktar }} {{ hizmet.birimAdi }})</td>
+                            <td>{{ hizmet.odaNo }} - {{ hizmet.binaAdi }}{{ hizmet.yatakNo ? ' / Yatak ' + hizmet.yatakNo : '' }}</td>
+                            <td>{{ formatCurrency(hizmet.toplamTutar, hizmet.paraBirimi) }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            }
+        </div>
     }
 
     <ng-template #footer>
@@ -518,6 +630,7 @@
                 <tr>
                     <th>Sira</th>
                     <th>Ad Soyad</th>
+                    <th>Cinsiyet</th>
                     <th>TC Kimlik No</th>
                     <th>Pasaport No</th>
                     @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
@@ -535,6 +648,19 @@
                     <td>{{ kisi.siraNo }}</td>
                     <td>
                         <input pInputText class="w-full" [(ngModel)]="kisi.adSoyad" [disabled]="konaklayanPlanSaving" />
+                    </td>
+                    <td>
+                        <p-select
+                            class="w-full"
+                            [options]="konaklayanCinsiyetSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [appendTo]="'body'"
+                            [showClear]="true"
+                            placeholder="Cinsiyet"
+                            [disabled]="konaklayanPlanSaving"
+                            [(ngModel)]="kisi.cinsiyet"
+                        />
                     </td>
                     <td>
                         <input pInputText class="w-full" [(ngModel)]="kisi.tcKimlikNo" [disabled]="konaklayanPlanSaving" />
@@ -601,6 +727,12 @@
         <strong>Referans:</strong> {{ odaDegisimReferansNo }}
     </div>
 
+    @if (odaDegisimBilgiMesaji) {
+        <div class="text-sm text-orange-600 mb-3">
+            {{ odaDegisimBilgiMesaji }}
+        </div>
+    }
+
     @if (odaDegisimLoading) {
         <div>Oda degisim secenekleri yukleniyor...</div>
     } @else if (!odaDegisimSecenekleri || odaDegisimSecenekleri.kayitlar.length === 0) {
@@ -628,6 +760,12 @@
                         <div class="text-xs text-color-secondary">
                             {{ kayit.mevcutOdaTipiAdi }} | {{ kayit.mevcutOdaPaylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}
                         </div>
+                        @if (kayit.tasinacakKonaklayanlar.length > 0) {
+                            <div class="text-xs text-color-secondary mt-2">
+                                Tasinacak konaklayanlar:
+                                {{ getTasinacakKonaklayanAdlari(kayit) }}
+                            </div>
+                        }
                     </td>
                     <td>{{ kayit.ayrilanKisiSayisi }}</td>
                     <td>
@@ -645,6 +783,32 @@
                                 [ngModel]="getOdaDegisimSeciliOdaId(kayit)"
                                 (ngModelChange)="setOdaDegisimSeciliOdaId(kayit, $event)"
                             />
+                            @if (getSelectedOdaDegisimAday(kayit); as selectedAday) {
+                                <div class="text-xs text-color-secondary mt-2">
+                                    @if (selectedAday.paylasimliMi && selectedAday.onerilenYatakNolari.length > 0) {
+                                        Onerilen yataklar: {{ selectedAday.onerilenYatakNolari.join(', ') }}
+                                    } @else if (selectedAday.paylasimliMi) {
+                                        Yatak atamasi kayit sirasinda otomatik belirlenecek.
+                                    } @else {
+                                        Paylasimsiz oda secildi.
+                                    }
+                                </div>
+                                @if (kayit.tasinacakKonaklayanlar.length > 0) {
+                                    <div class="mt-2 border-round border-1 surface-border p-2">
+                                        <div class="text-xs font-medium mb-2">Konaklayan Tasima Onerisi</div>
+                                        <div class="grid grid-cols-12 gap-2 text-xs">
+                                            <div class="col-span-5 font-medium">Konaklayan</div>
+                                            <div class="col-span-3 font-medium">Mevcut Yatak</div>
+                                            <div class="col-span-4 font-medium">Onerilen Yatak</div>
+                                            @for (oneri of getOdaDegisimKonaklayanOnerileri(kayit, selectedAday); track oneri.konaklayan.siraNo) {
+                                                <div class="col-span-5">{{ oneri.konaklayan.adSoyad }}</div>
+                                                <div class="col-span-3">{{ oneri.konaklayan.mevcutYatakNo ?? '-' }}</div>
+                                                <div class="col-span-4">{{ oneri.onerilenYatakNo ?? (selectedAday.paylasimliMi ? 'Otomatik' : '-') }}</div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
                         }
                     </td>
                 </tr>
@@ -785,9 +949,20 @@
     } @else {
         <div class="grid grid-cols-12 gap-3 mb-3">
             <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Konaklama Ucreti</div>
+                <div class="font-semibold">{{ formatCurrency(odemeOzeti.konaklamaUcreti, odemeOzeti.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Ek Hizmet Toplami</div>
+                <div class="font-semibold">{{ formatCurrency(odemeOzeti.ekHizmetToplami, odemeOzeti.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Toplam</div>
                 <div class="font-semibold">{{ formatCurrency(odemeOzeti.toplamUcret, odemeOzeti.paraBirimi) }}</div>
             </div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-3 mb-3">
             <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Odenen</div>
                 <div class="font-semibold">{{ formatCurrency(odemeOzeti.odenenTutar, odemeOzeti.paraBirimi) }}</div>
@@ -796,6 +971,148 @@
                 <div class="text-xs text-color-secondary">Kalan</div>
                 <div class="font-semibold">{{ formatCurrency(odemeOzeti.kalanTutar, odemeOzeti.paraBirimi) }}</div>
             </div>
+        </div>
+
+        <div class="border-1 surface-border border-round p-3 mb-4">
+            <div class="font-medium mb-3">Ek Hizmet Ekle</div>
+            @if (!odemeEkHizmetSecenekleri || ekHizmetMisafirSecenekleri.length === 0) {
+                <div class="text-sm text-color-secondary">
+                    Ek hizmet eklemek icin once konaklayan plani kaydedilmelidir.
+                </div>
+            } @else if (ekHizmetTarifeSecenekleri.length === 0) {
+                <div class="text-sm text-color-secondary">
+                    Bu rezervasyonun tesisi icin uygun ek hizmet tarifesi bulunmuyor.
+                </div>
+            } @else {
+                <div class="grid grid-cols-12 gap-3 mb-3">
+                    <div class="col-span-12 md:col-span-6">
+                        <label for="ekHizmetKonaklayan" class="block font-medium mb-2">Konaklayan</label>
+                        <p-select
+                            inputId="ekHizmetKonaklayan"
+                            class="w-full"
+                            [options]="ekHizmetMisafirSecenekleri"
+                            optionLabel="adSoyad"
+                            optionValue="rezervasyonKonaklayanId"
+                            [appendTo]="'body'"
+                            [showClear]="false"
+                            [disabled]="ekHizmetSaving || odemeSaving"
+                            [(ngModel)]="selectedEkHizmetKonaklayanId"
+                        />
+                    </div>
+                    <div class="col-span-12 md:col-span-6">
+                        <label for="ekHizmetTarife" class="block font-medium mb-2">Ek Hizmet</label>
+                        <p-select
+                            inputId="ekHizmetTarife"
+                            class="w-full"
+                            [options]="ekHizmetTarifeSecenekleri"
+                            optionLabel="ad"
+                            optionValue="id"
+                            [appendTo]="'body'"
+                            [showClear]="false"
+                            [disabled]="ekHizmetSaving || odemeSaving"
+                            [(ngModel)]="selectedEkHizmetTarifeId"
+                        />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-12 gap-3 mb-3">
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="ekHizmetTarih" class="block font-medium mb-2">Hizmet Tarihi</label>
+                        <input pInputText id="ekHizmetTarih" class="w-full" type="datetime-local" [(ngModel)]="ekHizmetTarihi" [disabled]="ekHizmetSaving || odemeSaving" />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="ekHizmetMiktar" class="block font-medium mb-2">Miktar</label>
+                        <input pInputText id="ekHizmetMiktar" class="w-full" type="number" min="0.01" step="0.01" [(ngModel)]="ekHizmetMiktar" [disabled]="ekHizmetSaving || odemeSaving" />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="ekHizmetAciklama" class="block font-medium mb-2">Aciklama</label>
+                        <input pInputText id="ekHizmetAciklama" class="w-full" [(ngModel)]="ekHizmetAciklama" [disabled]="ekHizmetSaving || odemeSaving" />
+                    </div>
+                </div>
+
+                @if (ekHizmetBilgiMesaji) {
+                    <div class="text-sm text-orange-600 mb-3">
+                        {{ ekHizmetBilgiMesaji }}
+                    </div>
+                }
+
+                <div class="flex flex-wrap gap-2">
+                    <p-button
+                        [label]="editingEkHizmetId ? 'Ek Hizmeti Guncelle' : 'Ek Hizmeti Hesaba Ekle'"
+                        [icon]="editingEkHizmetId ? 'pi pi-check' : 'pi pi-plus'"
+                        [loading]="ekHizmetSaving"
+                        [disabled]="odemeSaving || !canModifyEkHizmet"
+                        (onClick)="kaydetEkHizmet()" />
+                    @if (editingEkHizmetId) {
+                        <p-button
+                            label="Duzenlemeyi Iptal Et"
+                            icon="pi pi-times"
+                            severity="secondary"
+                            [outlined]="true"
+                            [disabled]="ekHizmetSaving || odemeSaving"
+                            (onClick)="ekHizmetDuzenlemeyiIptalEt()" />
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="mb-4">
+            <div class="font-medium mb-2">Ek Hizmet Kalemleri</div>
+            @if (odemeOzeti.ekHizmetler.length === 0) {
+                <div class="text-sm text-color-secondary">Bu rezervasyonda ek hizmet kaydi bulunmuyor.</div>
+            } @else {
+                <p-table [value]="odemeOzeti.ekHizmetler" [tableStyle]="{ 'min-width': '46rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Konaklayan</th>
+                            <th>Hizmet</th>
+                            <th>Konum</th>
+                            <th>Tutar</th>
+                            <th class="w-32">Islem</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-hizmet>
+                        <tr>
+                            <td>{{ formatDateTime(hizmet.hizmetTarihi) }}</td>
+                            <td>{{ hizmet.konaklayanAdiSoyadi }}</td>
+                            <td>{{ hizmet.tarifeAdi }} ({{ hizmet.miktar }} {{ hizmet.birimAdi }})</td>
+                            <td>{{ hizmet.odaNo }} - {{ hizmet.binaAdi }}{{ hizmet.yatakNo ? ' / Yatak ' + hizmet.yatakNo : '' }}</td>
+                            <td>{{ formatCurrency(hizmet.toplamTutar, hizmet.paraBirimi) }}</td>
+                            <td>
+                                <div class="flex gap-2">
+                                    <p-button
+                                        icon="pi pi-pencil"
+                                        size="small"
+                                        severity="secondary"
+                                        [text]="true"
+                                        [disabled]="getEkHizmetEditDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
+                                        (onClick)="duzenleEkHizmet(hizmet)" />
+                                    @if (getEkHizmetEditDisabledReason(hizmet)) {
+                                        <i
+                                            class="pi pi-info-circle text-color-secondary cursor-help self-center"
+                                            [pTooltip]="getEkHizmetEditDisabledMessage(hizmet)"
+                                            tooltipPosition="top"></i>
+                                    }
+                                    <p-button
+                                        icon="pi pi-trash"
+                                        size="small"
+                                        severity="danger"
+                                        [text]="true"
+                                        [disabled]="getEkHizmetDeleteDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
+                                        (onClick)="silEkHizmet(hizmet)" />
+                                    @if (getEkHizmetDeleteDisabledReason(hizmet)) {
+                                        <i
+                                            class="pi pi-info-circle text-color-secondary cursor-help self-center"
+                                            [pTooltip]="getEkHizmetDeleteDisabledMessage(hizmet)"
+                                            tooltipPosition="top"></i>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            }
         </div>
 
         <div class="grid grid-cols-12 gap-3 mb-3">

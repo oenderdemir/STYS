@@ -35,6 +35,8 @@ public class RezervasyonKaydetRequestDto
 
     public string? PasaportNo { get; set; }
 
+    public string? MisafirCinsiyeti { get; set; }
+
     public string? Notlar { get; set; }
 
     [Range(0, double.MaxValue)]

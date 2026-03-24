@@ -230,6 +230,48 @@ public class RezervasyonController : UIController
         return Ok(result);
     }
 
+    [HttpGet("kayitlar/{rezervasyonId:int}/ek-hizmet-secenekleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonEkHizmetSecenekleriDto>> GetEkHizmetSecenekleri([FromRoute] int rezervasyonId, CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetEkHizmetSecenekleriAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/ek-hizmetler")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> KaydetEkHizmet(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonEkHizmetKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetEkHizmetAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("kayitlar/{rezervasyonId:int}/ek-hizmetler/{ekHizmetId:int}")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> GuncelleEkHizmet(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int ekHizmetId,
+        [FromBody] RezervasyonEkHizmetKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GuncelleEkHizmetAsync(rezervasyonId, ekHizmetId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpDelete("kayitlar/{rezervasyonId:int}/ek-hizmetler/{ekHizmetId:int}")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> SilEkHizmet(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int ekHizmetId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.SilEkHizmetAsync(rezervasyonId, ekHizmetId, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("kayitlar/{rezervasyonId:int}/odemeler")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
     public async Task<ActionResult<RezervasyonOdemeOzetDto>> KaydetOdeme(

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
+using STYS.EkHizmetler.Entities;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
@@ -52,6 +53,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KonaklamaTipi> KonaklamaTipleri => Set<KonaklamaTipi>();
     public DbSet<MisafirTipi> MisafirTipleri => Set<MisafirTipi>();
     public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
+    public DbSet<EkHizmetTarife> EkHizmetTarifeleri => Set<EkHizmetTarife>();
     public DbSet<IndirimKurali> IndirimKurallari => Set<IndirimKurali>();
     public DbSet<IndirimKuraliMisafirTipi> IndirimKuraliMisafirTipleri => Set<IndirimKuraliMisafirTipi>();
     public DbSet<IndirimKuraliKonaklamaTipi> IndirimKuraliKonaklamaTipleri => Set<IndirimKuraliKonaklamaTipi>();
@@ -63,6 +65,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonDegisiklikGecmisi> RezervasyonDegisiklikGecmisleri => Set<RezervasyonDegisiklikGecmisi>();
     public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
+    public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -377,6 +380,23 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<EkHizmetTarife>(entity =>
+        {
+            entity.ToTable("EkHizmetTarifeleri", "dbo");
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.BirimAdi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.HasIndex(x => new { x.TesisId, x.Ad, x.BaslangicTarihi, x.BitisTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<IndirimKurali>(entity =>
         {
             entity.ToTable("IndirimKurallari", "dbo");
@@ -478,6 +498,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.MisafirEposta).HasMaxLength(256);
             entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
             entity.Property(x => x.PasaportNo).HasMaxLength(32);
+            entity.Property(x => x.MisafirCinsiyeti).HasMaxLength(16);
             entity.Property(x => x.Notlar).HasMaxLength(1024);
             entity.Property(x => x.ToplamBazUcret).HasPrecision(18, 2);
             entity.Property(x => x.ToplamUcret).HasPrecision(18, 2);
@@ -558,6 +579,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AdSoyad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
             entity.Property(x => x.PasaportNo).HasMaxLength(32);
+            entity.Property(x => x.Cinsiyet).HasMaxLength(16);
             entity.HasIndex(x => new { x.RezervasyonId, x.SiraNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
@@ -587,6 +609,49 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.RezervasyonSegment)
                 .WithMany(x => x.KonaklayanAtamalari)
+                .HasForeignKey(x => x.RezervasyonSegmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Oda)
+                .WithMany()
+                .HasForeignKey(x => x.OdaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonEkHizmet>(entity =>
+        {
+            entity.ToTable("RezervasyonEkHizmetler", "dbo");
+            entity.Property(x => x.TarifeAdiSnapshot).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.BirimAdiSnapshot).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.OdaNoSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.BinaAdiSnapshot).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Miktar).HasPrecision(18, 2);
+            entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
+            entity.Property(x => x.ToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => new { x.RezervasyonId, x.HizmetTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RezervasyonKonaklayanId, x.HizmetTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.EkHizmetler)
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RezervasyonKonaklayan)
+                .WithMany()
+                .HasForeignKey(x => x.RezervasyonKonaklayanId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.EkHizmetTarife)
+                .WithMany(x => x.RezervasyonEkHizmetleri)
+                .HasForeignKey(x => x.EkHizmetTarifeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RezervasyonSegment)
+                .WithMany()
                 .HasForeignKey(x => x.RezervasyonSegmentId)
                 .OnDelete(DeleteBehavior.Restrict);
 

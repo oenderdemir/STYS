@@ -28,6 +28,7 @@ public class RezervasyonOdaDegisimKayitDto
 
     public bool ProblemliMi { get; set; }
 
+    public List<RezervasyonOdaDegisimKonaklayanDto> TasinacakKonaklayanlar { get; set; } = [];
+
     public List<RezervasyonOdaDegisimAdayOdaDto> AdayOdalar { get; set; } = [];
 }
-

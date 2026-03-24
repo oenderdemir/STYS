@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260324185242_AddEkHizmetYonetimiAndReservationCharges")]
+    partial class AddEkHizmetYonetimiAndReservationCharges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1492,10 +1495,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int?>("MisafirTipiId")
                         .HasColumnType("int");
 
-                    b.Property<string>("MisafirCinsiyeti")
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
-
                     b.Property<string>("Notlar")
                         .HasMaxLength(1024)
                         .HasColumnType("nvarchar(1024)");
@@ -1625,10 +1624,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("Cinsiyet")
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
 
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");

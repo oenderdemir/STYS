@@ -49,6 +49,8 @@ public class RezervasyonKonaklayanKisiDto
 
     public string? PasaportNo { get; set; }
 
+    public string? Cinsiyet { get; set; }
+
     public List<RezervasyonKonaklayanKisiAtamaDto> Atamalar { get; set; } = [];
 }
 

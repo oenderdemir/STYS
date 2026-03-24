@@ -9,6 +9,8 @@ import {
     RezervasyonDashboardDto,
     RezervasyonDegisiklikGecmisiDto,
     RezervasyonDetayDto,
+    RezervasyonEkHizmetKaydetRequestDto,
+    RezervasyonEkHizmetSecenekleriDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonCheckInKontrolDto,
@@ -360,6 +362,54 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme ozeti alinamadi.');
+            })
+        );
+    }
+
+    getEkHizmetSecenekleri(rezervasyonId: number): Observable<RezervasyonEkHizmetSecenekleriDto> {
+        return this.http.get<ApiResponse<RezervasyonEkHizmetSecenekleriDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/ek-hizmet-secenekleri`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Ek hizmet secenekleri alinamadi.');
+            })
+        );
+    }
+
+    kaydetEkHizmet(rezervasyonId: number, request: RezervasyonEkHizmetKaydetRequestDto): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.post<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/ek-hizmetler`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Ek hizmet kaydi olusturulamadi.');
+            })
+        );
+    }
+
+    guncelleEkHizmet(rezervasyonId: number, ekHizmetId: number, request: RezervasyonEkHizmetKaydetRequestDto): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.put<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/ek-hizmetler/${ekHizmetId}`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Ek hizmet kaydi guncellenemedi.');
+            })
+        );
+    }
+
+    silEkHizmet(rezervasyonId: number, ekHizmetId: number): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.delete<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/ek-hizmetler/${ekHizmetId}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Ek hizmet kaydi silinemedi.');
             })
         );
     }

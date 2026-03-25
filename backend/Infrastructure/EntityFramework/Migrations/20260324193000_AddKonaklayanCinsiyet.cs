@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
+    [DbContext(typeof(StysAppDbContext))]
+    [Migration("20260324193000_AddKonaklayanCinsiyet")]
     public partial class AddKonaklayanCinsiyet : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

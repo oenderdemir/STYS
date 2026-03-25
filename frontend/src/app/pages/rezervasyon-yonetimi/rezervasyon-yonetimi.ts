@@ -65,6 +65,106 @@ interface DegisiklikPayloadTableData {
     standalone: true,
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
     templateUrl: './rezervasyon-yonetimi.html',
+    styles: [`
+        :host ::ng-deep .rez-odeme-dialog .p-dialog-content {
+            padding-top: 0.5rem;
+        }
+
+        :host ::ng-deep .rez-odeme-dialog .p-dialog-footer {
+            border-top: 1px solid var(--surface-border);
+            padding-top: 1rem;
+        }
+
+        .rez-odeme-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .rez-odeme-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .rez-odeme-summary-card {
+            border: 1px solid var(--surface-border);
+            border-radius: 14px;
+            padding: 0.9rem 1rem;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface-card) 88%, white), var(--surface-ground));
+            box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+        }
+
+        .rez-odeme-summary-card.is-primary {
+            background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 14%, white), color-mix(in srgb, var(--primary-color) 6%, var(--surface-card)));
+            border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border));
+        }
+
+        .rez-odeme-summary-card.is-accent {
+            background: linear-gradient(135deg, #ecfdf5, #f0fdf4);
+            border-color: #bbf7d0;
+        }
+
+        .rez-odeme-summary-label {
+            font-size: 0.78rem;
+            color: var(--text-color-secondary);
+            margin-bottom: 0.35rem;
+        }
+
+        .rez-odeme-summary-value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--text-color);
+        }
+
+        .rez-odeme-panel {
+            border: 1px solid var(--surface-border);
+            border-radius: 16px;
+            background: var(--surface-card);
+            padding: 1rem;
+        }
+
+        .rez-odeme-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .rez-odeme-panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .rez-odeme-panel-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-color-secondary);
+        }
+
+        .rez-odeme-action-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+
+        .rez-odeme-table :is(th, td) {
+            vertical-align: top;
+        }
+
+        .rez-odeme-table-cell {
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.35;
+        }
+
+        .rez-odeme-history-table :is(th, td) {
+            vertical-align: top;
+        }
+    `],
     providers: [MessageService]
 })
 export class RezervasyonYonetimi implements OnInit {

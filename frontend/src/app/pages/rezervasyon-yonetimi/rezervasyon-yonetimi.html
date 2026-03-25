@@ -934,231 +934,252 @@
     header="Rezervasyon Odemeleri"
     [(visible)]="odemeDialogVisible"
     [modal]="true"
-    [style]="{ width: '42rem', 'max-width': '96vw' }"
-    [breakpoints]="{ '960px': '94vw' }"
+    styleClass="rez-odeme-dialog"
+    [style]="{ width: '68rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '1200px': '94vw', '960px': '97vw' }"
     (onHide)="closeOdemeDialog()"
 >
-    <div class="text-sm mb-3">
-        <strong>Referans:</strong> {{ odemeReferansNo }}
-    </div>
-
-    @if (odemeLoading) {
-        <div>Odeme ozeti yukleniyor...</div>
-    } @else if (!odemeOzeti) {
-        <div>Odeme bilgisi bulunamadi.</div>
-    } @else {
-        <div class="grid grid-cols-12 gap-3 mb-3">
-            <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Konaklama Ucreti</div>
-                <div class="font-semibold">{{ formatCurrency(odemeOzeti.konaklamaUcreti, odemeOzeti.paraBirimi) }}</div>
-            </div>
-            <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Ek Hizmet Toplami</div>
-                <div class="font-semibold">{{ formatCurrency(odemeOzeti.ekHizmetToplami, odemeOzeti.paraBirimi) }}</div>
-            </div>
-            <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Toplam</div>
-                <div class="font-semibold">{{ formatCurrency(odemeOzeti.toplamUcret, odemeOzeti.paraBirimi) }}</div>
-            </div>
+    <div class="rez-odeme-shell">
+        <div class="text-sm">
+            <strong>Referans:</strong> {{ odemeReferansNo }}
         </div>
 
-        <div class="grid grid-cols-12 gap-3 mb-3">
-            <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Odenen</div>
-                <div class="font-semibold">{{ formatCurrency(odemeOzeti.odenenTutar, odemeOzeti.paraBirimi) }}</div>
+        @if (odemeLoading) {
+            <div>Odeme ozeti yukleniyor...</div>
+        } @else if (!odemeOzeti) {
+            <div>Odeme bilgisi bulunamadi.</div>
+        } @else {
+            <div class="rez-odeme-summary-grid">
+                <div class="rez-odeme-summary-card">
+                    <div class="rez-odeme-summary-label">Konaklama Ucreti</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.konaklamaUcreti, odemeOzeti.paraBirimi) }}</div>
+                </div>
+                <div class="rez-odeme-summary-card">
+                    <div class="rez-odeme-summary-label">Ek Hizmet Toplami</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.ekHizmetToplami, odemeOzeti.paraBirimi) }}</div>
+                </div>
+                <div class="rez-odeme-summary-card is-primary">
+                    <div class="rez-odeme-summary-label">Toplam</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.toplamUcret, odemeOzeti.paraBirimi) }}</div>
+                </div>
+                <div class="rez-odeme-summary-card">
+                    <div class="rez-odeme-summary-label">Odenen</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.odenenTutar, odemeOzeti.paraBirimi) }}</div>
+                </div>
+                <div class="rez-odeme-summary-card is-accent">
+                    <div class="rez-odeme-summary-label">Kalan</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.kalanTutar, odemeOzeti.paraBirimi) }}</div>
+                </div>
             </div>
-            <div class="col-span-12 md:col-span-4">
-                <div class="text-xs text-color-secondary">Kalan</div>
-                <div class="font-semibold">{{ formatCurrency(odemeOzeti.kalanTutar, odemeOzeti.paraBirimi) }}</div>
-            </div>
-        </div>
 
-        <div class="border-1 surface-border border-round p-3 mb-4">
-            <div class="font-medium mb-3">Ek Hizmet Ekle</div>
-            @if (!odemeEkHizmetSecenekleri || ekHizmetMisafirSecenekleri.length === 0) {
-                <div class="text-sm text-color-secondary">
-                    Ek hizmet eklemek icin once konaklayan plani kaydedilmelidir.
-                </div>
-            } @else if (ekHizmetTarifeSecenekleri.length === 0) {
-                <div class="text-sm text-color-secondary">
-                    Bu rezervasyonun tesisi icin uygun ek hizmet tarifesi bulunmuyor.
-                </div>
-            } @else {
-                <div class="grid grid-cols-12 gap-3 mb-3">
-                    <div class="col-span-12 md:col-span-6">
-                        <label for="ekHizmetKonaklayan" class="block font-medium mb-2">Konaklayan</label>
-                        <p-select
-                            inputId="ekHizmetKonaklayan"
-                            class="w-full"
-                            [options]="ekHizmetMisafirSecenekleri"
-                            optionLabel="adSoyad"
-                            optionValue="rezervasyonKonaklayanId"
-                            [appendTo]="'body'"
-                            [showClear]="false"
-                            [disabled]="ekHizmetSaving || odemeSaving"
-                            [(ngModel)]="selectedEkHizmetKonaklayanId"
-                        />
-                    </div>
-                    <div class="col-span-12 md:col-span-6">
-                        <label for="ekHizmetTarife" class="block font-medium mb-2">Ek Hizmet</label>
-                        <p-select
-                            inputId="ekHizmetTarife"
-                            class="w-full"
-                            [options]="ekHizmetTarifeSecenekleri"
-                            optionLabel="ad"
-                            optionValue="id"
-                            [appendTo]="'body'"
-                            [showClear]="false"
-                            [disabled]="ekHizmetSaving || odemeSaving"
-                            [(ngModel)]="selectedEkHizmetTarifeId"
-                        />
+            <div class="rez-odeme-panel">
+                <div class="rez-odeme-panel-header">
+                    <div>
+                        <div class="rez-odeme-panel-title">Ek Hizmet Ekle</div>
+                        <div class="rez-odeme-panel-subtitle">Konaklayana tarih bazli hizmet ekleyin.</div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-12 gap-3 mb-3">
-                    <div class="col-span-12 md:col-span-4">
-                        <label for="ekHizmetTarih" class="block font-medium mb-2">Hizmet Tarihi</label>
-                        <input pInputText id="ekHizmetTarih" class="w-full" type="datetime-local" [(ngModel)]="ekHizmetTarihi" [disabled]="ekHizmetSaving || odemeSaving" />
+                @if (!odemeEkHizmetSecenekleri || ekHizmetMisafirSecenekleri.length === 0) {
+                    <div class="text-sm text-color-secondary">
+                        Ek hizmet eklemek icin once konaklayan plani kaydedilmelidir.
                     </div>
-                    <div class="col-span-12 md:col-span-4">
-                        <label for="ekHizmetMiktar" class="block font-medium mb-2">Miktar</label>
-                        <input pInputText id="ekHizmetMiktar" class="w-full" type="number" min="0.01" step="0.01" [(ngModel)]="ekHizmetMiktar" [disabled]="ekHizmetSaving || odemeSaving" />
+                } @else if (ekHizmetTarifeSecenekleri.length === 0) {
+                    <div class="text-sm text-color-secondary">
+                        Bu rezervasyonun tesisi icin uygun ek hizmet tarifesi bulunmuyor.
                     </div>
-                    <div class="col-span-12 md:col-span-4">
-                        <label for="ekHizmetAciklama" class="block font-medium mb-2">Aciklama</label>
-                        <input pInputText id="ekHizmetAciklama" class="w-full" [(ngModel)]="ekHizmetAciklama" [disabled]="ekHizmetSaving || odemeSaving" />
+                } @else {
+                    <div class="grid grid-cols-12 gap-3 mb-3">
+                        <div class="col-span-12 md:col-span-6">
+                            <label for="ekHizmetKonaklayan" class="block font-medium mb-2">Konaklayan</label>
+                            <p-select
+                                inputId="ekHizmetKonaklayan"
+                                class="w-full"
+                                [options]="ekHizmetMisafirSecenekleri"
+                                optionLabel="adSoyad"
+                                optionValue="rezervasyonKonaklayanId"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="ekHizmetSaving || odemeSaving"
+                                [(ngModel)]="selectedEkHizmetKonaklayanId"
+                            />
+                        </div>
+                        <div class="col-span-12 md:col-span-6">
+                            <label for="ekHizmetTarife" class="block font-medium mb-2">Ek Hizmet</label>
+                            <p-select
+                                inputId="ekHizmetTarife"
+                                class="w-full"
+                                [options]="ekHizmetTarifeSecenekleri"
+                                optionLabel="ad"
+                                optionValue="id"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="ekHizmetSaving || odemeSaving"
+                                [(ngModel)]="selectedEkHizmetTarifeId"
+                            />
+                        </div>
                     </div>
-                </div>
 
-                @if (ekHizmetBilgiMesaji) {
-                    <div class="text-sm text-orange-600 mb-3">
-                        {{ ekHizmetBilgiMesaji }}
+                    <div class="grid grid-cols-12 gap-3 mb-3">
+                        <div class="col-span-12 md:col-span-4">
+                            <label for="ekHizmetTarih" class="block font-medium mb-2">Hizmet Tarihi</label>
+                            <input pInputText id="ekHizmetTarih" class="w-full" type="datetime-local" [(ngModel)]="ekHizmetTarihi" [disabled]="ekHizmetSaving || odemeSaving" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                            <label for="ekHizmetMiktar" class="block font-medium mb-2">Miktar</label>
+                            <input pInputText id="ekHizmetMiktar" class="w-full" type="number" min="0.01" step="0.01" [(ngModel)]="ekHizmetMiktar" [disabled]="ekHizmetSaving || odemeSaving" />
+                        </div>
+                        <div class="col-span-12 md:col-span-5">
+                            <label for="ekHizmetAciklama" class="block font-medium mb-2">Aciklama</label>
+                            <input pInputText id="ekHizmetAciklama" class="w-full" [(ngModel)]="ekHizmetAciklama" [disabled]="ekHizmetSaving || odemeSaving" />
+                        </div>
+                    </div>
+
+                    @if (ekHizmetBilgiMesaji) {
+                        <div class="text-sm text-orange-600 mb-3">
+                            {{ ekHizmetBilgiMesaji }}
+                        </div>
+                    }
+
+                    <div class="rez-odeme-action-row">
+                        @if (editingEkHizmetId) {
+                            <p-button
+                                label="Duzenlemeyi Iptal Et"
+                                icon="pi pi-times"
+                                severity="secondary"
+                                [outlined]="true"
+                                [disabled]="ekHizmetSaving || odemeSaving"
+                                (onClick)="ekHizmetDuzenlemeyiIptalEt()" />
+                        }
+                        <p-button
+                            [label]="editingEkHizmetId ? 'Ek Hizmeti Guncelle' : 'Ek Hizmeti Hesaba Ekle'"
+                            [icon]="editingEkHizmetId ? 'pi pi-check' : 'pi pi-plus'"
+                            [loading]="ekHizmetSaving"
+                            [disabled]="odemeSaving || !canModifyEkHizmet"
+                            (onClick)="kaydetEkHizmet()" />
                     </div>
                 }
+            </div>
 
-                <div class="flex flex-wrap gap-2">
-                    <p-button
-                        [label]="editingEkHizmetId ? 'Ek Hizmeti Guncelle' : 'Ek Hizmeti Hesaba Ekle'"
-                        [icon]="editingEkHizmetId ? 'pi pi-check' : 'pi pi-plus'"
-                        [loading]="ekHizmetSaving"
-                        [disabled]="odemeSaving || !canModifyEkHizmet"
-                        (onClick)="kaydetEkHizmet()" />
-                    @if (editingEkHizmetId) {
-                        <p-button
-                            label="Duzenlemeyi Iptal Et"
-                            icon="pi pi-times"
-                            severity="secondary"
-                            [outlined]="true"
-                            [disabled]="ekHizmetSaving || odemeSaving"
-                            (onClick)="ekHizmetDuzenlemeyiIptalEt()" />
-                    }
+            <div class="rez-odeme-panel">
+                <div class="rez-odeme-panel-header">
+                    <div>
+                        <div class="rez-odeme-panel-title">Ek Hizmet Kalemleri</div>
+                        <div class="rez-odeme-panel-subtitle">Rezervasyona bagli ek hizmetlerin tam listesi.</div>
+                    </div>
                 </div>
-            }
-        </div>
 
-        <div class="mb-4">
-            <div class="font-medium mb-2">Ek Hizmet Kalemleri</div>
-            @if (odemeOzeti.ekHizmetler.length === 0) {
-                <div class="text-sm text-color-secondary">Bu rezervasyonda ek hizmet kaydi bulunmuyor.</div>
-            } @else {
-                <p-table [value]="odemeOzeti.ekHizmetler" [tableStyle]="{ 'min-width': '46rem' }">
+                @if (odemeOzeti.ekHizmetler.length === 0) {
+                    <div class="text-sm text-color-secondary">Bu rezervasyonda ek hizmet kaydi bulunmuyor.</div>
+                } @else {
+                    <p-table class="rez-odeme-table" [value]="odemeOzeti.ekHizmetler" [tableStyle]="{ 'min-width': '58rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Konaklayan</th>
+                                <th>Hizmet</th>
+                                <th>Konum</th>
+                                <th>Tutar</th>
+                                <th class="w-32">Islem</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-hizmet>
+                            <tr>
+                                <td><div class="rez-odeme-table-cell">{{ formatDateTime(hizmet.hizmetTarihi) }}</div></td>
+                                <td><div class="rez-odeme-table-cell">{{ hizmet.konaklayanAdiSoyadi }}</div></td>
+                                <td><div class="rez-odeme-table-cell">{{ hizmet.tarifeAdi }} ({{ hizmet.miktar }} {{ hizmet.birimAdi }})</div></td>
+                                <td><div class="rez-odeme-table-cell">{{ hizmet.odaNo }} - {{ hizmet.binaAdi }}{{ hizmet.yatakNo ? ' / Yatak ' + hizmet.yatakNo : '' }}</div></td>
+                                <td><div class="rez-odeme-table-cell">{{ formatCurrency(hizmet.toplamTutar, hizmet.paraBirimi) }}</div></td>
+                                <td>
+                                    <div class="flex gap-2">
+                                        <p-button
+                                            icon="pi pi-pencil"
+                                            size="small"
+                                            severity="secondary"
+                                            [text]="true"
+                                            [disabled]="getEkHizmetEditDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
+                                            (onClick)="duzenleEkHizmet(hizmet)" />
+                                        @if (getEkHizmetEditDisabledReason(hizmet)) {
+                                            <i
+                                                class="pi pi-info-circle text-color-secondary cursor-help self-center"
+                                                [pTooltip]="getEkHizmetEditDisabledMessage(hizmet)"
+                                                tooltipPosition="top"></i>
+                                        }
+                                        <p-button
+                                            icon="pi pi-trash"
+                                            size="small"
+                                            severity="danger"
+                                            [text]="true"
+                                            [disabled]="getEkHizmetDeleteDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
+                                            (onClick)="silEkHizmet(hizmet)" />
+                                        @if (getEkHizmetDeleteDisabledReason(hizmet)) {
+                                            <i
+                                                class="pi pi-info-circle text-color-secondary cursor-help self-center"
+                                                [pTooltip]="getEkHizmetDeleteDisabledMessage(hizmet)"
+                                                tooltipPosition="top"></i>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
+            </div>
+
+            <div class="rez-odeme-panel">
+                <div class="rez-odeme-panel-header">
+                    <div>
+                        <div class="rez-odeme-panel-title">Odeme Islemleri</div>
+                        <div class="rez-odeme-panel-subtitle">Yeni odeme ekleyin ve onceki tahsilatlari izleyin.</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-12 gap-3 mb-4">
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="odemeTutari" class="block font-medium mb-2">Odeme Tutari</label>
+                        <input pInputText id="odemeTutari" class="w-full" type="number" min="0" step="0.01" [(ngModel)]="odemeTutari" [disabled]="odemeSaving" />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="odemeTipi" class="block font-medium mb-2">Odeme Tipi</label>
+                        <p-select
+                            inputId="odemeTipi"
+                            class="w-full"
+                            [options]="odemeTipleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [appendTo]="'body'"
+                            [showClear]="false"
+                            [disabled]="odemeSaving"
+                            [(ngModel)]="odemeTipi"
+                        />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label for="odemeAciklama" class="block font-medium mb-2">Aciklama</label>
+                        <input pInputText id="odemeAciklama" class="w-full" [(ngModel)]="odemeAciklama" [disabled]="odemeSaving" />
+                    </div>
+                </div>
+
+                <p-table class="rez-odeme-history-table" [value]="odemeOzeti.odemeler" [tableStyle]="{ 'min-width': '42rem' }">
                     <ng-template #header>
                         <tr>
                             <th>Tarih</th>
-                            <th>Konaklayan</th>
-                            <th>Hizmet</th>
-                            <th>Konum</th>
+                            <th>Tip</th>
                             <th>Tutar</th>
-                            <th class="w-32">Islem</th>
+                            <th>Aciklama</th>
                         </tr>
                     </ng-template>
-                    <ng-template #body let-hizmet>
+                    <ng-template #body let-odeme>
                         <tr>
-                            <td>{{ formatDateTime(hizmet.hizmetTarihi) }}</td>
-                            <td>{{ hizmet.konaklayanAdiSoyadi }}</td>
-                            <td>{{ hizmet.tarifeAdi }} ({{ hizmet.miktar }} {{ hizmet.birimAdi }})</td>
-                            <td>{{ hizmet.odaNo }} - {{ hizmet.binaAdi }}{{ hizmet.yatakNo ? ' / Yatak ' + hizmet.yatakNo : '' }}</td>
-                            <td>{{ formatCurrency(hizmet.toplamTutar, hizmet.paraBirimi) }}</td>
-                            <td>
-                                <div class="flex gap-2">
-                                    <p-button
-                                        icon="pi pi-pencil"
-                                        size="small"
-                                        severity="secondary"
-                                        [text]="true"
-                                        [disabled]="getEkHizmetEditDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
-                                        (onClick)="duzenleEkHizmet(hizmet)" />
-                                    @if (getEkHizmetEditDisabledReason(hizmet)) {
-                                        <i
-                                            class="pi pi-info-circle text-color-secondary cursor-help self-center"
-                                            [pTooltip]="getEkHizmetEditDisabledMessage(hizmet)"
-                                            tooltipPosition="top"></i>
-                                    }
-                                    <p-button
-                                        icon="pi pi-trash"
-                                        size="small"
-                                        severity="danger"
-                                        [text]="true"
-                                        [disabled]="getEkHizmetDeleteDisabledReason(hizmet) !== null || ekHizmetSaving || odemeSaving"
-                                        (onClick)="silEkHizmet(hizmet)" />
-                                    @if (getEkHizmetDeleteDisabledReason(hizmet)) {
-                                        <i
-                                            class="pi pi-info-circle text-color-secondary cursor-help self-center"
-                                            [pTooltip]="getEkHizmetDeleteDisabledMessage(hizmet)"
-                                            tooltipPosition="top"></i>
-                                    }
-                                </div>
-                            </td>
+                            <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
+                            <td>{{ odeme.odemeTipi }}</td>
+                            <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
+                            <td>{{ odeme.aciklama || '-' }}</td>
                         </tr>
                     </ng-template>
                 </p-table>
-            }
-        </div>
-
-        <div class="grid grid-cols-12 gap-3 mb-3">
-            <div class="col-span-12 md:col-span-4">
-                <label for="odemeTutari" class="block font-medium mb-2">Odeme Tutari</label>
-                <input pInputText id="odemeTutari" class="w-full" type="number" min="0" step="0.01" [(ngModel)]="odemeTutari" [disabled]="odemeSaving" />
             </div>
-            <div class="col-span-12 md:col-span-4">
-                <label for="odemeTipi" class="block font-medium mb-2">Odeme Tipi</label>
-                <p-select
-                    inputId="odemeTipi"
-                    class="w-full"
-                    [options]="odemeTipleri"
-                    optionLabel="label"
-                    optionValue="value"
-                    [appendTo]="'body'"
-                    [showClear]="false"
-                    [disabled]="odemeSaving"
-                    [(ngModel)]="odemeTipi"
-                />
-            </div>
-            <div class="col-span-12 md:col-span-4">
-                <label for="odemeAciklama" class="block font-medium mb-2">Aciklama</label>
-                <input pInputText id="odemeAciklama" class="w-full" [(ngModel)]="odemeAciklama" [disabled]="odemeSaving" />
-            </div>
-        </div>
-
-        <p-table [value]="odemeOzeti.odemeler" [tableStyle]="{ 'min-width': '34rem' }">
-            <ng-template #header>
-                <tr>
-                    <th>Tarih</th>
-                    <th>Tip</th>
-                    <th>Tutar</th>
-                    <th>Aciklama</th>
-                </tr>
-            </ng-template>
-            <ng-template #body let-odeme>
-                <tr>
-                    <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
-                    <td>{{ odeme.odemeTipi }}</td>
-                    <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
-                    <td>{{ odeme.aciklama || '-' }}</td>
-                </tr>
-            </ng-template>
-        </p-table>
-    }
+        }
+    </div>
 
     <ng-template #footer>
         <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="odemeSaving" (onClick)="closeOdemeDialog()" />

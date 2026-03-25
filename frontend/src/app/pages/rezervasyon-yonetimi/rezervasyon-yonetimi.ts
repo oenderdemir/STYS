@@ -133,6 +133,10 @@ interface DegisiklikPayloadTableData {
             margin-bottom: 0.85rem;
         }
 
+        .rez-odeme-panel-header.compact {
+            margin-bottom: 0;
+        }
+
         .rez-odeme-panel-title {
             font-size: 1rem;
             font-weight: 700;
@@ -219,6 +223,7 @@ export class RezervasyonYonetimi implements OnInit {
     odemeRezervasyonId: number | null = null;
     odemeReferansNo = '';
     odemeOzeti: RezervasyonOdemeOzetDto | null = null;
+    odemeEkHizmetPanelExpanded = false;
     odemeEkHizmetSecenekleri: RezervasyonEkHizmetSecenekleriDto | null = null;
     selectedEkHizmetKonaklayanId: number | null = null;
     selectedEkHizmetTarifeId: number | null = null;
@@ -315,6 +320,10 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         return null;
+    }
+
+    get odemeEkHizmetToggleLabel(): string {
+        return this.odemeEkHizmetPanelExpanded ? 'Ek Hizmetleri Gizle' : 'Ek Hizmetleri Goster';
     }
 
     get odaDegisimBilgiMesaji(): string | null {
@@ -1735,6 +1744,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeRezervasyonId = kayit.id;
         this.odemeReferansNo = kayit.referansNo;
         this.odemeOzeti = null;
+        this.odemeEkHizmetPanelExpanded = false;
         this.odemeTutari = null;
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
@@ -1757,6 +1767,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeRezervasyonId = null;
         this.odemeReferansNo = '';
         this.odemeOzeti = null;
+        this.odemeEkHizmetPanelExpanded = false;
         this.odemeEkHizmetSecenekleri = null;
         this.selectedEkHizmetKonaklayanId = null;
         this.selectedEkHizmetTarifeId = null;
@@ -1839,12 +1850,17 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        this.odemeEkHizmetPanelExpanded = true;
         this.editingEkHizmetId = hizmet.id;
         this.selectedEkHizmetKonaklayanId = hizmet.rezervasyonKonaklayanId;
         this.selectedEkHizmetTarifeId = hizmet.ekHizmetTarifeId;
         this.ekHizmetTarihi = this.toDateTimeLocalInputValue(hizmet.hizmetTarihi);
         this.ekHizmetMiktar = hizmet.miktar;
         this.ekHizmetAciklama = hizmet.aciklama ?? '';
+    }
+
+    toggleOdemeEkHizmetPanel(): void {
+        this.odemeEkHizmetPanelExpanded = !this.odemeEkHizmetPanelExpanded;
     }
 
     ekHizmetDuzenlemeyiIptalEt(): void {

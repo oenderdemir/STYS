@@ -2588,11 +2588,7 @@ public class RezervasyonService : IRezervasyonService
 
         var normalizedOdemeTipi = NormalizeOdemeTipi(request.OdemeTipi);
         var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
-
-        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
-        {
-            throw new BaseException("Iptal edilen rezervasyona odeme eklenemez.", 400);
-        }
+        await EnsureReservationAllowsPaymentCreateAsync(reservation);
 
         var odenenTutar = await _stysDbContext.RezervasyonOdemeler
             .Where(x => x.RezervasyonId == reservation.Id)
@@ -3469,12 +3465,13 @@ public class RezervasyonService : IRezervasyonService
         foreach (var roomId in roomIds.Where(x => x > 0).Distinct().OrderBy(x => x))
         {
             var resource = $"stys:rezervasyon:oda:{roomId}";
-            var lockResult = await _stysDbContext.Database
+            var lockResults = await _stysDbContext.Database
                 .SqlQueryRaw<int>(
                     "DECLARE @result int; EXEC @result = sp_getapplock @Resource = {0}, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = {1}; SELECT @result;",
                     resource,
                     15000)
-                .SingleAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
+            var lockResult = lockResults.Single();
 
             if (lockResult < 0)
             {
@@ -4015,6 +4012,21 @@ public class RezervasyonService : IRezervasyonService
             .ToListAsync(cancellationToken);
     }
 
+    private static Task EnsureReservationAllowsPaymentCreateAsync(Rezervasyon reservation)
+    {
+        if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
+        {
+            throw new BaseException("Iptal edilen rezervasyona odeme eklenemez.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi)
+        {
+            throw new BaseException("Odeme almak icin once check-in tamamlanmalidir.", 400);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private static Task EnsureReservationAllowsExtraServiceCreateAsync(Rezervasyon reservation)
     {
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.Iptal)
@@ -4025,6 +4037,11 @@ public class RezervasyonService : IRezervasyonService
         if (reservation.RezervasyonDurumu == RezervasyonDurumlari.CheckOutTamamlandi)
         {
             throw new BaseException("Check-out tamamlanan rezervasyona ek hizmet eklenemez.", 400);
+        }
+
+        if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi)
+        {
+            throw new BaseException("Ek hizmet eklemek icin once check-in tamamlanmalidir.", 400);
         }
 
         return Task.CompletedTask;

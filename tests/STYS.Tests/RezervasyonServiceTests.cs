@@ -1561,8 +1561,9 @@ public class RezervasyonServiceTests
     public async Task IptalEt_OdemeAlinmisRezervasyondaHataVerir()
     {
         await using var dbContext = CreateDbContext();
-        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9981, segmentId: 9982, withPlan: false);
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9981, segmentId: 9982, withPlan: true);
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(9981);
 
         await service.KaydetOdemeAsync(9981, new RezervasyonOdemeKaydetRequestDto
         {
@@ -1643,25 +1644,41 @@ public class RezervasyonServiceTests
         Assert.Equal(OdemeTipleri.Nakit, firstPayment.OdemeTipi);
     }
 
-    // Check-in oncesi (Onayli/Taslak) rezervasyonlarda da odeme alinabilmeli.
+    // Check-in tamamlanmadan rezervasyona odeme eklenememeli.
     [Fact]
-    public async Task KaydetOdeme_CheckInOncesiOdemeAlir()
+    public async Task KaydetOdeme_CheckInOncesiHataVerir()
     {
         await using var dbContext = CreateDbContext();
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1002, segmentId: 1003, withPlan: true);
         var service = CreateService(dbContext);
 
-        var ozet = await service.KaydetOdemeAsync(1002, new RezervasyonOdemeKaydetRequestDto
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetOdemeAsync(1002, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 200m,
             OdemeTipi = OdemeTipleri.KrediKarti
-        });
+        }));
 
-        Assert.Equal(1002, ozet.RezervasyonId);
-        Assert.Equal(200m, ozet.OdenenTutar);
-        Assert.Equal(800m, ozet.KalanTutar);
-        var firstPayment = Assert.Single(ozet.Odemeler);
-        Assert.Equal(OdemeTipleri.KrediKarti, firstPayment.OdemeTipi);
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
+    // Check-in tamamlanmadan rezervasyona ek hizmet eklenememeli.
+    [Fact]
+    public async Task KaydetEkHizmet_CheckInOncesiHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1008, segmentId: 1009, withPlan: true);
+        await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8008, tesisId: 1, birimFiyat: 75m);
+        var service = CreateService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetEkHizmetAsync(1008, new RezervasyonEkHizmetKaydetRequestDto
+        {
+            RezervasyonKonaklayanId = 2008,
+            EkHizmetTarifeId = 8008,
+            HizmetTarihi = new DateTime(2026, 3, 8, 18, 0, 0),
+            Miktar = 1
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
     }
 
     // Konaklayan plana bagli ek hizmet eklendiginde odeme ozetindeki ek hizmet ve toplam tutarlar artmali.
@@ -1672,6 +1689,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1010, segmentId: 1011, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8010, tesisId: 1, birimFiyat: 150m);
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1010);
 
         var ozet = await service.KaydetEkHizmetAsync(1010, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1701,6 +1719,7 @@ public class RezervasyonServiceTests
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8012, tesisId: 1, birimFiyat: 120m, ad: "Kurutemizleme");
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8013, tesisId: 1, birimFiyat: 250m, ad: "Odaya Kahvalti");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1012);
 
         var ilkOzet = await service.KaydetEkHizmetAsync(1012, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1740,6 +1759,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1014, segmentId: 1015, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8014, tesisId: 1, birimFiyat: 90m, ad: "Ayakkabi Boyama");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1014);
 
         var ilkOzet = await service.KaydetEkHizmetAsync(1014, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1766,6 +1786,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1016, segmentId: 1017, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8016, tesisId: 1, birimFiyat: 110m, ad: "Mini Bar");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1016);
 
         var ilkOzet = await service.KaydetEkHizmetAsync(1016, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1805,6 +1826,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1018, segmentId: 1019, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8018, tesisId: 1, birimFiyat: 200m, ad: "Transfer");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1018);
 
         var ozet = await service.KaydetEkHizmetAsync(1018, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1834,6 +1856,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1020, segmentId: 1021, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8020, tesisId: 1, birimFiyat: 300m, ad: "Vip Servis");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1020);
 
         var ozet = await service.KaydetEkHizmetAsync(1020, new RezervasyonEkHizmetKaydetRequestDto
         {
@@ -1863,6 +1886,7 @@ public class RezervasyonServiceTests
         await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1022, segmentId: 1023, withPlan: true);
         await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8022, tesisId: 1, birimFiyat: 300m, ad: "Laundry");
         var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1022);
 
         var ozet = await service.KaydetEkHizmetAsync(1022, new RezervasyonEkHizmetKaydetRequestDto
         {

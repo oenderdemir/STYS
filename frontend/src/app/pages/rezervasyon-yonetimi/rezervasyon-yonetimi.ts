@@ -302,11 +302,15 @@ export class RezervasyonYonetimi implements OnInit {
 
     get canModifyEkHizmet(): boolean {
         const durum = this.getSelectedOdemeRezervasyonDurumu();
-        return !!this.odemeOzeti && durum !== this.durumCheckOutTamamlandi && durum !== this.durumIptal;
+        return !!this.odemeOzeti && durum === this.durumCheckInTamamlandi;
     }
 
     get ekHizmetBilgiMesaji(): string | null {
         const reason = this.getEkHizmetModificationDisabledReason();
+        if (reason === 'Check-in bekleniyor') {
+            return 'Ek hizmet kalemleri yalnizca check-in tamamlandiktan sonra eklenebilir veya guncellenebilir.';
+        }
+
         if (reason === 'Check-out tamamlandi') {
             return 'Check-out tamamlanan rezervasyonda ek hizmet kalemleri yalnizca goruntulenebilir.';
         }
@@ -1207,6 +1211,10 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Iptal edildi';
         }
 
+        if (kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi && kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi) {
+            return 'Check-in bekleniyor';
+        }
+
         if (kayit.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
             return 'Check-out tamamlandi';
         }
@@ -1301,11 +1309,19 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Iptal edildi';
         }
 
+        if (kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi && kayit.rezervasyonDurumu !== this.durumCheckOutTamamlandi) {
+            return 'Check-in bekleniyor';
+        }
+
         return null;
     }
 
     getPaymentDisabledMessage(kayit: RezervasyonListeDto): string {
         const reason = this.getPaymentDisabledReason(kayit);
+        if (reason === 'Check-in bekleniyor') {
+            return 'Odeme ve ek hizmet islemleri yalnizca check-in tamamlandiktan sonra acilabilir.';
+        }
+
         if (reason === 'Iptal edildi') {
             return 'Iptal edilen rezervasyon icin odeme islemi yapilamaz.';
         }
@@ -1785,6 +1801,11 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        if (this.getSelectedOdemeRezervasyonDurumu() !== this.durumCheckInTamamlandi) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Check-in Bekleniyor', detail: 'Ek hizmet eklemek icin once check-in tamamlanmalidir.' });
+            return;
+        }
+
         if (!this.selectedEkHizmetKonaklayanId || this.selectedEkHizmetKonaklayanId <= 0) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir konaklayan seciniz.' });
             return;
@@ -1906,6 +1927,11 @@ export class RezervasyonYonetimi implements OnInit {
 
     kaydetOdeme(): void {
         if (!this.odemeRezervasyonId || !this.odemeOzeti || this.odemeSaving) {
+            return;
+        }
+
+        if (this.getSelectedOdemeRezervasyonDurumu() !== this.durumCheckInTamamlandi) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Check-in Bekleniyor', detail: 'Odeme almak icin once check-in tamamlanmalidir.' });
             return;
         }
 
@@ -2398,12 +2424,16 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         const durum = this.getSelectedOdemeRezervasyonDurumu();
-        if (durum === this.durumCheckOutTamamlandi) {
-            return 'Check-out tamamlandi';
-        }
+        if (durum !== this.durumCheckInTamamlandi) {
+            if (durum === this.durumCheckOutTamamlandi) {
+                return 'Check-out tamamlandi';
+            }
 
-        if (durum === this.durumIptal) {
-            return 'Iptal edildi';
+            if (durum === this.durumIptal) {
+                return 'Iptal edildi';
+            }
+
+            return 'Check-in bekleniyor';
         }
 
         return null;
@@ -2421,6 +2451,10 @@ export class RezervasyonYonetimi implements OnInit {
 
         if (reason === 'Iptal edildi') {
             return 'Iptal edilen rezervasyonda ek hizmet kalemi guncellenemez.';
+        }
+
+        if (reason === 'Check-in bekleniyor') {
+            return 'Check-in tamamlanmadan ek hizmet kalemi guncellenemez.';
         }
 
         if (reason === 'Odeme ozeti yok') {
@@ -2460,6 +2494,10 @@ export class RezervasyonYonetimi implements OnInit {
 
         if (reason === 'Iptal edildi') {
             return 'Iptal edilen rezervasyonda ek hizmet kalemi silinemez.';
+        }
+
+        if (reason === 'Check-in bekleniyor') {
+            return 'Check-in tamamlanmadan ek hizmet kalemi silinemez.';
         }
 
         if (reason === 'Odeme bakiyesi sifirlandi') {

@@ -25,6 +25,9 @@ public class RezervasyonKonaklayanKisiKaydetDto
     [MaxLength(16)]
     public string? Cinsiyet { get; set; }
 
+    [MaxLength(16)]
+    public string? KatilimDurumu { get; set; }
+
     public List<RezervasyonKonaklayanKisiAtamaKaydetDto> Atamalar { get; set; } = [];
 }
 

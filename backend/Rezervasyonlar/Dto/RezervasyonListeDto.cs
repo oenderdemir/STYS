@@ -38,5 +38,9 @@ public class RezervasyonListeDto
 
     public bool KonaklayanPlaniTamamlandi { get; set; }
 
+    public int GelenKonaklayanSayisi { get; set; }
+
+    public int BekleyenKonaklayanSayisi { get; set; }
+
     public bool OdaDegisimiGerekli { get; set; }
 }

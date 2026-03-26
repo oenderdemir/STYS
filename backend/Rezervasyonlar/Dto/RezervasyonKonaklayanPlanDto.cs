@@ -1,3 +1,5 @@
+using STYS.Rezervasyonlar;
+
 namespace STYS.Rezervasyonlar.Dto;
 
 public class RezervasyonKonaklayanPlanDto
@@ -50,6 +52,8 @@ public class RezervasyonKonaklayanKisiDto
     public string? PasaportNo { get; set; }
 
     public string? Cinsiyet { get; set; }
+
+    public string KatilimDurumu { get; set; } = KonaklayanKatilimDurumlari.Bekleniyor;
 
     public List<RezervasyonKonaklayanKisiAtamaDto> Atamalar { get; set; } = [];
 }

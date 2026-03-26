@@ -270,6 +270,7 @@
                     <th>Eposta</th>
                     <th>Pasaport</th>
                     <th>Kisi</th>
+                    <th>Katilim Ozeti</th>
                     <th>Giris</th>
                     <th>Cikis</th>
                     <th>Ucret</th>
@@ -290,6 +291,13 @@
                     <td>{{ kayit.misafirEposta || '-' }}</td>
                     <td>{{ kayit.pasaportNo || '-' }}</td>
                     <td>{{ kayit.kisiSayisi }}</td>
+                    <td>
+                        <div class="flex flex-wrap gap-1">
+                            @for (chip of getKonaklayanKatilimChipleri(kayit); track chip.label) {
+                                <p-tag [value]="chip.label" [severity]="chip.severity" [rounded]="true" />
+                            }
+                        </div>
+                    </td>
                     <td>{{ formatDateTime(kayit.girisTarihi) }}</td>
                     <td>{{ formatDateTime(kayit.cikisTarihi) }}</td>
                     <td>
@@ -631,6 +639,7 @@
                     <th>Sira</th>
                     <th>Ad Soyad</th>
                     <th>Cinsiyet</th>
+                    <th>Katilim Durumu</th>
                     <th>TC Kimlik No</th>
                     <th>Pasaport No</th>
                     @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
@@ -663,6 +672,19 @@
                         />
                     </td>
                     <td>
+                        <p-select
+                            class="w-full"
+                            [options]="konaklayanKatilimDurumuSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [appendTo]="'body'"
+                            [showClear]="false"
+                            [disabled]="konaklayanPlanSaving"
+                            [ngModel]="kisi.katilimDurumu"
+                            (ngModelChange)="setKonaklayanKatilimDurumu(kisi, $event)"
+                        />
+                    </td>
+                    <td>
                         <input pInputText class="w-full" [(ngModel)]="kisi.tcKimlikNo" [disabled]="konaklayanPlanSaving" />
                     </td>
                     <td>
@@ -678,7 +700,7 @@
                                 [appendTo]="'body'"
                                 [showClear]="true"
                                 placeholder="Oda Seciniz"
-                                [disabled]="konaklayanPlanSaving"
+                                [disabled]="konaklayanPlanSaving || !isKonaklayanAssignmentsRequired(kisi)"
                                 [ngModel]="getKonaklayanAtamaOdaId(kisi, segment.segmentId)"
                                 (ngModelChange)="setKonaklayanAtamaOdaId(kisi, segment.segmentId, $event)"
                             />
@@ -691,7 +713,7 @@
                                     [appendTo]="'body'"
                                     [showClear]="true"
                                     placeholder="Yatak Seciniz"
-                                    [disabled]="konaklayanPlanSaving"
+                                    [disabled]="konaklayanPlanSaving || !isKonaklayanAssignmentsRequired(kisi)"
                                     [ngModel]="getKonaklayanAtamaYatakNo(kisi, segment.segmentId)"
                                     (ngModelChange)="setKonaklayanAtamaYatakNo(kisi, segment.segmentId, $event)"
                                 />
@@ -1033,6 +1055,7 @@
                                         [showClear]="false"
                                         [disabled]="ekHizmetSaving || odemeSaving"
                                         [(ngModel)]="selectedEkHizmetTarifeId"
+                                        (ngModelChange)="onEkHizmetTarifeChange()"
                                     />
                                 </div>
                             </div>
@@ -1042,15 +1065,30 @@
                                     <label for="ekHizmetTarih" class="block font-medium mb-2">Hizmet Tarihi</label>
                                     <input pInputText id="ekHizmetTarih" class="w-full" type="datetime-local" [(ngModel)]="ekHizmetTarihi" [disabled]="ekHizmetSaving || odemeSaving" />
                                 </div>
-                                <div class="col-span-12 md:col-span-3">
+                                <div class="col-span-12 md:col-span-2">
                                     <label for="ekHizmetMiktar" class="block font-medium mb-2">Miktar</label>
                                     <input pInputText id="ekHizmetMiktar" class="w-full" type="number" min="0.01" step="0.01" [(ngModel)]="ekHizmetMiktar" [disabled]="ekHizmetSaving || odemeSaving" />
                                 </div>
-                                <div class="col-span-12 md:col-span-5">
+                                <div class="col-span-12 md:col-span-3">
+                                    <label for="ekHizmetBirimFiyat" class="block font-medium mb-2">Birim Fiyat</label>
+                                    <input pInputText id="ekHizmetBirimFiyat" class="w-full" type="number" min="0" step="0.01" [(ngModel)]="ekHizmetBirimFiyat" [disabled]="ekHizmetSaving || odemeSaving" />
+                                    @if (getSelectedEkHizmetTarifeVarsayilanFiyat(); as varsayilanFiyat) {
+                                        <div class="text-xs text-color-secondary mt-1">
+                                            Tarife varsayilani: {{ varsayilanFiyat }}
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-span-12 md:col-span-3">
                                     <label for="ekHizmetAciklama" class="block font-medium mb-2">Aciklama</label>
                                     <input pInputText id="ekHizmetAciklama" class="w-full" [(ngModel)]="ekHizmetAciklama" [disabled]="ekHizmetSaving || odemeSaving" />
                                 </div>
                             </div>
+
+                            @if (getEkHizmetToplamOnizleme(); as ekHizmetToplamOnizleme) {
+                                <div class="text-sm text-color-secondary mb-3">
+                                    Onizleme Toplam: <strong>{{ ekHizmetToplamOnizleme }}</strong>
+                                </div>
+                            }
 
                             @if (ekHizmetBilgiMesaji) {
                                 <div class="text-sm text-orange-600 mb-3">

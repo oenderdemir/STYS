@@ -9,16 +9,7 @@ public class EkHizmetTarife : BaseEntity<int>
 {
     public int TesisId { get; set; }
 
-    [Required]
-    [MaxLength(128)]
-    public string Ad { get; set; } = string.Empty;
-
-    [MaxLength(512)]
-    public string? Aciklama { get; set; }
-
-    [Required]
-    [MaxLength(32)]
-    public string BirimAdi { get; set; } = "Adet";
+    public int EkHizmetId { get; set; }
 
     public decimal BirimFiyat { get; set; }
 
@@ -33,6 +24,8 @@ public class EkHizmetTarife : BaseEntity<int>
     public bool AktifMi { get; set; } = true;
 
     public Tesis? Tesis { get; set; }
+
+    public EkHizmet? EkHizmet { get; set; }
 
     public ICollection<RezervasyonEkHizmet> RezervasyonEkHizmetleri { get; set; } = [];
 }

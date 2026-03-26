@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Rezervasyonlar;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Rezervasyonlar.Entities;
@@ -21,6 +22,10 @@ public class RezervasyonKonaklayan : BaseEntity<int>
 
     [MaxLength(16)]
     public string? Cinsiyet { get; set; }
+
+    [Required]
+    [MaxLength(16)]
+    public string KatilimDurumu { get; set; } = KonaklayanKatilimDurumlari.Bekleniyor;
 
     public Rezervasyon? Rezervasyon { get; set; }
 

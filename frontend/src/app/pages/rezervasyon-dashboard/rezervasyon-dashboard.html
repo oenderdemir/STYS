@@ -133,22 +133,40 @@
     <div class="card">Secili filtre icin dashboard verisi bulunamadi.</div>
 } @else {
     <div class="grid grid-cols-12 gap-4 mb-4">
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
             <div class="card">
                 <div class="text-sm text-color-secondary mb-1">Toplam Oda</div>
                 <div class="text-2xl font-semibold">{{ dashboard.toplamOdaSayisi }}</div>
             </div>
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
             <div class="card">
                 <div class="text-sm text-color-secondary mb-1">Dolu Oda</div>
                 <div class="text-2xl font-semibold">{{ dashboard.doluOdaSayisi }}</div>
             </div>
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
             <div class="card">
                 <div class="text-sm text-color-secondary mb-1">Bos Oda</div>
                 <div class="text-2xl font-semibold">{{ dashboard.bosOdaSayisi }}</div>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
+            <div class="card">
+                <div class="text-sm text-color-secondary mb-1">Toplam Kapasite</div>
+                <div class="text-2xl font-semibold">{{ dashboard.toplamKapasite }}</div>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
+            <div class="card">
+                <div class="text-sm text-color-secondary mb-1">Kullanilan Kapasite</div>
+                <div class="text-2xl font-semibold">{{ dashboard.kullanilanKapasite }}</div>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-4 lg:col-span-2">
+            <div class="card" style="background: linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%); border: 1px solid #a7f3d0;">
+                <div class="text-sm text-color-secondary mb-1">Serbest Kapasite</div>
+                <div class="text-2xl font-semibold text-green-700">{{ dashboard.serbestKapasite }}</div>
             </div>
         </div>
     </div>

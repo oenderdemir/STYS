@@ -640,6 +640,34 @@ public class RezervasyonServiceTests
         Assert.DoesNotContain(rooms, x => x.OdaId == 100);
     }
 
+    // Konaklayan Gelmedi olarak netlestirilip atamasi kaldirildiysa, bos kalan oda tekrar uygun hale gelmeli.
+    [Fact]
+    public async Task UygunOdaArama_GelmeyenKonaklayanSonrasiOdayiTekrarUygunYapar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 973, segmentId: 974, withPlan: true);
+
+        var guest = await dbContext.RezervasyonKonaklayanlar.SingleAsync(x => x.RezervasyonId == 973);
+        guest.KatilimDurumu = KonaklayanKatilimDurumlari.Gelmedi;
+        var guestAssignments = await dbContext.RezervasyonKonaklayanSegmentAtamalari
+            .Where(x => x.RezervasyonKonaklayanId == guest.Id)
+            .ToListAsync();
+        dbContext.RezervasyonKonaklayanSegmentAtamalari.RemoveRange(guestAssignments);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var rooms = await service.GetUygunOdalarAsync(new UygunOdaAramaRequestDto
+        {
+            TesisId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 3, 8, 15, 0, 0),
+            BitisTarihi = new DateTime(2026, 3, 9, 9, 0, 0)
+        });
+
+        Assert.Contains(rooms, x => x.OdaId == 101);
+    }
+
     // Paylasimli odada kalan kapasiteye gore 1 kisilik uygunluk varken 2 kisilik uygunluk olmayabilir.
     [Fact]
     public async Task UygunOdaArama_PaylasimliOdadaKalanKapasiteyiDikkateAlir()
@@ -1343,6 +1371,22 @@ public class RezervasyonServiceTests
         Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, updated.RezervasyonDurumu);
     }
 
+    // Check-in icin en az bir konaklayan Geldi olarak isaretlenmis olmali.
+    [Fact]
+    public async Task CheckIn_GelenMisafirYoksaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9921, segmentId: 9922, withPlan: true);
+        var guest = await dbContext.RezervasyonKonaklayanlar.SingleAsync(x => x.RezervasyonId == 9921);
+        guest.KatilimDurumu = KonaklayanKatilimDurumlari.Bekleniyor;
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckInAsync(9921));
+
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
     // Check-in tamamlanmis ve aktif blokaj bulunan rezervasyonda oda degisimi secenekleri getirilebilmeli.
     [Fact]
     public async Task OdaDegisimi_CheckInTamamlanmisRezervasyondaSecenekleriGetirebilir()
@@ -1522,6 +1566,8 @@ public class RezervasyonServiceTests
         Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, result.RezervasyonDurumu);
         var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 996);
         Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, updated.RezervasyonDurumu);
+        var guest = await dbContext.RezervasyonKonaklayanlar.SingleAsync(x => x.RezervasyonId == 996);
+        Assert.Equal(KonaklayanKatilimDurumlari.Ayrildi, guest.KatilimDurumu);
     }
 
     // Check-in yapilsa bile kalan bakiye varsa check-out engellenmeli.
@@ -1539,6 +1585,38 @@ public class RezervasyonServiceTests
         Assert.Equal(400, exception.ErrorCode);
         var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 9970);
         Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, updated.RezervasyonDurumu);
+    }
+
+    // Check-out oncesi bekleyen konaklayanlar Geldi veya Gelmedi olarak netlestirilmis olmali.
+    [Fact]
+    public async Task CheckOut_BekleyenMisafirVarkenHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9972, segmentId: 9973, withPlan: true);
+
+        var reservation = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 9972);
+        reservation.KisiSayisi = 2;
+        dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan
+        {
+            Id = 10972,
+            RezervasyonId = 9972,
+            SiraNo = 2,
+            AdSoyad = "Bekleyen Misafir",
+            KatilimDurumu = KonaklayanKatilimDurumlari.Bekleniyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(9972);
+        await service.KaydetOdemeAsync(9972, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 1000m,
+            OdemeTipi = OdemeTipleri.Nakit
+        });
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckOutAsync(9972));
+
+        Assert.Equal(400, exception.ErrorCode);
     }
 
     // Onayli rezervasyon iptal edildiginde durum Iptal olarak guncellenmeli.
@@ -1681,6 +1759,31 @@ public class RezervasyonServiceTests
         Assert.Equal(400, exception.ErrorCode);
     }
 
+    // Ek hizmet seceneklerinde yalnizca fiilen gelen konaklayanlar donmeli.
+    [Fact]
+    public async Task GetEkHizmetSecenekleri_SadeceGelenMisafirleriDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10081, segmentId: 10082, withPlan: true);
+        var reservation = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 10081);
+        reservation.KisiSayisi = 2;
+        dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan
+        {
+            Id = 12081,
+            RezervasyonId = 10081,
+            SiraNo = 2,
+            AdSoyad = "Gelmeyen Misafir",
+            KatilimDurumu = KonaklayanKatilimDurumlari.Gelmedi
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var result = await service.GetEkHizmetSecenekleriAsync(10081);
+
+        var guest = Assert.Single(result.Misafirler);
+        Assert.Equal("Ali Check", guest.AdSoyad);
+    }
+
     // Konaklayan plana bagli ek hizmet eklendiginde odeme ozetindeki ek hizmet ve toplam tutarlar artmali.
     [Fact]
     public async Task KaydetEkHizmet_OdemeOzetineEklenir()
@@ -1708,6 +1811,33 @@ public class RezervasyonServiceTests
         Assert.Equal(2010, hizmet.RezervasyonKonaklayanId);
         Assert.Equal(300m, hizmet.ToplamTutar);
         Assert.Equal("A-102", hizmet.OdaNo);
+    }
+
+    // Ek hizmet kaydedilirken tarife varsayilan fiyati yerine kullanicinin girdigi birim fiyat saklanabilmeli.
+    [Fact]
+    public async Task KaydetEkHizmet_OzelBirimFiyatlaKaydeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1011, segmentId: 1012, withPlan: true);
+        await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8011, tesisId: 1, birimFiyat: 150m, ad: "Ayakkabi Boyama");
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1011);
+
+        var ozet = await service.KaydetEkHizmetAsync(1011, new RezervasyonEkHizmetKaydetRequestDto
+        {
+            RezervasyonKonaklayanId = 2011,
+            EkHizmetTarifeId = 8011,
+            HizmetTarihi = new DateTime(2026, 3, 8, 18, 15, 0),
+            Miktar = 2,
+            BirimFiyat = 125m,
+            Aciklama = "Ozel fiyat"
+        });
+
+        var hizmet = Assert.Single(ozet.EkHizmetler);
+        Assert.Equal(125m, hizmet.BirimFiyat);
+        Assert.Equal(250m, hizmet.ToplamTutar);
+        Assert.Equal(250m, ozet.EkHizmetToplami);
+        Assert.Equal(1250m, ozet.ToplamUcret);
     }
 
     // Ek hizmet guncelleme sonrasinda miktar/tutar ve secilen tarife bilgisi yeni degerlerle donmeli.
@@ -1749,6 +1879,43 @@ public class RezervasyonServiceTests
         Assert.Equal(3, hizmet.Miktar);
         Assert.Equal(750m, hizmet.ToplamTutar);
         Assert.Equal("Guncel kayit", hizmet.Aciklama);
+    }
+
+    // Ek hizmet guncellenirken kullanici birim fiyati override ederse toplam bu yeni birim fiyata gore hesaplanmali.
+    [Fact]
+    public async Task GuncelleEkHizmet_OzelBirimFiyatiGunceller()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1013, segmentId: 1014, withPlan: true);
+        await SeedEkHizmetTarifesiAsync(dbContext, tarifeId: 8015, tesisId: 1, birimFiyat: 180m, ad: "Transfer");
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(1013);
+
+        var ilkOzet = await service.KaydetEkHizmetAsync(1013, new RezervasyonEkHizmetKaydetRequestDto
+        {
+            RezervasyonKonaklayanId = 2013,
+            EkHizmetTarifeId = 8015,
+            HizmetTarihi = new DateTime(2026, 3, 8, 12, 0, 0),
+            Miktar = 1
+        });
+
+        var ilkKayit = Assert.Single(ilkOzet.EkHizmetler);
+
+        var guncelOzet = await service.GuncelleEkHizmetAsync(1013, ilkKayit.Id, new RezervasyonEkHizmetKaydetRequestDto
+        {
+            RezervasyonKonaklayanId = 2013,
+            EkHizmetTarifeId = 8015,
+            HizmetTarihi = new DateTime(2026, 3, 8, 13, 0, 0),
+            Miktar = 2,
+            BirimFiyat = 95m,
+            Aciklama = "Ozel kampanya"
+        });
+
+        var hizmet = Assert.Single(guncelOzet.EkHizmetler);
+        Assert.Equal(95m, hizmet.BirimFiyat);
+        Assert.Equal(190m, hizmet.ToplamTutar);
+        Assert.Equal(190m, guncelOzet.EkHizmetToplami);
+        Assert.Equal("Ozel kampanya", hizmet.Aciklama);
     }
 
     // Ek hizmet silinince o kalem toplamdan dusmeli ve ek hizmet listesi bosalmali.
@@ -1994,7 +2161,8 @@ public class RezervasyonServiceTests
                 AdSoyad = "Ali Check",
                 TcKimlikNo = "11111111111",
                 PasaportNo = null,
-                Cinsiyet = konaklayanCinsiyet
+                Cinsiyet = konaklayanCinsiyet,
+                KatilimDurumu = KonaklayanKatilimDurumlari.Geldi
             });
 
             dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
@@ -2945,12 +3113,22 @@ public class RezervasyonServiceTests
         decimal birimFiyat,
         string ad = "Ek Hizmet")
     {
+        var ekHizmetId = tarifeId + 100000;
+
+        dbContext.EkHizmetler.Add(new EkHizmet
+        {
+            Id = ekHizmetId,
+            TesisId = tesisId,
+            Ad = ad,
+            BirimAdi = "Adet",
+            AktifMi = true
+        });
+
         dbContext.EkHizmetTarifeleri.Add(new EkHizmetTarife
         {
             Id = tarifeId,
             TesisId = tesisId,
-            Ad = ad,
-            BirimAdi = "Adet",
+            EkHizmetId = ekHizmetId,
             BirimFiyat = birimFiyat,
             ParaBirimi = "TRY",
             BaslangicTarihi = new DateTime(2026, 3, 1),

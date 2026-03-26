@@ -19,6 +19,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
+import { KonaklayanKatilimDurumlari } from './konaklayan-katilim-durumlari.constants';
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
     KonaklamaSenaryoDto,
@@ -217,6 +218,12 @@ export class RezervasyonYonetimi implements OnInit {
         { label: 'Kadin', value: KonaklayanCinsiyetleri.Kadin },
         { label: 'Erkek', value: KonaklayanCinsiyetleri.Erkek }
     ];
+    readonly konaklayanKatilimDurumuSecenekleri = [
+        { label: 'Bekleniyor', value: KonaklayanKatilimDurumlari.Bekleniyor },
+        { label: 'Geldi', value: KonaklayanKatilimDurumlari.Geldi },
+        { label: 'Gelmedi', value: KonaklayanKatilimDurumlari.Gelmedi },
+        { label: 'Ayrildi', value: KonaklayanKatilimDurumlari.Ayrildi }
+    ];
     odemeDialogVisible = false;
     odemeLoading = false;
     odemeSaving = false;
@@ -229,6 +236,7 @@ export class RezervasyonYonetimi implements OnInit {
     selectedEkHizmetTarifeId: number | null = null;
     ekHizmetTarihi = '';
     ekHizmetMiktar: number | null = 1;
+    ekHizmetBirimFiyat: number | null = null;
     ekHizmetAciklama = '';
     ekHizmetSaving = false;
     editingEkHizmetId: number | null = null;
@@ -873,6 +881,7 @@ export class RezervasyonYonetimi implements OnInit {
             const siraNo = this.readUnknown(item, ['SiraNo', 'siraNo']);
             const adSoyad = this.readUnknown(item, ['AdSoyad', 'adSoyad']);
             const cinsiyet = this.readUnknown(item, ['Cinsiyet', 'cinsiyet']);
+            const katilimDurumu = this.readUnknown(item, ['KatilimDurumu', 'katilimDurumu']);
             const tcKimlikNo = this.readUnknown(item, ['TcKimlikNo', 'tcKimlikNo']);
             const pasaportNo = this.readUnknown(item, ['PasaportNo', 'pasaportNo']);
             const atamalarUnknown = this.readUnknown(item, ['Atamalar', 'atamalar']);
@@ -897,6 +906,7 @@ export class RezervasyonYonetimi implements OnInit {
                 siraNo: this.toDisplayString(siraNo),
                 adSoyad: this.toDisplayString(adSoyad),
                 cinsiyet: this.toDisplayString(cinsiyet),
+                katilimDurumu: this.toDisplayString(katilimDurumu),
                 tcKimlikNo: this.toDisplayString(tcKimlikNo),
                 pasaportNo: this.toDisplayString(pasaportNo),
                 atamalar: atamaOzetleri.length > 0 ? atamaOzetleri.join('\n') : '-'
@@ -908,6 +918,7 @@ export class RezervasyonYonetimi implements OnInit {
                 { field: 'siraNo', header: 'Sıra' },
                 { field: 'adSoyad', header: 'Ad Soyad' },
                 { field: 'cinsiyet', header: 'Cinsiyet' },
+                { field: 'katilimDurumu', header: 'Katilim Durumu' },
                 { field: 'tcKimlikNo', header: 'TC Kimlik No' },
                 { field: 'pasaportNo', header: 'Pasaport No' },
                 { field: 'atamalar', header: 'Atamalar' }
@@ -1060,6 +1071,7 @@ export class RezervasyonYonetimi implements OnInit {
                     tcKimlikNo: this.normalizeOptional(kisi.tcKimlikNo ?? ''),
                     pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
                     cinsiyet: this.normalizeOptional(kisi.cinsiyet ?? ''),
+                    katilimDurumu: this.normalizeOptional(kisi.katilimDurumu ?? '') ?? KonaklayanKatilimDurumlari.Bekleniyor,
                     atamalar: kisi.atamalar.map((atama) => ({
                         segmentId: atama.segmentId,
                         odaId: atama.odaId,
@@ -1081,6 +1093,8 @@ export class RezervasyonYonetimi implements OnInit {
                         const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
                         if (kayit) {
                             kayit.konaklayanPlaniTamamlandi = this.isKonaklayanPlanComplete(plan);
+                            kayit.gelenKonaklayanSayisi = plan.konaklayanlar.filter((x) => x.katilimDurumu === KonaklayanKatilimDurumlari.Geldi).length;
+                            kayit.bekleyenKonaklayanSayisi = plan.konaklayanlar.filter((x) => x.katilimDurumu === KonaklayanKatilimDurumlari.Bekleniyor).length;
                         }
                     }
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
@@ -1101,9 +1115,18 @@ export class RezervasyonYonetimi implements OnInit {
         const segmentIds = new Set(plan.segmentler.map((x) => x.segmentId));
         return plan.konaklayanlar.every((kisi) =>
             (kisi.adSoyad ?? '').trim().length > 0
+            && (kisi.katilimDurumu ?? '').trim().length > 0
             && kisi.atamalar.length === segmentIds.size
             && kisi.atamalar.every((atama) => {
-                if (!segmentIds.has(atama.segmentId) || (atama.odaId ?? 0) <= 0) {
+                if (!segmentIds.has(atama.segmentId)) {
+                    return false;
+                }
+
+                if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+                    return (atama.odaId ?? 0) <= 0 && (atama.yatakNo ?? 0) <= 0;
+                }
+
+                if ((atama.odaId ?? 0) <= 0) {
                     return false;
                 }
 
@@ -1119,6 +1142,17 @@ export class RezervasyonYonetimi implements OnInit {
                 const yatakNo = atama.yatakNo ?? 0;
                 return yatakNo > 0 && yatakNo <= odaSecenegi.ayrilanKisiSayisi;
             }));
+    }
+
+    isKonaklayanAssignmentsRequired(kisi: RezervasyonKonaklayanKisiDto): boolean {
+        return kisi.katilimDurumu !== KonaklayanKatilimDurumlari.Gelmedi;
+    }
+
+    setKonaklayanKatilimDurumu(kisi: RezervasyonKonaklayanKisiDto, katilimDurumu: string | null): void {
+        kisi.katilimDurumu = katilimDurumu ?? KonaklayanKatilimDurumlari.Bekleniyor;
+        if (kisi.katilimDurumu === KonaklayanKatilimDurumlari.Gelmedi) {
+            kisi.atamalar = kisi.atamalar.map((x) => ({ ...x, odaId: null, yatakNo: null }));
+        }
     }
 
     canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
@@ -1170,6 +1204,10 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Oda degisimi gerekli';
         }
 
+        if ((kayit.gelenKonaklayanSayisi ?? 0) <= 0) {
+            return 'Gelen misafir yok';
+        }
+
         return null;
     }
 
@@ -1197,6 +1235,10 @@ export class RezervasyonYonetimi implements OnInit {
 
         if (reason === 'Yonetim yetkisi yok') {
             return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        if (reason === 'Gelen misafir yok') {
+            return 'Check-in icin en az bir konaklayan Geldi olarak isaretlenmelidir.';
         }
 
         return 'Check-in islemi su anda baslatilamaz.';
@@ -1227,6 +1269,10 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Kalan odeme var';
         }
 
+        if ((kayit.bekleyenKonaklayanSayisi ?? 0) > 0) {
+            return 'Bekleyen misafirler var';
+        }
+
         return null;
     }
 
@@ -1250,6 +1296,10 @@ export class RezervasyonYonetimi implements OnInit {
 
         if (reason === 'Yonetim yetkisi yok') {
             return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        if (reason === 'Bekleyen misafirler var') {
+            return 'Check-out oncesi bekleyen konaklayanlar Geldi veya Gelmedi olarak netlestirilmelidir.';
         }
 
         return 'Check-out islemi su anda baslatilamaz.';
@@ -1539,7 +1589,7 @@ export class RezervasyonYonetimi implements OnInit {
     private executeCheckInIfAllowed(kayit: RezervasyonListeDto, kontrol: RezervasyonCheckInKontrolDto): Observable<RezervasyonKayitSonucDto> {
         if (kontrol.uyarilar.length > 0) {
             const warningDetail = kontrol.uyarilar
-                .map((x) => `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})`)
+                .map((x) => x.odaNo ? `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})` : x.mesaj)
                 .join(', ');
 
             this.messageService.add({
@@ -1769,6 +1819,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.selectedEkHizmetTarifeId = null;
         this.ekHizmetTarihi = this.getDefaultEkHizmetTarihi(kayit.id);
         this.ekHizmetMiktar = 1;
+        this.ekHizmetBirimFiyat = null;
         this.ekHizmetAciklama = '';
         this.editingEkHizmetId = null;
         this.loadOdemeOzeti(kayit.id);
@@ -1789,6 +1840,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.selectedEkHizmetTarifeId = null;
         this.ekHizmetTarihi = '';
         this.ekHizmetMiktar = 1;
+        this.ekHizmetBirimFiyat = null;
         this.ekHizmetAciklama = '';
         this.editingEkHizmetId = null;
         this.odemeTutari = null;
@@ -1822,6 +1874,12 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
+        const birimFiyat = Number(this.ekHizmetBirimFiyat ?? 0);
+        if (!Number.isFinite(birimFiyat) || birimFiyat < 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Fiyat', detail: 'Birim fiyat sifirdan kucuk olamaz.' });
+            return;
+        }
+
         if (!this.ekHizmetTarihi) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Hizmet tarihi zorunludur.' });
             return;
@@ -1833,6 +1891,7 @@ export class RezervasyonYonetimi implements OnInit {
             ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
             hizmetTarihi: this.toIsoDate(this.ekHizmetTarihi),
             miktar,
+            birimFiyat,
             aciklama: this.normalizeOptional(this.ekHizmetAciklama)
         };
 
@@ -1877,7 +1936,13 @@ export class RezervasyonYonetimi implements OnInit {
         this.selectedEkHizmetTarifeId = hizmet.ekHizmetTarifeId;
         this.ekHizmetTarihi = this.toDateTimeLocalInputValue(hizmet.hizmetTarihi);
         this.ekHizmetMiktar = hizmet.miktar;
+        this.ekHizmetBirimFiyat = hizmet.birimFiyat;
         this.ekHizmetAciklama = hizmet.aciklama ?? '';
+    }
+
+    onEkHizmetTarifeChange(): void {
+        const selectedTarife = this.getSelectedEkHizmetTarife();
+        this.ekHizmetBirimFiyat = selectedTarife?.birimFiyat ?? null;
     }
 
     toggleOdemeEkHizmetPanel(): void {
@@ -2006,6 +2071,10 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     getKonaklayanOdaSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
+        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+            return [];
+        }
+
         const segment = this.konaklayanPlan?.segmentler.find((x) => x.segmentId === segmentId);
         if (!segment) {
             return [];
@@ -2038,6 +2107,10 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     isKonaklayanYatakSecimiGerekli(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): boolean {
+        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+            return false;
+        }
+
         const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
         if (!odaId || odaId <= 0) {
             return false;
@@ -2048,6 +2121,10 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     getKonaklayanYatakSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
+        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+            return [];
+        }
+
         const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
         if (!odaId || odaId <= 0) {
             return [];
@@ -2105,6 +2182,10 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         return this.konaklayanPlan.konaklayanlar.reduce((total, kisi) => {
+            if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+                return total;
+            }
+
             const selectedOdaId = kisi.atamalar.find((x) => x.segmentId === segmentId)?.odaId;
             return total + (selectedOdaId === odaId ? 1 : 0);
         }, 0);
@@ -2116,6 +2197,7 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         const selected = this.konaklayanPlan.konaklayanlar
+            .filter((kisi) => this.isKonaklayanAssignmentsRequired(kisi))
             .map((kisi) => kisi.atamalar.find((x) => x.segmentId === segmentId))
             .filter((atama) => atama?.odaId === odaId && (atama?.yatakNo ?? 0) > 0)
             .map((atama) => atama!.yatakNo!) as number[];
@@ -2397,6 +2479,26 @@ export class RezervasyonYonetimi implements OnInit {
         return this.ekHizmetTarifeSecenekleri.find((x) => x.id === this.selectedEkHizmetTarifeId) ?? null;
     }
 
+    getSelectedEkHizmetTarifeVarsayilanFiyat(): string | null {
+        const selectedTarife = this.getSelectedEkHizmetTarife();
+        if (!selectedTarife) {
+            return null;
+        }
+
+        return this.formatCurrency(selectedTarife.birimFiyat, selectedTarife.paraBirimi);
+    }
+
+    getEkHizmetToplamOnizleme(): string | null {
+        const selectedTarife = this.getSelectedEkHizmetTarife();
+        const miktar = Number(this.ekHizmetMiktar ?? 0);
+        const birimFiyat = Number(this.ekHizmetBirimFiyat ?? 0);
+        if (!selectedTarife || !Number.isFinite(miktar) || miktar <= 0 || !Number.isFinite(birimFiyat) || birimFiyat < 0) {
+            return null;
+        }
+
+        return this.formatCurrency(Math.round(birimFiyat * miktar * 100) / 100, selectedTarife.paraBirimi);
+    }
+
     private getDefaultEkHizmetTarihi(rezervasyonId: number): string {
         const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
         if (!kayit) {
@@ -2518,6 +2620,7 @@ export class RezervasyonYonetimi implements OnInit {
     private resetEkHizmetForm(): void {
         this.editingEkHizmetId = null;
         this.ekHizmetMiktar = 1;
+        this.ekHizmetBirimFiyat = this.getSelectedEkHizmetTarife()?.birimFiyat ?? null;
         this.ekHizmetAciklama = '';
 
         if (this.odemeRezervasyonId) {
@@ -2643,6 +2746,31 @@ export class RezervasyonYonetimi implements OnInit {
             default:
                 return UiSeverity.Secondary;
         }
+    }
+
+    getKonaklayanKatilimChipleri(kayit: RezervasyonListeDto): Array<{ label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' }> {
+        const gelen = Math.max(0, kayit.gelenKonaklayanSayisi ?? 0);
+        const bekleyen = Math.max(0, kayit.bekleyenKonaklayanSayisi ?? 0);
+        const gelmeyen = Math.max(0, (kayit.kisiSayisi ?? 0) - gelen - bekleyen);
+        const chips: Array<{ label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' }> = [];
+
+        if (gelen > 0) {
+            chips.push({ label: `Geldi: ${gelen}`, severity: UiSeverity.Success });
+        }
+
+        if (bekleyen > 0) {
+            chips.push({ label: `Bekliyor: ${bekleyen}`, severity: UiSeverity.Warn });
+        }
+
+        if (gelmeyen > 0) {
+            chips.push({ label: `Gelmedi: ${gelmeyen}`, severity: UiSeverity.Danger });
+        }
+
+        if (chips.length === 0) {
+            chips.push({ label: 'Katilim bilgisi yok', severity: UiSeverity.Secondary });
+        }
+
+        return chips;
     }
 
     private nowInput(): string {

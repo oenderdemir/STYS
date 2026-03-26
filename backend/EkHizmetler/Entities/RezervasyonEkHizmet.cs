@@ -11,6 +11,8 @@ public class RezervasyonEkHizmet : BaseEntity<int>
 
     public int RezervasyonKonaklayanId { get; set; }
 
+    public int EkHizmetId { get; set; }
+
     public int EkHizmetTarifeId { get; set; }
 
     public int RezervasyonSegmentId { get; set; }
@@ -53,6 +55,8 @@ public class RezervasyonEkHizmet : BaseEntity<int>
     public Rezervasyon? Rezervasyon { get; set; }
 
     public RezervasyonKonaklayan? RezervasyonKonaklayan { get; set; }
+
+    public EkHizmet? EkHizmet { get; set; }
 
     public EkHizmetTarife? EkHizmetTarife { get; set; }
 

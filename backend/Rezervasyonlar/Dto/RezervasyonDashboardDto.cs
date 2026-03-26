@@ -16,6 +16,12 @@ public class RezervasyonDashboardDto
 
     public int BosOdaSayisi { get; set; }
 
+    public int ToplamKapasite { get; set; }
+
+    public int KullanilanKapasite { get; set; }
+
+    public int SerbestKapasite { get; set; }
+
     public RezervasyonKpiOzetDto KpiOzet { get; set; } = new();
 
     public List<RezervasyonGelirKirilimDto> OdemeTipineGoreGelirKirilimi { get; set; } = [];

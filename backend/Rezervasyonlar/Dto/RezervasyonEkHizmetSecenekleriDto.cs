@@ -24,6 +24,8 @@ public class RezervasyonEkHizmetTarifeSecenekDto
 {
     public int Id { get; set; }
 
+    public int EkHizmetId { get; set; }
+
     public string Ad { get; set; } = string.Empty;
 
     public string? Aciklama { get; set; }

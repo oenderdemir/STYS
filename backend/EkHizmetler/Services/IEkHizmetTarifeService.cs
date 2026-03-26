@@ -8,6 +8,10 @@ public interface IEkHizmetTarifeService : IBaseRdbmsService<EkHizmetTarifeDto, E
 {
     Task<List<EkHizmetTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default);
 
+    Task<List<EkHizmetDto>> GetHizmetlerByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default);
+
+    Task<List<EkHizmetDto>> UpsertHizmetlerByTesisAsync(int tesisId, IEnumerable<EkHizmetDto> hizmetler, CancellationToken cancellationToken = default);
+
     Task<List<EkHizmetTarifeDto>> GetByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default);
 
     Task<List<EkHizmetTarifeDto>> UpsertByTesisAsync(int tesisId, IEnumerable<EkHizmetTarifeDto> tarifeler, CancellationToken cancellationToken = default);

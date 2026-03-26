@@ -299,7 +299,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("Countries", "dbo");
                 });
 
-            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmetTarife", b =>
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmet", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -319,13 +319,57 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("AktifMi")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime>("BaslangicTarihi")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("BirimAdi")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TesisId", "Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("EkHizmetler", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmetTarife", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("BaslangicTarihi")
+                        .HasColumnType("datetime2");
 
                     b.Property<decimal>("BirimFiyat")
                         .HasPrecision(18, 2)
@@ -349,6 +393,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int>("EkHizmetId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ParaBirimi")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -365,7 +412,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TesisId", "Ad", "BaslangicTarihi", "BitisTarihi")
+                    b.HasIndex("EkHizmetId");
+
+                    b.HasIndex("TesisId", "EkHizmetId", "BaslangicTarihi", "BitisTarihi")
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("EkHizmetTarifeleri", "dbo");
@@ -408,6 +457,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Property<string>("DeletedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EkHizmetId")
+                        .HasColumnType("int");
 
                     b.Property<int>("EkHizmetTarifeId")
                         .HasColumnType("int");
@@ -463,6 +515,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EkHizmetId");
 
                     b.HasIndex("EkHizmetTarifeId");
 
@@ -1645,6 +1699,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<string>("KatilimDurumu")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("Bekleniyor");
+
                     b.Property<string>("PasaportNo")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
@@ -2170,7 +2230,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Bina");
                 });
 
-            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmetTarife", b =>
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmet", b =>
                 {
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
                         .WithMany()
@@ -2181,8 +2241,33 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Tesis");
                 });
 
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmetTarife", b =>
+                {
+                    b.HasOne("STYS.EkHizmetler.Entities.EkHizmet", "EkHizmet")
+                        .WithMany("Tarifeler")
+                        .HasForeignKey("EkHizmetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("EkHizmet");
+
+                    b.Navigation("Tesis");
+                });
+
             modelBuilder.Entity("STYS.EkHizmetler.Entities.RezervasyonEkHizmet", b =>
                 {
+                    b.HasOne("STYS.EkHizmetler.Entities.EkHizmet", "EkHizmet")
+                        .WithMany("RezervasyonEkHizmetler")
+                        .HasForeignKey("EkHizmetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("STYS.EkHizmetler.Entities.EkHizmetTarife", "EkHizmetTarife")
                         .WithMany("RezervasyonEkHizmetleri")
                         .HasForeignKey("EkHizmetTarifeId")
@@ -2212,6 +2297,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasForeignKey("RezervasyonSegmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("EkHizmet");
 
                     b.Navigation("EkHizmetTarife");
 
@@ -2575,6 +2662,13 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Odalar");
 
                     b.Navigation("Yoneticiler");
+                });
+
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmet", b =>
+                {
+                    b.Navigation("RezervasyonEkHizmetler");
+
+                    b.Navigation("Tarifeler");
                 });
 
             modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmetTarife", b =>

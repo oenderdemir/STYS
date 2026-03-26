@@ -10,5 +10,7 @@ public class RezervasyonEkHizmetKaydetRequestDto
 
     public decimal Miktar { get; set; }
 
+    public decimal? BirimFiyat { get; set; }
+
     public string? Aciklama { get; set; }
 }

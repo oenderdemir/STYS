@@ -6,9 +6,11 @@ public class EkHizmetTarifeDto : BaseRdbmsDto<int>
 {
     public int TesisId { get; set; }
 
-    public string Ad { get; set; } = string.Empty;
+    public int EkHizmetId { get; set; }
 
-    public string? Aciklama { get; set; }
+    public string EkHizmetAdi { get; set; } = string.Empty;
+
+    public string? EkHizmetAciklama { get; set; }
 
     public string BirimAdi { get; set; } = "Adet";
 

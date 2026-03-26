@@ -31,6 +31,44 @@ public class EkHizmetTarifeController : UIController
         return Ok(items);
     }
 
+    [HttpGet("tesis/{tesisId:int}/hizmetler")]
+    [Permission(StructurePermissions.EkHizmetYonetimi.View)]
+    public async Task<ActionResult<List<EkHizmetDto>>> GetHizmetlerByTesisId(int tesisId, CancellationToken cancellationToken)
+    {
+        var items = await _ekHizmetTarifeService.GetHizmetlerByTesisIdAsync(tesisId, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpGet("tesis/{tesisId:int}/tarifeler")]
+    [Permission(StructurePermissions.EkHizmetYonetimi.View)]
+    public async Task<ActionResult<List<EkHizmetTarifeDto>>> GetTarifelerByTesisId(int tesisId, CancellationToken cancellationToken)
+    {
+        var items = await _ekHizmetTarifeService.GetByTesisIdAsync(tesisId, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpPut("tesis/{tesisId:int}/hizmetler")]
+    [Permission(StructurePermissions.EkHizmetYonetimi.Manage)]
+    public async Task<ActionResult<List<EkHizmetDto>>> UpsertHizmetlerByTesis(
+        int tesisId,
+        [FromBody] List<EkHizmetDto> hizmetler,
+        CancellationToken cancellationToken)
+    {
+        var items = await _ekHizmetTarifeService.UpsertHizmetlerByTesisAsync(tesisId, hizmetler, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpPut("tesis/{tesisId:int}/tarifeler")]
+    [Permission(StructurePermissions.EkHizmetYonetimi.Manage)]
+    public async Task<ActionResult<List<EkHizmetTarifeDto>>> UpsertTarifelerByTesis(
+        int tesisId,
+        [FromBody] List<EkHizmetTarifeDto> tarifeler,
+        CancellationToken cancellationToken)
+    {
+        var items = await _ekHizmetTarifeService.UpsertByTesisAsync(tesisId, tarifeler, cancellationToken);
+        return Ok(items);
+    }
+
     [HttpPut("tesis/{tesisId:int}")]
     [Permission(StructurePermissions.EkHizmetYonetimi.Manage)]
     public async Task<ActionResult<List<EkHizmetTarifeDto>>> UpsertByTesis(

@@ -6,6 +6,8 @@ public class RezervasyonEkHizmetDto
 
     public int RezervasyonKonaklayanId { get; set; }
 
+    public int EkHizmetId { get; set; }
+
     public int EkHizmetTarifeId { get; set; }
 
     public string KonaklayanAdiSoyadi { get; set; } = string.Empty;

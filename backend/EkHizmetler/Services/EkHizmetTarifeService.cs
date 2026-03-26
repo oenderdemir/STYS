@@ -49,12 +49,88 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<EkHizmetDto>> GetHizmetlerByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var items = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId)
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<EkHizmetDto>>(items);
+    }
+
+    public async Task<List<EkHizmetDto>> UpsertHizmetlerByTesisAsync(int tesisId, IEnumerable<EkHizmetDto> hizmetler, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        var items = (hizmetler ?? []).ToList();
+
+        foreach (var item in items)
+        {
+            item.TesisId = tesisId;
+            Normalize(item);
+        }
+
+        ValidateHizmetRows(items);
+
+        var existing = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId)
+            .ToListAsync(cancellationToken);
+
+        var existingById = existing.ToDictionary(x => x.Id);
+        foreach (var item in items)
+        {
+            if (item.Id is > 0 && existingById.TryGetValue(item.Id.Value, out var entity))
+            {
+                entity.Ad = item.Ad;
+                entity.Aciklama = item.Aciklama;
+                entity.BirimAdi = item.BirimAdi;
+                entity.AktifMi = item.AktifMi;
+                continue;
+            }
+
+            await _stysDbContext.EkHizmetler.AddAsync(new EkHizmet
+            {
+                TesisId = tesisId,
+                Ad = item.Ad,
+                Aciklama = item.Aciklama,
+                BirimAdi = item.BirimAdi,
+                AktifMi = item.AktifMi
+            }, cancellationToken);
+        }
+
+        var incomingIds = items.Where(x => x.Id > 0).Select(x => x.Id).ToHashSet();
+        var toRemove = existing.Where(x => !incomingIds.Contains(x.Id)).ToList();
+        if (toRemove.Count > 0)
+        {
+            var ids = toRemove.Select(x => x.Id).ToList();
+            var referencedIds = await GetReferencedEkHizmetIdsAsync(ids, cancellationToken);
+
+            foreach (var entity in toRemove)
+            {
+                if (referencedIds.Contains(entity.Id))
+                {
+                    entity.AktifMi = false;
+                    continue;
+                }
+
+                _stysDbContext.EkHizmetler.Remove(entity);
+            }
+        }
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return await GetHizmetlerByTesisIdAsync(tesisId, cancellationToken);
+    }
+
     public async Task<List<EkHizmetTarifeDto>> GetByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default)
     {
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
 
         var items = await _ekHizmetTarifeRepository.Where(x => x.TesisId == tesisId)
-            .OrderBy(x => x.Ad)
+            .Include(x => x.EkHizmet)
+            .OrderBy(x => x.EkHizmet!.Ad)
             .ThenBy(x => x.BaslangicTarihi)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -73,20 +149,62 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             Normalize(item);
         }
 
-        ValidateRows(items);
+        var tesisHizmetleri = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId)
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        ValidateTarifeRows(items, tesisHizmetleri);
 
         var existing = await _ekHizmetTarifeRepository.Where(x => x.TesisId == tesisId).ToListAsync(cancellationToken);
-        if (existing.Count > 0)
-        {
-            _ekHizmetTarifeRepository.DeleteRange(existing);
-            await _ekHizmetTarifeRepository.SaveChangesAsync(cancellationToken);
-        }
+        var existingById = existing.ToDictionary(x => x.Id);
 
         foreach (var item in items)
         {
-            var entity = Mapper.Map<EkHizmetTarife>(item);
-            entity.Id = 0;
-            await _ekHizmetTarifeRepository.AddAsync(entity);
+            if (item.Id is > 0 && existingById.TryGetValue(item.Id.Value, out var entity))
+            {
+                entity.EkHizmetId = item.EkHizmetId;
+                entity.BirimFiyat = item.BirimFiyat;
+                entity.ParaBirimi = item.ParaBirimi;
+                entity.BaslangicTarihi = item.BaslangicTarihi;
+                entity.BitisTarihi = item.BitisTarihi;
+                entity.AktifMi = item.AktifMi;
+                continue;
+            }
+
+            await _ekHizmetTarifeRepository.AddAsync(new EkHizmetTarife
+            {
+                TesisId = tesisId,
+                EkHizmetId = item.EkHizmetId,
+                BirimFiyat = item.BirimFiyat,
+                ParaBirimi = item.ParaBirimi,
+                BaslangicTarihi = item.BaslangicTarihi,
+                BitisTarihi = item.BitisTarihi,
+                AktifMi = item.AktifMi
+            });
+        }
+
+        var incomingIds = items.Where(x => x.Id > 0).Select(x => x.Id).ToHashSet();
+        var toRemove = existing.Where(x => !incomingIds.Contains(x.Id)).ToList();
+        if (toRemove.Count > 0)
+        {
+            var ids = toRemove.Select(x => x.Id).ToList();
+            var referencedIds = await _stysDbContext.RezervasyonEkHizmetler
+                .Where(x => ids.Contains(x.EkHizmetTarifeId))
+                .Select(x => x.EkHizmetTarifeId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var referencedIdSet = referencedIds.ToHashSet();
+            foreach (var entity in toRemove)
+            {
+                if (referencedIdSet.Contains(entity.Id))
+                {
+                    entity.AktifMi = false;
+                    continue;
+                }
+
+                _ekHizmetTarifeRepository.Delete(entity);
+            }
         }
 
         await _ekHizmetTarifeRepository.SaveChangesAsync(cancellationToken);
@@ -113,17 +231,38 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         }
     }
 
-    private static void Normalize(EkHizmetTarifeDto item)
+    private async Task<HashSet<int>> GetReferencedEkHizmetIdsAsync(IReadOnlyCollection<int> ekHizmetIds, CancellationToken cancellationToken)
+    {
+        var tarifedenGelenler = await _stysDbContext.EkHizmetTarifeleri
+            .Where(x => ekHizmetIds.Contains(x.EkHizmetId))
+            .Select(x => x.EkHizmetId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var rezervasyondanGelenler = await _stysDbContext.RezervasyonEkHizmetler
+            .Where(x => ekHizmetIds.Contains(x.EkHizmetId))
+            .Select(x => x.EkHizmetId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return tarifedenGelenler.Concat(rezervasyondanGelenler).ToHashSet();
+    }
+
+    private static void Normalize(EkHizmetDto item)
     {
         item.Ad = item.Ad?.Trim() ?? string.Empty;
         item.Aciklama = string.IsNullOrWhiteSpace(item.Aciklama) ? null : item.Aciklama.Trim();
         item.BirimAdi = string.IsNullOrWhiteSpace(item.BirimAdi) ? "Adet" : item.BirimAdi.Trim();
+    }
+
+    private static void Normalize(EkHizmetTarifeDto item)
+    {
         item.ParaBirimi = string.IsNullOrWhiteSpace(item.ParaBirimi) ? "TRY" : item.ParaBirimi.Trim().ToUpperInvariant();
         item.BaslangicTarihi = item.BaslangicTarihi.Date;
         item.BitisTarihi = item.BitisTarihi.Date;
     }
 
-    private static void ValidateRows(IReadOnlyCollection<EkHizmetTarifeDto> items)
+    private static void ValidateHizmetRows(IReadOnlyCollection<EkHizmetDto> items)
     {
         foreach (var item in items)
         {
@@ -135,6 +274,26 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             if (string.IsNullOrWhiteSpace(item.BirimAdi))
             {
                 throw new BaseException("Birim adi zorunludur.", 400);
+            }
+        }
+
+        var duplicates = items
+            .GroupBy(x => x.Ad.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(x => x.Count() > 1);
+
+        if (duplicates is not null)
+        {
+            throw new BaseException($"'{duplicates.Key}' hizmeti birden fazla kez tanimlanamaz.", 400);
+        }
+    }
+
+    private static void ValidateTarifeRows(IReadOnlyCollection<EkHizmetTarifeDto> items, IReadOnlyDictionary<int, EkHizmet> tesisHizmetleri)
+    {
+        foreach (var item in items)
+        {
+            if (item.EkHizmetId <= 0 || !tesisHizmetleri.ContainsKey(item.EkHizmetId))
+            {
+                throw new BaseException("Gecerli bir ek hizmet seciniz.", 400);
             }
 
             if (item.BirimFiyat < 0)
@@ -154,7 +313,7 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         }
 
         var groups = items
-            .GroupBy(x => x.Ad.Trim(), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(x => x.EkHizmetId)
             .ToList();
 
         foreach (var group in groups)
@@ -168,7 +327,8 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             {
                 if (ordered[i].BaslangicTarihi <= ordered[i - 1].BitisTarihi)
                 {
-                    throw new BaseException($"'{group.Key}' hizmeti icin cakisan tarih araligi tanimlanamaz.", 400);
+                    var hizmetAdi = tesisHizmetleri[group.Key].Ad;
+                    throw new BaseException($"'{hizmetAdi}' hizmeti icin cakisan tarih araligi tanimlanamaz.", 400);
                 }
             }
         }

@@ -100,6 +100,13 @@ public static class StructurePermissions
         public const string Manage = "OdaTemizlikYonetimi.Manage";
     }
 
+    public static class ErisimTeshisYonetimi
+    {
+        public const string Menu = "ErisimTeshisYonetimi.Menu";
+        public const string View = "ErisimTeshisYonetimi.View";
+        public const string Manage = "ErisimTeshisYonetimi.Manage";
+    }
+
     public static class RezervasyonYonetimi
     {
         public const string Menu = "RezervasyonYonetimi.Menu";

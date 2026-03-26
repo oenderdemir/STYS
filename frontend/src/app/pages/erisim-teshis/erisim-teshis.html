@@ -1,0 +1,274 @@
+<p-toast />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loading || analyzing" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card teshis-hero">
+    <h5 class="m-0 mb-2">Erisim Teshis</h5>
+    <p class="m-0 text-color-secondary">
+        Bir kullanicinin menuyu neden goremedigini, kayitlari neden listeleyemedigini veya neden guncelleme yapamadigini hizlica aciklar.
+    </p>
+</div>
+
+<div class="card mt-4">
+    <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 lg:col-span-4">
+            <label for="teshisKullanici" class="block font-medium mb-2">Kullanici</label>
+            <p-select
+                inputId="teshisKullanici"
+                class="w-full"
+                [options]="referanslar.kullanicilar"
+                optionLabel="kullaniciAdi"
+                optionValue="id"
+                [filter]="true"
+                [appendTo]="'body'"
+                [(ngModel)]="selectedKullaniciId"
+                [disabled]="loading || analyzing"
+            />
+        </div>
+
+        <div class="col-span-12 lg:col-span-4">
+            <label for="teshisModul" class="block font-medium mb-2">Modul</label>
+            <p-select
+                inputId="teshisModul"
+                class="w-full"
+                [options]="referanslar.moduller"
+                optionLabel="ad"
+                optionValue="anahtar"
+                [filter]="true"
+                [appendTo]="'body'"
+                [(ngModel)]="selectedModulAnahtari"
+                [disabled]="loading || analyzing"
+                (onChange)="onModulChange()"
+            />
+        </div>
+
+        <div class="col-span-12 lg:col-span-4">
+            <label for="teshisTesis" class="block font-medium mb-2">Tesis</label>
+            <p-select
+                inputId="teshisTesis"
+                class="w-full"
+                [options]="referanslar.tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [filter]="true"
+                [appendTo]="'body'"
+                [showClear]="true"
+                [(ngModel)]="selectedTesisId"
+                [disabled]="loading || analyzing || !selectedTesisRequired"
+            />
+            @if (selectedModul) {
+                <small class="text-color-secondary block mt-1">
+                    {{ selectedTesisRequired ? 'Bu modul icin tesis secimi gerekli.' : 'Bu modul icin tesis secimi zorunlu degil.' }}
+                </small>
+            }
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <div class="flex flex-wrap gap-2">
+            <p-button label="Teshis Et" icon="pi pi-search" [loading]="analyzing" [disabled]="loading || analyzing || !selectedKullaniciId || !selectedModulAnahtari" (onClick)="analyze()" />
+            @if (sonuc) {
+                <p-button label="Ozeti Kopyala" icon="pi pi-copy" severity="secondary" [outlined]="true" [disabled]="loading || analyzing" (onClick)="copySummary()" />
+            }
+        </div>
+    </div>
+</div>
+
+@if (sonuc) {
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 md:col-span-3">
+            <div [class]="getSummaryCardClass('info')">
+                <span class="mini-title">Genel Durum</span>
+                <strong>{{ sonuc.genelDurum }}</strong>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-3">
+            <div [class]="getSummaryCardClass('success')">
+                <span class="mini-title">Basarili Islem</span>
+                <strong>{{ sonuc.basariliIslemSayisi }}</strong>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-3">
+            <div [class]="getSummaryCardClass('warn')">
+                <span class="mini-title">Uyari</span>
+                <strong>{{ sonuc.uyariIslemSayisi }}</strong>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-3">
+            <div [class]="getSummaryCardClass('danger')">
+                <span class="mini-title">Engelli Islem</span>
+                <strong>{{ sonuc.engelliIslemSayisi }}</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 lg:col-span-8">
+            <div class="teshis-card">
+                <div class="mini-title mb-2">Ozet</div>
+                <div class="text-xl font-semibold mb-2">{{ sonuc.ozet }}</div>
+                <div class="text-color-secondary">
+                    Modul: <strong>{{ sonuc.modul.ad }}</strong>
+                    @if (sonuc.seciliTesis) {
+                        <span> | Tesis: <strong>{{ sonuc.seciliTesis.ad }}</strong></span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-4">
+            <div class="teshis-card">
+                <div class="mini-title mb-2">Kullanici</div>
+                <div class="font-semibold">{{ sonuc.kullanici.kullaniciAdi }}</div>
+                @if (sonuc.kullanici.adSoyad) {
+                    <div class="text-color-secondary">{{ sonuc.kullanici.adSoyad }}</div>
+                }
+                @if (sonuc.kullanici.eposta) {
+                    <div class="text-color-secondary">{{ sonuc.kullanici.eposta }}</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 xl:col-span-7">
+            <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Karar Kartlari</div>
+                <div class="grid grid-cols-12 gap-3">
+                    @for (row of sonuc.islemler; track row.islemAnahtari) {
+                        <div class="col-span-12 md:col-span-6">
+                            <div [class]="getDecisionCardClass(row)">
+                                <div class="flex justify-between items-start gap-3 mb-2">
+                                    <div>
+                                        <div class="font-semibold">{{ row.islemAdi }}</div>
+                                        <div class="text-sm text-color-secondary mt-1">
+                                            <code>{{ row.gerekliYetki }}</code>
+                                        </div>
+                                    </div>
+                                    <p-tag [value]="row.durum" [severity]="getDurumSeverity(row.durum)" />
+                                </div>
+                                <div class="text-sm mb-2">{{ row.aciklama }}</div>
+                                <div class="flex flex-wrap gap-2 mb-2">
+                                    <p-tag [value]="row.yetkiVar ? 'Yetki Var' : 'Yetki Yok'" [severity]="row.yetkiVar ? 'success' : 'danger'" />
+                                    @if (row.tesisScopeGerekli) {
+                                        <p-tag
+                                            [value]="row.tesisScopeUygun === true ? 'Scope Uygun' : (row.tesisScopeUygun === false ? 'Scope Engeli' : 'Scope Kontrol Bekliyor')"
+                                            [severity]="row.tesisScopeUygun === true ? 'success' : (row.tesisScopeUygun === false ? 'warn' : 'info')" />
+                                    }
+                                    @if (row.engelKodu) {
+                                        <p-tag [value]="getEngelEtiketi(row.engelKodu)" [severity]="getEngelSeverity(row.engelKodu)" />
+                                    }
+                                </div>
+                                <div class="text-sm text-color-secondary">
+                                    <strong>Oneri:</strong> {{ row.oneri }}
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="teshis-card">
+                <div class="mini-title mb-3">Islem Sonuclari</div>
+                <p-table [value]="sonuc.islemler" [tableStyle]="{ 'min-width': '46rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Islem</th>
+                            <th>Gerekli Yetki</th>
+                            <th>Durum</th>
+                            <th>Engel</th>
+                            <th>Aciklama</th>
+                            <th>Oneri</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-row>
+                        <tr>
+                            <td>{{ row.islemAdi }}</td>
+                            <td><code>{{ row.gerekliYetki }}</code></td>
+                            <td>
+                                <p-tag [value]="row.durum" [severity]="getDurumSeverity(row.durum)" />
+                            </td>
+                            <td>
+                                <p-tag [value]="row.engelKodu ? getEngelEtiketi(row.engelKodu) : 'Sorun Yok'" [severity]="row.engelKodu ? getEngelSeverity(row.engelKodu) : 'success'" />
+                            </td>
+                            <td>{{ row.aciklama }}</td>
+                            <td>{{ row.oneri }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-5">
+            <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Onerilen Aksiyonlar</div>
+                <ul class="recommendation-list">
+                    @for (aksiyon of sonuc.onerilenAksiyonlar; track aksiyon) {
+                        <li>{{ aksiyon }}</li>
+                    }
+                </ul>
+            </div>
+
+            <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Eksik Yetkiler</div>
+                @if (sonuc.eksikYetkiler.length > 0) {
+                    <div class="flex flex-wrap gap-2">
+                        @for (permission of sonuc.eksikYetkiler; track permission) {
+                            <span class="permission-chip">{{ permission }}</span>
+                        }
+                    </div>
+                } @else {
+                    <p class="m-0 text-color-secondary">Belirgin bir eksik yetki bulunmuyor.</p>
+                }
+            </div>
+
+            <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Scope Ozeti</div>
+                <p class="m-0 mb-3">{{ sonuc.scope.ozet }}</p>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <p-tag [value]="sonuc.scope.adminMi ? 'Admin' : 'Admin Degil'" [severity]="sonuc.scope.adminMi ? 'success' : 'secondary'" />
+                    <p-tag [value]="sonuc.scope.scopedMi ? 'Scoped' : 'Kisitsiz'" [severity]="sonuc.scope.scopedMi ? 'warn' : 'info'" />
+                </div>
+                @if (sonuc.scope.tesisler.length > 0) {
+                    <div class="mini-title mb-2">Scope Tesisleri</div>
+                    <div class="flex flex-wrap gap-2">
+                        @for (tesis of sonuc.scope.tesisler; track tesis.id) {
+                            <span class="permission-chip">{{ tesis.ad }}</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Kullanici Gruplari</div>
+                <p-table [value]="sonuc.kullaniciGruplari">
+                    <ng-template #header>
+                        <tr>
+                            <th>Grup</th>
+                            <th>Roller</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-group>
+                        <tr>
+                            <td>{{ group.grupAdi }}</td>
+                            <td>{{ group.roller.join(', ') }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </div>
+
+            <div class="teshis-card">
+                <div class="mini-title mb-3">Efektif Yetkiler</div>
+                <div class="flex flex-wrap gap-2">
+                    @for (permission of sonuc.yetkiler; track trackPermission($index, permission)) {
+                        <span class="permission-chip">{{ permission }}</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}

@@ -203,4 +203,3 @@ Kurumlar icin sagladigi ana avantajlar:
 - finansal gorunurluk
 - izlenebilirlik
 - yetki ve erisim kontrolu
-

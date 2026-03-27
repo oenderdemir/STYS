@@ -2,6 +2,12 @@
 
 Bu repository, STYS backend (`backend`), frontend (`frontend`), platform modulleri (`platform`) ve test projelerini (`tests`) icerir.
 
+## Diger Dokumanlar
+
+- Kurumsal tanitim brosuru: [docs/tanitim-brosuru.md](docs/tanitim-brosuru.md)
+- Kurumsal sunum deck'i: [docs/kurumsal-sunum-deck.md](docs/kurumsal-sunum-deck.md)
+- Demo toplantisi ozellik akisi: [docs/demo-toplantisi-ozellik-akisi.md](docs/demo-toplantisi-ozellik-akisi.md)
+
 ## Proje Yapisi
 
 - `backend`: ASP.NET Core + EF Core domain ve API katmani

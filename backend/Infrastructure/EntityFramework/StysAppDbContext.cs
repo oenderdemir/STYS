@@ -759,6 +759,8 @@ public class StysAppDbContext : DbContext
                 case EntityState.Added:
                     SetProperty(entity, nameof(BaseEntity<int>.CreatedAt), now);
                     SetProperty(entity, nameof(BaseEntity<int>.CreatedBy), user);
+                    SetProperty(entity, nameof(BaseEntity<int>.UpdatedAt), now);
+                    SetProperty(entity, nameof(BaseEntity<int>.UpdatedBy), user);
                     SetProperty(entity, nameof(BaseEntity<int>.IsDeleted), false);
                     break;
                 case EntityState.Modified:

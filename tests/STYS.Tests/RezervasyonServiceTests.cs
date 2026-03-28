@@ -1786,6 +1786,37 @@ public class RezervasyonServiceTests
         Assert.Equal("Ali Check", guest.AdSoyad);
     }
 
+    // Ek hizmet seceneklerinde paket icerigi uyarisi isim benzerligiyle degil explicit hizmet kodu eslesmesiyle gelmeli.
+    [Fact]
+    public async Task GetEkHizmetSecenekleri_PaketIcerikKodunaGoreUyariDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10082, segmentId: 10083, withPlan: true);
+        await SeedEkHizmetTarifesiAsync(
+            dbContext,
+            tarifeId: 8009,
+            tesisId: 1,
+            birimFiyat: 90m,
+            ad: "Sabah Servisi",
+            paketIcerikHizmetKodu: KonaklamaTipiIcerikHizmetKodlari.Kahvalti);
+
+        dbContext.KonaklamaTipiIcerikKalemleri.Add(new KonaklamaTipiIcerikKalemi
+        {
+            Id = 18009,
+            KonaklamaTipiId = 1,
+            HizmetKodu = KonaklamaTipiIcerikHizmetKodlari.Kahvalti,
+            Miktar = 1,
+            Periyot = KonaklamaTipiIcerikPeriyotlari.Gunluk
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var result = await service.GetEkHizmetSecenekleriAsync(10082);
+
+        var tarife = Assert.Single(result.Tarifeler);
+        Assert.Contains("Kahvalti", tarife.PaketIcerigiUyariMesaji);
+    }
+
     // Check-in tamamlanmis rezervasyonda bekleyen hak kullanildi olarak isaretlenebilmeli.
     [Fact]
     public async Task GuncelleKonaklamaHakkiDurumu_CheckInSonrasiBekliyorHakkiKullanildiYapar()
@@ -3343,7 +3374,8 @@ public class RezervasyonServiceTests
         int tarifeId,
         int tesisId,
         decimal birimFiyat,
-        string ad = "Ek Hizmet")
+        string ad = "Ek Hizmet",
+        string? paketIcerikHizmetKodu = null)
     {
         var ekHizmetId = tarifeId + 100000;
 
@@ -3353,6 +3385,7 @@ public class RezervasyonServiceTests
             TesisId = tesisId,
             Ad = ad,
             BirimAdi = "Adet",
+            PaketIcerikHizmetKodu = paketIcerikHizmetKodu,
             AktifMi = true
         });
 

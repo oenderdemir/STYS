@@ -6,6 +6,8 @@ public class RezervasyonEkHizmetSecenekleriDto
 
     public string ReferansNo { get; set; } = string.Empty;
 
+    public string PaketCakismaPolitikasi { get; set; } = string.Empty;
+
     public List<RezervasyonEkHizmetMisafirSecenekDto> Misafirler { get; set; } = [];
 
     public List<RezervasyonEkHizmetTarifeSecenekDto> Tarifeler { get; set; } = [];
@@ -39,4 +41,8 @@ public class RezervasyonEkHizmetTarifeSecenekDto
     public DateTime BaslangicTarihi { get; set; }
 
     public DateTime BitisTarihi { get; set; }
+
+    public string? PaketIcerikHizmetKodu { get; set; }
+
+    public string? PaketIcerigiUyariMesaji { get; set; }
 }

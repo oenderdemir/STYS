@@ -7,6 +7,7 @@ export interface TesisDto {
     eposta?: string | null;
     girisSaati: string;
     cikisSaati: string;
+    ekHizmetPaketCakismaPolitikasi: string;
     aktifMi: boolean;
     yoneticiUserIds?: string[] | null;
     resepsiyonistUserIds?: string[] | null;

@@ -16,6 +16,7 @@ using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
+using STYS.Tesisler;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -2790,6 +2791,10 @@ public class RezervasyonService : IRezervasyonService
 
         var stayStart = reservation.GirisTarihi.Date;
         var stayEnd = reservation.CikisTarihi.Date;
+        var paketCakismaPolitikasi = await _stysDbContext.Tesisler
+            .Where(x => x.Id == reservation.TesisId)
+            .Select(x => x.EkHizmetPaketCakismaPolitikasi)
+            .SingleOrDefaultAsync(cancellationToken) ?? EkHizmetPaketCakismaPolitikalari.OnayIste;
 
         var tarifeler = await _stysDbContext.EkHizmetTarifeleri
             .Include(x => x.EkHizmet)
@@ -2810,6 +2815,7 @@ public class RezervasyonService : IRezervasyonService
                 Ad = x.EkHizmet != null ? x.EkHizmet.Ad : string.Empty,
                 Aciklama = x.EkHizmet != null ? x.EkHizmet.Aciklama : null,
                 BirimAdi = x.EkHizmet != null ? x.EkHizmet.BirimAdi : string.Empty,
+                PaketIcerikHizmetKodu = x.EkHizmet != null ? x.EkHizmet.PaketIcerikHizmetKodu : null,
                 BirimFiyat = x.BirimFiyat,
                 ParaBirimi = x.ParaBirimi,
                 BaslangicTarihi = x.BaslangicTarihi,
@@ -2817,13 +2823,49 @@ public class RezervasyonService : IRezervasyonService
             })
             .ToListAsync(cancellationToken);
 
+        var paketIcerikKodlari = reservation.KonaklamaTipiId.HasValue
+            ? await _stysDbContext.KonaklamaTipiIcerikKalemleri
+                .Where(x => x.KonaklamaTipiId == reservation.KonaklamaTipiId.Value && !x.IsDeleted)
+                .Select(x => x.HizmetKodu)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+            : [];
+
+        ApplyEkHizmetPaketIcerigiWarnings(tarifeler, paketIcerikKodlari);
+
         return new RezervasyonEkHizmetSecenekleriDto
         {
             RezervasyonId = reservation.Id,
             ReferansNo = reservation.ReferansNo,
+            PaketCakismaPolitikasi = paketCakismaPolitikasi,
             Misafirler = misafirler,
             Tarifeler = tarifeler
         };
+    }
+
+    private static void ApplyEkHizmetPaketIcerigiWarnings(
+        List<RezervasyonEkHizmetTarifeSecenekDto> tarifeler,
+        IReadOnlyCollection<string> paketIcerikKodlari)
+    {
+        if (tarifeler.Count == 0 || paketIcerikKodlari.Count == 0)
+        {
+            return;
+        }
+
+        var normalizedKodlar = paketIcerikKodlari
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tarife in tarifeler)
+        {
+            if (string.IsNullOrWhiteSpace(tarife.PaketIcerikHizmetKodu) || !normalizedKodlar.Contains(tarife.PaketIcerikHizmetKodu))
+            {
+                continue;
+            }
+
+            tarife.PaketIcerigiUyariMesaji =
+                $"Secili konaklama tipi bu hizmeti paket icinde zaten sunuyor: {KonaklamaTipiIcerikHizmetKodlari.GetAd(tarife.PaketIcerikHizmetKodu)}. Gerekliyse ek satisa devam edebilirsiniz.";
+        }
     }
 
     public async Task<RezervasyonOdemeOzetDto> KaydetEkHizmetAsync(int rezervasyonId, RezervasyonEkHizmetKaydetRequestDto request, CancellationToken cancellationToken = default)

@@ -30,6 +30,10 @@ public class Tesis : BaseEntity<int>
 
     public TimeSpan CikisSaati { get; set; } = new(10, 0, 0);
 
+    [Required]
+    [MaxLength(16)]
+    public string EkHizmetPaketCakismaPolitikasi { get; set; } = EkHizmetPaketCakismaPolitikalari.OnayIste;
+
     public bool AktifMi { get; set; } = true;
 
     public Il? Il { get; set; }

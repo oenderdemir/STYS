@@ -561,11 +561,14 @@ export interface RezervasyonEkHizmetTarifeSecenekDto {
     paraBirimi: string;
     baslangicTarihi: string;
     bitisTarihi: string;
+    paketIcerikHizmetKodu?: string | null;
+    paketIcerigiUyariMesaji: string | null;
 }
 
 export interface RezervasyonEkHizmetSecenekleriDto {
     rezervasyonId: number;
     referansNo: string;
+    paketCakismaPolitikasi: string;
     misafirler: RezervasyonEkHizmetMisafirSecenekDto[];
     tarifeler: RezervasyonEkHizmetTarifeSecenekDto[];
 }

@@ -10,6 +10,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ManagerCandidateDto } from '../../core/identity';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { IlDto } from '../il-yonetimi/il-yonetimi.dto';
+import { EkHizmetPaketCakismaPolitikasiSecenekleri, EkHizmetPaketCakismaPolitikalari } from './ek-hizmet-paket-cakisma-politikasi.constants';
 import { TesisDto } from './tesis-yonetimi.dto';
 
 @Component({
@@ -71,6 +72,19 @@ import { TesisDto } from './tesis-yonetimi.dto';
                     <label for="adres" class="block font-medium mb-2">Adres</label>
                     <input id="adres" pInputText [(ngModel)]="workingModel.adres" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="ekHizmetPaketCakismaPolitikasi" class="block font-medium mb-2">Paket Ici Ek Hizmet Cakismasi</label>
+                    <p-select
+                        inputId="ekHizmetPaketCakismaPolitikasi"
+                        [options]="ekHizmetPaketCakismaPolitikasiSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        appendTo="body"
+                        class="w-full"
+                        [disabled]="isReadOnly || saving"
+                        [(ngModel)]="workingModel.ekHizmetPaketCakismaPolitikasi"
+                    />
+                </div>
                 <div class="col-span-12 flex items-center gap-3">
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
                     <label for="aktifMi">Aktif</label>
@@ -125,7 +139,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
     @Input() iller: IlDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
@@ -138,7 +152,8 @@ export class TesisDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    readonly ekHizmetPaketCakismaPolitikasiSecenekleri = EkHizmetPaketCakismaPolitikasiSecenekleri;
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
@@ -231,6 +246,7 @@ export class TesisDialog implements OnChanges {
             eposta: this.workingModel.eposta?.trim() || null,
             girisSaati: this.normalizeSaat(this.workingModel.girisSaati, '14:00'),
             cikisSaati: this.normalizeSaat(this.workingModel.cikisSaati, '10:00'),
+            ekHizmetPaketCakismaPolitikasi: this.workingModel.ekHizmetPaketCakismaPolitikasi || EkHizmetPaketCakismaPolitikalari.OnayIste,
             aktifMi: this.workingModel.aktifMi,
             yoneticiUserIds: this.canAssignTesisYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
             resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null
@@ -260,6 +276,7 @@ export class TesisDialog implements OnChanges {
             ...model,
             girisSaati: this.normalizeSaat(model.girisSaati, '14:00'),
             cikisSaati: this.normalizeSaat(model.cikisSaati, '10:00'),
+            ekHizmetPaketCakismaPolitikasi: model.ekHizmetPaketCakismaPolitikasi || EkHizmetPaketCakismaPolitikalari.OnayIste,
             yoneticiUserIds: [...(model.yoneticiUserIds ?? [])],
             resepsiyonistUserIds: [...(model.resepsiyonistUserIds ?? [])]
         };

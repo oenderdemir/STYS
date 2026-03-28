@@ -205,6 +205,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingEntity.Eposta = dto.Eposta;
         existingEntity.GirisSaati = ParseSaat(dto.GirisSaati, "Giris saati", new TimeSpan(14, 0, 0));
         existingEntity.CikisSaati = ParseSaat(dto.CikisSaati, "Cikis saati", new TimeSpan(10, 0, 0));
+        existingEntity.EkHizmetPaketCakismaPolitikasi = dto.EkHizmetPaketCakismaPolitikasi;
         existingEntity.AktifMi = dto.AktifMi;
 
         if (managerIds is not null)
@@ -331,6 +332,14 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         dto.Eposta = string.IsNullOrWhiteSpace(dto.Eposta) ? null : dto.Eposta.Trim();
         dto.GirisSaati = ParseSaat(dto.GirisSaati, "Giris saati", new TimeSpan(14, 0, 0)).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
         dto.CikisSaati = ParseSaat(dto.CikisSaati, "Cikis saati", new TimeSpan(10, 0, 0)).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+        dto.EkHizmetPaketCakismaPolitikasi = string.IsNullOrWhiteSpace(dto.EkHizmetPaketCakismaPolitikasi)
+            ? EkHizmetPaketCakismaPolitikalari.OnayIste
+            : dto.EkHizmetPaketCakismaPolitikasi.Trim();
+
+        if (!EkHizmetPaketCakismaPolitikalari.IsValid(dto.EkHizmetPaketCakismaPolitikasi))
+        {
+            throw new BaseException("Ek hizmet paket cakisma politikasi gecersiz.", 400);
+        }
     }
 
     private static TimeSpan ParseSaat(string? value, string fieldName, TimeSpan fallback)

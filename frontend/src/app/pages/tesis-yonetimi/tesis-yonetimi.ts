@@ -257,6 +257,7 @@ export class TesisYonetimi implements OnDestroy {
             eposta: null,
             girisSaati: '14:00',
             cikisSaati: '10:00',
+            ekHizmetPaketCakismaPolitikasi: 'OnayIste',
             aktifMi: true,
             yoneticiUserIds: null,
             resepsiyonistUserIds: null
@@ -268,6 +269,7 @@ export class TesisYonetimi implements OnDestroy {
             ...source,
             girisSaati: source.girisSaati ?? '14:00',
             cikisSaati: source.cikisSaati ?? '10:00',
+            ekHizmetPaketCakismaPolitikasi: source.ekHizmetPaketCakismaPolitikasi ?? 'OnayIste',
             yoneticiUserIds: [...(source.yoneticiUserIds ?? [])],
             resepsiyonistUserIds: [...(source.resepsiyonistUserIds ?? [])]
         };

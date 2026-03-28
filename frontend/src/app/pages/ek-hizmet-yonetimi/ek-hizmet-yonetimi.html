@@ -76,6 +76,7 @@
                                 <th style="min-width: 12rem">Hizmet Adi</th>
                                 <th style="min-width: 16rem">Aciklama</th>
                                 <th style="min-width: 8rem">Birim</th>
+                                <th style="min-width: 12rem">Paket Eslesmesi</th>
                                 <th style="width: 5rem">Aktif</th>
                                 <th style="width: 5rem">Sil</th>
                             </tr>
@@ -87,6 +88,17 @@
                                     <textarea pInputTextarea rows="3" class="cell-input" [(ngModel)]="row.aciklama" [disabled]="!canManage || savingHizmetler || savingTarifeler"></textarea>
                                 </td>
                                 <td><input pInputText class="cell-input" [(ngModel)]="row.birimAdi" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
+                                <td>
+                                    <p-select
+                                        class="cell-select"
+                                        [options]="paketIcerikSecenekleri"
+                                        optionLabel="label"
+                                        optionValue="value"
+                                        [(ngModel)]="row.paketIcerikHizmetKodu"
+                                        [appendTo]="'body'"
+                                        [disabled]="!canManage || savingHizmetler || savingTarifeler"
+                                    />
+                                </td>
                                 <td class="text-center">
                                     <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingHizmetler || savingTarifeler" />
                                 </td>
@@ -97,7 +109,7 @@
                         </ng-template>
                         <ng-template #emptymessage>
                             <tr>
-                                <td colspan="5" class="text-center text-color-secondary">Bu tesis icin tanimli ek hizmet bulunmuyor.</td>
+                                <td colspan="6" class="text-center text-color-secondary">Bu tesis icin tanimli ek hizmet bulunmuyor.</td>
                             </tr>
                         </ng-template>
                     </p-table>

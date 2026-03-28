@@ -14,6 +14,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 import { tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
+import { KonaklamaTipiIcerikHizmetSecenekleri } from '../konaklama-tipi-yonetimi/konaklama-tipi-icerik.constants';
 import { EkHizmetDto, EkHizmetFormRow, EkHizmetTarifeDto, EkHizmetTanimFormRow, EkHizmetTesisDto } from './ek-hizmet-yonetimi.dto';
 import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 
@@ -65,6 +66,7 @@ export class EkHizmetYonetimi implements OnInit {
     savingTarifeler = false;
     hizmetPanelExpanded = true;
     tarifePanelExpanded = true;
+    readonly paketIcerikSecenekleri = [{ label: 'Yok', value: null }, ...KonaklamaTipiIcerikHizmetSecenekleri];
 
     get canManage(): boolean {
         return this.authService.hasPermission('EkHizmetYonetimi.Manage');
@@ -106,6 +108,7 @@ export class EkHizmetYonetimi implements OnInit {
                 ad: '',
                 aciklama: null,
                 birimAdi: 'Adet',
+                paketIcerikHizmetKodu: null,
                 aktifMi: true
             }
         ];
@@ -164,6 +167,7 @@ export class EkHizmetYonetimi implements OnInit {
             ad: row.ad.trim(),
             aciklama: this.normalizeOptional(row.aciklama),
             birimAdi: row.birimAdi.trim(),
+            paketIcerikHizmetKodu: row.paketIcerikHizmetKodu,
             aktifMi: row.aktifMi
         })) satisfies EkHizmetDto[];
 
@@ -254,6 +258,7 @@ export class EkHizmetYonetimi implements OnInit {
                 ad: row.ad,
                 aciklama: row.aciklama,
                 birimAdi: row.birimAdi,
+                paketIcerikHizmetKodu: row.paketIcerikHizmetKodu,
                 aktifMi: row.aktifMi
             }))
             .filter((row) => !!row.id && !!row.ad?.trim())
@@ -344,6 +349,7 @@ export class EkHizmetYonetimi implements OnInit {
             ad: dto.ad,
             aciklama: dto.aciklama,
             birimAdi: dto.birimAdi,
+            paketIcerikHizmetKodu: dto.paketIcerikHizmetKodu,
             aktifMi: dto.aktifMi
         };
     }

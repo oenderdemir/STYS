@@ -1,4 +1,5 @@
 <p-toast />
+<p-confirmdialog />
 
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
@@ -545,6 +546,15 @@
                             </td>
                             <td class="text-right">
                                 <div class="flex justify-content-end gap-2 flex-wrap">
+                                @if (canOpenKonaklamaHakkiGecmisi(hak)) {
+                                    <p-button
+                                        label="Gecmis"
+                                        icon="pi pi-history"
+                                        size="small"
+                                        text
+                                        severity="secondary"
+                                        (onClick)="openKonaklamaHakkiGecmisDialog(getSelectedRezervasyonUcretDetay()!.id, hak)" />
+                                }
                                 @if (canOpenKonaklamaHakkiTuketim(getSelectedRezervasyonUcretDetay(), hak)) {
                                     <p-button
                                         label="Tuketim"
@@ -738,6 +748,84 @@
         <div class="flex justify-content-end gap-2">
             <p-button label="Kapat" severity="secondary" text (onClick)="closeKonaklamaHakkiTuketimDialog()" />
             <p-button label="Tuketim Kaydet" icon="pi pi-check" [loading]="savingKonaklamaHakkiTuketim" [disabled]="!canSaveKonaklamaHakkiTuketim()" (onClick)="kaydetKonaklamaHakkiTuketim()" />
+        </div>
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Konaklama Hakki Tuketim Gecmisi"
+    [(visible)]="konaklamaHakkiGecmisDialogVisible"
+    [modal]="true"
+    [style]="{ width: '52rem', maxWidth: '96vw' }"
+    [dismissableMask]="true"
+    (onHide)="closeKonaklamaHakkiGecmisDialog()">
+    @if (getSelectedKonaklamaHakkiForGecmis(); as hak) {
+        <div class="flex flex-column gap-3">
+            <div class="grid">
+                <div class="col-12 lg:col-4">
+                    <div class="border-1 border-round border-200 p-3 surface-ground h-full">
+                        <div class="text-xs text-color-secondary mb-1">Hak</div>
+                        <div class="font-semibold">{{ hak.hizmetAdi }}</div>
+                        <div class="text-sm text-color-secondary mt-2">{{ getKonaklamaIcerikKuralOzeti(hak) }}</div>
+                    </div>
+                </div>
+                <div class="col-12 lg:col-8">
+                    <div class="grid">
+                        <div class="col-12 md:col-4">
+                            <div class="border-1 border-round border-200 p-3 surface-ground h-full">
+                                <div class="text-xs text-color-secondary mb-1">Kayit Sayisi</div>
+                                <div class="font-semibold">{{ hak.tuketimKayitlari.length }}</div>
+                            </div>
+                        </div>
+                        <div class="col-12 md:col-4">
+                            <div class="border-1 border-round border-200 p-3 surface-ground h-full">
+                                <div class="text-xs text-color-secondary mb-1">Toplam Tuketim</div>
+                                <div class="font-semibold">{{ getKonaklamaHakkiToplamTuketimKaydiMiktari(hak) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-12 md:col-4">
+                            <div class="border-1 border-round border-200 p-3 surface-ground h-full">
+                                <div class="text-xs text-color-secondary mb-1">Son Kayit</div>
+                                <div class="font-semibold">{{ hak.sonTuketimTarihi ? (hak.sonTuketimTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p-table [value]="hak.tuketimKayitlari" [tableStyle]="{ 'min-width': '44rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Tuketim Tarihi</th>
+                        <th>Miktar</th>
+                        <th>Kullanim</th>
+                        <th>Tuketim Noktasi</th>
+                        <th>Kaydi Isleyen</th>
+                        <th>Aciklama</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-kayit>
+                    <tr>
+                        <td>{{ kayit.tuketimTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                        <td>{{ kayit.miktar }}</td>
+                        <td>{{ kayit.kullanimNoktasiAdi }}</td>
+                        <td>{{ kayit.tuketimNoktasiAdi || '-' }}</td>
+                        <td>
+                            <div>{{ kayit.createdBy || '-' }}</div>
+                            @if (kayit.createdAt) {
+                                <div class="text-xs text-color-secondary">{{ kayit.createdAt | date: 'dd.MM.yyyy HH:mm' }}</div>
+                            }
+                        </td>
+                        <td>{{ kayit.aciklama || '-' }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    }
+
+    <ng-template pTemplate="footer">
+        <div class="flex justify-content-end gap-2">
+            <p-button label="Kapat" severity="secondary" text (onClick)="closeKonaklamaHakkiGecmisDialog()" />
         </div>
     </ng-template>
 </p-dialog>
@@ -1305,6 +1393,11 @@
                                     @if (getSelectedEkHizmetTarifeVarsayilanFiyat(); as varsayilanFiyat) {
                                         <div class="text-xs text-color-secondary mt-1">
                                             Tarife varsayilani: {{ varsayilanFiyat }}
+                                        </div>
+                                    }
+                                    @if (getSelectedEkHizmetTarifePaketUyarisi(); as paketUyari) {
+                                        <div class="text-xs text-orange-600 mt-1">
+                                            {{ paketUyari }}
                                         </div>
                                     }
                                 </div>

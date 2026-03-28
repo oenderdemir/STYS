@@ -19,6 +19,9 @@ public class EkHizmet : BaseEntity<int>
     [MaxLength(32)]
     public string BirimAdi { get; set; } = "Adet";
 
+    [MaxLength(64)]
+    public string? PaketIcerikHizmetKodu { get; set; }
+
     public bool AktifMi { get; set; } = true;
 
     public Tesis? Tesis { get; set; }

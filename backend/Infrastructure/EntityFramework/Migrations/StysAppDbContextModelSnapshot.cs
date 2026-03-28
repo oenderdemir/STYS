@@ -324,6 +324,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("PaketIcerikHizmetKodu")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1732,6 +1736,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
+                    b.HasIndex("KonaklamaTipiId");
+
                     b.HasIndex("RezervasyonDurumu")
                         .HasFilter("[IsDeleted] = 0");
 
@@ -2412,6 +2418,13 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("EkHizmetPaketCakismaPolitikasi")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("OnayIste");
+
                     b.Property<TimeSpan>("GirisSaati")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("time(0)")
@@ -2865,11 +2878,18 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
                 {
+                    b.HasOne("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", "KonaklamaTipi")
+                        .WithMany()
+                        .HasForeignKey("KonaklamaTipiId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
                         .WithMany()
                         .HasForeignKey("TesisId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("KonaklamaTipi");
 
                     b.Navigation("Tesis");
                 });
@@ -3130,6 +3150,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("EkHizmetler");
 
                     b.Navigation("KonaklamaHaklari");
+
+                    b.Navigation("KonaklamaHakkiTuketimKayitlari");
 
                     b.Navigation("Konaklayanlar");
 

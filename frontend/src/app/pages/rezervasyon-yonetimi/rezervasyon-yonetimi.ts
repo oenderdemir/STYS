@@ -4,8 +4,9 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { EMPTY, finalize, forkJoin, Observable, switchMap } from 'rxjs';
-import { MenuItem, MessageService } from 'primeng/api';
+import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { MenuModule } from 'primeng/menu';
@@ -19,6 +20,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
+import { EkHizmetPaketCakismaPolitikalari } from '../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
 import { KonaklayanKatilimDurumlari } from './konaklayan-katilim-durumlari.constants';
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
@@ -67,7 +69,7 @@ interface DegisiklikPayloadTableData {
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
     templateUrl: './rezervasyon-yonetimi.html',
     styles: [`
         :host ::ng-deep .rez-odeme-dialog .p-dialog-content {
@@ -173,12 +175,13 @@ interface DegisiklikPayloadTableData {
             vertical-align: top;
         }
     `],
-    providers: [MessageService]
+    providers: [MessageService, ConfirmationService]
 })
 export class RezervasyonYonetimi implements OnInit {
     private readonly service = inject(RezervasyonYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
+    private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
 
     tesisler: RezervasyonTesisDto[] = [];
@@ -303,6 +306,9 @@ export class RezervasyonYonetimi implements OnInit {
     konaklamaHakkiTuketimAciklama = '';
     savingKonaklamaHakkiTuketim = false;
     removingKonaklamaHakkiTuketimId: number | null = null;
+    konaklamaHakkiGecmisDialogVisible = false;
+    selectedKonaklamaHakkiGecmisRezervasyonId: number | null = null;
+    selectedKonaklamaHakkiGecmisHakId: number | null = null;
 
     get canView(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.View');
@@ -810,6 +816,10 @@ export class RezervasyonYonetimi implements OnInit {
             && (hak.kullanimTipi !== 'Adetli' || (hak.kalanMiktar ?? 0) > 0);
     }
 
+    canOpenKonaklamaHakkiGecmisi(hak: RezervasyonKonaklamaHakkiDto): boolean {
+        return hak.tuketimKayitlari.length > 0;
+    }
+
     getKonaklamaHakkiAksiyonLabel(durum: string): string {
         return durum === this.hakDurumBekliyor ? 'Kullanildi' : 'Geri Al';
     }
@@ -880,6 +890,39 @@ export class RezervasyonYonetimi implements OnInit {
         this.konaklamaHakkiTuketimMiktar = 1;
         this.selectedKonaklamaHakkiTuketimNoktasiId = null;
         this.konaklamaHakkiTuketimAciklama = '';
+    }
+
+    openKonaklamaHakkiGecmisDialog(rezervasyonId: number, hak: RezervasyonKonaklamaHakkiDto): void {
+        if (!this.canOpenKonaklamaHakkiGecmisi(hak)) {
+            return;
+        }
+
+        this.selectedKonaklamaHakkiGecmisRezervasyonId = rezervasyonId;
+        this.selectedKonaklamaHakkiGecmisHakId = hak.id;
+        this.konaklamaHakkiGecmisDialogVisible = true;
+    }
+
+    closeKonaklamaHakkiGecmisDialog(): void {
+        this.konaklamaHakkiGecmisDialogVisible = false;
+        this.selectedKonaklamaHakkiGecmisRezervasyonId = null;
+        this.selectedKonaklamaHakkiGecmisHakId = null;
+    }
+
+    getSelectedKonaklamaHakkiForGecmis(): RezervasyonKonaklamaHakkiDto | null {
+        const detay = this.getRezervasyonDetay(this.selectedKonaklamaHakkiGecmisRezervasyonId);
+        if (!detay || !this.selectedKonaklamaHakkiGecmisHakId) {
+            return null;
+        }
+
+        return detay.konaklamaHaklari.find((x) => x.id === this.selectedKonaklamaHakkiGecmisHakId) ?? null;
+    }
+
+    getKonaklamaHakkiToplamTuketimKaydiMiktari(hak: RezervasyonKonaklamaHakkiDto | null): number {
+        if (!hak) {
+            return 0;
+        }
+
+        return hak.tuketimKayitlari.reduce((total, item) => total + (Number(item.miktar) || 0), 0);
     }
 
     getSelectedKonaklamaHakkiForTuketim(): RezervasyonKonaklamaHakkiDto | null {
@@ -2132,7 +2175,6 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        this.ekHizmetSaving = true;
         const request = {
             rezervasyonKonaklayanId: this.selectedEkHizmetKonaklayanId,
             ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
@@ -2141,10 +2183,51 @@ export class RezervasyonYonetimi implements OnInit {
             birimFiyat,
             aciklama: this.normalizeOptional(this.ekHizmetAciklama)
         };
+        const paketUyarisi = this.getSelectedEkHizmetTarifePaketUyarisi();
+        const paketCakismaPolitikasi = this.odemeEkHizmetSecenekleri?.paketCakismaPolitikasi ?? EkHizmetPaketCakismaPolitikalari.OnayIste;
+
+        if (paketUyarisi) {
+            if (paketCakismaPolitikasi === EkHizmetPaketCakismaPolitikalari.Engelle) {
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Paket Cakismasi', detail: `${paketUyarisi} Bu tesis politikasina gore ek satis engellendi.` });
+                return;
+            }
+
+            if (paketCakismaPolitikasi === EkHizmetPaketCakismaPolitikalari.OnayIste) {
+                this.confirmationService.confirm({
+                    header: 'Paket Icerigi Uyarisi',
+                    message: `${paketUyarisi} Yine de ek hizmet satisina devam etmek istiyor musunuz?`,
+                    icon: 'pi pi-exclamation-triangle',
+                    acceptLabel: 'Devam Et',
+                    rejectLabel: 'Vazgec',
+                    accept: () => this.executeKaydetEkHizmet(request)
+                });
+                return;
+            }
+
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Paket Cakismasi', detail: paketUyarisi });
+        }
+
+        this.executeKaydetEkHizmet(request);
+    }
+
+    private executeKaydetEkHizmet(request: {
+        rezervasyonKonaklayanId: number;
+        ekHizmetTarifeId: number;
+        hizmetTarihi: string;
+        miktar: number;
+        birimFiyat: number;
+        aciklama: string | null;
+    }): void {
+        if (!this.odemeRezervasyonId) {
+            return;
+        }
+
+        const rezervasyonId = this.odemeRezervasyonId;
+        this.ekHizmetSaving = true;
 
         const request$ = this.editingEkHizmetId
-            ? this.service.guncelleEkHizmet(this.odemeRezervasyonId, this.editingEkHizmetId, request)
-            : this.service.kaydetEkHizmet(this.odemeRezervasyonId, request);
+            ? this.service.guncelleEkHizmet(rezervasyonId, this.editingEkHizmetId, request)
+            : this.service.kaydetEkHizmet(rezervasyonId, request);
 
         request$
             .pipe(
@@ -2750,6 +2833,10 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         return this.formatCurrency(selectedTarife.birimFiyat, selectedTarife.paraBirimi);
+    }
+
+    getSelectedEkHizmetTarifePaketUyarisi(): string | null {
+        return this.getSelectedEkHizmetTarife()?.paketIcerigiUyariMesaji ?? null;
     }
 
     getEkHizmetToplamOnizleme(): string | null {

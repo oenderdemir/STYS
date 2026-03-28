@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Tesisler;
 using TOD.Platform.Persistence.Rdbms.Dto;
 
 namespace STYS.Tesisler.Dto;
@@ -24,6 +25,9 @@ public class TesisDto : BaseRdbmsDto<int>
 
     [Required]
     public string CikisSaati { get; set; } = "10:00";
+
+    [Required]
+    public string EkHizmetPaketCakismaPolitikasi { get; set; } = EkHizmetPaketCakismaPolitikalari.OnayIste;
 
     public bool AktifMi { get; set; } = true;
 

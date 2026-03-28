@@ -19,6 +19,7 @@ using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Entities;
 using STYS.SezonKurallari.Entities;
+using STYS.Tesisler;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
@@ -119,6 +120,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Eposta).HasMaxLength(256);
             entity.Property(x => x.GirisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(14, 0, 0));
             entity.Property(x => x.CikisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(10, 0, 0));
+            entity.Property(x => x.EkHizmetPaketCakismaPolitikasi).HasMaxLength(16).IsRequired().HasDefaultValue(EkHizmetPaketCakismaPolitikalari.OnayIste);
 
             entity.HasIndex(x => new { x.IlId, x.Ad })
                 .IsUnique()
@@ -430,6 +432,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(512);
             entity.Property(x => x.BirimAdi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PaketIcerikHizmetKodu).HasMaxLength(64);
             entity.HasIndex(x => new { x.TesisId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
@@ -578,6 +581,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KonaklamaTipi)
+                .WithMany()
+                .HasForeignKey(x => x.KonaklamaTipiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

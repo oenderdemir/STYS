@@ -12,5 +12,7 @@ public class EkHizmetDto : BaseRdbmsDto<int>
 
     public string BirimAdi { get; set; } = "Adet";
 
+    public string? PaketIcerikHizmetKodu { get; set; }
+
     public bool AktifMi { get; set; } = true;
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.EkHizmetler.Dto;
 using STYS.EkHizmetler.Entities;
+using STYS.KonaklamaTipleri;
 using STYS.EkHizmetler.Repositories;
 using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.Persistence.Rdbms.Services;
@@ -87,6 +88,7 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
                 entity.Ad = item.Ad;
                 entity.Aciklama = item.Aciklama;
                 entity.BirimAdi = item.BirimAdi;
+                entity.PaketIcerikHizmetKodu = item.PaketIcerikHizmetKodu;
                 entity.AktifMi = item.AktifMi;
                 continue;
             }
@@ -97,6 +99,7 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
                 Ad = item.Ad,
                 Aciklama = item.Aciklama,
                 BirimAdi = item.BirimAdi,
+                PaketIcerikHizmetKodu = item.PaketIcerikHizmetKodu,
                 AktifMi = item.AktifMi
             }, cancellationToken);
         }
@@ -253,6 +256,9 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         item.Ad = item.Ad?.Trim() ?? string.Empty;
         item.Aciklama = string.IsNullOrWhiteSpace(item.Aciklama) ? null : item.Aciklama.Trim();
         item.BirimAdi = string.IsNullOrWhiteSpace(item.BirimAdi) ? "Adet" : item.BirimAdi.Trim();
+        item.PaketIcerikHizmetKodu = string.IsNullOrWhiteSpace(item.PaketIcerikHizmetKodu)
+            ? null
+            : item.PaketIcerikHizmetKodu.Trim();
     }
 
     private static void Normalize(EkHizmetTarifeDto item)
@@ -274,6 +280,11 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             if (string.IsNullOrWhiteSpace(item.BirimAdi))
             {
                 throw new BaseException("Birim adi zorunludur.", 400);
+            }
+
+            if (item.PaketIcerikHizmetKodu is not null && !KonaklamaTipiIcerikHizmetKodlari.IsValid(item.PaketIcerikHizmetKodu))
+            {
+                throw new BaseException($"'{item.Ad}' hizmeti icin gecersiz paket icerik eslesmesi secildi.", 400);
             }
         }
 

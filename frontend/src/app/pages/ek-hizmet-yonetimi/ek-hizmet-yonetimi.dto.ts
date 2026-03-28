@@ -4,6 +4,7 @@ export interface EkHizmetDto {
     ad: string;
     aciklama: string | null;
     birimAdi: string;
+    paketIcerikHizmetKodu: string | null;
     aktifMi: boolean;
 }
 
@@ -41,5 +42,6 @@ export interface EkHizmetTanimFormRow {
     ad: string;
     aciklama: string | null;
     birimAdi: string;
+    paketIcerikHizmetKodu: string | null;
     aktifMi: boolean;
 }

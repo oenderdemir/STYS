@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.EkHizmetler.Entities;
+using STYS.KonaklamaTipleri.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -64,6 +65,8 @@ public class Rezervasyon : BaseEntity<int>
 
     public Tesis? Tesis { get; set; }
 
+    public KonaklamaTipi? KonaklamaTipi { get; set; }
+
     public ICollection<RezervasyonSegment> Segmentler { get; set; } = [];
 
     public ICollection<RezervasyonKonaklayan> Konaklayanlar { get; set; } = [];
@@ -71,6 +74,10 @@ public class Rezervasyon : BaseEntity<int>
     public ICollection<RezervasyonOdeme> Odemeler { get; set; } = [];
 
     public ICollection<RezervasyonEkHizmet> EkHizmetler { get; set; } = [];
+
+    public ICollection<RezervasyonKonaklamaHakki> KonaklamaHaklari { get; set; } = [];
+
+    public ICollection<RezervasyonKonaklamaHakkiTuketimKaydi> KonaklamaHakkiTuketimKayitlari { get; set; } = [];
 
     public ICollection<RezervasyonDegisiklikGecmisi> DegisiklikGecmisiKayitlari { get; set; } = [];
 }

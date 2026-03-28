@@ -80,6 +80,24 @@ export interface RezervasyonMisafirTipiDto {
 export interface RezervasyonKonaklamaTipiDto {
     id: number;
     ad: string;
+    icerikKalemleri: RezervasyonKonaklamaTipiIcerikDto[];
+}
+
+export interface RezervasyonKonaklamaTipiIcerikDto {
+    hizmetKodu: string;
+    hizmetAdi: string;
+    miktar: number;
+    periyot: string;
+    periyotAdi: string;
+    kullanimTipi: string;
+    kullanimTipiAdi: string;
+    kullanimNoktasi: string;
+    kullanimNoktasiAdi: string;
+    kullanimBaslangicSaati: string | null;
+    kullanimBitisSaati: string | null;
+    checkInGunuGecerliMi: boolean;
+    checkOutGunuGecerliMi: boolean;
+    aciklama: string | null;
 }
 
 export interface RezervasyonIndirimKuraliSecenekDto {
@@ -289,6 +307,9 @@ export interface RezervasyonDetayDto {
     kisiSayisi: number;
     girisTarihi: string;
     cikisTarihi: string;
+    konaklamaTipiAdi: string | null;
+    konaklamaTipiIcerikKalemleri: RezervasyonKonaklamaTipiIcerikDto[];
+    konaklamaHaklari: RezervasyonKonaklamaHakkiDto[];
     konaklamaUcreti: number;
     ekHizmetToplami: number;
     toplamBazUcret: number;
@@ -297,6 +318,64 @@ export interface RezervasyonDetayDto {
     uygulananIndirimler: UygulananIndirimDto[];
     ekHizmetler: RezervasyonEkHizmetDto[];
     segmentler: RezervasyonDetaySegmentDto[];
+}
+
+export interface RezervasyonKonaklamaHakkiDto {
+    id: number;
+    hizmetKodu: string;
+    hizmetAdi: string;
+    miktar: number;
+    periyot: string;
+    periyotAdi: string;
+    kullanimTipi: string;
+    kullanimTipiAdi: string;
+    kullanimNoktasi: string;
+    kullanimNoktasiAdi: string;
+    kullanimBaslangicSaati: string | null;
+    kullanimBitisSaati: string | null;
+    checkInGunuGecerliMi: boolean;
+    checkOutGunuGecerliMi: boolean;
+    hakTarihi: string | null;
+    aciklama: string | null;
+    durum: string;
+    tuketilenMiktar: number;
+    kalanMiktar: number | null;
+    sonTuketimTarihi: string | null;
+    tuketimNoktalari: RezervasyonKonaklamaHakkiTuketimNoktasiDto[];
+    tuketimKayitlari: RezervasyonKonaklamaHakkiTuketimKaydiDto[];
+}
+
+export interface RezervasyonKonaklamaHakkiDurumGuncelleRequestDto {
+    durum: string;
+}
+
+export interface RezervasyonKonaklamaHakkiTuketimKaydiDto {
+    id: number;
+    isletmeAlaniId: number | null;
+    tuketimTarihi: string;
+    miktar: number;
+    kullanimTipi: string;
+    kullanimNoktasi: string;
+    kullanimNoktasiAdi: string;
+    tuketimNoktasiAdi: string | null;
+    aciklama: string | null;
+    createdBy: string;
+    createdAt: string | null;
+}
+
+export interface RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto {
+    isletmeAlaniId: number | null;
+    tuketimTarihi: string;
+    miktar: number;
+    aciklama: string | null;
+}
+
+export interface RezervasyonKonaklamaHakkiTuketimNoktasiDto {
+    id: number;
+    ad: string;
+    binaAdi: string;
+    sinifKod: string;
+    sinifAd: string;
 }
 
 export interface RezervasyonDegisiklikGecmisiDto {

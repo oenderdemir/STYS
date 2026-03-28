@@ -5,4 +5,6 @@ public class RezervasyonKonaklamaTipiDto
     public int Id { get; set; }
 
     public string Ad { get; set; } = string.Empty;
+
+    public List<RezervasyonKonaklamaTipiIcerikDto> IcerikKalemleri { get; set; } = [];
 }

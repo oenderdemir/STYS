@@ -79,8 +79,31 @@
                 [disabled]="loadingReferences || loadingResults"
             />
         </div>
-
     </div>
+
+    @if (getSelectedKonaklamaTipi()?.icerikKalemleri?.length) {
+        <div class="mt-3 border-1 border-200 border-round p-3 surface-ground">
+            <div class="font-medium mb-2">Paket Icerigi</div>
+            <div class="flex flex-wrap gap-2">
+                @for (icerik of getSelectedKonaklamaTipi()!.icerikKalemleri; track $index) {
+                    <p-tag
+                        severity="secondary"
+                        [value]="icerik.hizmetAdi + ' x' + icerik.miktar + ' • ' + icerik.periyotAdi"
+                    />
+                    @if (getKonaklamaIcerikKuralOzeti(icerik)) {
+                        <span class="text-xs text-color-secondary self-center">{{ getKonaklamaIcerikKuralOzeti(icerik) }}</span>
+                    }
+                }
+            </div>
+            @for (icerik of getSelectedKonaklamaTipi()!.icerikKalemleri; track 'aciklama-' + $index) {
+                @if (icerik.aciklama) {
+                    <div class="text-xs text-color-secondary mt-2">
+                        <strong>{{ icerik.hizmetAdi }}:</strong> {{ icerik.aciklama }}
+                    </div>
+                }
+            }
+        </div>
+    }
 
     <div class="grid grid-cols-12 gap-4 mt-4">
         <div class="col-span-12 md:col-span-4 lg:col-span-2">
@@ -441,6 +464,10 @@
         </div>
         <div class="grid grid-cols-12 gap-3 mb-3">
             <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Konaklama Tipi</div>
+                <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.konaklamaTipiAdi || '-' }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Nihai Toplam</div>
                 <div class="font-semibold">{{ formatCurrency(getSelectedRezervasyonUcretDetay()!.toplamUcret, getSelectedRezervasyonUcretDetay()!.paraBirimi) }}</div>
             </div>
@@ -456,6 +483,132 @@
                 </div>
             </div>
         </div>
+
+        @if (getSelectedRezervasyonUcretDetay()!.konaklamaTipiIcerikKalemleri.length > 0) {
+            <div class="mb-4">
+                <div class="text-sm font-semibold mb-2">Paket Icerigi</div>
+                <div class="flex flex-wrap gap-2 mb-2">
+                    @for (icerik of getSelectedRezervasyonUcretDetay()!.konaklamaTipiIcerikKalemleri; track $index) {
+                        <p-tag severity="secondary" [value]="icerik.hizmetAdi + ' x' + icerik.miktar + ' • ' + icerik.periyotAdi" />
+                        @if (getKonaklamaIcerikKuralOzeti(icerik)) {
+                            <span class="text-xs text-color-secondary self-center">{{ getKonaklamaIcerikKuralOzeti(icerik) }}</span>
+                        }
+                    }
+                </div>
+                @for (icerik of getSelectedRezervasyonUcretDetay()!.konaklamaTipiIcerikKalemleri; track 'rezdetay-' + $index) {
+                    @if (icerik.aciklama) {
+                        <div class="text-xs text-color-secondary">
+                            <strong>{{ icerik.hizmetAdi }}:</strong> {{ icerik.aciklama }}
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @if (getSelectedRezervasyonUcretDetay()!.konaklamaHaklari.length > 0) {
+            <div class="mb-4">
+                <div class="text-sm font-semibold mb-2">Uretilen Konaklama Haklari</div>
+                <p-table [value]="getSelectedRezervasyonUcretDetay()!.konaklamaHaklari" [tableStyle]="{ 'min-width': '34rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Hizmet</th>
+                            <th>Tarih</th>
+                            <th>Miktar</th>
+                            <th>Tuketilen</th>
+                            <th>Kalan</th>
+                            <th>Periyot</th>
+                            <th>Durum</th>
+                            <th class="text-right">Islem</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-hak>
+                        <tr>
+                            <td>
+                                <div class="font-medium">{{ hak.hizmetAdi }}</div>
+                                @if (hak.aciklama) {
+                                    <div class="text-xs text-color-secondary">{{ hak.aciklama }}</div>
+                                }
+                                @if (getKonaklamaIcerikKuralOzeti(hak)) {
+                                    <div class="text-xs text-color-secondary">{{ getKonaklamaIcerikKuralOzeti(hak) }}</div>
+                                }
+                            </td>
+                            <td>{{ hak.hakTarihi ? (hak.hakTarihi | date: 'dd.MM.yyyy') : '-' }}</td>
+                            <td>{{ hak.miktar }}</td>
+                            <td>{{ hak.tuketilenMiktar }}</td>
+                            <td>{{ getKonaklamaHakkiKalanLabel(hak) }}</td>
+                            <td>{{ hak.periyotAdi }}</td>
+                            <td>
+                                <p-tag [severity]="getKonaklamaHakkiDurumSeverity(hak.durum)" [value]="getKonaklamaHakkiDurumLabel(hak.durum)" />
+                                @if (hak.sonTuketimTarihi) {
+                                    <div class="text-xs text-color-secondary mt-1">{{ hak.sonTuketimTarihi | date: 'dd.MM.yyyy HH:mm' }}</div>
+                                }
+                            </td>
+                            <td class="text-right">
+                                <div class="flex justify-content-end gap-2 flex-wrap">
+                                @if (canOpenKonaklamaHakkiTuketim(getSelectedRezervasyonUcretDetay(), hak)) {
+                                    <p-button
+                                        label="Tuketim"
+                                        icon="pi pi-plus-circle"
+                                        size="small"
+                                        text
+                                        (onClick)="openKonaklamaHakkiTuketimDialog(getSelectedRezervasyonUcretDetay()!.id, hak)" />
+                                }
+                                @if (canGuncelleKonaklamaHakkiDurumu(getSelectedRezervasyonUcretDetay(), hak)) {
+                                    <p-button
+                                        [label]="getKonaklamaHakkiAksiyonLabel(hak.durum)"
+                                        [icon]="getKonaklamaHakkiAksiyonIkonu(hak.durum)"
+                                        [loading]="updatingKonaklamaHakId === hak.id"
+                                        [disabled]="updatingKonaklamaHakId !== null && updatingKonaklamaHakId !== hak.id"
+                                        size="small"
+                                        text
+                                        (onClick)="guncelleKonaklamaHakkiDurumu(getSelectedRezervasyonUcretDetay()!.id, hak.id, hak.durum)" />
+                                } @else if (!canOpenKonaklamaHakkiTuketim(getSelectedRezervasyonUcretDetay(), hak)) {
+                                    <span class="text-xs text-color-secondary">-</span>
+                                }
+                                </div>
+                            </td>
+                        </tr>
+                        @if (hak.tuketimKayitlari.length > 0) {
+                            <tr>
+                                <td colspan="8" class="pt-0">
+                                    <div class="ml-2 mt-2">
+                                        <div class="text-xs font-semibold mb-2">Tuketim Kayitlari</div>
+                                        <div class="flex flex-column gap-2">
+                                            @for (kayit of hak.tuketimKayitlari; track kayit.id) {
+                                                <div class="flex align-items-start justify-content-between gap-3 border-1 border-round border-200 p-2">
+                                                    <div class="text-sm">
+                                                        <div class="font-medium">{{ kayit.tuketimTarihi | date: 'dd.MM.yyyy HH:mm' }} · {{ kayit.miktar }} adet</div>
+                                                        <div class="text-xs text-color-secondary">
+                                                            <span>{{ kayit.kullanimNoktasiAdi }}</span>
+                                                            @if (kayit.tuketimNoktasiAdi) {
+                                                                <span> · {{ kayit.tuketimNoktasiAdi }}</span>
+                                                            }
+                                                        </div>
+                                                        @if (kayit.aciklama) {
+                                                            <div class="text-xs text-color-secondary">{{ kayit.aciklama }}</div>
+                                                        }
+                                                    </div>
+                                                    @if (canOpenKonaklamaHakkiTuketim(getSelectedRezervasyonUcretDetay(), hak)) {
+                                                        <p-button
+                                                            icon="pi pi-trash"
+                                                            size="small"
+                                                            text
+                                                            severity="danger"
+                                                            [loading]="removingKonaklamaHakkiTuketimId === kayit.id"
+                                                            [disabled]="removingKonaklamaHakkiTuketimId !== null && removingKonaklamaHakkiTuketimId !== kayit.id"
+                                                            (onClick)="silKonaklamaHakkiTuketim(getSelectedRezervasyonUcretDetay()!.id, hak.id, kayit)" />
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </ng-template>
+                </p-table>
+            </div>
+        }
 
         @if (getSelectedRezervasyonUcretDetay()!.uygulananIndirimler.length === 0) {
             <div class="text-color-secondary">Bu rezervasyona uygulanmis indirim bulunmuyor.</div>
@@ -509,6 +662,83 @@
 
     <ng-template #footer>
         <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closeRezervasyonUcretDetayDialog()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Konaklama Hakki Tuketim Kaydi"
+    [(visible)]="konaklamaHakkiTuketimDialogVisible"
+    [modal]="true"
+    [style]="{ width: '32rem', maxWidth: '96vw' }"
+    [dismissableMask]="true"
+    (onHide)="closeKonaklamaHakkiTuketimDialog()">
+    @if (getSelectedKonaklamaHakkiForTuketim(); as hak) {
+        <div class="flex flex-column gap-3">
+            <div class="border-1 border-round border-200 p-3 surface-ground">
+                <div class="font-semibold">{{ hak.hizmetAdi }}</div>
+                <div class="text-sm text-color-secondary">{{ getKonaklamaIcerikKuralOzeti(hak) }}</div>
+                <div class="text-sm text-color-secondary mt-1">Tuketilen: {{ hak.tuketilenMiktar }} · Kalan: {{ getKonaklamaHakkiKalanLabel(hak) }}</div>
+            </div>
+
+            <div class="grid">
+                <div class="col-12 md:col-6">
+                    <label class="block text-sm mb-2">Tuketim Tarihi</label>
+                    <input pInputText type="datetime-local" class="w-full" [(ngModel)]="konaklamaHakkiTuketimTarihi" />
+                </div>
+                <div class="col-12 md:col-6">
+                    <label class="block text-sm mb-2">Miktar</label>
+                    <input pInputText type="number" min="1" class="w-full" [(ngModel)]="konaklamaHakkiTuketimMiktar" />
+                </div>
+                <div class="col-12">
+                    <label class="block text-sm mb-2">Tuketim Noktasi</label>
+                    @if (hak.kullanimNoktasi === 'Genel') {
+                        <div class="text-sm text-color-secondary border-1 border-round border-200 px-3 py-2">Bu hak icin zorunlu isletme alani secimi yok.</div>
+                    } @else if (hak.tuketimNoktalari.length > 0) {
+                        <p-select
+                            [options]="getKonaklamaHakkiTuketimNoktasiSecenekleri(hak)"
+                            optionLabel="label"
+                            optionValue="value"
+                            [showClear]="false"
+                            [(ngModel)]="selectedKonaklamaHakkiTuketimNoktasiId"
+                            styleClass="w-full" />
+                    } @else {
+                        <div class="text-sm text-red-500 border-1 border-round border-red-200 px-3 py-2">
+                            Bu hak icin uygun isletme alani tanimli degil. Once tesis altinda uygun restoran/bar/oda servisi alani tanimlanmalidir.
+                        </div>
+                    }
+                </div>
+                <div class="col-12">
+                    <label class="block text-sm mb-2">Aciklama</label>
+                    <input pInputText type="text" class="w-full" [(ngModel)]="konaklamaHakkiTuketimAciklama" placeholder="Opsiyonel not" />
+                </div>
+            </div>
+
+            @if (hak.tuketimKayitlari.length > 0) {
+                <div>
+                    <div class="text-sm font-semibold mb-2">Mevcut Kayitlar</div>
+                    <div class="flex flex-column gap-2">
+                        @for (kayit of hak.tuketimKayitlari; track kayit.id) {
+                            <div class="border-1 border-round border-200 p-2 text-sm">
+                                <div class="font-medium">{{ kayit.tuketimTarihi | date: 'dd.MM.yyyy HH:mm' }} · {{ kayit.miktar }} adet</div>
+                                <div class="text-xs text-color-secondary">
+                                    <span>{{ kayit.kullanimNoktasiAdi }}</span>
+                                    @if (kayit.tuketimNoktasiAdi) {
+                                        <span> · {{ kayit.tuketimNoktasiAdi }}</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <ng-template pTemplate="footer">
+        <div class="flex justify-content-end gap-2">
+            <p-button label="Kapat" severity="secondary" text (onClick)="closeKonaklamaHakkiTuketimDialog()" />
+            <p-button label="Tuketim Kaydet" icon="pi pi-check" [loading]="savingKonaklamaHakkiTuketim" [disabled]="!canSaveKonaklamaHakkiTuketim()" (onClick)="kaydetKonaklamaHakkiTuketim()" />
+        </div>
     </ng-template>
 </p-dialog>
 

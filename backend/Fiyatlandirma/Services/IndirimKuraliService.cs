@@ -5,6 +5,7 @@ using STYS.AccessScope;
 using STYS.Fiyatlandirma.Dto;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma.Repositories;
+using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri.Repositories;
 using STYS.MisafirTipleri.Repositories;
 using STYS.Tesisler.Repositories;
@@ -23,6 +24,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
     private readonly ITesisRepository _tesisRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly StysAppDbContext _stysDbContext;
 
     public IndirimKuraliService(
         IIndirimKuraliRepository indirimKuraliRepository,
@@ -31,6 +33,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         ITesisRepository tesisRepository,
         IUserAccessScopeService userAccessScopeService,
         IHttpContextAccessor httpContextAccessor,
+        StysAppDbContext stysAppDbContext,
         IMapper mapper)
         : base(indirimKuraliRepository, mapper)
     {
@@ -40,6 +43,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         _tesisRepository = tesisRepository;
         _userAccessScopeService = userAccessScopeService;
         _httpContextAccessor = httpContextAccessor;
+        _stysDbContext = stysAppDbContext;
     }
 
     public override async Task<IndirimKuraliDto> AddAsync(IndirimKuraliDto dto)
@@ -294,6 +298,23 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
             if (existingKonaklamaTipiIds.Count != dto.KonaklamaTipiIds.Distinct().Count())
             {
                 throw new BaseException("Gecersiz veya pasif konaklama tipi secildi.", 400);
+            }
+
+            if (dto.KapsamTipi.Equals(IndirimKapsamTipleri.Tesis, StringComparison.OrdinalIgnoreCase) && dto.TesisId.HasValue)
+            {
+                var tesisKonaklamaTipiIds = await _stysDbContext.TesisKonaklamaTipleri
+                    .Where(x => x.TesisId == dto.TesisId.Value
+                        && x.AktifMi
+                        && !x.IsDeleted
+                        && dto.KonaklamaTipiIds.Contains(x.KonaklamaTipiId))
+                    .Select(x => x.KonaklamaTipiId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (tesisKonaklamaTipiIds.Count != dto.KonaklamaTipiIds.Distinct().Count())
+                {
+                    throw new BaseException("Secilen konaklama tiplerinden biri ilgili tesiste kullanima acik degil.", 400);
+                }
             }
         }
     }

@@ -10,7 +10,7 @@ public interface IRezervasyonService
 
     Task<List<RezervasyonMisafirTipiDto>> GetMisafirTipleriAsync(CancellationToken cancellationToken = default);
 
-    Task<List<RezervasyonKonaklamaTipiDto>> GetKonaklamaTipleriAsync(CancellationToken cancellationToken = default);
+    Task<List<RezervasyonKonaklamaTipiDto>> GetKonaklamaTipleriAsync(int tesisId, CancellationToken cancellationToken = default);
 
     Task<List<RezervasyonIndirimKuraliSecenekDto>> GetUygulanabilirIndirimKurallariAsync(
         int tesisId,
@@ -68,6 +68,24 @@ public interface IRezervasyonService
     Task<RezervasyonOdemeOzetDto> SilEkHizmetAsync(int rezervasyonId, int ekHizmetId, CancellationToken cancellationToken = default);
 
     Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<RezervasyonDetayDto> GuncelleKonaklamaHakkiDurumuAsync(
+        int rezervasyonId,
+        int hakId,
+        RezervasyonKonaklamaHakkiDurumGuncelleRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<RezervasyonDetayDto> KaydetKonaklamaHakkiTuketimAsync(
+        int rezervasyonId,
+        int hakId,
+        RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<RezervasyonDetayDto> SilKonaklamaHakkiTuketimAsync(
+        int rezervasyonId,
+        int hakId,
+        int tuketimKaydiId,
+        CancellationToken cancellationToken = default);
 
     Task<OdemeRaporDto> GetOdemeRaporuAsync(IReadOnlyCollection<int> tesisIds, DateTime baslangicTarihi, DateTime bitisTarihi, CancellationToken cancellationToken = default);
 }

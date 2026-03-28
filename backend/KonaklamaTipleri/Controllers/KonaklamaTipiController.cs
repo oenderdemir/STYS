@@ -18,10 +18,40 @@ public class KonaklamaTipiController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.KonaklamaTipiYonetimi.View)]
-    public async Task<List<KonaklamaTipiDto>> GetAll()
+    public async Task<List<KonaklamaTipiDto>> GetAll([FromQuery] int? tesisId, CancellationToken cancellationToken)
     {
-        var items = await _konaklamaTipiService.GetAllAsync();
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _konaklamaTipiService.GetAktifKonaklamaTipleriByTesisAsync(tesisId.Value, cancellationToken)
+            : (await _konaklamaTipiService.GetAllAsync()).ToList();
+
         return items.OrderBy(x => x.Ad).ToList();
+    }
+
+    [HttpGet("yonetim-baglam")]
+    [Permission(StructurePermissions.KonaklamaTipiYonetimi.View)]
+    public async Task<ActionResult<KonaklamaTipiYonetimBaglamDto>> GetYonetimBaglam(CancellationToken cancellationToken)
+    {
+        var result = await _konaklamaTipiService.GetYonetimBaglamAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("tesis/{tesisId:int}/atamalar")]
+    [Permission(StructurePermissions.KonaklamaTipiYonetimi.View)]
+    public async Task<ActionResult<List<KonaklamaTipiTesisAtamaDto>>> GetTesisAtamalari([FromRoute] int tesisId, CancellationToken cancellationToken)
+    {
+        var result = await _konaklamaTipiService.GetTesisAtamalariAsync(tesisId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("tesis/{tesisId:int}/atamalar")]
+    [Permission(StructurePermissions.KonaklamaTipiYonetimi.Manage)]
+    public async Task<ActionResult<List<KonaklamaTipiTesisAtamaDto>>> KaydetTesisAtamalari(
+        [FromRoute] int tesisId,
+        [FromBody] KonaklamaTipiTesisAtamaKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _konaklamaTipiService.KaydetTesisAtamalariAsync(tesisId, request.KonaklamaTipiIds, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("paged")]

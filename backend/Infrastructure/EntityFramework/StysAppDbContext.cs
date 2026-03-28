@@ -52,6 +52,8 @@ public class StysAppDbContext : DbContext
     public DbSet<TesisOdaTipiOzellikDeger> TesisOdaTipiOzellikDegerleri => Set<TesisOdaTipiOzellikDeger>();
     public DbSet<Oda> Odalar => Set<Oda>();
     public DbSet<KonaklamaTipi> KonaklamaTipleri => Set<KonaklamaTipi>();
+    public DbSet<KonaklamaTipiIcerikKalemi> KonaklamaTipiIcerikKalemleri => Set<KonaklamaTipiIcerikKalemi>();
+    public DbSet<TesisKonaklamaTipi> TesisKonaklamaTipleri => Set<TesisKonaklamaTipi>();
     public DbSet<MisafirTipi> MisafirTipleri => Set<MisafirTipi>();
     public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
     public DbSet<EkHizmet> EkHizmetler => Set<EkHizmet>();
@@ -67,6 +69,8 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonDegisiklikGecmisi> RezervasyonDegisiklikGecmisleri => Set<RezervasyonDegisiklikGecmisi>();
     public DbSet<RezervasyonKonaklayan> RezervasyonKonaklayanlar => Set<RezervasyonKonaklayan>();
     public DbSet<RezervasyonKonaklayanSegmentAtama> RezervasyonKonaklayanSegmentAtamalari => Set<RezervasyonKonaklayanSegmentAtama>();
+    public DbSet<RezervasyonKonaklamaHakki> RezervasyonKonaklamaHaklari => Set<RezervasyonKonaklamaHakki>();
+    public DbSet<RezervasyonKonaklamaHakkiTuketimKaydi> RezervasyonKonaklamaHakkiTuketimKayitlari => Set<RezervasyonKonaklamaHakkiTuketimKaydi>();
     public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
@@ -344,6 +348,44 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
         });
 
+        modelBuilder.Entity<KonaklamaTipiIcerikKalemi>(entity =>
+        {
+            entity.ToTable("KonaklamaTipiIcerikKalemleri", "dbo");
+            entity.Property(x => x.HizmetKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Periyot).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimNoktasi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimBaslangicSaati).HasColumnType("time");
+            entity.Property(x => x.KullanimBitisSaati).HasColumnType("time");
+            entity.Property(x => x.Aciklama).HasMaxLength(256);
+            entity.HasIndex(x => new { x.KonaklamaTipiId, x.HizmetKodu })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KonaklamaTipi)
+                .WithMany(x => x.IcerikKalemleri)
+                .HasForeignKey(x => x.KonaklamaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TesisKonaklamaTipi>(entity =>
+        {
+            entity.ToTable("TesisKonaklamaTipleri", "dbo");
+            entity.HasIndex(x => new { x.TesisId, x.KonaklamaTipiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.KonaklamaTipleri)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KonaklamaTipi)
+                .WithMany(x => x.TesisKonaklamaTipleri)
+                .HasForeignKey(x => x.KonaklamaTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<MisafirTipi>(entity =>
         {
             entity.ToTable("MisafirTipleri", "dbo");
@@ -536,6 +578,59 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonKonaklamaHakki>(entity =>
+        {
+            entity.ToTable("RezervasyonKonaklamaHaklari", "dbo");
+            entity.Property(x => x.HizmetKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.HizmetAdiSnapshot).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Periyot).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PeriyotAdiSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.KullanimTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimTipiAdiSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.KullanimNoktasi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimNoktasiAdiSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.KullanimBaslangicSaati).HasColumnType("time");
+            entity.Property(x => x.KullanimBitisSaati).HasColumnType("time");
+            entity.Property(x => x.AciklamaSnapshot).HasMaxLength(256);
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.RezervasyonId, x.HizmetKodu, x.HakTarihi, x.Periyot })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.KonaklamaHaklari)
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RezervasyonKonaklamaHakkiTuketimKaydi>(entity =>
+        {
+            entity.ToTable("RezervasyonKonaklamaHakkiTuketimKayitlari", "dbo");
+            entity.Property(x => x.KullanimTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimNoktasi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KullanimNoktasiAdiSnapshot).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.TuketimNoktasiAdi).HasMaxLength(128);
+            entity.Property(x => x.Aciklama).HasMaxLength(256);
+            entity.HasIndex(x => new { x.RezervasyonKonaklamaHakkiId, x.TuketimTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RezervasyonId, x.TuketimTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany(x => x.KonaklamaHakkiTuketimKayitlari)
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RezervasyonKonaklamaHakki)
+                .WithMany(x => x.TuketimKayitlari)
+                .HasForeignKey(x => x.RezervasyonKonaklamaHakkiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IsletmeAlani)
+                .WithMany()
+                .HasForeignKey(x => x.IsletmeAlaniId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

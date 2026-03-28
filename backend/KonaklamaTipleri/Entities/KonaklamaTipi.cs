@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Fiyatlandirma.Entities;
+using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.KonaklamaTipleri.Entities;
@@ -16,7 +17,11 @@ public class KonaklamaTipi : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
+    public ICollection<KonaklamaTipiIcerikKalemi> IcerikKalemleri { get; set; } = [];
+
     public ICollection<OdaFiyat> OdaFiyatlari { get; set; } = [];
 
     public ICollection<IndirimKuraliKonaklamaTipi> IndirimKuralKonaklamaTipleri { get; set; } = [];
+
+    public ICollection<TesisKonaklamaTipi> TesisKonaklamaTipleri { get; set; } = [];
 }

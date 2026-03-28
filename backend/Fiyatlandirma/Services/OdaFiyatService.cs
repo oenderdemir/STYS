@@ -4,6 +4,7 @@ using STYS.AccessScope;
 using STYS.Fiyatlandirma.Dto;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma.Repositories;
+using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri.Repositories;
 using STYS.MisafirTipleri.Repositories;
 using STYS.OdaTipleri.Entities;
@@ -21,6 +22,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
     private readonly IMisafirTipiRepository _misafirTipiRepository;
     private readonly IIndirimKuraliRepository _indirimKuraliRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly StysAppDbContext _stysDbContext;
 
     public OdaFiyatService(
         IOdaFiyatRepository odaFiyatRepository,
@@ -29,6 +31,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         IMisafirTipiRepository misafirTipiRepository,
         IIndirimKuraliRepository indirimKuraliRepository,
         IUserAccessScopeService userAccessScopeService,
+        StysAppDbContext stysAppDbContext,
         IMapper mapper)
         : base(odaFiyatRepository, mapper)
     {
@@ -38,6 +41,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         _misafirTipiRepository = misafirTipiRepository;
         _indirimKuraliRepository = indirimKuraliRepository;
         _userAccessScopeService = userAccessScopeService;
+        _stysDbContext = stysAppDbContext;
     }
 
     public async Task<List<OdaFiyatDto>> GetByTesisOdaTipiIdAsync(int tesisOdaTipiId, CancellationToken cancellationToken = default)
@@ -55,7 +59,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
 
     public async Task<List<OdaFiyatDto>> UpsertByTesisOdaTipiAsync(int tesisOdaTipiId, IEnumerable<OdaFiyatDto> fiyatlar, CancellationToken cancellationToken = default)
     {
-        await EnsureCanAccessOdaTipiAsync(tesisOdaTipiId, cancellationToken);
+        var odaTipi = await EnsureCanAccessOdaTipiAsync(tesisOdaTipiId, cancellationToken);
         var items = (fiyatlar ?? []).ToList();
 
         foreach (var item in items)
@@ -66,7 +70,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         }
 
         EnsureNoDuplicateRows(items);
-        await EnsureReferencesAsync(items, cancellationToken);
+        await EnsureReferencesAsync(items, odaTipi.TesisId, cancellationToken);
 
         var existing = await _odaFiyatRepository.Where(x => x.TesisOdaTipiId == tesisOdaTipiId).ToListAsync(cancellationToken);
         if (existing.Count > 0)
@@ -90,6 +94,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
     {
         ValidateRequest(request);
         var odaTipi = await EnsureCanAccessOdaTipiAsync(request.TesisOdaTipiId, cancellationToken);
+        await EnsureTesisHasKonaklamaTipiAsync(odaTipi.TesisId, request.KonaklamaTipiId, cancellationToken);
         var hedefTarih = (request.Tarih ?? DateTime.UtcNow).Date;
 
         var basePrice = await _odaFiyatRepository.Where(x =>
@@ -214,7 +219,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         return odaTipi;
     }
 
-    private async Task EnsureReferencesAsync(IEnumerable<OdaFiyatDto> fiyatlar, CancellationToken cancellationToken)
+    private async Task EnsureReferencesAsync(IEnumerable<OdaFiyatDto> fiyatlar, int tesisId, CancellationToken cancellationToken)
     {
         var konaklamaTipiIds = fiyatlar.Select(x => x.KonaklamaTipiId).Distinct().ToList();
         var misafirTipiIds = fiyatlar.Select(x => x.MisafirTipiId).Distinct().ToList();
@@ -235,6 +240,20 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         if (existingKonaklamaTipiIds.Count != konaklamaTipiIds.Count)
         {
             throw new BaseException("Gecersiz veya pasif konaklama tipi secildi.", 400);
+        }
+
+        var tesisKonaklamaTipiIds = await _stysDbContext.TesisKonaklamaTipleri
+            .Where(x => x.TesisId == tesisId
+                && x.AktifMi
+                && !x.IsDeleted
+                && konaklamaTipiIds.Contains(x.KonaklamaTipiId))
+            .Select(x => x.KonaklamaTipiId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (tesisKonaklamaTipiIds.Count != konaklamaTipiIds.Count)
+        {
+            throw new BaseException("Secilen konaklama tipi ilgili tesiste kullanima acik degil.", 400);
         }
 
         if (existingMisafirTipiIds.Count != misafirTipiIds.Count)
@@ -315,5 +334,20 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         dto.ParaBirimi = string.IsNullOrWhiteSpace(dto.ParaBirimi)
             ? "TRY"
             : dto.ParaBirimi.Trim().ToUpperInvariant();
+    }
+
+    private async Task EnsureTesisHasKonaklamaTipiAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken)
+    {
+        var exists = await _stysDbContext.TesisKonaklamaTipleri.AnyAsync(x =>
+            x.TesisId == tesisId
+            && x.KonaklamaTipiId == konaklamaTipiId
+            && x.AktifMi
+            && !x.IsDeleted,
+            cancellationToken);
+
+        if (!exists)
+        {
+            throw new BaseException("Secilen konaklama tipi ilgili tesiste kullanima acik degil.", 400);
+        }
     }
 }

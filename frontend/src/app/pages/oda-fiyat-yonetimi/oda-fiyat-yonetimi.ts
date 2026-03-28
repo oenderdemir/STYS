@@ -12,6 +12,7 @@ import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
+import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { KonaklamaTipiDto, MisafirTipiDto, OdaFiyatDto, OdaFiyatFormRow, OdaTipiDto } from './oda-fiyat-yonetimi.dto';
@@ -60,6 +61,7 @@ export class OdaFiyatYonetimi implements OnInit {
 
     onTesisChange(): void {
         this.applySelectedOdaTipiForSelectedTesis();
+        this.loadKonaklamaTipleriForSelectedTesis();
         this.loadFiyatlarForSelectedOdaTipi();
     }
 
@@ -157,7 +159,6 @@ export class OdaFiyatYonetimi implements OnInit {
         forkJoin({
             tesisler: this.service.getTesisler(),
             odaTipleri: this.service.getOdaTipleri(),
-            konaklamaTipleri: this.service.getKonaklamaTipleri(),
             misafirTipleri: this.service.getMisafirTipleri()
         })
             .pipe(
@@ -167,10 +168,9 @@ export class OdaFiyatYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ tesisler, odaTipleri, konaklamaTipleri, misafirTipleri }) => {
+                next: ({ tesisler, odaTipleri, misafirTipleri }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.odaTipleri = [...odaTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.konaklamaTipleri = [...konaklamaTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.misafirTipleri = [...misafirTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
 
                     if (
@@ -185,6 +185,7 @@ export class OdaFiyatYonetimi implements OnInit {
                     }
 
                     this.applySelectedOdaTipiForSelectedTesis();
+                    this.loadKonaklamaTipleriForSelectedTesis();
                     this.loadFiyatlarForSelectedOdaTipi();
                     this.cdr.detectChanges();
                 },
@@ -193,6 +194,33 @@ export class OdaFiyatYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private loadKonaklamaTipleriForSelectedTesis(): void {
+        if (!this.selectedTesisId) {
+            this.konaklamaTipleri = [];
+            this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({ ...row, konaklamaTipiId: null }));
+            return;
+        }
+
+        this.service.getKonaklamaTipleri(this.selectedTesisId).subscribe({
+            next: (konaklamaTipleri) => {
+                this.konaklamaTipleri = [...konaklamaTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
+                const allowedIds = new Set(this.konaklamaTipleri.map((x) => x.id).filter((x): x is number => !!x));
+                const defaultKonaklamaTipiId = this.konaklamaTipleri[0]?.id ?? null;
+                this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({
+                    ...row,
+                    konaklamaTipiId: row.konaklamaTipiId && allowedIds.has(row.konaklamaTipiId) ? row.konaklamaTipiId : defaultKonaklamaTipiId
+                }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.konaklamaTipleri = [];
+                this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({ ...row, konaklamaTipiId: null }));
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private loadFiyatlarForSelectedOdaTipi(): void {
@@ -319,4 +347,3 @@ export class OdaFiyatYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

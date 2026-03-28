@@ -11,6 +11,8 @@ using STYS.Bildirimler.Dto;
 using STYS.Bildirimler.Services;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Infrastructure.EntityFramework;
+using STYS.IsletmeAlanlari.Entities;
+using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaKullanimBloklari;
@@ -1784,6 +1786,200 @@ public class RezervasyonServiceTests
         Assert.Equal("Ali Check", guest.AdSoyad);
     }
 
+    // Check-in tamamlanmis rezervasyonda bekleyen hak kullanildi olarak isaretlenebilmeli.
+    [Fact]
+    public async Task GuncelleKonaklamaHakkiDurumu_CheckInSonrasiBekliyorHakkiKullanildiYapar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10083, segmentId: 10084, withPlan: true);
+        dbContext.RezervasyonKonaklamaHaklari.Add(new RezervasyonKonaklamaHakki
+        {
+            Id = 13083,
+            RezervasyonId = 10083,
+            HizmetKodu = "Kahvalti",
+            HizmetAdiSnapshot = "Kahvaltı",
+            Miktar = 1,
+            Periyot = "Gunluk",
+            PeriyotAdiSnapshot = "Günlük",
+            HakTarihi = new DateTime(2026, 3, 8),
+            Durum = RezervasyonKonaklamaHakDurumlari.Bekliyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(10083);
+
+        var detay = await service.GuncelleKonaklamaHakkiDurumuAsync(10083, 13083, new RezervasyonKonaklamaHakkiDurumGuncelleRequestDto
+        {
+            Durum = RezervasyonKonaklamaHakDurumlari.Kullanildi
+        });
+
+        var hak = await dbContext.RezervasyonKonaklamaHaklari.SingleAsync(x => x.Id == 13083);
+        Assert.Equal(RezervasyonKonaklamaHakDurumlari.Kullanildi, hak.Durum);
+        Assert.Contains(detay.KonaklamaHaklari, x => x.Id == 13083 && x.Durum == RezervasyonKonaklamaHakDurumlari.Kullanildi);
+    }
+
+    // Check-in tamamlanmadan konaklama hakki durumu manuel olarak degistirilememeli.
+    [Fact]
+    public async Task GuncelleKonaklamaHakkiDurumu_CheckInOncesiHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10085, segmentId: 10086, withPlan: true);
+        dbContext.RezervasyonKonaklamaHaklari.Add(new RezervasyonKonaklamaHakki
+        {
+            Id = 13085,
+            RezervasyonId = 10085,
+            HizmetKodu = "Kahvalti",
+            HizmetAdiSnapshot = "Kahvaltı",
+            Miktar = 1,
+            Periyot = "Gunluk",
+            PeriyotAdiSnapshot = "Günlük",
+            HakTarihi = new DateTime(2026, 3, 8),
+            Durum = RezervasyonKonaklamaHakDurumlari.Bekliyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.GuncelleKonaklamaHakkiDurumuAsync(10085, 13085, new RezervasyonKonaklamaHakkiDurumGuncelleRequestDto
+        {
+            Durum = RezervasyonKonaklamaHakDurumlari.Kullanildi
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+        var hak = await dbContext.RezervasyonKonaklamaHaklari.SingleAsync(x => x.Id == 13085);
+        Assert.Equal(RezervasyonKonaklamaHakDurumlari.Bekliyor, hak.Durum);
+    }
+
+    // Adetli hakta tuketim kaydi miktari doldugunda hak kullanildi olur ve log olusur.
+    [Fact]
+    public async Task KaydetKonaklamaHakkiTuketim_AdetliHakIcinKayitOlusturur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10087, segmentId: 10088, withPlan: true);
+        var restoranId = await SeedIsletmeAlaniAsync(dbContext, binaId: 10, sinifId: 9001, alanId: 9002, sinifKod: "RESTORAN", sinifAd: "Restoran", ozelAd: "Ana Restoran");
+        dbContext.RezervasyonKonaklamaHaklari.Add(new RezervasyonKonaklamaHakki
+        {
+            Id = 13087,
+            RezervasyonId = 10087,
+            HizmetKodu = "Kahvalti",
+            HizmetAdiSnapshot = "Kahvaltı",
+            Miktar = 1,
+            Periyot = KonaklamaTipiIcerikPeriyotlari.Gunluk,
+            PeriyotAdiSnapshot = "Günlük",
+            KullanimTipi = KonaklamaTipiIcerikKullanimTipleri.Adetli,
+            KullanimTipiAdiSnapshot = "Adetli",
+            KullanimNoktasi = KonaklamaTipiIcerikKullanimNoktalari.Restoran,
+            KullanimNoktasiAdiSnapshot = "Restoran",
+            KullanimBaslangicSaati = new TimeSpan(7, 0, 0),
+            KullanimBitisSaati = new TimeSpan(10, 0, 0),
+            HakTarihi = new DateTime(2026, 3, 8),
+            Durum = RezervasyonKonaklamaHakDurumlari.Bekliyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(10087);
+
+        var detay = await service.KaydetKonaklamaHakkiTuketimAsync(10087, 13087, new RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto
+        {
+            TuketimTarihi = new DateTime(2026, 3, 8, 8, 15, 0),
+            Miktar = 1,
+            IsletmeAlaniId = restoranId,
+            Aciklama = "Sabah servisi"
+        });
+
+        var hak = await dbContext.RezervasyonKonaklamaHaklari.SingleAsync(x => x.Id == 13087);
+        var kayit = await dbContext.RezervasyonKonaklamaHakkiTuketimKayitlari.SingleAsync(x => x.RezervasyonKonaklamaHakkiId == 13087);
+        Assert.Equal(RezervasyonKonaklamaHakDurumlari.Kullanildi, hak.Durum);
+        Assert.Equal(restoranId, kayit.IsletmeAlaniId);
+        Assert.Equal("Ana Restoran", kayit.TuketimNoktasiAdi);
+        Assert.Contains(detay.KonaklamaHaklari, x => x.Id == 13087 && x.TuketilenMiktar == 1 && x.KalanMiktar == 0);
+    }
+
+    // Saat penceresi disinda tuketim kaydi eklenememeli.
+    [Fact]
+    public async Task KaydetKonaklamaHakkiTuketim_SaatPenceresiDisindaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10089, segmentId: 10090, withPlan: true);
+        var restoranId = await SeedIsletmeAlaniAsync(dbContext, binaId: 10, sinifId: 9011, alanId: 9012, sinifKod: "RESTORAN", sinifAd: "Restoran", ozelAd: "Ana Restoran");
+        dbContext.RezervasyonKonaklamaHaklari.Add(new RezervasyonKonaklamaHakki
+        {
+            Id = 13089,
+            RezervasyonId = 10089,
+            HizmetKodu = "Kahvalti",
+            HizmetAdiSnapshot = "Kahvaltı",
+            Miktar = 1,
+            Periyot = KonaklamaTipiIcerikPeriyotlari.Gunluk,
+            PeriyotAdiSnapshot = "Günlük",
+            KullanimTipi = KonaklamaTipiIcerikKullanimTipleri.Adetli,
+            KullanimTipiAdiSnapshot = "Adetli",
+            KullanimNoktasi = KonaklamaTipiIcerikKullanimNoktalari.Restoran,
+            KullanimNoktasiAdiSnapshot = "Restoran",
+            KullanimBaslangicSaati = new TimeSpan(7, 0, 0),
+            KullanimBitisSaati = new TimeSpan(10, 0, 0),
+            HakTarihi = new DateTime(2026, 3, 8),
+            Durum = RezervasyonKonaklamaHakDurumlari.Bekliyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(10089);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.KaydetKonaklamaHakkiTuketimAsync(10089, 13089, new RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto
+        {
+            TuketimTarihi = new DateTime(2026, 3, 8, 11, 0, 0),
+            Miktar = 1,
+            IsletmeAlaniId = restoranId
+        }));
+
+        Assert.Equal(400, exception.ErrorCode);
+        Assert.False(await dbContext.RezervasyonKonaklamaHakkiTuketimKayitlari.AnyAsync(x => x.RezervasyonKonaklamaHakkiId == 13089));
+    }
+
+    // Tuketim kaydi silinince adetli hak tekrar bekliyor durumuna donebilmeli.
+    [Fact]
+    public async Task SilKonaklamaHakkiTuketim_KaydiGeriAlir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 10091, segmentId: 10092, withPlan: true);
+        var restoranId = await SeedIsletmeAlaniAsync(dbContext, binaId: 10, sinifId: 9021, alanId: 9022, sinifKod: "RESTORAN", sinifAd: "Restoran", ozelAd: "Ana Restoran");
+        dbContext.RezervasyonKonaklamaHaklari.Add(new RezervasyonKonaklamaHakki
+        {
+            Id = 13091,
+            RezervasyonId = 10091,
+            HizmetKodu = "Kahvalti",
+            HizmetAdiSnapshot = "Kahvaltı",
+            Miktar = 1,
+            Periyot = KonaklamaTipiIcerikPeriyotlari.Gunluk,
+            PeriyotAdiSnapshot = "Günlük",
+            KullanimTipi = KonaklamaTipiIcerikKullanimTipleri.Adetli,
+            KullanimTipiAdiSnapshot = "Adetli",
+            KullanimNoktasi = KonaklamaTipiIcerikKullanimNoktalari.Restoran,
+            KullanimNoktasiAdiSnapshot = "Restoran",
+            HakTarihi = new DateTime(2026, 3, 8),
+            Durum = RezervasyonKonaklamaHakDurumlari.Bekliyor
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.TamamlaCheckInAsync(10091);
+        await service.KaydetKonaklamaHakkiTuketimAsync(10091, 13091, new RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto
+        {
+            TuketimTarihi = new DateTime(2026, 3, 8, 8, 0, 0),
+            Miktar = 1,
+            IsletmeAlaniId = restoranId
+        });
+
+        var kayit = await dbContext.RezervasyonKonaklamaHakkiTuketimKayitlari.SingleAsync(x => x.RezervasyonKonaklamaHakkiId == 13091 && !x.IsDeleted);
+        var detay = await service.SilKonaklamaHakkiTuketimAsync(10091, 13091, kayit.Id);
+
+        var hak = await dbContext.RezervasyonKonaklamaHaklari.SingleAsync(x => x.Id == 13091);
+        Assert.Equal(RezervasyonKonaklamaHakDurumlari.Bekliyor, hak.Durum);
+        Assert.Contains(detay.KonaklamaHaklari, x => x.Id == 13091 && x.TuketilenMiktar == 0 && x.KalanMiktar == 1);
+    }
+
     // Konaklayan plana bagli ek hizmet eklendiginde odeme ozetindeki ek hizmet ve toplam tutarlar artmali.
     [Fact]
     public async Task KaydetEkHizmet_OdemeOzetineEklenir()
@@ -2175,6 +2371,42 @@ public class RezervasyonServiceTests
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<int> SeedIsletmeAlaniAsync(
+        StysAppDbContext dbContext,
+        int binaId,
+        int sinifId,
+        int alanId,
+        string sinifKod,
+        string sinifAd,
+        string? ozelAd = null)
+    {
+        if (!await dbContext.IsletmeAlaniSiniflari.AnyAsync(x => x.Id == sinifId))
+        {
+            dbContext.IsletmeAlaniSiniflari.Add(new IsletmeAlaniSinifi
+            {
+                Id = sinifId,
+                Kod = sinifKod,
+                Ad = sinifAd,
+                AktifMi = true
+            });
+        }
+
+        if (!await dbContext.IsletmeAlanlari.AnyAsync(x => x.Id == alanId))
+        {
+            dbContext.IsletmeAlanlari.Add(new IsletmeAlani
+            {
+                Id = alanId,
+                BinaId = binaId,
+                IsletmeAlaniSinifiId = sinifId,
+                OzelAd = ozelAd,
+                AktifMi = true
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+        return alanId;
     }
 
     private static async Task SeedRoomBlockForReservationAsync(

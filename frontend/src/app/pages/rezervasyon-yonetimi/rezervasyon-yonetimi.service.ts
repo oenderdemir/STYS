@@ -15,6 +15,8 @@ import {
     RezervasyonKaydetRequestDto,
     RezervasyonCheckInKontrolDto,
     RezervasyonKayitSonucDto,
+    RezervasyonKonaklamaHakkiDurumGuncelleRequestDto,
+    RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto,
     RezervasyonKonaklamaTipiDto,
     RezervasyonKonaklayanPlanDto,
     RezervasyonKonaklayanPlanKaydetRequestDto,
@@ -74,8 +76,9 @@ export class RezervasyonYonetimiService {
         );
     }
 
-    getKonaklamaTipleri(): Observable<RezervasyonKonaklamaTipiDto[]> {
-        return this.http.get<ApiResponse<RezervasyonKonaklamaTipiDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/konaklama-tipleri`).pipe(
+    getKonaklamaTipleri(tesisId: number): Observable<RezervasyonKonaklamaTipiDto[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<RezervasyonKonaklamaTipiDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/konaklama-tipleri`, { params }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
@@ -422,6 +425,62 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme kaydedilemedi.');
+            })
+        );
+    }
+
+    guncelleKonaklamaHakkiDurumu(
+        rezervasyonId: number,
+        hakId: number,
+        request: RezervasyonKonaklamaHakkiDurumGuncelleRequestDto
+    ): Observable<RezervasyonDetayDto> {
+        return this.http.put<ApiResponse<RezervasyonDetayDto>>(
+            `${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/konaklama-haklari/${hakId}/durum`,
+            request
+        ).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklama hakki durumu guncellenemedi.');
+            })
+        );
+    }
+
+    kaydetKonaklamaHakkiTuketim(
+        rezervasyonId: number,
+        hakId: number,
+        request: RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto
+    ): Observable<RezervasyonDetayDto> {
+        return this.http.post<ApiResponse<RezervasyonDetayDto>>(
+            `${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/konaklama-haklari/${hakId}/tuketimler`,
+            request
+        ).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklama hakki tuketim kaydi eklenemedi.');
+            })
+        );
+    }
+
+    silKonaklamaHakkiTuketim(
+        rezervasyonId: number,
+        hakId: number,
+        tuketimKaydiId: number
+    ): Observable<RezervasyonDetayDto> {
+        return this.http.delete<ApiResponse<RezervasyonDetayDto>>(
+            `${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/konaklama-haklari/${hakId}/tuketimler/${tuketimKaydiId}`
+        ).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklama hakki tuketim kaydi silinemedi.');
             })
         );
     }

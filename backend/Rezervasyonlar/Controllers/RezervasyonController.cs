@@ -42,9 +42,9 @@ public class RezervasyonController : UIController
 
     [HttpGet("konaklama-tipleri")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
-    public async Task<ActionResult<List<RezervasyonKonaklamaTipiDto>>> GetKonaklamaTipleri(CancellationToken cancellationToken)
+    public async Task<ActionResult<List<RezervasyonKonaklamaTipiDto>>> GetKonaklamaTipleri([FromQuery] int tesisId, CancellationToken cancellationToken)
     {
-        var konaklamaTipleri = await _rezervasyonService.GetKonaklamaTipleriAsync(cancellationToken);
+        var konaklamaTipleri = await _rezervasyonService.GetKonaklamaTipleriAsync(tesisId, cancellationToken);
         return Ok(konaklamaTipleri);
     }
 
@@ -280,6 +280,42 @@ public class RezervasyonController : UIController
         CancellationToken cancellationToken)
     {
         var result = await _rezervasyonService.KaydetOdemeAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("kayitlar/{rezervasyonId:int}/konaklama-haklari/{hakId:int}/durum")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonDetayDto>> GuncelleKonaklamaHakkiDurumu(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int hakId,
+        [FromBody] RezervasyonKonaklamaHakkiDurumGuncelleRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GuncelleKonaklamaHakkiDurumuAsync(rezervasyonId, hakId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/konaklama-haklari/{hakId:int}/tuketimler")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonDetayDto>> KaydetKonaklamaHakkiTuketim(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int hakId,
+        [FromBody] RezervasyonKonaklamaHakkiTuketimKaydiKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetKonaklamaHakkiTuketimAsync(rezervasyonId, hakId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpDelete("kayitlar/{rezervasyonId:int}/konaklama-haklari/{hakId:int}/tuketimler/{tuketimKaydiId:int}")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonDetayDto>> SilKonaklamaHakkiTuketim(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int hakId,
+        [FromRoute] int tuketimKaydiId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.SilKonaklamaHakkiTuketimAsync(rezervasyonId, hakId, tuketimKaydiId, cancellationToken);
         return Ok(result);
     }
 

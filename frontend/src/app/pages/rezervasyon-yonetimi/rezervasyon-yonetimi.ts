@@ -33,6 +33,9 @@ import {
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonKayitSonucDto,
+    RezervasyonKonaklamaHakkiDto,
+    RezervasyonKonaklamaHakkiTuketimKaydiDto,
+    RezervasyonKonaklamaHakkiTuketimNoktasiDto,
     RezervasyonKonaklamaTipiDto,
     RezervasyonKonaklayanKisiDto,
     RezervasyonKonaklayanOdaSecenekDto,
@@ -287,6 +290,19 @@ export class RezervasyonYonetimi implements OnInit {
     private readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
     private readonly durumCheckOutTamamlandi = 'CheckOutTamamlandi';
     private readonly durumIptal = 'Iptal';
+    private readonly hakDurumBekliyor = 'Bekliyor';
+    private readonly hakDurumKullanildi = 'Kullanildi';
+    private readonly hakDurumIptal = 'Iptal';
+    updatingKonaklamaHakId: number | null = null;
+    konaklamaHakkiTuketimDialogVisible = false;
+    selectedKonaklamaHakkiTuketimRezervasyonId: number | null = null;
+    selectedKonaklamaHakkiTuketimHakId: number | null = null;
+    konaklamaHakkiTuketimTarihi = this.nowInput();
+    konaklamaHakkiTuketimMiktar: number | null = 1;
+    selectedKonaklamaHakkiTuketimNoktasiId: number | null = null;
+    konaklamaHakkiTuketimAciklama = '';
+    savingKonaklamaHakkiTuketim = false;
+    removingKonaklamaHakkiTuketimId: number | null = null;
 
     get canView(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.View');
@@ -370,7 +386,9 @@ export class RezervasyonYonetimi implements OnInit {
     onTesisChange(): void {
         if (!this.selectedTesisId || this.selectedTesisId <= 0) {
             this.odaTipleri = [];
+            this.konaklamaTipleri = [];
             this.selectedOdaTipiId = null;
+            this.selectedKonaklamaTipiId = null;
             this.senaryolar = [];
             this.rezervasyonKayitlari = [];
             this.availableDiscountRules = [];
@@ -379,6 +397,7 @@ export class RezervasyonYonetimi implements OnInit {
 
         this.applySelectedTesisDateTimes();
         this.loadOdaTipleri(this.selectedTesisId, true);
+        this.loadKonaklamaTipleriByTesis(this.selectedTesisId);
         this.loadRezervasyonKayitlari(this.selectedTesisId);
     }
 
@@ -749,6 +768,226 @@ export class RezervasyonYonetimi implements OnInit {
         return this.getRezervasyonDetay(this.rezervasyonUcretDetayRezervasyonId);
     }
 
+    getKonaklamaHakkiDurumLabel(durum: string): string {
+        switch (durum) {
+            case this.hakDurumBekliyor:
+                return 'Bekliyor';
+            case this.hakDurumKullanildi:
+                return 'Kullanıldı';
+            case this.hakDurumIptal:
+                return 'İptal';
+            default:
+                return durum;
+        }
+    }
+
+    getKonaklamaHakkiDurumSeverity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+        switch (durum) {
+            case this.hakDurumBekliyor:
+                return UiSeverity.Warn;
+            case this.hakDurumKullanildi:
+                return UiSeverity.Success;
+            case this.hakDurumIptal:
+                return UiSeverity.Danger;
+            default:
+                return UiSeverity.Secondary;
+        }
+    }
+
+    canGuncelleKonaklamaHakkiDurumu(detay: RezervasyonDetayDto | null, hak: RezervasyonKonaklamaHakkiDto): boolean {
+        return !!detay
+            && this.canManage
+            && detay.rezervasyonDurumu === this.durumCheckInTamamlandi
+            && hak.tuketimKayitlari.length === 0
+            && (hak.durum === this.hakDurumBekliyor || hak.durum === this.hakDurumKullanildi);
+    }
+
+    canOpenKonaklamaHakkiTuketim(detay: RezervasyonDetayDto | null, hak: RezervasyonKonaklamaHakkiDto): boolean {
+        return !!detay
+            && this.canManage
+            && detay.rezervasyonDurumu === this.durumCheckInTamamlandi
+            && hak.durum !== this.hakDurumIptal
+            && (hak.kullanimTipi !== 'Adetli' || (hak.kalanMiktar ?? 0) > 0);
+    }
+
+    getKonaklamaHakkiAksiyonLabel(durum: string): string {
+        return durum === this.hakDurumBekliyor ? 'Kullanildi' : 'Geri Al';
+    }
+
+    getKonaklamaHakkiAksiyonIkonu(durum: string): string {
+        return durum === this.hakDurumBekliyor ? 'pi pi-check' : 'pi pi-undo';
+    }
+
+    guncelleKonaklamaHakkiDurumu(rezervasyonId: number, hakId: number, mevcutDurum: string): void {
+        const detay = this.getRezervasyonDetay(rezervasyonId);
+        const hak = detay?.konaklamaHaklari.find((x) => x.id === hakId) ?? null;
+        if (!hak || !this.canGuncelleKonaklamaHakkiDurumu(detay, hak)) {
+            return;
+        }
+
+        const hedefDurum = mevcutDurum === this.hakDurumBekliyor
+            ? this.hakDurumKullanildi
+            : this.hakDurumBekliyor;
+
+        this.updatingKonaklamaHakId = hakId;
+        this.service
+            .guncelleKonaklamaHakkiDurumu(rezervasyonId, hakId, { durum: hedefDurum })
+            .pipe(
+                finalize(() => {
+                    this.updatingKonaklamaHakId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (updatedDetay) => {
+                    this.rezervasyonDetayById[rezervasyonId] = updatedDetay;
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Basarili',
+                        detail: hedefDurum === this.hakDurumKullanildi
+                            ? 'Konaklama hakki kullanildi olarak isaretlendi.'
+                            : 'Konaklama hakki tekrar bekliyor durumuna alindi.'
+                    });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    openKonaklamaHakkiTuketimDialog(rezervasyonId: number, hak: RezervasyonKonaklamaHakkiDto): void {
+        const detay = this.getRezervasyonDetay(rezervasyonId);
+        if (!this.canOpenKonaklamaHakkiTuketim(detay, hak)) {
+            return;
+        }
+
+        this.selectedKonaklamaHakkiTuketimRezervasyonId = rezervasyonId;
+        this.selectedKonaklamaHakkiTuketimHakId = hak.id;
+        this.konaklamaHakkiTuketimDialogVisible = true;
+        this.konaklamaHakkiTuketimMiktar = hak.kullanimTipi === 'Sinirsiz' ? 1 : Math.max(1, hak.kalanMiktar ?? 1);
+        this.konaklamaHakkiTuketimTarihi = this.nowInput();
+        this.selectedKonaklamaHakkiTuketimNoktasiId = hak.tuketimNoktalari[0]?.id ?? null;
+        this.konaklamaHakkiTuketimAciklama = '';
+    }
+
+    closeKonaklamaHakkiTuketimDialog(): void {
+        this.konaklamaHakkiTuketimDialogVisible = false;
+        this.selectedKonaklamaHakkiTuketimRezervasyonId = null;
+        this.selectedKonaklamaHakkiTuketimHakId = null;
+        this.konaklamaHakkiTuketimTarihi = this.nowInput();
+        this.konaklamaHakkiTuketimMiktar = 1;
+        this.selectedKonaklamaHakkiTuketimNoktasiId = null;
+        this.konaklamaHakkiTuketimAciklama = '';
+    }
+
+    getSelectedKonaklamaHakkiForTuketim(): RezervasyonKonaklamaHakkiDto | null {
+        const detay = this.getSelectedRezervasyonUcretDetay();
+        if (!detay || !this.selectedKonaklamaHakkiTuketimHakId) {
+            return null;
+        }
+
+        return detay.konaklamaHaklari.find((x) => x.id === this.selectedKonaklamaHakkiTuketimHakId) ?? null;
+    }
+
+    canSaveKonaklamaHakkiTuketim(): boolean {
+        const detay = this.getSelectedRezervasyonUcretDetay();
+        const hak = this.getSelectedKonaklamaHakkiForTuketim();
+        return !!detay
+            && !!hak
+            && this.canOpenKonaklamaHakkiTuketim(detay, hak)
+            && !!this.konaklamaHakkiTuketimTarihi
+            && Number.isFinite(Number(this.konaklamaHakkiTuketimMiktar ?? 0))
+            && Number(this.konaklamaHakkiTuketimMiktar ?? 0) > 0
+            && (hak.kullanimNoktasi === 'Genel' || !!this.selectedKonaklamaHakkiTuketimNoktasiId);
+    }
+
+    kaydetKonaklamaHakkiTuketim(): void {
+        const rezervasyonId = this.selectedKonaklamaHakkiTuketimRezervasyonId;
+        const hakId = this.selectedKonaklamaHakkiTuketimHakId;
+        if (!rezervasyonId || !hakId || !this.canSaveKonaklamaHakkiTuketim()) {
+            return;
+        }
+
+        this.savingKonaklamaHakkiTuketim = true;
+        this.service
+            .kaydetKonaklamaHakkiTuketim(rezervasyonId, hakId, {
+                isletmeAlaniId: this.selectedKonaklamaHakkiTuketimNoktasiId,
+                tuketimTarihi: this.konaklamaHakkiTuketimTarihi,
+                miktar: Number(this.konaklamaHakkiTuketimMiktar ?? 0),
+                aciklama: this.konaklamaHakkiTuketimAciklama.trim() || null
+            })
+            .pipe(
+                finalize(() => {
+                    this.savingKonaklamaHakkiTuketim = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (updatedDetay) => {
+                    this.rezervasyonDetayById[rezervasyonId] = updatedDetay;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklama hakki tuketim kaydi eklendi.' });
+                    this.closeKonaklamaHakkiTuketimDialog();
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    silKonaklamaHakkiTuketim(rezervasyonId: number, hakId: number, kayit: RezervasyonKonaklamaHakkiTuketimKaydiDto): void {
+        if (this.removingKonaklamaHakkiTuketimId !== null) {
+            return;
+        }
+
+        this.removingKonaklamaHakkiTuketimId = kayit.id;
+        this.service
+            .silKonaklamaHakkiTuketim(rezervasyonId, hakId, kayit.id)
+            .pipe(
+                finalize(() => {
+                    this.removingKonaklamaHakkiTuketimId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (updatedDetay) => {
+                    this.rezervasyonDetayById[rezervasyonId] = updatedDetay;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklama hakki tuketim kaydi silindi.' });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getKonaklamaHakkiKalanLabel(hak: RezervasyonKonaklamaHakkiDto): string {
+        return hak.kalanMiktar === null ? 'Sinirsiz' : `${hak.kalanMiktar}`;
+    }
+
+    getKonaklamaHakkiTuketimNoktasiSecenekleri(hak: RezervasyonKonaklamaHakkiDto | null): Array<{ label: string; value: number }> {
+        if (!hak) {
+            return [];
+        }
+
+        return hak.tuketimNoktalari.map((x: RezervasyonKonaklamaHakkiTuketimNoktasiDto) => ({
+            label: `${x.ad} (${x.binaAdi})`,
+            value: x.id
+        }));
+    }
+
+    getSelectedKonaklamaTipi(): RezervasyonKonaklamaTipiDto | null {
+        if (!this.selectedKonaklamaTipiId) {
+            return null;
+        }
+
+        return this.konaklamaTipleri.find((item) => item.id === this.selectedKonaklamaTipiId) ?? null;
+    }
+
     openDegisiklikGecmisiDialog(kayit: RezervasyonListeDto): void {
         if (!this.canView || !kayit?.id || kayit.id <= 0) {
             return;
@@ -788,6 +1027,14 @@ export class RezervasyonYonetimi implements OnInit {
                 return 'İptal Geri Alındı';
             case 'OdemeKaydedildi':
                 return 'Ödeme Kaydedildi';
+            case 'KonaklamaHaklariUretildi':
+                return 'Konaklama Hakları Üretildi';
+            case 'KonaklamaHakkiDurumuGuncellendi':
+                return 'Konaklama Hakkı Durumu Güncellendi';
+            case 'KonaklamaHakkiTuketimiKaydedildi':
+                return 'Konaklama Hakkı Tüketimi Kaydedildi';
+            case 'KonaklamaHakkiTuketimiSilindi':
+                return 'Konaklama Hakkı Tüketimi Silindi';
             default:
                 return islemTipi;
         }
@@ -2237,8 +2484,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.loadingReferences = true;
         forkJoin({
             tesisler: this.service.getTesisler(),
-            misafirTipleri: this.service.getMisafirTipleri(),
-            konaklamaTipleri: this.service.getKonaklamaTipleri()
+            misafirTipleri: this.service.getMisafirTipleri()
         })
             .pipe(
                 finalize(() => {
@@ -2247,10 +2493,9 @@ export class RezervasyonYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ tesisler, misafirTipleri, konaklamaTipleri }) => {
+                next: ({ tesisler, misafirTipleri }) => {
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.misafirTipleri = [...misafirTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
-                    this.konaklamaTipleri = [...konaklamaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
 
                     if (this.selectedTesisId && !this.tesisler.some((x) => x.id === this.selectedTesisId)) {
                         this.selectedTesisId = null;
@@ -2268,23 +2513,18 @@ export class RezervasyonYonetimi implements OnInit {
                         this.selectedMisafirTipiId = this.misafirTipleri[0].id;
                     }
 
-                    if (this.selectedKonaklamaTipiId && !this.konaklamaTipleri.some((x) => x.id === this.selectedKonaklamaTipiId)) {
-                        this.selectedKonaklamaTipiId = null;
-                    }
-
-                    if (!this.selectedKonaklamaTipiId && this.konaklamaTipleri.length > 0) {
-                        this.selectedKonaklamaTipiId = this.konaklamaTipleri[0].id;
-                    }
-
                     if (this.selectedTesisId && this.selectedTesisId > 0) {
                         this.applySelectedTesisDateTimes();
                         this.loadOdaTipleri(this.selectedTesisId);
+                        this.loadKonaklamaTipleriByTesis(this.selectedTesisId);
                         this.loadRezervasyonKayitlari(this.selectedTesisId);
                         return;
                     }
 
                     this.odaTipleri = [];
+                    this.konaklamaTipleri = [];
                     this.selectedOdaTipiId = null;
+                    this.selectedKonaklamaTipiId = null;
                     this.senaryolar = [];
                     this.rezervasyonKayitlari = [];
                     this.expandedRowKeys = {};
@@ -2314,6 +2554,30 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private loadKonaklamaTipleriByTesis(tesisId: number): void {
+        this.service.getKonaklamaTipleri(tesisId).subscribe({
+            next: (konaklamaTipleri) => {
+                this.konaklamaTipleri = [...konaklamaTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+
+                if (this.selectedKonaklamaTipiId && !this.konaklamaTipleri.some((x) => x.id === this.selectedKonaklamaTipiId)) {
+                    this.selectedKonaklamaTipiId = null;
+                }
+
+                if (!this.selectedKonaklamaTipiId && this.konaklamaTipleri.length > 0) {
+                    this.selectedKonaklamaTipiId = this.konaklamaTipleri[0].id;
+                }
+
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.konaklamaTipleri = [];
+                this.selectedKonaklamaTipiId = null;
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private loadRezervasyonKayitlari(tesisId: number | null): void {
@@ -2712,6 +2976,42 @@ export class RezervasyonYonetimi implements OnInit {
         const safeValue = Number.isFinite(value) ? value : 0;
         const safeCurrency = (currency || 'TRY').toUpperCase();
         return `${safeValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${safeCurrency}`;
+    }
+
+    getKonaklamaIcerikKuralOzeti(icerik: {
+        kullanimTipiAdi?: string | null;
+        kullanimNoktasiAdi?: string | null;
+        kullanimBaslangicSaati?: string | null;
+        kullanimBitisSaati?: string | null;
+        checkInGunuGecerliMi?: boolean;
+        checkOutGunuGecerliMi?: boolean;
+    }): string {
+        const parcali: string[] = [];
+
+        if (icerik.kullanimTipiAdi) {
+            parcali.push(icerik.kullanimTipiAdi);
+        }
+
+        if (icerik.kullanimNoktasiAdi) {
+            parcali.push(icerik.kullanimNoktasiAdi);
+        }
+
+        if (icerik.kullanimBaslangicSaati && icerik.kullanimBitisSaati) {
+            parcali.push(`${icerik.kullanimBaslangicSaati}-${icerik.kullanimBitisSaati}`);
+        }
+
+        const gunKurali: string[] = [];
+        if (icerik.checkInGunuGecerliMi === false) {
+            gunKurali.push('check-in gunu yok');
+        }
+        if (icerik.checkOutGunuGecerliMi === false) {
+            gunKurali.push('check-out gunu yok');
+        }
+        if (gunKurali.length > 0) {
+            parcali.push(gunKurali.join(', '));
+        }
+
+        return parcali.join(' • ');
     }
 
     getRezervasyonDurumLabel(durum: string): string {

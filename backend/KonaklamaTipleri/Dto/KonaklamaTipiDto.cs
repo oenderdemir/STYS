@@ -12,4 +12,6 @@ public class KonaklamaTipiDto : BaseRdbmsDto<int>
     public string Ad { get; set; } = string.Empty;
 
     public bool AktifMi { get; set; } = true;
+
+    public List<KonaklamaTipiIcerikDto> IcerikKalemleri { get; set; } = [];
 }

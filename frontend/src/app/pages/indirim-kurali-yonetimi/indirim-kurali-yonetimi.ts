@@ -14,6 +14,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
+import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { IndirimKuraliDialog, SelectOption } from './indirim-kurali-dialog';
@@ -343,5 +344,3 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
         return 'Beklenmeyen bir hata olustu.';
     }
 }
-
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

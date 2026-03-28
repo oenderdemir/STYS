@@ -22,6 +22,10 @@ public class RezervasyonDetayDto
 
     public DateTime CikisTarihi { get; set; }
 
+    public string? KonaklamaTipiAdi { get; set; }
+
+    public List<RezervasyonKonaklamaTipiIcerikDto> KonaklamaTipiIcerikKalemleri { get; set; } = [];
+
     public decimal KonaklamaUcreti { get; set; }
 
     public decimal EkHizmetToplami { get; set; }
@@ -31,6 +35,8 @@ public class RezervasyonDetayDto
     public decimal ToplamUcret { get; set; }
 
     public string ParaBirimi { get; set; } = "TRY";
+
+    public List<RezervasyonKonaklamaHakkiDto> KonaklamaHaklari { get; set; } = [];
 
     public List<UygulananIndirimDto> UygulananIndirimler { get; set; } = [];
 

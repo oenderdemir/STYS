@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
@@ -35,8 +35,9 @@ export class OdaFiyatYonetimiService {
         );
     }
 
-    getKonaklamaTipleri(): Observable<KonaklamaTipiDto[]> {
-        return this.http.get<ApiResponse<KonaklamaTipiDto[]>>(`${this.apiBaseUrl}/ui/konaklamatipi`).pipe(
+    getKonaklamaTipleri(tesisId: number): Observable<KonaklamaTipiDto[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<KonaklamaTipiDto[]>>(`${this.apiBaseUrl}/ui/konaklamatipi`, { params }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;

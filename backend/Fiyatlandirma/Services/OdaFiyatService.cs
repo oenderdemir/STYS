@@ -94,6 +94,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
     {
         ValidateRequest(request);
         var odaTipi = await EnsureCanAccessOdaTipiAsync(request.TesisOdaTipiId, cancellationToken);
+        await EnsureTesisHasMisafirTipiAsync(odaTipi.TesisId, request.MisafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(odaTipi.TesisId, request.KonaklamaTipiId, cancellationToken);
         var hedefTarih = (request.Tarih ?? DateTime.UtcNow).Date;
 
@@ -219,6 +220,23 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         return odaTipi;
     }
 
+    private async Task EnsureTesisHasMisafirTipiAsync(int tesisId, int misafirTipiId, CancellationToken cancellationToken)
+    {
+        var exists = await _stysDbContext.TesisMisafirTipleri.AnyAsync(x =>
+            x.TesisId == tesisId
+            && x.MisafirTipiId == misafirTipiId
+            && x.AktifMi
+            && !x.IsDeleted
+            && x.MisafirTipi != null
+            && x.MisafirTipi.AktifMi,
+            cancellationToken);
+
+        if (!exists)
+        {
+            throw new BaseException("Secilen misafir tipi ilgili tesiste kullanima acik degil.", 400);
+        }
+    }
+
     private async Task EnsureReferencesAsync(IEnumerable<OdaFiyatDto> fiyatlar, int tesisId, CancellationToken cancellationToken)
     {
         var konaklamaTipiIds = fiyatlar.Select(x => x.KonaklamaTipiId).Distinct().ToList();
@@ -259,6 +277,20 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         if (existingMisafirTipiIds.Count != misafirTipiIds.Count)
         {
             throw new BaseException("Gecersiz veya pasif misafir tipi secildi.", 400);
+        }
+
+        var tesisMisafirTipiIds = await _stysDbContext.TesisMisafirTipleri
+            .Where(x => x.TesisId == tesisId
+                && x.AktifMi
+                && !x.IsDeleted
+                && misafirTipiIds.Contains(x.MisafirTipiId))
+            .Select(x => x.MisafirTipiId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (tesisMisafirTipiIds.Count != misafirTipiIds.Count)
+        {
+            throw new BaseException("Secilen misafir tiplerinden biri ilgili tesiste kullanima acik degil.", 400);
         }
 
         if (existingOdaTipiIds.Count != odaTipiIds.Count)

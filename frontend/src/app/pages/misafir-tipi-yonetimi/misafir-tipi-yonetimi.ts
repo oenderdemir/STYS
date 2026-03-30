@@ -1,207 +1,172 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, Observable } from 'rxjs';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { Router } from '@angular/router';
+import { finalize } from 'rxjs';
+import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
-import { ConfirmDialogModule } from 'primeng/confirmdialog';
-import { IconFieldModule } from 'primeng/iconfield';
-import { InputIconModule } from 'primeng/inputicon';
-import { InputTextModule } from 'primeng/inputtext';
+import { CheckboxModule } from 'primeng/checkbox';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
-import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
+import { tryReadApiMessage } from '../../core/api';
+import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import { MisafirTipiDialog } from './misafir-tipi-dialog';
-import { MisafirTipiDto } from './misafir-tipi-yonetimi.dto';
+import { MisafirTipiTesisAtamaDto } from './misafir-tipi-yonetimi.dto';
 import { MisafirTipiYonetimiService } from './misafir-tipi-yonetimi.service';
 
 @Component({
     selector: 'app-misafir-tipi-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MisafirTipiDialog],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './misafir-tipi-yonetimi.html',
-    providers: [MessageService, ConfirmationService]
+    styles: [`
+        .misafir-page {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .misafir-section {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid #dbe4ee;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .section-subtitle {
+            margin-top: 0.35rem;
+            color: #64748b;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            max-width: 48rem;
+        }
+
+        .assignment-controls {
+            display: grid;
+            grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: end;
+            margin-bottom: 1rem;
+        }
+
+        .assignment-note {
+            display: flex;
+            align-items: end;
+            min-height: 100%;
+        }
+
+        :host ::ng-deep .misafir-table .p-datatable-wrapper {
+            overflow: auto;
+        }
+
+        :host ::ng-deep .misafir-table .p-datatable-table {
+            width: 100%;
+        }
+
+        :host ::ng-deep .misafir-table .p-datatable-thead > tr > th {
+            white-space: nowrap;
+        }
+
+        :host ::ng-deep .misafir-table .p-datatable-tbody > tr > td {
+            vertical-align: top;
+        }
+
+        @media (max-width: 991px) {
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .assignment-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    `],
+    providers: [MessageService]
 })
-export class MisafirTipiYonetimi implements OnDestroy {
+export class MisafirTipiYonetimi implements OnInit {
     private readonly service = inject(MisafirTipiYonetimiService);
     private readonly authService = inject(AuthService);
+    private readonly router = inject(Router);
     private readonly messageService = inject(MessageService);
-    private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
 
-    misafirTipleri: MisafirTipiDto[] = [];
-    selectedMisafirTipi: MisafirTipiDto = this.getEmptyModel();
-    loading = false;
-    saving = false;
-    dialogVisible = false;
-    dialogMode: CrudDialogMode = 'create';
-    pageNumber = 1;
-    pageSize = 10;
-    totalRecords = 0;
-    searchQuery = '';
-    sortBy = 'ad';
-    sortDir: SortDirection = 'asc';
+    tesisAtamalari: MisafirTipiTesisAtamaDto[] = [];
+    selectedTesisId: number | null = null;
+    tesisSecenekleri: Array<{ label: string; value: number }> = [];
 
-    private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+    loadingBaglam = false;
+    loadingAtamalar = false;
+    savingAtamalar = false;
 
-    get canManage(): boolean {
-        return this.authService.hasPermission('MisafirTipiYonetimi.Manage');
+    get canManageAssignments(): boolean {
+        return this.hasAnyPermission('MisafirTipiTesisAtamaYonetimi.Manage', 'MisafirTipiYonetimi.Manage') && !!this.selectedTesisId;
     }
 
-    ngOnDestroy(): void {
-        if (this.searchDebounceHandle !== null) {
-            clearTimeout(this.searchDebounceHandle);
-            this.searchDebounceHandle = null;
-        }
+    get canViewGlobalDefinitions(): boolean {
+        return this.hasAnyPermission('MisafirTipiTanimYonetimi.View', 'MisafirTipiYonetimi.View');
     }
 
-    onLazyLoad(event: LazyLoadPayload): void {
-        const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
-        const nextFirst = event.first && event.first >= 0 ? event.first : 0;
-        const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
-        const sort = resolveSortFromLazyPayload(event, this.sortBy, this.sortDir);
-        if (this.loading && nextPageNumber === this.pageNumber && nextPageSize === this.pageSize && sort.sortBy === this.sortBy && sort.sortDir === this.sortDir) {
-            return;
-        }
-        this.pageNumber = nextPageNumber;
-        this.pageSize = nextPageSize;
-        this.sortBy = sort.sortBy;
-        this.sortDir = sort.sortDir;
-        this.loadMisafirTipleri(this.pageNumber, this.pageSize);
-    }
-
-    onSearchInput(event: Event): void {
-        const value = (event.target as HTMLInputElement).value;
-        this.searchQuery = value;
-
-        if (this.searchDebounceHandle !== null) {
-            clearTimeout(this.searchDebounceHandle);
-        }
-
-        this.searchDebounceHandle = setTimeout(() => {
-            this.pageNumber = 1;
-            this.loadMisafirTipleri(this.pageNumber, this.pageSize);
-            this.searchDebounceHandle = null;
-        }, 300);
+    ngOnInit(): void {
+        this.loadPageContext();
     }
 
     refresh(): void {
-        this.loadMisafirTipleri(this.pageNumber, this.pageSize);
+        this.loadPageContext();
     }
 
-    openNew(): void {
-        if (!this.canManage) {
+    onTesisChange(): void {
+        this.loadTesisAtamalari();
+    }
+
+    openGlobalDefinitions(): void {
+        void this.router.navigate(['/misafir-tipi-tanimlari']);
+    }
+
+    toggleTesisAtamasi(item: MisafirTipiTesisAtamaDto, checked: boolean): void {
+        item.tesisteKullanilabilirMi = checked;
+    }
+
+    kaydetTesisAtamalari(): void {
+        if (!this.canManageAssignments || !this.selectedTesisId || this.savingAtamalar) {
             return;
         }
 
-        this.selectedMisafirTipi = this.getEmptyModel();
-        this.dialogMode = 'create';
-        this.dialogVisible = true;
-    }
+        const misafirTipiIds = this.tesisAtamalari
+            .filter((x) => x.tesisteKullanilabilirMi && x.globalAktifMi)
+            .map((x) => x.misafirTipiId);
 
-    openEdit(item: MisafirTipiDto): void {
-        if (!this.canManage) {
-            return;
-        }
-
-        this.selectedMisafirTipi = { ...item };
-        this.dialogMode = 'edit';
-        this.dialogVisible = true;
-    }
-
-    openView(item: MisafirTipiDto): void {
-        this.selectedMisafirTipi = { ...item };
-        this.dialogMode = 'view';
-        this.dialogVisible = true;
-    }
-
-    onDialogSave(payload: MisafirTipiDto): void {
-        if (this.saving || !this.canManage) {
-            return;
-        }
-
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedMisafirTipi.id
-                ? this.service.updateMisafirTipi(this.selectedMisafirTipi.id, payload)
-                : this.service.createMisafirTipi(payload);
-
-        this.saving = true;
-        save$
-            .pipe(
-                finalize(() => {
-                    this.saving = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: () => {
-                    this.dialogVisible = false;
-                    this.loadMisafirTipleri(this.pageNumber, this.pageSize);
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: this.dialogMode === 'edit' ? 'Misafir tipi guncellendi.' : 'Misafir tipi olusturuldu.' });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
-    deleteMisafirTipi(item: MisafirTipiDto): void {
-        if (!this.canManage || !item.id) {
-            return;
-        }
-
-        this.confirmationService.confirm({
-            message: `"${item.ad}" kaydini silmek istediginize emin misiniz?`,
-            header: 'Silme Onayi',
-            icon: 'pi pi-exclamation-triangle',
-            acceptButtonStyleClass: 'p-button-danger',
-            rejectButtonStyleClass: 'p-button-secondary',
-            acceptLabel: 'Evet',
-            rejectLabel: 'Hayir',
-            accept: () => {
-                this.service.deleteMisafirTipi(item.id!).subscribe({
-                    next: () => {
-                        this.loadMisafirTipleri(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Misafir tipi silindi.' });
-                        this.cdr.detectChanges();
-                    },
-                    error: (error: unknown) => {
-                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                        this.cdr.detectChanges();
-                    }
-                });
-            }
-        });
-    }
-
-    private loadMisafirTipleri(pageNumber: number, pageSize: number): void {
-        this.loading = true;
+        this.savingAtamalar = true;
         this.service
-            .getMisafirTipleriPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir)
-            .pipe(
-                finalize(() => {
-                    this.loading = false;
-                    this.cdr.detectChanges();
-                })
-            )
+            .kaydetTesisAtamalari(this.selectedTesisId, misafirTipiIds)
+            .pipe(finalize(() => {
+                this.savingAtamalar = false;
+                this.cdr.detectChanges();
+            }))
             .subscribe({
-                next: (pagedResponse) => {
-                    if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
-                        this.pageNumber = pagedResponse.totalPages;
-                        this.loadMisafirTipleri(this.pageNumber, this.pageSize);
-                        return;
-                    }
-
-                    this.misafirTipleri = pagedResponse.items;
-                    this.pageNumber = pagedResponse.pageNumber;
-                    this.pageSize = pagedResponse.pageSize;
-                    this.totalRecords = pagedResponse.totalCount;
+                next: (items) => {
+                    this.tesisAtamalari = items;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Tesis misafir tipi atamalari kaydedildi.' });
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -209,6 +174,75 @@ export class MisafirTipiYonetimi implements OnDestroy {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    trackByMisafirTipi(index: number, item: MisafirTipiTesisAtamaDto): number {
+        return item.misafirTipiId;
+    }
+
+    private loadPageContext(): void {
+        this.loadingBaglam = true;
+        this.service
+            .getYonetimBaglam()
+            .pipe(finalize(() => {
+                this.loadingBaglam = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (baglam) => {
+                    this.tesisSecenekleri = baglam.tesisler
+                        .map((x) => ({ label: x.ad, value: x.id }))
+                        .sort((a, b) => a.label.localeCompare(b.label));
+
+                    if (this.selectedTesisId && !this.tesisSecenekleri.some((x) => x.value === this.selectedTesisId)) {
+                        this.selectedTesisId = null;
+                    }
+
+                    if (!this.selectedTesisId) {
+                        this.selectedTesisId = this.tesisSecenekleri[0]?.value ?? null;
+                    }
+
+                    this.loadTesisAtamalari();
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.tesisSecenekleri = [];
+                    this.selectedTesisId = null;
+                    this.tesisAtamalari = [];
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadTesisAtamalari(): void {
+        if (!this.selectedTesisId) {
+            this.tesisAtamalari = [];
+            return;
+        }
+
+        this.loadingAtamalar = true;
+        this.service
+            .getTesisAtamalari(this.selectedTesisId)
+            .pipe(finalize(() => {
+                this.loadingAtamalar = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (items) => {
+                    this.tesisAtamalari = items;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.tesisAtamalari = [];
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private hasAnyPermission(...permissions: string[]): boolean {
+        return permissions.some((permission) => this.authService.hasPermission(permission));
     }
 
     private resolveErrorMessage(error: unknown): string {
@@ -225,14 +259,4 @@ export class MisafirTipiYonetimi implements OnDestroy {
 
         return 'Beklenmeyen bir hata olustu.';
     }
-
-    private getEmptyModel(): MisafirTipiDto {
-        return {
-            kod: '',
-            ad: '',
-            aktifMi: true
-        };
-    }
 }
-
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

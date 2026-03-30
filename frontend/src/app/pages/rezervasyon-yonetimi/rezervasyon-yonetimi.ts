@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { EMPTY, finalize, forkJoin, Observable, switchMap } from 'rxjs';
+import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -392,8 +392,10 @@ export class RezervasyonYonetimi implements OnInit {
     onTesisChange(): void {
         if (!this.selectedTesisId || this.selectedTesisId <= 0) {
             this.odaTipleri = [];
+            this.misafirTipleri = [];
             this.konaklamaTipleri = [];
             this.selectedOdaTipiId = null;
+            this.selectedMisafirTipiId = null;
             this.selectedKonaklamaTipiId = null;
             this.senaryolar = [];
             this.rezervasyonKayitlari = [];
@@ -403,6 +405,7 @@ export class RezervasyonYonetimi implements OnInit {
 
         this.applySelectedTesisDateTimes();
         this.loadOdaTipleri(this.selectedTesisId, true);
+        this.loadMisafirTipleriByTesis(this.selectedTesisId);
         this.loadKonaklamaTipleriByTesis(this.selectedTesisId);
         this.loadRezervasyonKayitlari(this.selectedTesisId);
     }
@@ -2565,10 +2568,7 @@ export class RezervasyonYonetimi implements OnInit {
 
     private loadReferences(): void {
         this.loadingReferences = true;
-        forkJoin({
-            tesisler: this.service.getTesisler(),
-            misafirTipleri: this.service.getMisafirTipleri()
-        })
+        this.service.getTesisler()
             .pipe(
                 finalize(() => {
                     this.loadingReferences = false;
@@ -2576,9 +2576,8 @@ export class RezervasyonYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ tesisler, misafirTipleri }) => {
+                next: (tesisler) => {
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
-                    this.misafirTipleri = [...misafirTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
 
                     if (this.selectedTesisId && !this.tesisler.some((x) => x.id === this.selectedTesisId)) {
                         this.selectedTesisId = null;
@@ -2588,16 +2587,9 @@ export class RezervasyonYonetimi implements OnInit {
                         this.selectedTesisId = this.tesisler[0].id;
                     }
 
-                    if (this.selectedMisafirTipiId && !this.misafirTipleri.some((x) => x.id === this.selectedMisafirTipiId)) {
-                        this.selectedMisafirTipiId = null;
-                    }
-
-                    if (!this.selectedMisafirTipiId && this.misafirTipleri.length > 0) {
-                        this.selectedMisafirTipiId = this.misafirTipleri[0].id;
-                    }
-
                     if (this.selectedTesisId && this.selectedTesisId > 0) {
                         this.applySelectedTesisDateTimes();
+                        this.loadMisafirTipleriByTesis(this.selectedTesisId);
                         this.loadOdaTipleri(this.selectedTesisId);
                         this.loadKonaklamaTipleriByTesis(this.selectedTesisId);
                         this.loadRezervasyonKayitlari(this.selectedTesisId);
@@ -2605,8 +2597,10 @@ export class RezervasyonYonetimi implements OnInit {
                     }
 
                     this.odaTipleri = [];
+                    this.misafirTipleri = [];
                     this.konaklamaTipleri = [];
                     this.selectedOdaTipiId = null;
+                    this.selectedMisafirTipiId = null;
                     this.selectedKonaklamaTipiId = null;
                     this.senaryolar = [];
                     this.rezervasyonKayitlari = [];
@@ -2637,6 +2631,30 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private loadMisafirTipleriByTesis(tesisId: number): void {
+        this.service.getMisafirTipleri(tesisId).subscribe({
+            next: (misafirTipleri) => {
+                this.misafirTipleri = [...misafirTipleri].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+
+                if (this.selectedMisafirTipiId && !this.misafirTipleri.some((x) => x.id === this.selectedMisafirTipiId)) {
+                    this.selectedMisafirTipiId = null;
+                }
+
+                if (!this.selectedMisafirTipiId && this.misafirTipleri.length > 0) {
+                    this.selectedMisafirTipiId = this.misafirTipleri[0].id;
+                }
+
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.misafirTipleri = [];
+                this.selectedMisafirTipiId = null;
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private loadKonaklamaTipleriByTesis(tesisId: number): void {

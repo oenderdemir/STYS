@@ -64,8 +64,9 @@ export class RezervasyonYonetimiService {
         );
     }
 
-    getMisafirTipleri(): Observable<RezervasyonMisafirTipiDto[]> {
-        return this.http.get<ApiResponse<RezervasyonMisafirTipiDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/misafir-tipleri`).pipe(
+    getMisafirTipleri(tesisId: number): Observable<RezervasyonMisafirTipiDto[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<RezervasyonMisafirTipiDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/misafir-tipleri`, { params }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;

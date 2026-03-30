@@ -1,219 +1,71 @@
 <p-toast />
 
-<p-toolbar styleClass="mb-4">
-    <ng-template #start>
-        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingReferences || loadingTesisData" (onClick)="refresh()" />
-    </ng-template>
-</p-toolbar>
-
-<div class="card">
-    <h5 class="m-0 mb-3">Ek Hizmet Yonetimi</h5>
-
-    <div class="grid grid-cols-12 gap-4 mb-4">
-        <div class="col-span-12 md:col-span-6 lg:col-span-4">
-            <label for="ekHizmetTesis" class="block font-medium mb-2">Tesis</label>
-            <p-select
-                inputId="ekHizmetTesis"
-                class="w-full"
-                [options]="tesisler"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedTesisId"
-                [appendTo]="'body'"
-                [filter]="true"
-                [showClear]="false"
-                [disabled]="loadingReferences || loadingTesisData || savingHizmetler || savingTarifeler"
-                (onChange)="onTesisChange()"
-            />
-        </div>
-    </div>
-
-    <div class="grid grid-cols-12 gap-4">
-        <div class="col-span-12 2xl:col-span-5">
-            <div class="border rounded-lg p-3 h-full">
-                <div class="flex justify-between items-center mb-3">
-                    <div>
-                        <h6 class="m-0">Hizmet Tanimlari</h6>
-                        <small class="text-color-secondary">Tesisin sundugu hizmetleri tanimlayin.</small>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <p-button
-                            label="Yeni Hizmet"
-                            icon="pi pi-plus"
-                            severity="secondary"
-                            [outlined]="true"
-                            [disabled]="!canManage || !hasTesisSelection"
-                            (onClick)="addHizmetRow()"
-                        />
-                        <p-button
-                            label="Hizmetleri Kaydet"
-                            icon="pi pi-check"
-                            [loading]="savingHizmetler"
-                            [disabled]="!canManage || !hasTesisSelection || loadingReferences || loadingTesisData || savingTarifeler"
-                            (onClick)="saveHizmetler()"
-                        />
-                        <p-button
-                            [label]="hizmetPanelExpanded ? 'Gizle' : 'Goster'"
-                            [icon]="hizmetPanelExpanded ? 'pi pi-angle-up' : 'pi pi-angle-down'"
-                            severity="secondary"
-                            [text]="true"
-                            (onClick)="toggleHizmetPanel()"
-                        />
-                    </div>
-                </div>
-
-                @if (hizmetPanelExpanded) {
-                    <p-table
-                        styleClass="ek-hizmet-table"
-                        [value]="hizmetler"
-                        [loading]="loadingTesisData"
-                        [scrollable]="true"
-                        scrollDirection="horizontal"
-                        [tableStyle]="{ 'min-width': '48rem' }"
-                    >
-                        <ng-template #header>
-                            <tr>
-                                <th style="min-width: 12rem">Hizmet Adi</th>
-                                <th style="min-width: 16rem">Aciklama</th>
-                                <th style="min-width: 8rem">Birim</th>
-                                <th style="min-width: 12rem">Paket Eslesmesi</th>
-                                <th style="width: 5rem">Aktif</th>
-                                <th style="width: 5rem">Sil</th>
-                            </tr>
-                        </ng-template>
-                        <ng-template #body let-row let-rowIndex="rowIndex">
-                            <tr>
-                                <td><input pInputText class="cell-input" [(ngModel)]="row.ad" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td>
-                                    <textarea pInputTextarea rows="3" class="cell-input" [(ngModel)]="row.aciklama" [disabled]="!canManage || savingHizmetler || savingTarifeler"></textarea>
-                                </td>
-                                <td><input pInputText class="cell-input" [(ngModel)]="row.birimAdi" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td>
-                                    <p-select
-                                        class="cell-select"
-                                        [options]="paketIcerikSecenekleri"
-                                        optionLabel="label"
-                                        optionValue="value"
-                                        [(ngModel)]="row.paketIcerikHizmetKodu"
-                                        [appendTo]="'body'"
-                                        [disabled]="!canManage || savingHizmetler || savingTarifeler"
-                                    />
-                                </td>
-                                <td class="text-center">
-                                    <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingHizmetler || savingTarifeler" />
-                                </td>
-                                <td class="text-center">
-                                    <p-button icon="pi pi-trash" severity="danger" [text]="true" [disabled]="!canManage || savingHizmetler || savingTarifeler" (onClick)="removeHizmetRow(rowIndex)" />
-                                </td>
-                            </tr>
-                        </ng-template>
-                        <ng-template #emptymessage>
-                            <tr>
-                                <td colspan="6" class="text-center text-color-secondary">Bu tesis icin tanimli ek hizmet bulunmuyor.</td>
-                            </tr>
-                        </ng-template>
-                    </p-table>
-                } @else {
-                    <div class="text-sm text-color-secondary py-2">Hizmet tanimlari paneli kapali.</div>
-                }
+<div class="page-shell">
+    <p-toolbar>
+        <ng-template #start>
+            <div class="toolbar-links">
+                <p-button label="Yeni Tarife" icon="pi pi-plus" [disabled]="!canManage || !hasTesisSelection" (onClick)="addTarifeRow()" />
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingReferences || loadingTesisData || savingTarifeler" (onClick)="refresh()" />
             </div>
-        </div>
-
-        <div class="col-span-12 2xl:col-span-7">
-            <div class="border rounded-lg p-3 h-full">
-                <div class="flex justify-between items-center mb-3">
-                    <div>
-                        <h6 class="m-0">Fiyat Tarifeleri</h6>
-                        <small class="text-color-secondary">Hizmet tanimlarini tarih bazli fiyat araliklarina baglayin.</small>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <p-button
-                            label="Yeni Tarife"
-                            icon="pi pi-calendar-plus"
-                            severity="secondary"
-                            [outlined]="true"
-                            [disabled]="!canManage || !hasTesisSelection || hizmetSecenekleri.length === 0"
-                            (onClick)="addTarifeRow()"
-                        />
-                        <p-button
-                            label="Tarifeleri Kaydet"
-                            icon="pi pi-money-bill"
-                            [loading]="savingTarifeler"
-                            [disabled]="!canManage || !hasTesisSelection || loadingReferences || loadingTesisData || savingHizmetler"
-                            (onClick)="saveTarifeler()"
-                        />
-                        <p-button
-                            [label]="tarifePanelExpanded ? 'Gizle' : 'Goster'"
-                            [icon]="tarifePanelExpanded ? 'pi pi-angle-up' : 'pi pi-angle-down'"
-                            severity="secondary"
-                            [text]="true"
-                            (onClick)="toggleTarifePanel()"
-                        />
-                    </div>
-                </div>
-
-                @if (tarifePanelExpanded) {
-                    <p-table
-                        styleClass="ek-hizmet-table"
-                        [value]="tarifeler"
-                        [loading]="loadingTesisData"
-                        [scrollable]="true"
-                        scrollDirection="horizontal"
-                        [tableStyle]="{ 'min-width': '58rem' }"
-                    >
-                        <ng-template #header>
-                            <tr>
-                                <th style="min-width: 14rem">Hizmet</th>
-                                <th style="min-width: 8rem">Fiyat</th>
-                                <th style="min-width: 5rem">PB</th>
-                                <th style="min-width: 11rem">Baslangic</th>
-                                <th style="min-width: 11rem">Bitis</th>
-                                <th style="width: 5rem">Aktif</th>
-                                <th style="width: 5rem">Sil</th>
-                            </tr>
-                        </ng-template>
-                        <ng-template #body let-row let-rowIndex="rowIndex">
-                            <tr>
-                                <td>
-                                    <p-select
-                                        class="cell-select"
-                                        [options]="hizmetSecenekleri"
-                                        optionLabel="ad"
-                                        optionValue="id"
-                                        [(ngModel)]="row.ekHizmetId"
-                                        [appendTo]="'body'"
-                                        [filter]="true"
-                                        [showClear]="false"
-                                        [disabled]="!canManage || savingHizmetler || savingTarifeler || hizmetSecenekleri.length === 0"
-                                    />
-                                    @if (row.ekHizmetId) {
-                                        <div class="text-xs text-color-secondary mt-1 compact-help">
-                                            {{ getTarifeHizmetLabel(row) }}
-                                        </div>
-                                    }
-                                </td>
-                                <td><input pInputText class="cell-input" type="number" min="0" step="0.01" [(ngModel)]="row.birimFiyat" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td><input pInputText class="cell-input" maxlength="3" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || savingHizmetler || savingTarifeler" /></td>
-                                <td class="text-center">
-                                    <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingHizmetler || savingTarifeler" />
-                                </td>
-                                <td class="text-center">
-                                    <p-button icon="pi pi-trash" severity="danger" [text]="true" [disabled]="!canManage || savingHizmetler || savingTarifeler" (onClick)="removeTarifeRow(rowIndex)" />
-                                </td>
-                            </tr>
-                        </ng-template>
-                        <ng-template #emptymessage>
-                            <tr>
-                                <td colspan="7" class="text-center text-color-secondary">Bu tesis icin tanimli fiyat tarifesi bulunmuyor.</td>
-                            </tr>
-                        </ng-template>
-                    </p-table>
-                } @else {
-                    <div class="text-sm text-color-secondary py-2">Fiyat tarifeleri paneli kapali.</div>
+        </ng-template>
+        <ng-template #end>
+            <div class="toolbar-links">
+                @if (canViewDefinitions) {
+                    <p-button label="Global Tanimlar" icon="pi pi-globe" severity="secondary" [outlined]="true" (onClick)="openDefinitions()" />
                 }
+                @if (canViewAssignments) {
+                    <p-button label="Tesis Atamalari" icon="pi pi-sitemap" severity="secondary" [outlined]="true" (onClick)="openAssignments()" />
+                }
+                <p-button label="Tarifeleri Kaydet" icon="pi pi-check" [loading]="savingTarifeler" [disabled]="!canManage || !hasTesisSelection || loadingReferences || loadingTesisData" (onClick)="saveTarifeler()" />
             </div>
+        </ng-template>
+    </p-toolbar>
+
+    <div class="page-card">
+        <h5 class="page-title">Ek Hizmet Tarifeleri</h5>
+        <div class="page-subtitle">Tesis bazli fiyat araliklarini yonetin. Bu ekranda sadece ilgili tesise atanmis aktif hizmetler listelenir.</div>
+
+        <div class="selection-grid">
+            <div>
+                <label for="ekHizmetTarifeTesis" class="block font-medium mb-2">Tesis</label>
+                <p-select inputId="ekHizmetTarifeTesis" class="w-full" [options]="tesisler" optionLabel="ad" optionValue="id" [(ngModel)]="selectedTesisId" [appendTo]="'body'" [filter]="true" [showClear]="false" [disabled]="loadingReferences || loadingTesisData || savingTarifeler" (onChange)="onTesisChange()" />
+            </div>
+            <div class="text-sm text-color-secondary">Atama yapilmayan veya pasif kalan hizmetler bu listede gorunmez. Tarife tanimlayamiyorsaniz once tesis atama ekranini kontrol edin.</div>
         </div>
+
+        <p-table styleClass="ek-hizmet-table mt-4" [value]="tarifeler" [loading]="loadingTesisData" [scrollable]="true" scrollDirection="horizontal" [tableStyle]="{ 'min-width': '58rem' }">
+            <ng-template #header>
+                <tr>
+                    <th style="min-width: 14rem">Hizmet</th>
+                    <th style="min-width: 8rem">Fiyat</th>
+                    <th style="min-width: 5rem">PB</th>
+                    <th style="min-width: 11rem">Baslangic</th>
+                    <th style="min-width: 11rem">Bitis</th>
+                    <th style="width: 5rem">Aktif</th>
+                    <th style="width: 5rem">Sil</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-row let-rowIndex="rowIndex">
+                <tr>
+                    <td>
+                        <p-select class="cell-select" [options]="hizmetSecenekleri" optionLabel="ad" optionValue="id" [(ngModel)]="row.ekHizmetId" [appendTo]="'body'" [filter]="true" [showClear]="false" [disabled]="!canManage || savingTarifeler || hizmetSecenekleri.length === 0" />
+                        @if (row.ekHizmetId) {
+                            <div class="text-xs text-color-secondary mt-1 compact-help">{{ getTarifeHizmetLabel(row) }}</div>
+                        }
+                    </td>
+                    <td><input pInputText class="cell-input" type="number" min="0" step="0.01" [(ngModel)]="row.birimFiyat" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td><input pInputText class="cell-input" maxlength="3" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td class="text-center"><p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td class="text-center"><p-button icon="pi pi-trash" severity="danger" [text]="true" [disabled]="!canManage || savingTarifeler" (onClick)="removeTarifeRow(rowIndex)" /></td>
+                </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+                <tr>
+                    <td colspan="7" class="text-center text-color-secondary">Bu tesis icin tanimli fiyat tarifesi bulunmuyor.</td>
+                </tr>
+            </ng-template>
+        </p-table>
     </div>
 </div>

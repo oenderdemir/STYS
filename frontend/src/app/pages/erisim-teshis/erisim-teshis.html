@@ -205,6 +205,19 @@
 
         <div class="col-span-12 xl:col-span-5">
             <div class="teshis-card mb-4">
+                <div class="mini-title mb-3">Menu Gorunurlugu</div>
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <p-tag [value]="sonuc.menuGorunumu.menuKaydiBulundu ? 'Menu Kaydi Var' : 'Menu Kaydi Yok'" [severity]="sonuc.menuGorunumu.menuKaydiBulundu ? 'success' : 'danger'" />
+                    <p-tag [value]="sonuc.menuGorunumu.sidebardaGorunur ? 'Sidebarda Gorunur' : 'Sidebarda Gorunmez'" [severity]="sonuc.menuGorunumu.sidebardaGorunur ? 'success' : 'warn'" />
+                    <p-tag [value]="sonuc.menuGorunumu.menuYetkisiVar ? 'Menu Yetkisi Var' : 'Menu Yetkisi Yok'" [severity]="sonuc.menuGorunumu.menuYetkisiVar ? 'success' : 'danger'" />
+                </div>
+                <div class="text-sm mb-2">
+                    <strong>Menu Yolu:</strong> {{ sonuc.menuGorunumu.menuYolu }}
+                </div>
+                <p class="m-0 text-color-secondary">{{ sonuc.menuGorunumu.aciklama }}</p>
+            </div>
+
+            <div class="teshis-card mb-4">
                 <div class="mini-title mb-3">Onerilen Aksiyonlar</div>
                 <ul class="recommendation-list">
                     @for (aksiyon of sonuc.onerilenAksiyonlar; track aksiyon) {

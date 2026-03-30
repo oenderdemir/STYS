@@ -1,0 +1,93 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManageGlobal) {
+            <p-button label="Yeni Konaklama Tipi" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        @if (canViewAssignments) {
+            <p-button label="Tesis Atamalarina Git" icon="pi pi-building" class="mr-2" severity="secondary" [outlined]="true" (onClick)="openAssignments()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="page-shell">
+    <section class="page-card">
+        <div class="caption-tools">
+            <div>
+                <h5 class="section-title">Global Konaklama Tipi Tanimlari</h5>
+                <div class="section-subtitle">Konaklama tiplerinin ana tanimlari ve paket icerikleri burada tutulur. Tesis bazli kullanima acma ayri atama ekranindan yapilir.</div>
+            </div>
+            <p-iconfield class="search-box">
+                <p-inputicon styleClass="pi pi-search" />
+                <input pInputText type="text" class="w-full" [ngModel]="searchQuery" placeholder="Ad veya kod ara..." (input)="onSearchInput($event)" />
+            </p-iconfield>
+        </div>
+
+        <p-table
+            styleClass="konaklama-table"
+            [value]="konaklamaTipleri"
+            [loading]="loading"
+            dataKey="id"
+            [lazy]="true"
+            (onLazyLoad)="onLazyLoad($event)"
+            sortMode="single"
+            [paginator]="true"
+            [rows]="pageSize"
+            [first]="(pageNumber - 1) * pageSize"
+            [rowsPerPageOptions]="[10, 20, 50]"
+            [totalRecords]="totalRecords"
+            [tableStyle]="{ 'min-width': '56rem', width: '100%' }"
+            currentPageReportTemplate="{first} - {last} / {totalRecords}"
+            [showCurrentPageReport]="true"
+        >
+            <ng-template #header>
+                <tr>
+                    <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
+                    <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
+                    <th>Paket Icerigi</th>
+                    <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
+                    <th style="width: 18rem">Islem</th>
+                </tr>
+            </ng-template>
+
+            <ng-template #body let-item>
+                <tr>
+                    <td>{{ item.kod }}</td>
+                    <td>{{ item.ad }}</td>
+                    <td>
+                        @if (item.icerikKalemleri.length === 0) {
+                            <span class="text-color-secondary">Tanimlanmadi</span>
+                        } @else {
+                            <div class="flex flex-wrap gap-1">
+                                @for (icerik of item.icerikKalemleri; track $index) {
+                                    <p-tag severity="secondary" [value]="icerik.hizmetAdi + ' x' + icerik.miktar + ' • ' + icerik.kullanimNoktasiAdi" />
+                                }
+                            </div>
+                        }
+                    </td>
+                    <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>
+                    <td>
+                        <div class="flex gap-2">
+                            <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(item)" />
+                            <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                            <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteKonaklamaTipi(item)" />
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </section>
+</div>
+
+<app-konaklama-tipi-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedKonaklamaTipi"
+    [saving]="saving"
+    [canManage]="canManageGlobal"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>

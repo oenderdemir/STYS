@@ -1,79 +1,75 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin } from 'rxjs';
+import { Router } from '@angular/router';
+import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { InputTextModule } from 'primeng/inputtext';
-import { TextareaModule } from 'primeng/textarea';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
+import { forkJoin } from 'rxjs';
 import { tryReadApiMessage } from '../../core/api';
+import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import { KonaklamaTipiIcerikHizmetSecenekleri } from '../konaklama-tipi-yonetimi/konaklama-tipi-icerik.constants';
-import { EkHizmetDto, EkHizmetFormRow, EkHizmetTarifeDto, EkHizmetTanimFormRow, EkHizmetTesisDto } from './ek-hizmet-yonetimi.dto';
+import { EkHizmetDto, EkHizmetFormRow, EkHizmetTarifeDto, EkHizmetTesisDto } from './ek-hizmet-yonetimi.dto';
 import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 
 @Component({
     selector: 'app-ek-hizmet-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, TextareaModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-yonetimi.html',
     styles: [`
-        :host ::ng-deep .ek-hizmet-table .p-datatable-table {
-            min-width: 100%;
-        }
-
-        :host ::ng-deep .ek-hizmet-table .p-datatable-thead > tr > th,
-        :host ::ng-deep .ek-hizmet-table .p-datatable-tbody > tr > td {
-            vertical-align: top;
-        }
-
-        :host ::ng-deep .ek-hizmet-table .cell-input,
-        :host ::ng-deep .ek-hizmet-table .cell-select {
-            width: 100%;
-            min-width: 0;
-        }
-
-        :host ::ng-deep .ek-hizmet-table .cell-select .p-select {
-            width: 100%;
-        }
-
-        :host ::ng-deep .ek-hizmet-table .compact-help {
-            line-height: 1.2;
-            word-break: break-word;
-        }
+        .page-shell { display: flex; flex-direction: column; gap: 1.25rem; }
+        .page-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); }
+        .page-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+        .page-subtitle { margin-top: 0.35rem; color: #64748b; font-size: 0.92rem; line-height: 1.45; }
+        .toolbar-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .selection-grid { display: grid; grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr); gap: 1rem; margin-top: 1rem; align-items: end; }
+        .cell-input, .cell-select { width: 100%; }
+        .compact-help { line-height: 1.35; }
+        :host ::ng-deep .ek-hizmet-table .p-datatable-wrapper { overflow: auto; }
+        :host ::ng-deep .ek-hizmet-table .p-datatable-table { width: 100%; }
+        :host ::ng-deep .ek-hizmet-table .p-datatable-thead > tr > th { white-space: nowrap; }
+        @media (max-width: 991px) { .selection-grid { grid-template-columns: 1fr; } }
     `],
     providers: [MessageService]
 })
 export class EkHizmetYonetimi implements OnInit {
     private readonly service = inject(EkHizmetYonetimiService);
     private readonly authService = inject(AuthService);
+    private readonly router = inject(Router);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
     tesisler: EkHizmetTesisDto[] = [];
-    hizmetler: EkHizmetTanimFormRow[] = [];
-    tarifeler: EkHizmetFormRow[] = [];
     selectedTesisId: number | null = null;
+    tarifeler: EkHizmetFormRow[] = [];
+    hizmetSecenekleri: EkHizmetDto[] = [];
+
     loadingReferences = false;
     loadingTesisData = false;
-    savingHizmetler = false;
     savingTarifeler = false;
-    hizmetPanelExpanded = true;
-    tarifePanelExpanded = true;
-    readonly paketIcerikSecenekleri = [{ label: 'Yok', value: null }, ...KonaklamaTipiIcerikHizmetSecenekleri];
-
-    get canManage(): boolean {
-        return this.authService.hasPermission('EkHizmetYonetimi.Manage');
-    }
 
     get hasTesisSelection(): boolean {
         return !!this.selectedTesisId;
+    }
+
+    get canManage(): boolean {
+        return this.authService.hasPermission('EkHizmetTarifeYonetimi.Manage');
+    }
+
+    get canViewDefinitions(): boolean {
+        return this.authService.hasPermission('EkHizmetTanimYonetimi.View');
+    }
+
+    get canViewAssignments(): boolean {
+        return this.authService.hasPermission('EkHizmetTesisAtamaYonetimi.View');
     }
 
     ngOnInit(): void {
@@ -88,55 +84,32 @@ export class EkHizmetYonetimi implements OnInit {
         this.loadTesisData();
     }
 
-    toggleHizmetPanel(): void {
-        this.hizmetPanelExpanded = !this.hizmetPanelExpanded;
+    openDefinitions(): void {
+        void this.router.navigate(['/ek-hizmet-tanimlari']);
     }
 
-    toggleTarifePanel(): void {
-        this.tarifePanelExpanded = !this.tarifePanelExpanded;
-    }
-
-    addHizmetRow(): void {
-        if (!this.canManage) {
-            return;
-        }
-
-        this.hizmetPanelExpanded = true;
-        this.hizmetler = [
-            ...this.hizmetler,
-            {
-                ad: '',
-                aciklama: null,
-                birimAdi: 'Adet',
-                paketIcerikHizmetKodu: null,
-                aktifMi: true
-            }
-        ];
-    }
-
-    removeHizmetRow(index: number): void {
-        if (!this.canManage) {
-            return;
-        }
-
-        this.hizmetler = this.hizmetler.filter((_, i) => i !== index);
+    openAssignments(): void {
+        void this.router.navigate(['/ek-hizmet-atamalari']);
     }
 
     addTarifeRow(): void {
-        if (!this.canManage) {
+        if (!this.canManage || !this.selectedTesisId) {
             return;
         }
 
-        this.tarifePanelExpanded = true;
-        const today = this.todayInput();
+        if (this.hizmetSecenekleri.length === 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Once ilgili tesis icin en az bir ek hizmet atamasi yapmalisiniz.' });
+            return;
+        }
+
         this.tarifeler = [
             ...this.tarifeler,
             {
                 ekHizmetId: this.hizmetSecenekleri[0]?.id ?? null,
                 birimFiyat: 0,
                 paraBirimi: 'TRY',
-                baslangicTarihi: today,
-                bitisTarihi: today,
+                baslangicTarihi: '',
+                bitisTarihi: '',
                 aktifMi: true
             }
         ];
@@ -150,61 +123,12 @@ export class EkHizmetYonetimi implements OnInit {
         this.tarifeler = this.tarifeler.filter((_, i) => i !== index);
     }
 
-    saveHizmetler(): void {
-        if (!this.canManage || this.savingHizmetler || !this.selectedTesisId) {
-            return;
-        }
-
-        const validationError = this.validateHizmetRows();
-        if (validationError) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: validationError });
-            return;
-        }
-
-        const payload = this.hizmetler.map((row) => ({
-            id: row.id ?? null,
-            tesisId: this.selectedTesisId!,
-            ad: row.ad.trim(),
-            aciklama: this.normalizeOptional(row.aciklama),
-            birimAdi: row.birimAdi.trim(),
-            paketIcerikHizmetKodu: row.paketIcerikHizmetKodu,
-            aktifMi: row.aktifMi
-        })) satisfies EkHizmetDto[];
-
-        this.savingHizmetler = true;
-        this.service
-            .upsertHizmetler(this.selectedTesisId, payload)
-            .pipe(
-                finalize(() => {
-                    this.savingHizmetler = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (items) => {
-                    this.hizmetler = items.map((item) => this.toHizmetFormRow(item));
-                    this.reconcileTarifeSelections();
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Ek hizmet tanimlari kaydedildi.' });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
     saveTarifeler(): void {
-        if (!this.canManage || this.savingTarifeler || !this.selectedTesisId) {
+        if (!this.canManage || !this.selectedTesisId || this.savingTarifeler) {
             return;
         }
 
-        if (this.hizmetSecenekleri.length === 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Once en az bir ek hizmet tanimi kaydetmelisiniz.' });
-            return;
-        }
-
-        const validationError = this.validateTarifeRows();
+        const validationError = this.validateTarifeler();
         if (validationError) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: validationError });
             return;
@@ -213,26 +137,24 @@ export class EkHizmetYonetimi implements OnInit {
         const payload = this.tarifeler.map((row) => ({
             id: row.id ?? null,
             tesisId: this.selectedTesisId!,
-            ekHizmetId: row.ekHizmetId!,
+            ekHizmetId: row.ekHizmetId,
             ekHizmetAdi: '',
             ekHizmetAciklama: null,
             birimAdi: '',
             birimFiyat: row.birimFiyat ?? 0,
             paraBirimi: (row.paraBirimi || 'TRY').trim().toUpperCase(),
-            baslangicTarihi: this.toIsoDate(row.baslangicTarihi),
-            bitisTarihi: this.toIsoDate(row.bitisTarihi),
+            baslangicTarihi: row.baslangicTarihi,
+            bitisTarihi: row.bitisTarihi,
             aktifMi: row.aktifMi
-        })) satisfies EkHizmetTarifeDto[];
+        } as EkHizmetTarifeDto));
 
         this.savingTarifeler = true;
         this.service
             .upsertTarifeler(this.selectedTesisId, payload)
-            .pipe(
-                finalize(() => {
-                    this.savingTarifeler = false;
-                    this.cdr.detectChanges();
-                })
-            )
+            .pipe(finalize(() => {
+                this.savingTarifeler = false;
+                this.cdr.detectChanges();
+            }))
             .subscribe({
                 next: (items) => {
                     this.tarifeler = items.map((item) => this.toTarifeFormRow(item));
@@ -246,48 +168,27 @@ export class EkHizmetYonetimi implements OnInit {
             });
     }
 
-    trackByIndex(index: number): number {
-        return index;
-    }
-
-    get hizmetSecenekleri(): EkHizmetDto[] {
-        return this.hizmetler
-            .map((row) => ({
-                id: row.id ?? null,
-                tesisId: this.selectedTesisId ?? 0,
-                ad: row.ad,
-                aciklama: row.aciklama,
-                birimAdi: row.birimAdi,
-                paketIcerikHizmetKodu: row.paketIcerikHizmetKodu,
-                aktifMi: row.aktifMi
-            }))
-            .filter((row) => !!row.id && !!row.ad?.trim())
-            .sort((a, b) => a.ad.localeCompare(b.ad));
-    }
-
     getTarifeHizmetLabel(row: EkHizmetFormRow): string {
         const hizmet = this.hizmetSecenekleri.find((item) => item.id === row.ekHizmetId);
-        if (!hizmet) {
-            return '-';
-        }
-
-        return `${hizmet.ad} (${hizmet.birimAdi})`;
+        return hizmet ? `${hizmet.ad} (${hizmet.birimAdi})` : '-';
     }
 
     private loadReferences(): void {
         this.loadingReferences = true;
         this.service
             .getTesisler()
-            .pipe(
-                finalize(() => {
-                    this.loadingReferences = false;
-                    this.cdr.detectChanges();
-                })
-            )
+            .pipe(finalize(() => {
+                this.loadingReferences = false;
+                this.cdr.detectChanges();
+            }))
             .subscribe({
-                next: (items) => {
-                    this.tesisler = [...items].sort((a, b) => a.ad.localeCompare(b.ad));
-                    if (!this.selectedTesisId || !this.tesisler.some((x) => x.id === this.selectedTesisId)) {
+                next: (tesisler) => {
+                    this.tesisler = tesisler;
+                    if (this.selectedTesisId && !this.tesisler.some((x) => x.id === this.selectedTesisId)) {
+                        this.selectedTesisId = null;
+                    }
+
+                    if (!this.selectedTesisId) {
                         this.selectedTesisId = this.tesisler[0]?.id ?? null;
                     }
 
@@ -295,6 +196,10 @@ export class EkHizmetYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
+                    this.tesisler = [];
+                    this.selectedTesisId = null;
+                    this.hizmetSecenekleri = [];
+                    this.tarifeler = [];
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
                 }
@@ -303,7 +208,7 @@ export class EkHizmetYonetimi implements OnInit {
 
     private loadTesisData(): void {
         if (!this.selectedTesisId) {
-            this.hizmetler = [];
+            this.hizmetSecenekleri = [];
             this.tarifeler = [];
             return;
         }
@@ -313,21 +218,18 @@ export class EkHizmetYonetimi implements OnInit {
             hizmetler: this.service.getHizmetlerByTesis(this.selectedTesisId),
             tarifeler: this.service.getTarifelerByTesis(this.selectedTesisId)
         })
-            .pipe(
-                finalize(() => {
-                    this.loadingTesisData = false;
-                    this.cdr.detectChanges();
-                })
-            )
+            .pipe(finalize(() => {
+                this.loadingTesisData = false;
+                this.cdr.detectChanges();
+            }))
             .subscribe({
                 next: ({ hizmetler, tarifeler }) => {
-                    this.hizmetler = hizmetler.map((item) => this.toHizmetFormRow(item));
+                    this.hizmetSecenekleri = hizmetler;
                     this.tarifeler = tarifeler.map((item) => this.toTarifeFormRow(item));
-                    this.reconcileTarifeSelections();
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.hizmetler = [];
+                    this.hizmetSecenekleri = [];
                     this.tarifeler = [];
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
@@ -335,100 +237,60 @@ export class EkHizmetYonetimi implements OnInit {
             });
     }
 
-    private reconcileTarifeSelections(): void {
-        const validIds = this.hizmetSecenekleri.map((x) => x.id).filter((id): id is number => !!id);
-        this.tarifeler = this.tarifeler.map((row) => ({
-            ...row,
-            ekHizmetId: row.ekHizmetId && validIds.includes(row.ekHizmetId) ? row.ekHizmetId : null
-        }));
-    }
-
-    private toHizmetFormRow(dto: EkHizmetDto): EkHizmetTanimFormRow {
+    private toTarifeFormRow(item: EkHizmetTarifeDto): EkHizmetFormRow {
         return {
-            id: dto.id ?? null,
-            ad: dto.ad,
-            aciklama: dto.aciklama,
-            birimAdi: dto.birimAdi,
-            paketIcerikHizmetKodu: dto.paketIcerikHizmetKodu,
-            aktifMi: dto.aktifMi
+            id: item.id ?? null,
+            ekHizmetId: item.ekHizmetId,
+            birimFiyat: item.birimFiyat,
+            paraBirimi: item.paraBirimi,
+            baslangicTarihi: this.toInputDate(item.baslangicTarihi),
+            bitisTarihi: this.toInputDate(item.bitisTarihi),
+            aktifMi: item.aktifMi
         };
     }
 
-    private toTarifeFormRow(dto: EkHizmetTarifeDto): EkHizmetFormRow {
-        return {
-            id: dto.id ?? null,
-            ekHizmetId: dto.ekHizmetId,
-            birimFiyat: dto.birimFiyat,
-            paraBirimi: dto.paraBirimi,
-            baslangicTarihi: this.normalizeDateInput(dto.baslangicTarihi),
-            bitisTarihi: this.normalizeDateInput(dto.bitisTarihi),
-            aktifMi: dto.aktifMi
-        };
+    private toInputDate(value: string): string {
+        return value ? value.slice(0, 10) : '';
     }
 
-    private validateHizmetRows(): string | null {
-        const names = new Set<string>();
-
-        for (let i = 0; i < this.hizmetler.length; i++) {
-            const row = this.hizmetler[i];
-            const lineNo = i + 1;
-            const normalizedName = row.ad?.trim().toLocaleLowerCase('tr-TR');
-
-            if (!row.ad?.trim()) {
-                return `${lineNo}. hizmet satiri: Hizmet adi zorunludur.`;
-            }
-
-            if (!row.birimAdi?.trim()) {
-                return `${lineNo}. hizmet satiri: Birim adi zorunludur.`;
-            }
-
-            if (normalizedName && names.has(normalizedName)) {
-                return `${lineNo}. hizmet satiri: Ayni isimle birden fazla hizmet tanimi olamaz.`;
-            }
-
-            if (normalizedName) {
-                names.add(normalizedName);
-            }
+    private validateTarifeler(): string | null {
+        if (!this.selectedTesisId) {
+            return 'Tesis secimi zorunludur.';
         }
 
-        return null;
-    }
+        const validIds = this.hizmetSecenekleri.map((x) => x.id).filter((id): id is number => typeof id === 'number');
+        const rows = this.tarifeler.map((row, index) => ({ ...row, lineNo: index + 1 }));
 
-    private validateTarifeRows(): string | null {
-        const groupedRows = new Map<number, Array<{ start: number; end: number; lineNo: number }>>();
-
-        for (let i = 0; i < this.tarifeler.length; i++) {
-            const row = this.tarifeler[i];
-            const lineNo = i + 1;
-
-            if (!row.ekHizmetId || row.ekHizmetId <= 0) {
-                return `${lineNo}. tarife satiri: Gecerli bir ek hizmet seciniz.`;
+        for (const row of rows) {
+            if (!row.ekHizmetId || !validIds.includes(row.ekHizmetId)) {
+                return `${row.lineNo}. tarife satiri: Gecerli bir ek hizmet seciniz.`;
             }
 
-            if (row.birimFiyat === null || Number.isNaN(Number(row.birimFiyat)) || Number(row.birimFiyat) < 0) {
-                return `${lineNo}. tarife satiri: Gecerli bir birim fiyat giriniz.`;
+            if (row.birimFiyat === null || row.birimFiyat < 0) {
+                return `${row.lineNo}. tarife satiri: Gecerli bir birim fiyat giriniz.`;
             }
 
             if (!row.baslangicTarihi || !row.bitisTarihi) {
-                return `${lineNo}. tarife satiri: Baslangic ve bitis tarihleri zorunludur.`;
+                return `${row.lineNo}. tarife satiri: Baslangic ve bitis tarihleri zorunludur.`;
             }
 
-            const start = new Date(row.baslangicTarihi).getTime();
-            const end = new Date(row.bitisTarihi).getTime();
-            if (start > end) {
-                return `${lineNo}. tarife satiri: Baslangic tarihi bitis tarihinden buyuk olamaz.`;
+            if (row.baslangicTarihi > row.bitisTarihi) {
+                return `${row.lineNo}. tarife satiri: Baslangic tarihi bitis tarihinden buyuk olamaz.`;
             }
-
-            const rows = groupedRows.get(row.ekHizmetId) ?? [];
-            rows.push({ start, end, lineNo });
-            groupedRows.set(row.ekHizmetId, rows);
         }
 
-        for (const [, rows] of groupedRows) {
-            rows.sort((a, b) => a.start - b.start || a.end - b.end);
-            for (let i = 1; i < rows.length; i++) {
-                if (rows[i].start <= rows[i - 1].end) {
-                    return `${rows[i].lineNo}. tarife satiri: Ayni hizmet icin cakisan tarih araligi tanimlanamaz.`;
+        const groups = new Map<number, typeof rows>();
+        for (const row of rows) {
+            const list = groups.get(row.ekHizmetId!) ?? [];
+            list.push(row);
+            groups.set(row.ekHizmetId!, list);
+        }
+
+        for (const rowsForService of groups.values()) {
+            const ordered = [...rowsForService].sort((a, b) => a.baslangicTarihi.localeCompare(b.baslangicTarihi) || a.bitisTarihi.localeCompare(b.bitisTarihi));
+            for (let i = 1; i < ordered.length; i++) {
+                if (ordered[i].baslangicTarihi <= ordered[i - 1].bitisTarihi) {
+                    return `${ordered[i].lineNo}. tarife satiri: Ayni hizmet icin cakisan tarih araligi tanimlanamaz.`;
                 }
             }
         }
@@ -436,28 +298,18 @@ export class EkHizmetYonetimi implements OnInit {
         return null;
     }
 
-    private normalizeDateInput(value: string): string {
-        return value ? value.slice(0, 10) : this.todayInput();
-    }
-
-    private toIsoDate(value: string): string {
-        return new Date(value).toISOString();
-    }
-
-    private todayInput(): string {
-        return new Date().toISOString().slice(0, 10);
-    }
-
-    private normalizeOptional(value: string | null | undefined): string | null {
-        const normalized = value?.trim();
-        return normalized ? normalized : null;
-    }
-
     private resolveErrorMessage(error: unknown): string {
-        if (error instanceof Error && error.message) {
+        if (error instanceof HttpErrorResponse) {
+            const apiMessage = tryReadApiMessage(error.error);
+            if (apiMessage) {
+                return apiMessage;
+            }
+        }
+
+        if (error instanceof Error && error.message.trim().length > 0) {
             return error.message;
         }
 
-        return tryReadApiMessage(error) ?? 'Beklenmeyen bir hata olustu.';
+        return 'Beklenmeyen bir hata olustu.';
     }
 }

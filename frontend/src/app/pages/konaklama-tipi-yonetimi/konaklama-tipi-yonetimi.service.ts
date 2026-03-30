@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KonaklamaTipiDto, KonaklamaTipiTesisAtamaDto, KonaklamaTipiYonetimBaglamDto } from './konaklama-tipi-yonetimi.dto';
+import { KonaklamaTipiDto, KonaklamaTipiTesisAtamaDto, KonaklamaTipiTesisIcerikOverrideDto, KonaklamaTipiYonetimBaglamDto } from './konaklama-tipi-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KonaklamaTipiYonetimiService {
@@ -89,6 +89,30 @@ export class KonaklamaTipiYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis konaklama tipi atamalari kaydedilemedi.');
+            })
+        );
+    }
+
+    getTesisIcerikOverride(tesisId: number, konaklamaTipiId: number): Observable<KonaklamaTipiTesisIcerikOverrideDto[]> {
+        return this.http.get<ApiResponse<KonaklamaTipiTesisIcerikOverrideDto[]>>(`${this.apiBaseUrl}/ui/konaklamatipi/tesis/${tesisId}/atamalar/${konaklamaTipiId}/icerik-override`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis icerik override bilgileri alinamadi.');
+            })
+        );
+    }
+
+    kaydetTesisIcerikOverride(tesisId: number, konaklamaTipiId: number, icerikKalemleri: KonaklamaTipiTesisIcerikOverrideDto[]): Observable<KonaklamaTipiTesisIcerikOverrideDto[]> {
+        return this.http.put<ApiResponse<KonaklamaTipiTesisIcerikOverrideDto[]>>(`${this.apiBaseUrl}/ui/konaklamatipi/tesis/${tesisId}/atamalar/${konaklamaTipiId}/icerik-override`, { icerikKalemleri }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis icerik override bilgileri kaydedilemedi.');
             })
         );
     }

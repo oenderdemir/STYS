@@ -34,9 +34,9 @@ public class RezervasyonController : UIController
 
     [HttpGet("misafir-tipleri")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
-    public async Task<ActionResult<List<RezervasyonMisafirTipiDto>>> GetMisafirTipleri(CancellationToken cancellationToken)
+    public async Task<ActionResult<List<RezervasyonMisafirTipiDto>>> GetMisafirTipleri([FromQuery] int tesisId, CancellationToken cancellationToken)
     {
-        var misafirTipleri = await _rezervasyonService.GetMisafirTipleriAsync(cancellationToken);
+        var misafirTipleri = await _rezervasyonService.GetMisafirTipleriAsync(tesisId, cancellationToken);
         return Ok(misafirTipleri);
     }
 

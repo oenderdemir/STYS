@@ -12,6 +12,7 @@ using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri;
+using STYS.KonaklamaTipleri.Entities;
 using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
@@ -88,10 +89,22 @@ public class RezervasyonService : IRezervasyonService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<RezervasyonMisafirTipiDto>> GetMisafirTipleriAsync(CancellationToken cancellationToken = default)
+    public async Task<List<RezervasyonMisafirTipiDto>> GetMisafirTipleriAsync(int tesisId, CancellationToken cancellationToken = default)
     {
+        if (tesisId <= 0)
+        {
+            return [];
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
         return await _stysDbContext.MisafirTipleri
-            .Where(x => x.AktifMi)
+            .Where(x => x.AktifMi
+                && _stysDbContext.TesisMisafirTipleri.Any(y =>
+                    y.TesisId == tesisId
+                    && y.MisafirTipiId == x.Id
+                    && y.AktifMi
+                    && !y.IsDeleted))
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
             .Select(x => new RezervasyonMisafirTipiDto
@@ -123,52 +136,21 @@ public class RezervasyonService : IRezervasyonService
             .Select(x => new
             {
                 x.Id,
-                x.Ad,
-                IcerikKalemleri = x.IcerikKalemleri
-                    .Where(y => !y.IsDeleted)
-                    .OrderBy(y => y.HizmetKodu)
-                    .ThenBy(y => y.Id)
-                    .Select(y => new
-                    {
-                        y.HizmetKodu,
-                        y.Miktar,
-                        y.Periyot,
-                        y.KullanimTipi,
-                        y.KullanimNoktasi,
-                        y.KullanimBaslangicSaati,
-                        y.KullanimBitisSaati,
-                        y.CheckInGunuGecerliMi,
-                        y.CheckOutGunuGecerliMi,
-                        y.Aciklama
-                    })
-                    .ToList()
+                x.Ad
             })
             .ToListAsync(cancellationToken);
+
+        var effectiveIcerikMap = await GetEffectiveKonaklamaTipiIcerikMapAsync(
+            tesisId,
+            rawItems.Select(x => x.Id).ToList(),
+            cancellationToken);
 
         return rawItems
             .Select(x => new RezervasyonKonaklamaTipiDto
             {
                 Id = x.Id,
                 Ad = x.Ad,
-                IcerikKalemleri = x.IcerikKalemleri
-                    .Select(y => new RezervasyonKonaklamaTipiIcerikDto
-                    {
-                        HizmetKodu = y.HizmetKodu,
-                        HizmetAdi = KonaklamaTipiIcerikHizmetKodlari.GetAd(y.HizmetKodu),
-                        Miktar = y.Miktar,
-                        Periyot = y.Periyot,
-                        PeriyotAdi = KonaklamaTipiIcerikPeriyotlari.GetAd(y.Periyot),
-                        KullanimTipi = y.KullanimTipi,
-                        KullanimTipiAdi = KonaklamaTipiIcerikKullanimTipleri.GetAd(y.KullanimTipi),
-                        KullanimNoktasi = y.KullanimNoktasi,
-                        KullanimNoktasiAdi = KonaklamaTipiIcerikKullanimNoktalari.GetAd(y.KullanimNoktasi),
-                        KullanimBaslangicSaati = FormatTime(y.KullanimBaslangicSaati),
-                        KullanimBitisSaati = FormatTime(y.KullanimBitisSaati),
-                        CheckInGunuGecerliMi = y.CheckInGunuGecerliMi,
-                        CheckOutGunuGecerliMi = y.CheckOutGunuGecerliMi,
-                        Aciklama = y.Aciklama
-                    })
-                    .ToList()
+                IcerikKalemleri = effectiveIcerikMap.GetValueOrDefault(x.Id, [])
             })
             .ToList();
     }
@@ -187,6 +169,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        await EnsureTesisHasMisafirTipiAsync(tesisId, misafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(tesisId, konaklamaTipiId, cancellationToken);
         if (baslangicTarihi >= bitisTarihi)
         {
@@ -613,25 +596,8 @@ public class RezervasyonService : IRezervasyonService
                 x.MisafirAdiSoyadi,
                 x.MisafirCinsiyeti,
                 x.KisiSayisi,
+                x.KonaklamaTipiId,
                 KonaklamaTipiAdi = x.KonaklamaTipi != null ? x.KonaklamaTipi.Ad : null,
-                KonaklamaTipiIcerikKalemleri = x.KonaklamaTipi!.IcerikKalemleri
-                    .Where(y => !y.IsDeleted)
-                    .OrderBy(y => y.HizmetKodu)
-                    .ThenBy(y => y.Id)
-                    .Select(y => new
-                    {
-                        HizmetKodu = y.HizmetKodu,
-                        Miktar = y.Miktar,
-                        Periyot = y.Periyot,
-                        KullanimTipi = y.KullanimTipi,
-                        KullanimNoktasi = y.KullanimNoktasi,
-                        y.KullanimBaslangicSaati,
-                        y.KullanimBitisSaati,
-                        y.CheckInGunuGecerliMi,
-                        y.CheckOutGunuGecerliMi,
-                        Aciklama = y.Aciklama
-                    })
-                    .ToList(),
                 x.GirisTarihi,
                 x.CikisTarihi,
                 x.ToplamBazUcret,
@@ -718,6 +684,10 @@ public class RezervasyonService : IRezervasyonService
         var ekHizmetler = await GetEkHizmetlerAsync(rezervasyonId, cancellationToken);
         var ekHizmetToplami = ekHizmetler.Sum(x => x.ToplamTutar);
         var tuketimNoktalari = await GetTuketimNoktalariAsync(raw.TesisId, cancellationToken);
+        var konaklamaTipiIcerikKalemleri = raw.KonaklamaTipiId.HasValue
+            ? (await GetEffectiveKonaklamaTipiIcerikMapAsync(raw.TesisId, [raw.KonaklamaTipiId.Value], cancellationToken))
+                .GetValueOrDefault(raw.KonaklamaTipiId.Value, [])
+            : [];
 
         return new RezervasyonDetayDto
         {
@@ -729,25 +699,7 @@ public class RezervasyonService : IRezervasyonService
             MisafirCinsiyeti = raw.MisafirCinsiyeti,
             KisiSayisi = raw.KisiSayisi,
             KonaklamaTipiAdi = raw.KonaklamaTipiAdi,
-            KonaklamaTipiIcerikKalemleri = raw.KonaklamaTipiIcerikKalemleri
-                .Select(x => new RezervasyonKonaklamaTipiIcerikDto
-                {
-                    HizmetKodu = x.HizmetKodu,
-                    HizmetAdi = KonaklamaTipiIcerikHizmetKodlari.GetAd(x.HizmetKodu),
-                    Miktar = x.Miktar,
-                    Periyot = x.Periyot,
-                    PeriyotAdi = KonaklamaTipiIcerikPeriyotlari.GetAd(x.Periyot),
-                    KullanimTipi = x.KullanimTipi,
-                    KullanimTipiAdi = KonaklamaTipiIcerikKullanimTipleri.GetAd(x.KullanimTipi),
-                    KullanimNoktasi = x.KullanimNoktasi,
-                    KullanimNoktasiAdi = KonaklamaTipiIcerikKullanimNoktalari.GetAd(x.KullanimNoktasi),
-                    KullanimBaslangicSaati = FormatTime(x.KullanimBaslangicSaati),
-                    KullanimBitisSaati = FormatTime(x.KullanimBitisSaati),
-                    CheckInGunuGecerliMi = x.CheckInGunuGecerliMi,
-                    CheckOutGunuGecerliMi = x.CheckOutGunuGecerliMi,
-                    Aciklama = x.Aciklama
-                })
-                .ToList(),
+            KonaklamaTipiIcerikKalemleri = konaklamaTipiIcerikKalemleri,
             GirisTarihi = raw.GirisTarihi,
             CikisTarihi = raw.CikisTarihi,
             KonaklamaUcreti = raw.ToplamUcret,
@@ -1904,6 +1856,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateScenarioRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await EnsureTesisHasMisafirTipiAsync(request.TesisId, request.MisafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(request.TesisId, request.KonaklamaTipiId, cancellationToken);
         await EnsureSeasonRuleComplianceAsync(request.TesisId, request.BaslangicTarihi, request.BitisTarihi, cancellationToken);
         var guestGenderRequirements = BuildScenarioGuestGenderRequirements(request.KonaklayanCinsiyetleri, request.KisiSayisi);
@@ -2001,6 +1954,7 @@ public class RezervasyonService : IRezervasyonService
     {
         ValidateSaveRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await EnsureTesisHasMisafirTipiAsync(request.TesisId, request.MisafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(request.TesisId, request.KonaklamaTipiId, cancellationToken);
         await EnsureSeasonRuleComplianceAsync(request.TesisId, request.GirisTarihi, request.CikisTarihi, cancellationToken);
         await ValidateAppliedDiscountPermissionsAsync(request, cancellationToken);
@@ -2150,6 +2104,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         var konaklamaHaklari = await BuildKonaklamaHaklariAsync(
+            reservation.TesisId,
             request.KonaklamaTipiId,
             reservation.GirisTarihi,
             reservation.CikisTarihi,
@@ -2824,11 +2779,14 @@ public class RezervasyonService : IRezervasyonService
             .ToListAsync(cancellationToken);
 
         var paketIcerikKodlari = reservation.KonaklamaTipiId.HasValue
-            ? await _stysDbContext.KonaklamaTipiIcerikKalemleri
-                .Where(x => x.KonaklamaTipiId == reservation.KonaklamaTipiId.Value && !x.IsDeleted)
+            ? (await GetEffectiveKonaklamaTipiIcerikMapAsync(
+                    reservation.TesisId,
+                    [reservation.KonaklamaTipiId.Value],
+                    cancellationToken))
+                .GetValueOrDefault(reservation.KonaklamaTipiId.Value, [])
                 .Select(x => x.HizmetKodu)
-                .Distinct()
-                .ToListAsync(cancellationToken)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
             : [];
 
         ApplyEkHizmetPaketIcerigiWarnings(tarifeler, paketIcerikKodlari);
@@ -3492,6 +3450,7 @@ public class RezervasyonService : IRezervasyonService
         CancellationToken cancellationToken)
     {
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        await EnsureTesisHasMisafirTipiAsync(tesisId, misafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(tesisId, konaklamaTipiId, cancellationToken);
         ValidatePricingRequest(tesisId, misafirTipiId, konaklamaTipiId, baslangicTarihi, bitisTarihi, segmentler);
         await EnsureSeasonRuleComplianceAsync(tesisId, baslangicTarihi, bitisTarihi, cancellationToken);
@@ -4736,7 +4695,7 @@ public class RezervasyonService : IRezervasyonService
         return NormalizeStoredKonaklayanKatilimDurumu(katilimDurumu) ?? KonaklayanKatilimDurumlari.Bekleniyor;
     }
 
-    private static string? NormalizeStoredKonaklayanKatilimDurumu(string? katilimDurumu)
+    private static string NormalizeStoredKonaklayanKatilimDurumu(string? katilimDurumu)
     {
         if (string.IsNullOrWhiteSpace(katilimDurumu))
         {
@@ -5684,17 +5643,32 @@ public class RezervasyonService : IRezervasyonService
         }
     }
 
+    private async Task EnsureTesisHasMisafirTipiAsync(int tesisId, int misafirTipiId, CancellationToken cancellationToken)
+    {
+        var exists = await _stysDbContext.TesisMisafirTipleri.AnyAsync(x =>
+            x.TesisId == tesisId
+            && x.MisafirTipiId == misafirTipiId
+            && x.AktifMi
+            && !x.IsDeleted
+            && x.MisafirTipi != null
+            && x.MisafirTipi.AktifMi,
+            cancellationToken);
+
+        if (!exists)
+        {
+            throw new BaseException("Secilen misafir tipi bu tesiste kullanima acik degil.", 400);
+        }
+    }
+
     private async Task<List<RezervasyonKonaklamaHakki>> BuildKonaklamaHaklariAsync(
+        int tesisId,
         int konaklamaTipiId,
         DateTime girisTarihi,
         DateTime cikisTarihi,
         CancellationToken cancellationToken)
     {
-        var icerikKalemleri = await _stysDbContext.KonaklamaTipiIcerikKalemleri
-            .Where(x => x.KonaklamaTipiId == konaklamaTipiId && !x.IsDeleted)
-            .OrderBy(x => x.HizmetKodu)
-            .ThenBy(x => x.Id)
-            .ToListAsync(cancellationToken);
+        var icerikKalemleri = (await GetEffectiveKonaklamaTipiIcerikMapAsync(tesisId, [konaklamaTipiId], cancellationToken))
+            .GetValueOrDefault(konaklamaTipiId, []);
 
         if (icerikKalemleri.Count == 0)
         {
@@ -5720,16 +5694,16 @@ public class RezervasyonService : IRezervasyonService
                     haklar.Add(new RezervasyonKonaklamaHakki
                     {
                         HizmetKodu = item.HizmetKodu,
-                        HizmetAdiSnapshot = KonaklamaTipiIcerikHizmetKodlari.GetAd(item.HizmetKodu),
+                        HizmetAdiSnapshot = item.HizmetAdi,
                         Miktar = item.Miktar,
                         Periyot = item.Periyot,
-                        PeriyotAdiSnapshot = KonaklamaTipiIcerikPeriyotlari.GetAd(item.Periyot),
+                        PeriyotAdiSnapshot = item.PeriyotAdi,
                         KullanimTipi = item.KullanimTipi,
-                        KullanimTipiAdiSnapshot = KonaklamaTipiIcerikKullanimTipleri.GetAd(item.KullanimTipi),
+                        KullanimTipiAdiSnapshot = item.KullanimTipiAdi,
                         KullanimNoktasi = item.KullanimNoktasi,
-                        KullanimNoktasiAdiSnapshot = KonaklamaTipiIcerikKullanimNoktalari.GetAd(item.KullanimNoktasi),
-                        KullanimBaslangicSaati = item.KullanimBaslangicSaati,
-                        KullanimBitisSaati = item.KullanimBitisSaati,
+                        KullanimNoktasiAdiSnapshot = item.KullanimNoktasiAdi,
+                        KullanimBaslangicSaati = ParseTimeOrNull(item.KullanimBaslangicSaati),
+                        KullanimBitisSaati = ParseTimeOrNull(item.KullanimBitisSaati),
                         CheckInGunuGecerliMi = item.CheckInGunuGecerliMi,
                         CheckOutGunuGecerliMi = item.CheckOutGunuGecerliMi,
                         HakTarihi = tarih,
@@ -5745,16 +5719,16 @@ public class RezervasyonService : IRezervasyonService
             haklar.Add(new RezervasyonKonaklamaHakki
             {
                 HizmetKodu = item.HizmetKodu,
-                HizmetAdiSnapshot = KonaklamaTipiIcerikHizmetKodlari.GetAd(item.HizmetKodu),
+                HizmetAdiSnapshot = item.HizmetAdi,
                 Miktar = item.Miktar,
                 Periyot = item.Periyot,
-                PeriyotAdiSnapshot = KonaklamaTipiIcerikPeriyotlari.GetAd(item.Periyot),
+                PeriyotAdiSnapshot = item.PeriyotAdi,
                 KullanimTipi = item.KullanimTipi,
-                KullanimTipiAdiSnapshot = KonaklamaTipiIcerikKullanimTipleri.GetAd(item.KullanimTipi),
+                KullanimTipiAdiSnapshot = item.KullanimTipiAdi,
                 KullanimNoktasi = item.KullanimNoktasi,
-                KullanimNoktasiAdiSnapshot = KonaklamaTipiIcerikKullanimNoktalari.GetAd(item.KullanimNoktasi),
-                KullanimBaslangicSaati = item.KullanimBaslangicSaati,
-                KullanimBitisSaati = item.KullanimBitisSaati,
+                KullanimNoktasiAdiSnapshot = item.KullanimNoktasiAdi,
+                KullanimBaslangicSaati = ParseTimeOrNull(item.KullanimBaslangicSaati),
+                KullanimBitisSaati = ParseTimeOrNull(item.KullanimBitisSaati),
                 CheckInGunuGecerliMi = item.CheckInGunuGecerliMi,
                 CheckOutGunuGecerliMi = item.CheckOutGunuGecerliMi,
                 HakTarihi = girisGun,
@@ -5981,6 +5955,94 @@ public class RezervasyonService : IRezervasyonService
             RezervasyonDurumu = reservation.RezervasyonDurumu
         };
     }
+
+    private async Task<Dictionary<int, List<RezervasyonKonaklamaTipiIcerikDto>>> GetEffectiveKonaklamaTipiIcerikMapAsync(
+        int tesisId,
+        IReadOnlyCollection<int> konaklamaTipiIds,
+        CancellationToken cancellationToken)
+    {
+        if (konaklamaTipiIds.Count == 0)
+        {
+            return [];
+        }
+
+        var globalItems = await _stysDbContext.KonaklamaTipiIcerikKalemleri
+            .Where(x => konaklamaTipiIds.Contains(x.KonaklamaTipiId) && !x.IsDeleted)
+            .OrderBy(x => x.HizmetKodu)
+            .ThenBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                x.KonaklamaTipiId,
+                x.HizmetKodu,
+                x.Miktar,
+                x.Periyot,
+                x.KullanimTipi,
+                x.KullanimNoktasi,
+                x.KullanimBaslangicSaati,
+                x.KullanimBitisSaati,
+                x.CheckInGunuGecerliMi,
+                x.CheckOutGunuGecerliMi,
+                x.Aciklama
+            })
+            .ToListAsync(cancellationToken);
+
+        if (globalItems.Count == 0)
+        {
+            return [];
+        }
+
+        var itemIds = globalItems.Select(x => x.Id).ToList();
+        var overrides = await _stysDbContext.Set<TesisKonaklamaTipiIcerikOverride>()
+            .Where(x => x.TesisId == tesisId
+                && itemIds.Contains(x.KonaklamaTipiIcerikKalemiId)
+                && !x.IsDeleted)
+            .ToDictionaryAsync(x => x.KonaklamaTipiIcerikKalemiId, cancellationToken);
+
+        return globalItems
+            .Select(item =>
+            {
+                overrides.TryGetValue(item.Id, out var overrideItem);
+                if (overrideItem?.DevreDisiMi == true)
+                {
+                    return null;
+                }
+
+                var periyot = overrideItem?.Periyot ?? item.Periyot;
+                var kullanimTipi = overrideItem?.KullanimTipi ?? item.KullanimTipi;
+                var kullanimNoktasi = overrideItem?.KullanimNoktasi ?? item.KullanimNoktasi;
+
+                return new
+                {
+                    item.KonaklamaTipiId,
+                    Icerik = new RezervasyonKonaklamaTipiIcerikDto
+                    {
+                        HizmetKodu = item.HizmetKodu,
+                        HizmetAdi = KonaklamaTipiIcerikHizmetKodlari.GetAd(item.HizmetKodu),
+                        Miktar = overrideItem?.Miktar ?? item.Miktar,
+                        Periyot = periyot,
+                        PeriyotAdi = KonaklamaTipiIcerikPeriyotlari.GetAd(periyot),
+                        KullanimTipi = kullanimTipi,
+                        KullanimTipiAdi = KonaklamaTipiIcerikKullanimTipleri.GetAd(kullanimTipi),
+                        KullanimNoktasi = kullanimNoktasi,
+                        KullanimNoktasiAdi = KonaklamaTipiIcerikKullanimNoktalari.GetAd(kullanimNoktasi),
+                        KullanimBaslangicSaati = FormatTime(overrideItem?.KullanimBaslangicSaati ?? item.KullanimBaslangicSaati),
+                        KullanimBitisSaati = FormatTime(overrideItem?.KullanimBitisSaati ?? item.KullanimBitisSaati),
+                        CheckInGunuGecerliMi = overrideItem?.CheckInGunuGecerliMi ?? item.CheckInGunuGecerliMi,
+                        CheckOutGunuGecerliMi = overrideItem?.CheckOutGunuGecerliMi ?? item.CheckOutGunuGecerliMi,
+                        Aciklama = overrideItem?.Aciklama ?? item.Aciklama
+                    }
+                };
+            })
+            .Where(x => x is not null)
+            .GroupBy(x => x!.KonaklamaTipiId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(x => x!.Icerik).ToList());
+    }
+
+    private static TimeSpan? ParseTimeOrNull(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : TimeSpan.ParseExact(value, @"hh\:mm", null);
 
     private static string? FormatTime(TimeSpan? value)
         => value.HasValue ? value.Value.ToString(@"hh\:mm") : null;

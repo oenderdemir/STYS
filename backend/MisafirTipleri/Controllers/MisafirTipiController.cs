@@ -17,15 +17,56 @@ public class MisafirTipiController : UIController
     }
 
     [HttpGet]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.View)]
-    public async Task<List<MisafirTipiDto>> GetAll()
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.View,
+        StructurePermissions.MisafirTipiTanimYonetimi.View,
+        StructurePermissions.MisafirTipiTesisAtamaYonetimi.View)]
+    public async Task<List<MisafirTipiDto>> GetAll([FromQuery] int? tesisId, CancellationToken cancellationToken)
     {
-        var items = await _misafirTipiService.GetAllAsync();
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _misafirTipiService.GetAktifMisafirTipleriByTesisAsync(tesisId.Value, cancellationToken)
+            : (await _misafirTipiService.GetAllAsync()).ToList();
+
         return items.OrderBy(x => x.Ad).ToList();
     }
 
+    [HttpGet("yonetim-baglam")]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.View,
+        StructurePermissions.MisafirTipiTesisAtamaYonetimi.View)]
+    public async Task<ActionResult<MisafirTipiYonetimBaglamDto>> GetYonetimBaglam(CancellationToken cancellationToken)
+    {
+        var result = await _misafirTipiService.GetYonetimBaglamAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("tesis/{tesisId:int}/atamalar")]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.View,
+        StructurePermissions.MisafirTipiTesisAtamaYonetimi.View)]
+    public async Task<ActionResult<List<MisafirTipiTesisAtamaDto>>> GetTesisAtamalari([FromRoute] int tesisId, CancellationToken cancellationToken)
+    {
+        var result = await _misafirTipiService.GetTesisAtamalariAsync(tesisId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("tesis/{tesisId:int}/atamalar")]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.Manage,
+        StructurePermissions.MisafirTipiTesisAtamaYonetimi.Manage)]
+    public async Task<ActionResult<List<MisafirTipiTesisAtamaDto>>> KaydetTesisAtamalari(
+        [FromRoute] int tesisId,
+        [FromBody] MisafirTipiTesisAtamaKaydetRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _misafirTipiService.KaydetTesisAtamalariAsync(tesisId, request.MisafirTipiIds, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("paged")]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.View)]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.View,
+        StructurePermissions.MisafirTipiTanimYonetimi.View)]
     public async Task<ActionResult<PagedResult<MisafirTipiDto>>> GetPaged(
         [FromQuery] PagedRequest request,
         [FromQuery(Name = "q")] string? query,
@@ -49,7 +90,9 @@ public class MisafirTipiController : UIController
     }
 
     [HttpGet("{id:int}")]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.View)]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.View,
+        StructurePermissions.MisafirTipiTanimYonetimi.View)]
     public async Task<ActionResult<MisafirTipiDto>> GetById(int id)
     {
         var item = await _misafirTipiService.GetByIdAsync(id);
@@ -62,7 +105,9 @@ public class MisafirTipiController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.Manage)]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.Manage,
+        StructurePermissions.MisafirTipiTanimYonetimi.Manage)]
     public async Task<ActionResult<MisafirTipiDto>> Create([FromBody] MisafirTipiDto dto)
     {
         var created = await _misafirTipiService.AddAsync(dto);
@@ -70,7 +115,9 @@ public class MisafirTipiController : UIController
     }
 
     [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.Manage)]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.Manage,
+        StructurePermissions.MisafirTipiTanimYonetimi.Manage)]
     public async Task<ActionResult<MisafirTipiDto>> Update(int id, [FromBody] MisafirTipiDto dto)
     {
         dto.Id = id;
@@ -79,14 +126,16 @@ public class MisafirTipiController : UIController
     }
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.MisafirTipiYonetimi.Manage)]
+    [Permission(
+        StructurePermissions.MisafirTipiYonetimi.Manage,
+        StructurePermissions.MisafirTipiTanimYonetimi.Manage)]
     public async Task<IActionResult> Delete(int id)
     {
         await _misafirTipiService.DeleteAsync(id);
         return Ok();
     }
 
-    private static Func<IQueryable<STYS.MisafirTipleri.Entities.MisafirTipi>, IOrderedQueryable<STYS.MisafirTipleri.Entities.MisafirTipi>>? BuildOrderBy(string? sortBy, string? sortDir)
+    private static Func<IQueryable<MisafirTipleri.Entities.MisafirTipi>, IOrderedQueryable<MisafirTipleri.Entities.MisafirTipi>>? BuildOrderBy(string? sortBy, string? sortDir)
     {
         if (string.IsNullOrWhiteSpace(sortBy))
         {

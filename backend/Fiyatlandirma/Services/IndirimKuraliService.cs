@@ -288,6 +288,23 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
             {
                 throw new BaseException("Gecersiz veya pasif misafir tipi secildi.", 400);
             }
+
+            if (dto.KapsamTipi.Equals(IndirimKapsamTipleri.Tesis, StringComparison.OrdinalIgnoreCase) && dto.TesisId.HasValue)
+            {
+                var tesisMisafirTipiIds = await _stysDbContext.TesisMisafirTipleri
+                    .Where(x => x.TesisId == dto.TesisId.Value
+                        && x.AktifMi
+                        && !x.IsDeleted
+                        && dto.MisafirTipiIds.Contains(x.MisafirTipiId))
+                    .Select(x => x.MisafirTipiId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (tesisMisafirTipiIds.Count != dto.MisafirTipiIds.Distinct().Count())
+                {
+                    throw new BaseException("Secilen misafir tiplerinden biri ilgili tesiste kullanima acik degil.", 400);
+                }
+            }
         }
 
         if (dto.KonaklamaTipiIds.Count > 0)

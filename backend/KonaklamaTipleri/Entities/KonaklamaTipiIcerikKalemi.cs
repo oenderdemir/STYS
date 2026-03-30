@@ -37,4 +37,6 @@ public class KonaklamaTipiIcerikKalemi : BaseEntity<int>
     public string? Aciklama { get; set; }
 
     public KonaklamaTipi? KonaklamaTipi { get; set; }
+
+    public ICollection<TesisKonaklamaTipiIcerikOverride> TesisOverrideKalemleri { get; set; } = [];
 }

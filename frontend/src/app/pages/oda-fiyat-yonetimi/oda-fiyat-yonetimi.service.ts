@@ -48,8 +48,9 @@ export class OdaFiyatYonetimiService {
         );
     }
 
-    getMisafirTipleri(): Observable<MisafirTipiDto[]> {
-        return this.http.get<ApiResponse<MisafirTipiDto[]>>(`${this.apiBaseUrl}/ui/misafirtipi`).pipe(
+    getMisafirTipleri(tesisId: number): Observable<MisafirTipiDto[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<MisafirTipiDto[]>>(`${this.apiBaseUrl}/ui/misafirtipi`, { params }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;

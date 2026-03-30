@@ -8,6 +8,8 @@ public class EkHizmetTarifeProfile : Profile
 {
     public EkHizmetTarifeProfile()
     {
+        CreateMap<GlobalEkHizmetTanimi, GlobalEkHizmetTanimiDto>().ReverseMap();
+
         CreateMap<EkHizmet, EkHizmetDto>().ReverseMap();
 
         CreateMap<EkHizmetTarife, EkHizmetTarifeDto>()

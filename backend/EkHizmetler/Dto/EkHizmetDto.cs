@@ -6,6 +6,8 @@ public class EkHizmetDto : BaseRdbmsDto<int>
 {
     public int TesisId { get; set; }
 
+    public int? GlobalEkHizmetTanimiId { get; set; }
+
     public string Ad { get; set; } = string.Empty;
 
     public string? Aciklama { get; set; }

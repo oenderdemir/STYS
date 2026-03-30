@@ -50,68 +50,176 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<EkHizmetDto>> GetHizmetlerByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default)
+    public async Task<List<GlobalEkHizmetTanimiDto>> GetGlobalTanimlarAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
-
-        var items = await _stysDbContext.EkHizmetler
-            .Where(x => x.TesisId == tesisId)
+        var items = await _stysDbContext.GlobalEkHizmetTanimlari
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        return Mapper.Map<List<EkHizmetDto>>(items);
+        return Mapper.Map<List<GlobalEkHizmetTanimiDto>>(items);
     }
 
-    public async Task<List<EkHizmetDto>> UpsertHizmetlerByTesisAsync(int tesisId, IEnumerable<EkHizmetDto> hizmetler, CancellationToken cancellationToken = default)
+    public async Task<GlobalEkHizmetTanimiDto?> GetGlobalTanimByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
-        var items = (hizmetler ?? []).ToList();
+        var entity = await _stysDbContext.GlobalEkHizmetTanimlari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        return entity is null ? null : Mapper.Map<GlobalEkHizmetTanimiDto>(entity);
+    }
 
-        foreach (var item in items)
-        {
-            item.TesisId = tesisId;
-            Normalize(item);
-        }
+    public async Task<GlobalEkHizmetTanimiDto> AddGlobalTanimAsync(GlobalEkHizmetTanimiDto dto, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanManageGlobalAsync(cancellationToken);
+        Normalize(dto);
+        ValidateGlobalRows([dto]);
+        await EnsureUniqueGlobalAsync(dto, null, cancellationToken);
 
-        ValidateHizmetRows(items);
+        var entity = Mapper.Map<GlobalEkHizmetTanimi>(dto);
+        await _stysDbContext.GlobalEkHizmetTanimlari.AddAsync(entity, cancellationToken);
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return Mapper.Map<GlobalEkHizmetTanimiDto>(entity);
+    }
 
-        var existing = await _stysDbContext.EkHizmetler
-            .Where(x => x.TesisId == tesisId)
+    public async Task<GlobalEkHizmetTanimiDto> UpdateGlobalTanimAsync(int id, GlobalEkHizmetTanimiDto dto, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanManageGlobalAsync(cancellationToken);
+        Normalize(dto);
+        ValidateGlobalRows([dto]);
+        await EnsureUniqueGlobalAsync(dto, id, cancellationToken);
+
+        var entity = await _stysDbContext.GlobalEkHizmetTanimlari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new BaseException("Guncellenecek global ek hizmet tanimi bulunamadi.", 404);
+
+        entity.Ad = dto.Ad;
+        entity.Aciklama = dto.Aciklama;
+        entity.BirimAdi = dto.BirimAdi;
+        entity.PaketIcerikHizmetKodu = dto.PaketIcerikHizmetKodu;
+        entity.AktifMi = dto.AktifMi;
+
+        var assignments = await _stysDbContext.EkHizmetler
+            .Where(x => x.GlobalEkHizmetTanimiId == id)
             .ToListAsync(cancellationToken);
 
-        var existingById = existing.ToDictionary(x => x.Id);
-        foreach (var item in items)
+        foreach (var assignment in assignments)
         {
-            if (item.Id is > 0 && existingById.TryGetValue(item.Id.Value, out var entity))
+            assignment.Ad = entity.Ad;
+            assignment.Aciklama = entity.Aciklama;
+            assignment.BirimAdi = entity.BirimAdi;
+            assignment.PaketIcerikHizmetKodu = entity.PaketIcerikHizmetKodu;
+        }
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return Mapper.Map<GlobalEkHizmetTanimiDto>(entity);
+    }
+
+    public async Task DeleteGlobalTanimAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanManageGlobalAsync(cancellationToken);
+
+        var entity = await _stysDbContext.GlobalEkHizmetTanimlari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new BaseException("Silinecek global ek hizmet tanimi bulunamadi.", 404);
+
+        var hasAssignments = await _stysDbContext.EkHizmetler.AnyAsync(x => x.GlobalEkHizmetTanimiId == id, cancellationToken);
+        if (hasAssignments)
+        {
+            entity.AktifMi = false;
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        _stysDbContext.GlobalEkHizmetTanimlari.Remove(entity);
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<EkHizmetTesisAtamaDto>> GetTesisAtamalariAsync(int tesisId, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var assignments = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId && x.GlobalEkHizmetTanimiId.HasValue)
+            .Select(x => new
             {
-                entity.Ad = item.Ad;
-                entity.Aciklama = item.Aciklama;
-                entity.BirimAdi = item.BirimAdi;
-                entity.PaketIcerikHizmetKodu = item.PaketIcerikHizmetKodu;
-                entity.AktifMi = item.AktifMi;
+                x.GlobalEkHizmetTanimiId,
+                x.AktifMi,
+                TarifeSayisi = x.Tarifeler.Count(t => !t.IsDeleted)
+            })
+            .ToListAsync(cancellationToken);
+
+        var assignmentMap = assignments
+            .Where(x => x.GlobalEkHizmetTanimiId.HasValue)
+            .ToDictionary(x => x.GlobalEkHizmetTanimiId!.Value, x => new { x.AktifMi, x.TarifeSayisi });
+
+        var globals = await _stysDbContext.GlobalEkHizmetTanimlari
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return globals.Select(x => new EkHizmetTesisAtamaDto
+        {
+            GlobalEkHizmetTanimiId = x.Id,
+            Ad = x.Ad,
+            Aciklama = x.Aciklama,
+            BirimAdi = x.BirimAdi,
+            PaketIcerikHizmetKodu = x.PaketIcerikHizmetKodu,
+            GlobalAktifMi = x.AktifMi,
+            TesisteKullanilabilirMi = assignmentMap.ContainsKey(x.Id) && assignmentMap[x.Id].AktifMi,
+            TarifeSayisi = assignmentMap.ContainsKey(x.Id) ? assignmentMap[x.Id].TarifeSayisi : 0
+        }).ToList();
+    }
+
+    public async Task<List<EkHizmetTesisAtamaDto>> KaydetTesisAtamalariAsync(int tesisId, IReadOnlyCollection<int> globalTanimIds, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var hedefIds = (globalTanimIds ?? [])
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        var globals = await _stysDbContext.GlobalEkHizmetTanimlari
+            .Where(x => hedefIds.Contains(x.Id) && x.AktifMi)
+            .ToListAsync(cancellationToken);
+
+        if (globals.Count != hedefIds.Count)
+        {
+            throw new BaseException("Secilen global ek hizmet tanimlarindan biri gecersiz veya pasif.", 400);
+        }
+
+        var mevcutlar = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId && x.GlobalEkHizmetTanimiId.HasValue)
+            .Include(x => x.Tarifeler)
+            .ToListAsync(cancellationToken);
+
+        var mevcutByGlobalId = mevcutlar.ToDictionary(x => x.GlobalEkHizmetTanimiId!.Value);
+        foreach (var global in globals)
+        {
+            if (mevcutByGlobalId.TryGetValue(global.Id, out var mevcut))
+            {
+                mevcut.Ad = global.Ad;
+                mevcut.Aciklama = global.Aciklama;
+                mevcut.BirimAdi = global.BirimAdi;
+                mevcut.PaketIcerikHizmetKodu = global.PaketIcerikHizmetKodu;
+                mevcut.AktifMi = true;
+                mevcut.IsDeleted = false;
                 continue;
             }
 
             await _stysDbContext.EkHizmetler.AddAsync(new EkHizmet
             {
                 TesisId = tesisId,
-                Ad = item.Ad,
-                Aciklama = item.Aciklama,
-                BirimAdi = item.BirimAdi,
-                PaketIcerikHizmetKodu = item.PaketIcerikHizmetKodu,
-                AktifMi = item.AktifMi
+                GlobalEkHizmetTanimiId = global.Id,
+                Ad = global.Ad,
+                Aciklama = global.Aciklama,
+                BirimAdi = global.BirimAdi,
+                PaketIcerikHizmetKodu = global.PaketIcerikHizmetKodu,
+                AktifMi = true
             }, cancellationToken);
         }
 
-        var incomingIds = items.Where(x => x.Id > 0).Select(x => x.Id).ToHashSet();
-        var toRemove = existing.Where(x => !incomingIds.Contains(x.Id)).ToList();
-        if (toRemove.Count > 0)
+        var deselected = mevcutlar.Where(x => !hedefIds.Contains(x.GlobalEkHizmetTanimiId!.Value)).ToList();
+        if (deselected.Count > 0)
         {
-            var ids = toRemove.Select(x => x.Id).ToList();
-            var referencedIds = await GetReferencedEkHizmetIdsAsync(ids, cancellationToken);
-
-            foreach (var entity in toRemove)
+            var referencedIds = await GetReferencedEkHizmetIdsAsync(deselected.Select(x => x.Id).ToList(), cancellationToken);
+            foreach (var entity in deselected)
             {
                 if (referencedIds.Contains(entity.Id))
                 {
@@ -124,7 +232,20 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         }
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
-        return await GetHizmetlerByTesisIdAsync(tesisId, cancellationToken);
+        return await GetTesisAtamalariAsync(tesisId, cancellationToken);
+    }
+
+    public async Task<List<EkHizmetDto>> GetHizmetlerByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var items = await _stysDbContext.EkHizmetler
+            .Where(x => x.TesisId == tesisId && x.AktifMi)
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<EkHizmetDto>>(items);
     }
 
     public async Task<List<EkHizmetTarifeDto>> GetByTesisIdAsync(int tesisId, CancellationToken cancellationToken = default)
@@ -251,7 +372,16 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         return tarifedenGelenler.Concat(rezervasyondanGelenler).ToHashSet();
     }
 
-    private static void Normalize(EkHizmetDto item)
+    private async Task EnsureCanManageGlobalAsync(CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            throw new BaseException("Global ek hizmet tanimlari yalnizca merkez yonetimi tarafindan duzenlenebilir.", 403);
+        }
+    }
+
+    private static void Normalize(GlobalEkHizmetTanimiDto item)
     {
         item.Ad = item.Ad?.Trim() ?? string.Empty;
         item.Aciklama = string.IsNullOrWhiteSpace(item.Aciklama) ? null : item.Aciklama.Trim();
@@ -268,7 +398,7 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         item.BitisTarihi = item.BitisTarihi.Date;
     }
 
-    private static void ValidateHizmetRows(IReadOnlyCollection<EkHizmetDto> items)
+    private static void ValidateGlobalRows(IReadOnlyCollection<GlobalEkHizmetTanimiDto> items)
     {
         foreach (var item in items)
         {
@@ -295,6 +425,20 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
         if (duplicates is not null)
         {
             throw new BaseException($"'{duplicates.Key}' hizmeti birden fazla kez tanimlanamaz.", 400);
+        }
+    }
+
+    private async Task EnsureUniqueGlobalAsync(GlobalEkHizmetTanimiDto item, int? excludedId, CancellationToken cancellationToken)
+    {
+        var normalizedName = item.Ad.Trim();
+        var exists = await _stysDbContext.GlobalEkHizmetTanimlari.AnyAsync(
+            x => x.Ad == normalizedName
+                && (!excludedId.HasValue || x.Id != excludedId.Value),
+            cancellationToken);
+
+        if (exists)
+        {
+            throw new BaseException($"'{item.Ad}' adinda baska bir global ek hizmet tanimi zaten bulunuyor.", 400);
         }
     }
 

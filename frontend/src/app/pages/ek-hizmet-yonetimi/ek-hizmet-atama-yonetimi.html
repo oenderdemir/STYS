@@ -1,0 +1,65 @@
+<p-toast />
+
+<div class="page-shell">
+    <p-toolbar>
+        <ng-template #start>
+            <div class="toolbar-links">
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loadingBaglam || loadingAtamalar || saving" (onClick)="refresh()" />
+            </div>
+        </ng-template>
+        <ng-template #end>
+            <div class="toolbar-links">
+                @if (canViewDefinitions) {
+                    <p-button label="Global Tanimlar" icon="pi pi-globe" severity="secondary" [outlined]="true" (onClick)="openDefinitions()" />
+                }
+                @if (canViewTariffs) {
+                    <p-button label="Tarifeler" icon="pi pi-money-bill" severity="secondary" [outlined]="true" (onClick)="openTariffs()" />
+                }
+                <p-button label="Atamalari Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!canManageAssignments || loadingBaglam || loadingAtamalar" (onClick)="kaydet()" />
+            </div>
+        </ng-template>
+    </p-toolbar>
+
+    <div class="page-card">
+        <h5 class="page-title">Ek Hizmet Tesis Atamalari</h5>
+        <div class="page-subtitle">Tesis yoneticileri sadece kendi tesislerinde hangi global ek hizmetlerin satilabilecegini belirler. Fiyatlar ayri tarife ekraninda yonetilir.</div>
+
+        <div class="assignment-controls">
+            <div>
+                <label for="ekHizmetAtamaTesis" class="block font-medium mb-2">Tesis</label>
+                <p-select inputId="ekHizmetAtamaTesis" class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="selectedTesisId" [appendTo]="'body'" [disabled]="loadingBaglam || loadingAtamalar || saving" (onChange)="onTesisChange()" />
+            </div>
+            <div class="text-sm text-color-secondary">Global tanimlar merkez tarafinda yonetilir. Bu ekranda sadece tesise acik hizmetler secilir.</div>
+        </div>
+
+        <p-table styleClass="ek-hizmet-table mt-4" [value]="atamalar" [loading]="loadingAtamalar" [scrollable]="true" scrollDirection="horizontal" [tableStyle]="{ 'min-width': '60rem' }">
+            <ng-template #header>
+                <tr>
+                    <th style="width: 7rem">Tesiste Var</th>
+                    <th style="width: 7rem">Global Aktif</th>
+                    <th style="min-width: 15rem">Ad</th>
+                    <th style="min-width: 16rem">Aciklama</th>
+                    <th style="min-width: 8rem">Birim</th>
+                    <th style="min-width: 10rem">Paket Eslesmesi</th>
+                    <th style="width: 6rem">Tarife</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-row>
+                <tr>
+                    <td class="text-center"><p-checkbox [binary]="true" [ngModel]="row.tesisteKullanilabilirMi" [disabled]="!canManageAssignments || !row.globalAktifMi || saving" (ngModelChange)="toggleAtama(row, $event)" /></td>
+                    <td><p-tag [value]="row.globalAktifMi ? 'Evet' : 'Hayir'" [severity]="row.globalAktifMi ? 'success' : 'danger'" /></td>
+                    <td>{{ row.ad }}</td>
+                    <td>{{ row.aciklama || '-' }}</td>
+                    <td>{{ row.birimAdi }}</td>
+                    <td>{{ row.paketIcerikHizmetKodu || '-' }}</td>
+                    <td>{{ row.tarifeSayisi }}</td>
+                </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+                <tr>
+                    <td colspan="7" class="text-center text-color-secondary">Gosterilecek ek hizmet atamasi bulunmuyor.</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+</div>

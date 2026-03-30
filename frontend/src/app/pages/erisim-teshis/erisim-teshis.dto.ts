@@ -42,6 +42,14 @@ export interface ErisimTeshisScopeDto {
     ozet: string;
 }
 
+export interface ErisimTeshisMenuGorunumDto {
+    menuKaydiBulundu: boolean;
+    menuYolu: string;
+    sidebardaGorunur: boolean;
+    menuYetkisiVar: boolean;
+    aciklama: string;
+}
+
 export interface ErisimTeshisIslemSonucDto {
     islemAnahtari: string;
     islemAdi: string;
@@ -63,6 +71,7 @@ export interface ErisimTeshisSonucDto {
     kullaniciGruplari: ErisimTeshisKullaniciGrupDto[];
     yetkiler: string[];
     scope: ErisimTeshisScopeDto;
+    menuGorunumu: ErisimTeshisMenuGorunumDto;
     islemler: ErisimTeshisIslemSonucDto[];
     genelDurum: string;
     basariliIslemSayisi: number;

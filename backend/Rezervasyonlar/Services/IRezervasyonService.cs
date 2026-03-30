@@ -8,7 +8,7 @@ public interface IRezervasyonService
 
     Task<List<RezervasyonOdaTipiDto>> GetOdaTipleriByTesisAsync(int tesisId, CancellationToken cancellationToken = default);
 
-    Task<List<RezervasyonMisafirTipiDto>> GetMisafirTipleriAsync(CancellationToken cancellationToken = default);
+    Task<List<RezervasyonMisafirTipiDto>> GetMisafirTipleriAsync(int tesisId, CancellationToken cancellationToken = default);
 
     Task<List<RezervasyonKonaklamaTipiDto>> GetKonaklamaTipleriAsync(int tesisId, CancellationToken cancellationToken = default);
 

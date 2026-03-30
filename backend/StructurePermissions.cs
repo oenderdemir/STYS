@@ -65,6 +65,27 @@ public static class StructurePermissions
         public const string Manage = "EkHizmetYonetimi.Manage";
     }
 
+    public static class EkHizmetTanimYonetimi
+    {
+        public const string Menu = "EkHizmetTanimYonetimi.Menu";
+        public const string View = "EkHizmetTanimYonetimi.View";
+        public const string Manage = "EkHizmetTanimYonetimi.Manage";
+    }
+
+    public static class EkHizmetTesisAtamaYonetimi
+    {
+        public const string Menu = "EkHizmetTesisAtamaYonetimi.Menu";
+        public const string View = "EkHizmetTesisAtamaYonetimi.View";
+        public const string Manage = "EkHizmetTesisAtamaYonetimi.Manage";
+    }
+
+    public static class EkHizmetTarifeYonetimi
+    {
+        public const string Menu = "EkHizmetTarifeYonetimi.Menu";
+        public const string View = "EkHizmetTarifeYonetimi.View";
+        public const string Manage = "EkHizmetTarifeYonetimi.Manage";
+    }
+
     public static class KonaklamaTipiYonetimi
     {
         public const string Menu = "KonaklamaTipiYonetimi.Menu";
@@ -72,11 +93,39 @@ public static class StructurePermissions
         public const string Manage = "KonaklamaTipiYonetimi.Manage";
     }
 
+    public static class KonaklamaTipiTanimYonetimi
+    {
+        public const string Menu = "KonaklamaTipiTanimYonetimi.Menu";
+        public const string View = "KonaklamaTipiTanimYonetimi.View";
+        public const string Manage = "KonaklamaTipiTanimYonetimi.Manage";
+    }
+
+    public static class KonaklamaTipiTesisAtamaYonetimi
+    {
+        public const string Menu = "KonaklamaTipiTesisAtamaYonetimi.Menu";
+        public const string View = "KonaklamaTipiTesisAtamaYonetimi.View";
+        public const string Manage = "KonaklamaTipiTesisAtamaYonetimi.Manage";
+    }
+
     public static class MisafirTipiYonetimi
     {
         public const string Menu = "MisafirTipiYonetimi.Menu";
         public const string View = "MisafirTipiYonetimi.View";
         public const string Manage = "MisafirTipiYonetimi.Manage";
+    }
+
+    public static class MisafirTipiTanimYonetimi
+    {
+        public const string Menu = "MisafirTipiTanimYonetimi.Menu";
+        public const string View = "MisafirTipiTanimYonetimi.View";
+        public const string Manage = "MisafirTipiTanimYonetimi.Manage";
+    }
+
+    public static class MisafirTipiTesisAtamaYonetimi
+    {
+        public const string Menu = "MisafirTipiTesisAtamaYonetimi.Menu";
+        public const string View = "MisafirTipiTesisAtamaYonetimi.View";
+        public const string Manage = "MisafirTipiTesisAtamaYonetimi.Manage";
     }
 
     public static class SezonYonetimi

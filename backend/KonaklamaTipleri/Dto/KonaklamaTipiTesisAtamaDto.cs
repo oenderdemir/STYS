@@ -11,4 +11,8 @@ public class KonaklamaTipiTesisAtamaDto
     public bool GlobalAktifMi { get; set; }
 
     public bool TesisteKullanilabilirMi { get; set; }
+
+    public bool OverrideVarMi { get; set; }
+
+    public int EtkinIcerikSayisi { get; set; }
 }

@@ -21,13 +21,155 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
     selector: 'app-konaklama-tipi-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, CheckboxModule, SelectModule, InputNumberModule, TextareaModule],
+    styles: [`
+        :host ::ng-deep .konaklama-tipi-dialog .p-dialog-content {
+            padding-top: 0.5rem;
+        }
+
+        .dialog-grid,
+        .icerik-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .span-12 { grid-column: span 12; }
+        .span-8 { grid-column: span 8; }
+        .span-6 { grid-column: span 6; }
+        .span-4 { grid-column: span 4; }
+        .span-3 { grid-column: span 3; }
+        .span-2 { grid-column: span 2; }
+
+        .dialog-section {
+            border: 1px solid #dbe4ee;
+            border-radius: 0.95rem;
+            padding: 1rem;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        }
+
+        .icerik-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .icerik-item {
+            border: 1px solid #dbe4ee;
+            border-radius: 0.95rem;
+            padding: 1rem;
+            background: #ffffff;
+            width: 100%;
+        }
+
+        .icerik-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .icerik-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .icerik-item-title {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .icerik-item-subtitle {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 0.2rem;
+        }
+
+        .icerik-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .check-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+            padding-top: 1.9rem;
+        }
+
+        .aktif-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .time-range {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 0.75rem;
+            align-items: end;
+        }
+
+        .time-separator {
+            font-weight: 700;
+            color: #64748b;
+            padding-bottom: 0.8rem;
+        }
+
+        :host ::ng-deep .konaklama-tipi-dialog .p-select,
+        :host ::ng-deep .konaklama-tipi-dialog .p-inputnumber,
+        :host ::ng-deep .konaklama-tipi-dialog .p-inputnumber-input,
+        :host ::ng-deep .konaklama-tipi-dialog input[pInputText],
+        :host ::ng-deep .konaklama-tipi-dialog textarea[pInputTextarea] {
+            width: 100%;
+        }
+
+        @media (max-width: 991px) {
+            .span-8,
+            .span-6,
+            .span-4,
+            .span-3,
+            .span-2 {
+                grid-column: span 12;
+            }
+
+            .check-group {
+                padding-top: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .icerik-item-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .icerik-item-actions {
+                justify-content: space-between;
+            }
+
+            .time-range {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            .time-separator {
+                display: none;
+            }
+        }
+    `],
     template: `
         <p-dialog
             [header]="dialogTitle"
             [visible]="visible"
             [modal]="true"
-            [style]="{ width: '52rem', 'max-width': '96vw' }"
-            [breakpoints]="{ '960px': '90vw' }"
+            [style]="{ width: '76rem', 'max-width': '96vw' }"
+            [breakpoints]="{ '1200px': '94vw', '960px': '96vw' }"
+            styleClass="konaklama-tipi-dialog"
             (onHide)="close()"
         >
             @if (showLockToggle) {
@@ -36,22 +178,25 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                 </div>
             }
 
-            <div class="grid grid-cols-12 gap-4">
-                <div class="col-span-12 md:col-span-4">
+            <div class="dialog-grid">
+                <div class="span-4">
                     <label for="kod" class="block font-medium mb-2">Kod</label>
                     <input id="kod" pInputText [(ngModel)]="workingModel.kod" class="w-full" [disabled]="isReadOnly || saving" maxlength="64" />
                 </div>
-                <div class="col-span-12 md:col-span-8">
+                <div class="span-8">
                     <label for="ad" class="block font-medium mb-2">Ad</label>
                     <input id="ad" pInputText [(ngModel)]="workingModel.ad" class="w-full" [disabled]="isReadOnly || saving" maxlength="128" />
                 </div>
-                <div class="col-span-12">
-                    <p-checkbox inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [binary]="true" [disabled]="isReadOnly || saving" />
-                    <label for="aktifMi" class="ml-2">Aktif</label>
+                <div class="span-12">
+                    <div class="aktif-row">
+                        <p-checkbox inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [binary]="true" [disabled]="isReadOnly || saving" />
+                        <label for="aktifMi">Aktif</label>
+                    </div>
                 </div>
 
-                <div class="col-span-12">
-                    <div class="flex items-center justify-between mb-2">
+                <div class="span-12">
+                    <div class="dialog-section">
+                    <div class="flex flex-column md:flex-row md:items-start md:justify-content-between gap-3 mb-3">
                         <div>
                             <div class="font-medium">Paket Icerigi</div>
                             <div class="text-sm text-color-secondary">Bu konaklama tipinin icine dahil olan hizmetleri acikca tanimlayin.</div>
@@ -66,11 +211,39 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                             Bu paket icin henuz icerik tanimlanmadi. Ornegin Oda Kahvalti icin Kahvalti ekleyebilirsin.
                         </div>
                     } @else {
-                        <div class="flex flex-column gap-3">
+                        @if (!isReadOnly) {
+                            <div class="icerik-toolbar">
+                                <span class="text-sm text-color-secondary">Hazir icerik ekle:</span>
+                                <p-button label="Kahvalti" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('kahvalti')" />
+                                <p-button label="Ogle Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('ogleYemegi')" />
+                                <p-button label="Aksam Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('aksamYemegi')" />
+                            </div>
+                        }
+                        <div class="icerik-list">
                             @for (item of workingModel.icerikKalemleri; track trackIcerikKalemi($index, item)) {
-                                <div class="border-1 border-200 border-round p-3">
-                                    <div class="grid grid-cols-12 gap-3">
-                                        <div class="col-span-12 md:col-span-4">
+                                <div class="icerik-item">
+                                    <div class="icerik-item-header">
+                                        <div>
+                                            <div class="icerik-item-title">{{ item.hizmetAdi || 'Yeni Icerik Kalemi' }}</div>
+                                            <div class="icerik-item-subtitle">{{ item.periyotAdi || 'Periyot secilmedi' }} • {{ item.kullanimNoktasiAdi || 'Kullanim noktasi secilmedi' }}</div>
+                                        </div>
+                                        <div class="icerik-item-actions">
+                                            <p-button
+                                                [icon]="isExpanded($index) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                                                severity="secondary"
+                                                [text]="true"
+                                                [disabled]="saving"
+                                                (onClick)="toggleExpanded($index)"
+                                            />
+                                            @if (!isReadOnly) {
+                                                <p-button icon="pi pi-trash" severity="danger" [outlined]="true" [disabled]="saving" (onClick)="removeIcerikKalemi($index)" />
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @if (isExpanded($index)) {
+                                    <div class="icerik-grid">
+                                        <div class="span-4">
                                             <label class="block font-medium mb-2">Hizmet</label>
                                             <p-select
                                                 [options]="hizmetSecenekleri"
@@ -84,11 +257,11 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                                                 (ngModelChange)="syncIcerikAdlari(item)"
                                             />
                                         </div>
-                                        <div class="col-span-12 md:col-span-3">
+                                        <div class="span-2">
                                             <label class="block font-medium mb-2">Miktar</label>
                                             <p-inputnumber [(ngModel)]="item.miktar" [min]="1" [useGrouping]="false" [disabled]="isReadOnly || saving" styleClass="w-full" />
                                         </div>
-                                        <div class="col-span-12 md:col-span-4">
+                                        <div class="span-3">
                                             <label class="block font-medium mb-2">Periyot</label>
                                             <p-select
                                                 [options]="periyotSecenekleri"
@@ -102,12 +275,7 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                                                 (ngModelChange)="syncIcerikAdlari(item)"
                                             />
                                         </div>
-                                        <div class="col-span-12 md:col-span-1 flex md:justify-end md:items-end">
-                                            @if (!isReadOnly) {
-                                                <p-button icon="pi pi-trash" severity="danger" [outlined]="true" [disabled]="saving" (onClick)="removeIcerikKalemi($index)" />
-                                            }
-                                        </div>
-                                        <div class="col-span-12 md:col-span-4">
+                                        <div class="span-3">
                                             <label class="block font-medium mb-2">Kullanim Tipi</label>
                                             <p-select
                                                 [options]="kullanimTipiSecenekleri"
@@ -121,7 +289,7 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                                                 (ngModelChange)="syncIcerikAdlari(item)"
                                             />
                                         </div>
-                                        <div class="col-span-12 md:col-span-4">
+                                        <div class="span-4">
                                             <label class="block font-medium mb-2">Kullanim Noktasi</label>
                                             <p-select
                                                 [options]="kullanimNoktasiSecenekleri"
@@ -135,15 +303,8 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                                                 (ngModelChange)="syncIcerikAdlari(item)"
                                             />
                                         </div>
-                                        <div class="col-span-12 md:col-span-2">
-                                            <label class="block font-medium mb-2">Baslangic</label>
-                                            <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBaslangicSaati" [disabled]="isReadOnly || saving" />
-                                        </div>
-                                        <div class="col-span-12 md:col-span-2">
-                                            <label class="block font-medium mb-2">Bitis</label>
-                                            <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBitisSaati" [disabled]="isReadOnly || saving" />
-                                        </div>
-                                        <div class="col-span-12 md:col-span-6 flex flex-wrap gap-4 items-end">
+                                        <div class="span-4">
+                                            <div class="check-group">
                                             <div>
                                                 <p-checkbox [inputId]="'checkin-' + $index" [(ngModel)]="item.checkInGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
                                                 <label [for]="'checkin-' + $index" class="ml-2">Check-in gunu gecerli</label>
@@ -152,16 +313,27 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
                                                 <p-checkbox [inputId]="'checkout-' + $index" [(ngModel)]="item.checkOutGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
                                                 <label [for]="'checkout-' + $index" class="ml-2">Check-out gunu gecerli</label>
                                             </div>
+                                            </div>
                                         </div>
-                                        <div class="col-span-12">
+                                        <div class="span-4">
+                                            <label class="block font-medium mb-2">Saat Araligi</label>
+                                            <div class="time-range">
+                                                <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBaslangicSaati" [disabled]="isReadOnly || saving" />
+                                                <span class="time-separator">-</span>
+                                                <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBitisSaati" [disabled]="isReadOnly || saving" />
+                                            </div>
+                                        </div>
+                                        <div class="span-12">
                                             <label class="block font-medium mb-2">Aciklama</label>
                                             <textarea pInputTextarea rows="2" class="w-full" [(ngModel)]="item.aciklama" [disabled]="isReadOnly || saving" maxlength="256"></textarea>
                                         </div>
                                     </div>
+                                    }
                                 </div>
                             }
                         </div>
                     }
+                    </div>
                 </div>
             </div>
 
@@ -186,6 +358,7 @@ export class KonaklamaTipiDialog implements OnChanges {
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: KonaklamaTipiDto = { kod: '', ad: '', aktifMi: true, icerikKalemleri: [] };
+    expandedIndexes = new Set<number>();
     readonly hizmetSecenekleri = KonaklamaTipiIcerikHizmetSecenekleri;
     readonly periyotSecenekleri = KonaklamaTipiIcerikPeriyotSecenekleri;
     readonly kullanimTipiSecenekleri = KonaklamaTipiIcerikKullanimTipiSecenekleri;
@@ -234,10 +407,12 @@ export class KonaklamaTipiDialog implements OnChanges {
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
             this.workingModel = this.cloneModel(this.model);
+            this.expandAllRows();
         }
 
         if (changes['visible'] && this.visible) {
             this.workingModel = this.cloneModel(this.model);
+            this.expandAllRows();
         }
     }
 
@@ -324,6 +499,7 @@ export class KonaklamaTipiDialog implements OnChanges {
                 aciklama: null
             }
         ];
+        this.expandedIndexes.add(this.workingModel.icerikKalemleri.length - 1);
     }
 
     removeIcerikKalemi(index: number): void {
@@ -332,6 +508,30 @@ export class KonaklamaTipiDialog implements OnChanges {
         }
 
         this.workingModel.icerikKalemleri = this.workingModel.icerikKalemleri.filter((_, itemIndex) => itemIndex !== index);
+        this.expandAllRows();
+    }
+
+    addPreset(preset: 'kahvalti' | 'ogleYemegi' | 'aksamYemegi'): void {
+        if (this.isReadOnly) {
+            return;
+        }
+
+        const item = this.createPresetItem(preset);
+        this.workingModel.icerikKalemleri = [...this.workingModel.icerikKalemleri, item];
+        this.expandedIndexes.add(this.workingModel.icerikKalemleri.length - 1);
+    }
+
+    toggleExpanded(index: number): void {
+        if (this.expandedIndexes.has(index)) {
+            this.expandedIndexes.delete(index);
+            return;
+        }
+
+        this.expandedIndexes.add(index);
+    }
+
+    isExpanded(index: number): boolean {
+        return this.expandedIndexes.has(index);
     }
 
     syncIcerikAdlari(item: KonaklamaTipiIcerikDto): void {
@@ -350,6 +550,66 @@ export class KonaklamaTipiDialog implements OnChanges {
             ...model,
             icerikKalemleri: (model.icerikKalemleri ?? []).map((item) => ({ ...item }))
         };
+    }
+
+    private expandAllRows(): void {
+        this.expandedIndexes = new Set(this.workingModel.icerikKalemleri.map((_, index) => index));
+    }
+
+    private createPresetItem(preset: 'kahvalti' | 'ogleYemegi' | 'aksamYemegi'): KonaklamaTipiIcerikDto {
+        switch (preset) {
+            case 'kahvalti':
+                return {
+                    hizmetKodu: 'Kahvalti',
+                    hizmetAdi: this.getHizmetLabel('Kahvalti'),
+                    miktar: 1,
+                    periyot: 'Gunluk',
+                    periyotAdi: this.getPeriyotLabel('Gunluk'),
+                    kullanimTipi: 'Adetli',
+                    kullanimTipiAdi: this.getKullanimTipiLabel('Adetli'),
+                    kullanimNoktasi: 'Restoran',
+                    kullanimNoktasiAdi: this.getKullanimNoktasiLabel('Restoran'),
+                    kullanimBaslangicSaati: '07:00',
+                    kullanimBitisSaati: '10:00',
+                    checkInGunuGecerliMi: false,
+                    checkOutGunuGecerliMi: true,
+                    aciklama: 'Paket dahilinde gunluk kahvalti hakki.'
+                };
+            case 'ogleYemegi':
+                return {
+                    hizmetKodu: 'OgleYemegi',
+                    hizmetAdi: this.getHizmetLabel('OgleYemegi'),
+                    miktar: 1,
+                    periyot: 'Gunluk',
+                    periyotAdi: this.getPeriyotLabel('Gunluk'),
+                    kullanimTipi: 'Adetli',
+                    kullanimTipiAdi: this.getKullanimTipiLabel('Adetli'),
+                    kullanimNoktasi: 'Restoran',
+                    kullanimNoktasiAdi: this.getKullanimNoktasiLabel('Restoran'),
+                    kullanimBaslangicSaati: '12:00',
+                    kullanimBitisSaati: '14:00',
+                    checkInGunuGecerliMi: true,
+                    checkOutGunuGecerliMi: true,
+                    aciklama: 'Paket dahilinde gunluk ogle yemegi hakki.'
+                };
+            default:
+                return {
+                    hizmetKodu: 'AksamYemegi',
+                    hizmetAdi: this.getHizmetLabel('AksamYemegi'),
+                    miktar: 1,
+                    periyot: 'Gunluk',
+                    periyotAdi: this.getPeriyotLabel('Gunluk'),
+                    kullanimTipi: 'Adetli',
+                    kullanimTipiAdi: this.getKullanimTipiLabel('Adetli'),
+                    kullanimNoktasi: 'Restoran',
+                    kullanimNoktasiAdi: this.getKullanimNoktasiLabel('Restoran'),
+                    kullanimBaslangicSaati: '19:00',
+                    kullanimBitisSaati: '21:00',
+                    checkInGunuGecerliMi: true,
+                    checkOutGunuGecerliMi: false,
+                    aciklama: 'Paket dahilinde gunluk aksam yemegi hakki.'
+                };
+        }
     }
 
     private getHizmetLabel(value: string): string {

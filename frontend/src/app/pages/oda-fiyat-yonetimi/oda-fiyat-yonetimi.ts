@@ -61,6 +61,7 @@ export class OdaFiyatYonetimi implements OnInit {
 
     onTesisChange(): void {
         this.applySelectedOdaTipiForSelectedTesis();
+        this.loadMisafirTipleriForSelectedTesis();
         this.loadKonaklamaTipleriForSelectedTesis();
         this.loadFiyatlarForSelectedOdaTipi();
     }
@@ -158,8 +159,7 @@ export class OdaFiyatYonetimi implements OnInit {
         this.loadingReferences = true;
         forkJoin({
             tesisler: this.service.getTesisler(),
-            odaTipleri: this.service.getOdaTipleri(),
-            misafirTipleri: this.service.getMisafirTipleri()
+            odaTipleri: this.service.getOdaTipleri()
         })
             .pipe(
                 finalize(() => {
@@ -168,10 +168,9 @@ export class OdaFiyatYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ tesisler, odaTipleri, misafirTipleri }) => {
+                next: ({ tesisler, odaTipleri }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.odaTipleri = [...odaTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.misafirTipleri = [...misafirTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
 
                     if (
                         this.selectedTesisId &&
@@ -185,6 +184,7 @@ export class OdaFiyatYonetimi implements OnInit {
                     }
 
                     this.applySelectedOdaTipiForSelectedTesis();
+                    this.loadMisafirTipleriForSelectedTesis();
                     this.loadKonaklamaTipleriForSelectedTesis();
                     this.loadFiyatlarForSelectedOdaTipi();
                     this.cdr.detectChanges();
@@ -194,6 +194,33 @@ export class OdaFiyatYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    private loadMisafirTipleriForSelectedTesis(): void {
+        if (!this.selectedTesisId) {
+            this.misafirTipleri = [];
+            this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({ ...row, misafirTipiId: null }));
+            return;
+        }
+
+        this.service.getMisafirTipleri(this.selectedTesisId).subscribe({
+            next: (misafirTipleri) => {
+                this.misafirTipleri = [...misafirTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
+                const allowedIds = new Set(this.misafirTipleri.map((x) => x.id).filter((x): x is number => !!x));
+                const defaultMisafirTipiId = this.misafirTipleri[0]?.id ?? null;
+                this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({
+                    ...row,
+                    misafirTipiId: row.misafirTipiId && allowedIds.has(row.misafirTipiId) ? row.misafirTipiId : defaultMisafirTipiId
+                }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.misafirTipleri = [];
+                this.fiyatSatirlari = this.fiyatSatirlari.map((row) => ({ ...row, misafirTipiId: null }));
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private loadKonaklamaTipleriForSelectedTesis(): void {

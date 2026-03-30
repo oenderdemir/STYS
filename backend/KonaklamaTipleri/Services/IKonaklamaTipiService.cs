@@ -12,5 +12,9 @@ public interface IKonaklamaTipiService : IBaseRdbmsService<KonaklamaTipiDto, Kon
 
     Task<List<KonaklamaTipiTesisAtamaDto>> KaydetTesisAtamalariAsync(int tesisId, IReadOnlyCollection<int> konaklamaTipiIds, CancellationToken cancellationToken = default);
 
+    Task<List<KonaklamaTipiTesisIcerikOverrideDto>> GetTesisIcerikOverrideAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken = default);
+
+    Task<List<KonaklamaTipiTesisIcerikOverrideDto>> KaydetTesisIcerikOverrideAsync(int tesisId, int konaklamaTipiId, IReadOnlyCollection<KonaklamaTipiTesisIcerikOverrideDto> items, CancellationToken cancellationToken = default);
+
     Task<List<KonaklamaTipiDto>> GetAktifKonaklamaTipleriByTesisAsync(int tesisId, CancellationToken cancellationToken = default);
 }

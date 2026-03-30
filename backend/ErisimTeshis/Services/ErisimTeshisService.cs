@@ -3,6 +3,7 @@ using STYS;
 using STYS.AccessScope;
 using STYS.ErisimTeshis.Dto;
 using STYS.Infrastructure.EntityFramework;
+using TOD.Platform.Identity.MenuItems.Entities;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -147,6 +148,7 @@ public class ErisimTeshisService : IErisimTeshisService
         }
 
         var operations = BuildOperationResults(modul, permissionSet, userScopeSnapshot, selectedTesis);
+        var menuGorunumu = await BuildMenuVisibilityAsync(modul, permissionSet, cancellationToken);
         var missingPermissions = operations
             .Where(x => string.Equals(x.EngelKodu, "YetkiEksik", StringComparison.OrdinalIgnoreCase))
             .Select(x => x.GerekliYetki)
@@ -191,6 +193,7 @@ public class ErisimTeshisService : IErisimTeshisService
                 BinaIdleri = userScopeSnapshot.DomainScope.BinaIds.OrderBy(x => x).ToList(),
                 Ozet = BuildScopeSummary(userScopeSnapshot)
             },
+            MenuGorunumu = menuGorunumu,
             Islemler = operations,
             GenelDurum = engelliIslemSayisi > 0 ? "Engelli" : (uyariIslemSayisi > 0 ? "Uyari" : "Basarili"),
             BasariliIslemSayisi = basariliIslemSayisi,
@@ -200,6 +203,98 @@ public class ErisimTeshisService : IErisimTeshisService
             OnerilenAksiyonlar = recommendations,
             Ozet = BuildOverallSummary(user.UserName, modul.Ad, operations, selectedTesis)
         };
+    }
+
+    private async Task<ErisimTeshisMenuGorunumDto> BuildMenuVisibilityAsync(
+        ErisimTeshisModulTanimi modul,
+        IReadOnlySet<string> permissionSet,
+        CancellationToken cancellationToken)
+    {
+        var normalizedRoute = NormalizeMenuRoute(modul.Route);
+        if (string.IsNullOrWhiteSpace(normalizedRoute))
+        {
+            return new ErisimTeshisMenuGorunumDto
+            {
+                MenuKaydiBulundu = false,
+                MenuYolu = modul.Ad,
+                SidebardaGorunur = false,
+                MenuYetkisiVar = false,
+                Aciklama = "Bu modul icin route tanimi bulunmadigi icin menu kaydi eslestirilemedi."
+            };
+        }
+
+        var menuItem = await _identityDbContext.MenuItems
+            .AsNoTracking()
+            .Include(x => x.MenuItemRoles)
+            .ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(
+                x => !x.IsDeleted
+                     && x.Route != null
+                     && (x.Route == normalizedRoute || x.Route == "/" + normalizedRoute),
+                cancellationToken);
+
+        if (menuItem is null)
+        {
+            return new ErisimTeshisMenuGorunumDto
+            {
+                MenuKaydiBulundu = false,
+                MenuYolu = modul.Ad,
+                SidebardaGorunur = false,
+                MenuYetkisiVar = false,
+                Aciklama = "Bu modul icin DB tarafinda aktif bir menu kaydi bulunamadi."
+            };
+        }
+
+        var menuPath = await BuildMenuPathAsync(menuItem, cancellationToken);
+        var menuPermissions = menuItem.MenuItemRoles
+            .Select(x => ToPermission(x.Role.Domain, x.Role.Name))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var menuPermissionGranted = menuPermissions.Count == 0 || menuPermissions.Any(x => HasPermission(permissionSet, x));
+
+        return new ErisimTeshisMenuGorunumDto
+        {
+            MenuKaydiBulundu = true,
+            MenuYolu = menuPath,
+            SidebardaGorunur = menuPermissionGranted,
+            MenuYetkisiVar = menuPermissionGranted,
+            Aciklama = menuPermissionGranted
+                ? "Secili modulun menu yetkisi mevcut. Parent menu gruplari cocuk kayit uzerinden sidebarda gorunur."
+                : $"Secili modulun menu kaydi bulundu ancak gerekli menu yetkisi eksik: {string.Join(", ", menuPermissions)}"
+        };
+    }
+
+    private async Task<string> BuildMenuPathAsync(MenuItem menuItem, CancellationToken cancellationToken)
+    {
+        var labels = new List<string>();
+        MenuItem? current = menuItem;
+
+        while (current is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(current.Label))
+            {
+                labels.Add(current.Label.Trim());
+            }
+
+            if (!current.ParentId.HasValue)
+            {
+                break;
+            }
+
+            current = await _identityDbContext.MenuItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == current.ParentId.Value, cancellationToken);
+        }
+
+        labels.Reverse();
+        return string.Join(" > ", labels);
+    }
+
+    private static string NormalizeMenuRoute(string route)
+    {
+        return route.Trim().TrimStart('/');
     }
 
     private static ErisimTeshisModulDto ToModulDto(ErisimTeshisModulTanimi module)

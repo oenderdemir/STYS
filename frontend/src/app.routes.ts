@@ -5,15 +5,19 @@ import { BinaYonetimi } from './app/pages/bina-yonetimi/bina-yonetimi';
 import { Dashboard } from './app/pages/dashboard/dashboard';
 import { Documentation } from './app/pages/documentation/documentation';
 import { ErisimTeshis } from './app/pages/erisim-teshis/erisim-teshis';
+import { EkHizmetAtamaYonetimi } from './app/pages/ek-hizmet-yonetimi/ek-hizmet-atama-yonetimi';
+import { EkHizmetTanimYonetimi } from './app/pages/ek-hizmet-yonetimi/ek-hizmet-tanim-yonetimi';
 import { EkHizmetYonetimi } from './app/pages/ek-hizmet-yonetimi/ek-hizmet-yonetimi';
 import { IndirimKuraliYonetimi } from './app/pages/indirim-kurali-yonetimi/indirim-kurali-yonetimi';
 import { IlYonetimi } from './app/pages/il-yonetimi/il-yonetimi';
 import { IsletmeAlaniSinifiYonetimi } from './app/pages/isletme-alani-sinifi-yonetimi/isletme-alani-sinifi-yonetimi';
+import { KonaklamaTipiTanimYonetimi } from './app/pages/konaklama-tipi-yonetimi/konaklama-tipi-tanim-yonetimi';
 import { KonaklamaTipiYonetimi } from './app/pages/konaklama-tipi-yonetimi/konaklama-tipi-yonetimi';
 import { KullaniciGrupYonetimi } from './app/pages/kullanici-grup-yonetimi/kullanici-grup-yonetimi';
 import { KullaniciYonetimi } from './app/pages/kullanici-yonetimi/kullanici-yonetimi';
 import { Landing } from './app/pages/landing/landing';
 import { MenuYonetimi } from './app/pages/menu-yonetimi/menu-yonetimi';
+import { MisafirTipiTanimYonetimi } from './app/pages/misafir-tipi-yonetimi/misafir-tipi-tanim-yonetimi';
 import { MisafirTipiYonetimi } from './app/pages/misafir-tipi-yonetimi/misafir-tipi-yonetimi';
 import { Notfound } from './app/pages/notfound/notfound';
 import { OdaFiyatYonetimi } from './app/pages/oda-fiyat-yonetimi/oda-fiyat-yonetimi';
@@ -56,13 +60,20 @@ export const appRoutes: Routes = [
             { path: 'oda-ozellikler', component: OdaOzellikYonetimi },
             { path: 'odalar', component: OdaYonetimi },
             { path: 'oda-fiyatlari', component: OdaFiyatYonetimi },
-            { path: 'ek-hizmetler', component: EkHizmetYonetimi },
+            { path: 'ek-hizmet-tanimlari', component: EkHizmetTanimYonetimi },
+            { path: 'ek-hizmet-atamalari', component: EkHizmetAtamaYonetimi },
+            { path: 'ek-hizmet-tarifeleri', component: EkHizmetYonetimi },
+            { path: 'ek-hizmetler', redirectTo: 'ek-hizmet-tarifeleri', pathMatch: 'full' },
             { path: 'erisim-teshis', component: ErisimTeshis },
             { path: 'oda-bakim-ariza', component: OdaKullanimBlokYonetimi },
             { path: 'oda-temizlik-yonetimi', component: OdaTemizlikYonetimi },
             { path: 'indirim-kurallari', component: IndirimKuraliYonetimi },
-            { path: 'konaklama-tipleri', component: KonaklamaTipiYonetimi },
-            { path: 'misafir-tipleri', component: MisafirTipiYonetimi },
+            { path: 'konaklama-tipi-tanimlari', component: KonaklamaTipiTanimYonetimi },
+            { path: 'konaklama-tipi-atamalari', component: KonaklamaTipiYonetimi },
+            { path: 'konaklama-tipleri', redirectTo: 'konaklama-tipi-atamalari', pathMatch: 'full' },
+            { path: 'misafir-tipi-tanimlari', component: MisafirTipiTanimYonetimi },
+            { path: 'misafir-tipi-atamalari', component: MisafirTipiYonetimi },
+            { path: 'misafir-tipleri', redirectTo: 'misafir-tipi-atamalari', pathMatch: 'full' },
             { path: 'sezon-kurallari', component: SezonYonetimi },
             { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi },
             { path: 'rezervasyon-dashboard', component: RezervasyonDashboard },

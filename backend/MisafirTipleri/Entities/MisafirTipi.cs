@@ -19,4 +19,6 @@ public class MisafirTipi : BaseEntity<int>
     public ICollection<OdaFiyat> OdaFiyatlari { get; set; } = [];
 
     public ICollection<IndirimKuraliMisafirTipi> IndirimKuralMisafirTipleri { get; set; } = [];
+
+    public ICollection<TesisMisafirTipi> TesisMisafirTipleri { get; set; } = [];
 }

@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { MisafirTipiDto } from './misafir-tipi-yonetimi.dto';
+import { MisafirTipiDto, MisafirTipiTesisAtamaDto, MisafirTipiYonetimBaglamDto } from './misafir-tipi-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class MisafirTipiYonetimiService {
@@ -36,6 +36,67 @@ export class MisafirTipiYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Misafir tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getMisafirTipleriByTesis(tesisId: number): Observable<MisafirTipiDto[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<MisafirTipiDto[]>>(`${this.apiBaseUrl}/ui/misafirtipi`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Misafir tipi listesi alinamadi.');
+            })
+        );
+    }
+
+    getYonetimBaglam(): Observable<MisafirTipiYonetimBaglamDto> {
+        return this.http.get<ApiResponse<MisafirTipiYonetimBaglamDto>>(`${this.apiBaseUrl}/ui/misafirtipi/yonetim-baglam`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Misafir tipi yonetim baglami alinamadi.');
+            })
+        );
+    }
+
+    getTesisAtamalari(tesisId: number): Observable<MisafirTipiTesisAtamaDto[]> {
+        return this.http.get<ApiResponse<MisafirTipiTesisAtamaDto[]>>(`${this.apiBaseUrl}/ui/misafirtipi/tesis/${tesisId}/atamalar`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis misafir tipi atamalari alinamadi.');
+            })
+        );
+    }
+
+    kaydetTesisAtamalari(tesisId: number, misafirTipiIds: number[]): Observable<MisafirTipiTesisAtamaDto[]> {
+        return this.http.put<ApiResponse<MisafirTipiTesisAtamaDto[]>>(`${this.apiBaseUrl}/ui/misafirtipi/tesis/${tesisId}/atamalar`, { misafirTipiIds }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis misafir tipi atamalari kaydedilemedi.');
+            })
+        );
+    }
+
+    getMisafirTipiById(id: number): Observable<MisafirTipiDto> {
+        return this.http.get<ApiResponse<MisafirTipiDto>>(`${this.apiBaseUrl}/ui/misafirtipi/${id}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Misafir tipi detayi alinamadi.');
             })
         );
     }

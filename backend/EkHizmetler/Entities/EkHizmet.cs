@@ -8,6 +8,8 @@ public class EkHizmet : BaseEntity<int>
 {
     public int TesisId { get; set; }
 
+    public int? GlobalEkHizmetTanimiId { get; set; }
+
     [Required]
     [MaxLength(128)]
     public string Ad { get; set; } = string.Empty;
@@ -25,6 +27,8 @@ public class EkHizmet : BaseEntity<int>
     public bool AktifMi { get; set; } = true;
 
     public Tesis? Tesis { get; set; }
+
+    public GlobalEkHizmetTanimi? GlobalEkHizmetTanimi { get; set; }
 
     public ICollection<EkHizmetTarife> Tarifeler { get; set; } = [];
 

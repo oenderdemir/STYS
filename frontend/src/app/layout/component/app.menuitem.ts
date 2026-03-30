@@ -13,7 +13,16 @@ import { filter } from 'rxjs/operators';
             <div class="layout-menuitem-root-text">{{ item().label }}</div>
         }
         @if ((!hasRouterLink() || hasChildren()) && isVisible()) {
-            <a [attr.href]="item().url" (click)="itemClick($event)" [ngClass]="item().class" [attr.target]="item().target" tabindex="0" pRipple>
+            <a
+                [attr.href]="item().url"
+                (click)="itemClick($event)"
+                [ngClass]="item().class"
+                [class.menu-parent-link]="hasChildren()"
+                [class.menu-leaf-link]="!hasChildren()"
+                [attr.target]="item().target"
+                tabindex="0"
+                pRipple
+            >
                 <i [ngClass]="item().icon" class="layout-menuitem-icon"></i>
                 <span class="layout-menuitem-text">{{ item().label }}</span>
                 @if (hasChildren()) {
@@ -35,6 +44,8 @@ import { filter } from 'rxjs/operators';
                 [replaceUrl]="item().replaceUrl"
                 [state]="item().state"
                 [queryParams]="item().queryParams"
+                [class.menu-parent-link]="hasChildren()"
+                [class.menu-leaf-link]="!hasChildren()"
                 [attr.target]="item().target"
                 tabindex="0"
                 pRipple
@@ -47,7 +58,12 @@ import { filter } from 'rxjs/operators';
             </a>
         }
         @if (hasChildren() && isVisible() && (root() || isActive())) {
-            <ul [animate.enter]="initialized() ? 'p-submenu-enter' : null" [animate.leave]="'p-submenu-leave'" [class.layout-root-submenulist]="root()">
+            <ul
+                [animate.enter]="initialized() ? 'p-submenu-enter' : null"
+                [animate.leave]="'p-submenu-leave'"
+                [class.layout-root-submenulist]="root()"
+                [class.menu-child-list]="!root()"
+            >
                 @for (child of item().items; track child?.label) {
                     <li app-menuitem [item]="child" [parentPath]="fullPath()" [root]="false" [class]="child['badgeClass']"></li>
                 }
@@ -88,6 +104,33 @@ import { filter } from 'rxjs/operators';
                     max-height: 0;
                     overflow: hidden;
                 }
+            }
+
+            .layout-menuitem-root-text {
+                font-size: 0.78rem;
+                letter-spacing: 0.08em;
+                font-weight: 700;
+                text-transform: uppercase;
+                color: #475569;
+                margin: 1rem 0 0.5rem;
+            }
+
+            .layout-root-menuitem > a {
+                display: none;
+            }
+
+            .menu-child-list {
+                margin-left: 0.65rem;
+                padding-left: 0.85rem;
+                border-left: 1px solid #e2e8f0;
+            }
+
+            .menu-parent-link {
+                font-weight: 600;
+            }
+
+            .menu-leaf-link .layout-menuitem-icon {
+                opacity: 0.72;
             }
         `
     ]

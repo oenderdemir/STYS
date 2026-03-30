@@ -1,11 +1,32 @@
 export interface EkHizmetDto {
     id?: number | null;
     tesisId: number;
+    globalEkHizmetTanimiId?: number | null;
     ad: string;
     aciklama: string | null;
     birimAdi: string;
     paketIcerikHizmetKodu: string | null;
     aktifMi: boolean;
+}
+
+export interface GlobalEkHizmetTanimiDto {
+    id?: number | null;
+    ad: string;
+    aciklama: string | null;
+    birimAdi: string;
+    paketIcerikHizmetKodu: string | null;
+    aktifMi: boolean;
+}
+
+export interface EkHizmetTesisAtamaDto {
+    globalEkHizmetTanimiId: number;
+    ad: string;
+    aciklama: string | null;
+    birimAdi: string;
+    paketIcerikHizmetKodu: string | null;
+    globalAktifMi: boolean;
+    tesisteKullanilabilirMi: boolean;
+    tarifeSayisi: number;
 }
 
 export interface EkHizmetTarifeDto {

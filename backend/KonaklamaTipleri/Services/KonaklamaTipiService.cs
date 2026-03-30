@@ -123,19 +123,45 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
             .ToListAsync(cancellationToken);
 
         var seciliSet = seciliTipIds.ToHashSet();
+        var globalCounts = await _stysDbContext.KonaklamaTipiIcerikKalemleri
+            .Where(x => !x.IsDeleted)
+            .GroupBy(x => x.KonaklamaTipiId)
+            .Select(group => new
+            {
+                KonaklamaTipiId = group.Key,
+                Count = group.Count()
+            })
+            .ToDictionaryAsync(x => x.KonaklamaTipiId, x => x.Count, cancellationToken);
 
-        return await _stysDbContext.KonaklamaTipleri
+        var overrideInfos = await _stysDbContext.Set<TesisKonaklamaTipiIcerikOverride>()
+            .Where(x => x.TesisId == tesisId
+                && !x.IsDeleted
+                && x.KonaklamaTipiIcerikKalemi != null
+                && !x.KonaklamaTipiIcerikKalemi.IsDeleted)
+            .GroupBy(x => x.KonaklamaTipiIcerikKalemi!.KonaklamaTipiId)
+            .Select(group => new
+            {
+                KonaklamaTipiId = group.Key,
+                OverrideVarMi = group.Any(),
+                DevreDisiSayisi = group.Count(x => x.DevreDisiMi)
+            })
+            .ToDictionaryAsync(x => x.KonaklamaTipiId, x => new { x.OverrideVarMi, x.DevreDisiSayisi }, cancellationToken);
+
+        var tipler = await _stysDbContext.KonaklamaTipleri
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
-            .Select(x => new KonaklamaTipiTesisAtamaDto
-            {
-                KonaklamaTipiId = x.Id,
-                Kod = x.Kod,
-                Ad = x.Ad,
-                GlobalAktifMi = x.AktifMi,
-                TesisteKullanilabilirMi = seciliSet.Contains(x.Id)
-            })
             .ToListAsync(cancellationToken);
+
+        return tipler.Select(x => new KonaklamaTipiTesisAtamaDto
+        {
+            KonaklamaTipiId = x.Id,
+            Kod = x.Kod,
+            Ad = x.Ad,
+            GlobalAktifMi = x.AktifMi,
+            TesisteKullanilabilirMi = seciliSet.Contains(x.Id),
+            OverrideVarMi = overrideInfos.ContainsKey(x.Id) && overrideInfos[x.Id].OverrideVarMi,
+            EtkinIcerikSayisi = Math.Max(0, globalCounts.GetValueOrDefault(x.Id) - (overrideInfos.ContainsKey(x.Id) ? overrideInfos[x.Id].DevreDisiSayisi : 0))
+        }).ToList();
     }
 
     public async Task<List<KonaklamaTipiTesisAtamaDto>> KaydetTesisAtamalariAsync(int tesisId, IReadOnlyCollection<int> konaklamaTipiIds, CancellationToken cancellationToken = default)
@@ -211,6 +237,102 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
         return await GetTesisAtamalariAsync(tesisId, cancellationToken);
     }
 
+    public async Task<List<KonaklamaTipiTesisIcerikOverrideDto>> GetTesisIcerikOverrideAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        await EnsureTesisHasKonaklamaTipiAsync(tesisId, konaklamaTipiId, cancellationToken);
+
+        var globalItems = await _stysDbContext.KonaklamaTipiIcerikKalemleri
+            .Where(x => x.KonaklamaTipiId == konaklamaTipiId && !x.IsDeleted)
+            .OrderBy(x => x.HizmetKodu)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var overrideMap = await GetTesisOverrideMapAsync(tesisId, globalItems.Select(x => x.Id).ToList(), cancellationToken);
+        return globalItems.Select(x => BuildTesisOverrideDto(x, overrideMap.GetValueOrDefault(x.Id))).ToList();
+    }
+
+    public async Task<List<KonaklamaTipiTesisIcerikOverrideDto>> KaydetTesisIcerikOverrideAsync(int tesisId, int konaklamaTipiId, IReadOnlyCollection<KonaklamaTipiTesisIcerikOverrideDto> items, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        await EnsureTesisHasKonaklamaTipiAsync(tesisId, konaklamaTipiId, cancellationToken);
+
+        var globalItems = await _stysDbContext.KonaklamaTipiIcerikKalemleri
+            .Where(x => x.KonaklamaTipiId == konaklamaTipiId && !x.IsDeleted)
+            .OrderBy(x => x.HizmetKodu)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var globalById = globalItems.ToDictionary(x => x.Id);
+        var requestItems = (items ?? []).ToDictionary(x => x.KonaklamaTipiIcerikKalemiId);
+
+        if (requestItems.Keys.Except(globalById.Keys).Any())
+        {
+            throw new BaseException("Gecersiz icerik override kaydi gonderildi.", 400);
+        }
+
+        var existingOverrides = await _stysDbContext.Set<TesisKonaklamaTipiIcerikOverride>()
+            .Where(x => x.TesisId == tesisId
+                && !x.IsDeleted
+                && x.KonaklamaTipiIcerikKalemi != null
+                && x.KonaklamaTipiIcerikKalemi.KonaklamaTipiId == konaklamaTipiId)
+            .ToListAsync(cancellationToken);
+        var existingByItemId = existingOverrides.ToDictionary(x => x.KonaklamaTipiIcerikKalemiId);
+
+        foreach (var globalItem in globalItems)
+        {
+            requestItems.TryGetValue(globalItem.Id, out var requestItem);
+            if (requestItem is null)
+            {
+                if (existingByItemId.TryGetValue(globalItem.Id, out var existingToDelete))
+                {
+                    _stysDbContext.Remove(existingToDelete);
+                }
+
+                continue;
+            }
+
+            if (!string.Equals(requestItem.HizmetKodu?.Trim(), globalItem.HizmetKodu, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BaseException("Override kaydindaki hizmet bilgisi global tanim ile uyusmuyor.", 400);
+            }
+
+            ValidateOverrideItem(requestItem);
+            var normalized = BuildNormalizedOverride(tesisId, globalItem, requestItem);
+
+            if (!HasMeaningfulOverride(normalized))
+            {
+                if (existingByItemId.TryGetValue(globalItem.Id, out var existingToDelete))
+                {
+                    _stysDbContext.Remove(existingToDelete);
+                }
+
+                continue;
+            }
+
+            if (existingByItemId.TryGetValue(globalItem.Id, out var existing))
+            {
+                existing.DevreDisiMi = normalized.DevreDisiMi;
+                existing.Miktar = normalized.Miktar;
+                existing.Periyot = normalized.Periyot;
+                existing.KullanimTipi = normalized.KullanimTipi;
+                existing.KullanimNoktasi = normalized.KullanimNoktasi;
+                existing.KullanimBaslangicSaati = normalized.KullanimBaslangicSaati;
+                existing.KullanimBitisSaati = normalized.KullanimBitisSaati;
+                existing.CheckInGunuGecerliMi = normalized.CheckInGunuGecerliMi;
+                existing.CheckOutGunuGecerliMi = normalized.CheckOutGunuGecerliMi;
+                existing.Aciklama = normalized.Aciklama;
+                existing.IsDeleted = false;
+                continue;
+            }
+
+            await _stysDbContext.AddAsync(normalized, cancellationToken);
+        }
+
+        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return await GetTesisIcerikOverrideAsync(tesisId, konaklamaTipiId, cancellationToken);
+    }
+
     public async Task<List<KonaklamaTipiDto>> GetAktifKonaklamaTipleriByTesisAsync(int tesisId, CancellationToken cancellationToken = default)
     {
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
@@ -227,7 +349,24 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        return items.Select(MapDto).ToList();
+        var overrideMap = await GetTesisOverrideMapAsync(
+            tesisId,
+            items.SelectMany(x => x.IcerikKalemleri).Select(x => x.Id).ToList(),
+            cancellationToken);
+
+        return items.Select(x =>
+        {
+            var dto = MapDto(x);
+            dto.IcerikKalemleri = x.IcerikKalemleri
+                .Where(y => !y.IsDeleted)
+                .OrderBy(y => y.HizmetKodu)
+                .ThenBy(y => y.Id)
+                .Select(y => BuildEffectiveIcerikDto(y, overrideMap.GetValueOrDefault(y.Id)))
+                .Where(y => y is not null)
+                .Cast<KonaklamaTipiIcerikDto>()
+                .ToList();
+            return dto;
+        }).ToList();
     }
 
     public override async Task<PagedResult<KonaklamaTipiDto>> GetPagedAsync(
@@ -279,6 +418,23 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
         if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
         {
             throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private async Task EnsureTesisHasKonaklamaTipiAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken)
+    {
+        var exists = await _stysDbContext.TesisKonaklamaTipleri.AnyAsync(x =>
+            x.TesisId == tesisId
+            && x.KonaklamaTipiId == konaklamaTipiId
+            && x.AktifMi
+            && !x.IsDeleted
+            && x.KonaklamaTipi != null
+            && x.KonaklamaTipi.AktifMi,
+            cancellationToken);
+
+        if (!exists)
+        {
+            throw new BaseException("Secilen konaklama tipi bu tesiste kullanima acik degil.", 400);
         }
     }
 
@@ -345,9 +501,12 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
     }
 
     private static void ValidateIcerikKalemleri(KonaklamaTipiDto dto)
+        => ValidateIcerikKalemleri(dto.IcerikKalemleri);
+
+    private static void ValidateIcerikKalemleri(IEnumerable<KonaklamaTipiIcerikDto> items)
     {
         var duplicateSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in dto.IcerikKalemleri)
+        foreach (var item in items)
         {
             if (!KonaklamaTipiIcerikHizmetKodlari.IsValid(item.HizmetKodu))
             {
@@ -463,6 +622,162 @@ public class KonaklamaTipiService : BaseRdbmsService<KonaklamaTipiDto, Konaklama
 
         return dto;
     }
+
+    private async Task<Dictionary<int, TesisKonaklamaTipiIcerikOverride>> GetTesisOverrideMapAsync(int tesisId, IReadOnlyCollection<int> itemIds, CancellationToken cancellationToken)
+    {
+        if (itemIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _stysDbContext.Set<TesisKonaklamaTipiIcerikOverride>()
+            .Where(x => x.TesisId == tesisId
+                && itemIds.Contains(x.KonaklamaTipiIcerikKalemiId)
+                && !x.IsDeleted)
+            .ToDictionaryAsync(x => x.KonaklamaTipiIcerikKalemiId, cancellationToken);
+    }
+
+    private static KonaklamaTipiTesisIcerikOverrideDto BuildTesisOverrideDto(
+        KonaklamaTipiIcerikKalemi item,
+        TesisKonaklamaTipiIcerikOverride? overrideItem)
+    {
+        var effective = BuildEffectiveIcerikDto(item, overrideItem);
+        return new KonaklamaTipiTesisIcerikOverrideDto
+        {
+            KonaklamaTipiIcerikKalemiId = item.Id,
+            HizmetKodu = item.HizmetKodu,
+            HizmetAdi = KonaklamaTipiIcerikHizmetKodlari.GetAd(item.HizmetKodu),
+            OverrideVarMi = overrideItem is not null,
+            DevreDisiMi = overrideItem?.DevreDisiMi ?? false,
+            GlobalMiktar = item.Miktar,
+            GlobalPeriyot = item.Periyot,
+            GlobalPeriyotAdi = KonaklamaTipiIcerikPeriyotlari.GetAd(item.Periyot),
+            GlobalKullanimTipi = item.KullanimTipi,
+            GlobalKullanimTipiAdi = KonaklamaTipiIcerikKullanimTipleri.GetAd(item.KullanimTipi),
+            GlobalKullanimNoktasi = item.KullanimNoktasi,
+            GlobalKullanimNoktasiAdi = KonaklamaTipiIcerikKullanimNoktalari.GetAd(item.KullanimNoktasi),
+            GlobalKullanimBaslangicSaati = FormatTime(item.KullanimBaslangicSaati),
+            GlobalKullanimBitisSaati = FormatTime(item.KullanimBitisSaati),
+            GlobalCheckInGunuGecerliMi = item.CheckInGunuGecerliMi,
+            GlobalCheckOutGunuGecerliMi = item.CheckOutGunuGecerliMi,
+            GlobalAciklama = item.Aciklama,
+            Miktar = effective?.Miktar ?? item.Miktar,
+            Periyot = effective?.Periyot ?? item.Periyot,
+            PeriyotAdi = effective?.PeriyotAdi ?? KonaklamaTipiIcerikPeriyotlari.GetAd(item.Periyot),
+            KullanimTipi = effective?.KullanimTipi ?? item.KullanimTipi,
+            KullanimTipiAdi = effective?.KullanimTipiAdi ?? KonaklamaTipiIcerikKullanimTipleri.GetAd(item.KullanimTipi),
+            KullanimNoktasi = effective?.KullanimNoktasi ?? item.KullanimNoktasi,
+            KullanimNoktasiAdi = effective?.KullanimNoktasiAdi ?? KonaklamaTipiIcerikKullanimNoktalari.GetAd(item.KullanimNoktasi),
+            KullanimBaslangicSaati = effective?.KullanimBaslangicSaati ?? FormatTime(item.KullanimBaslangicSaati),
+            KullanimBitisSaati = effective?.KullanimBitisSaati ?? FormatTime(item.KullanimBitisSaati),
+            CheckInGunuGecerliMi = effective?.CheckInGunuGecerliMi ?? item.CheckInGunuGecerliMi,
+            CheckOutGunuGecerliMi = effective?.CheckOutGunuGecerliMi ?? item.CheckOutGunuGecerliMi,
+            Aciklama = effective?.Aciklama ?? item.Aciklama
+        };
+    }
+
+    private static KonaklamaTipiIcerikDto? BuildEffectiveIcerikDto(
+        KonaklamaTipiIcerikKalemi item,
+        TesisKonaklamaTipiIcerikOverride? overrideItem)
+    {
+        if (overrideItem?.DevreDisiMi == true)
+        {
+            return null;
+        }
+
+        var miktar = overrideItem?.Miktar ?? item.Miktar;
+        var periyot = overrideItem?.Periyot ?? item.Periyot;
+        var kullanimTipi = overrideItem?.KullanimTipi ?? item.KullanimTipi;
+        var kullanimNoktasi = overrideItem?.KullanimNoktasi ?? item.KullanimNoktasi;
+        var baslangic = overrideItem?.KullanimBaslangicSaati ?? item.KullanimBaslangicSaati;
+        var bitis = overrideItem?.KullanimBitisSaati ?? item.KullanimBitisSaati;
+        var checkIn = overrideItem?.CheckInGunuGecerliMi ?? item.CheckInGunuGecerliMi;
+        var checkOut = overrideItem?.CheckOutGunuGecerliMi ?? item.CheckOutGunuGecerliMi;
+        var aciklama = overrideItem?.Aciklama ?? item.Aciklama;
+
+        return new KonaklamaTipiIcerikDto
+        {
+            HizmetKodu = item.HizmetKodu,
+            HizmetAdi = KonaklamaTipiIcerikHizmetKodlari.GetAd(item.HizmetKodu),
+            Miktar = miktar,
+            Periyot = periyot,
+            PeriyotAdi = KonaklamaTipiIcerikPeriyotlari.GetAd(periyot),
+            KullanimTipi = kullanimTipi,
+            KullanimTipiAdi = KonaklamaTipiIcerikKullanimTipleri.GetAd(kullanimTipi),
+            KullanimNoktasi = kullanimNoktasi,
+            KullanimNoktasiAdi = KonaklamaTipiIcerikKullanimNoktalari.GetAd(kullanimNoktasi),
+            KullanimBaslangicSaati = FormatTime(baslangic),
+            KullanimBitisSaati = FormatTime(bitis),
+            CheckInGunuGecerliMi = checkIn,
+            CheckOutGunuGecerliMi = checkOut,
+            Aciklama = aciklama
+        };
+    }
+
+    private static void ValidateOverrideItem(KonaklamaTipiTesisIcerikOverrideDto item)
+    {
+        if (item.DevreDisiMi)
+        {
+            return;
+        }
+
+        ValidateIcerikKalemleri([
+            new KonaklamaTipiIcerikDto
+            {
+                HizmetKodu = item.HizmetKodu,
+                Miktar = item.Miktar,
+                Periyot = item.Periyot,
+                KullanimTipi = item.KullanimTipi,
+                KullanimNoktasi = item.KullanimNoktasi,
+                KullanimBaslangicSaati = item.KullanimBaslangicSaati,
+                KullanimBitisSaati = item.KullanimBitisSaati,
+                CheckInGunuGecerliMi = item.CheckInGunuGecerliMi,
+                CheckOutGunuGecerliMi = item.CheckOutGunuGecerliMi,
+                Aciklama = item.Aciklama
+            }
+        ]);
+    }
+
+    private static TesisKonaklamaTipiIcerikOverride BuildNormalizedOverride(
+        int tesisId,
+        KonaklamaTipiIcerikKalemi globalItem,
+        KonaklamaTipiTesisIcerikOverrideDto item)
+    {
+        var normalizedPeriyot = item.DevreDisiMi ? null : item.Periyot?.Trim();
+        var normalizedKullanimTipi = item.DevreDisiMi ? null : item.KullanimTipi?.Trim();
+        var normalizedKullanimNoktasi = item.DevreDisiMi ? null : item.KullanimNoktasi?.Trim();
+        var normalizedAciklama = string.IsNullOrWhiteSpace(item.Aciklama) ? null : item.Aciklama.Trim();
+        var normalizedBaslangic = ParseTimeOrNull(NormalizeTime(item.KullanimBaslangicSaati));
+        var normalizedBitis = ParseTimeOrNull(NormalizeTime(item.KullanimBitisSaati));
+
+        return new TesisKonaklamaTipiIcerikOverride
+        {
+            TesisId = tesisId,
+            KonaklamaTipiIcerikKalemiId = globalItem.Id,
+            DevreDisiMi = item.DevreDisiMi,
+            Miktar = item.DevreDisiMi || item.Miktar == globalItem.Miktar ? null : item.Miktar,
+            Periyot = item.DevreDisiMi || string.Equals(normalizedPeriyot, globalItem.Periyot, StringComparison.OrdinalIgnoreCase) ? null : normalizedPeriyot,
+            KullanimTipi = item.DevreDisiMi || string.Equals(normalizedKullanimTipi, globalItem.KullanimTipi, StringComparison.OrdinalIgnoreCase) ? null : normalizedKullanimTipi,
+            KullanimNoktasi = item.DevreDisiMi || string.Equals(normalizedKullanimNoktasi, globalItem.KullanimNoktasi, StringComparison.OrdinalIgnoreCase) ? null : normalizedKullanimNoktasi,
+            KullanimBaslangicSaati = item.DevreDisiMi || normalizedBaslangic == globalItem.KullanimBaslangicSaati ? null : normalizedBaslangic,
+            KullanimBitisSaati = item.DevreDisiMi || normalizedBitis == globalItem.KullanimBitisSaati ? null : normalizedBitis,
+            CheckInGunuGecerliMi = item.DevreDisiMi || item.CheckInGunuGecerliMi == globalItem.CheckInGunuGecerliMi ? null : item.CheckInGunuGecerliMi,
+            CheckOutGunuGecerliMi = item.DevreDisiMi || item.CheckOutGunuGecerliMi == globalItem.CheckOutGunuGecerliMi ? null : item.CheckOutGunuGecerliMi,
+            Aciklama = item.DevreDisiMi || string.Equals(normalizedAciklama, globalItem.Aciklama, StringComparison.Ordinal) ? null : normalizedAciklama,
+        };
+    }
+
+    private static bool HasMeaningfulOverride(TesisKonaklamaTipiIcerikOverride item)
+        => item.DevreDisiMi
+            || item.Miktar.HasValue
+            || item.Periyot is not null
+            || item.KullanimTipi is not null
+            || item.KullanimNoktasi is not null
+            || item.KullanimBaslangicSaati.HasValue
+            || item.KullanimBitisSaati.HasValue
+            || item.CheckInGunuGecerliMi.HasValue
+            || item.CheckOutGunuGecerliMi.HasValue
+            || item.Aciklama is not null;
 
     private async Task<HashSet<int>> GetKilitliKonaklamaTipiIdsAsync(int tesisId, IReadOnlyCollection<int> konaklamaTipiIds, CancellationToken cancellationToken)
     {

@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using STYS.Binalar.Entities;
 using STYS.Iller.Entities;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.MisafirTipleri.Entities;
 using STYS.OdaTipleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -47,4 +48,8 @@ public class Tesis : BaseEntity<int>
     public ICollection<OdaTipi> OdaTipleri { get; set; } = [];
 
     public ICollection<TesisKonaklamaTipi> KonaklamaTipleri { get; set; } = [];
+
+    public ICollection<TesisMisafirTipi> MisafirTipleri { get; set; } = [];
+
+    public ICollection<TesisKonaklamaTipiIcerikOverride> KonaklamaTipiIcerikOverridelari { get; set; } = [];
 }

@@ -14,6 +14,8 @@ public class ErisimTeshisSonucDto
 
     public ErisimTeshisScopeDto Scope { get; set; } = new();
 
+    public ErisimTeshisMenuGorunumDto MenuGorunumu { get; set; } = new();
+
     public List<ErisimTeshisIslemSonucDto> Islemler { get; set; } = [];
 
     public string GenelDurum { get; set; } = string.Empty;

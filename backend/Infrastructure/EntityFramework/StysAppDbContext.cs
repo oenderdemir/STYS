@@ -55,8 +55,11 @@ public class StysAppDbContext : DbContext
     public DbSet<KonaklamaTipi> KonaklamaTipleri => Set<KonaklamaTipi>();
     public DbSet<KonaklamaTipiIcerikKalemi> KonaklamaTipiIcerikKalemleri => Set<KonaklamaTipiIcerikKalemi>();
     public DbSet<TesisKonaklamaTipi> TesisKonaklamaTipleri => Set<TesisKonaklamaTipi>();
+    public DbSet<TesisKonaklamaTipiIcerikOverride> TesisKonaklamaTipiIcerikOverridelari => Set<TesisKonaklamaTipiIcerikOverride>();
     public DbSet<MisafirTipi> MisafirTipleri => Set<MisafirTipi>();
+    public DbSet<TesisMisafirTipi> TesisMisafirTipleri => Set<TesisMisafirTipi>();
     public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
+    public DbSet<GlobalEkHizmetTanimi> GlobalEkHizmetTanimlari => Set<GlobalEkHizmetTanimi>();
     public DbSet<EkHizmet> EkHizmetler => Set<EkHizmet>();
     public DbSet<EkHizmetTarife> EkHizmetTarifeleri => Set<EkHizmetTarife>();
     public DbSet<IndirimKurali> IndirimKurallari => Set<IndirimKurali>();
@@ -388,6 +391,30 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<TesisKonaklamaTipiIcerikOverride>(entity =>
+        {
+            entity.ToTable("TesisKonaklamaTipiIcerikOverridelari", "dbo");
+            entity.Property(x => x.Periyot).HasMaxLength(32);
+            entity.Property(x => x.KullanimTipi).HasMaxLength(32);
+            entity.Property(x => x.KullanimNoktasi).HasMaxLength(32);
+            entity.Property(x => x.KullanimBaslangicSaati).HasColumnType("time");
+            entity.Property(x => x.KullanimBitisSaati).HasColumnType("time");
+            entity.Property(x => x.Aciklama).HasMaxLength(256);
+            entity.HasIndex(x => new { x.TesisId, x.KonaklamaTipiIcerikKalemiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.KonaklamaTipiIcerikOverridelari)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KonaklamaTipiIcerikKalemi)
+                .WithMany(x => x.TesisOverrideKalemleri)
+                .HasForeignKey(x => x.KonaklamaTipiIcerikKalemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<MisafirTipi>(entity =>
         {
             entity.ToTable("MisafirTipleri", "dbo");
@@ -399,6 +426,24 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.Ad)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<TesisMisafirTipi>(entity =>
+        {
+            entity.ToTable("TesisMisafirTipleri", "dbo");
+            entity.HasIndex(x => new { x.TesisId, x.MisafirTipiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.MisafirTipleri)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MisafirTipi)
+                .WithMany(x => x.TesisMisafirTipleri)
+                .HasForeignKey(x => x.MisafirTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OdaFiyat>(entity =>
@@ -426,6 +471,18 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<GlobalEkHizmetTanimi>(entity =>
+        {
+            entity.ToTable("GlobalEkHizmetTanimlari", "dbo");
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.BirimAdi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PaketIcerikHizmetKodu).HasMaxLength(64);
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+        });
+
         modelBuilder.Entity<EkHizmet>(entity =>
         {
             entity.ToTable("EkHizmetler", "dbo");
@@ -436,10 +493,18 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.GlobalEkHizmetTanimiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [GlobalEkHizmetTanimiId] IS NOT NULL");
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.GlobalEkHizmetTanimi)
+                .WithMany(x => x.TesisAtamalari)
+                .HasForeignKey(x => x.GlobalEkHizmetTanimiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

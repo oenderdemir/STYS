@@ -324,10 +324,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("PaketIcerikHizmetKodu")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -340,8 +336,15 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("GlobalEkHizmetTanimiId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("PaketIcerikHizmetKodu")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("TesisId")
                         .HasColumnType("int");
@@ -354,9 +357,15 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GlobalEkHizmetTanimiId");
+
                     b.HasIndex("TesisId", "Ad")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("TesisId", "GlobalEkHizmetTanimiId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [GlobalEkHizmetTanimiId] IS NOT NULL");
 
                     b.ToTable("EkHizmetler", "dbo");
                 });
@@ -422,6 +431,65 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("EkHizmetTarifeleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.GlobalEkHizmetTanimi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("BirimAdi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PaketIcerikHizmetKodu")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("GlobalEkHizmetTanimlari", "dbo");
                 });
 
             modelBuilder.Entity("STYS.EkHizmetler.Entities.RezervasyonEkHizmet", b =>
@@ -1003,6 +1071,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<bool>("CheckInGunuGecerliMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CheckOutGunuGecerliMi")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1020,14 +1094,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<bool>("CheckInGunuGecerliMi")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("CheckOutGunuGecerliMi")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<int>("KonaklamaTipiId")
+                        .HasColumnType("int");
 
                     b.Property<TimeSpan?>("KullanimBaslangicSaati")
                         .HasColumnType("time");
@@ -1044,9 +1115,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
-
-                    b.Property<int>("KonaklamaTipiId")
-                        .HasColumnType("int");
 
                     b.Property<int>("Miktar")
                         .HasColumnType("int");
@@ -1082,9 +1150,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("AktifMi")
                         .HasColumnType("bit");
 
-                    b.Property<int>("KonaklamaTipiId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1099,6 +1164,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<int>("KonaklamaTipiId")
+                        .HasColumnType("int");
 
                     b.Property<int>("TesisId")
                         .HasColumnType("int");
@@ -1118,6 +1186,86 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("TesisKonaklamaTipleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.TesisKonaklamaTipiIcerikOverride", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool?>("CheckInGunuGecerliMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("CheckOutGunuGecerliMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("DevreDisiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KonaklamaTipiIcerikKalemiId")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan?>("KullanimBaslangicSaati")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan?>("KullanimBitisSaati")
+                        .HasColumnType("time");
+
+                    b.Property<string>("KullanimNoktasi")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("KullanimTipi")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("Miktar")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Periyot")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KonaklamaTipiIcerikKalemiId");
+
+                    b.HasIndex("TesisId", "KonaklamaTipiIcerikKalemiId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("TesisKonaklamaTipiIcerikOverridelari", "dbo");
                 });
 
             modelBuilder.Entity("STYS.Kullanicilar.Entities.KullaniciTesisSahiplik", b =>
@@ -1219,6 +1367,55 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("MisafirTipleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.MisafirTipleri.Entities.TesisMisafirTipi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MisafirTipiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MisafirTipiId");
+
+                    b.HasIndex("TesisId", "MisafirTipiId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("TesisMisafirTipleri", "dbo");
                 });
 
             modelBuilder.Entity("STYS.OdaKullanimBloklari.Entities.OdaKullanimBlok", b =>
@@ -1732,11 +1929,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("KonaklamaTipiId");
+
                     b.HasIndex("ReferansNo")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
-
-                    b.HasIndex("KonaklamaTipiId");
 
                     b.HasIndex("RezervasyonDurumu")
                         .HasFilter("[IsDeleted] = 0");
@@ -1745,6 +1942,61 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("Rezervasyonlar", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonDegisiklikGecmisi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("IslemTipi")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("OncekiDegerJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RezervasyonId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("YeniDegerJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RezervasyonId", "CreatedAt")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RezervasyonDegisiklikGecmisleri", "dbo");
                 });
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklamaHakki", b =>
@@ -1760,6 +2012,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CheckInGunuGecerliMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CheckOutGunuGecerliMi")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("CreatedAt")
@@ -1791,12 +2049,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
-
-                    b.Property<bool>("CheckInGunuGecerliMi")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("CheckOutGunuGecerliMi")
-                        .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -1938,61 +2190,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("RezervasyonKonaklamaHakkiTuketimKayitlari", "dbo");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonDegisiklikGecmisi", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Aciklama")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("IslemTipi")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("OncekiDegerJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("RezervasyonId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("YeniDegerJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RezervasyonId", "CreatedAt")
-                        .HasFilter("[IsDeleted] = 0");
-
-                    b.ToTable("RezervasyonDegisiklikGecmisleri", "dbo");
                 });
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklayan", b =>
@@ -2414,16 +2611,16 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Eposta")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
                     b.Property<string>("EkHizmetPaketCakismaPolitikasi")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)")
                         .HasDefaultValue("OnayIste");
+
+                    b.Property<string>("Eposta")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
 
                     b.Property<TimeSpan>("GirisSaati")
                         .ValueGeneratedOnAdd()
@@ -2568,11 +2765,18 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("STYS.EkHizmetler.Entities.EkHizmet", b =>
                 {
+                    b.HasOne("STYS.EkHizmetler.Entities.GlobalEkHizmetTanimi", "GlobalEkHizmetTanimi")
+                        .WithMany("TesisAtamalari")
+                        .HasForeignKey("GlobalEkHizmetTanimiId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
                         .WithMany()
                         .HasForeignKey("TesisId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("GlobalEkHizmetTanimi");
 
                     b.Navigation("Tesis");
                 });
@@ -2741,16 +2945,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("IsletmeAlaniSinifi");
                 });
 
-            modelBuilder.Entity("STYS.Kullanicilar.Entities.KullaniciTesisSahiplik", b =>
-                {
-                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
-                        .WithMany()
-                        .HasForeignKey("TesisId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Tesis");
-                });
-
             modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.KonaklamaTipiIcerikKalemi", b =>
                 {
                     b.HasOne("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", "KonaklamaTipi")
@@ -2777,6 +2971,54 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsRequired();
 
                     b.Navigation("KonaklamaTipi");
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.TesisKonaklamaTipiIcerikOverride", b =>
+                {
+                    b.HasOne("STYS.KonaklamaTipleri.Entities.KonaklamaTipiIcerikKalemi", "KonaklamaTipiIcerikKalemi")
+                        .WithMany("TesisOverrideKalemleri")
+                        .HasForeignKey("KonaklamaTipiIcerikKalemiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany("KonaklamaTipiIcerikOverridelari")
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KonaklamaTipiIcerikKalemi");
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.Kullanicilar.Entities.KullaniciTesisSahiplik", b =>
+                {
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.MisafirTipleri.Entities.TesisMisafirTipi", b =>
+                {
+                    b.HasOne("STYS.MisafirTipleri.Entities.MisafirTipi", "MisafirTipi")
+                        .WithMany("TesisMisafirTipleri")
+                        .HasForeignKey("MisafirTipiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany("MisafirTipleri")
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MisafirTipi");
 
                     b.Navigation("Tesis");
                 });
@@ -2894,6 +3136,17 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Tesis");
                 });
 
+            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonDegisiklikGecmisi", b =>
+                {
+                    b.HasOne("STYS.Rezervasyonlar.Entities.Rezervasyon", "Rezervasyon")
+                        .WithMany("DegisiklikGecmisiKayitlari")
+                        .HasForeignKey("RezervasyonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Rezervasyon");
+                });
+
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklamaHakki", b =>
                 {
                     b.HasOne("STYS.Rezervasyonlar.Entities.Rezervasyon", "Rezervasyon")
@@ -2929,17 +3182,6 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Rezervasyon");
 
                     b.Navigation("RezervasyonKonaklamaHakki");
-                });
-
-            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonDegisiklikGecmisi", b =>
-                {
-                    b.HasOne("STYS.Rezervasyonlar.Entities.Rezervasyon", "Rezervasyon")
-                        .WithMany("DegisiklikGecmisiKayitlari")
-                        .HasForeignKey("RezervasyonId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Rezervasyon");
                 });
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklayan", b =>
@@ -3086,6 +3328,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("RezervasyonEkHizmetleri");
                 });
 
+            modelBuilder.Entity("STYS.EkHizmetler.Entities.GlobalEkHizmetTanimi", b =>
+                {
+                    b.Navigation("TesisAtamalari");
+                });
+
             modelBuilder.Entity("STYS.Fiyatlandirma.Entities.IndirimKurali", b =>
                 {
                     b.Navigation("KonaklamaTipiKisitlari");
@@ -3114,11 +3361,18 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("TesisKonaklamaTipleri");
                 });
 
+            modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.KonaklamaTipiIcerikKalemi", b =>
+                {
+                    b.Navigation("TesisOverrideKalemleri");
+                });
+
             modelBuilder.Entity("STYS.MisafirTipleri.Entities.MisafirTipi", b =>
                 {
                     b.Navigation("IndirimKuralMisafirTipleri");
 
                     b.Navigation("OdaFiyatlari");
+
+                    b.Navigation("TesisMisafirTipleri");
                 });
 
             modelBuilder.Entity("STYS.OdaOzellikleri.Entities.OdaOzellik", b =>
@@ -3149,15 +3403,20 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Navigation("EkHizmetler");
 
-                    b.Navigation("KonaklamaHaklari");
-
                     b.Navigation("KonaklamaHakkiTuketimKayitlari");
+
+                    b.Navigation("KonaklamaHaklari");
 
                     b.Navigation("Konaklayanlar");
 
                     b.Navigation("Odemeler");
 
                     b.Navigation("Segmentler");
+                });
+
+            modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklamaHakki", b =>
+                {
+                    b.Navigation("TuketimKayitlari");
                 });
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.RezervasyonKonaklayan", b =>
@@ -3176,7 +3435,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 {
                     b.Navigation("Binalar");
 
+                    b.Navigation("KonaklamaTipiIcerikOverridelari");
+
                     b.Navigation("KonaklamaTipleri");
+
+                    b.Navigation("MisafirTipleri");
 
                     b.Navigation("OdaTipleri");
 

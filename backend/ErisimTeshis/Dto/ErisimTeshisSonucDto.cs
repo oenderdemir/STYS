@@ -30,5 +30,7 @@ public class ErisimTeshisSonucDto
 
     public List<string> OnerilenAksiyonlar { get; set; } = [];
 
+    public string DestekNotu { get; set; } = string.Empty;
+
     public string Ozet { get; set; } = string.Empty;
 }

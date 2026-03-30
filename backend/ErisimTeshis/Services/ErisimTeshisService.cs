@@ -160,6 +160,7 @@ public class ErisimTeshisService : IErisimTeshisService
         var basariliIslemSayisi = operations.Count(x => string.Equals(x.Durum, "Basarili", StringComparison.OrdinalIgnoreCase));
         var uyariIslemSayisi = operations.Count(x => string.Equals(x.Durum, "Uyari", StringComparison.OrdinalIgnoreCase));
         var engelliIslemSayisi = operations.Count(x => string.Equals(x.Durum, "Engelli", StringComparison.OrdinalIgnoreCase));
+        var destekNotu = BuildSupportNote(user.UserName, modul.Ad, selectedTesis, menuGorunumu, operations);
 
         return new ErisimTeshisSonucDto
         {
@@ -201,6 +202,7 @@ public class ErisimTeshisService : IErisimTeshisService
             EngelliIslemSayisi = engelliIslemSayisi,
             EksikYetkiler = missingPermissions,
             OnerilenAksiyonlar = recommendations,
+            DestekNotu = destekNotu,
             Ozet = BuildOverallSummary(user.UserName, modul.Ad, operations, selectedTesis)
         };
     }
@@ -217,8 +219,10 @@ public class ErisimTeshisService : IErisimTeshisService
             {
                 MenuKaydiBulundu = false,
                 MenuYolu = modul.Ad,
+                Route = modul.Route,
                 SidebardaGorunur = false,
                 MenuYetkisiVar = false,
+                MenuZinciri = [],
                 Aciklama = "Bu modul icin route tanimi bulunmadigi icin menu kaydi eslestirilemedi."
             };
         }
@@ -239,13 +243,16 @@ public class ErisimTeshisService : IErisimTeshisService
             {
                 MenuKaydiBulundu = false,
                 MenuYolu = modul.Ad,
+                Route = modul.Route,
                 SidebardaGorunur = false,
                 MenuYetkisiVar = false,
+                MenuZinciri = [],
                 Aciklama = "Bu modul icin DB tarafinda aktif bir menu kaydi bulunamadi."
             };
         }
 
-        var menuPath = await BuildMenuPathAsync(menuItem, cancellationToken);
+        var menuChain = await BuildMenuChainAsync(menuItem, permissionSet, cancellationToken);
+        var menuPath = string.Join(" > ", menuChain.Select(x => x.Etiket));
         var menuPermissions = menuItem.MenuItemRoles
             .Select(x => ToPermission(x.Role.Domain, x.Role.Name))
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -258,24 +265,42 @@ public class ErisimTeshisService : IErisimTeshisService
         {
             MenuKaydiBulundu = true,
             MenuYolu = menuPath,
+            Route = menuItem.Route ?? modul.Route,
             SidebardaGorunur = menuPermissionGranted,
             MenuYetkisiVar = menuPermissionGranted,
+            GerekliMenuYetkileri = menuPermissions,
+            MenuZinciri = menuChain,
             Aciklama = menuPermissionGranted
                 ? "Secili modulun menu yetkisi mevcut. Parent menu gruplari cocuk kayit uzerinden sidebarda gorunur."
                 : $"Secili modulun menu kaydi bulundu ancak gerekli menu yetkisi eksik: {string.Join(", ", menuPermissions)}"
         };
     }
 
-    private async Task<string> BuildMenuPathAsync(MenuItem menuItem, CancellationToken cancellationToken)
+    private async Task<List<ErisimTeshisMenuSeviyeDto>> BuildMenuChainAsync(
+        MenuItem menuItem,
+        IReadOnlySet<string> permissionSet,
+        CancellationToken cancellationToken)
     {
-        var labels = new List<string>();
+        var chain = new List<ErisimTeshisMenuSeviyeDto>();
         MenuItem? current = menuItem;
 
         while (current is not null)
         {
+            var permissions = current.MenuItemRoles
+                .Select(x => ToPermission(x.Role.Domain, x.Role.Name))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
             if (!string.IsNullOrWhiteSpace(current.Label))
             {
-                labels.Add(current.Label.Trim());
+                chain.Add(new ErisimTeshisMenuSeviyeDto
+                {
+                    Etiket = current.Label.Trim(),
+                    Route = current.Route ?? string.Empty,
+                    GerekliYetkiler = permissions,
+                    Gorunur = permissions.Count == 0 || permissions.Any(x => HasPermission(permissionSet, x))
+                });
             }
 
             if (!current.ParentId.HasValue)
@@ -285,11 +310,13 @@ public class ErisimTeshisService : IErisimTeshisService
 
             current = await _identityDbContext.MenuItems
                 .AsNoTracking()
+                .Include(x => x.MenuItemRoles)
+                .ThenInclude(x => x.Role)
                 .FirstOrDefaultAsync(x => x.Id == current.ParentId.Value, cancellationToken);
         }
 
-        labels.Reverse();
-        return string.Join(" > ", labels);
+        chain.Reverse();
+        return chain;
     }
 
     private static string NormalizeMenuRoute(string route)
@@ -664,6 +691,36 @@ public class ErisimTeshisService : IErisimTeshisService
         var firstBlocked = blocked[0];
         return $"{userName} kullanicisi {moduleName} modulu icin engelli. Ilk neden: {firstBlocked.Aciklama}";
     }
+
+    private static string BuildSupportNote(
+        string userName,
+        string moduleName,
+        ErisimTeshisTesisDto? selectedTesis,
+        ErisimTeshisMenuGorunumDto menuGorunumu,
+        IReadOnlyList<ErisimTeshisIslemSonucDto> operations)
+    {
+        if (!menuGorunumu.MenuKaydiBulundu)
+        {
+            return $"{userName} icin {moduleName} menusu DB'de bulunamadi. Route: {menuGorunumu.Route}.";
+        }
+
+        if (!menuGorunumu.MenuYetkisiVar)
+        {
+            var missingPermission = menuGorunumu.GerekliMenuYetkileri.FirstOrDefault() ?? "menu yetkisi";
+            return $"{userName} {moduleName} menusunu goremez; eksik menu yetkisi: {missingPermission}.";
+        }
+
+        var firstBlocked = operations.FirstOrDefault(x => !x.Sonuc);
+        if (firstBlocked is null)
+        {
+            return selectedTesis is null
+                ? $"{userName} icin {moduleName} menusu ve temel islem yetkileri uygun."
+                : $"{userName} icin {moduleName} menusu gorunur ve {selectedTesis.Ad} tesisinde temel islem yetkileri uygun.";
+        }
+
+        return $"{userName} {moduleName} menusunu gorebilir; ancak {firstBlocked.IslemAdi.ToLowerInvariant()} islemi engelli. Neden: {firstBlocked.Aciklama}";
+    }
+
     private sealed record UserScopeSnapshot(
         bool AdminMi,
         DomainAccessScope DomainScope,

@@ -45,9 +45,19 @@ export interface ErisimTeshisScopeDto {
 export interface ErisimTeshisMenuGorunumDto {
     menuKaydiBulundu: boolean;
     menuYolu: string;
+    route: string;
     sidebardaGorunur: boolean;
     menuYetkisiVar: boolean;
+    gerekliMenuYetkileri: string[];
+    menuZinciri: ErisimTeshisMenuSeviyeDto[];
     aciklama: string;
+}
+
+export interface ErisimTeshisMenuSeviyeDto {
+    etiket: string;
+    route: string;
+    gerekliYetkiler: string[];
+    gorunur: boolean;
 }
 
 export interface ErisimTeshisIslemSonucDto {
@@ -79,5 +89,6 @@ export interface ErisimTeshisSonucDto {
     engelliIslemSayisi: number;
     eksikYetkiler: string[];
     onerilenAksiyonlar: string[];
+    destekNotu: string;
     ozet: string;
 }

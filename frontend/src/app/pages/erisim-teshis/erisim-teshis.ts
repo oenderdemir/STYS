@@ -17,6 +17,7 @@ import {
     ErisimTeshisIstekDto,
     ErisimTeshisIslemSonucDto,
     ErisimTeshisKullaniciGrupDto,
+    ErisimTeshisMenuSeviyeDto,
     ErisimTeshisModulDto,
     ErisimTeshisReferansDto,
     ErisimTeshisSonucDto,
@@ -125,6 +126,44 @@ import { ErisimTeshisService } from './erisim-teshis.service';
         .recommendation-list li + li {
             margin-top: 0.45rem;
         }
+
+        .menu-path {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .menu-path-segment {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 0.7rem;
+            border: 1px solid #dbe3ef;
+            border-radius: 999px;
+            background: #f8fafc;
+            font-size: 0.85rem;
+            color: #334155;
+        }
+
+        .support-note {
+            border: 1px solid #bfdbfe;
+            background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+            border-radius: 0.9rem;
+            padding: 1rem;
+        }
+
+        .menu-chain-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.55rem 0;
+            border-top: 1px solid #eef2f7;
+        }
+
+        .menu-chain-row:first-child {
+            border-top: 0;
+            padding-top: 0;
+        }
     `],
     providers: [MessageService]
 })
@@ -166,6 +205,15 @@ export class ErisimTeshis implements OnInit {
 
     get selectedTesisRequired(): boolean {
         return !!this.selectedModul?.tesisSecimiGerekli;
+    }
+
+    get menuPathSegments(): string[] {
+        const menuPath = this.sonuc?.menuGorunumu.menuYolu?.trim();
+        return menuPath ? menuPath.split('>').map((x) => x.trim()).filter((x) => x.length > 0) : [];
+    }
+
+    get menuChain(): ErisimTeshisMenuSeviyeDto[] {
+        return this.sonuc?.menuGorunumu.menuZinciri ?? [];
     }
 
     ngOnInit(): void {
@@ -291,10 +339,21 @@ export class ErisimTeshis implements OnInit {
             `Modul: ${this.sonuc.modul.ad}`,
             `Tesis: ${this.sonuc.seciliTesis?.ad ?? '-'}`,
             `Genel Durum: ${this.sonuc.genelDurum}`,
+            `Destek Notu: ${this.sonuc.destekNotu}`,
+            `Menu Yolu: ${this.sonuc.menuGorunumu.menuYolu}`,
+            `Menu Route: ${this.sonuc.menuGorunumu.route}`,
+            `Sidebarda Gorunur: ${this.sonuc.menuGorunumu.sidebardaGorunur ? 'Evet' : 'Hayir'}`,
             `Ozet: ${this.sonuc.ozet}`,
             '',
             'Islem Sonuclari:'
         ];
+
+        if (this.sonuc.menuGorunumu.gerekliMenuYetkileri.length > 0) {
+            lines.push('', 'Menu Yetkileri:');
+            for (const permission of this.sonuc.menuGorunumu.gerekliMenuYetkileri) {
+                lines.push(`- ${permission}`);
+            }
+        }
 
         for (const item of this.sonuc.islemler) {
             lines.push(`- ${item.islemAdi}: ${item.durum} | ${item.aciklama}`);

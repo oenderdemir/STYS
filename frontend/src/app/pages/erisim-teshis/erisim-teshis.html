@@ -121,6 +121,15 @@
         </div>
 
         <div class="col-span-12 lg:col-span-4">
+            <div class="support-note">
+                <div class="mini-title mb-2">Destek Notu</div>
+                <div class="font-medium">{{ sonuc.destekNotu }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mt-4">
+        <div class="col-span-12 lg:col-span-4">
             <div class="teshis-card">
                 <div class="mini-title mb-2">Kullanici</div>
                 <div class="font-semibold">{{ sonuc.kullanici.kullaniciAdi }}</div>
@@ -212,8 +221,59 @@
                     <p-tag [value]="sonuc.menuGorunumu.menuYetkisiVar ? 'Menu Yetkisi Var' : 'Menu Yetkisi Yok'" [severity]="sonuc.menuGorunumu.menuYetkisiVar ? 'success' : 'danger'" />
                 </div>
                 <div class="text-sm mb-2">
-                    <strong>Menu Yolu:</strong> {{ sonuc.menuGorunumu.menuYolu }}
+                    <strong>Menu Yolu:</strong>
                 </div>
+                <div class="menu-path mb-3">
+                    @for (segment of menuPathSegments; track trackPermission($index, segment)) {
+                        <span class="menu-path-segment">{{ segment }}</span>
+                    }
+                </div>
+                <div class="text-sm mb-2">
+                    <strong>Route:</strong> <code>{{ sonuc.menuGorunumu.route }}</code>
+                </div>
+                <div class="text-sm mb-2">
+                    <strong>Menuyu Acan Yetkiler:</strong>
+                </div>
+                @if (sonuc.menuGorunumu.gerekliMenuYetkileri.length > 0) {
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        @for (permission of sonuc.menuGorunumu.gerekliMenuYetkileri; track permission) {
+                            <span class="permission-chip">{{ permission }}</span>
+                        }
+                    </div>
+                } @else {
+                    <p class="m-0 mb-3 text-color-secondary">Bu menu icin explicit bir menu yetkisi baglanmamis.</p>
+                }
+                @if (menuChain.length > 0) {
+                    <div class="text-sm mb-2">
+                        <strong>Parent Menu Analizi:</strong>
+                    </div>
+                    <div class="mb-3">
+                        @for (item of menuChain; track trackPermission($index, item.etiket)) {
+                            <div class="menu-chain-row">
+                                <div>
+                                    <div class="font-medium">{{ item.etiket }}</div>
+                                    <div class="text-color-secondary text-sm">
+                                        @if (item.route) {
+                                            <code>{{ item.route }}</code>
+                                        } @else {
+                                            <span>Parent grup</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="flex flex-wrap gap-2 justify-content-end">
+                                    <p-tag [value]="item.gorunur ? 'Gorunur' : 'Gorunmez'" [severity]="item.gorunur ? 'success' : 'danger'" />
+                                </div>
+                            </div>
+                            @if (item.gerekliYetkiler.length > 0) {
+                                <div class="flex flex-wrap gap-2 mb-2">
+                                    @for (permission of item.gerekliYetkiler; track permission) {
+                                        <span class="permission-chip">{{ permission }}</span>
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
+                }
                 <p class="m-0 text-color-secondary">{{ sonuc.menuGorunumu.aciklama }}</p>
             </div>
 

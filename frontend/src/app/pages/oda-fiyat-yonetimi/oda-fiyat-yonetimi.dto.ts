@@ -4,6 +4,7 @@ export interface OdaFiyatDto {
     konaklamaTipiId: number;
     misafirTipiId: number;
     kisiSayisi: number;
+    kullanimSekli: string;
     fiyat: number;
     paraBirimi: string;
     baslangicTarihi: string;
@@ -39,6 +40,7 @@ export interface OdaFiyatFormRow {
     id?: number | null;
     konaklamaTipiId: number | null;
     misafirTipiId: number | null;
+    kullanimSekli: string;
     fiyat: number | null;
     paraBirimi: string;
     baslangicTarihi: string;

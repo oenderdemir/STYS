@@ -84,7 +84,8 @@ public class RezervasyonService : IRezervasyonService
                 Id = x.Id,
                 TesisId = x.TesisId,
                 Ad = x.Ad,
-                Kapasite = x.Kapasite
+                Kapasite = x.Kapasite,
+                PaylasimliMi = x.PaylasimliMi
             })
             .ToListAsync(cancellationToken);
     }
@@ -246,6 +247,17 @@ public class RezervasyonService : IRezervasyonService
                     .Sum() ?? 0m),
                 ParaBirimi = x.ParaBirimi,
                 RezervasyonDurumu = x.RezervasyonDurumu,
+                FiyatlamaOzeti = x.TekKisilikFiyatUygulandiMi
+                    ? "Tek kisilik fiyat"
+                    : x.Segmentler
+                        .SelectMany(s => s.OdaAtamalari)
+                        .Any(a => a.PaylasimliMiSnapshot)
+                            ? x.Segmentler
+                                .SelectMany(s => s.OdaAtamalari)
+                                .Any(a => !a.PaylasimliMiSnapshot)
+                                    ? "Karma"
+                                    : "Kisi basi"
+                            : "Ozel kullanim",
                 KonaklayanPlaniTamamlandi = x.Segmentler.Count() > 0
                     && x.Konaklayanlar.Count() == x.KisiSayisi
                     && !x.Konaklayanlar.Any(k => k.AdSoyad == null || k.AdSoyad == string.Empty)
@@ -598,6 +610,7 @@ public class RezervasyonService : IRezervasyonService
                 x.KisiSayisi,
                 x.KonaklamaTipiId,
                 KonaklamaTipiAdi = x.KonaklamaTipi != null ? x.KonaklamaTipi.Ad : null,
+                x.TekKisilikFiyatUygulandiMi,
                 x.GirisTarihi,
                 x.CikisTarihi,
                 x.ToplamBazUcret,
@@ -699,6 +712,8 @@ public class RezervasyonService : IRezervasyonService
             MisafirCinsiyeti = raw.MisafirCinsiyeti,
             KisiSayisi = raw.KisiSayisi,
             KonaklamaTipiAdi = raw.KonaklamaTipiAdi,
+            TekKisilikFiyatUygulandiMi = raw.TekKisilikFiyatUygulandiMi,
+            FiyatlamaOzeti = BuildRezervasyonFiyatlamaOzeti(raw.TekKisilikFiyatUygulandiMi, raw.Segmentler),
             KonaklamaTipiIcerikKalemleri = konaklamaTipiIcerikKalemleri,
             GirisTarihi = raw.GirisTarihi,
             CikisTarihi = raw.CikisTarihi,
@@ -1901,6 +1916,8 @@ public class RezervasyonService : IRezervasyonService
                 request.TesisId,
                 request.MisafirTipiId,
                 request.KonaklamaTipiId,
+                request.KisiSayisi,
+                request.TekKisilikFiyatUygulansinMi,
                 request.BaslangicTarihi,
                 request.BitisTarihi,
                 scenario.Segmentler.Select(x => new SenaryoFiyatHesaplaSegmentDto
@@ -1943,6 +1960,8 @@ public class RezervasyonService : IRezervasyonService
             request.TesisId,
             request.MisafirTipiId,
             request.KonaklamaTipiId,
+            request.KisiSayisi,
+            request.TekKisilikFiyatUygulansinMi,
             request.BaslangicTarihi,
             request.BitisTarihi,
             request.Segmentler,
@@ -2055,6 +2074,7 @@ public class RezervasyonService : IRezervasyonService
             KonaklamaTipiId = request.KonaklamaTipiId,
             GirisTarihi = request.GirisTarihi,
             CikisTarihi = request.CikisTarihi,
+            TekKisilikFiyatUygulandiMi = request.TekKisilikFiyatUygulansinMi,
             MisafirAdiSoyadi = request.MisafirAdiSoyadi.Trim(),
             MisafirTelefon = request.MisafirTelefon.Trim(),
             MisafirEposta = string.IsNullOrWhiteSpace(request.MisafirEposta) ? null : request.MisafirEposta.Trim(),
@@ -3443,6 +3463,8 @@ public class RezervasyonService : IRezervasyonService
         int tesisId,
         int misafirTipiId,
         int konaklamaTipiId,
+        int kisiSayisi,
+        bool tekKisilikFiyatUygulansinMi,
         DateTime baslangicTarihi,
         DateTime bitisTarihi,
         IReadOnlyCollection<SenaryoFiyatHesaplaSegmentDto> segmentler,
@@ -3452,7 +3474,7 @@ public class RezervasyonService : IRezervasyonService
         await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
         await EnsureTesisHasMisafirTipiAsync(tesisId, misafirTipiId, cancellationToken);
         await EnsureTesisHasKonaklamaTipiAsync(tesisId, konaklamaTipiId, cancellationToken);
-        ValidatePricingRequest(tesisId, misafirTipiId, konaklamaTipiId, baslangicTarihi, bitisTarihi, segmentler);
+        ValidatePricingRequest(tesisId, misafirTipiId, konaklamaTipiId, kisiSayisi, tekKisilikFiyatUygulansinMi, baslangicTarihi, bitisTarihi, segmentler);
         await EnsureSeasonRuleComplianceAsync(tesisId, baslangicTarihi, bitisTarihi, cancellationToken);
 
         var roomIds = segmentler.SelectMany(x => x.OdaAtamalari).Select(x => x.OdaId).Distinct().ToList();
@@ -3468,7 +3490,8 @@ public class RezervasyonService : IRezervasyonService
             {
                 OdaId = oda.Id,
                 bina.TesisId,
-                OdaTipiId = odaTipi.Id
+                OdaTipiId = odaTipi.Id,
+                odaTipi.PaylasimliMi
             })
             .ToListAsync(cancellationToken);
 
@@ -3478,7 +3501,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         var roomTypeIds = roomMaps.Select(x => x.OdaTipiId).Distinct().ToList();
-        var roomTypeByRoomId = roomMaps.ToDictionary(x => x.OdaId, x => x.OdaTipiId);
+        var roomTypeByRoomId = roomMaps.ToDictionary(x => x.OdaId, x => new RoomTypePricingInfo(x.OdaTipiId, x.PaylasimliMi));
         var tesisSaatleri = await _stysDbContext.Tesisler
             .Where(x => x.Id == tesisId)
             .Select(x => new { x.GirisSaati, x.CikisSaati })
@@ -3525,16 +3548,26 @@ public class RezervasyonService : IRezervasyonService
 
             foreach (var atama in aktifSegment.OdaAtamalari)
             {
-                var odaTipiId = roomTypeByRoomId[atama.OdaId];
-                var fiyat = fiyatKayitlari.FirstOrDefault(x =>
-                    x.TesisOdaTipiId == odaTipiId
-                    && x.BaslangicTarihi.Date <= chargeWindow.ChargeDay
-                    && x.BitisTarihi.Date >= chargeWindow.ChargeDay);
+                var roomTypeInfo = roomTypeByRoomId[atama.OdaId];
+                var applicableRows = fiyatKayitlari
+                    .Where(x =>
+                        x.TesisOdaTipiId == roomTypeInfo.OdaTipiId
+                        && x.BaslangicTarihi.Date <= chargeWindow.ChargeDay
+                        && x.BitisTarihi.Date >= chargeWindow.ChargeDay)
+                    .ToList();
 
-                if (fiyat is null)
+                if (applicableRows.Count == 0)
                 {
                     throw new BaseException($"Senaryo icin {chargeWindow.ChargeDay:yyyy-MM-dd} tarihinde uygun oda fiyati bulunamadi.", 400);
                 }
+
+                var fiyat = ResolveScenarioPrice(
+                    applicableRows,
+                    roomTypeInfo.PaylasimliMi,
+                    atama.AyrilanKisiSayisi,
+                    kisiSayisi,
+                    tekKisilikFiyatUygulansinMi,
+                    chargeWindow.ChargeDay);
 
                 if (string.IsNullOrWhiteSpace(currency))
                 {
@@ -3545,7 +3578,7 @@ public class RezervasyonService : IRezervasyonService
                     throw new BaseException("Senaryo fiyatlari birden fazla para birimi iceriyor.", 400);
                 }
 
-                baseTotal += fiyat.Fiyat * atama.AyrilanKisiSayisi;
+                baseTotal += fiyat.Tutar;
             }
         }
 
@@ -3768,6 +3801,8 @@ public class RezervasyonService : IRezervasyonService
         int tesisId,
         int misafirTipiId,
         int konaklamaTipiId,
+        int kisiSayisi,
+        bool tekKisilikFiyatUygulansinMi,
         DateTime baslangicTarihi,
         DateTime bitisTarihi,
         IReadOnlyCollection<SenaryoFiyatHesaplaSegmentDto> segmentler)
@@ -3785,6 +3820,16 @@ public class RezervasyonService : IRezervasyonService
         if (konaklamaTipiId <= 0)
         {
             throw new BaseException("Konaklama tipi secimi zorunludur.", 400);
+        }
+
+        if (kisiSayisi <= 0)
+        {
+            throw new BaseException("Kisi sayisi sifirdan buyuk olmalidir.", 400);
+        }
+
+        if (tekKisilikFiyatUygulansinMi && kisiSayisi != 1)
+        {
+            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
         }
 
         if (baslangicTarihi >= bitisTarihi)
@@ -3867,6 +3912,11 @@ public class RezervasyonService : IRezervasyonService
         {
             throw new BaseException("Konaklayan cinsiyet sayisi kisi sayisi ile uyumlu olmalidir.", 400);
         }
+
+        if (request.TekKisilikFiyatUygulansinMi && request.KisiSayisi != 1)
+        {
+            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
+        }
     }
 
     private static void ValidateSaveRequest(RezervasyonKaydetRequestDto request)
@@ -3934,6 +3984,11 @@ public class RezervasyonService : IRezervasyonService
         if (request.MisafirCinsiyeti is not null && NormalizeKonaklayanCinsiyet(request.MisafirCinsiyeti) is null)
         {
             throw new BaseException("Misafir cinsiyeti gecersiz.", 400);
+        }
+
+        if (request.TekKisilikFiyatUygulansinMi && request.KisiSayisi != 1)
+        {
+            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
         }
 
         if (request.UygulananIndirimler.Any(x =>
@@ -4082,6 +4137,8 @@ public class RezervasyonService : IRezervasyonService
             reservation.TesisId,
             reservation.MisafirTipiId.Value,
             reservation.KonaklamaTipiId.Value,
+            reservation.KisiSayisi,
+            reservation.TekKisilikFiyatUygulandiMi,
             reservation.GirisTarihi,
             reservation.CikisTarihi,
             segmentDtos,
@@ -4692,7 +4749,7 @@ public class RezervasyonService : IRezervasyonService
 
     private static string NormalizeKonaklayanKatilimDurumu(string? katilimDurumu)
     {
-        return NormalizeStoredKonaklayanKatilimDurumu(katilimDurumu) ?? KonaklayanKatilimDurumlari.Bekleniyor;
+        return NormalizeStoredKonaklayanKatilimDurumu(katilimDurumu);
     }
 
     private static string NormalizeStoredKonaklayanKatilimDurumu(string? katilimDurumu)
@@ -4723,6 +4780,81 @@ public class RezervasyonService : IRezervasyonService
         }
 
         throw new BaseException("Konaklayan katilim durumu gecersiz.", 400);
+    }
+
+    private static SelectedScenarioPrice ResolveScenarioPrice(
+        IReadOnlyCollection<OdaFiyat> priceRows,
+        bool paylasimliOdaTipi,
+        int segmentKisiSayisi,
+        int rezervasyonKisiSayisi,
+        bool tekKisilikFiyatUygulansinMi,
+        DateTime hedefTarih)
+    {
+        var kisiBasiPrice = priceRows.FirstOrDefault(x => x.KullanimSekli.Equals(OdaFiyatKullanimSekilleri.KisiBasi, StringComparison.OrdinalIgnoreCase));
+        var ozelKullanimPrice = priceRows.FirstOrDefault(x => x.KullanimSekli.Equals(OdaFiyatKullanimSekilleri.OzelKullanim, StringComparison.OrdinalIgnoreCase));
+
+        if (paylasimliOdaTipi)
+        {
+            if (kisiBasiPrice is null)
+            {
+                throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin paylasimli kullanim kisi bazli tarife bulunamadi.", 400);
+            }
+
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi);
+        }
+
+        if (tekKisilikFiyatUygulansinMi && rezervasyonKisiSayisi == 1)
+        {
+            if (kisiBasiPrice is null)
+            {
+                throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin tek kisilik fiyat uygulanacak kisi bazli tarife bulunamadi.", 400);
+            }
+
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat);
+        }
+
+        if (ozelKullanimPrice is not null)
+        {
+            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat);
+        }
+
+        if (kisiBasiPrice is not null)
+        {
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi);
+        }
+
+        throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin uygun oda fiyati bulunamadi.", 400);
+    }
+
+    private static string BuildRezervasyonFiyatlamaOzeti(
+        bool tekKisilikFiyatUygulandiMi,
+        IReadOnlyCollection<RezervasyonDetaySegmentDto> segmentler)
+    {
+        if (tekKisilikFiyatUygulandiMi)
+        {
+            return "Tek kisilik fiyat uygulandi";
+        }
+
+        var tumAtamalar = segmentler.SelectMany(x => x.OdaAtamalari).ToList();
+        if (tumAtamalar.Count == 0)
+        {
+            return "Standart fiyatlama";
+        }
+
+        var hasShared = tumAtamalar.Any(x => x.PaylasimliMi);
+        var hasPrivate = tumAtamalar.Any(x => !x.PaylasimliMi);
+
+        if (hasShared && hasPrivate)
+        {
+            return "Karma fiyatlama (paylasimli + ozel kullanim)";
+        }
+
+        if (hasShared)
+        {
+            return "Kisi basi fiyatlama";
+        }
+
+        return "Ozel kullanim fiyatlama";
     }
 
     private static bool DoesGuestRequireAssignments(string katilimDurumu)
@@ -6110,6 +6242,10 @@ public class RezervasyonService : IRezervasyonService
         DateTime BaslangicTarihi,
         DateTime BitisTarihi,
         string? Cinsiyet);
+
+    private sealed record RoomTypePricingInfo(int OdaTipiId, bool PaylasimliMi);
+
+    private sealed record SelectedScenarioPrice(string ParaBirimi, decimal Tutar);
 
     private sealed record ScenarioGuestGenderRequirements(
         int KadinSayisi,

@@ -7,6 +7,8 @@
     <ng-template #end>
         @if (canManage) {
             <p-button label="Satir Ekle" icon="pi pi-plus" class="mr-2" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="addRow()" />
+            <p-button label="Eksik Ozel Kullanimlari Olustur" icon="pi pi-clone" severity="secondary" class="mr-2" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="addMissingOzelKullanimRows()" />
+            <p-button label="Tum Eksikleri Olustur" icon="pi pi-plus-circle" severity="secondary" class="mr-2" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="addMissingRows()" />
             <p-button label="Kaydet" icon="pi pi-save" [disabled]="!selectedOdaTipiId || loadingReferences || loadingFiyatlar || saving" (onClick)="save()" />
         }
     </ng-template>
@@ -54,11 +56,37 @@
         <span>Fiyatlari gormek ve duzenlemek icin once bir tesis oda tipi seciniz.</span>
     </div>
 } @else {
-    <p-table [value]="fiyatSatirlari" [loading]="loadingReferences || loadingFiyatlar" [tableStyle]="{ 'min-width': '80rem' }">
+    @if (fiyatlamaBilgiMesaji) {
+        <div class="card mb-3">
+            <div class="text-sm text-color-secondary">{{ fiyatlamaBilgiMesaji }}</div>
+            <div class="flex flex-wrap gap-4 mt-3">
+                <div class="flex align-items-center gap-2">
+                    <p-checkbox inputId="showIncompleteRows" [binary]="true" [(ngModel)]="showOnlyIncompleteRows" />
+                    <label for="showIncompleteRows">Yalnizca eksik kombinasyonlar</label>
+                </div>
+                <div class="flex align-items-center gap-2">
+                    <p-checkbox inputId="showZeroPriceRows" [binary]="true" [(ngModel)]="showOnlyZeroPriceRows" />
+                    <label for="showZeroPriceRows">Yalnizca sifir fiyatlilar</label>
+                </div>
+            </div>
+            @if (eksikOzelKullanimUyarilari.length > 0) {
+                <div class="mt-3">
+                    <div class="text-sm font-medium text-orange-600 mb-2">Eksik Ozel Kullanim Tarifeleri</div>
+                    <ul class="m-0 pl-3 text-sm text-orange-600">
+                        @for (uyari of eksikOzelKullanimUyarilari; track uyari) {
+                            <li>{{ uyari }}</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+    <p-table [value]="visibleFiyatSatirlari" [loading]="loadingReferences || loadingFiyatlar" [tableStyle]="{ 'min-width': '80rem' }">
         <ng-template #header>
             <tr>
                 <th>Konaklama Tipi</th>
                 <th>Misafir Tipi</th>
+                <th>Kullanim Sekli</th>
                 <th>Fiyat</th>
                 <th>Para Birimi</th>
                 <th>Baslangic</th>
@@ -71,7 +99,7 @@
         </ng-template>
 
         <ng-template #body let-row let-rowIndex="rowIndex">
-            <tr>
+            <tr [ngStyle]="isZeroPriceRow(row) ? { 'background-color': '#fff8db' } : null">
                 <td>
                     <p-select
                         class="w-full"
@@ -95,7 +123,22 @@
                     />
                 </td>
                 <td>
+                    <p-select
+                        class="w-full"
+                        [options]="kullanimSekliSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="row.kullanimSekli"
+                        [appendTo]="'body'"
+                        [disabled]="!canManage || saving"
+                    />
+                    <div class="text-xs text-color-secondary mt-1">{{ getKullanimSekliLabel(row.kullanimSekli) === 'Kisi Basi' ? 'Fiyat / kisi' : 'Fiyat / oda' }}</div>
+                </td>
+                <td>
                     <input pInputText type="number" min="0" step="0.01" class="w-full" [(ngModel)]="row.fiyat" [disabled]="!canManage || saving" />
+                    @if (isZeroPriceRow(row)) {
+                        <div class="text-xs text-orange-700 mt-1">{{ getZeroPriceRowMessage(row) }}</div>
+                    }
                 </td>
                 <td>
                     <input pInputText maxlength="3" class="w-full" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || saving" />
@@ -119,7 +162,7 @@
 
         <ng-template #emptymessage>
             <tr>
-                <td [attr.colspan]="canManage ? 8 : 7">
+                <td [attr.colspan]="canManage ? 9 : 8">
                     Bu oda tipi icin fiyat kaydi bulunmuyor.
                 </td>
             </tr>

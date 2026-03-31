@@ -23,6 +23,8 @@ public class RezervasyonKaydetRequestDto
     [Required]
     public DateTime CikisTarihi { get; set; }
 
+    public bool TekKisilikFiyatUygulansinMi { get; set; }
+
     [Required]
     public string MisafirAdiSoyadi { get; set; } = string.Empty;
 

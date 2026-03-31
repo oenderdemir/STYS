@@ -24,6 +24,8 @@ public class Rezervasyon : BaseEntity<int>
 
     public DateTime CikisTarihi { get; set; }
 
+    public bool TekKisilikFiyatUygulandiMi { get; set; }
+
     public decimal ToplamBazUcret { get; set; }
 
     public decimal ToplamUcret { get; set; }

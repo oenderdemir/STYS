@@ -24,5 +24,7 @@ public class KonaklamaSenaryoAramaRequestDto
     [Required]
     public DateTime BitisTarihi { get; set; }
 
+    public bool TekKisilikFiyatUygulansinMi { get; set; }
+
     public List<string?> KonaklayanCinsiyetleri { get; set; } = [];
 }

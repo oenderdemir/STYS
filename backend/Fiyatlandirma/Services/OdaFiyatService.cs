@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Fiyatlandirma;
 using STYS.Fiyatlandirma.Dto;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Fiyatlandirma.Repositories;
@@ -50,6 +51,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
 
         var list = await _odaFiyatRepository.Where(x => x.TesisOdaTipiId == tesisOdaTipiId)
             .OrderBy(x => x.BaslangicTarihi)
+            .ThenBy(x => x.KullanimSekli)
             .ThenBy(x => x.KonaklamaTipiId)
             .ThenBy(x => x.MisafirTipiId)
             .ToListAsync(cancellationToken);
@@ -98,7 +100,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         await EnsureTesisHasKonaklamaTipiAsync(odaTipi.TesisId, request.KonaklamaTipiId, cancellationToken);
         var hedefTarih = (request.Tarih ?? DateTime.UtcNow).Date;
 
-        var basePrice = await _odaFiyatRepository.Where(x =>
+        var priceRows = await _odaFiyatRepository.Where(x =>
                 x.TesisOdaTipiId == request.TesisOdaTipiId &&
                 x.KonaklamaTipiId == request.KonaklamaTipiId &&
                 x.MisafirTipiId == request.MisafirTipiId &&
@@ -108,12 +110,19 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
                 x.BitisTarihi >= hedefTarih)
             .OrderByDescending(x => x.BaslangicTarihi)
             .ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        if (basePrice is null)
+        if (priceRows.Count == 0)
         {
             throw new BaseException("Bu kriterler icin aktif bir baz fiyat bulunamadi.", 404);
         }
+
+        var basePrice = ResolveApplicablePrice(
+            priceRows,
+            odaTipi.PaylasimliMi,
+            request.KisiSayisi,
+            request.TekKisilikFiyatUygulansinMi,
+            hedefTarih);
 
         var candidateRules = await _indirimKuraliRepository.Where(
                 x => x.AktifMi &&
@@ -133,7 +142,7 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
             .ThenBy(x => x.Id)
             .ToList();
 
-        var currentAmount = basePrice.Fiyat * request.KisiSayisi;
+        var currentAmount = basePrice.Tutar;
         var totalBaseAmount = currentAmount;
         var applied = new List<UygulananIndirimDto>();
 
@@ -302,12 +311,12 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
     private static void EnsureNoDuplicateRows(IReadOnlyCollection<OdaFiyatDto> fiyatlar)
     {
         var duplicates = fiyatlar
-            .GroupBy(x => new { x.TesisOdaTipiId, x.KonaklamaTipiId, x.MisafirTipiId, x.KisiSayisi, Baslangic = x.BaslangicTarihi.Date, Bitis = x.BitisTarihi.Date })
+            .GroupBy(x => new { x.TesisOdaTipiId, x.KonaklamaTipiId, x.MisafirTipiId, x.KullanimSekli, x.KisiSayisi, Baslangic = x.BaslangicTarihi.Date, Bitis = x.BitisTarihi.Date })
             .FirstOrDefault(x => x.Count() > 1);
 
         if (duplicates is not null)
         {
-            throw new BaseException("Ayni oda tipi/konaklama/misafir/kisi ve tarih araligina ait birden fazla fiyat tanimi olamaz.", 400);
+            throw new BaseException("Ayni oda tipi/konaklama/misafir/kullanim sekli ve tarih araligina ait birden fazla fiyat tanimi olamaz.", 400);
         }
     }
 
@@ -332,6 +341,11 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         {
             throw new BaseException("Kisi sayisi sifirdan buyuk olmalidir.", 400);
         }
+
+        if (request.TekKisilikFiyatUygulansinMi && request.KisiSayisi != 1)
+        {
+            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
+        }
     }
 
     private static void Normalize(OdaFiyatDto dto)
@@ -352,6 +366,14 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
         }
 
         dto.KisiSayisi = 1;
+        dto.KullanimSekli = string.IsNullOrWhiteSpace(dto.KullanimSekli)
+            ? OdaFiyatKullanimSekilleri.KisiBasi
+            : dto.KullanimSekli.Trim();
+
+        if (!OdaFiyatKullanimSekilleri.Tumu.Contains(dto.KullanimSekli))
+        {
+            throw new BaseException("Kullanim sekli gecersiz.", 400);
+        }
 
         if (dto.Fiyat < 0)
         {
@@ -382,4 +404,49 @@ public class OdaFiyatService : BaseRdbmsService<OdaFiyatDto, OdaFiyat, int>, IOd
             throw new BaseException("Secilen konaklama tipi ilgili tesiste kullanima acik degil.", 400);
         }
     }
+
+    private static SelectedPriceRow ResolveApplicablePrice(
+        IReadOnlyCollection<OdaFiyat> priceRows,
+        bool paylasimliOdaTipi,
+        int kisiSayisi,
+        bool tekKisilikFiyatUygulansinMi,
+        DateTime hedefTarih)
+    {
+        var kisiBasiPrice = priceRows.FirstOrDefault(x => x.KullanimSekli.Equals(OdaFiyatKullanimSekilleri.KisiBasi, StringComparison.OrdinalIgnoreCase));
+        var ozelKullanimPrice = priceRows.FirstOrDefault(x => x.KullanimSekli.Equals(OdaFiyatKullanimSekilleri.OzelKullanim, StringComparison.OrdinalIgnoreCase));
+
+        if (paylasimliOdaTipi)
+        {
+            if (kisiBasiPrice is null)
+            {
+                throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin kisi bazli fiyat bulunamadi.", 400);
+            }
+
+            return new SelectedPriceRow(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * kisiSayisi);
+        }
+
+        if (tekKisilikFiyatUygulansinMi)
+        {
+            if (kisiBasiPrice is null)
+            {
+                throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin tek kisilik fiyat uygulanacak kisi bazli tarife bulunamadi.", 400);
+            }
+
+            return new SelectedPriceRow(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat);
+        }
+
+        if (ozelKullanimPrice is not null)
+        {
+            return new SelectedPriceRow(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat);
+        }
+
+        if (kisiBasiPrice is not null)
+        {
+            return new SelectedPriceRow(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * kisiSayisi);
+        }
+
+        throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin uygun oda fiyati bulunamadi.", 400);
+    }
+
+    private sealed record SelectedPriceRow(string ParaBirimi, decimal Tutar);
 }

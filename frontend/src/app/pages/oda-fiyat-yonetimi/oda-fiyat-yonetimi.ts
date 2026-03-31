@@ -15,6 +15,7 @@ import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { getOdaFiyatKullanimSekliLabel, ODA_FIYAT_KULLANIM_SEKLI_OPTIONS } from './oda-fiyat-kullanim-sekli.constants';
 import { KonaklamaTipiDto, MisafirTipiDto, OdaFiyatDto, OdaFiyatFormRow, OdaTipiDto } from './oda-fiyat-yonetimi.dto';
 import { OdaFiyatYonetimiService } from './oda-fiyat-yonetimi.service';
 
@@ -36,9 +37,12 @@ export class OdaFiyatYonetimi implements OnInit {
     konaklamaTipleri: KonaklamaTipiDto[] = [];
     misafirTipleri: MisafirTipiDto[] = [];
     fiyatSatirlari: OdaFiyatFormRow[] = [];
+    readonly kullanimSekliSecenekleri = ODA_FIYAT_KULLANIM_SEKLI_OPTIONS;
 
     selectedTesisId: number | null = null;
     selectedOdaTipiId: number | null = null;
+    showOnlyIncompleteRows = false;
+    showOnlyZeroPriceRows = false;
     loadingReferences = false;
     loadingFiyatlar = false;
     saving = false;
@@ -74,6 +78,79 @@ export class OdaFiyatYonetimi implements OnInit {
         return this.odaTipleri.filter((x) => x.tesisId === this.selectedTesisId);
     }
 
+    get visibleFiyatSatirlari(): OdaFiyatFormRow[] {
+        return this.fiyatSatirlari.filter((row) => {
+            if (this.showOnlyIncompleteRows && !this.isIncompleteCombination(row)) {
+                return false;
+            }
+
+            if (this.showOnlyZeroPriceRows && !this.isZeroPriceRow(row)) {
+                return false;
+            }
+
+            return true;
+        });
+    }
+
+    get selectedOdaTipi(): OdaTipiDto | null {
+        return this.filteredOdaTipleri.find((x) => x.id === this.selectedOdaTipiId) ?? null;
+    }
+
+    get fiyatlamaBilgiMesaji(): string | null {
+        const odaTipi = this.selectedOdaTipi;
+        if (!odaTipi) {
+            return null;
+        }
+
+        if (odaTipi.paylasimliMi) {
+            return 'Bu oda tipi paylasimli. Varsayilan fiyatlama kisi basi calisir. Ozel kullanim satiri tanimlasaniz bile senaryo hesaplamasinda kullanilmaz.';
+        }
+
+        return 'Paylasimsiz odalarda ayni kombinasyon icin hem Kisi Basi hem Ozel Kullanim tarife tanimlayabilirsiniz. Sistem once Ozel Kullanim fiyatini kullanir; yoksa kisi basi fiyata duser.';
+    }
+
+    get eksikOzelKullanimUyarilari(): string[] {
+        const odaTipi = this.selectedOdaTipi;
+        if (!odaTipi || odaTipi.paylasimliMi) {
+            return [];
+        }
+
+        const konaklamaTipiMap = new Map(this.konaklamaTipleri.map((item) => [item.id, item.ad]));
+        const misafirTipiMap = new Map(this.misafirTipleri.map((item) => [item.id, item.ad]));
+        const warnings: string[] = [];
+
+        const groups = new Map<string, { konaklamaTipiId: number | null; misafirTipiId: number | null; hasKisiBasi: boolean; hasOzelKullanim: boolean }>();
+        for (const row of this.fiyatSatirlari) {
+            const key = `${row.konaklamaTipiId ?? 0}-${row.misafirTipiId ?? 0}`;
+            const existing = groups.get(key) ?? {
+                konaklamaTipiId: row.konaklamaTipiId,
+                misafirTipiId: row.misafirTipiId,
+                hasKisiBasi: false,
+                hasOzelKullanim: false
+            };
+
+            if (row.kullanimSekli === 'KisiBasi') {
+                existing.hasKisiBasi = true;
+            }
+
+            if (row.kullanimSekli === 'OzelKullanim') {
+                existing.hasOzelKullanim = true;
+            }
+
+            groups.set(key, existing);
+        }
+
+        for (const group of groups.values()) {
+            if (group.hasKisiBasi && !group.hasOzelKullanim) {
+                const konaklamaTipiAdi = group.konaklamaTipiId ? (konaklamaTipiMap.get(group.konaklamaTipiId) ?? 'Bilinmeyen Konaklama Tipi') : 'Konaklama tipi secilmemis';
+                const misafirTipiAdi = group.misafirTipiId ? (misafirTipiMap.get(group.misafirTipiId) ?? 'Bilinmeyen Misafir Tipi') : 'Misafir tipi secilmemis';
+                warnings.push(`${konaklamaTipiAdi} / ${misafirTipiAdi}: Ozel kullanim tarifesi eksik.`);
+            }
+        }
+
+        return warnings;
+    }
+
     addRow(): void {
         if (!this.canManage) {
             return;
@@ -88,6 +165,7 @@ export class OdaFiyatYonetimi implements OnInit {
             {
                 konaklamaTipiId: defaultKonaklamaTipiId,
                 misafirTipiId: defaultMisafirTipiId,
+                kullanimSekli: this.selectedOdaTipi?.paylasimliMi ? 'KisiBasi' : 'OzelKullanim',
                 fiyat: 0,
                 paraBirimi: 'TRY',
                 baslangicTarihi: today,
@@ -95,6 +173,75 @@ export class OdaFiyatYonetimi implements OnInit {
                 aktifMi: true
             }
         ];
+    }
+
+    addMissingRows(): void {
+        this.addMissingRowsByModes(this.selectedOdaTipi?.paylasimliMi ? ['KisiBasi'] : ['KisiBasi', 'OzelKullanim']);
+    }
+
+    addMissingOzelKullanimRows(): void {
+        this.addMissingRowsByModes(['OzelKullanim']);
+    }
+
+    private addMissingRowsByModes(modes: string[]): void {
+        if (!this.canManage || !this.selectedOdaTipi) {
+            return;
+        }
+
+        if (this.konaklamaTipleri.length === 0 || this.misafirTipleri.length === 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Veri', detail: 'Eksik satirlari olusturmak icin once konaklama ve misafir tipleri yuklenmelidir.' });
+            return;
+        }
+
+        const usageModes = this.selectedOdaTipi.paylasimliMi
+            ? modes.filter((mode) => mode === 'KisiBasi')
+            : modes;
+
+        if (usageModes.length === 0) {
+            this.messageService.add({ severity: UiSeverity.Info, summary: 'Uygun Degil', detail: 'Paylasimli oda tiplerinde ozel kullanim satiri olusturulmaz.' });
+            return;
+        }
+
+        const existingKeys = new Set(
+            this.fiyatSatirlari.map((row) => `${row.konaklamaTipiId ?? 0}-${row.misafirTipiId ?? 0}-${row.kullanimSekli}`)
+        );
+
+        const defaultDate = this.todayInput();
+        const newRows: OdaFiyatFormRow[] = [];
+
+        for (const konaklamaTipi of this.konaklamaTipleri) {
+            for (const misafirTipi of this.misafirTipleri) {
+                const siblingRows = this.fiyatSatirlari.filter((row) => row.konaklamaTipiId === konaklamaTipi.id && row.misafirTipiId === misafirTipi.id);
+                const templateRow = siblingRows[0] ?? null;
+
+                for (const kullanimSekli of usageModes) {
+                    const key = `${konaklamaTipi.id ?? 0}-${misafirTipi.id ?? 0}-${kullanimSekli}`;
+                    if (existingKeys.has(key)) {
+                        continue;
+                    }
+
+                    existingKeys.add(key);
+                    newRows.push({
+                        konaklamaTipiId: konaklamaTipi.id ?? null,
+                        misafirTipiId: misafirTipi.id ?? null,
+                        kullanimSekli,
+                        fiyat: templateRow?.fiyat ?? 0,
+                        paraBirimi: templateRow?.paraBirimi ?? 'TRY',
+                        baslangicTarihi: templateRow?.baslangicTarihi ?? defaultDate,
+                        bitisTarihi: templateRow?.bitisTarihi ?? defaultDate,
+                        aktifMi: templateRow?.aktifMi ?? true
+                    });
+                }
+            }
+        }
+
+        if (newRows.length === 0) {
+            this.messageService.add({ severity: UiSeverity.Info, summary: 'Tamam', detail: 'Eksik kombinasyon bulunmuyor.' });
+            return;
+        }
+
+        this.fiyatSatirlari = [...this.fiyatSatirlari, ...newRows];
+        this.messageService.add({ severity: UiSeverity.Success, summary: 'Satirlar Olusturuldu', detail: `${newRows.length} eksik fiyat satiri eklendi.` });
     }
 
     removeRow(index: number): void {
@@ -122,6 +269,7 @@ export class OdaFiyatYonetimi implements OnInit {
             konaklamaTipiId: row.konaklamaTipiId!,
             misafirTipiId: row.misafirTipiId!,
             kisiSayisi: 1,
+            kullanimSekli: row.kullanimSekli,
             fiyat: row.fiyat!,
             paraBirimi: (row.paraBirimi || 'TRY').trim().toUpperCase(),
             baslangicTarihi: this.toIsoDate(row.baslangicTarihi),
@@ -297,6 +445,7 @@ export class OdaFiyatYonetimi implements OnInit {
             id: dto.id ?? null,
             konaklamaTipiId: dto.konaklamaTipiId,
             misafirTipiId: dto.misafirTipiId,
+            kullanimSekli: dto.kullanimSekli || 'KisiBasi',
             fiyat: dto.fiyat,
             paraBirimi: dto.paraBirimi,
             baslangicTarihi: this.normalizeDateInput(dto.baslangicTarihi),
@@ -316,6 +465,10 @@ export class OdaFiyatYonetimi implements OnInit {
 
             if (!row.misafirTipiId) {
                 return `${lineNo}. satir: Misafir tipi secimi zorunludur.`;
+            }
+
+            if (!row.kullanimSekli) {
+                return `${lineNo}. satir: Kullanim sekli secimi zorunludur.`;
             }
 
             if (row.fiyat === null || row.fiyat < 0) {
@@ -372,5 +525,35 @@ export class OdaFiyatYonetimi implements OnInit {
         }
 
         return 'Beklenmeyen bir hata olustu.';
+    }
+
+    getKullanimSekliLabel(value: string | null | undefined): string {
+        return getOdaFiyatKullanimSekliLabel(value);
+    }
+
+    isZeroPriceRow(row: OdaFiyatFormRow): boolean {
+        return Number(row.fiyat ?? 0) === 0;
+    }
+
+    getZeroPriceRowMessage(row: OdaFiyatFormRow): string {
+        return row.kullanimSekli === 'OzelKullanim'
+            ? 'Ozel kullanim fiyatı henuz girilmedi.'
+            : 'Kisi basi fiyat henuz girilmedi.';
+    }
+
+    isIncompleteCombination(row: OdaFiyatFormRow): boolean {
+        const odaTipi = this.selectedOdaTipi;
+        if (!odaTipi || odaTipi.paylasimliMi) {
+            return false;
+        }
+
+        const siblingRows = this.fiyatSatirlari.filter((item) =>
+            item.konaklamaTipiId === row.konaklamaTipiId &&
+            item.misafirTipiId === row.misafirTipiId
+        );
+
+        const hasKisiBasi = siblingRows.some((item) => item.kullanimSekli === 'KisiBasi');
+        const hasOzelKullanim = siblingRows.some((item) => item.kullanimSekli === 'OzelKullanim');
+        return !(hasKisiBasi && hasOzelKullanim);
     }
 }

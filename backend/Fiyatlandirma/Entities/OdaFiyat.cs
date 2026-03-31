@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Fiyatlandirma;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaTipleri.Entities;
@@ -15,6 +16,10 @@ public class OdaFiyat : BaseEntity<int>
     public int MisafirTipiId { get; set; }
 
     public int KisiSayisi { get; set; } = 1;
+
+    [Required]
+    [MaxLength(32)]
+    public string KullanimSekli { get; set; } = OdaFiyatKullanimSekilleri.KisiBasi;
 
     public decimal Fiyat { get; set; }
 

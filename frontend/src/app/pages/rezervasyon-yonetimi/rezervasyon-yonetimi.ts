@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
@@ -69,7 +70,7 @@ interface DegisiklikPayloadTableData {
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
     templateUrl: './rezervasyon-yonetimi.html',
     styles: [`
         :host ::ng-deep .rez-odeme-dialog .p-dialog-content {
@@ -269,6 +270,7 @@ export class RezervasyonYonetimi implements OnInit {
     selectedMisafirTipiId: number | null = null;
     selectedKonaklamaTipiId: number | null = null;
     kisiSayisi = 1;
+    tekKisilikFiyatUygulansinMi = false;
     senaryoKonaklayanCinsiyetleri: Array<string | null> = [null];
     baslangicTarihi = this.nowInput();
     bitisTarihi = this.tomorrowInput();
@@ -316,6 +318,34 @@ export class RezervasyonYonetimi implements OnInit {
 
     get canManage(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.Manage');
+    }
+
+    get selectedRezervasyonOdaTipi(): RezervasyonOdaTipiDto | null {
+        return this.odaTipleri.find((x) => x.id === this.selectedOdaTipiId) ?? null;
+    }
+
+    get canUseSinglePersonPricing(): boolean {
+        if (this.kisiSayisi !== 1) {
+            return false;
+        }
+
+        if (!this.selectedRezervasyonOdaTipi) {
+            return true;
+        }
+
+        return !this.selectedRezervasyonOdaTipi.paylasimliMi;
+    }
+
+    get singlePersonPricingHint(): string | null {
+        if (this.kisiSayisi !== 1) {
+            return 'Tek kisilik fiyat secimi yalnizca tek konaklayan icin kullanilir.';
+        }
+
+        if (this.selectedRezervasyonOdaTipi?.paylasimliMi) {
+            return 'Secili oda tipi paylasimli. Bu durumda sistem zaten kisi bazli fiyat uygular.';
+        }
+
+        return 'Bu secenek aciksa, paylasimsiz odada tek konaklayan icin kisi bazli tarife kullanilir. Kapaliysa ozel kullanim fiyatı once kullanilir.';
     }
 
     get canApplyCustomDiscount(): boolean {
@@ -410,6 +440,12 @@ export class RezervasyonYonetimi implements OnInit {
         this.loadRezervasyonKayitlari(this.selectedTesisId);
     }
 
+    onOdaTipiSelectionChange(): void {
+        if (!this.canUseSinglePersonPricing) {
+            this.tekKisilikFiyatUygulansinMi = false;
+        }
+    }
+
     search(): void {
         if (!this.canView) {
             return;
@@ -461,6 +497,7 @@ export class RezervasyonYonetimi implements OnInit {
                 kisiSayisi: this.kisiSayisi,
                 baslangicTarihi: this.toIsoDate(this.baslangicTarihi),
                 bitisTarihi: this.toIsoDate(this.bitisTarihi),
+                tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
                 konaklayanCinsiyetleri: this.senaryoKonaklayanCinsiyetleri.map((x) => this.normalizeOptional(x ?? ''))
             })
             .pipe(
@@ -488,6 +525,9 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         this.kisiSayisi = Math.max(1, Math.trunc(this.kisiSayisi));
+        if (!this.canUseSinglePersonPricing) {
+            this.tekKisilikFiyatUygulansinMi = false;
+        }
         this.syncSenaryoKonaklayanCinsiyetleri();
     }
 
@@ -517,6 +557,40 @@ export class RezervasyonYonetimi implements OnInit {
 
     getScenarioSharedRoomGenderBadgeSeverity(scenario: KonaklamaSenaryoDto): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
         return this.hasSharedRoomUsage(scenario) ? UiSeverity.Success : UiSeverity.Secondary;
+    }
+
+    getScenarioPricingLabel(scenario: KonaklamaSenaryoDto): string {
+        if (this.tekKisilikFiyatUygulansinMi && this.kisiSayisi === 1) {
+            return 'Tek Kisilik Fiyat';
+        }
+
+        const hasShared = this.hasSharedRoomUsage(scenario);
+        const hasPrivate = scenario.segmentler.some((segment) => segment.odaAtamalari.some((assignment) => !assignment.paylasimliMi));
+
+        if (hasShared && hasPrivate) {
+            return 'Karma';
+        }
+
+        if (hasShared) {
+            return 'Kisi Basi';
+        }
+
+        return 'Ozel Kullanim';
+    }
+
+    getScenarioPricingSeverity(scenario: KonaklamaSenaryoDto): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+        switch (this.getScenarioPricingLabel(scenario)) {
+            case 'Tek Kisilik Fiyat':
+                return UiSeverity.Info;
+            case 'Kisi Basi':
+                return UiSeverity.Info;
+            case 'Karma':
+                return UiSeverity.Warn;
+            case 'Ozel Kullanim':
+                return UiSeverity.Success;
+            default:
+                return UiSeverity.Secondary;
+        }
     }
 
     private syncSenaryoKonaklayanCinsiyetleri(): void {
@@ -561,6 +635,7 @@ export class RezervasyonYonetimi implements OnInit {
             konaklamaTipiId: this.selectedKonaklamaTipiId!,
             girisTarihi: this.toIsoDate(this.baslangicTarihi),
             cikisTarihi: this.toIsoDate(this.bitisTarihi),
+            tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
             misafirAdiSoyadi: this.misafirAdiSoyadi.trim(),
             misafirTelefon: this.misafirTelefon.trim(),
             misafirEposta: this.normalizeOptional(this.misafirEposta),
@@ -676,8 +751,10 @@ export class RezervasyonYonetimi implements OnInit {
                 tesisId: this.selectedTesisId,
                 misafirTipiId: this.selectedMisafirTipiId,
                 konaklamaTipiId: this.selectedKonaklamaTipiId,
+                kisiSayisi: this.kisiSayisi,
                 baslangicTarihi: this.toIsoDate(this.baslangicTarihi),
                 bitisTarihi: this.toIsoDate(this.bitisTarihi),
+                tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
                 segmentler: this.selectedScenarioForDiscount.segmentler.map((segment) => ({
                     baslangicTarihi: segment.baslangicTarihi,
                     bitisTarihi: segment.bitisTarihi,
@@ -3040,6 +3117,10 @@ export class RezervasyonYonetimi implements OnInit {
                         this.selectedOdaTipiId = null;
                     }
 
+                    if (!this.canUseSinglePersonPricing) {
+                        this.tekKisilikFiyatUygulansinMi = false;
+                    }
+
                     if (clearResults) {
                         this.senaryolar = [];
                     }
@@ -3049,6 +3130,7 @@ export class RezervasyonYonetimi implements OnInit {
                 error: (error: unknown) => {
                     this.odaTipleri = [];
                     this.selectedOdaTipiId = null;
+                    this.tekKisilikFiyatUygulansinMi = false;
                     this.senaryolar = [];
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.detectChanges();
@@ -3148,6 +3230,21 @@ export class RezervasyonYonetimi implements OnInit {
                 return UiSeverity.Success;
             case this.durumIptal:
                 return UiSeverity.Danger;
+            default:
+                return UiSeverity.Secondary;
+        }
+    }
+
+    getFiyatlamaOzetiSeverity(fiyatlamaOzeti: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+        switch ((fiyatlamaOzeti ?? '').trim()) {
+            case 'Tek kisilik fiyat':
+                return UiSeverity.Info;
+            case 'Kisi basi':
+                return UiSeverity.Info;
+            case 'Karma':
+                return UiSeverity.Warn;
+            case 'Ozel kullanim':
+                return UiSeverity.Success;
             default:
                 return UiSeverity.Secondary;
         }

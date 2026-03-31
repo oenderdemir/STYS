@@ -1,3 +1,4 @@
+using STYS.Fiyatlandirma;
 using TOD.Platform.Persistence.Rdbms.Dto;
 
 namespace STYS.Fiyatlandirma.Dto;
@@ -11,6 +12,8 @@ public class OdaFiyatDto : BaseRdbmsDto<int>
     public int MisafirTipiId { get; set; }
 
     public int KisiSayisi { get; set; } = 1;
+
+    public string KullanimSekli { get; set; } = OdaFiyatKullanimSekilleri.KisiBasi;
 
     public decimal Fiyat { get; set; }
 

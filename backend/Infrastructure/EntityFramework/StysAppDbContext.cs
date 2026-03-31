@@ -450,8 +450,9 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("OdaFiyatlari", "dbo");
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.KullanimSekli).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Fiyat).HasPrecision(18, 2);
-            entity.HasIndex(x => new { x.TesisOdaTipiId, x.KonaklamaTipiId, x.MisafirTipiId, x.KisiSayisi, x.BaslangicTarihi, x.BitisTarihi })
+            entity.HasIndex(x => new { x.TesisOdaTipiId, x.KonaklamaTipiId, x.MisafirTipiId, x.KullanimSekli, x.KisiSayisi, x.BaslangicTarihi, x.BitisTarihi })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
 

@@ -10,5 +10,7 @@ public class OdaFiyatHesaplaRequestDto
 
     public int KisiSayisi { get; set; } = 1;
 
+    public bool TekKisilikFiyatUygulansinMi { get; set; }
+
     public DateTime? Tarih { get; set; }
 }

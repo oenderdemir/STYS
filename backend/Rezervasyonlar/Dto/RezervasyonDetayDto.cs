@@ -24,6 +24,10 @@ public class RezervasyonDetayDto
 
     public string? KonaklamaTipiAdi { get; set; }
 
+    public bool TekKisilikFiyatUygulandiMi { get; set; }
+
+    public string FiyatlamaOzeti { get; set; } = string.Empty;
+
     public List<RezervasyonKonaklamaTipiIcerikDto> KonaklamaTipiIcerikKalemleri { get; set; } = [];
 
     public decimal KonaklamaUcreti { get; set; }

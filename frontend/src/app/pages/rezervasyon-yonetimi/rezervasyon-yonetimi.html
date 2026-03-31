@@ -46,6 +46,7 @@
                 [showClear]="true"
                 placeholder="Tum Oda Tipleri"
                 [disabled]="loadingReferences || loadingResults"
+                (onChange)="onOdaTipiSelectionChange()"
             />
         </div>
 
@@ -105,6 +106,24 @@
             }
         </div>
     }
+
+    <div class="mt-3 border-1 border-200 border-round p-3 surface-ground">
+        <div class="font-medium mb-2">Fiyatlama Tercihi</div>
+        <div class="flex align-items-center gap-2 mb-2">
+            <p-checkbox
+                inputId="tekKisilikFiyat"
+                [binary]="true"
+                [(ngModel)]="tekKisilikFiyatUygulansinMi"
+                [disabled]="loadingReferences || loadingResults || !canUseSinglePersonPricing"
+            />
+            <label for="tekKisilikFiyat" class="font-medium">Tek kisilik fiyat uygula</label>
+        </div>
+        @if (singlePersonPricingHint) {
+            <div class="text-sm text-color-secondary">
+                {{ singlePersonPricingHint }}
+            </div>
+        }
+    </div>
 
     <div class="grid grid-cols-12 gap-4 mt-4">
         <div class="col-span-12 md:col-span-4 lg:col-span-2">
@@ -214,6 +233,13 @@
                                     />
                                 </div>
                             }
+                            <div class="mt-2">
+                                <p-tag
+                                    [value]="getScenarioPricingLabel(senaryo)"
+                                    [severity]="getScenarioPricingSeverity(senaryo)"
+                                    [rounded]="true"
+                                />
+                            </div>
                         </div>
                         <div class="flex items-center gap-3">
                             <div class="text-sm">
@@ -295,6 +321,7 @@
                     <th>Pasaport</th>
                     <th>Kisi</th>
                     <th>Katilim Ozeti</th>
+                    <th>Fiyatlama</th>
                     <th>Giris</th>
                     <th>Cikis</th>
                     <th>Ucret</th>
@@ -321,6 +348,13 @@
                                 <p-tag [value]="chip.label" [severity]="chip.severity" [rounded]="true" />
                             }
                         </div>
+                    </td>
+                    <td>
+                        <p-tag
+                            [value]="kayit.fiyatlamaOzeti || '-'"
+                            [severity]="getFiyatlamaOzetiSeverity(kayit.fiyatlamaOzeti)"
+                            [rounded]="true"
+                        />
                     </td>
                     <td>{{ formatDateTime(kayit.girisTarihi) }}</td>
                     <td>{{ formatDateTime(kayit.cikisTarihi) }}</td>
@@ -467,6 +501,10 @@
             <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Konaklama Tipi</div>
                 <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.konaklamaTipiAdi || '-' }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-xs text-color-secondary">Fiyatlama Modu</div>
+                <div class="font-semibold">{{ getSelectedRezervasyonUcretDetay()!.fiyatlamaOzeti || '-' }}</div>
             </div>
             <div class="col-span-12 md:col-span-4">
                 <div class="text-xs text-color-secondary">Nihai Toplam</div>

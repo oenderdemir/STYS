@@ -10,6 +10,7 @@ export interface RezervasyonOdaTipiDto {
     tesisId: number;
     ad: string;
     kapasite: number;
+    paylasimliMi: boolean;
 }
 
 export interface UygunOdaAramaRequestDto {
@@ -39,6 +40,7 @@ export interface KonaklamaSenaryoAramaRequestDto {
     kisiSayisi: number;
     baslangicTarihi: string;
     bitisTarihi: string;
+    tekKisilikFiyatUygulansinMi: boolean;
     konaklayanCinsiyetleri: Array<string | null>;
 }
 
@@ -133,8 +135,10 @@ export interface SenaryoFiyatHesaplaRequestDto {
     tesisId: number;
     misafirTipiId: number;
     konaklamaTipiId: number;
+    kisiSayisi: number;
     baslangicTarihi: string;
     bitisTarihi: string;
+    tekKisilikFiyatUygulansinMi: boolean;
     segmentler: SenaryoFiyatHesaplaSegmentDto[];
     seciliIndirimKuraliIds: number[];
 }
@@ -164,6 +168,7 @@ export interface RezervasyonKaydetRequestDto {
     konaklamaTipiId: number;
     girisTarihi: string;
     cikisTarihi: string;
+    tekKisilikFiyatUygulansinMi: boolean;
     misafirAdiSoyadi: string;
     misafirTelefon: string;
     misafirEposta: string | null;
@@ -218,6 +223,7 @@ export interface RezervasyonListeDto {
     kalanTutar: number;
     paraBirimi: string;
     rezervasyonDurumu: string;
+    fiyatlamaOzeti: string;
     konaklayanPlaniTamamlandi: boolean;
     gelenKonaklayanSayisi: number;
     bekleyenKonaklayanSayisi: number;
@@ -308,6 +314,8 @@ export interface RezervasyonDetayDto {
     girisTarihi: string;
     cikisTarihi: string;
     konaklamaTipiAdi: string | null;
+    tekKisilikFiyatUygulandiMi: boolean;
+    fiyatlamaOzeti: string;
     konaklamaTipiIcerikKalemleri: RezervasyonKonaklamaTipiIcerikDto[];
     konaklamaHaklari: RezervasyonKonaklamaHakkiDto[];
     konaklamaUcreti: number;

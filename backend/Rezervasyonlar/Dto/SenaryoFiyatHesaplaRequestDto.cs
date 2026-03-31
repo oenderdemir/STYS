@@ -19,6 +19,10 @@ public class SenaryoFiyatHesaplaRequestDto
     [Required]
     public DateTime BitisTarihi { get; set; }
 
+    public int KisiSayisi { get; set; } = 1;
+
+    public bool TekKisilikFiyatUygulansinMi { get; set; }
+
     public List<SenaryoFiyatHesaplaSegmentDto> Segmentler { get; set; } = [];
 
     public List<int> SeciliIndirimKuraliIds { get; set; } = [];

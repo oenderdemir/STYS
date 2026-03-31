@@ -109,6 +109,7 @@
                         [(ngModel)]="row.konaklamaTipiId"
                         [appendTo]="'body'"
                         [disabled]="!canManage || saving"
+                        (ngModelChange)="clearNewOzelKullanimBadge(row)"
                     />
                 </td>
                 <td>
@@ -120,6 +121,7 @@
                         [(ngModel)]="row.misafirTipiId"
                         [appendTo]="'body'"
                         [disabled]="!canManage || saving"
+                        (ngModelChange)="clearNewOzelKullanimBadge(row)"
                     />
                 </td>
                 <td>
@@ -131,26 +133,32 @@
                         [(ngModel)]="row.kullanimSekli"
                         [appendTo]="'body'"
                         [disabled]="!canManage || saving"
+                        (ngModelChange)="clearNewOzelKullanimBadge(row)"
                     />
-                    <div class="text-xs text-color-secondary mt-1">{{ getKullanimSekliLabel(row.kullanimSekli) === 'Kisi Basi' ? 'Fiyat / kisi' : 'Fiyat / oda' }}</div>
+                    <div class="flex flex-wrap align-items-center gap-2 mt-1">
+                        <div class="text-xs text-color-secondary">{{ getKullanimSekliLabel(row.kullanimSekli) === 'Kisi Basi' ? 'Fiyat / kisi' : 'Fiyat / oda' }}</div>
+                        @if (isNewOzelKullanimRow(row)) {
+                            <p-tag value="Yeni Ozel Kullanim" severity="warn" [rounded]="true" />
+                        }
+                    </div>
                 </td>
                 <td>
-                    <input pInputText type="number" min="0" step="0.01" class="w-full" [(ngModel)]="row.fiyat" [disabled]="!canManage || saving" />
+                    <input pInputText type="number" min="0" step="0.01" class="w-full" [(ngModel)]="row.fiyat" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                     @if (isZeroPriceRow(row)) {
                         <div class="text-xs text-orange-700 mt-1">{{ getZeroPriceRowMessage(row) }}</div>
                     }
                 </td>
                 <td>
-                    <input pInputText maxlength="3" class="w-full" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || saving" />
+                    <input pInputText maxlength="3" class="w-full" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                 </td>
                 <td>
-                    <input pInputText type="date" class="w-full" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || saving" />
+                    <input pInputText type="date" class="w-full" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                 </td>
                 <td>
-                    <input pInputText type="date" class="w-full" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || saving" />
+                    <input pInputText type="date" class="w-full" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                 </td>
                 <td>
-                    <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || saving" />
+                    <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                 </td>
                 @if (canManage) {
                     <td>

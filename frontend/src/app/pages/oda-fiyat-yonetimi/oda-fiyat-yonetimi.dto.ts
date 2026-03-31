@@ -46,4 +46,5 @@ export interface OdaFiyatFormRow {
     baslangicTarihi: string;
     bitisTarihi: string;
     aktifMi: boolean;
+    uiYeniOzelKullanimSatiriMi?: boolean;
 }

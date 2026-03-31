@@ -8,6 +8,7 @@ import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { TagModule } from 'primeng/tag';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -22,7 +23,7 @@ import { OdaFiyatYonetimiService } from './oda-fiyat-yonetimi.service';
 @Component({
     selector: 'app-oda-fiyat-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TagModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './oda-fiyat-yonetimi.html',
     providers: [MessageService]
 })
@@ -79,17 +80,29 @@ export class OdaFiyatYonetimi implements OnInit {
     }
 
     get visibleFiyatSatirlari(): OdaFiyatFormRow[] {
-        return this.fiyatSatirlari.filter((row) => {
-            if (this.showOnlyIncompleteRows && !this.isIncompleteCombination(row)) {
-                return false;
-            }
+        return this.fiyatSatirlari
+            .map((row, index) => ({ row, index }))
+            .filter(({ row }) => {
+                if (this.showOnlyIncompleteRows && !this.isIncompleteCombination(row)) {
+                    return false;
+                }
 
-            if (this.showOnlyZeroPriceRows && !this.isZeroPriceRow(row)) {
-                return false;
-            }
+                if (this.showOnlyZeroPriceRows && !this.isZeroPriceRow(row)) {
+                    return false;
+                }
 
-            return true;
-        });
+                return true;
+            })
+            .sort((left, right) => {
+                const leftPriority = left.row.uiYeniOzelKullanimSatiriMi ? 0 : 1;
+                const rightPriority = right.row.uiYeniOzelKullanimSatiriMi ? 0 : 1;
+                if (leftPriority !== rightPriority) {
+                    return leftPriority - rightPriority;
+                }
+
+                return left.index - right.index;
+            })
+            .map((item) => item.row);
     }
 
     get selectedOdaTipi(): OdaTipiDto | null {
@@ -180,10 +193,10 @@ export class OdaFiyatYonetimi implements OnInit {
     }
 
     addMissingOzelKullanimRows(): void {
-        this.addMissingRowsByModes(['OzelKullanim']);
+        this.addMissingRowsByModes(['OzelKullanim'], true);
     }
 
-    private addMissingRowsByModes(modes: string[]): void {
+    private addMissingRowsByModes(modes: string[], markAsNewOzelKullanim = false): void {
         if (!this.canManage || !this.selectedOdaTipi) {
             return;
         }
@@ -229,7 +242,8 @@ export class OdaFiyatYonetimi implements OnInit {
                         paraBirimi: templateRow?.paraBirimi ?? 'TRY',
                         baslangicTarihi: templateRow?.baslangicTarihi ?? defaultDate,
                         bitisTarihi: templateRow?.bitisTarihi ?? defaultDate,
-                        aktifMi: templateRow?.aktifMi ?? true
+                        aktifMi: templateRow?.aktifMi ?? true,
+                        uiYeniOzelKullanimSatiriMi: markAsNewOzelKullanim && kullanimSekli === 'OzelKullanim'
                     });
                 }
             }
@@ -240,7 +254,9 @@ export class OdaFiyatYonetimi implements OnInit {
             return;
         }
 
-        this.fiyatSatirlari = [...this.fiyatSatirlari, ...newRows];
+        this.fiyatSatirlari = markAsNewOzelKullanim
+            ? [...newRows, ...this.fiyatSatirlari]
+            : [...this.fiyatSatirlari, ...newRows];
         this.messageService.add({ severity: UiSeverity.Success, summary: 'Satirlar Olusturuldu', detail: `${newRows.length} eksik fiyat satiri eklendi.` });
     }
 
@@ -539,6 +555,18 @@ export class OdaFiyatYonetimi implements OnInit {
         return row.kullanimSekli === 'OzelKullanim'
             ? 'Ozel kullanim fiyatı henuz girilmedi.'
             : 'Kisi basi fiyat henuz girilmedi.';
+    }
+
+    isNewOzelKullanimRow(row: OdaFiyatFormRow): boolean {
+        return row.uiYeniOzelKullanimSatiriMi === true;
+    }
+
+    clearNewOzelKullanimBadge(row: OdaFiyatFormRow): void {
+        if (!row.uiYeniOzelKullanimSatiriMi) {
+            return;
+        }
+
+        row.uiYeniOzelKullanimSatiriMi = false;
     }
 
     isIncompleteCombination(row: OdaFiyatFormRow): boolean {

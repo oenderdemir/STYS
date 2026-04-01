@@ -5,9 +5,9 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-      SA_PASSWORD: "Strong!Pass1"
+      SA_PASSWORD: "${STYS_DB_PASSWORD:-Strong!Pass1}"
     ports:
-      - "14333:1433"
+      - "${STYS_DB_HOST_PORT:-14333}:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     healthcheck:
@@ -16,7 +16,84 @@ services:
       timeout: 5s
       retries: 15
       start_period: 20s
+    networks:
+      - stys-internal
     restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: stys-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:8080"
+      EnableSwagger: "${STYS_ENABLE_SWAGGER:-true}"
+      RunDatabaseMigrationsOnStartup: "true"
+      ConnectionStrings__TodIdentityDbConnection: "Server=${STYS_DB_HOST:-mssql},${STYS_DB_PORT:-1433};Database=${STYS_DB_NAME:-STYSDB};User Id=${STYS_DB_USER:-sa};Password=${STYS_DB_PASSWORD:-Strong!Pass1};Encrypt=${STYS_DB_ENCRYPT:-False};TrustServerCertificate=${STYS_DB_TRUST_SERVER_CERTIFICATE:-True};MultipleActiveResultSets=${STYS_DB_MARS:-True}"
+      Jwt__Key: "${STYS_JWT_KEY:-ChangeMe!DockerSecretForTestEnvironmentOnly_2026}"
+      Jwt__Issuer: "${STYS_JWT_ISSUER:-TOD.Platform}"
+      Jwt__Audience: "${STYS_JWT_AUDIENCE:-TOD.Platform.Clients}"
+      Jwt__AccessTokenExpirationMinutes: "${STYS_JWT_ACCESS_MINUTES:-30}"
+      Jwt__RefreshTokenExpirationDays: "${STYS_JWT_REFRESH_DAYS:-7}"
+      Jwt__RefreshTokenRetentionDays: "${STYS_JWT_RETENTION_DAYS:-30}"
+      Jwt__RefreshTokenCleanupIntervalHours: "${STYS_JWT_CLEANUP_INTERVAL_HOURS:-24}"
+      Jwt__RefreshTokenCleanupStartupDelayMinutes: "${STYS_JWT_CLEANUP_STARTUP_DELAY_MINUTES:-2}"
+      TodPlatform__RateLimiting__Enabled: "${STYS_RATE_LIMIT_ENABLED:-true}"
+      TodPlatform__RateLimiting__PermitLimit: "${STYS_RATE_LIMIT_PERMIT_LIMIT:-120}"
+      TodPlatform__RateLimiting__WindowSeconds: "${STYS_RATE_LIMIT_WINDOW_SECONDS:-60}"
+      TodPlatform__RateLimiting__QueueLimit: "${STYS_RATE_LIMIT_QUEUE_LIMIT:-0}"
+      TodPlatform__RateLimiting__QueueProcessingOrder: "${STYS_RATE_LIMIT_QUEUE_ORDER:-OldestFirst}"
+      TodPlatform__RateLimiting__RejectionStatusCode: "${STYS_RATE_LIMIT_REJECTION_STATUS_CODE:-429}"
+      TodPlatform__RateLimiting__RejectionMessage: "${STYS_RATE_LIMIT_REJECTION_MESSAGE:-Too many requests.}"
+      TodPlatform__RateLimiting__RejectionErrorCode: "${STYS_RATE_LIMIT_REJECTION_ERROR_CODE:-RATE_LIMITED}"
+      TodPlatform__RateLimiting__RejectionDetail: "${STYS_RATE_LIMIT_REJECTION_DETAIL:-Too many requests. Please try again later.}"
+      TodPlatform__RateLimiting__UnknownClientIp: "${STYS_RATE_LIMIT_UNKNOWN_CLIENT_IP:-unknown}"
+      Serilog__ArchiveDirectoryFormat: "${STYS_LOG_ARCHIVE_DIRECTORY_FORMAT:-/app/Logs/archive/{UtcDate:yyyy}/{UtcDate:MM}}"
+      Serilog__MinimumLevel__Default: "${STYS_LOG_LEVEL_DEFAULT:-Information}"
+      Serilog__MinimumLevel__Override__Microsoft: "${STYS_LOG_LEVEL_MICROSOFT:-Warning}"
+      Serilog__MinimumLevel__Override__Microsoft.AspNetCore: "${STYS_LOG_LEVEL_ASPNETCORE:-Warning}"
+      Serilog__MinimumLevel__Override__System: "${STYS_LOG_LEVEL_SYSTEM:-Warning}"
+      Serilog__WriteTo__1__Args__path: "${STYS_LOG_FILE_PATH:-/app/Logs/stys-.log}"
+      Serilog__WriteTo__1__Args__fileSizeLimitBytes: "${STYS_LOG_FILE_SIZE_LIMIT_BYTES:-10485760}"
+      Serilog__WriteTo__1__Args__retainedFileCountLimit: "${STYS_LOG_RETAINED_FILE_COUNT_LIMIT:-14}"
+    depends_on:
+      mssql:
+        condition: service_healthy
+    volumes:
+      - ./Data/logs/backend:/app/Logs
+    expose:
+      - "8080"
+    networks:
+      - stys-internal
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: stys-frontend
+    environment:
+      STYS_SWAGGER_AUTH_USERNAME: "${STYS_SWAGGER_AUTH_USERNAME:-swagger}"
+      STYS_SWAGGER_AUTH_PASSWORD: "${STYS_SWAGGER_AUTH_PASSWORD:-ChangeMe!Swagger_2026}"
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./Data/logs/frontend:/var/log/nginx
+    ports:
+      - "8080:80"
+    networks:
+      - stys-edge
+      - stys-internal
+    restart: unless-stopped
+
+networks:
+  stys-edge:
+    name: stys-edge
+  stys-internal:
+    name: stys-internal
 
 volumes:
   mssql_data:
+    name: stys_mssql_data

@@ -20,6 +20,7 @@ using TOD.Platform.AspNetCore.Filters;
 using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
+using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Persistence.Rdbms.Extensions;
 
@@ -111,10 +112,28 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (app.Configuration.GetValue<bool>("RunDatabaseMigrationsOnStartup"))
 {
-    app.UseSwagger();
+    await StartupMigrationRunner.ApplyAsync(app.Services);
+}
+
+// Configure the HTTP request pipeline.
+var enableSwagger = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("EnableSwagger");
+if (enableSwagger)
+{
+    app.UseSwagger(options =>
+    {
+        options.PreSerializeFilters.Add((swagger, request) =>
+        {
+            swagger.Servers =
+            [
+                new OpenApiServer
+                {
+                    Url = $"{request.Scheme}://{request.Host}/api"
+                }
+            ];
+        });
+    });
     app.UseSwaggerUI();
 }
 
@@ -135,3 +154,41 @@ app.MapHub<BildirimHub>(BildirimHub.HubRoute)
 
 
 app.Run();
+
+internal static class StartupMigrationRunner
+{
+    public static async Task ApplyAsync(IServiceProvider rootServices)
+    {
+        await using var scope = rootServices.CreateAsyncScope();
+        var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger("StartupMigration");
+
+        await MigrateWithRetryAsync<TodIdentityDbContext>(scope.ServiceProvider, logger);
+        await MigrateWithRetryAsync<StysAppDbContext>(scope.ServiceProvider, logger);
+    }
+
+    private static async Task MigrateWithRetryAsync<TContext>(IServiceProvider services, Microsoft.Extensions.Logging.ILogger logger)
+        where TContext : DbContext
+    {
+        const int maxAttempts = 12;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                var dbContext = services.GetRequiredService<TContext>();
+                await dbContext.Database.MigrateAsync();
+                logger.LogInformation("Database migrations applied for {DbContext}.", typeof(TContext).Name);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Min(5 * attempt, 30));
+                logger.LogWarning(ex, "Migration attempt {Attempt}/{MaxAttempts} failed for {DbContext}. Retrying in {DelaySeconds}s.", attempt, maxAttempts, typeof(TContext).Name, delay.TotalSeconds);
+                await Task.Delay(delay);
+            }
+        }
+
+        var finalContext = services.GetRequiredService<TContext>();
+        await finalContext.Database.MigrateAsync();
+    }
+}

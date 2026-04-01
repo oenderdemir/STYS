@@ -4,19 +4,21 @@ import { RouterModule } from '@angular/router';
 import { AppTopbar } from './app.topbar';
 import { AppSidebar } from './app.sidebar';
 import { AppFooter } from './app.footer';
+import { AppBreadcrumb } from './app.breadcrumb';
 import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
 
 @Component({
     selector: 'app-layout',
     standalone: true,
-    imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter],
+    imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter, AppBreadcrumb],
     template: `<div class="layout-wrapper" [ngClass]="containerClass()">
         @if (isAuthenticated()) {
             <app-topbar></app-topbar>
             <app-sidebar></app-sidebar>
             <div class="layout-main-container">
                 <div class="layout-main">
+                    <app-breadcrumb></app-breadcrumb>
                     <router-outlet></router-outlet>
                 </div>
                 <app-footer></app-footer>

@@ -44,7 +44,7 @@ export const appRoutes: Routes = [
         canActivate: [authGuard],
         canActivateChild: [authChildGuard],
         children: [
-            { path: '', component: Dashboard },
+            { path: '', component: RezervasyonDashboard },
             { path: 'kullanicilar', component: KullaniciYonetimi },
             { path: 'kullanici-gruplar', component: KullaniciGrupYonetimi },
             { path: 'yetkiler', component: RolYonetimi },

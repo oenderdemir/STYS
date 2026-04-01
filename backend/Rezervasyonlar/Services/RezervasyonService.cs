@@ -266,6 +266,7 @@ public class RezervasyonService : IRezervasyonService
                         && k.SegmentAtamalari.Count() != x.Segmentler.Count()),
                 GelenKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == KonaklayanKatilimDurumlari.Geldi),
                 BekleyenKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == null || k.KatilimDurumu == KonaklayanKatilimDurumlari.Bekleniyor),
+                AyrilanKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == KonaklayanKatilimDurumlari.Ayrildi),
                 OdaDegisimiGerekli = false
             })
             .Take(200)

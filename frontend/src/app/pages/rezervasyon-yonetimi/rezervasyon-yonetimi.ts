@@ -144,6 +144,73 @@ interface DegisiklikPayloadTableData {
             margin-bottom: 0;
         }
 
+        .rez-query-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .rez-query-info-card {
+            border: 1px solid var(--surface-border);
+            border-radius: 16px;
+            padding: 1rem 1rem 0.9rem;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface-card) 90%, white), var(--surface-ground));
+        }
+
+        .rez-query-info-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 0.3rem;
+        }
+
+        .rez-query-info-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-color-secondary);
+            margin-bottom: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .rez-query-info-hint {
+            font-size: 0.82rem;
+            color: var(--text-color-secondary);
+            line-height: 1.45;
+        }
+
+        .rez-package-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .rez-package-item {
+            border: 1px solid color-mix(in srgb, var(--surface-border) 88%, white);
+            border-radius: 12px;
+            padding: 0.7rem 0.8rem;
+            background: color-mix(in srgb, var(--surface-card) 82%, white);
+        }
+
+        .rez-package-item-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            align-items: center;
+        }
+
+        .rez-package-rule {
+            font-size: 0.78rem;
+            color: var(--text-color-secondary);
+            line-height: 1.35;
+        }
+
+        .rez-package-description {
+            margin-top: 0.45rem;
+            font-size: 0.8rem;
+            color: var(--text-color-secondary);
+            line-height: 1.45;
+        }
+
         .rez-odeme-panel-title {
             font-size: 1rem;
             font-weight: 700;
@@ -269,6 +336,7 @@ export class RezervasyonYonetimi implements OnInit {
     selectedOdaTipiId: number | null = null;
     selectedMisafirTipiId: number | null = null;
     selectedKonaklamaTipiId: number | null = null;
+    selectedRezervasyonDurumFiltre = 'Tum';
     kisiSayisi = 1;
     tekKisilikFiyatUygulansinMi = false;
     senaryoKonaklayanCinsiyetleri: Array<string | null> = [null];
@@ -290,6 +358,14 @@ export class RezervasyonYonetimi implements OnInit {
     saving = false;
     private readonly defaultGirisSaati = '14:00';
     private readonly defaultCikisSaati = '10:00';
+    readonly rezervasyonDurumFiltreSecenekleri = [
+        { label: 'Tum Kayitlar', value: 'Tum' },
+        { label: 'Taslak', value: 'Taslak' },
+        { label: 'Onayli', value: 'Onayli' },
+        { label: 'Check-in Yapilmis', value: 'CheckInTamamlandi' },
+        { label: 'Check-out Yapilmis', value: 'CheckOutTamamlandi' },
+        { label: 'Iptal Edilmis', value: 'Iptal' }
+    ];
     private readonly durumTaslak = 'Taslak';
     private readonly durumOnayli = 'Onayli';
     private readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
@@ -2462,6 +2538,7 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (result) => {
                     this.updateRezervasyonDurumu(kayit.id, result.rezervasyonDurumu);
+                    this.syncRezervasyonSummaryAfterCheckOut(kayit.id);
                     this.messageService.add({
                         severity: UiSeverity.Success,
                         summary: 'Basarili',
@@ -3150,6 +3227,18 @@ export class RezervasyonYonetimi implements OnInit {
         }
     }
 
+    private syncRezervasyonSummaryAfterCheckOut(rezervasyonId: number): void {
+        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
+        if (!kayit) {
+            return;
+        }
+
+        const gelen = Math.max(0, kayit.gelenKonaklayanSayisi ?? 0);
+        kayit.ayrilanKonaklayanSayisi = Math.max(0, (kayit.ayrilanKonaklayanSayisi ?? 0) + gelen);
+        kayit.gelenKonaklayanSayisi = 0;
+        kayit.bekleyenKonaklayanSayisi = 0;
+    }
+
     formatDateTime(value: string): string {
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
@@ -3250,10 +3339,21 @@ export class RezervasyonYonetimi implements OnInit {
         }
     }
 
+    get filteredRezervasyonKayitlari(): RezervasyonListeDto[] {
+        if (this.selectedRezervasyonDurumFiltre === 'Tum') {
+            return this.rezervasyonKayitlari;
+        }
+
+        return this.rezervasyonKayitlari.filter(
+            (kayit) => kayit.rezervasyonDurumu === this.selectedRezervasyonDurumFiltre
+        );
+    }
+
     getKonaklayanKatilimChipleri(kayit: RezervasyonListeDto): Array<{ label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' }> {
         const gelen = Math.max(0, kayit.gelenKonaklayanSayisi ?? 0);
         const bekleyen = Math.max(0, kayit.bekleyenKonaklayanSayisi ?? 0);
-        const gelmeyen = Math.max(0, (kayit.kisiSayisi ?? 0) - gelen - bekleyen);
+        const ayrilan = Math.max(0, kayit.ayrilanKonaklayanSayisi ?? 0);
+        const gelmeyen = Math.max(0, (kayit.kisiSayisi ?? 0) - gelen - bekleyen - ayrilan);
         const chips: Array<{ label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' }> = [];
 
         if (gelen > 0) {
@@ -3262,6 +3362,10 @@ export class RezervasyonYonetimi implements OnInit {
 
         if (bekleyen > 0) {
             chips.push({ label: `Bekliyor: ${bekleyen}`, severity: UiSeverity.Warn });
+        }
+
+        if (ayrilan > 0) {
+            chips.push({ label: `Ayrildi: ${ayrilan}`, severity: UiSeverity.Info });
         }
 
         if (gelmeyen > 0) {

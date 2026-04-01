@@ -227,6 +227,7 @@ export interface RezervasyonListeDto {
     konaklayanPlaniTamamlandi: boolean;
     gelenKonaklayanSayisi: number;
     bekleyenKonaklayanSayisi: number;
+    ayrilanKonaklayanSayisi: number;
     odaDegisimiGerekli: boolean;
 }
 

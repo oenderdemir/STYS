@@ -83,46 +83,58 @@
         </div>
     </div>
 
-    @if (getSelectedKonaklamaTipi()?.icerikKalemleri?.length) {
-        <div class="mt-3 border-1 border-200 border-round p-3 surface-ground">
-            <div class="font-medium mb-2">Paket Icerigi</div>
-            <div class="flex flex-wrap gap-2">
-                @for (icerik of getSelectedKonaklamaTipi()!.icerikKalemleri; track $index) {
-                    <p-tag
-                        severity="secondary"
-                        [value]="icerik.hizmetAdi + ' x' + icerik.miktar + ' • ' + icerik.periyotAdi"
-                    />
-                    @if (getKonaklamaIcerikKuralOzeti(icerik)) {
-                        <span class="text-xs text-color-secondary self-center">{{ getKonaklamaIcerikKuralOzeti(icerik) }}</span>
-                    }
-                }
-            </div>
-            @for (icerik of getSelectedKonaklamaTipi()!.icerikKalemleri; track 'aciklama-' + $index) {
-                @if (icerik.aciklama) {
-                    <div class="text-xs text-color-secondary mt-2">
-                        <strong>{{ icerik.hizmetAdi }}:</strong> {{ icerik.aciklama }}
-                    </div>
-                }
-            }
-        </div>
-    }
+    <div class="rez-query-info-grid mt-3">
+        @if (getSelectedKonaklamaTipi()?.icerikKalemleri?.length) {
+            <div class="rez-query-info-card">
+                <div class="rez-query-info-title">Paket Icerigi</div>
+                <div class="rez-query-info-subtitle">
+                    Secili konaklama tipinin dahil hizmetleri ve kullanim kurallari.
+                </div>
 
-    <div class="mt-3 border-1 border-200 border-round p-3 surface-ground">
-        <div class="font-medium mb-2">Fiyatlama Tercihi</div>
-        <div class="flex align-items-center gap-2 mb-2">
-            <p-checkbox
-                inputId="tekKisilikFiyat"
-                [binary]="true"
-                [(ngModel)]="tekKisilikFiyatUygulansinMi"
-                [disabled]="loadingReferences || loadingResults || !canUseSinglePersonPricing"
-            />
-            <label for="tekKisilikFiyat" class="font-medium">Tek kisilik fiyat uygula</label>
-        </div>
-        @if (singlePersonPricingHint) {
-            <div class="text-sm text-color-secondary">
-                {{ singlePersonPricingHint }}
+                <div class="rez-package-list">
+                    @for (icerik of getSelectedKonaklamaTipi()!.icerikKalemleri; track $index) {
+                        <div class="rez-package-item">
+                            <div class="rez-package-item-header">
+                                <p-tag
+                                    severity="secondary"
+                                    [value]="icerik.hizmetAdi + ' x' + icerik.miktar + ' • ' + icerik.periyotAdi"
+                                />
+                                @if (getKonaklamaIcerikKuralOzeti(icerik)) {
+                                    <span class="rez-package-rule">{{ getKonaklamaIcerikKuralOzeti(icerik) }}</span>
+                                }
+                            </div>
+                            @if (icerik.aciklama) {
+                                <div class="rez-package-description">
+                                    {{ icerik.aciklama }}
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
         }
+
+        <div class="rez-query-info-card">
+            <div class="rez-query-info-title">Fiyatlama Tercihi</div>
+            <div class="rez-query-info-subtitle">
+                Paylasimsiz odada tek misafir icin kisi bazli fiyat kullanmak istersen bu secenegi ac.
+            </div>
+
+            <div class="flex align-items-center gap-2 mb-2">
+                <p-checkbox
+                    inputId="tekKisilikFiyat"
+                    [binary]="true"
+                    [(ngModel)]="tekKisilikFiyatUygulansinMi"
+                    [disabled]="loadingReferences || loadingResults || !canUseSinglePersonPricing"
+                />
+                <label for="tekKisilikFiyat" class="font-medium">Tek kisilik fiyat uygula</label>
+            </div>
+            @if (singlePersonPricingHint) {
+                <div class="rez-query-info-hint">
+                    {{ singlePersonPricingHint }}
+                </div>
+            }
+        </div>
     </div>
 
     <div class="grid grid-cols-12 gap-4 mt-4">
@@ -308,7 +320,27 @@
     @if (loadingRezervasyonlar) {
         <div>Rezervasyon kayitlari yukleniyor...</div>
     } @else {
-        <p-table [value]="rezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }">
+        <div class="flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+            <div class="text-sm text-color-secondary">
+                Toplam {{ rezervasyonKayitlari.length }} kayit
+                @if (selectedRezervasyonDurumFiltre !== 'Tum') {
+                    <span> • Filtreli gorunum: {{ filteredRezervasyonKayitlari.length }}</span>
+                }
+            </div>
+            <div class="flex align-items-center gap-2">
+                <label for="rezervasyonDurumFiltre" class="text-sm font-medium">Durum Filtresi</label>
+                <p-select
+                    inputId="rezervasyonDurumFiltre"
+                    [options]="rezervasyonDurumFiltreSecenekleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="selectedRezervasyonDurumFiltre"
+                    [appendTo]="'body'"
+                    styleClass="w-16rem"
+                />
+            </div>
+        </div>
+        <p-table [value]="filteredRezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }">
             <ng-template #header>
                 <tr>
                     <th style="width: 4rem"></th>
@@ -326,7 +358,6 @@
                     <th>Cikis</th>
                     <th>Ucret</th>
                     <th>Islemler</th>
-                    <th>Durum</th>
                 </tr>
             </ng-template>
             <ng-template #body let-kayit let-expanded="expanded">
@@ -334,7 +365,19 @@
                     <td>
                         <p-button type="button" [pRowToggler]="kayit" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
                     </td>
-                    <td>{{ kayit.referansNo }}</td>
+                    <td>
+                        <div class="flex flex-column gap-1">
+                            <span>{{ kayit.referansNo }}</span>
+                            <p-tag
+                                [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
+                                [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
+                                [rounded]="true"
+                            />
+                            @if (kayit.odaDegisimiGerekli) {
+                                <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
+                            }
+                        </div>
+                    </td>
                     <td>{{ kayit.misafirAdiSoyadi }}</td>
                     <td>{{ kayit.misafirCinsiyeti || '-' }}</td>
                     <td>{{ kayit.tcKimlikNo || '-' }}</td>
@@ -391,23 +434,11 @@
                             <span>-</span>
                         }
                     </td>
-	                    <td>
-	                        <div class="flex flex-col gap-1">
-	                            <p-tag
-	                                [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
-	                                [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
-	                                [rounded]="true"
-	                            />
-	                            @if (kayit.odaDegisimiGerekli) {
-	                                <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
-	                            }
-	                        </div>
-	                    </td>
 	                </tr>
 	            </ng-template>
             <ng-template #expandedrow let-kayit>
                 <tr>
-                    <td colspan="14">
+                    <td colspan="15">
                         <div class="p-3">
                             @if (isRezervasyonDetayLoading(kayit.id)) {
                                 <span class="text-color-secondary">Rezervasyon detayi yukleniyor...</span>

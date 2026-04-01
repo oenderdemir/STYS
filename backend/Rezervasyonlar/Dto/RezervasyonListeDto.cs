@@ -44,5 +44,7 @@ public class RezervasyonListeDto
 
     public int BekleyenKonaklayanSayisi { get; set; }
 
+    public int AyrilanKonaklayanSayisi { get; set; }
+
     public bool OdaDegisimiGerekli { get; set; }
 }

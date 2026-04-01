@@ -63,6 +63,80 @@ Notlar:
 - Backend loglari hostta `./Data/logs/backend` klasorune yazilir.
 - Nginx access/error loglari hostta `./Data/logs/frontend` klasorune yazilir.
 
+## Docker Image Push
+
+ACR veya baska bir OCI registry'ye backend ve frontend image'larini push etmek icin:
+
+```powershell
+.\scripts\push-images.ps1 -RegistryName todregistry
+```
+
+Bu komut:
+
+- `az acr login --name todregistry`
+- `docker compose build backend frontend`
+- `docker compose push backend frontend`
+
+akisini calistirir.
+
+Varsayilan image isimleri:
+
+- backend: `todregistry.azurecr.io/stys/backend:<tag>`
+- frontend: `todregistry.azurecr.io/stys/frontend:<tag>`
+
+Varsayilan tag:
+
+- calisma zamani damgasi (`yyyyMMddHHmmss`)
+
+Istersen tag'i elle verebilirsin:
+
+```powershell
+.\scripts\push-images.ps1 -RegistryName todregistry -Tag v1.0.0
+```
+
+Registry server'i dogrudan vermek istersen:
+
+```powershell
+.\scripts\push-images.ps1 -RegistryServer todregistry.azurecr.io -Tag test-20260401 -SkipLogin
+```
+
+Compose image referanslari `.env` ile de override edilebilir:
+
+- `STYS_BACKEND_IMAGE`
+- `STYS_FRONTEND_IMAGE`
+- `STYS_IMAGE_TAG`
+
+## Remote Deploy
+
+Test veya hedef sunucuda, `mssql` container'ina dokunmadan sadece `backend` ve `frontend` image'larini registry'den cekip guncellemek icin:
+Ilk kurulumda `mssql` yoksa script onu bir kez ayaga kaldirir. `mssql` zaten calisiyorsa dokunmaz.
+
+```powershell
+.\scripts\deploy-remote.ps1
+```
+
+Bu komut sunlari yapar:
+
+- `mssql` yoksa veya calismiyorsa `docker compose up -d mssql`
+- `docker compose pull backend frontend`
+- `docker compose up -d --no-deps backend frontend`
+
+Eger deploy server'da docker login yoksa:
+
+```powershell
+.\scripts\deploy-remote.ps1 `
+  -WithLogin `
+  -RegistryServer todregistry.azurecr.io `
+  -Username todregistry `
+  -Password "<registry-password>"
+```
+
+Bu akista:
+
+- `mssql` varsa korunur
+- `mssql` sadece yoksa veya durmussa ayağa kaldirilir
+- sadece uygulama katmani guncellenir
+
 ## Proje Yapisi
 
 - `backend`: ASP.NET Core + EF Core domain ve API katmani

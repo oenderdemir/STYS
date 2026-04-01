@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
 
   backend:
+    image: "${STYS_BACKEND_IMAGE:-stys/backend}:${STYS_IMAGE_TAG:-latest}"
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -69,6 +70,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    image: "${STYS_FRONTEND_IMAGE:-stys/frontend}:${STYS_IMAGE_TAG:-latest}"
     build:
       context: .
       dockerfile: frontend/Dockerfile

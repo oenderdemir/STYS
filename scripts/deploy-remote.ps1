@@ -23,10 +23,23 @@ if ($WithLogin) {
 }
 
 if (-not $SkipDatabaseBootstrap) {
-    $mssqlContainerState = docker compose ps --format json mssql | ConvertFrom-Json -ErrorAction SilentlyContinue
-    $mssqlContainerItems = @($mssqlContainerState)
+    $mssqlPsOutput = docker compose ps mssql --format json 2>$null
+    $mssqlContainerItems = @()
 
-    if (-not $mssqlContainerState -or $mssqlContainerItems.Count -eq 0) {
+    if ($LASTEXITCODE -eq 0) {
+        $mssqlPsText = ($mssqlPsOutput | Out-String).Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($mssqlPsText)) {
+            try {
+                $mssqlContainerItems = @(($mssqlPsText | ConvertFrom-Json))
+            }
+            catch {
+                $mssqlContainerItems = @()
+            }
+        }
+    }
+
+    if ($mssqlContainerItems.Count -eq 0) {
         Write-Host "mssql container bulunamadi. Ilk kurulum icin mssql ayaga kaldiriliyor..."
         docker compose up -d mssql
     }

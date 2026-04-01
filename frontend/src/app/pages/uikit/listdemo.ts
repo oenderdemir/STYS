@@ -149,13 +149,7 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
             </div>
         </div>
     </div>`,
-    styles: `
-        ::ng-deep {
-            .p-orderlist-list-container {
-                width: 100%;
-            }
-        }
-    `,
+    styleUrl: './listdemo.scss',
     providers: [ProductService]
 })
 export class ListDemo {

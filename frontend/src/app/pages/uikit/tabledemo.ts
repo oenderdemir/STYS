@@ -379,15 +379,7 @@ interface expandedRows {
                 </ng-template>
             </p-table>
         </div>`,
-    styles: `
-        .p-datatable-frozen-tbody {
-            font-weight: bold;
-        }
-
-        .p-datatable-scrollable .p-frozen-column {
-            font-weight: bold;
-        }
-    `,
+    styleUrl: './tabledemo.scss',
     providers: [ConfirmationService, MessageService, CustomerService, ProductService]
 })
 export class TableDemo implements OnInit {

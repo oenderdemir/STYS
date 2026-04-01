@@ -23,17 +23,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-atama-yonetimi.html',
-    styles: [`
-        .page-shell { display: flex; flex-direction: column; gap: 1.25rem; }
-        .page-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid #dbe4ee; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); }
-        .page-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
-        .page-subtitle { margin-top: 0.35rem; color: #64748b; font-size: 0.92rem; line-height: 1.45; }
-        .assignment-controls { display: grid; grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr); gap: 1rem; align-items: end; margin-top: 1rem; }
-        .toolbar-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-wrapper { overflow: auto; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-table { width: 100%; }
-        @media (max-width: 991px) { .assignment-controls { grid-template-columns: 1fr; } }
-    `],
+    styleUrl: './ek-hizmet-atama-yonetimi.scss',
     providers: [MessageService]
 })
 export class EkHizmetAtamaYonetimi implements OnInit {

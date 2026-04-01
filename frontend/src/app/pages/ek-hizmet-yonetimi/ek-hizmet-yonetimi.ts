@@ -24,20 +24,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-yonetimi.html',
-    styles: [`
-        .page-shell { display: flex; flex-direction: column; gap: 1.25rem; }
-        .page-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); }
-        .page-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
-        .page-subtitle { margin-top: 0.35rem; color: #64748b; font-size: 0.92rem; line-height: 1.45; }
-        .toolbar-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .selection-grid { display: grid; grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr); gap: 1rem; margin-top: 1rem; align-items: end; }
-        .cell-input, .cell-select { width: 100%; }
-        .compact-help { line-height: 1.35; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-wrapper { overflow: auto; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-table { width: 100%; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-thead > tr > th { white-space: nowrap; }
-        @media (max-width: 991px) { .selection-grid { grid-template-columns: 1fr; } }
-    `],
+    styleUrl: './ek-hizmet-yonetimi.scss',
     providers: [MessageService]
 })
 export class EkHizmetYonetimi implements OnInit {

@@ -16,27 +16,7 @@ import { BreadcrumbModule } from 'primeng/breadcrumb';
             </div>
         }
     `,
-    styles: [`
-        .app-breadcrumb-shell {
-            margin-bottom: 1rem;
-            padding: 0.5rem 0 0.25rem;
-        }
-
-        :host ::ng-deep .app-breadcrumb-shell .p-breadcrumb {
-            border: 0;
-            background: transparent;
-            padding: 0;
-        }
-
-        :host ::ng-deep .app-breadcrumb-shell .p-breadcrumb-list {
-            flex-wrap: wrap;
-            gap: 0.2rem;
-        }
-
-        :host ::ng-deep .app-breadcrumb-shell .p-menuitem-text {
-            font-size: 0.85rem;
-        }
-    `]
+    styleUrl: './app.breadcrumb.scss'
 })
 export class AppBreadcrumb implements OnInit {
     private readonly router = inject(Router);

@@ -29,39 +29,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
     standalone: true,
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
-    styles: [`
-        .dash-hero {
-            background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 45%, #ecfdf5 100%);
-            border: 1px solid #dbeafe;
-        }
-
-        .kpi-card {
-            border: 1px solid;
-            border-radius: 0.75rem;
-            padding: 0.9rem;
-            min-height: 8.25rem;
-        }
-
-        .kpi-card--blue {
-            background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
-            border-color: #bfdbfe;
-        }
-
-        .kpi-card--violet {
-            background: linear-gradient(180deg, #f5f3ff 0%, #faf9ff 100%);
-            border-color: #ddd6fe;
-        }
-
-        .kpi-card--emerald {
-            background: linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%);
-            border-color: #a7f3d0;
-        }
-
-        .kpi-card--amber {
-            background: linear-gradient(180deg, #fffbeb 0%, #fffef8 100%);
-            border-color: #fcd34d;
-        }
-    `],
+    styleUrl: './rezervasyon-dashboard.scss',
     providers: [MessageService]
 })
 export class RezervasyonDashboard implements OnInit {

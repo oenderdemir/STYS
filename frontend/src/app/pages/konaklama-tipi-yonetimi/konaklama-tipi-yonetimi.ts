@@ -27,37 +27,7 @@ import { KonaklamaTipiYonetimiService } from './konaklama-tipi-yonetimi.service'
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './konaklama-tipi-yonetimi.html',
-    styles: [`
-        .konaklama-page{display:flex;flex-direction:column;gap:1.25rem}
-        .konaklama-section{background:linear-gradient(180deg,#fff 0%,#f8fbff 100%);border:1px solid #dbe4ee;border-radius:1rem;padding:1.25rem;box-shadow:0 12px 30px rgba(15,23,42,.04)}
-        .section-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1rem}
-        .section-title{margin:0;font-size:1.1rem;font-weight:700;color:#0f172a}
-        .section-subtitle,.override-note,.override-card-subtitle{color:#64748b}
-        .section-subtitle{margin-top:.35rem;font-size:.92rem;line-height:1.45;max-width:48rem}
-        .assignment-controls{display:grid;grid-template-columns:minmax(18rem,24rem) minmax(0,1fr);gap:1rem;align-items:end;margin-bottom:1rem}
-        .assignment-note{display:flex;align-items:end;min-height:100%}
-        :host ::ng-deep .konaklama-table .p-datatable-wrapper{overflow:auto}
-        :host ::ng-deep .konaklama-table .p-datatable-table{width:100%}
-        :host ::ng-deep .konaklama-table .p-datatable-thead>tr>th{white-space:nowrap}
-        :host ::ng-deep .konaklama-table .p-datatable-tbody>tr>td{vertical-align:top}
-        .override-shell,.override-card{display:flex;flex-direction:column}
-        .override-shell{gap:1rem}
-        .override-note{font-size:.9rem;line-height:1.4}
-        .override-card{border:1px solid #dbe4ee;border-radius:.85rem;padding:1rem;background:#f8fbff;gap:.9rem}
-        .override-card.disabled{background:#fff7f7;border-color:#fecaca}
-        .override-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}
-        .override-card-title{font-weight:700;color:#0f172a}
-        .override-card-subtitle{font-size:.86rem;margin-top:.2rem}
-        .override-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.85rem}
-        .span-2{grid-column:span 2}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-6{grid-column:span 6}.span-12{grid-column:span 12}
-        .override-global{padding:.75rem;border-radius:.75rem;background:#eef6ff;color:#334155;font-size:.88rem}
-        .override-checks{display:flex;gap:1rem;flex-wrap:wrap;padding-top:.25rem}
-        @media (max-width:991px){
-            .section-header{flex-direction:column;align-items:stretch}
-            .assignment-controls,.override-grid{grid-template-columns:1fr}
-            .span-2,.span-3,.span-4,.span-6,.span-12{grid-column:span 1}
-        }
-    `],
+    styleUrl: './konaklama-tipi-yonetimi.scss',
     providers: [MessageService]
 })
 export class KonaklamaTipiYonetimi implements OnInit {

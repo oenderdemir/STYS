@@ -26,18 +26,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, SelectModule, InputTextModule, TableModule, TextareaModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-tanim-yonetimi.html',
-    styles: [`
-        .page-shell { display: flex; flex-direction: column; gap: 1.25rem; }
-        .page-card { background: #fff; border: 1px solid #dbe4ee; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); }
-        .page-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
-        .page-subtitle { margin-top: 0.35rem; color: #64748b; font-size: 0.92rem; line-height: 1.45; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-wrapper { overflow: auto; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-table { width: 100%; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-thead > tr > th { white-space: nowrap; }
-        :host ::ng-deep .ek-hizmet-table .p-datatable-tbody > tr > td { vertical-align: top; }
-        .cell-input { width: 100%; }
-        .toolbar-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    `],
+    styleUrl: './ek-hizmet-tanim-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
 })
 export class EkHizmetTanimYonetimi implements OnInit {

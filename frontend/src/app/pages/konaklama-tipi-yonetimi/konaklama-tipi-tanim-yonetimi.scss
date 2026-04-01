@@ -1,0 +1,68 @@
+.page-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.page-card {
+    background: #ffffff;
+    border: 1px solid #dbe4ee;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+}
+
+.section-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.section-subtitle {
+    margin-top: 0.35rem;
+    color: #64748b;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    max-width: 48rem;
+}
+
+.caption-tools {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.search-box {
+    min-width: 16rem;
+}
+
+:host ::ng-deep .konaklama-table .p-datatable-wrapper {
+    overflow: auto;
+}
+
+:host ::ng-deep .konaklama-table .p-datatable-table {
+    width: 100%;
+}
+
+:host ::ng-deep .konaklama-table .p-datatable-thead > tr > th {
+    white-space: nowrap;
+}
+
+:host ::ng-deep .konaklama-table .p-datatable-tbody > tr > td {
+    vertical-align: top;
+}
+
+@media (max-width: 991px) {
+    .caption-tools {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box {
+        min-width: 0;
+        width: 100%;
+    }
+}

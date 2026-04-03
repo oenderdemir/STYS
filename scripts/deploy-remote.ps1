@@ -9,6 +9,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptDirectory
+Set-Location $projectRoot
+
 if ($WithLogin) {
     if ([string]::IsNullOrWhiteSpace($RegistryServer)) {
         throw "WithLogin kullaniliyorsa RegistryServer vermen gerekiyor."

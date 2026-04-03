@@ -111,8 +111,17 @@ Compose image referanslari `.env` ile de override edilebilir:
 Test veya hedef sunucuda, `mssql` container'ina dokunmadan sadece `backend` ve `frontend` image'larini registry'den cekip guncellemek icin:
 Ilk kurulumda `mssql` yoksa script onu bir kez ayaga kaldirir. `mssql` zaten calisiyorsa dokunmaz.
 
+Windows:
+
 ```powershell
 .\scripts\deploy-remote.ps1
+```
+
+Linux:
+
+```bash
+chmod +x ./scripts/deploy-remote.sh
+./scripts/deploy-remote.sh
 ```
 
 Bu komut sunlari yapar:
@@ -123,12 +132,25 @@ Bu komut sunlari yapar:
 
 Eger deploy server'da docker login yoksa:
 
+Windows:
+
 ```powershell
 .\scripts\deploy-remote.ps1 `
   -WithLogin `
   -RegistryServer todregistry.azurecr.io `
   -Username todregistry `
   -Password "<registry-password>"
+```
+
+Linux:
+
+```bash
+chmod +x ./scripts/deploy-remote.sh
+./scripts/deploy-remote.sh \
+  --with-login \
+  --registry-server todregistry.azurecr.io \
+  --username todregistry \
+  --password "<registry-password>"
 ```
 
 Bu akista:

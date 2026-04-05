@@ -1,0 +1,54 @@
+.kamp-rezervasyonlar-page {
+    padding: 1rem;
+}
+
+.kamp-rezervasyon-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+
+    label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-width: 160px;
+
+        span {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        select {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid var(--p-inputtext-border-color, #ced4da);
+            border-radius: 6px;
+            background: var(--p-inputtext-background, #fff);
+            font-size: 0.875rem;
+        }
+    }
+}
+
+.kamp-rezervasyon-no {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.kamp-iptal-form {
+    padding: 0.5rem 0;
+
+    label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
+        span {
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+        }
+    }
+}

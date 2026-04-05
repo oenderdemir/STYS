@@ -1,0 +1,67 @@
+.kamp-basvuru-detay-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.kamp-basvuru-detay-card {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.9rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.9rem;
+    background: #f8fafc;
+}
+
+.kamp-basvuru-detay-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.kamp-basvuru-detay-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.kamp-basvuru-detay-flags span {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #dbe3ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    font-size: 0.85rem;
+}
+
+.kamp-basvuru-uyarilar {
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+    border-radius: 0.85rem;
+}
+
+.kamp-basvuru-uyarilar ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.kamp-katilimci-ad {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.kamp-basvuru-detay-loading {
+    padding: 1.25rem 0;
+    color: #64748b;
+}
+
+@media (max-width: 960px) {
+    .kamp-basvuru-detay-grid {
+        grid-template-columns: 1fr;
+    }
+}

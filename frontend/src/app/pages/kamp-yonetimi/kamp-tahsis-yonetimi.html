@@ -1,0 +1,140 @@
+<p-toast />
+
+<div class="kamp-tahsis-page">
+    <p-toolbar styleClass="mb-3">
+        <ng-template #start>
+            <div>
+                <h2 class="m-0">Kamp Tahsisleri</h2>
+                <p class="m-0 text-color-secondary">Basvurulari puan ve oncelik sirasina gore inceleyip tahsis karari ver.</p>
+            </div>
+        </ng-template>
+        <ng-template #end>
+            <div class="kamp-tahsis-toolbar-actions">
+                <a pButton routerLink="/kamp-iade-yonetimi" icon="pi pi-wallet" label="Iade Yonetimi" [outlined]="true"></a>
+                <p-button
+                    *ngIf="canManage"
+                    icon="pi pi-sparkles"
+                    label="Otomatik Tahsis"
+                    [disabled]="!canRunOtomatikTahsis"
+                    [loading]="otomatikTahsisCalisiyor"
+                    (onClick)="uygulaOtomatikTahsis()" />
+                <p-button
+                    *ngIf="canManage"
+                    icon="pi pi-times-circle"
+                    label="No-Show Iptal"
+                    severity="danger"
+                    [outlined]="true"
+                    [disabled]="!canRunNoShowIptal"
+                    [loading]="noShowIptalCalisiyor"
+                    (onClick)="uygulaNoShowIptal()" />
+                <p-button icon="pi pi-refresh" label="Yenile" [outlined]="true" (onClick)="refresh()" />
+            </div>
+        </ng-template>
+    </p-toolbar>
+
+    <div class="kamp-tahsis-filters">
+        <label>
+            <span>Donem</span>
+            <select [(ngModel)]="selectedKampDonemiId" (ngModelChange)="onFiltersChanged()">
+                <option [ngValue]="0">Tum donemler</option>
+                <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.ad }}</option>
+            </select>
+        </label>
+
+        <label>
+            <span>Tesis</span>
+            <select [(ngModel)]="selectedTesisId" (ngModelChange)="onFiltersChanged()">
+                <option [ngValue]="0">Tum tesisler</option>
+                <option *ngFor="let tesis of baglam?.tesisler ?? []" [ngValue]="tesis.id">{{ tesis.ad }}</option>
+            </select>
+        </label>
+
+        <label>
+            <span>Durum</span>
+            <select [(ngModel)]="selectedDurum" (ngModelChange)="onFiltersChanged()">
+                <option value="">Tum durumlar</option>
+                <option *ngFor="let durum of baglam?.durumlar ?? []" [value]="durum">{{ durum }}</option>
+            </select>
+        </label>
+    </div>
+
+    <small *ngIf="canManage" class="text-color-secondary">
+        Otomatik tahsis, secili donem ve tesis icin siralamaya gore kontenjan kadar basvuruyu tahsis eder.
+    </small>
+
+    <p-table [value]="kayitlar" [loading]="loading" [tableStyle]="{ 'min-width': '90rem' }" responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>#</th>
+                <th>Donem</th>
+                <th>Tesis</th>
+                <th>Basvuru Sahibi</th>
+                <th>Durum</th>
+                <th>Oncelik</th>
+                <th>Puan</th>
+                <th>Katilimci</th>
+                <th>Kontenjan</th>
+                <th>Tutar</th>
+                <th>Uyarilar</th>
+                <th *ngIf="canManage">Aksiyon</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+            <tr>
+                <td>{{ item.siralama }}</td>
+                <td>
+                    <div class="kamp-tahsis-cell-title">{{ item.kampDonemiAd }}</div>
+                    <small>{{ item.konaklamaBirimiTipi }}</small>
+                </td>
+                <td>{{ item.tesisAd }}</td>
+                <td>
+                    <div class="kamp-tahsis-cell-title">{{ item.basvuruSahibiAdiSoyadi }}</div>
+                    <small>{{ item.basvuruSahibiTipi }}</small>
+                </td>
+                <td><p-tag [value]="item.durum" [severity]="durumSeverity(item.durum)" /></td>
+                <td>{{ item.oncelikSirasi }}</td>
+                <td>{{ item.puan }}</td>
+                <td>{{ item.katilimciSayisi }}</td>
+                <td>{{ item.tahsisEdilenSayisi }}/{{ item.toplamKontenjan }} <small class="text-color-secondary">kalan {{ item.kalanKontenjan }}</small></td>
+                <td>
+                    <div>{{ item.donemToplamTutar | number:'1.2-2' }} TL</div>
+                    <small>Avans {{ item.avansToplamTutar | number:'1.2-2' }} TL</small>
+                </td>
+                <td>
+                    <div *ngIf="item.uyarilar.length === 0" class="text-color-secondary">-</div>
+                    <ul *ngIf="item.uyarilar.length > 0" class="kamp-uyari-listesi">
+                        <li *ngFor="let uyari of item.uyarilar">{{ uyari }}</li>
+                    </ul>
+                </td>
+                <td *ngIf="canManage">
+                    <div class="kamp-tahsis-actions">
+                        <p-button label="Detay" size="small" severity="info" [outlined]="true" (onClick)="acDetay(item)" />
+                        <p-button label="Tahsis Et" size="small" (onClick)="kararVer(item, 'TahsisEdildi')" [loading]="kararKaydediliyorId === item.id && item.durum !== 'TahsisEdildi'" />
+                        <p-button label="Tahsis Edilemedi" size="small" severity="danger" [outlined]="true" (onClick)="kararVer(item, 'TahsisEdilemedi')" [loading]="kararKaydediliyorId === item.id && item.durum !== 'TahsisEdilemedi'" />
+                        <p-button label="Beklemeye Al" size="small" severity="secondary" [text]="true" (onClick)="kararVer(item, 'Beklemede')" [loading]="kararKaydediliyorId === item.id && item.durum !== 'Beklemede'" />
+                        <p-button
+                            *ngIf="item.durum === 'TahsisEdildi'"
+                            label="Rezervasyon Uret"
+                            size="small"
+                            severity="info"
+                            [outlined]="true"
+                            [loading]="rezervasyonUretiliyorId === item.id"
+                            [disabled]="rezervasyonUretiliyorId !== null && rezervasyonUretiliyorId !== item.id"
+                            (onClick)="uretRezervasyon(item)" />
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td [attr.colspan]="canManage ? 12 : 11">Filtrelere uygun kamp basvurusu bulunamadi.</td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<app-kamp-basvuru-detay-dialog
+    [(visible)]="detayDialogVisible"
+    [basvuruId]="selectedBasvuruId"
+    [canManageParticipants]="canManage"
+    (degisti)="onDetayDegisti()" />

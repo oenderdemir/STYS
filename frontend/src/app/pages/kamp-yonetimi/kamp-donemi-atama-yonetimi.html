@@ -1,0 +1,87 @@
+<p-toast />
+
+<div class="kamp-page">
+    <section class="kamp-section">
+        <div class="section-header">
+            <div>
+                <h2 class="section-title">Kamp Donemi Tesis Atamasi</h2>
+                <p class="section-subtitle">
+                    Secilen kamp doneminin hangi tesislerde acik olacagini, kontenjanini ve basvuru durumunu yonetin.
+                </p>
+            </div>
+
+            <div class="flex gap-2 flex-wrap">
+                @if (canViewDonemDefinitions) {
+                    <p-button label="Kamp Donemleri" icon="pi pi-external-link" severity="secondary" [outlined]="true" (onClick)="openDonemDefinitions()" />
+                }
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [loading]="loadingBaglam || loadingAtamalar" (onClick)="refresh()" />
+                @if (canManageAssignments) {
+                    <p-button label="Atamalari Kaydet" icon="pi pi-check" [loading]="savingAtamalar" (onClick)="kaydetTesisAtamalari()" />
+                }
+            </div>
+        </div>
+
+        <div class="assignment-controls">
+            <div>
+                <label for="kampDonemiSecimi" class="block font-medium mb-2">Kamp Donemi</label>
+                <p-select
+                    inputId="kampDonemiSecimi"
+                    [options]="donemSecenekleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="selectedKampDonemiId"
+                    [showClear]="false"
+                    placeholder="Kamp donemi secin"
+                    class="w-full"
+                    [disabled]="loadingBaglam || loadingAtamalar"
+                    (ngModelChange)="onKampDonemiChange()"
+                />
+            </div>
+        </div>
+
+        <p-table
+            [value]="tesisAtamalari"
+            dataKey="tesisId"
+            [loading]="loadingAtamalar"
+            [tableStyle]="{ 'min-width': '72rem' }"
+            styleClass="kamp-table"
+        >
+            <ng-template #header>
+                <tr>
+                    <th style="width: 8rem;">Atama</th>
+                    <th>Tesis</th>
+                    <th style="width: 8rem;">Donem Aktif</th>
+                    <th style="width: 8rem;">Basvuru Acik</th>
+                    <th style="width: 10rem;">Kontenjan</th>
+                    <th>Aciklama</th>
+                </tr>
+            </ng-template>
+
+            <ng-template #body let-item>
+                <tr>
+                    <td>
+                        <p-checkbox
+                            [binary]="true"
+                            [(ngModel)]="item.atamaVarMi"
+                            [disabled]="!canManageAssignments"
+                            (ngModelChange)="toggleAtama(item, $event)"
+                        />
+                    </td>
+                    <td>{{ item.tesisAd }}</td>
+                    <td>
+                        <p-checkbox [binary]="true" [(ngModel)]="item.donemdeAktifMi" [disabled]="!canManageAssignments || !item.atamaVarMi" />
+                    </td>
+                    <td>
+                        <p-checkbox [binary]="true" [(ngModel)]="item.basvuruyaAcikMi" [disabled]="!canManageAssignments || !item.atamaVarMi" />
+                    </td>
+                    <td>
+                        <input pInputText type="number" min="0" class="w-full" [(ngModel)]="item.toplamKontenjan" [disabled]="!canManageAssignments || !item.atamaVarMi" />
+                    </td>
+                    <td>
+                        <input pInputText type="text" class="w-full" [(ngModel)]="item.aciklama" [disabled]="!canManageAssignments || !item.atamaVarMi" maxlength="512" />
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </section>
+</div>

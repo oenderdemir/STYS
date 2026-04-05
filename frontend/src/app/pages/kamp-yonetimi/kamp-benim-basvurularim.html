@@ -1,0 +1,117 @@
+<div class="kamp-benim-basvurularim-page">
+    <p-toolbar styleClass="mb-3">
+        <ng-template #start>
+            <div>
+                <h2 class="m-0">Benim Basvurularim</h2>
+                <p class="m-0 text-color-secondary">Olusturdugun kamp basvurularini ve katilimci listesini incele.</p>
+            </div>
+        </ng-template>
+        <ng-template #end>
+            <p-button icon="pi pi-refresh" label="Yenile" [outlined]="true" (onClick)="refresh()" />
+        </ng-template>
+    </p-toolbar>
+
+    <div *ngIf="hataMesaji" class="kamp-benim-basvurularim-error">{{ hataMesaji }}</div>
+
+    <p-table [value]="kayitlar" [loading]="loading" [tableStyle]="{ 'min-width': '72rem' }" responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Donem</th>
+                <th>Tesis</th>
+                <th>Durum</th>
+                <th>Puan</th>
+                <th>Katilimci</th>
+                <th>Toplam</th>
+                <th>Avans</th>
+                <th>Olusturma</th>
+                <th>Aksiyon</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+            <tr>
+                <td>
+                    <div>{{ item.kampDonemiAd }}</div>
+                    <small class="text-color-secondary">{{ item.konaklamaBaslangicTarihi | date:'dd.MM.yyyy' }} - {{ item.konaklamaBitisTarihi | date:'dd.MM.yyyy' }}</small>
+                </td>
+                <td>
+                    <div>{{ item.tesisAd }}</div>
+                    <small class="text-color-secondary">{{ item.konaklamaBirimiTipi }}</small>
+                </td>
+                <td><p-tag [value]="item.durum" [severity]="durumSeverity(item.durum)" /></td>
+                <td>{{ item.puan }}</td>
+                <td>{{ item.katilimciSayisi }}</td>
+                <td>{{ item.donemToplamTutar | number:'1.2-2' }} TL</td>
+                <td>{{ item.avansToplamTutar | number:'1.2-2' }} TL</td>
+                <td>{{ item.createdAt | date:'dd.MM.yyyy HH:mm' }}</td>
+                <td>
+                    <p-button label="Detay" size="small" severity="info" [outlined]="true" (onClick)="acDetay(item)" />
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="9">Kaydedilmis kamp basvurusu bulunamadi.</td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog
+    header="Basvuru Detayi"
+    [(visible)]="detayVisible"
+    [modal]="true"
+    [style]="{ width: '68rem', 'max-width': '96vw' }">
+    <ng-container *ngIf="selectedKayit as item">
+        <div class="kamp-basvuru-detay-grid">
+            <div class="kamp-basvuru-detay-card">
+                <span>Basvuru Sahibi</span>
+                <strong>{{ item.basvuruSahibiAdiSoyadi }}</strong>
+                <small>{{ item.basvuruSahibiTipi }}</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span>Puan / Oncelik</span>
+                <strong>{{ item.puan }} puan</strong>
+                <small>{{ item.oncelikSirasi }}. oncelik</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span>Odeme</span>
+                <strong>{{ item.donemToplamTutar | number:'1.2-2' }} TL</strong>
+                <small>Avans {{ item.avansToplamTutar | number:'1.2-2' }} TL</small>
+            </div>
+        </div>
+
+        <div *ngIf="item.uyarilar.length > 0" class="kamp-basvuru-detay-warning">
+            <strong>Uyarilar</strong>
+            <ul>
+                <li *ngFor="let uyari of item.uyarilar">{{ uyari }}</li>
+            </ul>
+        </div>
+
+        <p-table [value]="item.katilimcilar" [tableStyle]="{ 'min-width': '100%' }">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Ad Soyad</th>
+                    <th>Tip</th>
+                    <th>Akrabalik</th>
+                    <th>Dogum</th>
+                    <th>Kimlik</th>
+                    <th>Yemek</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-katilimci>
+                <tr>
+                    <td>{{ katilimci.adSoyad }}</td>
+                    <td>{{ katilimci.katilimciTipi }}</td>
+                    <td>{{ katilimci.akrabalikTipi }}</td>
+                    <td>{{ katilimci.dogumTarihi | date:'dd.MM.yyyy' }}</td>
+                    <td>{{ katilimci.tcKimlikNo || '-' }}</td>
+                    <td>{{ katilimci.yemekTalepEdiyorMu ? 'Evet' : 'Hayir' }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </ng-container>
+
+    <ng-template pTemplate="footer">
+        <p-button label="Kapat" [text]="true" (onClick)="detayVisible = false" />
+    </ng-template>
+</p-dialog>

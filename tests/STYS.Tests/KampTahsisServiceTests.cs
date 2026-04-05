@@ -1,0 +1,198 @@
+using Microsoft.EntityFrameworkCore;
+using STYS.Infrastructure.EntityFramework;
+using STYS.Kamp;
+using STYS.Kamp.Dto;
+using STYS.Kamp.Entities;
+using STYS.Kamp.Services;
+using STYS.Iller.Entities;
+using STYS.Tesisler.Entities;
+using TOD.Platform.SharedKernel.Exceptions;
+
+namespace STYS.Tests;
+
+public class KampTahsisServiceTests
+{
+    [Fact]
+    public async Task OtomatikKararUygula_KontenjanaGoreEnYuksekSiradakileriTahsisEder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedFixtureAsync(dbContext);
+
+        dbContext.KampBasvurulari.AddRange(
+            new KampBasvuru
+            {
+                Id = 100,
+                KampDonemiId = 10,
+                TesisId = 1,
+                KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
+                BasvuruSahibiAdiSoyadi = "Birinci Aday",
+                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.TarimOrmanPersoneli,
+                Durum = KampBasvuruDurumlari.TahsisEdildi,
+                KatilimciSayisi = 4,
+                OncelikSirasi = 1,
+                Puan = 90,
+                DonemToplamTutar = 100m,
+                AvansToplamTutar = 10m,
+                KalanOdemeTutari = 90m
+            },
+            new KampBasvuru
+            {
+                Id = 101,
+                KampDonemiId = 10,
+                TesisId = 1,
+                KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
+                BasvuruSahibiAdiSoyadi = "Ikinci Aday",
+                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.BagliKurulusPersoneli,
+                Durum = KampBasvuruDurumlari.Beklemede,
+                KatilimciSayisi = 4,
+                OncelikSirasi = 2,
+                Puan = 80,
+                DonemToplamTutar = 100m,
+                AvansToplamTutar = 10m,
+                KalanOdemeTutari = 90m
+            },
+            new KampBasvuru
+            {
+                Id = 102,
+                KampDonemiId = 10,
+                TesisId = 1,
+                KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
+                BasvuruSahibiAdiSoyadi = "Ucuncu Aday",
+                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.Diger,
+                Durum = KampBasvuruDurumlari.TahsisEdildi,
+                KatilimciSayisi = 4,
+                OncelikSirasi = 4,
+                Puan = 20,
+                DonemToplamTutar = 100m,
+                AvansToplamTutar = 10m,
+                KalanOdemeTutari = 90m
+            },
+            new KampBasvuru
+            {
+                Id = 103,
+                KampDonemiId = 10,
+                TesisId = 1,
+                KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
+                BasvuruSahibiAdiSoyadi = "Iptal Kayit",
+                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.Diger,
+                Durum = KampBasvuruDurumlari.IptalEdildi,
+                KatilimciSayisi = 4,
+                OncelikSirasi = 1,
+                Puan = 100,
+                DonemToplamTutar = 100m,
+                AvansToplamTutar = 10m,
+                KalanOdemeTutari = 90m
+            });
+
+        await dbContext.SaveChangesAsync();
+
+        var service = new KampTahsisService(dbContext);
+        var result = await service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
+        {
+            KampDonemiId = 10,
+            TesisId = 1
+        });
+
+        Assert.Equal(2, result.ToplamKontenjan);
+        Assert.Equal(3, result.DegerlendirilenBasvuruSayisi);
+        Assert.Equal(2, result.TahsisEdilenSayisi);
+        Assert.Equal(1, result.TahsisEdilemeyenSayisi);
+        Assert.Equal(2, result.GuncellenenKayitSayisi);
+
+        var durumlar = await dbContext.KampBasvurulari
+            .IgnoreQueryFilters()
+            .Where(x => x.KampDonemiId == 10 && x.TesisId == 1)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Durum })
+            .ToListAsync();
+
+        Assert.Equal(KampBasvuruDurumlari.TahsisEdildi, durumlar.Single(x => x.Id == 100).Durum);
+        Assert.Equal(KampBasvuruDurumlari.TahsisEdildi, durumlar.Single(x => x.Id == 101).Durum);
+        Assert.Equal(KampBasvuruDurumlari.TahsisEdilemedi, durumlar.Single(x => x.Id == 102).Durum);
+        Assert.Equal(KampBasvuruDurumlari.IptalEdildi, durumlar.Single(x => x.Id == 103).Durum);
+    }
+
+    [Fact]
+    public async Task OtomatikKararUygula_AtamaYoksaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedFixtureAsync(dbContext, atamaEkle: false);
+        var service = new KampTahsisService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(() => service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
+        {
+            KampDonemiId = 10,
+            TesisId = 1
+        }));
+
+        Assert.Equal(404, exception.ErrorCode);
+    }
+
+    private static StysAppDbContext CreateDbContext()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new StysAppDbContext(options);
+    }
+
+    private static async Task SeedFixtureAsync(StysAppDbContext dbContext, bool atamaEkle = true)
+    {
+        dbContext.Iller.Add(new Il
+        {
+            Id = 1,
+            Ad = "Mersin",
+            AktifMi = true
+        });
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1,
+            IlId = 1,
+            Ad = "Foca Kamp Tesisi",
+            Telefon = "000",
+            Adres = "Adres",
+            AktifMi = true
+        });
+
+        dbContext.KampProgramlari.Add(new KampProgrami
+        {
+            Id = 1,
+            Kod = "YAZ",
+            Ad = "Yaz Kampi",
+            AktifMi = true
+        });
+
+        dbContext.KampDonemleri.Add(new KampDonemi
+        {
+            Id = 10,
+            KampProgramiId = 1,
+            Kod = "2025-YAZ-1",
+            Ad = "2025 Yaz 1",
+            Yil = 2025,
+            BasvuruBaslangicTarihi = new DateTime(2025, 1, 1),
+            BasvuruBitisTarihi = new DateTime(2025, 1, 31),
+            KonaklamaBaslangicTarihi = new DateTime(2025, 6, 1),
+            KonaklamaBitisTarihi = new DateTime(2025, 6, 6),
+            MinimumGece = 5,
+            MaksimumGece = 5,
+            AktifMi = true
+        });
+
+        if (atamaEkle)
+        {
+            dbContext.KampDonemiTesisleri.Add(new KampDonemiTesis
+            {
+                Id = 20,
+                KampDonemiId = 10,
+                TesisId = 1,
+                AktifMi = true,
+                BasvuruyaAcikMi = true,
+                ToplamKontenjan = 2
+            });
+        }
+
+        await dbContext.SaveChangesAsync();
+    }
+}

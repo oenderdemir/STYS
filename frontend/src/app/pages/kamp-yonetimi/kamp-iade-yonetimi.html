@@ -1,0 +1,150 @@
+<div class="kamp-iade-page">
+    <p-toolbar styleClass="mb-3">
+        <ng-template #start>
+            <div>
+                <h2 class="m-0">Kamp Iade Yonetimi</h2>
+                <p class="m-0 text-color-secondary">Basvuru secip iade ve kesinti kararini bagimsiz olarak hesapla.</p>
+            </div>
+        </ng-template>
+        <ng-template #end>
+            <p-button icon="pi pi-refresh" label="Yenile" [outlined]="true" (onClick)="refresh()" />
+        </ng-template>
+    </p-toolbar>
+
+    <div *ngIf="hataMesaji" class="kamp-iade-error">{{ hataMesaji }}</div>
+
+    <div class="kamp-iade-layout">
+        <section class="kamp-iade-list">
+            <div class="kamp-iade-filters">
+                <label>
+                    <span>Donem</span>
+                    <select [(ngModel)]="selectedKampDonemiId" (ngModelChange)="onFiltersChanged()">
+                        <option [ngValue]="0">Tum donemler</option>
+                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.ad }}</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Tesis</span>
+                    <select [(ngModel)]="selectedTesisId" (ngModelChange)="onFiltersChanged()">
+                        <option [ngValue]="0">Tum tesisler</option>
+                        <option *ngFor="let tesis of baglam?.tesisler ?? []" [ngValue]="tesis.id">{{ tesis.ad }}</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Durum</span>
+                    <select [(ngModel)]="selectedDurum" (ngModelChange)="onFiltersChanged()">
+                        <option value="">Tum durumlar</option>
+                        <option *ngFor="let durum of baglam?.durumlar ?? []" [value]="durum">{{ durum }}</option>
+                    </select>
+                </label>
+            </div>
+
+            <p-table [value]="kayitlar" [loading]="loading" [tableStyle]="{ 'min-width': '100%' }">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Basvuru</th>
+                        <th>Durum</th>
+                        <th>Puan</th>
+                        <th>Katilimci</th>
+                        <th>Aksiyon</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-item>
+                    <tr>
+                        <td>
+                            <div>{{ item.basvuruSahibiAdiSoyadi }}</div>
+                            <small class="text-color-secondary">{{ item.kampDonemiAd }} / {{ item.tesisAd }}</small>
+                        </td>
+                        <td><p-tag [value]="item.durum" [severity]="durumSeverity(item.durum)" /></td>
+                        <td>{{ item.puan }}</td>
+                        <td>{{ item.katilimciSayisi }}</td>
+                        <td>
+                            <p-button label="Sec" size="small" severity="info" [outlined]="true" (onClick)="secBasvuru(item)" />
+                        </td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="5">Degerlendirilecek kamp basvurusu bulunamadi.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </section>
+
+        <section class="kamp-iade-form-panel">
+            <ng-container *ngIf="selectedBasvuru as item; else noSelection">
+                <div class="kamp-iade-summary">
+                    <div>
+                        <span>Basvuru</span>
+                        <strong>{{ item.basvuruSahibiAdiSoyadi }}</strong>
+                        <small>{{ item.kampDonemiAd }} / {{ item.tesisAd }}</small>
+                    </div>
+                    <div>
+                        <span>Donem</span>
+                        <strong>{{ item.konaklamaBaslangicTarihi | date:'dd.MM.yyyy' }} - {{ item.konaklamaBitisTarihi | date:'dd.MM.yyyy' }}</strong>
+                        <small>{{ toplamGunSayisi }} gun</small>
+                    </div>
+                    <div>
+                        <span>Odeme</span>
+                        <strong>{{ item.donemToplamTutar | number:'1.2-2' }} TL</strong>
+                        <small>Avans {{ item.avansToplamTutar | number:'1.2-2' }} TL</small>
+                    </div>
+                </div>
+
+                <div class="kamp-iade-form">
+                    <label>
+                        <span>Vazgecme Tarihi</span>
+                        <input type="date" [(ngModel)]="vazgecmeTarihi" [disabled]="hesapliyor || detayLoading" />
+                    </label>
+
+                    <label>
+                        <span>Odenen Toplam Tutar</span>
+                        <input type="number" min="0" step="0.01" [(ngModel)]="odenenToplamTutar" [disabled]="hesapliyor || detayLoading" />
+                    </label>
+
+                    <label>
+                        <span>Kullanilmayan Gun Sayisi</span>
+                        <input type="number" min="0" [max]="toplamGunSayisi" [(ngModel)]="kullanilmayanGunSayisi" [disabled]="hesapliyor || detayLoading" />
+                    </label>
+
+                    <label class="kamp-iade-checkbox">
+                        <input type="checkbox" [(ngModel)]="mazeretliZorunluAyrilisMi" [disabled]="hesapliyor || detayLoading" />
+                        Mazeretli / zorunlu ayrilis
+                    </label>
+                </div>
+
+                <div class="kamp-iade-actions">
+                    <p-button label="Iade Hesapla" [loading]="hesapliyor || detayLoading" (onClick)="hesapla()" />
+                </div>
+
+                <div *ngIf="sonuc as karar" class="kamp-iade-result">
+                    <div>
+                        <span>Iade</span>
+                        <strong>{{ karar.iadeVarMi ? 'Var' : 'Yok' }}</strong>
+                    </div>
+                    <div>
+                        <span>Iade Tutari</span>
+                        <strong>{{ karar.iadeTutari | number:'1.2-2' }} TL</strong>
+                    </div>
+                    <div>
+                        <span>Kesinti Tutari</span>
+                        <strong>{{ karar.kesintiTutari | number:'1.2-2' }} TL</strong>
+                    </div>
+                    <div class="kamp-iade-gerekce">
+                        <span>Gerekce</span>
+                        <strong>{{ karar.gerekce }}</strong>
+                    </div>
+                </div>
+            </ng-container>
+
+            <ng-template #noSelection>
+                <div class="kamp-iade-placeholder">
+                    <span *ngIf="detayLoading">Basvuru detayi yukleniyor...</span>
+                    <span *ngIf="!detayLoading">Soldaki listeden bir kamp basvurusu sec.</span>
+                </div>
+            </ng-template>
+        </section>
+    </div>
+</div>

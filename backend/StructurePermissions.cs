@@ -128,6 +128,55 @@ public static class StructurePermissions
         public const string Manage = "MisafirTipiTesisAtamaYonetimi.Manage";
     }
 
+    public static class KampProgramiYonetimi
+    {
+        public const string Menu = "KampProgramiYonetimi.Menu";
+        public const string View = "KampProgramiYonetimi.View";
+        public const string Manage = "KampProgramiYonetimi.Manage";
+    }
+
+    public static class KampProgramiTanimYonetimi
+    {
+        public const string Menu = "KampProgramiTanimYonetimi.Menu";
+        public const string View = "KampProgramiTanimYonetimi.View";
+        public const string Manage = "KampProgramiTanimYonetimi.Manage";
+    }
+
+    public static class KampDonemiYonetimi
+    {
+        public const string Menu = "KampDonemiYonetimi.Menu";
+        public const string View = "KampDonemiYonetimi.View";
+        public const string Manage = "KampDonemiYonetimi.Manage";
+    }
+
+    public static class KampDonemiTanimYonetimi
+    {
+        public const string Menu = "KampDonemiTanimYonetimi.Menu";
+        public const string View = "KampDonemiTanimYonetimi.View";
+        public const string Manage = "KampDonemiTanimYonetimi.Manage";
+    }
+
+    public static class KampDonemiTesisAtamaYonetimi
+    {
+        public const string Menu = "KampDonemiTesisAtamaYonetimi.Menu";
+        public const string View = "KampDonemiTesisAtamaYonetimi.View";
+        public const string Manage = "KampDonemiTesisAtamaYonetimi.Manage";
+    }
+
+    public static class KampTahsisYonetimi
+    {
+        public const string Menu = "KampTahsisYonetimi.Menu";
+        public const string View = "KampTahsisYonetimi.View";
+        public const string Manage = "KampTahsisYonetimi.Manage";
+    }
+
+    public static class KampRezervasyonYonetimi
+    {
+        public const string Menu = "KampRezervasyonYonetimi.Menu";
+        public const string View = "KampRezervasyonYonetimi.View";
+        public const string Manage = "KampRezervasyonYonetimi.Manage";
+    }
+
     public static class SezonYonetimi
     {
         public const string Menu = "SezonYonetimi.Menu";

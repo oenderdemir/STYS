@@ -1,0 +1,105 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-shell">
+    <section class="page-card">
+        <div class="flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+            <div>
+                <h2 class="section-title">Kamp Donemleri</h2>
+                <p class="section-subtitle">
+                    Her yil veya sezon icin basvuru, konaklama ve kullanim kurallari bu ekrandan tanimlanir.
+                </p>
+            </div>
+
+            <div class="flex gap-2 flex-wrap">
+                @if (canViewPrograms) {
+                    <p-button label="Kamp Programlari" icon="pi pi-external-link" severity="secondary" [outlined]="true" (onClick)="openPrograms()" />
+                }
+                @if (canViewAssignments) {
+                    <p-button label="Tesis Atamalari" icon="pi pi-sitemap" severity="secondary" [outlined]="true" (onClick)="openAssignments()" />
+                }
+                @if (canManageGlobal) {
+                    <p-button label="Yeni Kamp Donemi" icon="pi pi-plus" (onClick)="openNew()" />
+                }
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+            </div>
+        </div>
+
+        <p-table
+            [value]="kampDonemleri"
+            [loading]="loading"
+            dataKey="id"
+            [lazy]="true"
+            (onLazyLoad)="onLazyLoad($event)"
+            sortMode="single"
+            [paginator]="true"
+            [rows]="pageSize"
+            [first]="(pageNumber - 1) * pageSize"
+            [rowsPerPageOptions]="[10, 20, 50]"
+            [totalRecords]="totalRecords"
+            [tableStyle]="{ 'min-width': '70rem' }"
+            currentPageReportTemplate="{first} - {last} / {totalRecords}"
+            [showCurrentPageReport]="true"
+            styleClass="kamp-table"
+        >
+            <ng-template #caption>
+                <div class="caption-tools">
+                    <div>
+                        <h3 class="m-0 text-base font-semibold text-900">Donem Listesi</h3>
+                        <p class="m-0 mt-2 text-600 text-sm">Program, yil ve tarihlere gore kamp donemlerini yonetin.</p>
+                    </div>
+
+                    <p-iconfield class="search-box">
+                        <p-inputicon styleClass="pi pi-search" />
+                        <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ad, kod veya program ara..." (input)="onSearchInput($event)" class="w-full" />
+                    </p-iconfield>
+                </div>
+            </ng-template>
+
+            <ng-template #header>
+                <tr>
+                    <th pSortableColumn="yil">Yil <p-sortIcon field="yil" /></th>
+                    <th pSortableColumn="program">Program <p-sortIcon field="program" /></th>
+                    <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
+                    <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
+                    <th pSortableColumn="basvuruBaslangicTarihi">Basvuru</th>
+                    <th pSortableColumn="konaklamaBaslangicTarihi">Konaklama</th>
+                    <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
+                    <th style="width: 18rem">Islem</th>
+                </tr>
+            </ng-template>
+
+            <ng-template #body let-item>
+                <tr>
+                    <td>{{ item.yil }}</td>
+                    <td>{{ item.kampProgramiAd || '-' }}</td>
+                    <td>{{ item.kod }}</td>
+                    <td>{{ item.ad }}</td>
+                    <td>{{ item.basvuruBaslangicTarihi | date: 'dd.MM.yyyy' }} - {{ item.basvuruBitisTarihi | date: 'dd.MM.yyyy' }}</td>
+                    <td>{{ item.konaklamaBaslangicTarihi | date: 'dd.MM.yyyy' }} - {{ item.konaklamaBitisTarihi | date: 'dd.MM.yyyy' }}</td>
+                    <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>
+                    <td>
+                        <div class="flex gap-2 flex-wrap">
+                            <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(item)" />
+                            @if (canManageGlobal) {
+                                <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                                <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteKampDonemi(item)" />
+                            }
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </section>
+</div>
+
+<app-kamp-donemi-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedKampDonemi"
+    [saving]="saving"
+    [canManage]="canManageGlobal"
+    [programlar]="programlar"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>

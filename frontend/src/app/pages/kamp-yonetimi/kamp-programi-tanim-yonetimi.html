@@ -1,0 +1,95 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="page-shell">
+    <section class="page-card">
+        <div class="flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+            <div>
+                <h2 class="section-title">Kamp Programlari</h2>
+                <p class="section-subtitle">
+                    Yillara yayilan kamp ailesini tanimlayin. Donemler bu programlar altinda olusur.
+                </p>
+            </div>
+
+            <div class="flex gap-2 flex-wrap">
+                @if (canViewDonemler) {
+                    <p-button label="Kamp Donemleri" icon="pi pi-external-link" severity="secondary" [outlined]="true" (onClick)="openDonemler()" />
+                }
+                @if (canManageGlobal) {
+                    <p-button label="Yeni Kamp Programi" icon="pi pi-plus" (onClick)="openNew()" />
+                }
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+            </div>
+        </div>
+
+        <p-table
+            [value]="kampProgramlari"
+            [loading]="loading"
+            dataKey="id"
+            [lazy]="true"
+            (onLazyLoad)="onLazyLoad($event)"
+            sortMode="single"
+            [paginator]="true"
+            [rows]="pageSize"
+            [first]="(pageNumber - 1) * pageSize"
+            [rowsPerPageOptions]="[10, 20, 50]"
+            [totalRecords]="totalRecords"
+            [tableStyle]="{ 'min-width': '56rem' }"
+            currentPageReportTemplate="{first} - {last} / {totalRecords}"
+            [showCurrentPageReport]="true"
+            styleClass="kamp-table"
+        >
+            <ng-template #caption>
+                <div class="caption-tools">
+                    <div>
+                        <h3 class="m-0 text-base font-semibold text-900">Program Listesi</h3>
+                        <p class="m-0 mt-2 text-600 text-sm">Yaz kampi, kis kampi gibi tekrarlayan kamp serileri burada tanimlanir.</p>
+                    </div>
+
+                    <p-iconfield class="search-box">
+                        <p-inputicon styleClass="pi pi-search" />
+                        <input pInputText type="text" [ngModel]="searchQuery" placeholder="Ad veya kod ara..." (input)="onSearchInput($event)" class="w-full" />
+                    </p-iconfield>
+                </div>
+            </ng-template>
+
+            <ng-template #header>
+                <tr>
+                    <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
+                    <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
+                    <th>Aciklama</th>
+                    <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
+                    <th style="width: 18rem">Islem</th>
+                </tr>
+            </ng-template>
+
+            <ng-template #body let-item>
+                <tr>
+                    <td>{{ item.kod }}</td>
+                    <td>{{ item.ad }}</td>
+                    <td>{{ item.aciklama || '-' }}</td>
+                    <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>
+                    <td>
+                        <div class="flex gap-2 flex-wrap">
+                            <p-button label="Goruntule" icon="pi pi-eye" size="small" severity="info" [outlined]="true" (onClick)="openView(item)" />
+                            @if (canManageGlobal) {
+                                <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                                <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteKampProgrami(item)" />
+                            }
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </section>
+</div>
+
+<app-kamp-programi-dialog
+    [(visible)]="dialogVisible"
+    [mode]="dialogMode"
+    [model]="selectedKampProgrami"
+    [saving]="saving"
+    [canManage]="canManageGlobal"
+    (save)="onDialogSave($event)"
+    (modeChange)="dialogMode = $event"
+/>

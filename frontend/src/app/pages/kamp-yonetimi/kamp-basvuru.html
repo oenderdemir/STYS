@@ -1,0 +1,179 @@
+<div class="kamp-basvuru-page">
+    <section class="kamp-panel">
+        <div class="kamp-panel__header">
+            <div>
+                <h1>Kamp Basvurusu</h1>
+                <p>2025 yaz kampi basvurusu icin tesis, donem ve katilimci bilgilerini gir.</p>
+            </div>
+            <div class="kamp-panel__header-actions">
+                <a pButton routerLink="/kamp-basvurularim" label="Benim Basvurularim"></a>
+                <button pButton type="button" label="Katilimci Ekle" (click)="addKatilimci()"></button>
+            </div>
+        </div>
+
+        <div *ngIf="hataMesaji" class="kamp-alert kamp-alert--error">{{ hataMesaji }}</div>
+
+        <form [formGroup]="form" class="kamp-form">
+            <div class="kamp-grid kamp-grid--3">
+                <label>
+                    <span>Donem</span>
+                    <select formControlName="kampDonemiId">
+                        <option [ngValue]="0">Seciniz</option>
+                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.ad }}</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Tesis</span>
+                    <select formControlName="tesisId">
+                        <option [ngValue]="0">Seciniz</option>
+                        <option *ngFor="let tesis of seciliDonem?.tesisler ?? []" [ngValue]="tesis.tesisId">{{ tesis.tesisAd }}</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Konaklama Birimi</span>
+                    <select formControlName="konaklamaBirimiTipi">
+                        <option value="">Seciniz</option>
+                        <option *ngFor="let birim of seciliBirimler" [value]="birim.kod">{{ birim.ad }} ({{ birim.minimumKisi }}-{{ birim.maksimumKisi }})</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="kamp-grid kamp-grid--2">
+                <label>
+                    <span>Basvuru Sahibi Tipi</span>
+                    <select formControlName="basvuruSahibiTipi">
+                        <option *ngFor="let tip of basvuruSahibiTipleri" [value]="tip.value">{{ tip.label }}</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Hizmet Yili</span>
+                    <input type="number" min="0" formControlName="hizmetYili" />
+                </label>
+            </div>
+
+            <div class="kamp-flags">
+                <label><input type="checkbox" formControlName="kamp2023tenFaydalandiMi" /> 2023 kampindan faydalandi</label>
+                <label><input type="checkbox" formControlName="kamp2024tenFaydalandiMi" /> 2024 kampindan faydalandi</label>
+                <label><input type="checkbox" formControlName="evcilHayvanGetirecekMi" /> Evcil hayvan getirecek</label>
+                <label><input type="checkbox" formControlName="buzdolabiTalepEdildiMi" /> Buzdolabi</label>
+                <label><input type="checkbox" formControlName="televizyonTalepEdildiMi" /> Televizyon</label>
+                <label><input type="checkbox" formControlName="klimaTalepEdildiMi" /> Klima</label>
+            </div>
+
+            <div formArrayName="katilimcilar" class="kamp-katilimcilar">
+                <div *ngFor="let katilimci of katilimcilar.controls; let i = index" [formGroupName]="i" class="kamp-katilimci-card">
+                    <div class="kamp-katilimci-card__header">
+                        <strong>{{ i + 1 }}. Katilimci</strong>
+                        <button *ngIf="!katilimci.get('basvuruSahibiMi')?.value" type="button" class="kamp-link-button" (click)="removeKatilimci(i)">Sil</button>
+                    </div>
+
+                    <div class="kamp-grid kamp-grid--4">
+                        <label>
+                            <span>Ad Soyad</span>
+                            <input type="text" formControlName="adSoyad" />
+                        </label>
+                        <label>
+                            <span>TC Kimlik No</span>
+                            <input type="text" formControlName="tcKimlikNo" />
+                        </label>
+                        <label>
+                            <span>Dogum Tarihi</span>
+                            <input type="date" formControlName="dogumTarihi" />
+                        </label>
+                        <label>
+                            <span>Katilimci Tipi</span>
+                            <select formControlName="katilimciTipi">
+                                <option *ngFor="let tip of katilimciTipleri" [value]="tip.value">{{ tip.label }}</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="kamp-grid kamp-grid--3">
+                        <label>
+                            <span>Akrabalik</span>
+                            <select formControlName="akrabalikTipi">
+                                <option *ngFor="let tip of akrabalikTipleri" [value]="tip.value">{{ tip.label }}</option>
+                            </select>
+                        </label>
+                        <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="kimlikBilgileriDogrulandiMi" /> Kimlik dogrulandi</label>
+                        <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="yemekTalepEdiyorMu" /> Yemek talep ediyor</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kamp-actions">
+                <button pButton type="button" label="Basvuruyu Kaydet" (click)="submit()" [loading]="kaydediliyor"></button>
+            </div>
+        </form>
+    </section>
+
+    <section class="kamp-panel" *ngIf="onizleme as o">
+        <div class="kamp-panel__header">
+            <div>
+                <h2>Canli Onizleme</h2>
+                <p>Puan, kontenjan ve ucret ozeti.</p>
+            </div>
+        </div>
+
+        <div class="kamp-metrics">
+            <div><span>Puan</span><strong>{{ o.puan }}</strong></div>
+            <div><span>Oncelik</span><strong>{{ o.oncelikSirasi }}</strong></div>
+            <div><span>Gunluk</span><strong>{{ o.gunlukToplamTutar | number:'1.2-2' }} TL</strong></div>
+            <div><span>Donem Toplami</span><strong>{{ o.donemToplamTutar | number:'1.2-2' }} TL</strong></div>
+            <div><span>Avans</span><strong>{{ o.avansToplamTutar | number:'1.2-2' }} TL</strong></div>
+            <div><span>Kalan</span><strong>{{ o.kalanOdemeTutari | number:'1.2-2' }} TL</strong></div>
+            <div><span>Kontenjan</span><strong>{{ o.kontenjanMesaji }}</strong></div>
+        </div>
+
+        <div *ngIf="o.hatalar.length > 0" class="kamp-alert kamp-alert--error">
+            <strong>Hatalar</strong>
+            <ul>
+                <li *ngFor="let hata of o.hatalar">{{ hata }}</li>
+            </ul>
+        </div>
+
+        <div *ngIf="o.uyarilar.length > 0" class="kamp-alert kamp-alert--warn">
+            <strong>Uyarilar</strong>
+            <ul>
+                <li *ngFor="let uyari of o.uyarilar">{{ uyari }}</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="kamp-panel" *ngIf="benimBasvurularim.length > 0">
+        <div class="kamp-panel__header">
+            <div>
+                <h2>Benim Basvurularim</h2>
+                <p>Daha once olusturulan kamp basvurulari.</p>
+            </div>
+        </div>
+
+        <div class="kamp-table-wrap">
+            <table class="kamp-table">
+                <thead>
+                    <tr>
+                        <th>Donem</th>
+                        <th>Tesis</th>
+                        <th>Durum</th>
+                        <th>Puan</th>
+                        <th>Toplam</th>
+                        <th>Avans</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let item of benimBasvurularim">
+                        <td>{{ item.kampDonemiAd }}</td>
+                        <td>{{ item.tesisAd }}</td>
+                        <td>{{ item.durum }}</td>
+                        <td>{{ item.puan }}</td>
+                        <td>{{ item.donemToplamTutar | number:'1.2-2' }} TL</td>
+                        <td>{{ item.avansToplamTutar | number:'1.2-2' }} TL</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>

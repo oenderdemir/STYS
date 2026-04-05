@@ -1,0 +1,113 @@
+<p-toast />
+
+<p-dialog
+    header="Kamp Basvuru Detayi"
+    [(visible)]="visible"
+    [modal]="true"
+    [style]="{ width: '72rem', 'max-width': '96vw' }"
+    [closable]="iptalEdilenKatilimciId === null"
+    (onHide)="close()">
+    <ng-container *ngIf="detay as item; else detailLoading">
+        <div class="kamp-basvuru-detay-grid">
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Donem</span>
+                <strong>{{ item.kampDonemiAd }}</strong>
+                <small>{{ item.konaklamaBaslangicTarihi | date:'dd.MM.yyyy' }} - {{ item.konaklamaBitisTarihi | date:'dd.MM.yyyy' }}</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Tesis</span>
+                <strong>{{ item.tesisAd }}</strong>
+                <small>{{ item.konaklamaBirimiTipi }}</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Durum</span>
+                <p-tag [value]="item.durum" [severity]="durumSeverity(item.durum)" />
+                <small>{{ item.createdAt | date:'dd.MM.yyyy HH:mm' }}</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Basvuru Sahibi</span>
+                <strong>{{ item.basvuruSahibiAdiSoyadi }}</strong>
+                <small>{{ item.basvuruSahibiTipi }}</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Puan / Oncelik</span>
+                <strong>{{ item.puan }} puan</strong>
+                <small>{{ item.oncelikSirasi }}. oncelik</small>
+            </div>
+            <div class="kamp-basvuru-detay-card">
+                <span class="kamp-basvuru-detay-label">Odeme</span>
+                <strong>{{ item.donemToplamTutar | number:'1.2-2' }} TL</strong>
+                <small>Avans {{ item.avansToplamTutar | number:'1.2-2' }} TL, kalan {{ item.kalanOdemeTutari | number:'1.2-2' }} TL</small>
+            </div>
+        </div>
+
+        <div class="kamp-basvuru-detay-flags">
+            <span *ngIf="item.buzdolabiTalepEdildiMi">Buzdolabi</span>
+            <span *ngIf="item.televizyonTalepEdildiMi">Televizyon</span>
+            <span *ngIf="item.klimaTalepEdildiMi">Klima</span>
+            <span *ngIf="item.evcilHayvanGetirecekMi">Evcil Hayvan</span>
+            <span *ngIf="!item.buzdolabiTalepEdildiMi && !item.televizyonTalepEdildiMi && !item.klimaTalepEdildiMi && !item.evcilHayvanGetirecekMi" class="text-color-secondary">Ek talep yok</span>
+        </div>
+
+        <div *ngIf="item.uyarilar.length > 0" class="kamp-basvuru-uyarilar">
+            <strong>Uyarilar</strong>
+            <ul>
+                <li *ngFor="let uyari of item.uyarilar">{{ uyari }}</li>
+            </ul>
+        </div>
+
+        <p-table [value]="item.katilimcilar" [tableStyle]="{ 'min-width': '100%' }">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Ad Soyad</th>
+                    <th>Tip</th>
+                    <th>Akrabalik</th>
+                    <th>Dogum</th>
+                    <th>Kimlik</th>
+                    <th>Yemek</th>
+                    <th *ngIf="canManageParticipants">Aksiyon</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-katilimci>
+                <tr>
+                    <td>
+                        <div class="kamp-katilimci-ad">
+                            {{ katilimci.adSoyad }}
+                            <small *ngIf="katilimci.basvuruSahibiMi" class="text-color-secondary">Basvuru sahibi</small>
+                        </div>
+                    </td>
+                    <td>{{ katilimci.katilimciTipi }}</td>
+                    <td>{{ katilimci.akrabalikTipi }}</td>
+                    <td>{{ katilimci.dogumTarihi | date:'dd.MM.yyyy' }}</td>
+                    <td>
+                        <div>{{ katilimci.tcKimlikNo || '-' }}</div>
+                        <small>{{ katilimci.kimlikBilgileriDogrulandiMi ? 'Dogrulandi' : 'Dogrulanmadi' }}</small>
+                    </td>
+                    <td>{{ katilimci.yemekTalepEdiyorMu ? 'Evet' : 'Hayir' }}</td>
+                    <td *ngIf="canManageParticipants">
+                        <p-button
+                            *ngIf="!katilimci.basvuruSahibiMi"
+                            label="Katilimci Iptal"
+                            size="small"
+                            severity="danger"
+                            [outlined]="true"
+                            [loading]="iptalEdilenKatilimciId === katilimci.id"
+                            [disabled]="iptalEdilenKatilimciId !== null && iptalEdilenKatilimciId !== katilimci.id"
+                            (onClick)="katilimciIptalEt(katilimci.id)" />
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </ng-container>
+
+    <ng-template #detailLoading>
+        <div class="kamp-basvuru-detay-loading">
+            <span *ngIf="loading">Basvuru detayi yukleniyor...</span>
+            <span *ngIf="!loading">Detay bulunamadi.</span>
+        </div>
+    </ng-template>
+
+    <ng-template pTemplate="footer">
+        <p-button label="Kapat" [text]="true" [disabled]="iptalEdilenKatilimciId !== null" (onClick)="close()" />
+    </ng-template>
+</p-dialog>

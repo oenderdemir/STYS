@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Binalar.Entities;
 using STYS.Iller.Entities;
+using STYS.Kamp.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaTipleri.Entities;
@@ -52,4 +53,8 @@ public class Tesis : BaseEntity<int>
     public ICollection<TesisMisafirTipi> MisafirTipleri { get; set; } = [];
 
     public ICollection<TesisKonaklamaTipiIcerikOverride> KonaklamaTipiIcerikOverridelari { get; set; } = [];
+
+    public ICollection<KampDonemiTesis> KampDonemiTesisleri { get; set; } = [];
+
+    public ICollection<KampBasvuru> KampBasvurulari { get; set; } = [];
 }

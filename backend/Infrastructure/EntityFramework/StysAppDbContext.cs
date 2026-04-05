@@ -7,6 +7,7 @@ using STYS.EkHizmetler.Entities;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
+using STYS.Kamp.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
 using STYS.MisafirTipleri.Entities;
@@ -58,6 +59,12 @@ public class StysAppDbContext : DbContext
     public DbSet<TesisKonaklamaTipiIcerikOverride> TesisKonaklamaTipiIcerikOverridelari => Set<TesisKonaklamaTipiIcerikOverride>();
     public DbSet<MisafirTipi> MisafirTipleri => Set<MisafirTipi>();
     public DbSet<TesisMisafirTipi> TesisMisafirTipleri => Set<TesisMisafirTipi>();
+    public DbSet<KampProgrami> KampProgramlari => Set<KampProgrami>();
+    public DbSet<KampDonemi> KampDonemleri => Set<KampDonemi>();
+    public DbSet<KampDonemiTesis> KampDonemiTesisleri => Set<KampDonemiTesis>();
+    public DbSet<KampBasvuru> KampBasvurulari => Set<KampBasvuru>();
+    public DbSet<KampBasvuruKatilimci> KampBasvuruKatilimcilari => Set<KampBasvuruKatilimci>();
+    public DbSet<KampRezervasyon> KampRezervasyonlari => Set<KampRezervasyon>();
     public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
     public DbSet<GlobalEkHizmetTanimi> GlobalEkHizmetTanimlari => Set<GlobalEkHizmetTanimi>();
     public DbSet<EkHizmet> EkHizmetler => Set<EkHizmet>();
@@ -443,6 +450,138 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.MisafirTipi)
                 .WithMany(x => x.TesisMisafirTipleri)
                 .HasForeignKey(x => x.MisafirTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampProgrami>(entity =>
+        {
+            entity.ToTable("KampProgramlari", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<KampDonemi>(entity =>
+        {
+            entity.ToTable("KampDonemleri", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.BasvuruBaslangicTarihi).HasColumnType("date");
+            entity.Property(x => x.BasvuruBitisTarihi).HasColumnType("date");
+            entity.Property(x => x.KonaklamaBaslangicTarihi).HasColumnType("date");
+            entity.Property(x => x.KonaklamaBitisTarihi).HasColumnType("date");
+            entity.Property(x => x.IptalSonGun).HasColumnType("date");
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KampProgramiId, x.Yil, x.Ad })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampProgrami)
+                .WithMany(x => x.KampDonemleri)
+                .HasForeignKey(x => x.KampProgramiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampDonemiTesis>(entity =>
+        {
+            entity.ToTable("KampDonemiTesisleri", "dbo");
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampDonemi)
+                .WithMany(x => x.TesisAtamalari)
+                .HasForeignKey(x => x.KampDonemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.KampDonemiTesisleri)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampBasvuru>(entity =>
+        {
+            entity.ToTable("KampBasvurulari", "dbo");
+            entity.Property(x => x.KonaklamaBirimiTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.BasvuruSahibiAdiSoyadi).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BasvuruSahibiTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.GunlukToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.DonemToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.AvansToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.KalanOdemeTutari).HasPrecision(18, 2);
+            entity.Property(x => x.UyariMesajlariJson).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId, x.Durum })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.BasvuruSahibiUserId, x.KampDonemiId })
+                .HasFilter("[IsDeleted] = 0 AND [BasvuruSahibiUserId] IS NOT NULL");
+
+            entity.HasOne(x => x.KampDonemi)
+                .WithMany(x => x.Basvurular)
+                .HasForeignKey(x => x.KampDonemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany(x => x.KampBasvurulari)
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampBasvuruKatilimci>(entity =>
+        {
+            entity.ToTable("KampBasvuruKatilimcilari", "dbo");
+            entity.Property(x => x.AdSoyad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
+            entity.Property(x => x.KatilimciTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.AkrabalikTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.DogumTarihi).HasColumnType("date");
+            entity.HasIndex(x => new { x.KampBasvuruId, x.TcKimlikNo })
+                .HasFilter("[IsDeleted] = 0 AND [TcKimlikNo] IS NOT NULL");
+
+            entity.HasOne(x => x.KampBasvuru)
+                .WithMany(x => x.Katilimcilar)
+                .HasForeignKey(x => x.KampBasvuruId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampRezervasyon>(entity =>
+        {
+            entity.ToTable("KampRezervasyonlari", "dbo");
+            entity.Property(x => x.RezervasyonNo).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.BasvuruSahibiAdiSoyadi).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BasvuruSahibiTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KonaklamaBirimiTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.IptalNedeni).HasMaxLength(500);
+            entity.Property(x => x.DonemToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.AvansToplamTutar).HasPrecision(18, 2);
+            entity.HasIndex(x => x.RezervasyonNo).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.KampBasvuruId).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId, x.Durum });
+
+            entity.HasOne(x => x.KampBasvuru)
+                .WithMany()
+                .HasForeignKey(x => x.KampBasvuruId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KampDonemi)
+                .WithMany()
+                .HasForeignKey(x => x.KampDonemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

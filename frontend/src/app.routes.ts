@@ -11,6 +11,14 @@ import { EkHizmetYonetimi } from './app/pages/ek-hizmet-yonetimi/ek-hizmet-yonet
 import { IndirimKuraliYonetimi } from './app/pages/indirim-kurali-yonetimi/indirim-kurali-yonetimi';
 import { IlYonetimi } from './app/pages/il-yonetimi/il-yonetimi';
 import { IsletmeAlaniSinifiYonetimi } from './app/pages/isletme-alani-sinifi-yonetimi/isletme-alani-sinifi-yonetimi';
+import { KampDonemiAtamaYonetimi } from './app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi';
+import { KampDonemiTanimYonetimi } from './app/pages/kamp-yonetimi/kamp-donemi-tanim-yonetimi';
+import { KampBenimBasvurularimPage } from './app/pages/kamp-yonetimi/kamp-benim-basvurularim';
+import { KampBasvuruPage } from './app/pages/kamp-yonetimi/kamp-basvuru';
+import { KampIadeYonetimiPage } from './app/pages/kamp-yonetimi/kamp-iade-yonetimi';
+import { KampRezervasyonlariPage } from './app/pages/kamp-yonetimi/kamp-rezervasyonlari';
+import { KampTahsisYonetimiPage } from './app/pages/kamp-yonetimi/kamp-tahsis-yonetimi';
+import { KampProgramiTanimYonetimi } from './app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi';
 import { KonaklamaTipiTanimYonetimi } from './app/pages/konaklama-tipi-yonetimi/konaklama-tipi-tanim-yonetimi';
 import { KonaklamaTipiYonetimi } from './app/pages/konaklama-tipi-yonetimi/konaklama-tipi-yonetimi';
 import { KullaniciGrupYonetimi } from './app/pages/kullanici-grup-yonetimi/kullanici-grup-yonetimi';
@@ -74,6 +82,14 @@ export const appRoutes: Routes = [
             { path: 'misafir-tipi-tanimlari', component: MisafirTipiTanimYonetimi, data: { breadcrumb: ['Isletme', 'Misafir Tipleri', 'Global Tanimlari'] } },
             { path: 'misafir-tipi-atamalari', component: MisafirTipiYonetimi, data: { breadcrumb: ['Isletme', 'Misafir Tipleri', 'Tesis Atamalari'] } },
             { path: 'misafir-tipleri', redirectTo: 'misafir-tipi-atamalari', pathMatch: 'full' },
+            { path: 'kamp-programlari', component: KampProgramiTanimYonetimi, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Programlar'] } },
+            { path: 'kamp-donemleri', component: KampDonemiTanimYonetimi, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Donemler'] } },
+            { path: 'kamp-donemi-atamalari', component: KampDonemiAtamaYonetimi, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Tesis Atamalari'] } },
+            { path: 'kamp-tahsisleri', component: KampTahsisYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Tahsisler'] } },
+            { path: 'kamp-rezervasyonlari', component: KampRezervasyonlariPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Rezervasyonlar'] } },
+            { path: 'kamp-iade-yonetimi', component: KampIadeYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Iade Yonetimi'] } },
+            { path: 'kamp-basvurusu', component: KampBasvuruPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurusu'] } },
+            { path: 'kamp-basvurularim', component: KampBenimBasvurularimPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurularim'] } },
             { path: 'sezon-kurallari', component: SezonYonetimi, data: { breadcrumb: ['Isletme', 'Sezon Kurallari'] } },
             { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Yonetimi'] } },
             { path: 'rezervasyon-dashboard', component: RezervasyonDashboard, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Dashboard'] } },

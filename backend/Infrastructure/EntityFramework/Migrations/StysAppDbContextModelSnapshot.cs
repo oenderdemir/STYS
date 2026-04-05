@@ -1009,6 +1009,505 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("IsletmeAlaniSiniflari", "dbo");
                 });
 
+            modelBuilder.Entity("STYS.Kamp.Entities.KampBasvuru", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AvansToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("BasvuruSahibiAdiSoyadi")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BasvuruSahibiTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid?>("BasvuruSahibiUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("BuzdolabiTalepEdildiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("DonemToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Durum")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("EvcilHayvanGetirecekMi")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("GunlukToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("HizmetYili")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("KalanOdemeTutari")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("Kamp2023tenFaydalandiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Kamp2024tenFaydalandiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampDonemiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KatilimciSayisi")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("KlimaTalepEdildiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("KonaklamaBirimiTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("OncelikSirasi")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Puan")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("TelevizyonTalepEdildiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UyariMesajlariJson")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TesisId");
+
+                    b.HasIndex("BasvuruSahibiUserId", "KampDonemiId")
+                        .HasFilter("[IsDeleted] = 0 AND [BasvuruSahibiUserId] IS NOT NULL");
+
+                    b.HasIndex("KampDonemiId", "TesisId", "Durum")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KampBasvurulari", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampBasvuruKatilimci", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdSoyad")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("AkrabalikTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("BasvuruSahibiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("DogumTarihi")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampBasvuruId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("KatilimciTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("KimlikBilgileriDogrulandiMi")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TcKimlikNo")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("YemekTalepEdiyorMu")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KampBasvuruId", "TcKimlikNo")
+                        .HasFilter("[IsDeleted] = 0 AND [TcKimlikNo] IS NOT NULL");
+
+                    b.ToTable("KampBasvuruKatilimcilari", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampDonemi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AyniAileIcinTekBasvuruMu")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("BasvuruBaslangicTarihi")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("BasvuruBitisTarihi")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("CekilisGerekliMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("IptalSonGun")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampProgramiId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Kod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("KonaklamaBaslangicTarihi")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("KonaklamaBitisTarihi")
+                        .HasColumnType("date");
+
+                    b.Property<int>("MaksimumGece")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MinimumGece")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("OnayGerektirirMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Yil")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kod")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("KampProgramiId", "Yil", "Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KampDonemleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampDonemiTesis", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("BasvuruyaAcikMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampDonemiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToplamKontenjan")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TesisId");
+
+                    b.HasIndex("KampDonemiId", "TesisId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KampDonemiTesisleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampProgrami", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Kod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("Kod")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KampProgramlari", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampRezervasyon", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AvansToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("BasvuruSahibiAdiSoyadi")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BasvuruSahibiTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("DonemToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Durum")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("IptalNedeni")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("IptalTarihi")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampBasvuruId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KampDonemiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KatilimciSayisi")
+                        .HasColumnType("int");
+
+                    b.Property<string>("KonaklamaBirimiTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("RezervasyonNo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KampBasvuruId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RezervasyonNo")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("TesisId");
+
+                    b.HasIndex("KampDonemiId", "TesisId", "Durum");
+
+                    b.ToTable("KampRezervasyonlari", "dbo");
+                });
+
             modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", b =>
                 {
                     b.Property<int>("Id")
@@ -2953,6 +3452,93 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("IsletmeAlaniSinifi");
                 });
 
+            modelBuilder.Entity("STYS.Kamp.Entities.KampBasvuru", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampDonemi", "KampDonemi")
+                        .WithMany("Basvurular")
+                        .HasForeignKey("KampDonemiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany("KampBasvurulari")
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampDonemi");
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampBasvuruKatilimci", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampBasvuru", "KampBasvuru")
+                        .WithMany("Katilimcilar")
+                        .HasForeignKey("KampBasvuruId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampBasvuru");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampDonemi", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampProgrami", "KampProgrami")
+                        .WithMany("KampDonemleri")
+                        .HasForeignKey("KampProgramiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampProgrami");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampDonemiTesis", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampDonemi", "KampDonemi")
+                        .WithMany("TesisAtamalari")
+                        .HasForeignKey("KampDonemiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany("KampDonemiTesisleri")
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampDonemi");
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampRezervasyon", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampBasvuru", "KampBasvuru")
+                        .WithMany()
+                        .HasForeignKey("KampBasvuruId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Kamp.Entities.KampDonemi", "KampDonemi")
+                        .WithMany()
+                        .HasForeignKey("KampDonemiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampBasvuru");
+
+                    b.Navigation("KampDonemi");
+
+                    b.Navigation("Tesis");
+                });
+
             modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.KonaklamaTipiIcerikKalemi", b =>
                 {
                     b.HasOne("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", "KonaklamaTipi")
@@ -3358,6 +3944,23 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("IsletmeAlanlari");
                 });
 
+            modelBuilder.Entity("STYS.Kamp.Entities.KampBasvuru", b =>
+                {
+                    b.Navigation("Katilimcilar");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampDonemi", b =>
+                {
+                    b.Navigation("Basvurular");
+
+                    b.Navigation("TesisAtamalari");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampProgrami", b =>
+                {
+                    b.Navigation("KampDonemleri");
+                });
+
             modelBuilder.Entity("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", b =>
                 {
                     b.Navigation("IcerikKalemleri");
@@ -3442,6 +4045,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("STYS.Tesisler.Entities.Tesis", b =>
                 {
                     b.Navigation("Binalar");
+
+                    b.Navigation("KampBasvurulari");
+
+                    b.Navigation("KampDonemiTesisleri");
 
                     b.Navigation("KonaklamaTipiIcerikOverridelari");
 

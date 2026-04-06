@@ -13,21 +13,21 @@ public class KampBasvuru : BaseEntity<int>
     [MaxLength(32)]
     public string KonaklamaBirimiTipi { get; set; } = string.Empty;
 
-    public Guid? BasvuruSahibiUserId { get; set; }
+    [Required]
+    [MaxLength(32)]
+    public string BasvuruNo { get; set; } = string.Empty;
+
+    public int KampBasvuruSahibiId { get; set; }
 
     [Required]
     [MaxLength(200)]
-    public string BasvuruSahibiAdiSoyadi { get; set; } = string.Empty;
+    public string BasvuruSahibiAdiSoyadiSnapshot { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(32)]
-    public string BasvuruSahibiTipi { get; set; } = string.Empty;
+    public string BasvuruSahibiTipiSnapshot { get; set; } = string.Empty;
 
-    public int HizmetYili { get; set; }
-
-    public bool Kamp2023tenFaydalandiMi { get; set; }
-
-    public bool Kamp2024tenFaydalandiMi { get; set; }
+    public int HizmetYiliSnapshot { get; set; }
 
     public bool EvcilHayvanGetirecekMi { get; set; }
 
@@ -58,6 +58,8 @@ public class KampBasvuru : BaseEntity<int>
     public bool KlimaTalepEdildiMi { get; set; }
 
     public KampDonemi? KampDonemi { get; set; }
+
+    public KampBasvuruSahibi? KampBasvuruSahibi { get; set; }
 
     public Tesisler.Entities.Tesis? Tesis { get; set; }
 

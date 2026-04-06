@@ -47,6 +47,13 @@ export const appRoutes: Routes = [
     { path: 'landing', component: Landing },
     { path: 'notfound', component: Notfound },
     {
+        path: 'kamp-basvurusu',
+        component: AppLayout,
+        children: [
+            { path: '', component: KampBasvuruPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurusu'] } }
+        ]
+    },
+    {
         path: '',
         component: AppLayout,
         canActivate: [authGuard],
@@ -88,7 +95,6 @@ export const appRoutes: Routes = [
             { path: 'kamp-tahsisleri', component: KampTahsisYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Tahsisler'] } },
             { path: 'kamp-rezervasyonlari', component: KampRezervasyonlariPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Rezervasyonlar'] } },
             { path: 'kamp-iade-yonetimi', component: KampIadeYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Iade Yonetimi'] } },
-            { path: 'kamp-basvurusu', component: KampBasvuruPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurusu'] } },
             { path: 'kamp-basvurularim', component: KampBenimBasvurularimPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurularim'] } },
             { path: 'sezon-kurallari', component: SezonYonetimi, data: { breadcrumb: ['Isletme', 'Sezon Kurallari'] } },
             { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Yonetimi'] } },

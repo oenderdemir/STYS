@@ -13,6 +13,7 @@ public class KampBasvuruOnizlemeDto
     public int ToplamKontenjan { get; set; }
     public int BosKontenjan { get; set; }
     public string? KontenjanMesaji { get; set; }
+    public List<int> GecmisKatilimYillari { get; set; } = [];
     public List<string> Hatalar { get; set; } = [];
     public List<string> Uyarilar { get; set; } = [];
 }

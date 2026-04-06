@@ -7,8 +7,7 @@ public class KampBasvuruRequestDto
     public string KonaklamaBirimiTipi { get; set; } = string.Empty;
     public string BasvuruSahibiTipi { get; set; } = string.Empty;
     public int HizmetYili { get; set; }
-    public bool Kamp2023tenFaydalandiMi { get; set; }
-    public bool Kamp2024tenFaydalandiMi { get; set; }
+    public List<int> GecmisKatilimYillari { get; set; } = [];
     public bool EvcilHayvanGetirecekMi { get; set; }
     public bool BuzdolabiTalepEdildiMi { get; set; }
     public bool TelevizyonTalepEdildiMi { get; set; }

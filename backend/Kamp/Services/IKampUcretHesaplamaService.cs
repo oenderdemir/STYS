@@ -6,5 +6,10 @@ namespace STYS.Kamp.Services;
 
 public interface IKampUcretHesaplamaService
 {
-    void Hesapla(KampBasvuruRequestDto request, KampDonemi kampDonemi, Tesis tesis, KampBasvuruOnizlemeDto onizleme);
+    Task HesaplaAsync(
+        KampBasvuruRequestDto request,
+        KampDonemi kampDonemi,
+        Tesis tesis,
+        KampBasvuruOnizlemeDto onizleme,
+        CancellationToken cancellationToken = default);
 }

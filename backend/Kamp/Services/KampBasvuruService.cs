@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
 using STYS.Tesisler.Entities;
-using TOD.Platform.SharedKernel.Exceptions;
 using TOD.Platform.Security.Auth.Services;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
 
@@ -14,22 +15,26 @@ public class KampBasvuruService : IKampBasvuruService
     private readonly StysAppDbContext _dbContext;
     private readonly IKampPuanlamaService _puanlamaService;
     private readonly IKampUcretHesaplamaService _ucretHesaplamaService;
+    private readonly IKampParametreService _parametreService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
 
     public KampBasvuruService(
         StysAppDbContext dbContext,
         IKampPuanlamaService puanlamaService,
         IKampUcretHesaplamaService ucretHesaplamaService,
+        IKampParametreService parametreService,
         ICurrentUserAccessor currentUserAccessor)
     {
         _dbContext = dbContext;
         _puanlamaService = puanlamaService;
         _ucretHesaplamaService = ucretHesaplamaService;
+        _parametreService = parametreService;
         _currentUserAccessor = currentUserAccessor;
     }
 
     public async Task<KampBasvuruBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
     {
+        var lookupBaglami = await LoadLookupBaglamiAsync(cancellationToken);
         var donemler = await _dbContext.KampDonemleri
             .Where(x => x.AktifMi)
             .Include(x => x.TesisAtamalari.Where(y => y.AktifMi && y.BasvuruyaAcikMi))
@@ -45,8 +50,10 @@ public class KampBasvuruService : IKampBasvuruService
                 {
                     Id = x.Id,
                     Ad = x.Ad,
+                    Yil = x.Yil,
                     KonaklamaBaslangicTarihi = x.KonaklamaBaslangicTarihi,
                     KonaklamaBitisTarihi = x.KonaklamaBitisTarihi,
+                    GecmisKatilimYillari = BuildGecmisKatilimYillari(x.Yil, lookupBaglami.GetKuralSeti(x.Yil)),
                     Tesisler = x.TesisAtamalari
                         .Where(y => y.Tesis != null)
                         .Select(y => new KampBasvuruTesisSecenekDto
@@ -61,30 +68,66 @@ public class KampBasvuruService : IKampBasvuruService
                         .ToList()
                 })
                 .Where(x => x.Tesisler.Count > 0)
+                .ToList(),
+            BasvuruSahibiTipleri = lookupBaglami.BasvuruSahibiTipleri
+                .Select(x => new KampBasvuruSahibiTipSecenekDto
+                {
+                    Kod = x.Kod,
+                    Ad = x.Ad,
+                    VarsayilanKatilimciTipiKodu = x.VarsayilanKatilimciTipiKodu
+                })
+                .ToList(),
+            KatilimciTipleri = lookupBaglami.KatilimciTipleri
+                .Select(x => new KampSecenekDto
+                {
+                    Kod = x.Kod,
+                    Ad = x.Ad
+                })
+                .ToList(),
+            AkrabalikTipleri = lookupBaglami.AkrabalikTipleri
+                .Select(x => new KampAkrabalikTipiSecenekDto
+                {
+                    Kod = x.Kod,
+                    Ad = x.Ad,
+                    BasvuruSahibiAkrabaligiMi = x.BasvuruSahibiAkrabaligiMi
+                })
                 .ToList()
         };
     }
 
     public async Task<KampBasvuruOnizlemeDto> OnizleAsync(KampBasvuruRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _parametreService.LoadAsync(cancellationToken);
+        var lookupBaglami = await LoadLookupBaglamiAsync(cancellationToken);
         var onizleme = new KampBasvuruOnizlemeDto();
         var (kampDonemi, tesis, atama) = await LoadContextAsync(request, cancellationToken);
-        ValidateRequest(request, kampDonemi, tesis, atama, onizleme);
-        AddWarnings(request, onizleme);
+        ValidateRequest(request, kampDonemi, tesis, atama, lookupBaglami, onizleme);
+        AddWarnings(request, lookupBaglami, onizleme);
+
+        var basvuruSahibi = GetBasvuruSahibiKatilimci(request);
+        var mevcutSahip = basvuruSahibi is null
+            ? null
+            : await FindBasvuruSahibiAsync(NormalizeNullable(basvuruSahibi.TcKimlikNo), cancellationToken);
+
+        var birlesikGecmisKatilimYillari = await BuildBirlesikGecmisKatilimYillariAsync(
+            kampDonemi.Yil,
+            request.GecmisKatilimYillari,
+            mevcutSahip?.Id,
+            cancellationToken);
+
+        onizleme.GecmisKatilimYillari = birlesikGecmisKatilimYillari;
+
         await PopulateKontenjanAsync(request, atama, onizleme, cancellationToken);
-        _puanlamaService.Puanla(request, onizleme);
-        _ucretHesaplamaService.Hesapla(request, kampDonemi, tesis, onizleme);
+        await _puanlamaService.PuanlaAsync(request, onizleme, kampDonemi.Yil, birlesikGecmisKatilimYillari, cancellationToken);
+        await _ucretHesaplamaService.HesaplaAsync(request, kampDonemi, tesis, onizleme, cancellationToken);
         onizleme.BasvuruGecerliMi = onizleme.Hatalar.Count == 0;
         return onizleme;
     }
 
     public async Task<KampBasvuruDto> BasvuruOlusturAsync(KampBasvuruRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _parametreService.LoadAsync(cancellationToken);
         var currentUserId = _currentUserAccessor.GetCurrentUserId();
-        if (!currentUserId.HasValue)
-        {
-            throw new BaseException("Kamp basvurusu icin giris yapan kullanici bilgisi bulunamadi.", 401);
-        }
 
         var onizleme = await OnizleAsync(request, cancellationToken);
         if (!onizleme.BasvuruGecerliMi)
@@ -93,16 +136,13 @@ public class KampBasvuruService : IKampBasvuruService
         }
 
         var (kampDonemi, tesis, _) = await LoadContextAsync(request, cancellationToken);
-        var basvuruSahibi = request.Katilimcilar.Single(x => x.BasvuruSahibiMi);
+        var basvuruSahibi = GetBasvuruSahibiKatilimci(request)
+            ?? throw new BaseException("Basvuru sahibi bilgisi bulunamadi.", 400);
+        var kampBasvuruSahibi = await ResolveBasvuruSahibiAsync(basvuruSahibi, request, currentUserId, cancellationToken);
 
         if (kampDonemi.AyniAileIcinTekBasvuruMu)
         {
-            var mevcutBasvuruVar = await _dbContext.KampBasvurulari.AnyAsync(x =>
-                x.KampDonemiId == request.KampDonemiId &&
-                x.BasvuruSahibiUserId == currentUserId &&
-                x.Durum != KampBasvuruDurumlari.IptalEdildi &&
-                x.Durum != KampBasvuruDurumlari.Reddedildi,
-                cancellationToken);
+            var mevcutBasvuruVar = await ExistsAktifBasvuruAsync(request.KampDonemiId, kampBasvuruSahibi, cancellationToken);
 
             if (mevcutBasvuruVar)
             {
@@ -115,12 +155,11 @@ public class KampBasvuruService : IKampBasvuruService
             KampDonemiId = request.KampDonemiId,
             TesisId = request.TesisId,
             KonaklamaBirimiTipi = request.KonaklamaBirimiTipi,
-            BasvuruSahibiUserId = currentUserId,
-            BasvuruSahibiAdiSoyadi = basvuruSahibi.AdSoyad.Trim(),
-            BasvuruSahibiTipi = request.BasvuruSahibiTipi,
-            HizmetYili = Math.Max(request.HizmetYili, 0),
-            Kamp2023tenFaydalandiMi = request.Kamp2023tenFaydalandiMi,
-            Kamp2024tenFaydalandiMi = request.Kamp2024tenFaydalandiMi,
+            BasvuruNo = await GenerateBasvuruNoAsync(kampDonemi.Yil, cancellationToken),
+            KampBasvuruSahibi = kampBasvuruSahibi,
+            BasvuruSahibiAdiSoyadiSnapshot = basvuruSahibi.AdSoyad.Trim(),
+            BasvuruSahibiTipiSnapshot = request.BasvuruSahibiTipi,
+            HizmetYiliSnapshot = Math.Max(request.HizmetYili, 0),
             EvcilHayvanGetirecekMi = request.EvcilHayvanGetirecekMi,
             Durum = KampBasvuruDurumlari.Beklemede,
             KatilimciSayisi = request.Katilimcilar.Count,
@@ -150,7 +189,10 @@ public class KampBasvuruService : IKampBasvuruService
         await _dbContext.KampBasvurulari.AddAsync(entity, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return MapToDto(entity, kampDonemi, tesis, onizleme.Uyarilar);
+        await EnsureGecmisKatilimKayitlariAsync(kampBasvuruSahibi.Id, onizleme.GecmisKatilimYillari, entity.Id, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return MapToDto(entity, kampDonemi, tesis, onizleme.Uyarilar, onizleme.GecmisKatilimYillari);
     }
 
     public async Task<List<KampBasvuruDto>> GetBenimBasvurularimAsync(CancellationToken cancellationToken = default)
@@ -162,10 +204,12 @@ public class KampBasvuruService : IKampBasvuruService
         }
 
         var items = await _dbContext.KampBasvurulari
-            .Where(x => x.BasvuruSahibiUserId == currentUserId)
+            .Where(x => x.KampBasvuruSahibi != null && x.KampBasvuruSahibi.UserId == currentUserId)
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
             .Include(x => x.Katilimcilar)
+            .Include(x => x.KampBasvuruSahibi)
+            .ThenInclude(x => x!.GecmisKatilimlar)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -178,8 +222,30 @@ public class KampBasvuruService : IKampBasvuruService
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
             .Include(x => x.Katilimcilar)
+            .Include(x => x.KampBasvuruSahibi)
+            .ThenInclude(x => x!.GecmisKatilimlar)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new BaseException("Kamp basvurusu bulunamadi.", 404);
+
+        return MapToDto(item, item.KampDonemi!, item.Tesis!, TryDeserializeWarnings(item.UyariMesajlariJson));
+    }
+
+    public async Task<KampBasvuruDto> GetByBasvuruNoAsync(string basvuruNo, CancellationToken cancellationToken = default)
+    {
+        var normalizedBasvuruNo = NormalizeBasvuruNo(basvuruNo);
+        if (string.IsNullOrWhiteSpace(normalizedBasvuruNo))
+        {
+            throw new BaseException("Basvuru numarasi zorunludur.", 400);
+        }
+
+        var item = await _dbContext.KampBasvurulari
+            .Include(x => x.KampDonemi)
+            .Include(x => x.Tesis)
+            .Include(x => x.Katilimcilar)
+            .Include(x => x.KampBasvuruSahibi)
+            .ThenInclude(x => x!.GecmisKatilimlar)
+            .FirstOrDefaultAsync(x => x.BasvuruNo == normalizedBasvuruNo, cancellationToken)
+            ?? throw new BaseException("Basvuru numarasi ile eslesen kamp basvurusu bulunamadi.", 404);
 
         return MapToDto(item, item.KampDonemi!, item.Tesis!, TryDeserializeWarnings(item.UyariMesajlariJson));
     }
@@ -192,13 +258,17 @@ public class KampBasvuruService : IKampBasvuruService
             ?? throw new BaseException("Kamp basvurusu bulunamadi.", 404);
 
         if (basvuru.Durum == KampBasvuruDurumlari.IptalEdildi || basvuru.Durum == KampBasvuruDurumlari.Reddedildi)
+        {
             throw new BaseException("Iptal veya reddedilmis basvurularda katilimci iptali yapilamaz.", 400);
+        }
 
         var katilimci = basvuru.Katilimcilar.FirstOrDefault(x => x.Id == katilimciId)
             ?? throw new BaseException("Katilimci bulunamadi.", 404);
 
         if (katilimci.BasvuruSahibiMi)
+        {
             throw new BaseException("Basvuru sahibi iptal edilemez. Basvuru sahibinin kampa katilamayacak olmasi halinde basvurunun tamaminin iptal edilmesi gerekmektedir.", 400);
+        }
 
         katilimci.IsDeleted = true;
 
@@ -239,7 +309,13 @@ public class KampBasvuruService : IKampBasvuruService
         return (kampDonemi, tesis, atama);
     }
 
-    private void ValidateRequest(KampBasvuruRequestDto request, KampDonemi kampDonemi, Tesis tesis, KampDonemiTesis atama, KampBasvuruOnizlemeDto onizleme)
+    private void ValidateRequest(
+        KampBasvuruRequestDto request,
+        KampDonemi kampDonemi,
+        Tesis tesis,
+        KampDonemiTesis atama,
+        KampLookupBaglami lookupBaglami,
+        KampBasvuruOnizlemeDto onizleme)
     {
         if (!kampDonemi.AktifMi)
         {
@@ -257,9 +333,15 @@ public class KampBasvuruService : IKampBasvuruService
             onizleme.Hatalar.Add($"Basvuru suresi doldu. Son basvuru tarihi: {kampDonemi.BasvuruBitisTarihi:dd.MM.yyyy}");
         }
 
-        if (!KampBasvuruSahibiTipleri.Hepsi.Contains(request.BasvuruSahibiTipi))
+        if (!lookupBaglami.BasvuruSahibiTipleriByKod.ContainsKey(request.BasvuruSahibiTipi))
         {
             onizleme.Hatalar.Add("Basvuru sahibi tipi gecersiz.");
+        }
+
+        var kuralSeti = lookupBaglami.GetKuralSeti(kampDonemi.Yil);
+        if (kuralSeti is null)
+        {
+            onizleme.Hatalar.Add($"{kampDonemi.Yil} yili icin aktif kamp kural seti bulunamadi.");
         }
 
         if (!atama.AktifMi || !atama.BasvuruyaAcikMi)
@@ -300,6 +382,18 @@ public class KampBasvuruService : IKampBasvuruService
             onizleme.Hatalar.Add("Basvuru icinde tam olarak bir basvuru sahibi tanimlanmalidir.");
         }
 
+        var izinliGecmisYillar = kuralSeti is null
+            ? []
+            : BuildGecmisKatilimYillari(kampDonemi.Yil, kuralSeti);
+
+        foreach (var yil in request.GecmisKatilimYillari.Distinct())
+        {
+            if (!izinliGecmisYillar.Contains(yil))
+            {
+                onizleme.Hatalar.Add($"{yil} yili secili kamp donemi icin dikkate alinabilecek gecmis katilim yillari arasinda degil.");
+            }
+        }
+
         foreach (var katilimci in request.Katilimcilar)
         {
             if (string.IsNullOrWhiteSpace(katilimci.AdSoyad))
@@ -308,12 +402,12 @@ public class KampBasvuruService : IKampBasvuruService
                 continue;
             }
 
-            if (!KampKatilimciTipleri.Hepsi.Contains(katilimci.KatilimciTipi))
+            if (!lookupBaglami.KatilimciTipleriByKod.ContainsKey(katilimci.KatilimciTipi))
             {
                 onizleme.Hatalar.Add($"{katilimci.AdSoyad} icin katilimci tipi gecersiz.");
             }
 
-            if (!KampAkrabalikTipleri.Hepsi.Contains(katilimci.AkrabalikTipi))
+            if (!lookupBaglami.AkrabalikTipleriByKod.ContainsKey(katilimci.AkrabalikTipi))
             {
                 onizleme.Hatalar.Add($"{katilimci.AdSoyad} icin akrabalik tipi gecersiz.");
             }
@@ -323,18 +417,18 @@ public class KampBasvuruService : IKampBasvuruService
                 onizleme.Hatalar.Add($"{katilimci.AdSoyad} icin dogum tarihi gelecekte olamaz.");
             }
 
-            if (katilimci.BasvuruSahibiMi && katilimci.AkrabalikTipi != KampAkrabalikTipleri.BasvuruSahibi)
+            if (katilimci.BasvuruSahibiMi && katilimci.AkrabalikTipi != lookupBaglami.BasvuruSahibiAkrabalikKodu)
             {
-                onizleme.Hatalar.Add("Basvuru sahibi olarak isaretlenen katilimcinin akrabalik tipi BasvuruSahibi olmalidir.");
+                onizleme.Hatalar.Add("Basvuru sahibi olarak isaretlenen katilimcinin akrabalik tipi basvuru sahibi olmalidir.");
             }
         }
     }
 
-    private void AddWarnings(KampBasvuruRequestDto request, KampBasvuruOnizlemeDto onizleme)
+    private void AddWarnings(KampBasvuruRequestDto request, KampLookupBaglami lookupBaglami, KampBasvuruOnizlemeDto onizleme)
     {
         foreach (var katilimci in request.Katilimcilar)
         {
-            if (!KampAkrabalikTipleri.IsYakindanDogrulanabilir(katilimci.AkrabalikTipi))
+            if (lookupBaglami.AkrabalikTipleriByKod.TryGetValue(katilimci.AkrabalikTipi, out var akrabalikTipi) && !akrabalikTipi.YakindanDogrulanabilirMi)
             {
                 onizleme.Uyarilar.Add($"{katilimci.AdSoyad} icin birinci derece / es iliskisi disinda bir akrabalik bildirildi.");
             }
@@ -375,6 +469,219 @@ public class KampBasvuruService : IKampBasvuruService
             onizleme.KontenjanMesaji = $"{onizleme.BosKontenjan} bos kontenjan";
         }
     }
+
+    private async Task<KampLookupBaglami> LoadLookupBaglamiAsync(CancellationToken cancellationToken)
+    {
+        var basvuruSahibiTipleri = await _dbContext.KampBasvuruSahibiTipleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderBy(x => x.OncelikSirasi)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var katilimciTipleri = await _dbContext.KampKatilimciTipleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var akrabalikTipleri = await _dbContext.KampAkrabalikTipleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderByDescending(x => x.BasvuruSahibiAkrabaligiMi)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var kuralSetleri = await _dbContext.KampKuralSetleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .ToListAsync(cancellationToken);
+
+        return new KampLookupBaglami(
+            basvuruSahibiTipleri,
+            katilimciTipleri,
+            akrabalikTipleri,
+            kuralSetleri);
+    }
+
+    private async Task<KampBasvuruSahibi?> FindBasvuruSahibiAsync(string? tcKimlikNo, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tcKimlikNo))
+        {
+            return null;
+        }
+
+        return await _dbContext.KampBasvuruSahipleri
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.TcKimlikNo == tcKimlikNo, cancellationToken);
+    }
+
+    private async Task<KampBasvuruSahibi> ResolveBasvuruSahibiAsync(
+        KampBasvuruKatilimciDto basvuruSahibi,
+        KampBasvuruRequestDto request,
+        Guid? currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var tcKimlikNo = NormalizeNullable(basvuruSahibi.TcKimlikNo);
+        if (!string.IsNullOrWhiteSpace(tcKimlikNo))
+        {
+            var mevcut = await _dbContext.KampBasvuruSahipleri.FirstOrDefaultAsync(x => x.TcKimlikNo == tcKimlikNo, cancellationToken);
+            if (mevcut is not null)
+            {
+                mevcut.AdSoyad = basvuruSahibi.AdSoyad.Trim();
+                mevcut.BasvuruSahibiTipi = request.BasvuruSahibiTipi;
+                mevcut.HizmetYili = Math.Max(request.HizmetYili, 0);
+                mevcut.UserId ??= currentUserId;
+                mevcut.AktifMi = true;
+                return mevcut;
+            }
+        }
+
+        var entity = new KampBasvuruSahibi
+        {
+            TcKimlikNo = tcKimlikNo,
+            AdSoyad = basvuruSahibi.AdSoyad.Trim(),
+            BasvuruSahibiTipi = request.BasvuruSahibiTipi,
+            HizmetYili = Math.Max(request.HizmetYili, 0),
+            UserId = currentUserId,
+            AktifMi = true
+        };
+
+        await _dbContext.KampBasvuruSahipleri.AddAsync(entity, cancellationToken);
+        return entity;
+    }
+
+    private async Task<bool> ExistsAktifBasvuruAsync(int kampDonemiId, KampBasvuruSahibi kampBasvuruSahibi, CancellationToken cancellationToken)
+    {
+        var query = _dbContext.KampBasvurulari.Where(x =>
+            x.KampDonemiId == kampDonemiId &&
+            x.Durum != KampBasvuruDurumlari.IptalEdildi &&
+            x.Durum != KampBasvuruDurumlari.Reddedildi);
+
+        if (kampBasvuruSahibi.Id > 0)
+        {
+            return await query.AnyAsync(x => x.KampBasvuruSahibiId == kampBasvuruSahibi.Id, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(kampBasvuruSahibi.TcKimlikNo))
+        {
+            return await query.AnyAsync(
+                x => x.KampBasvuruSahibi != null && x.KampBasvuruSahibi.TcKimlikNo == kampBasvuruSahibi.TcKimlikNo,
+                cancellationToken);
+        }
+
+        if (kampBasvuruSahibi.UserId.HasValue)
+        {
+            return await query.AnyAsync(
+                x => x.KampBasvuruSahibi != null && x.KampBasvuruSahibi.UserId == kampBasvuruSahibi.UserId,
+                cancellationToken);
+        }
+
+        return false;
+    }
+
+    private async Task<string> GenerateBasvuruNoAsync(int kampYili, CancellationToken cancellationToken)
+    {
+        for (var deneme = 0; deneme < 10; deneme++)
+        {
+            var randomHex = Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
+            var basvuruNo = $"KB{kampYili}{randomHex}";
+            var exists = await _dbContext.KampBasvurulari.AnyAsync(x => x.BasvuruNo == basvuruNo, cancellationToken);
+            if (!exists)
+            {
+                return basvuruNo;
+            }
+        }
+
+        throw new BaseException("Kamp basvuru numarasi olusturulamadi.", 500);
+    }
+
+    private async Task<List<int>> BuildBirlesikGecmisKatilimYillariAsync(
+        int kampYili,
+        IEnumerable<int> secilenGecmisKatilimYillari,
+        int? kampBasvuruSahibiId,
+        CancellationToken cancellationToken)
+    {
+        var yillar = new HashSet<int>(SanitizeGecmisKatilimYillari(secilenGecmisKatilimYillari, kampYili));
+        if (!kampBasvuruSahibiId.HasValue)
+        {
+            return yillar.OrderByDescending(x => x).ToList();
+        }
+
+        var mevcutYillar = await _dbContext.KampBasvuruGecmisKatilimlari
+            .AsNoTracking()
+            .Where(x => x.KampBasvuruSahibiId == kampBasvuruSahibiId.Value && x.AktifMi)
+            .Select(x => x.KatilimYili)
+            .ToListAsync(cancellationToken);
+
+        foreach (var yil in SanitizeGecmisKatilimYillari(mevcutYillar, kampYili))
+        {
+            yillar.Add(yil);
+        }
+
+        return yillar.OrderByDescending(x => x).ToList();
+    }
+
+    private async Task EnsureGecmisKatilimKayitlariAsync(
+        int kampBasvuruSahibiId,
+        IEnumerable<int> gecmisKatilimYillari,
+        int kaynakBasvuruId,
+        CancellationToken cancellationToken)
+    {
+        var mevcutKayitlar = await _dbContext.KampBasvuruGecmisKatilimlari
+            .Where(x => x.KampBasvuruSahibiId == kampBasvuruSahibiId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var yil in gecmisKatilimYillari.Distinct())
+        {
+            var mevcut = mevcutKayitlar.FirstOrDefault(x => x.KatilimYili == yil);
+            if (mevcut is null)
+            {
+                _dbContext.KampBasvuruGecmisKatilimlari.Add(new KampBasvuruGecmisKatilim
+                {
+                    KampBasvuruSahibiId = kampBasvuruSahibiId,
+                    KatilimYili = yil,
+                    KaynakBasvuruId = kaynakBasvuruId,
+                    BeyanMi = true,
+                    AktifMi = true
+                });
+
+                continue;
+            }
+
+            mevcut.AktifMi = true;
+            mevcut.BeyanMi = true;
+            mevcut.KaynakBasvuruId ??= kaynakBasvuruId;
+        }
+    }
+
+    private static KampBasvuruKatilimciDto? GetBasvuruSahibiKatilimci(KampBasvuruRequestDto request)
+        => request.Katilimcilar.FirstOrDefault(x => x.BasvuruSahibiMi);
+
+    private static List<int> BuildGecmisKatilimYillari(int kampYili, KampKuralSeti? kuralSeti)
+    {
+        if (kuralSeti is null || kuralSeti.OncekiYilSayisi <= 0)
+        {
+            return [];
+        }
+
+        return Enumerable.Range(kampYili - kuralSeti.OncekiYilSayisi, kuralSeti.OncekiYilSayisi)
+            .Where(x => x > 0 && x < kampYili)
+            .OrderByDescending(x => x)
+            .ToList();
+    }
+
+    private static List<int> SanitizeGecmisKatilimYillari(IEnumerable<int> yillar, int kampYili)
+        => yillar
+            .Where(x => x > 0 && x < kampYili)
+            .Distinct()
+            .OrderByDescending(x => x)
+            .ToList();
+
+    private static string NormalizeBasvuruNo(string? basvuruNo)
+        => string.IsNullOrWhiteSpace(basvuruNo)
+            ? string.Empty
+            : basvuruNo.Trim().ToUpperInvariant();
 
     private static List<KampKonaklamaBirimiSecenekDto> BuildBirimler(Tesis tesis)
     {
@@ -424,10 +731,16 @@ public class KampBasvuruService : IKampBasvuruService
         return [];
     }
 
-    private static KampBasvuruDto MapToDto(KampBasvuru entity, KampDonemi kampDonemi, Tesis tesis, List<string> uyarilar)
+    private KampBasvuruDto MapToDto(
+        KampBasvuru entity,
+        KampDonemi kampDonemi,
+        Tesis tesis,
+        List<string> uyarilar,
+        List<int>? gecmisKatilimYillari = null)
         => new()
         {
             Id = entity.Id,
+            BasvuruNo = entity.BasvuruNo,
             KampDonemiId = entity.KampDonemiId,
             KampDonemiAd = kampDonemi.Ad,
             KonaklamaBaslangicTarihi = kampDonemi.KonaklamaBaslangicTarihi,
@@ -435,11 +748,16 @@ public class KampBasvuruService : IKampBasvuruService
             TesisId = entity.TesisId,
             TesisAd = tesis.Ad,
             KonaklamaBirimiTipi = entity.KonaklamaBirimiTipi,
-            BasvuruSahibiAdiSoyadi = entity.BasvuruSahibiAdiSoyadi,
-            BasvuruSahibiTipi = entity.BasvuruSahibiTipi,
-            HizmetYili = entity.HizmetYili,
-            Kamp2023tenFaydalandiMi = entity.Kamp2023tenFaydalandiMi,
-            Kamp2024tenFaydalandiMi = entity.Kamp2024tenFaydalandiMi,
+            BasvuruSahibiAdiSoyadi = entity.BasvuruSahibiAdiSoyadiSnapshot,
+            BasvuruSahibiTipi = entity.BasvuruSahibiTipiSnapshot,
+            HizmetYili = entity.HizmetYiliSnapshot,
+            GecmisKatilimYillari = (gecmisKatilimYillari ?? entity.KampBasvuruSahibi?.GecmisKatilimlar
+                    .Where(x => x.AktifMi && x.KatilimYili < kampDonemi.Yil)
+                    .Select(x => x.KatilimYili)
+                    .Distinct()
+                    .OrderByDescending(x => x)
+                    .ToList())
+                ?? [],
             EvcilHayvanGetirecekMi = entity.EvcilHayvanGetirecekMi,
             Durum = entity.Durum,
             KatilimciSayisi = entity.KatilimciSayisi,
@@ -487,4 +805,44 @@ public class KampBasvuruService : IKampBasvuruService
 
     private static string? NormalizeNullable(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class KampLookupBaglami
+    {
+        public KampLookupBaglami(
+            List<KampBasvuruSahibiTipi> basvuruSahibiTipleri,
+            List<KampKatilimciTipi> katilimciTipleri,
+            List<KampAkrabalikTipi> akrabalikTipleri,
+            List<KampKuralSeti> kuralSetleri)
+        {
+            BasvuruSahibiTipleri = basvuruSahibiTipleri;
+            KatilimciTipleri = katilimciTipleri;
+            AkrabalikTipleri = akrabalikTipleri;
+            KuralSetleriByYil = kuralSetleri
+                .GroupBy(x => x.KampYili)
+                .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Id).First());
+            BasvuruSahibiTipleriByKod = basvuruSahibiTipleri.ToDictionary(x => x.Kod, x => x);
+            KatilimciTipleriByKod = katilimciTipleri.ToDictionary(x => x.Kod, x => x);
+            AkrabalikTipleriByKod = akrabalikTipleri.ToDictionary(x => x.Kod, x => x);
+            BasvuruSahibiAkrabalikKodu = akrabalikTipleri.FirstOrDefault(x => x.BasvuruSahibiAkrabaligiMi)?.Kod;
+        }
+
+        public List<KampBasvuruSahibiTipi> BasvuruSahibiTipleri { get; }
+
+        public List<KampKatilimciTipi> KatilimciTipleri { get; }
+
+        public List<KampAkrabalikTipi> AkrabalikTipleri { get; }
+
+        public Dictionary<string, KampBasvuruSahibiTipi> BasvuruSahibiTipleriByKod { get; }
+
+        public Dictionary<string, KampKatilimciTipi> KatilimciTipleriByKod { get; }
+
+        public Dictionary<string, KampAkrabalikTipi> AkrabalikTipleriByKod { get; }
+
+        public Dictionary<int, KampKuralSeti> KuralSetleriByYil { get; }
+
+        public string? BasvuruSahibiAkrabalikKodu { get; }
+
+        public KampKuralSeti? GetKuralSeti(int kampYili)
+            => KuralSetleriByYil.GetValueOrDefault(kampYili);
+    }
 }

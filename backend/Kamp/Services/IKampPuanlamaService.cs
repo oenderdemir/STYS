@@ -4,5 +4,10 @@ namespace STYS.Kamp.Services;
 
 public interface IKampPuanlamaService
 {
-    KampBasvuruOnizlemeDto Puanla(KampBasvuruRequestDto request, KampBasvuruOnizlemeDto onizleme);
+    Task<KampBasvuruOnizlemeDto> PuanlaAsync(
+        KampBasvuruRequestDto request,
+        KampBasvuruOnizlemeDto onizleme,
+        int kampYili,
+        IReadOnlyCollection<int> gecmisKatilimYillari,
+        CancellationToken cancellationToken = default);
 }

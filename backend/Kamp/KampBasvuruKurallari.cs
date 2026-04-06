@@ -2,64 +2,6 @@ using STYS.Tesisler.Entities;
 
 namespace STYS.Kamp;
 
-public static class KampBasvuruSahibiTipleri
-{
-    public const string TarimOrmanPersoneli = "TarimOrmanPersoneli";
-    public const string TarimOrmanEmeklisi = "TarimOrmanEmeklisi";
-    public const string BagliKurulusPersoneli = "BagliKurulusPersoneli";
-    public const string BagliKurulusEmeklisi = "BagliKurulusEmeklisi";
-    public const string DigerKamuPersoneli = "DigerKamuPersoneli";
-    public const string DigerKamuEmeklisi = "DigerKamuEmeklisi";
-    public const string Diger = "Diger";
-
-    public static readonly string[] Hepsi =
-    [
-        TarimOrmanPersoneli,
-        TarimOrmanEmeklisi,
-        BagliKurulusPersoneli,
-        BagliKurulusEmeklisi,
-        DigerKamuPersoneli,
-        DigerKamuEmeklisi,
-        Diger
-    ];
-
-    public static bool IsPublic(string tip)
-        => tip != Diger;
-}
-
-public static class KampKatilimciTipleri
-{
-    public const string Kamu = "Kamu";
-    public const string SehitGaziMalul = "SehitGaziMalul";
-    public const string Diger = "Diger";
-
-    public static readonly string[] Hepsi = [Kamu, SehitGaziMalul, Diger];
-
-    /// <summary>
-    /// Talimat: "Sehit yakinlari ile gaziler, harp ve vazife malulleri ve yakinlarina,
-    /// belgelendirmeleri durumunda, Bakanlik mensuplari icin belirlenen tarife uzerinden
-    /// ucretlendirme yapilacaktir."
-    /// </summary>
-    public static bool KamuTarifesiUygulanirMi(string katilimciTipi)
-        => katilimciTipi is Kamu or SehitGaziMalul;
-}
-
-public static class KampAkrabalikTipleri
-{
-    public const string BasvuruSahibi = "BasvuruSahibi";
-    public const string Es = "Es";
-    public const string Cocuk = "Cocuk";
-    public const string Anne = "Anne";
-    public const string Baba = "Baba";
-    public const string Kardes = "Kardes";
-    public const string Diger = "Diger";
-
-    public static readonly string[] Hepsi = [BasvuruSahibi, Es, Cocuk, Anne, Baba, Kardes, Diger];
-
-    public static bool IsYakindanDogrulanabilir(string tip)
-        => tip is BasvuruSahibi or Es or Cocuk or Anne or Baba;
-}
-
 public static class KampBasvuruDurumlari
 {
     public const string Beklemede = "Beklemede";
@@ -103,8 +45,8 @@ public static class KampIadeNedenleri
 
 public static class KampBasvuruKurallari
 {
-    public static readonly DateTime UcretsizCocukSiniri = new(2022, 1, 1);
-    public static readonly DateTime YarimUcretliCocukSiniri = new(2019, 1, 1);
+    public static readonly DateTime UcretsizCocukSiniri = new(2023, 1, 1);
+    public static readonly DateTime YarimUcretliCocukSiniri = new(2020, 1, 1);
     public const decimal KamuAvansKisiBasi = 1700m;
     public const decimal DigerAvansKisiBasi = 2550m;
     public const decimal YemekOrani = 0.50m;
@@ -125,24 +67,6 @@ public static class KampBasvuruKurallari
         };
     }
 
-    public static int GetOncelik(string basvuruSahibiTipi)
-        => basvuruSahibiTipi switch
-        {
-            KampBasvuruSahibiTipleri.TarimOrmanPersoneli or KampBasvuruSahibiTipleri.TarimOrmanEmeklisi => 1,
-            KampBasvuruSahibiTipleri.BagliKurulusPersoneli or KampBasvuruSahibiTipleri.BagliKurulusEmeklisi => 2,
-            KampBasvuruSahibiTipleri.DigerKamuPersoneli or KampBasvuruSahibiTipleri.DigerKamuEmeklisi => 3,
-            _ => 4
-        };
-
-    public static int GetTabanPuan(string basvuruSahibiTipi)
-        => basvuruSahibiTipi switch
-        {
-            KampBasvuruSahibiTipleri.TarimOrmanPersoneli => 40,
-            KampBasvuruSahibiTipleri.TarimOrmanEmeklisi => 20,
-            KampBasvuruSahibiTipleri.BagliKurulusPersoneli or KampBasvuruSahibiTipleri.BagliKurulusEmeklisi => 15,
-            KampBasvuruSahibiTipleri.DigerKamuPersoneli or KampBasvuruSahibiTipleri.DigerKamuEmeklisi => 10,
-            _ => 5
-        };
 }
 
 public sealed record KampKonaklamaKonfigurasyonu(

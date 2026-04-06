@@ -24,9 +24,10 @@ public class KampTahsisServiceTests
                 Id = 100,
                 KampDonemiId = 10,
                 TesisId = 1,
+                KampBasvuruSahibiId = 100,
                 KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
-                BasvuruSahibiAdiSoyadi = "Birinci Aday",
-                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.TarimOrmanPersoneli,
+                BasvuruSahibiAdiSoyadiSnapshot = "Birinci Aday",
+                BasvuruSahibiTipiSnapshot = "TarimOrmanPersoneli",
                 Durum = KampBasvuruDurumlari.TahsisEdildi,
                 KatilimciSayisi = 4,
                 OncelikSirasi = 1,
@@ -40,9 +41,10 @@ public class KampTahsisServiceTests
                 Id = 101,
                 KampDonemiId = 10,
                 TesisId = 1,
+                KampBasvuruSahibiId = 101,
                 KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
-                BasvuruSahibiAdiSoyadi = "Ikinci Aday",
-                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.BagliKurulusPersoneli,
+                BasvuruSahibiAdiSoyadiSnapshot = "Ikinci Aday",
+                BasvuruSahibiTipiSnapshot = "BagliKurulusPersoneli",
                 Durum = KampBasvuruDurumlari.Beklemede,
                 KatilimciSayisi = 4,
                 OncelikSirasi = 2,
@@ -56,9 +58,10 @@ public class KampTahsisServiceTests
                 Id = 102,
                 KampDonemiId = 10,
                 TesisId = 1,
+                KampBasvuruSahibiId = 102,
                 KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
-                BasvuruSahibiAdiSoyadi = "Ucuncu Aday",
-                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.Diger,
+                BasvuruSahibiAdiSoyadiSnapshot = "Ucuncu Aday",
+                BasvuruSahibiTipiSnapshot = "Diger",
                 Durum = KampBasvuruDurumlari.TahsisEdildi,
                 KatilimciSayisi = 4,
                 OncelikSirasi = 4,
@@ -72,9 +75,10 @@ public class KampTahsisServiceTests
                 Id = 103,
                 KampDonemiId = 10,
                 TesisId = 1,
+                KampBasvuruSahibiId = 103,
                 KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
-                BasvuruSahibiAdiSoyadi = "Iptal Kayit",
-                BasvuruSahibiTipi = KampBasvuruSahibiTipleri.Diger,
+                BasvuruSahibiAdiSoyadiSnapshot = "Iptal Kayit",
+                BasvuruSahibiTipiSnapshot = "Diger",
                 Durum = KampBasvuruDurumlari.IptalEdildi,
                 KatilimciSayisi = 4,
                 OncelikSirasi = 1,
@@ -179,6 +183,12 @@ public class KampTahsisServiceTests
             MaksimumGece = 5,
             AktifMi = true
         });
+
+        dbContext.KampBasvuruSahipleri.AddRange(
+            new KampBasvuruSahibi { Id = 100, AdSoyad = "Birinci Aday", BasvuruSahibiTipi = "TarimOrmanPersoneli", HizmetYili = 0, AktifMi = true },
+            new KampBasvuruSahibi { Id = 101, AdSoyad = "Ikinci Aday", BasvuruSahibiTipi = "BagliKurulusPersoneli", HizmetYili = 0, AktifMi = true },
+            new KampBasvuruSahibi { Id = 102, AdSoyad = "Ucuncu Aday", BasvuruSahibiTipi = "Diger", HizmetYili = 0, AktifMi = true },
+            new KampBasvuruSahibi { Id = 103, AdSoyad = "Iptal Kayit", BasvuruSahibiTipi = "Diger", HizmetYili = 0, AktifMi = true });
 
         if (atamaEkle)
         {

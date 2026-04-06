@@ -3,6 +3,7 @@ namespace STYS.Kamp.Dto;
 public class KampBasvuruDto
 {
     public int Id { get; set; }
+    public string BasvuruNo { get; set; } = string.Empty;
     public int KampDonemiId { get; set; }
     public string KampDonemiAd { get; set; } = string.Empty;
     public DateTime KonaklamaBaslangicTarihi { get; set; }
@@ -13,8 +14,7 @@ public class KampBasvuruDto
     public string BasvuruSahibiAdiSoyadi { get; set; } = string.Empty;
     public string BasvuruSahibiTipi { get; set; } = string.Empty;
     public int HizmetYili { get; set; }
-    public bool Kamp2023tenFaydalandiMi { get; set; }
-    public bool Kamp2024tenFaydalandiMi { get; set; }
+    public List<int> GecmisKatilimYillari { get; set; } = [];
     public bool EvcilHayvanGetirecekMi { get; set; }
     public string Durum { get; set; } = string.Empty;
     public int KatilimciSayisi { get; set; }

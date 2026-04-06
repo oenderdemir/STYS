@@ -1,49 +1,37 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { debounceTime, Subject, takeUntil } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
-import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampBasvuruTesisSecenekDto, KampBasvuruDonemSecenekDto, KampKonaklamaBirimiSecenekDto } from './kamp-yonetimi.dto';
+import { AuthService } from '../auth';
+import {
+    KampAkrabalikTipiSecenekDto,
+    KampBasvuruBaglamDto,
+    KampBasvuruDonemSecenekDto,
+    KampBasvuruDto,
+    KampBasvuruOnizlemeDto,
+    KampBasvuruRequestDto,
+    KampBasvuruSahibiTipSecenekDto,
+    KampBasvuruTesisSecenekDto,
+    KampKonaklamaBirimiSecenekDto,
+    KampSecenekDto
+} from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 
 @Component({
     selector: 'app-kamp-basvuru',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, RouterLink, ButtonModule],
+    imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, ButtonModule],
     templateUrl: './kamp-basvuru.html',
     styleUrl: './kamp-basvuru.scss'
 })
 export class KampBasvuruPage implements OnInit, OnDestroy {
     private readonly fb = inject(FormBuilder);
     private readonly kampService = inject(KampYonetimiService);
+    private readonly authService = inject(AuthService);
     private readonly destroy$ = new Subject<void>();
-
-    readonly basvuruSahibiTipleri = [
-        { label: 'Tarim ve Orman Personeli', value: 'TarimOrmanPersoneli' },
-        { label: 'Tarim ve Orman Emeklisi', value: 'TarimOrmanEmeklisi' },
-        { label: 'Bagli / Ilgili Kurulus Personeli', value: 'BagliKurulusPersoneli' },
-        { label: 'Bagli / Ilgili Kurulus Emeklisi', value: 'BagliKurulusEmeklisi' },
-        { label: 'Diger Kamu Personeli', value: 'DigerKamuPersoneli' },
-        { label: 'Diger Kamu Emeklisi', value: 'DigerKamuEmeklisi' },
-        { label: 'Diger', value: 'Diger' }
-    ];
-
-    readonly katilimciTipleri = [
-        { label: 'Kamu', value: 'Kamu' },
-        { label: 'Sehit/Gazi/Malul', value: 'SehitGaziMalul' },
-        { label: 'Diger', value: 'Diger' }
-    ];
-
-    readonly akrabalikTipleri = [
-        { label: 'Basvuru Sahibi', value: 'BasvuruSahibi' },
-        { label: 'Es', value: 'Es' },
-        { label: 'Cocuk', value: 'Cocuk' },
-        { label: 'Anne', value: 'Anne' },
-        { label: 'Baba', value: 'Baba' },
-        { label: 'Kardes', value: 'Kardes' },
-        { label: 'Diger', value: 'Diger' }
-    ];
 
     baglam: KampBasvuruBaglamDto | null = null;
     seciliDonem: KampBasvuruDonemSecenekDto | null = null;
@@ -51,18 +39,22 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     seciliBirimler: KampKonaklamaBirimiSecenekDto[] = [];
     onizleme: KampBasvuruOnizlemeDto | null = null;
     benimBasvurularim: KampBasvuruDto[] = [];
+    sonBasvuru: KampBasvuruDto | null = null;
+    sorgulananBasvuru: KampBasvuruDto | null = null;
+    seciliGecmisKatilimYillari = new Set<number>();
+    sorguBasvuruNo = '';
     yukleniyor = false;
     kaydediliyor = false;
+    sorgulaniyor = false;
     hataMesaji: string | null = null;
+    sorguHataMesaji: string | null = null;
 
     readonly form = this.fb.group({
         kampDonemiId: [0, Validators.required],
         tesisId: [0, Validators.required],
         konaklamaBirimiTipi: ['', Validators.required],
-        basvuruSahibiTipi: ['TarimOrmanPersoneli', Validators.required],
+        basvuruSahibiTipi: ['', Validators.required],
         hizmetYili: [0, [Validators.required, Validators.min(0)]],
-        kamp2023tenFaydalandiMi: [false],
-        kamp2024tenFaydalandiMi: [false],
         evcilHayvanGetirecekMi: [false],
         buzdolabiTalepEdildiMi: [false],
         televizyonTalepEdildiMi: [false],
@@ -74,10 +66,32 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         return this.form.get('katilimcilar') as FormArray<FormGroup>;
     }
 
+    get basvuruSahibiTipleri(): KampBasvuruSahibiTipSecenekDto[] {
+        return this.baglam?.basvuruSahibiTipleri ?? [];
+    }
+
+    get katilimciTipleri(): KampSecenekDto[] {
+        return this.baglam?.katilimciTipleri ?? [];
+    }
+
+    get akrabalikTipleri(): KampAkrabalikTipiSecenekDto[] {
+        return this.baglam?.akrabalikTipleri ?? [];
+    }
+
+    get seciliGecmisYilSecenekleri(): number[] {
+        return this.seciliDonem?.gecmisKatilimYillari ?? [];
+    }
+
+    get isAuthenticated(): boolean {
+        return this.authService.isAuthenticated();
+    }
+
     ngOnInit(): void {
         this.katilimcilar.push(this.createKatilimciForm(true));
         this.loadBaglam();
-        this.loadBasvurular();
+        if (this.isAuthenticated) {
+            this.loadBasvurular();
+        }
 
         this.form.get('kampDonemiId')?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe((value) => {
             this.updateDonemSelection(Number(value));
@@ -92,7 +106,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         this.form.get('basvuruSahibiTipi')?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe((value) => {
             const first = this.katilimcilar.at(0);
             if (first) {
-                first.patchValue({ katilimciTipi: value === 'Diger' ? 'Diger' : 'Kamu' }, { emitEvent: false });
+                first.patchValue({ katilimciTipi: this.getVarsayilanKatilimciTipiKodu(value ?? '') }, { emitEvent: false });
             }
             this.triggerPreview();
         });
@@ -107,6 +121,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
     addKatilimci(): void {
         this.katilimcilar.push(this.createKatilimciForm(false));
+        this.triggerPreview();
     }
 
     removeKatilimci(index: number): void {
@@ -115,6 +130,16 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         }
 
         this.katilimcilar.removeAt(index);
+        this.triggerPreview();
+    }
+
+    toggleGecmisKatilimYili(yil: number, checked: boolean): void {
+        if (checked) {
+            this.seciliGecmisKatilimYillari.add(yil);
+        } else {
+            this.seciliGecmisKatilimYillari.delete(yil);
+        }
+
         this.triggerPreview();
     }
 
@@ -131,12 +156,41 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (result) => {
+                    this.sonBasvuru = result;
+                    this.sorgulananBasvuru = result;
+                    this.sorguBasvuruNo = result.basvuruNo;
+                    this.syncGecmisKatilimYillari(result.gecmisKatilimYillari ?? []);
                     this.benimBasvurularim = [result, ...this.benimBasvurularim];
                     this.kaydediliyor = false;
                 },
                 error: (error: Error) => {
                     this.hataMesaji = error.message;
                     this.kaydediliyor = false;
+                }
+            });
+    }
+
+    sorgulaBasvuru(): void {
+        const basvuruNo = this.sorguBasvuruNo.trim();
+        if (!basvuruNo) {
+            this.sorguHataMesaji = 'Basvuru numarasi giriniz.';
+            this.sorgulananBasvuru = null;
+            return;
+        }
+
+        this.sorgulaniyor = true;
+        this.sorguHataMesaji = null;
+        this.kampService.getKampBasvuruByBasvuruNo(basvuruNo)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+                next: (result) => {
+                    this.sorgulananBasvuru = result;
+                    this.sorgulaniyor = false;
+                },
+                error: (error: Error) => {
+                    this.sorguHataMesaji = error.message;
+                    this.sorgulananBasvuru = null;
+                    this.sorgulaniyor = false;
                 }
             });
     }
@@ -149,10 +203,21 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
                 next: (baglam) => {
                     this.baglam = baglam;
                     const firstDonem = baglam.donemler[0];
+                    const firstSahipTipi = baglam.basvuruSahibiTipleri[0];
+
                     if (firstDonem) {
                         this.form.patchValue({ kampDonemiId: firstDonem.id }, { emitEvent: false });
                         this.updateDonemSelection(firstDonem.id);
                     }
+
+                    if (firstSahipTipi) {
+                        this.form.patchValue({ basvuruSahibiTipi: firstSahipTipi.kod }, { emitEvent: false });
+                        const first = this.katilimcilar.at(0);
+                        if (first) {
+                            first.patchValue({ katilimciTipi: this.getVarsayilanKatilimciTipiKodu(firstSahipTipi.kod) }, { emitEvent: false });
+                        }
+                    }
+
                     this.yukleniyor = false;
                     this.triggerPreview();
                 },
@@ -179,6 +244,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         const firstTesis = this.seciliDonem?.tesisler[0] ?? null;
         this.form.patchValue({ tesisId: firstTesis?.tesisId ?? 0 }, { emitEvent: false });
         this.updateTesisSelection(firstTesis?.tesisId ?? 0);
+        this.syncGecmisKatilimYillari(Array.from(this.seciliGecmisKatilimYillari));
     }
 
     private updateTesisSelection(tesisId: number): void {
@@ -194,8 +260,8 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             tcKimlikNo: [''],
             dogumTarihi: ['', Validators.required],
             basvuruSahibiMi: [basvuruSahibiMi],
-            katilimciTipi: [basvuruSahibiMi ? 'Kamu' : 'Kamu', Validators.required],
-            akrabalikTipi: [basvuruSahibiMi ? 'BasvuruSahibi' : 'Es', Validators.required],
+            katilimciTipi: [basvuruSahibiMi ? this.getVarsayilanKatilimciTipiKodu(this.form.get('basvuruSahibiTipi')?.value ?? '') : this.getVarsayilanEkKatilimciTipiKodu(), Validators.required],
+            akrabalikTipi: [basvuruSahibiMi ? this.getBasvuruSahibiAkrabalikKodu() : this.getVarsayilanEkKatilimciAkrabalikKodu(), Validators.required],
             kimlikBilgileriDogrulandiMi: [basvuruSahibiMi],
             yemekTalepEdiyorMu: [true]
         });
@@ -211,7 +277,10 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         this.kampService.onizleKampBasvurusu(payload)
             .pipe(takeUntil(this.destroy$))
             .subscribe({
-                next: (result) => this.onizleme = result,
+                next: (result) => {
+                    this.onizleme = result;
+                    this.syncGecmisKatilimYillari(result.gecmisKatilimYillari ?? []);
+                },
                 error: () => this.onizleme = null
             });
     }
@@ -222,7 +291,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         }
 
         const raw = this.form.getRawValue();
-        if (!raw.kampDonemiId || !raw.tesisId || !raw.konaklamaBirimiTipi) {
+        if (!raw.kampDonemiId || !raw.tesisId || !raw.konaklamaBirimiTipi || !raw.basvuruSahibiTipi) {
             return null;
         }
 
@@ -241,10 +310,9 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             kampDonemiId: raw.kampDonemiId ?? 0,
             tesisId: raw.tesisId ?? 0,
             konaklamaBirimiTipi: raw.konaklamaBirimiTipi ?? '',
-            basvuruSahibiTipi: raw.basvuruSahibiTipi ?? 'TarimOrmanPersoneli',
+            basvuruSahibiTipi: raw.basvuruSahibiTipi ?? '',
             hizmetYili: raw.hizmetYili ?? 0,
-            kamp2023tenFaydalandiMi: raw.kamp2023tenFaydalandiMi ?? false,
-            kamp2024tenFaydalandiMi: raw.kamp2024tenFaydalandiMi ?? false,
+            gecmisKatilimYillari: Array.from(this.seciliGecmisKatilimYillari).sort((a, b) => b - a),
             evcilHayvanGetirecekMi: raw.evcilHayvanGetirecekMi ?? false,
             buzdolabiTalepEdildiMi: raw.buzdolabiTalepEdildiMi ?? false,
             televizyonTalepEdildiMi: raw.televizyonTalepEdildiMi ?? false,
@@ -254,11 +322,46 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
                 tcKimlikNo: x.tcKimlikNo ?? null,
                 dogumTarihi: x.dogumTarihi ?? '',
                 basvuruSahibiMi: !!x.basvuruSahibiMi,
-                katilimciTipi: x.katilimciTipi ?? 'Kamu',
-                akrabalikTipi: x.akrabalikTipi ?? 'Diger',
+                katilimciTipi: x.katilimciTipi ?? this.getVarsayilanEkKatilimciTipiKodu(),
+                akrabalikTipi: x.akrabalikTipi ?? this.getVarsayilanEkKatilimciAkrabalikKodu(),
                 kimlikBilgileriDogrulandiMi: !!x.kimlikBilgileriDogrulandiMi,
                 yemekTalepEdiyorMu: !!x.yemekTalepEdiyorMu
             }))
         };
+    }
+
+    private syncGecmisKatilimYillari(yillar: number[]): void {
+        const izinliYillar = new Set(this.seciliGecmisYilSecenekleri);
+        const yeniSecim = new Set<number>();
+
+        for (const yil of yillar) {
+            if (izinliYillar.has(yil)) {
+                yeniSecim.add(yil);
+            }
+        }
+
+        this.seciliGecmisKatilimYillari = yeniSecim;
+    }
+
+    private getVarsayilanKatilimciTipiKodu(basvuruSahibiTipiKodu: string): string {
+        const sahipTipi = this.basvuruSahibiTipleri.find((x) => x.kod === basvuruSahibiTipiKodu);
+        return sahipTipi?.varsayilanKatilimciTipiKodu
+            ?? this.katilimciTipleri[0]?.kod
+            ?? '';
+    }
+
+    private getVarsayilanEkKatilimciTipiKodu(): string {
+        return this.katilimciTipleri[0]?.kod ?? '';
+    }
+
+    private getBasvuruSahibiAkrabalikKodu(): string {
+        return this.akrabalikTipleri.find((x) => x.basvuruSahibiAkrabaligiMi)?.kod
+            ?? this.akrabalikTipleri[0]?.kod
+            ?? '';
+    }
+
+    private getVarsayilanEkKatilimciAkrabalikKodu(): string {
+        return this.akrabalikTipleri.find((x) => !x.basvuruSahibiAkrabaligiMi)?.kod
+            ?? this.getBasvuruSahibiAkrabalikKodu();
     }
 }

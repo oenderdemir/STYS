@@ -54,13 +54,18 @@ export interface KampDonemiTesisAtamaDto {
 
 export interface KampBasvuruBaglamDto {
     donemler: KampBasvuruDonemSecenekDto[];
+    basvuruSahibiTipleri: KampBasvuruSahibiTipSecenekDto[];
+    katilimciTipleri: KampSecenekDto[];
+    akrabalikTipleri: KampAkrabalikTipiSecenekDto[];
 }
 
 export interface KampBasvuruDonemSecenekDto {
     id: number;
     ad: string;
+    yil: number;
     konaklamaBaslangicTarihi: string;
     konaklamaBitisTarihi: string;
+    gecmisKatilimYillari: number[];
     tesisler: KampBasvuruTesisSecenekDto[];
 }
 
@@ -76,6 +81,19 @@ export interface KampKonaklamaBirimiSecenekDto {
     ad: string;
     minimumKisi: number;
     maksimumKisi: number;
+}
+
+export interface KampSecenekDto {
+    kod: string;
+    ad: string;
+}
+
+export interface KampBasvuruSahibiTipSecenekDto extends KampSecenekDto {
+    varsayilanKatilimciTipiKodu?: string | null;
+}
+
+export interface KampAkrabalikTipiSecenekDto extends KampSecenekDto {
+    basvuruSahibiAkrabaligiMi: boolean;
 }
 
 export interface KampBasvuruKatilimciDto {
@@ -96,8 +114,7 @@ export interface KampBasvuruRequestDto {
     konaklamaBirimiTipi: string;
     basvuruSahibiTipi: string;
     hizmetYili: number;
-    kamp2023tenFaydalandiMi: boolean;
-    kamp2024tenFaydalandiMi: boolean;
+    gecmisKatilimYillari: number[];
     evcilHayvanGetirecekMi: boolean;
     buzdolabiTalepEdildiMi: boolean;
     televizyonTalepEdildiMi: boolean;
@@ -117,12 +134,14 @@ export interface KampBasvuruOnizlemeDto {
     toplamKontenjan: number;
     bosKontenjan: number;
     kontenjanMesaji?: string | null;
+    gecmisKatilimYillari: number[];
     hatalar: string[];
     uyarilar: string[];
 }
 
 export interface KampBasvuruDto {
     id: number;
+    basvuruNo: string;
     kampDonemiId: number;
     kampDonemiAd: string;
     konaklamaBaslangicTarihi: string;
@@ -133,8 +152,7 @@ export interface KampBasvuruDto {
     basvuruSahibiAdiSoyadi: string;
     basvuruSahibiTipi: string;
     hizmetYili: number;
-    kamp2023tenFaydalandiMi: boolean;
-    kamp2024tenFaydalandiMi: boolean;
+    gecmisKatilimYillari: number[];
     evcilHayvanGetirecekMi: boolean;
     durum: string;
     katilimciSayisi: number;

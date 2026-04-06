@@ -250,6 +250,18 @@ export class KampYonetimiService {
         );
     }
 
+    getKampBasvuruByBasvuruNo(basvuruNo: string): Observable<KampBasvuruDto> {
+        return this.http.get<ApiResponse<KampBasvuruDto>>(`${this.apiBaseUrl}/ui/kampbasvuru/basvuru-no/${encodeURIComponent(basvuruNo)}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return this.normalizeBasvuru(responseEnvelope.data);
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp basvurusu bulunamadi.');
+            })
+        );
+    }
+
     onizleKampBasvurusu(payload: KampBasvuruRequestDto): Observable<KampBasvuruOnizlemeDto> {
         return this.http.post<ApiResponse<KampBasvuruOnizlemeDto>>(`${this.apiBaseUrl}/ui/kampbasvuru/onizleme`, payload).pipe(
             map((responseEnvelope) => {

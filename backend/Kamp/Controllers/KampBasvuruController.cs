@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Services;
@@ -17,6 +18,7 @@ public class KampBasvuruController : UIController
         _kampIadeService = kampIadeService;
     }
 
+    [AllowAnonymous]
     [HttpGet("baglam")]
     public async Task<ActionResult<KampBasvuruBaglamDto>> GetBaglam(CancellationToken cancellationToken)
         => Ok(await _kampBasvuruService.GetBaglamAsync(cancellationToken));
@@ -30,10 +32,17 @@ public class KampBasvuruController : UIController
     public async Task<ActionResult<KampBasvuruDto>> GetById(int id, CancellationToken cancellationToken)
         => Ok(await _kampBasvuruService.GetByIdAsync(id, cancellationToken));
 
+    [AllowAnonymous]
+    [HttpGet("basvuru-no/{basvuruNo}")]
+    public async Task<ActionResult<KampBasvuruDto>> GetByBasvuruNo(string basvuruNo, CancellationToken cancellationToken)
+        => Ok(await _kampBasvuruService.GetByBasvuruNoAsync(basvuruNo, cancellationToken));
+
+    [AllowAnonymous]
     [HttpPost("onizleme")]
     public async Task<ActionResult<KampBasvuruOnizlemeDto>> Onizleme([FromBody] KampBasvuruRequestDto request, CancellationToken cancellationToken)
         => Ok(await _kampBasvuruService.OnizleAsync(request, cancellationToken));
 
+    [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<KampBasvuruDto>> BasvuruOlustur([FromBody] KampBasvuruRequestDto request, CancellationToken cancellationToken)
     {

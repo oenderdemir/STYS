@@ -58,6 +58,19 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.kamp-sorgu-row {
+    align-items: end;
+}
+
+.kamp-sorgu-actions {
+    display: flex;
+    align-items: end;
+}
+
+.kamp-sorgu-sonuc {
+    margin-top: 1rem;
+}
+
 label {
     display: grid;
     gap: 0.35rem;
@@ -154,6 +167,12 @@ select {
     background: #fffbeb;
     color: #92400e;
     border: 1px solid #fde68a;
+}
+
+.kamp-alert--success {
+    background: #ecfdf5;
+    color: #166534;
+    border: 1px solid #86efac;
 }
 
 .kamp-table-wrap {

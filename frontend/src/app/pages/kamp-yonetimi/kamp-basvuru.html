@@ -2,16 +2,49 @@
     <section class="kamp-panel">
         <div class="kamp-panel__header">
             <div>
+                <h2>Basvuru Sorgula</h2>
+                <p>Basvuru numarasi ile kaydinin durumunu giris yapmadan kontrol et.</p>
+            </div>
+        </div>
+
+        <div class="kamp-grid kamp-grid--3 kamp-sorgu-row">
+            <label>
+                <span>Basvuru Numarasi</span>
+                <input type="text" [(ngModel)]="sorguBasvuruNo" [ngModelOptions]="{ standalone: true }" placeholder="KB2026XXXXXXXX" />
+            </label>
+            <div class="kamp-sorgu-actions">
+                <button pButton type="button" label="Sorgula" (click)="sorgulaBasvuru()" [loading]="sorgulaniyor"></button>
+            </div>
+        </div>
+
+        <div *ngIf="sorguHataMesaji" class="kamp-alert kamp-alert--error">{{ sorguHataMesaji }}</div>
+
+        <div *ngIf="sorgulananBasvuru as sorgu" class="kamp-sorgu-sonuc">
+            <div class="kamp-metrics">
+                <div><span>Basvuru No</span><strong>{{ sorgu.basvuruNo }}</strong></div>
+                <div><span>Durum</span><strong>{{ sorgu.durum }}</strong></div>
+                <div><span>Puan</span><strong>{{ sorgu.puan }}</strong></div>
+                <div><span>Donem</span><strong>{{ sorgu.kampDonemiAd }}</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="kamp-panel">
+        <div class="kamp-panel__header">
+            <div>
                 <h1>Kamp Basvurusu</h1>
-                <p>2025 yaz kampi basvurusu icin tesis, donem ve katilimci bilgilerini gir.</p>
+                <p>2026 yaz kampi basvurusu icin tesis, donem ve katilimci bilgilerini gir.</p>
             </div>
             <div class="kamp-panel__header-actions">
-                <a pButton routerLink="/kamp-basvurularim" label="Benim Basvurularim"></a>
+                <a *ngIf="isAuthenticated" pButton routerLink="/kamp-basvurularim" label="Benim Basvurularim"></a>
                 <button pButton type="button" label="Katilimci Ekle" (click)="addKatilimci()"></button>
             </div>
         </div>
 
         <div *ngIf="hataMesaji" class="kamp-alert kamp-alert--error">{{ hataMesaji }}</div>
+        <div *ngIf="sonBasvuru" class="kamp-alert kamp-alert--success">
+            Basvuru kaydedildi. Basvuru numaran: <strong>{{ sonBasvuru.basvuruNo }}</strong>
+        </div>
 
         <form [formGroup]="form" class="kamp-form">
             <div class="kamp-grid kamp-grid--3">
@@ -44,7 +77,7 @@
                 <label>
                     <span>Basvuru Sahibi Tipi</span>
                     <select formControlName="basvuruSahibiTipi">
-                        <option *ngFor="let tip of basvuruSahibiTipleri" [value]="tip.value">{{ tip.label }}</option>
+                        <option *ngFor="let tip of basvuruSahibiTipleri" [value]="tip.kod">{{ tip.ad }}</option>
                     </select>
                 </label>
 
@@ -54,9 +87,14 @@
                 </label>
             </div>
 
+            <div class="kamp-flags" *ngIf="seciliGecmisYilSecenekleri.length > 0">
+                <label *ngFor="let yil of seciliGecmisYilSecenekleri">
+                    <input type="checkbox" [checked]="seciliGecmisKatilimYillari.has(yil)" (change)="toggleGecmisKatilimYili(yil, $any($event.target).checked)" />
+                    {{ yil }} kampina katildi
+                </label>
+            </div>
+
             <div class="kamp-flags">
-                <label><input type="checkbox" formControlName="kamp2023tenFaydalandiMi" /> 2023 kampindan faydalandi</label>
-                <label><input type="checkbox" formControlName="kamp2024tenFaydalandiMi" /> 2024 kampindan faydalandi</label>
                 <label><input type="checkbox" formControlName="evcilHayvanGetirecekMi" /> Evcil hayvan getirecek</label>
                 <label><input type="checkbox" formControlName="buzdolabiTalepEdildiMi" /> Buzdolabi</label>
                 <label><input type="checkbox" formControlName="televizyonTalepEdildiMi" /> Televizyon</label>
@@ -86,7 +124,7 @@
                         <label>
                             <span>Katilimci Tipi</span>
                             <select formControlName="katilimciTipi">
-                                <option *ngFor="let tip of katilimciTipleri" [value]="tip.value">{{ tip.label }}</option>
+                                <option *ngFor="let tip of katilimciTipleri" [value]="tip.kod">{{ tip.ad }}</option>
                             </select>
                         </label>
                     </div>
@@ -95,7 +133,7 @@
                         <label>
                             <span>Akrabalik</span>
                             <select formControlName="akrabalikTipi">
-                                <option *ngFor="let tip of akrabalikTipleri" [value]="tip.value">{{ tip.label }}</option>
+                                <option *ngFor="let tip of akrabalikTipleri" [value]="tip.kod">{{ tip.ad }}</option>
                             </select>
                         </label>
                         <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="kimlikBilgileriDogrulandiMi" /> Kimlik dogrulandi</label>
@@ -143,7 +181,7 @@
         </div>
     </section>
 
-    <section class="kamp-panel" *ngIf="benimBasvurularim.length > 0">
+    <section class="kamp-panel" *ngIf="isAuthenticated && benimBasvurularim.length > 0">
         <div class="kamp-panel__header">
             <div>
                 <h2>Benim Basvurularim</h2>
@@ -155,6 +193,7 @@
             <table class="kamp-table">
                 <thead>
                     <tr>
+                        <th>Basvuru No</th>
                         <th>Donem</th>
                         <th>Tesis</th>
                         <th>Durum</th>
@@ -165,6 +204,7 @@
                 </thead>
                 <tbody>
                     <tr *ngFor="let item of benimBasvurularim">
+                        <td>{{ item.basvuruNo }}</td>
                         <td>{{ item.kampDonemiAd }}</td>
                         <td>{{ item.tesisAd }}</td>
                         <td>{{ item.durum }}</td>

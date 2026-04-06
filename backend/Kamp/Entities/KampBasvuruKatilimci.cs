@@ -20,11 +20,11 @@ public class KampBasvuruKatilimci : BaseEntity<int>
 
     [Required]
     [MaxLength(32)]
-    public string KatilimciTipi { get; set; } = KampKatilimciTipleri.Kamu;
+    public string KatilimciTipi { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(32)]
-    public string AkrabalikTipi { get; set; } = KampAkrabalikTipleri.Diger;
+    public string AkrabalikTipi { get; set; } = string.Empty;
 
     public bool KimlikBilgileriDogrulandiMi { get; set; }
 

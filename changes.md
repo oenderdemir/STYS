@@ -1,6 +1,7 @@
 # Proje Mimari Kurallari
 
 Bu kurallara uyulmali, mevcut patterni bozmamali:
+Her turda yapılan işlemlerin özeti changes.md dosyasına append edilmeli.
 
 ## Backend (.NET 10 + EF Core + SQL Server)
 - **Repository pattern:** Tum entity erisimi `IBaseRdbmsRepository<TEntity, TKey>` / `BaseRdbmsRepository<TEntity, TKey>` uzerinden yapilir (kaynak: `TOD.Platform.Persistence.Rdbms`). Servisler dogrudan DbContext kullanmaz — yalnizca projection/cross-entity sorgulari icin DbContext kullanilabilir.
@@ -209,3 +210,313 @@ Bu kurallara uyulmali, mevcut patterni bozmamali:
 ### Dogrulama
 - `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` : BASARILI
 - `dotnet ef migrations has-pending-model-changes --project backend/STYS.csproj --startup-project backend/STYS.csproj --context StysAppDbContext` : `No changes have been made to the model since the last migration.`
+
+---
+
+## Tur 4 - Kamp Menu Reorganizasyonu
+
+### Yapilan Degisiklikler
+- "Kamp Yonetimi" ana menusu Isletme altindan cikarilip top-level yapildi (ParentId=NULL)
+- Eksik 3 ekranin menusu eklendi:
+  - **Iade Yonetimi** (MenuOrder=5, route: kamp-iade-yonetimi, rol kisitlamali)
+  - **Basvuru Yap** (MenuOrder=6, route: kamp-basvurusu, herkese acik)
+  - **Basvurularim** (MenuOrder=7, route: kamp-basvurularim, herkese acik)
+- KampIadeYonetimi yetki sinifi eklendi (Menu/View/Manage)
+- Iade rolleri Admin ve TesisManager gruplarina atandi
+- ErisimTeshis modul tanimi eklendi
+
+### Menu Yapisi (son durum)
+```
+Kamp Yonetimi (top-level, fa-campground)
+  ├─ 0: Programlar
+  ├─ 1: Donemler
+  ├─ 2: Tesis Atamalari
+  ├─ 3: Tahsisler
+  ├─ 4: Rezervasyonlar
+  ├─ 5: Iade Yonetimi
+  ├─ 6: Basvuru Yap
+  └─ 7: Basvurularim
+```
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs — KampIadeYonetimi eklendi
+- backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs — kamp-iade-yonetimi modulu eklendi
+- backend/Infrastructure/EntityFramework/Migrations/20260405170000_ReorganizeKampMenus.cs (YENI)
+
+### Build Sonuclari (Tur 4)
+- Backend: BASARILI (0 hata, 0 uyari)
+- Frontend: Degisiklik yok (menu DB tarafinda)
+
+---
+
+## Tur 5 - Magic Number/String Parametrizasyonu ve 2026 Yil Guncellemesi
+
+### 5a. KampParametre tablosu — magic numberlari DB'ye tasima
+- Yeni `KampParametreleri` tablosu (Kod/Deger/Aciklama, unique index on Kod)
+- Yeni `KampParametre` entity + `IKampParametreService` / `KampParametreService` (scoped, lazy-load cache)
+- `KampParametreKodlari` static class — tum parametre kodlari
+- Seed data ile mevcut tum sabitler DB'ye yazildi (41 parametre)
+
+#### DB'ye tasinan sabitler:
+| Parametre | Eski Yer | Deger |
+|---|---|---|
+| KamuAvansKisiBasi | KampBasvuruKurallari.cs | 1700 |
+| DigerAvansKisiBasi | KampBasvuruKurallari.cs | 2550 |
+| YemekOrani | KampBasvuruKurallari.cs | 0.50 |
+| UcretsizCocukSiniri | KampBasvuruKurallari.cs | 2023-01-01 (2026 kampi icin) |
+| YarimUcretliCocukSiniri | KampBasvuruKurallari.cs | 2020-01-01 (2026 kampi icin) |
+| EmekliBonusPuan | KampPuanlamaService.cs | 30 |
+| KatilimciBasinaPuan | KampPuanlamaService.cs | 10 |
+| OncekiYilKatilimPenalti | KampPuanlamaService.cs | 20 |
+| TabanPuan.* (5 adet) | KampBasvuruKurallari.GetTabanPuan() | 40/20/15/10/5 |
+| Konaklama.*.* (28 adet) | KampBasvuruKurallari.ResolveKonaklama() | Tesis bazli ucretler ve kisi sinirlari |
+
+- KampPuanlamaService ve KampUcretHesaplamaService artik IKampParametreService'ten okuyor
+- Kod icindeki eski sabitler fallback default olarak korunuyor
+
+### 5b. Yil guncellemesi (2025 → 2026)
+- **Entity**: `Kamp2023tenFaydalandiMi` kaldirildi, `Kamp2025tenFaydalandiMi` eklendi (Kamp2024 korundu)
+- **DB migration**: `Kamp2023tenFaydalandiMi` column drop, `Kamp2025tenFaydalandiMi` column add
+- **DTO**: Backend + frontend'de 2023→2024, 2024→2025 olarak guncellendi
+- **Servisler**: KampBasvuruService, KampPuanlamaService property referanslari guncellendi
+- **Frontend**: Checkbox labellari "2024 kampindan faydalandi" / "2025 kampindan faydalandi" olarak guncellendi
+- **Frontend**: Basvuru sayfasi baslik metni "2026 yaz kampi" olarak guncellendi
+- **KampBasvuruKurallari.cs**: Cocuk yas sinirlari 2026 yilina gore guncellendi (2022→2023, 2019→2020)
+
+### 5c. 2026 Yaz Kampi seed data
+- 17 donem eklendi (2026-YAZ-01..17, Haziran-Eylul 2026)
+- Basvuru tarihleri: 01 Mart 2026 - 02 Mayis 2026
+- Alata (52 kontenjan) ve Foca (61 kontenjan) tesis atamalari
+- Mevcut YAZ_KAMPI programi kullanildi
+
+### Yeni Dosyalar
+- backend/Kamp/Entities/KampParametre.cs
+- backend/Kamp/Services/IKampParametreService.cs
+- backend/Kamp/Services/KampParametreService.cs
+- backend/Kamp/KampParametreKodlari.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260405180000_AddKampParametreAndUpdateYears.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs — column rename
+- backend/Kamp/Dto/KampBasvuruDto.cs — property rename
+- backend/Kamp/Dto/KampBasvuruRequestDto.cs — property rename
+- backend/Kamp/KampBasvuruKurallari.cs — cocuk yas sinir defaults guncellendi
+- backend/Kamp/Services/KampBasvuruService.cs — yil referanslari + parametreService inject
+- backend/Kamp/Services/KampPuanlamaService.cs — DB parametreleri kullanir
+- backend/Kamp/Services/KampUcretHesaplamaService.cs — DB parametreleri kullanir
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs — KampParametreleri DbSet + model config
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs — KampParametre eklendi + column degisikligi
+- backend/Program.cs — IKampParametreService kaydi
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts — property rename
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.ts — form control rename
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html — label + baslik 2026
+
+### Riskler
+- `ResolveKonaklama()` hala code-based (tesis adi + birim tipi match). Konaklama parametreleri DB'ye seed edildi ama henuz servisten okunmuyor — bu sabitler nadir degisir, gelecekte ihtiyac olursa baglanti kurulabilir.
+- Mevcut 2025 donemi basvurulari icin `Kamp2023tenFaydalandiMi` datasi drop ediliyor — bunlar artik 2025 yili icin tarihsel olarak irrelevant.
+- KampParametreService cache'i scoped (request bazli). Cok sik parametre degisikligi olursa singleton + invalidation gerekebilir.
+
+### Build Sonuclari (Tur 5)
+- Backend: BASARILI (0 hata, 0 uyari)
+- Frontend: BASARILI
+
+---
+
+## Tur 6 - Kamp Basvuru Kurallarinin Dinamiklestirilmesi
+
+### Yapilan Degisiklikler
+- `KampBasvuru` icindeki statik `Kamp2024tenFaydalandiMi` / `Kamp2025tenFaydalandiMi` alanlari kaldirildi.
+- Yeni `KampBasvuruSahibi` yapisi eklendi; kamp basvurulari artik `KampBasvuruSahibiId` ile baglaniyor.
+- Gecmis kamp katilimlari icin dinamik `KampBasvuruGecmisKatilimlari` tablosu eklendi.
+- Kamp yilina gore puan kirma penceresini belirleyen `KampKuralSetleri` tablosu eklendi.
+- Basvuru sahibi tipi, katilimci tipi ve akrabalik tipi lookup’lari DB’ye tasindi:
+  - `KampBasvuruSahibiTipleri`
+  - `KampKatilimciTipleri`
+  - `KampAkrabalikTipleri`
+- `KampPuanlamaService` artik:
+  - aktif `KampKuralSeti` kaydini okur
+  - basvuru sahibi tipini DB lookup’tan bulur
+  - basvuru yilina gore gecmis yil penceresini hesaplar
+  - kullanicinin secimi + ayni TC’ye ait mevcut gecmis katilimlarini birlestirerek puan kirar
+- `KampUcretHesaplamaService` icindeki kamu tarife karari DB lookup’tan okunur.
+- `KampBasvuruService` icinde:
+  - basvuru sahibinin TC’si ile `KampBasvuruSahibi` resolve edilir
+  - secili/bulunan gecmis katilim yillari birlestirilir
+  - create sirasinda eksik gecmis yil kayitlari dinamik tabloya yazilir
+- Kamp basvuru baglami genisletildi:
+  - `basvuruSahibiTipleri`
+  - `katilimciTipleri`
+  - `akrabalikTipleri`
+  - donem bazli dinamik `gecmisKatilimYillari`
+- Frontend kamp basvuru ekrani artik:
+  - tip listelerini backend baglamindan alir
+  - statik 2024/2025 checkbox’lari yerine doneme gore dinamik gecmis yil checkbox’lari gosterir
+  - preview sonucundaki birlesik gecmis yil bilgisini forma yansitir
+
+### Yeni Dosyalar
+- backend/Kamp/Entities/KampBasvuruSahibi.cs
+- backend/Kamp/Entities/KampBasvuruGecmisKatilim.cs
+- backend/Kamp/Entities/KampKuralSeti.cs
+- backend/Kamp/Entities/KampBasvuruSahibiTipi.cs
+- backend/Kamp/Entities/KampKatilimciTipi.cs
+- backend/Kamp/Entities/KampAkrabalikTipi.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260405193000_DynamicKampBasvuruKurallari.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs
+- backend/Kamp/Entities/KampBasvuruKatilimci.cs
+- backend/Kamp/Dto/KampBasvuruBaglamDto.cs
+- backend/Kamp/Dto/KampBasvuruDto.cs
+- backend/Kamp/Dto/KampBasvuruKatilimciDto.cs
+- backend/Kamp/Dto/KampBasvuruOnizlemeDto.cs
+- backend/Kamp/Dto/KampBasvuruRequestDto.cs
+- backend/Kamp/KampBasvuruKurallari.cs
+- backend/Kamp/Services/IKampPuanlamaService.cs
+- backend/Kamp/Services/IKampUcretHesaplamaService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampPuanlamaService.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html
+- changes.md
+
+### Build Sonuclari (Tur 6)
+- Backend: BASARILI
+- Frontend: BASARILI
+
+### Notlar / Riskler
+- `dotnet ef migrations has-pending-model-changes` denemesi sandbox’taki `dotnet ef` tasarim-zamani build davranisi nedeniyle dogrulanamadi; runtime build basarili.
+- Bu turda lookup tablolarina yonetim CRUD eklenmedi; seed + runtime okuma modeli kullaniliyor.
+- Gecmis katilimlar su an kullanici beyani + mevcut sahibin kayitlari uzerinden tutuluyor; gercek kamp kullanim/veri dogrulamasi baglantisi ileride ayrica guclendirilebilir.
+
+---
+
+## Tur 7 - KampBasvuru / KampBasvuruSahibi Ayrimini Netlestirme
+
+### Yapilan Degisiklikler
+- `KampBasvuru` icindeki kisi profiline donuk alanlar acik snapshot alanlarina donusturuldu:
+  - `BasvuruSahibiAdiSoyadi` -> `BasvuruSahibiAdiSoyadiSnapshot`
+  - `BasvuruSahibiTipi` -> `BasvuruSahibiTipiSnapshot`
+  - `HizmetYili` -> `HizmetYiliSnapshot`
+- `KampBasvuruSahibi` profiline tasinan alanlar:
+  - `BasvuruSahibiTipi`
+  - `HizmetYili`
+- `AdSoyad` zaten sahip entity’sinde oldugu icin ayni isimle profil kaynagi olarak korunuyor.
+- `KampBasvuruService` icinde:
+  - sahip resolve edilirken profil alanlari artik `KampBasvuruSahibi` uzerinde guncelleniyor
+  - yeni basvuru olusturulurken ayni veriler snapshot alanlarina da yaziliyor
+  - DTO map’leri snapshot alanlardan donmeye devam ediyor, bu nedenle mevcut UI kirilmadi
+- Tahsis ve rezervasyon akislari, basvuru icindeki yeni snapshot alanlarini kullanacak sekilde guncellendi.
+- Yeni migration ile mevcut veride:
+  - sahip tablosuna yeni profil kolonlari ekleniyor
+  - mevcut basvurulardan sahip profili backfill ediliyor
+  - basvuru kolonlari snapshot adlarina rename ediliyor
+
+### Yeni Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260406090000_SeparateKampBasvuruSahibiProfile.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs
+- backend/Kamp/Entities/KampBasvuruSahibi.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampTahsisService.cs
+- backend/Kamp/Services/KampRezervasyonService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- tests/STYS.Tests/KampTahsisServiceTests.cs
+- changes.md
+
+### Build Sonuclari (Tur 7)
+- Backend: BASARILI
+- Frontend: BASARILI
+
+### Notlar / Riskler
+- DTO adlari geriye donuk uyumluluk icin korunuyor; acik snapshot adlandirmasi entity/migration katmaninda yapildi.
+- Sahip profili backfill’i, mevcut basvurular arasindan en guncel kayda gore dolduruluyor. Farkli tarihsel basvurularda tip/hizmet yili degismisse sahip profili son durumu temsil edecek.
+
+## Tur 7.1 - Kamp Migration Metadata Tamamlama
+
+### Yapilanlar
+- Manuel eklenen kamp migration’lari icin eksik `.Designer.cs` dosyalari olusturuldu.
+- `DbContext` ve `Migration` attribute tanimlari, `BuildTargetModel` govdeleriyle birlikte migration metadata’si tamamlandi.
+- `StysAppDbContextModelSnapshot.cs` icindeki kamp rezervasyon alan adlari mevcut `DbContext` ile hizalandi.
+
+### Yeni Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260405193000_DynamicKampBasvuruKurallari.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406090000_SeparateKampBasvuruSahibiProfile.Designer.cs
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- changes.md
+
+### Build Sonuclari (Tur 7.1)
+- Backend: BASARILI
+- Frontend: BASARILI
+
+### Notlar / Riskler
+- Bu turda sadece migration metadata ve snapshot uyumu duzeltildi; runtime davranisinda yeni is kurali degisikligi yok.
+
+## Tur 7.2 - KampBasvuru User Shortcut Sadelestirme
+
+### Yapilanlar
+- `KampBasvuru` icindeki `BasvuruSahibiUserId` alani kaldirildi.
+- "Benim basvurularim" ve ayni aile tekrar basvuru kontrolleri `KampBasvuruSahibi.UserId` uzerinden calisacak sekilde tasindi.
+- Basvuru olusturma akisi login zorunlulugundan cikarildi; anonim kullanici da kamp basvurusu olusturabilir hale geldi.
+- `KampBasvuruSahibi.UserId` geri dolumu icin migration eklendi, mevcut `KampBasvurulari.BasvuruSahibiUserId` verisi dusurulmeden once sahip profiline tasiniyor.
+
+### Yeni Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260406094500_RemoveKampBasvuruUserShortcut.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406094500_RemoveKampBasvuruUserShortcut.Designer.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+
+### Build Sonuclari (Tur 7.2)
+- Backend: BASARILI
+- Frontend: CALISTIRILMADI
+
+### Notlar / Riskler
+- Anonim ve TC'siz basvurularda "ayni aile tek basvuru" kontrolu ancak kayitli sahip baglami kurulabildigi durumda calisir; en guclu esleme halen TC kimlik no uzerinden saglaniyor.
+
+## Tur 7.3 - Kamp Basvuru No ve Public Sorgu
+
+### Yapilanlar
+- Her kamp basvurusu icin benzersiz `BasvuruNo` uretilmeye baslandi.
+- `KampBasvuruDto` ve frontend modellerine `basvuruNo` eklendi; basvuru kaydi sonrasi kullaniciya bu numara donduruluyor.
+- `KampBasvuruController` icinde `baglam`, `onizleme`, `basvuru olusturma` ve `basvuru-no ile sorgulama` endpoint'leri anonim kullanima acildi.
+- `kamp-basvurusu` route'u auth guard disina alindi; ekran public erisilebilir hale geldi.
+- Kamp basvuru ekranina "Basvuru Sorgula" alani eklendi. Kullanici login olmadan basvuru numarasi ile durumunu kontrol edebiliyor.
+- Eski kayitlar icin `BasvuruNo` backfill eden migration eklendi ve benzersiz index tanimlandi.
+
+### Yeni Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260406103000_AddKampBasvuruNoAndPublicTracking.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406103000_AddKampBasvuruNoAndPublicTracking.Designer.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs
+- backend/Kamp/Dto/KampBasvuruDto.cs
+- backend/Kamp/Services/IKampBasvuruService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Controllers/KampBasvuruController.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app.routes.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.service.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.scss
+- changes.md
+
+### Build Sonuclari (Tur 7.3)
+- Backend: BASARILI
+- Frontend: BASARILI
+
+### Notlar / Riskler
+- `BasvuruNo` ile public sorgu, numarayi bilen kisiye basvuru detayini gosterebilir. Daha siki mahremiyet istenirse ikinci bir dogrulama alanı (ornegin TC son 4 hane veya dogum tarihi) eklenmeli.

@@ -61,34 +61,38 @@ public partial class AddKampParametreAndUpdateYears : Migration
             (N'TabanPuan.BagliKurulus', N'15', N'Bagli kurulus personel/emekli taban puani', 0, @Now, @Now, N'system', N'system'),
             (N'TabanPuan.DigerKamu', N'10', N'Diger kamu personel/emekli taban puani', 0, @Now, @Now, N'system', N'system'),
             (N'TabanPuan.Diger', N'5', N'Diger basvuru sahipleri taban puani', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.KamuGunluk', N'1700', N'Alata standart kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.DigerGunluk', N'2550', N'Alata standart diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.BuzdolabiGunluk', N'45', N'Alata buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.TelevizyonGunluk', N'45', N'Alata televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.KlimaGunluk', N'60', N'Alata klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.MinKisi', N'3', N'Alata minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.Alata.MaksKisi', N'4', N'Alata maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.KamuGunluk', N'1550', N'Foca prefabrik kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.DigerGunluk', N'2325', N'Foca prefabrik diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.BuzdolabiGunluk', N'40', N'Foca prefabrik buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.TelevizyonGunluk', N'40', N'Foca prefabrik televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.KlimaGunluk', N'50', N'Foca prefabrik klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.MinKisi', N'4', N'Foca prefabrik minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaPrefabrik.MaksKisi', N'5', N'Foca prefabrik maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.KamuGunluk', N'1550', N'Foca otel kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.DigerGunluk', N'2325', N'Foca otel diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.BuzdolabiGunluk', N'40', N'Foca otel buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.TelevizyonGunluk', N'40', N'Foca otel televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.KlimaGunluk', N'50', N'Foca otel klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.MinKisi', N'4', N'Foca otel minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaOtel.MaksKisi', N'5', N'Foca otel maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.KamuGunluk', N'1700', N'Foca betonarme kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.DigerGunluk', N'2550', N'Foca betonarme diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.BuzdolabiGunluk', N'40', N'Foca betonarme buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.TelevizyonGunluk', N'40', N'Foca betonarme televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.KlimaGunluk', N'50', N'Foca betonarme klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.MinKisi', N'4', N'Foca betonarme minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
-            (N'Konaklama.FocaBetonarme.MaksKisi', N'5', N'Foca betonarme maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system');
+            (N'Konaklama.Standart34.Ad', N'Standart 3-4 Kisilik', N'Konaklama birim tipi etiketi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.KamuGunluk', N'1700', N'Standart 3-4 kisilik kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.DigerGunluk', N'2550', N'Standart 3-4 kisilik diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.BuzdolabiGunluk', N'45', N'Standart 3-4 kisilik buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.TelevizyonGunluk', N'45', N'Standart 3-4 kisilik televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.KlimaGunluk', N'60', N'Standart 3-4 kisilik klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.MinKisi', N'3', N'Standart 3-4 kisilik minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Standart34.MaksKisi', N'4', N'Standart 3-4 kisilik maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.Ad', N'Prefabrik 4-5 Kisilik', N'Konaklama birim tipi etiketi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.KamuGunluk', N'1550', N'Prefabrik 4-5 kisilik kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.DigerGunluk', N'2325', N'Prefabrik 4-5 kisilik diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.BuzdolabiGunluk', N'40', N'Prefabrik 4-5 kisilik buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.TelevizyonGunluk', N'40', N'Prefabrik 4-5 kisilik televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.KlimaGunluk', N'50', N'Prefabrik 4-5 kisilik klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.MinKisi', N'4', N'Prefabrik 4-5 kisilik minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Prefabrik45.MaksKisi', N'5', N'Prefabrik 4-5 kisilik maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.Ad', N'Otel 4-5 Kisilik', N'Konaklama birim tipi etiketi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.KamuGunluk', N'1550', N'Otel 4-5 kisilik kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.DigerGunluk', N'2325', N'Otel 4-5 kisilik diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.BuzdolabiGunluk', N'40', N'Otel 4-5 kisilik buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.TelevizyonGunluk', N'40', N'Otel 4-5 kisilik televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.KlimaGunluk', N'50', N'Otel 4-5 kisilik klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.MinKisi', N'4', N'Otel 4-5 kisilik minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Otel45.MaksKisi', N'5', N'Otel 4-5 kisilik maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.Ad', N'Betonarme 4-5 Kisilik', N'Konaklama birim tipi etiketi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.KamuGunluk', N'1700', N'Betonarme 4-5 kisilik kamu gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.DigerGunluk', N'2550', N'Betonarme 4-5 kisilik diger gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.BuzdolabiGunluk', N'40', N'Betonarme 4-5 kisilik buzdolabi gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.TelevizyonGunluk', N'40', N'Betonarme 4-5 kisilik televizyon gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.KlimaGunluk', N'50', N'Betonarme 4-5 kisilik klima gunluk ucret', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.MinKisi', N'4', N'Betonarme 4-5 kisilik minimum kisi sayisi', 0, @Now, @Now, N'system', N'system'),
+            (N'Konaklama.Betonarme45.MaksKisi', N'5', N'Betonarme 4-5 kisilik maksimum kisi sayisi', 0, @Now, @Now, N'system', N'system');
             """);
 
         // 3. KampBasvurulari: Kamp2023tenFaydalandiMi → drop, Kamp2025tenFaydalandiMi → add
@@ -172,26 +176,31 @@ public partial class AddKampParametreAndUpdateYears : Migration
             FROM @Donemler d
             WHERE NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemleri] x WHERE x.[Kod] = d.[Kod]);
 
-            DECLARE @AlataTesisId int = (SELECT TOP 1 [Id] FROM [dbo].[Tesisler] WHERE [Ad] LIKE N'%Alata%' AND [IsDeleted] = 0 ORDER BY [Id]);
-            DECLARE @FocaTesisId int = (SELECT TOP 1 [Id] FROM [dbo].[Tesisler] WHERE ([Ad] LIKE N'%Foca%' OR [Ad] LIKE N'%Foça%') AND [IsDeleted] = 0 ORDER BY [Id]);
-
-            IF @AlataTesisId IS NOT NULL
-            BEGIN
-                INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
-                SELECT d.[Id], @AlataTesisId, 1, 1, 52, N'Alata 52 oda, 3-4 kisilik.', 0, @Now, @Now, N'system', N'system'
-                FROM [dbo].[KampDonemleri] d
-                WHERE d.[KampProgramiId] = @ProgramId AND d.[Yil] = 2026
-                  AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = @AlataTesisId);
-            END
-
-            IF @FocaTesisId IS NOT NULL
-            BEGIN
-                INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
-                SELECT d.[Id], @FocaTesisId, 1, 1, 61, N'Foça 61 oda, 4-5 kisilik.', 0, @Now, @Now, N'system', N'system'
-                FROM [dbo].[KampDonemleri] d
-                WHERE d.[KampProgramiId] = @ProgramId AND d.[Yil] = 2026
-                  AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = @FocaTesisId);
-            END
+            ;WITH AktifTesisler AS
+            (
+                SELECT
+                    t.[Id],
+                    CASE
+                        WHEN oda.[OdaSayisi] > 0 THEN oda.[OdaSayisi]
+                        ELSE 50
+                    END AS [ToplamKontenjan]
+                FROM [dbo].[Tesisler] t
+                OUTER APPLY
+                (
+                    SELECT COUNT(1) AS [OdaSayisi]
+                    FROM [dbo].[Binalar] b
+                    INNER JOIN [dbo].[Odalar] o ON o.[BinaId] = b.[Id] AND o.[IsDeleted] = 0 AND o.[AktifMi] = 1
+                    WHERE b.[TesisId] = t.[Id] AND b.[IsDeleted] = 0 AND b.[AktifMi] = 1
+                ) oda
+                WHERE t.[IsDeleted] = 0
+                  AND t.[AktifMi] = 1
+            )
+            INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
+            SELECT d.[Id], t.[Id], 1, 1, t.[ToplamKontenjan], N'Genel kamp atamasi (otomatik).', 0, @Now, @Now, N'system', N'system'
+            FROM [dbo].[KampDonemleri] d
+            CROSS JOIN AktifTesisler t
+            WHERE d.[KampProgramiId] = @ProgramId AND d.[Yil] = 2026
+              AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = t.[Id]);
             """);
     }
 

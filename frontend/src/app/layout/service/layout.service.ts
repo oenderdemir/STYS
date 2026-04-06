@@ -15,6 +15,7 @@ interface LayoutState {
     mobileMenuActive: boolean;
     menuHoverActive: boolean;
     activePath: string | null;
+    expandedRootPaths: string[];
 }
 
 @Injectable({
@@ -35,7 +36,8 @@ export class LayoutService {
         configSidebarVisible: false,
         mobileMenuActive: false,
         menuHoverActive: false,
-        activePath: null
+        activePath: null,
+        expandedRootPaths: []
     });
 
     theme = computed(() => (this.layoutConfig().darkTheme ? 'light' : 'dark'));
@@ -118,5 +120,46 @@ export class LayoutService {
 
     isMobile() {
         return !this.isDesktop();
+    }
+
+    isRootExpanded(path: string): boolean {
+        if (!path) {
+            return false;
+        }
+
+        return this.layoutState().expandedRootPaths.includes(path);
+    }
+
+    setRootExpanded(path: string, expanded: boolean): void {
+        if (!path) {
+            return;
+        }
+
+        this.layoutState.update((prev) => {
+            const exists = prev.expandedRootPaths.includes(path);
+            if (expanded && !exists) {
+                return {
+                    ...prev,
+                    expandedRootPaths: [...prev.expandedRootPaths, path]
+                };
+            }
+
+            if (!expanded && exists) {
+                return {
+                    ...prev,
+                    expandedRootPaths: prev.expandedRootPaths.filter((x) => x !== path)
+                };
+            }
+
+            return prev;
+        });
+    }
+
+    toggleRootExpanded(path: string): void {
+        if (!path) {
+            return;
+        }
+
+        this.setRootExpanded(path, !this.isRootExpanded(path));
     }
 }

@@ -18,6 +18,9 @@
                 @if (canViewAssignments) {
                     <p-button label="Tesis Atamalari" icon="pi pi-sitemap" severity="secondary" [outlined]="true" (onClick)="openAssignments()" />
                 }
+                @if (canViewPuanKurallari) {
+                    <p-button label="Puan Kurallari" icon="pi pi-sliders-h" severity="secondary" [outlined]="true" (onClick)="openPuanKurallari()" />
+                }
                 @if (canManageGlobal) {
                     <p-button label="Yeni Kamp Donemi" icon="pi pi-plus" (onClick)="openNew()" />
                 }

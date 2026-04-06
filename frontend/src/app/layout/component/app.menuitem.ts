@@ -10,9 +10,14 @@ import { filter } from 'rxjs/operators';
     imports: [CommonModule, RouterModule, RippleModule],
     template: `
         @if (root() && isVisible()) {
-            <div class="layout-menuitem-root-text">{{ item().label }}</div>
+            <button type="button" class="layout-menuitem-root-toggle" (click)="toggleRoot($event)">
+                <span class="layout-menuitem-root-text">{{ item().label }}</span>
+                @if (hasChildren()) {
+                    <i class="pi pi-fw layout-root-toggler-icon" [ngClass]="isRootExpanded() ? 'pi-angle-up' : 'pi-angle-down'"></i>
+                }
+            </button>
         }
-        @if ((!hasRouterLink() || hasChildren()) && isVisible()) {
+        @if ((!hasRouterLink() || hasChildren()) && isVisible() && (!root() || !hasChildren())) {
             <a
                 [attr.href]="item().url"
                 (click)="itemClick($event)"
@@ -57,7 +62,7 @@ import { filter } from 'rxjs/operators';
                 }
             </a>
         }
-        @if (hasChildren() && isVisible() && (root() || isActive())) {
+        @if (hasChildren() && isVisible() && (root() ? isRootExpanded() : isActive())) {
             <ul
                 [animate.enter]="initialized() ? 'p-submenu-enter' : null"
                 [animate.leave]="'p-submenu-leave'"
@@ -92,6 +97,19 @@ export class AppMenuitem {
     hasChildren = computed(() => this.item()?.items && this.item()?.items.length > 0);
 
     hasRouterLink = computed(() => !!this.item()?.routerLink);
+
+    isRootExpanded = computed(() => {
+        if (!this.root()) {
+            return false;
+        }
+
+        const path = this.fullPath();
+        if (!path) {
+            return false;
+        }
+
+        return this.layoutService.isRootExpanded(path) || this.isActive();
+    });
 
     fullPath = computed(() => {
         const itemPath = this.item()?.path;
@@ -189,5 +207,21 @@ export class AppMenuitem {
                 menuHoverActive: false
             }));
         }
+    }
+
+    toggleRoot(event: Event): void {
+        if (!this.root() || !this.hasChildren()) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const path = this.fullPath();
+        if (!path) {
+            return;
+        }
+
+        this.layoutService.toggleRootExpanded(path);
     }
 }

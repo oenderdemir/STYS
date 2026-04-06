@@ -34,7 +34,9 @@ public class KampBasvuruService : IKampBasvuruService
 
     public async Task<KampBasvuruBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
     {
+        await _parametreService.LoadAsync(cancellationToken);
         var lookupBaglami = await LoadLookupBaglamiAsync(cancellationToken);
+        var konaklamaBirimleri = BuildBirimler();
         var donemler = await _dbContext.KampDonemleri
             .Where(x => x.AktifMi)
             .Include(x => x.TesisAtamalari.Where(y => y.AktifMi && y.BasvuruyaAcikMi))
@@ -45,15 +47,16 @@ public class KampBasvuruService : IKampBasvuruService
         return new KampBasvuruBaglamDto
         {
             Donemler = donemler
-                .Where(x => x.TesisAtamalari.Any(y => y.Tesis != null && BuildBirimler(y.Tesis).Count > 0))
+                .Where(x => x.TesisAtamalari.Any(y => y.Tesis != null && konaklamaBirimleri.Count > 0))
                 .Select(x => new KampBasvuruDonemSecenekDto
                 {
                     Id = x.Id,
+                    KampProgramiId = x.KampProgramiId,
                     Ad = x.Ad,
                     Yil = x.Yil,
                     KonaklamaBaslangicTarihi = x.KonaklamaBaslangicTarihi,
                     KonaklamaBitisTarihi = x.KonaklamaBitisTarihi,
-                    GecmisKatilimYillari = BuildGecmisKatilimYillari(x.Yil, lookupBaglami.GetKuralSeti(x.Yil)),
+                    GecmisKatilimYillari = BuildGecmisKatilimYillari(x.Yil, lookupBaglami.GetKuralSeti(x.KampProgramiId, x.Yil)),
                     Tesisler = x.TesisAtamalari
                         .Where(y => y.Tesis != null)
                         .Select(y => new KampBasvuruTesisSecenekDto
@@ -61,7 +64,15 @@ public class KampBasvuruService : IKampBasvuruService
                             TesisId = y.TesisId,
                             TesisAd = y.Tesis!.Ad,
                             ToplamKontenjan = y.ToplamKontenjan,
-                            Birimler = BuildBirimler(y.Tesis!)
+                            Birimler = konaklamaBirimleri
+                                .Select(b => new KampKonaklamaBirimiSecenekDto
+                                {
+                                    Kod = b.Kod,
+                                    Ad = b.Ad,
+                                    MinimumKisi = b.MinimumKisi,
+                                    MaksimumKisi = b.MaksimumKisi
+                                })
+                                .ToList()
                         })
                         .Where(y => y.Birimler.Count > 0)
                         .OrderBy(y => y.TesisAd)
@@ -72,6 +83,7 @@ public class KampBasvuruService : IKampBasvuruService
             BasvuruSahibiTipleri = lookupBaglami.BasvuruSahibiTipleri
                 .Select(x => new KampBasvuruSahibiTipSecenekDto
                 {
+                    Id = x.Id,
                     Kod = x.Kod,
                     Ad = x.Ad,
                     VarsayilanKatilimciTipiKodu = x.VarsayilanKatilimciTipiKodu
@@ -118,7 +130,7 @@ public class KampBasvuruService : IKampBasvuruService
         onizleme.GecmisKatilimYillari = birlesikGecmisKatilimYillari;
 
         await PopulateKontenjanAsync(request, atama, onizleme, cancellationToken);
-        await _puanlamaService.PuanlaAsync(request, onizleme, kampDonemi.Yil, birlesikGecmisKatilimYillari, cancellationToken);
+        await _puanlamaService.PuanlaAsync(request, onizleme, kampDonemi.KampProgramiId, kampDonemi.Yil, birlesikGecmisKatilimYillari, cancellationToken);
         await _ucretHesaplamaService.HesaplaAsync(request, kampDonemi, tesis, onizleme, cancellationToken);
         onizleme.BasvuruGecerliMi = onizleme.Hatalar.Count == 0;
         return onizleme;
@@ -338,10 +350,10 @@ public class KampBasvuruService : IKampBasvuruService
             onizleme.Hatalar.Add("Basvuru sahibi tipi gecersiz.");
         }
 
-        var kuralSeti = lookupBaglami.GetKuralSeti(kampDonemi.Yil);
+        var kuralSeti = lookupBaglami.GetKuralSeti(kampDonemi.KampProgramiId, kampDonemi.Yil);
         if (kuralSeti is null)
         {
-            onizleme.Hatalar.Add($"{kampDonemi.Yil} yili icin aktif kamp kural seti bulunamadi.");
+            onizleme.Hatalar.Add($"{kampDonemi.Yil} yili ve secili program icin aktif kamp kural seti bulunamadi.");
         }
 
         if (!atama.AktifMi || !atama.BasvuruyaAcikMi)
@@ -352,7 +364,7 @@ public class KampBasvuruService : IKampBasvuruService
         KampKonaklamaKonfigurasyonu konfigurasyon;
         try
         {
-            konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(tesis, request.KonaklamaBirimiTipi);
+            konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(_parametreService, request.KonaklamaBirimiTipi);
         }
         catch (Exception ex)
         {
@@ -683,52 +695,71 @@ public class KampBasvuruService : IKampBasvuruService
             ? string.Empty
             : basvuruNo.Trim().ToUpperInvariant();
 
-    private static List<KampKonaklamaBirimiSecenekDto> BuildBirimler(Tesis tesis)
+    private List<KampKonaklamaBirimiSecenekDto> BuildBirimler()
     {
-        var tesisAd = (tesis.Ad ?? string.Empty).Trim().ToLowerInvariant();
-        if (tesisAd.Contains("alata"))
+        var byPrefix = _parametreService.GetByPrefix(KampKonaklamaBirimiTipleri.ParametrePrefix);
+        if (byPrefix.Count == 0)
         {
-            return
-            [
-                new KampKonaklamaBirimiSecenekDto
-                {
-                    Kod = KampKonaklamaBirimiTipleri.AlataStandart,
-                    Ad = "Alata Standart",
-                    MinimumKisi = 3,
-                    MaksimumKisi = 4
-                }
-            ];
+            return [];
         }
 
-        if (tesisAd.Contains("foca") || tesisAd.Contains("foça"))
+        var birimKodlari = byPrefix.Keys
+            .Select(x => x.Split('.', StringSplitOptions.RemoveEmptyEntries))
+            .Where(x => x.Length >= 3)
+            .Select(x => x[1])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var result = new List<KampKonaklamaBirimiSecenekDto>();
+        foreach (var birimKodu in birimKodlari)
         {
-            return
-            [
-                new KampKonaklamaBirimiSecenekDto
+            try
+            {
+                var konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(_parametreService, birimKodu);
+                var birimAdi = _parametreService.GetString(
+                    KampKonaklamaBirimiTipleri.BuildParametreKodu(birimKodu, KampKonaklamaBirimiTipleri.AlanAd),
+                    NormalizeBirimAdi(birimKodu)) ?? birimKodu;
+
+                result.Add(new KampKonaklamaBirimiSecenekDto
                 {
-                    Kod = KampKonaklamaBirimiTipleri.FocaPrefabrik,
-                    Ad = "Foça Prefabrik",
-                    MinimumKisi = 4,
-                    MaksimumKisi = 5
-                },
-                new KampKonaklamaBirimiSecenekDto
-                {
-                    Kod = KampKonaklamaBirimiTipleri.FocaOtel,
-                    Ad = "Foça Otel",
-                    MinimumKisi = 4,
-                    MaksimumKisi = 5
-                },
-                new KampKonaklamaBirimiSecenekDto
-                {
-                    Kod = KampKonaklamaBirimiTipleri.FocaBetonarme,
-                    Ad = "Foça Betonarme",
-                    MinimumKisi = 4,
-                    MaksimumKisi = 5
-                }
-            ];
+                    Kod = birimKodu,
+                    Ad = birimAdi,
+                    MinimumKisi = konfigurasyon.MinimumKisi,
+                    MaksimumKisi = konfigurasyon.MaksimumKisi
+                });
+            }
+            catch
+            {
+                // Eksik/gecersiz parametreli birimler baglamda gosterilmez.
+            }
         }
 
-        return [];
+        return result;
+    }
+
+    private static string NormalizeBirimAdi(string birimKodu)
+    {
+        if (string.IsNullOrWhiteSpace(birimKodu))
+        {
+            return string.Empty;
+        }
+
+        var chars = birimKodu.Trim().ToCharArray();
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            var prev = i > 0 ? chars[i - 1] : '\0';
+            if (i > 0 && char.IsUpper(c) && (char.IsLower(prev) || char.IsDigit(prev)))
+            {
+                sb.Append(' ');
+            }
+
+            sb.Append(c);
+        }
+
+        return sb.ToString();
     }
 
     private KampBasvuruDto MapToDto(
@@ -817,9 +848,9 @@ public class KampBasvuruService : IKampBasvuruService
             BasvuruSahibiTipleri = basvuruSahibiTipleri;
             KatilimciTipleri = katilimciTipleri;
             AkrabalikTipleri = akrabalikTipleri;
-            KuralSetleriByYil = kuralSetleri
-                .GroupBy(x => x.KampYili)
-                .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Id).First());
+            KuralSetleriByProgramYil = kuralSetleri
+                .GroupBy(x => new { x.KampProgramiId, x.KampYili })
+                .ToDictionary(x => (x.Key.KampProgramiId, x.Key.KampYili), x => x.OrderByDescending(y => y.Id).First());
             BasvuruSahibiTipleriByKod = basvuruSahibiTipleri.ToDictionary(x => x.Kod, x => x);
             KatilimciTipleriByKod = katilimciTipleri.ToDictionary(x => x.Kod, x => x);
             AkrabalikTipleriByKod = akrabalikTipleri.ToDictionary(x => x.Kod, x => x);
@@ -838,11 +869,11 @@ public class KampBasvuruService : IKampBasvuruService
 
         public Dictionary<string, KampAkrabalikTipi> AkrabalikTipleriByKod { get; }
 
-        public Dictionary<int, KampKuralSeti> KuralSetleriByYil { get; }
+        public Dictionary<(int KampProgramiId, int KampYili), KampKuralSeti> KuralSetleriByProgramYil { get; }
 
         public string? BasvuruSahibiAkrabalikKodu { get; }
 
-        public KampKuralSeti? GetKuralSeti(int kampYili)
-            => KuralSetleriByYil.GetValueOrDefault(kampYili);
+        public KampKuralSeti? GetKuralSeti(int kampProgramiId, int kampYili)
+            => KuralSetleriByProgramYil.GetValueOrDefault((kampProgramiId, kampYili));
     }
 }

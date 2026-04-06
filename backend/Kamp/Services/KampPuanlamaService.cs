@@ -7,17 +7,16 @@ namespace STYS.Kamp.Services;
 public class KampPuanlamaService : IKampPuanlamaService
 {
     private readonly StysAppDbContext _dbContext;
-    private readonly IKampParametreService _params;
 
-    public KampPuanlamaService(StysAppDbContext dbContext, IKampParametreService kampParametreService)
+    public KampPuanlamaService(StysAppDbContext dbContext)
     {
         _dbContext = dbContext;
-        _params = kampParametreService;
     }
 
     public async Task<KampBasvuruOnizlemeDto> PuanlaAsync(
         KampBasvuruRequestDto request,
         KampBasvuruOnizlemeDto onizleme,
+        int kampProgramiId,
         int kampYili,
         IReadOnlyCollection<int> gecmisKatilimYillari,
         CancellationToken cancellationToken = default)
@@ -34,7 +33,7 @@ public class KampPuanlamaService : IKampPuanlamaService
 
         var kuralSeti = await _dbContext.KampKuralSetleri
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.AktifMi && x.KampYili == kampYili, cancellationToken);
+            .FirstOrDefaultAsync(x => x.AktifMi && x.KampProgramiId == kampProgramiId && x.KampYili == kampYili, cancellationToken);
 
         if (kuralSeti is null)
         {
@@ -42,25 +41,35 @@ public class KampPuanlamaService : IKampPuanlamaService
             return onizleme;
         }
 
-        var puan = basvuruSahibiTipi.TabanPuan;
+        var tipKurali = await _dbContext.KampProgramiBasvuruSahibiTipKurallari
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.AktifMi && x.KampProgramiId == kampProgramiId && x.KampBasvuruSahibiTipiId == basvuruSahibiTipi.Id, cancellationToken);
 
-        if (basvuruSahibiTipi.HizmetYiliPuaniAktifMi)
+        if (tipKurali is null)
+        {
+            onizleme.Hatalar.Add("Secilen kamp programi icin basvuru sahibi tipi puan kurali bulunamadi.");
+            return onizleme;
+        }
+
+        var puan = tipKurali.TabanPuan;
+
+        if (tipKurali.HizmetYiliPuaniAktifMi)
         {
             puan += Math.Max(request.HizmetYili, 0);
         }
 
-        if (basvuruSahibiTipi.EmekliBonusPuani > 0)
+        if (tipKurali.EmekliBonusPuani > 0)
         {
-            puan += basvuruSahibiTipi.EmekliBonusPuani;
+            puan += tipKurali.EmekliBonusPuani;
         }
 
-        puan += request.Katilimcilar.Count * _params.GetInt(KampParametreKodlari.KatilimciBasinaPuan, 10);
+        puan += request.Katilimcilar.Count * Math.Max(0, kuralSeti.KatilimciBasinaPuan);
 
         var dikkateAlinanGecmisYillar = GetDikkateAlinanGecmisYillar(kampYili, kuralSeti.OncekiYilSayisi, gecmisKatilimYillari);
         puan -= dikkateAlinanGecmisYillar.Count * Math.Max(0, kuralSeti.KatilimCezaPuani);
 
         onizleme.Puan = puan;
-        onizleme.OncelikSirasi = basvuruSahibiTipi.OncelikSirasi;
+        onizleme.OncelikSirasi = tipKurali.OncelikSirasi;
         onizleme.GecmisKatilimYillari = gecmisKatilimYillari
             .Where(x => x > 0 && x < kampYili)
             .Distinct()

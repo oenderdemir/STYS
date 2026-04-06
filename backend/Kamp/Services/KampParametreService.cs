@@ -41,4 +41,26 @@ public class KampParametreService : IKampParametreService
             return result;
         return defaultValue;
     }
+
+    public string? GetString(string kod, string? defaultValue = null)
+    {
+        if (_cache != null && _cache.TryGetValue(kod, out var val))
+        {
+            return val;
+        }
+
+        return defaultValue;
+    }
+
+    public IReadOnlyDictionary<string, string> GetByPrefix(string prefix)
+    {
+        if (_cache is null || string.IsNullOrWhiteSpace(prefix))
+        {
+            return new Dictionary<string, string>();
+        }
+
+        return _cache
+            .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+    }
 }

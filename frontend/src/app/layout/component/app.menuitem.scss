@@ -28,13 +28,29 @@
     }
 }
 
+.layout-menuitem-root-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0.25rem 0;
+    margin: 1rem 0 0.35rem;
+    cursor: pointer;
+}
+
 .layout-menuitem-root-text {
     font-size: 0.78rem;
     letter-spacing: 0.08em;
     font-weight: 700;
     text-transform: uppercase;
     color: #475569;
-    margin: 1rem 0 0.5rem;
+}
+
+.layout-root-toggler-icon {
+    font-size: 0.78rem;
+    color: #64748b;
 }
 
 .layout-root-menuitem > a {

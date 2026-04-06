@@ -6,4 +6,6 @@ public interface IKampParametreService
     decimal GetDecimal(string kod, decimal defaultValue = 0m);
     int GetInt(string kod, int defaultValue = 0);
     DateTime GetDate(string kod, DateTime defaultValue = default);
+    string? GetString(string kod, string? defaultValue = null);
+    IReadOnlyDictionary<string, string> GetByPrefix(string prefix);
 }

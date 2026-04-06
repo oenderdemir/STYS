@@ -72,26 +72,31 @@ public partial class Seed2025YazKampiData : Migration
             FROM @Donemler d
             WHERE NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemleri] x WHERE x.[Kod] = d.[Kod]);
 
-            DECLARE @AlataTesisId int = (SELECT TOP 1 [Id] FROM [dbo].[Tesisler] WHERE [Ad] LIKE N'%Alata%' AND [IsDeleted] = 0 ORDER BY [Id]);
-            DECLARE @FocaTesisId int = (SELECT TOP 1 [Id] FROM [dbo].[Tesisler] WHERE ([Ad] LIKE N'%Foca%' OR [Ad] LIKE N'%Foça%') AND [IsDeleted] = 0 ORDER BY [Id]);
-
-            IF @AlataTesisId IS NOT NULL
-            BEGIN
-                INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
-                SELECT d.[Id], @AlataTesisId, 1, 1, 52, N'Alata 52 oda, 3-4 kisilik.', 0, @Now, @Now, N'system', N'system'
-                FROM [dbo].[KampDonemleri] d
-                WHERE d.[KampProgramiId] = @ProgramId
-                  AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = @AlataTesisId);
-            END
-
-            IF @FocaTesisId IS NOT NULL
-            BEGIN
-                INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
-                SELECT d.[Id], @FocaTesisId, 1, 1, 61, N'Foça 61 oda, 4-5 kisilik.', 0, @Now, @Now, N'system', N'system'
-                FROM [dbo].[KampDonemleri] d
-                WHERE d.[KampProgramiId] = @ProgramId
-                  AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = @FocaTesisId);
-            END
+            ;WITH AktifTesisler AS
+            (
+                SELECT
+                    t.[Id],
+                    CASE
+                        WHEN oda.[OdaSayisi] > 0 THEN oda.[OdaSayisi]
+                        ELSE 50
+                    END AS [ToplamKontenjan]
+                FROM [dbo].[Tesisler] t
+                OUTER APPLY
+                (
+                    SELECT COUNT(1) AS [OdaSayisi]
+                    FROM [dbo].[Binalar] b
+                    INNER JOIN [dbo].[Odalar] o ON o.[BinaId] = b.[Id] AND o.[IsDeleted] = 0 AND o.[AktifMi] = 1
+                    WHERE b.[TesisId] = t.[Id] AND b.[IsDeleted] = 0 AND b.[AktifMi] = 1
+                ) oda
+                WHERE t.[IsDeleted] = 0
+                  AND t.[AktifMi] = 1
+            )
+            INSERT INTO [dbo].[KampDonemiTesisleri] ([KampDonemiId], [TesisId], [AktifMi], [BasvuruyaAcikMi], [ToplamKontenjan], [Aciklama], [IsDeleted], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy])
+            SELECT d.[Id], t.[Id], 1, 1, t.[ToplamKontenjan], N'Genel kamp atamasi (otomatik).', 0, @Now, @Now, N'system', N'system'
+            FROM [dbo].[KampDonemleri] d
+            CROSS JOIN AktifTesisler t
+            WHERE d.[KampProgramiId] = @ProgramId
+              AND NOT EXISTS (SELECT 1 FROM [dbo].[KampDonemiTesisleri] x WHERE x.[KampDonemiId] = d.[Id] AND x.[TesisId] = t.[Id]);
             """);
     }
 

@@ -1,0 +1,121 @@
+<p-toast />
+
+<div class="page-shell">
+    <section class="page-card">
+        <p-toolbar styleClass="mb-3">
+            <ng-template #start>
+                <div>
+                    <h2 class="section-title m-0">Kamp Puan Kurallari</h2>
+                    <p class="section-subtitle m-0 mt-2">
+                        Puan hesaplama davranisini belirleyen kural setleri, basvuru sahibi tipleri ve katilimci basi puan buradan yonetilir.
+                    </p>
+                </div>
+            </ng-template>
+            <ng-template #end>
+                <div class="flex gap-2">
+                    <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="loading || saving" (onClick)="load()" />
+                    <p-button label="Kaydet" icon="pi pi-save" [loading]="saving" [disabled]="loading || saving || !canManage" (onClick)="save()" />
+                </div>
+            </ng-template>
+        </p-toolbar>
+
+        @if (!canManage) {
+            <p class="text-color-secondary mt-0 mb-3">
+                Bu ekranda degisiklik yapma yetkiniz bulunmuyor. Sadece goruntuleme yapabilirsiniz.
+            </p>
+        }
+
+        <div class="flex justify-content-between align-items-center mb-2">
+            <h3 class="m-0 text-lg">Kural Setleri (Program + Yil Bazli)</h3>
+            <p-button label="Kural Seti Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addKuralSeti()" />
+        </div>
+
+        <p-table [value]="kuralSetleri" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '54rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Kamp Programi</th>
+                    <th>Yil</th>
+                    <th>Onceki Yil Sayisi</th>
+                    <th>Katilim Ceza Puani</th>
+                    <th>Katilimci Basina Puan</th>
+                    <th>Aktif</th>
+                    <th style="width: 6rem">Islem</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-item let-rowIndex="rowIndex">
+                <tr>
+                    <td>
+                        <select [(ngModel)]="item.kampProgramiId" [disabled]="loading || saving || !canManage">
+                            @for (program of programlar; track program.id) {
+                                <option [ngValue]="program.id">{{ program.ad }}</option>
+                            }
+                        </select>
+                    </td>
+                    <td><input pInputText type="number" min="2000" max="2100" [(ngModel)]="item.kampYili" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input pInputText type="number" min="0" max="10" [(ngModel)]="item.oncekiYilSayisi" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.katilimCezaPuani" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.katilimciBasinaPuan" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
+                    <td>
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeKuralSeti(rowIndex)" />
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+
+        <div class="flex justify-content-between align-items-center mb-2">
+            <h3 class="m-0 text-lg">Basvuru Sahibi Tipleri</h3>
+            <p-button label="Tip Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addBasvuruSahibiTipi()" />
+        </div>
+
+        <p-table [value]="basvuruSahibiTipleri" [loading]="loading" dataKey="id" styleClass="kamp-table" [tableStyle]="{ 'min-width': '82rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Program</th>
+                    <th>Global Tip</th>
+                    <th>Oncelik</th>
+                    <th>Taban Puan</th>
+                    <th>Hizmet Yili Puani</th>
+                    <th>Emekli Bonus</th>
+                    <th>Varsayilan Katilimci Tipi</th>
+                    <th>Aktif</th>
+                    <th style="width: 6rem">Islem</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-item let-rowIndex="rowIndex">
+                <tr>
+                    <td>
+                        <select [(ngModel)]="item.kampProgramiId" [disabled]="loading || saving || !canManage">
+                            @for (program of programlar; track program.id) {
+                                <option [ngValue]="program.id">{{ program.ad }}</option>
+                            }
+                        </select>
+                    </td>
+                    <td>
+                        <select [(ngModel)]="item.kampBasvuruSahibiTipiId" [disabled]="loading || saving || !canManage" (ngModelChange)="onBasvuruSahibiTipiChange(item)">
+                            @for (tip of globalBasvuruSahibiTipleri; track tip.id) {
+                                <option [ngValue]="tip.id">{{ tip.ad }} ({{ tip.kod }})</option>
+                            }
+                        </select>
+                    </td>
+                    <td><input pInputText type="number" min="0" max="999" [(ngModel)]="item.oncelikSirasi" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input pInputText type="number" min="0" max="5000" [(ngModel)]="item.tabanPuan" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input type="checkbox" [(ngModel)]="item.hizmetYiliPuaniAktifMi" [disabled]="loading || saving || !canManage" /></td>
+                    <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.emekliBonusPuani" [disabled]="loading || saving || !canManage" /></td>
+                    <td>
+                        <select [(ngModel)]="item.varsayilanKatilimciTipiKodu" [disabled]="loading || saving || !canManage">
+                            <option [ngValue]="null">-</option>
+                            @for (tip of katilimciTipleri; track tip.kod) {
+                                <option [ngValue]="tip.kod">{{ tip.ad }}</option>
+                            }
+                        </select>
+                    </td>
+                    <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
+                    <td>
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeBasvuruSahibiTipi(rowIndex)" />
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </section>
+</div>

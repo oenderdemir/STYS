@@ -15,6 +15,9 @@
                 @if (canViewDonemler) {
                     <p-button label="Kamp Donemleri" icon="pi pi-external-link" severity="secondary" [outlined]="true" (onClick)="openDonemler()" />
                 }
+                @if (canViewPuanKurallari) {
+                    <p-button label="Puan Kurallari" icon="pi pi-sliders-h" severity="secondary" [outlined]="true" (onClick)="openPuanKurallari()" />
+                }
                 @if (canManageGlobal) {
                     <p-button label="Yeni Kamp Programi" icon="pi pi-plus" (onClick)="openNew()" />
                 }

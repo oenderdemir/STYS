@@ -24,7 +24,7 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
         KampBasvuruOnizlemeDto onizleme,
         CancellationToken cancellationToken = default)
     {
-        var konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(tesis, request.KonaklamaBirimiTipi);
+        var konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(_params, request.KonaklamaBirimiTipi);
         var gunSayisi = (kampDonemi.KonaklamaBitisTarihi.Date - kampDonemi.KonaklamaBaslangicTarihi.Date).Days + 1;
         var toplamGunluk = 0m;
         var avansToplami = 0m;

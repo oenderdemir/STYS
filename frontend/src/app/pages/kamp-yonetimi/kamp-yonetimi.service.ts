@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampNoShowIptalSonucDto, KampProgramiDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto } from './kamp-yonetimi.dto';
+import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampNoShowIptalSonucDto, KampProgramiDto, KampPuanKuraliYonetimBaglamDto, KampPuanKuraliYonetimKaydetRequestDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto } from './kamp-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KampYonetimiService {
@@ -84,6 +84,30 @@ export class KampYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp programi silinemedi.');
+            })
+        );
+    }
+
+    getKampPuanKuraliYonetimBaglam(): Observable<KampPuanKuraliYonetimBaglamDto> {
+        return this.http.get<ApiResponse<KampPuanKuraliYonetimBaglamDto>>(`${this.apiBaseUrl}/ui/kamppuankurali/yonetim-baglam`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp puan kurali baglami alinamadi.');
+            })
+        );
+    }
+
+    kaydetKampPuanKuraliYonetimBaglam(payload: KampPuanKuraliYonetimKaydetRequestDto): Observable<KampPuanKuraliYonetimBaglamDto> {
+        return this.http.put<ApiResponse<KampPuanKuraliYonetimBaglamDto>>(`${this.apiBaseUrl}/ui/kamppuankurali/yonetim-baglam`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp puan kurallari kaydedilemedi.');
             })
         );
     }

@@ -1,0 +1,16 @@
+.puan-parametre-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.puan-parametre-card input {
+    width: 10rem;
+}
+
+:host ::ng-deep .kamp-table input[type='number'],
+:host ::ng-deep .kamp-table input[type='text'],
+:host ::ng-deep .kamp-table select {
+    width: 100%;
+    min-width: 7rem;
+}

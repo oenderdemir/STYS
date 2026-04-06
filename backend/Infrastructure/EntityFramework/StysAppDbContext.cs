@@ -65,6 +65,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KampBasvuruSahibi> KampBasvuruSahipleri => Set<KampBasvuruSahibi>();
     public DbSet<KampBasvuruGecmisKatilim> KampBasvuruGecmisKatilimlari => Set<KampBasvuruGecmisKatilim>();
     public DbSet<KampKuralSeti> KampKuralSetleri => Set<KampKuralSeti>();
+    public DbSet<KampProgramiBasvuruSahibiTipKurali> KampProgramiBasvuruSahibiTipKurallari => Set<KampProgramiBasvuruSahibiTipKurali>();
     public DbSet<KampBasvuruSahibiTipi> KampBasvuruSahibiTipleri => Set<KampBasvuruSahibiTipi>();
     public DbSet<KampKatilimciTipi> KampKatilimciTipleri => Set<KampKatilimciTipi>();
     public DbSet<KampAkrabalikTipi> KampAkrabalikTipleri => Set<KampAkrabalikTipi>();
@@ -550,9 +551,33 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<KampKuralSeti>(entity =>
         {
             entity.ToTable("KampKuralSetleri", "dbo");
-            entity.HasIndex(x => x.KampYili)
+            entity.HasIndex(x => new { x.KampProgramiId, x.KampYili })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampProgrami)
+                .WithMany()
+                .HasForeignKey(x => x.KampProgramiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampProgramiBasvuruSahibiTipKurali>(entity =>
+        {
+            entity.ToTable("KampProgramiBasvuruSahibiTipKurallari", "dbo");
+            entity.Property(x => x.VarsayilanKatilimciTipiKodu).HasMaxLength(64);
+            entity.HasIndex(x => new { x.KampProgramiId, x.KampBasvuruSahibiTipiId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampProgrami)
+                .WithMany()
+                .HasForeignKey(x => x.KampProgramiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KampBasvuruSahibiTipi)
+                .WithMany()
+                .HasForeignKey(x => x.KampBasvuruSahibiTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<KampBasvuruSahibiTipi>(entity =>

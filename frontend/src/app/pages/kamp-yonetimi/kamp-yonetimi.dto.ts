@@ -11,6 +11,50 @@ export interface KampProgramiSecenekDto {
     ad: string;
 }
 
+export interface KampPuanKuralSetiDto {
+    id?: number | null;
+    kampProgramiId: number;
+    kampProgramiAd?: string | null;
+    kampYili: number;
+    oncekiYilSayisi: number;
+    katilimCezaPuani: number;
+    katilimciBasinaPuan: number;
+    aktifMi: boolean;
+}
+
+export interface KampPuanBasvuruSahibiTipiDto {
+    id?: number | null;
+    kampProgramiId: number;
+    kampBasvuruSahibiTipiId: number;
+    kod: string;
+    ad: string;
+    oncelikSirasi: number;
+    tabanPuan: number;
+    hizmetYiliPuaniAktifMi: boolean;
+    emekliBonusPuani: number;
+    varsayilanKatilimciTipiKodu?: string | null;
+    aktifMi: boolean;
+}
+
+export interface KampPuanBasvuruSahibiTipSecenekDto {
+    id: number;
+    kod: string;
+    ad: string;
+}
+
+export interface KampPuanKuraliYonetimBaglamDto {
+    programlar: KampProgramiSecenekDto[];
+    globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[];
+    kuralSetleri: KampPuanKuralSetiDto[];
+    basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
+    katilimciTipleri: KampSecenekDto[];
+}
+
+export interface KampPuanKuraliYonetimKaydetRequestDto {
+    kuralSetleri: KampPuanKuralSetiDto[];
+    basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
+}
+
 export interface KampTesisDto {
     id: number;
     ad: string;
@@ -61,6 +105,7 @@ export interface KampBasvuruBaglamDto {
 
 export interface KampBasvuruDonemSecenekDto {
     id: number;
+    kampProgramiId: number;
     ad: string;
     yil: number;
     konaklamaBaslangicTarihi: string;
@@ -89,6 +134,7 @@ export interface KampSecenekDto {
 }
 
 export interface KampBasvuruSahibiTipSecenekDto extends KampSecenekDto {
+    id: number;
     varsayilanKatilimciTipiKodu?: string | null;
 }
 

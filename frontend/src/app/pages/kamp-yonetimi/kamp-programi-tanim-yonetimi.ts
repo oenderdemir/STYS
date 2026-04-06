@@ -61,6 +61,10 @@ export class KampProgramiTanimYonetimi implements OnInit, OnDestroy {
         return this.hasAnyPermission('KampDonemiTanimYonetimi.View', 'KampDonemiYonetimi.View');
     }
 
+    get canViewPuanKurallari(): boolean {
+        return this.hasAnyPermission('KampPuanKuraliYonetimi.View', 'KampPuanKuraliYonetimi.Menu');
+    }
+
     ngOnInit(): void {
         this.loadKampProgramlari(this.pageNumber, this.pageSize);
     }
@@ -109,6 +113,10 @@ export class KampProgramiTanimYonetimi implements OnInit, OnDestroy {
 
     openDonemler(): void {
         void this.router.navigate(['/kamp-donemleri']);
+    }
+
+    openPuanKurallari(): void {
+        void this.router.navigate(['/kamp-puan-kurallari']);
     }
 
     openNew(): void {

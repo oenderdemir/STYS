@@ -14,9 +14,9 @@ public class KampKurallariTests
     public async Task Puanlama_TarimOrmanPersoneliIcinTalimatPuanlariniUygular()
     {
         await using var dbContext = CreateDbContext();
-        await SeedLookupDataAsync(dbContext);
+        var kampProgramiId = await SeedLookupDataAsync(dbContext);
 
-        var service = new KampPuanlamaService(dbContext, new FakeKampParametreService());
+        var service = new KampPuanlamaService(dbContext);
         var onizleme = new KampBasvuruOnizlemeDto();
         var request = new KampBasvuruRequestDto
         {
@@ -31,7 +31,7 @@ public class KampKurallariTests
             ]
         };
 
-        await service.PuanlaAsync(request, onizleme, 2025, request.GecmisKatilimYillari);
+        await service.PuanlaAsync(request, onizleme, kampProgramiId, 2025, request.GecmisKatilimYillari);
 
         Assert.Equal(1, onizleme.OncelikSirasi);
         Assert.Equal(62, onizleme.Puan);
@@ -50,10 +50,10 @@ public class KampKurallariTests
             KonaklamaBaslangicTarihi = new DateTime(2025, 6, 2),
             KonaklamaBitisTarihi = new DateTime(2025, 6, 6)
         };
-        var tesis = new Tesis { Ad = "Foça" };
+        var tesis = new Tesis { Ad = "Test Tesisi" };
         var request = new KampBasvuruRequestDto
         {
-            KonaklamaBirimiTipi = KampKonaklamaBirimiTipleri.FocaPrefabrik,
+            KonaklamaBirimiTipi = "TestBirim",
             KlimaTalepEdildiMi = true,
             Katilimcilar =
             [
@@ -66,10 +66,10 @@ public class KampKurallariTests
 
         await service.HesaplaAsync(request, donem, tesis, onizleme);
 
-        Assert.Equal(5175m, onizleme.GunlukToplamTutar);
-        Assert.Equal(25875m, onizleme.DonemToplamTutar);
+        Assert.Equal(5668.75m, onizleme.GunlukToplamTutar);
+        Assert.Equal(28343.75m, onizleme.DonemToplamTutar);
         Assert.Equal(6800m, onizleme.AvansToplamTutar);
-        Assert.Equal(19075m, onizleme.KalanOdemeTutari);
+        Assert.Equal(21543.75m, onizleme.KalanOdemeTutari);
     }
 
     [Fact]
@@ -104,8 +104,16 @@ public class KampKurallariTests
         return new StysAppDbContext(options);
     }
 
-    private static async Task SeedLookupDataAsync(StysAppDbContext dbContext)
+    private static async Task<int> SeedLookupDataAsync(StysAppDbContext dbContext)
     {
+        var kampProgrami = new KampProgrami
+        {
+            Kod = "GENEL",
+            Ad = "Genel Kamp Programi",
+            AktifMi = true
+        };
+        dbContext.KampProgramlari.Add(kampProgrami);
+
         dbContext.KampBasvuruSahibiTipleri.Add(new KampBasvuruSahibiTipi
         {
             Kod = "TarimOrmanPersoneli",
@@ -123,23 +131,60 @@ public class KampKurallariTests
 
         dbContext.KampKuralSetleri.Add(new KampKuralSeti
         {
+            KampProgrami = kampProgrami,
             KampYili = 2025,
             OncekiYilSayisi = 2,
             KatilimCezaPuani = 20,
+            KatilimciBasinaPuan = 10,
+            AktifMi = true
+        });
+
+        var basvuruSahibiTipi = dbContext.KampBasvuruSahibiTipleri.Local.First();
+        dbContext.KampProgramiBasvuruSahibiTipKurallari.Add(new KampProgramiBasvuruSahibiTipKurali
+        {
+            KampProgrami = kampProgrami,
+            KampBasvuruSahibiTipi = basvuruSahibiTipi,
+            OncelikSirasi = basvuruSahibiTipi.OncelikSirasi,
+            TabanPuan = basvuruSahibiTipi.TabanPuan,
+            HizmetYiliPuaniAktifMi = basvuruSahibiTipi.HizmetYiliPuaniAktifMi,
+            EmekliBonusPuani = basvuruSahibiTipi.EmekliBonusPuani,
+            VarsayilanKatilimciTipiKodu = "Kamu",
             AktifMi = true
         });
 
         await dbContext.SaveChangesAsync();
+        return kampProgrami.Id;
     }
 
     private sealed class FakeKampParametreService : IKampParametreService
     {
+        private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanMinKisi)] = "4",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanMaksKisi)] = "5",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanKamuGunluk)] = "1550",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanDigerGunluk)] = "2325",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanBuzdolabiGunluk)] = "40",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanTelevizyonGunluk)] = "40",
+            [KampKonaklamaBirimiTipleri.BuildParametreKodu("TestBirim", KampKonaklamaBirimiTipleri.AlanKlimaGunluk)] = "50"
+        };
+
         public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public decimal GetDecimal(string kod, decimal defaultValue = 0m) => defaultValue;
+        public decimal GetDecimal(string kod, decimal defaultValue = 0m)
+            => _values.TryGetValue(kod, out var value) && decimal.TryParse(value, out var parsed) ? parsed : defaultValue;
 
-        public int GetInt(string kod, int defaultValue = 0) => defaultValue;
+        public int GetInt(string kod, int defaultValue = 0)
+            => _values.TryGetValue(kod, out var value) && int.TryParse(value, out var parsed) ? parsed : defaultValue;
 
         public DateTime GetDate(string kod, DateTime defaultValue = default) => defaultValue;
+
+        public string? GetString(string kod, string? defaultValue = null)
+            => _values.TryGetValue(kod, out var value) ? value : defaultValue;
+
+        public IReadOnlyDictionary<string, string> GetByPrefix(string prefix)
+            => _values
+                .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
     }
 }

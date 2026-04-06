@@ -11,6 +11,7 @@ public class KampBasvuruBaglamDto
 public class KampBasvuruDonemSecenekDto
 {
     public int Id { get; set; }
+    public int KampProgramiId { get; set; }
     public string Ad { get; set; } = string.Empty;
     public int Yil { get; set; }
     public DateTime KonaklamaBaslangicTarihi { get; set; }
@@ -43,6 +44,7 @@ public class KampSecenekDto
 
 public class KampBasvuruSahibiTipSecenekDto : KampSecenekDto
 {
+    public int Id { get; set; }
     public string? VarsayilanKatilimciTipiKodu { get; set; }
 }
 

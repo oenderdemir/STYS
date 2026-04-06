@@ -16,6 +16,7 @@ import { KampDonemiTanimYonetimi } from './app/pages/kamp-yonetimi/kamp-donemi-t
 import { KampBenimBasvurularimPage } from './app/pages/kamp-yonetimi/kamp-benim-basvurularim';
 import { KampBasvuruPage } from './app/pages/kamp-yonetimi/kamp-basvuru';
 import { KampIadeYonetimiPage } from './app/pages/kamp-yonetimi/kamp-iade-yonetimi';
+import { KampPuanKuraliYonetimiPage } from './app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi';
 import { KampRezervasyonlariPage } from './app/pages/kamp-yonetimi/kamp-rezervasyonlari';
 import { KampTahsisYonetimiPage } from './app/pages/kamp-yonetimi/kamp-tahsis-yonetimi';
 import { KampProgramiTanimYonetimi } from './app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi';
@@ -95,6 +96,7 @@ export const appRoutes: Routes = [
             { path: 'kamp-tahsisleri', component: KampTahsisYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Tahsisler'] } },
             { path: 'kamp-rezervasyonlari', component: KampRezervasyonlariPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Rezervasyonlar'] } },
             { path: 'kamp-iade-yonetimi', component: KampIadeYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Iade Yonetimi'] } },
+            { path: 'kamp-puan-kurallari', component: KampPuanKuraliYonetimiPage, data: { breadcrumb: ['Isletme', 'Kamp Yonetimi', 'Puan Kurallari'] } },
             { path: 'kamp-basvurularim', component: KampBenimBasvurularimPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurularim'] } },
             { path: 'sezon-kurallari', component: SezonYonetimi, data: { breadcrumb: ['Isletme', 'Sezon Kurallari'] } },
             { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Yonetimi'] } },

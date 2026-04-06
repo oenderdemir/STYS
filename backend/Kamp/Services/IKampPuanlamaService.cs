@@ -7,6 +7,7 @@ public interface IKampPuanlamaService
     Task<KampBasvuruOnizlemeDto> PuanlaAsync(
         KampBasvuruRequestDto request,
         KampBasvuruOnizlemeDto onizleme,
+        int kampProgramiId,
         int kampYili,
         IReadOnlyCollection<int> gecmisKatilimYillari,
         CancellationToken cancellationToken = default);

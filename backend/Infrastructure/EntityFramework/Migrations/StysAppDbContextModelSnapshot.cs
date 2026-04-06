@@ -1676,10 +1676,16 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int>("KampProgramiId")
+                        .HasColumnType("int");
+
                     b.Property<int>("KampYili")
                         .HasColumnType("int");
 
                     b.Property<int>("KatilimCezaPuani")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KatilimciBasinaPuan")
                         .HasColumnType("int");
 
                     b.Property<int>("OncekiYilSayisi")
@@ -1693,11 +1699,76 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("KampYili")
+                    b.HasIndex("KampProgramiId", "KampYili")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("KampKuralSetleri", "dbo");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampProgramiBasvuruSahibiTipKurali", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmekliBonusPuani")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("HizmetYiliPuaniAktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KampBasvuruSahibiTipiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KampProgramiId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OncelikSirasi")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TabanPuan")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("VarsayilanKatilimciTipiKodu")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KampBasvuruSahibiTipiId");
+
+                    b.HasIndex("KampProgramiId", "KampBasvuruSahibiTipiId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KampProgramiBasvuruSahibiTipKurallari", "dbo");
                 });
 
             modelBuilder.Entity("STYS.Kamp.Entities.KampParametre", b =>
@@ -3916,6 +3987,36 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasForeignKey("KampProgramiId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("KampProgrami");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampKuralSeti", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampProgrami", "KampProgrami")
+                        .WithMany()
+                        .HasForeignKey("KampProgramiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampProgrami");
+                });
+
+            modelBuilder.Entity("STYS.Kamp.Entities.KampProgramiBasvuruSahibiTipKurali", b =>
+                {
+                    b.HasOne("STYS.Kamp.Entities.KampBasvuruSahibiTipi", "KampBasvuruSahibiTipi")
+                        .WithMany()
+                        .HasForeignKey("KampBasvuruSahibiTipiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Kamp.Entities.KampProgrami", "KampProgrami")
+                        .WithMany()
+                        .HasForeignKey("KampProgramiId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("KampBasvuruSahibiTipi");
 
                     b.Navigation("KampProgrami");
                 });

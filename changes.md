@@ -520,3 +520,229 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Notlar / Riskler
 - `BasvuruNo` ile public sorgu, numarayi bilen kisiye basvuru detayini gosterebilir. Daha siki mahremiyet istenirse ikinci bir dogrulama alanı (ornegin TC son 4 hane veya dogum tarihi) eklenmeli.
+
+## Tur 8 - Alata/Foca Ozel Akislarin Genericlestirilmesi
+
+### Yapilanlar
+- Kamp konaklama birimi kurali tesis adina bagli `contains("alata"/"foca")` kontrolunden cikarildi.
+- Konaklama konfigurasyonu artik `KampParametreleri` icindeki `Konaklama.<BirimKodu>.*` kayitlarindan dinamik okunuyor.
+- Kamp basvuru baglami icindeki birim listesi artik parametre tablosundan otomatik uretiliyor; yeni tesis/birim eklemede kod degisikligi gerekmiyor.
+- `IKampParametreService` genisletildi:
+  - `GetString(kod, defaultValue)`
+  - `GetByPrefix(prefix)`
+- Kamp migration'larindaki tesis adi bazli Alata/Foca atama SQL'i generic hale getirildi; aktif tum tesisler donemlere otomatik atanacak sekilde duzenlendi.
+- `20260405180000_AddKampParametreAndUpdateYears` icindeki konaklama parametre seed anahtarlari Alata/Foca adlarindan bagimsiz birim kodlarina cekildi (`Standart34`, `Prefabrik45`, `Otel45`, `Betonarme45`).
+- Kamp testlerindeki Alata/Foca bagimli birim kodlari ve fixture adlari genericlestirildi.
+
+### Degisen Dosyalar
+- backend/Kamp/KampBasvuruKurallari.cs
+- backend/Kamp/KampParametreKodlari.cs
+- backend/Kamp/Services/IKampParametreService.cs
+- backend/Kamp/Services/KampParametreService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260404195000_Seed2025YazKampiData.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260405180000_AddKampParametreAndUpdateYears.cs
+- tests/STYS.Tests/KampKurallariTests.cs
+- tests/STYS.Tests/KampTahsisServiceTests.cs
+- changes.md
+
+### Build Sonuclari (Tur 8)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Test Notu
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --no-build` calistirildi; mevcut projede kamp disi rezervasyon testlerinde halihazirda bulunan hatalar nedeniyle genel test paketi basarisiz.
+- Kamp odakli filtreli test calistirma denemesinde ortam kaynakli `NU1900` (nuget vulnerability index erisim) uyarisi nedeniyle test kosumu tamamlanamadi.
+
+## Tur 9 - Sidebar Ana Basliklari Acilir/Kapanir Yapisi
+
+### Yapilanlar
+- Sol menude root seviye ana basliklar (`ANA MENU`, `TESIS`, `ISLETME`, `KAMP YONETIMI` vb.) acilir/kapanir hale getirildi.
+- Varsayilan davranis: root basliklar kapali gelir.
+- Aktif route'un bulundugu grup otomatik acik kalir (route gorunurlugu korunur).
+- Root baslik satiri tiklanabilir toggle butonuna cevrildi; acik/kapali durum icin yukari/asagi ok gosterimi eklendi.
+- Root grup genisleme durumu layout state icine alindi (`expandedRootPaths`) ve servis seviyesinde yonetildi.
+
+### Degisen Dosyalar
+- frontend/src/app/layout/service/layout.service.ts
+- frontend/src/app/layout/component/app.menuitem.ts
+- frontend/src/app/layout/component/app.menuitem.scss
+- changes.md
+
+### Build Sonuclari (Tur 9)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Notlar
+- Backend build'de bu turdan bagimsiz mevcut warningler korunuyor (`20260406091119_duzeltme` isimlendirme warning).
+
+## Tur 10 - Kamp Puan Kurali Yonetim Ekranlari
+
+### Yapilanlar
+- Kamp puan hesaplama kurallarini yonetmek icin yeni backend API eklendi:
+  - `GET /ui/kamppuankurali/yonetim-baglam`
+  - `PUT /ui/kamppuankurali/yonetim-baglam`
+- API kapsaminda su alanlar yonetilebilir hale getirildi:
+  - `KatilimciBasinaPuan` (`KampParametreleri`)
+  - `KampKuralSetleri` (kamp yili, onceki yil sayisi, katilim ceza puani, aktiflik)
+  - `KampBasvuruSahibiTipleri` (kod, ad, oncelik, taban puan, hizmet yili puani aktifligi, emekli bonus, varsayilan katilimci tipi, aktiflik)
+- Yeni frontend sayfasi eklendi: `kamp-puan-kurallari`
+  - Inline duzenleme ile kural seti ve basvuru sahibi tipi ekleme/guncelleme/satir silme
+  - `KatilimciBasinaPuan` parametresi duzenleme
+  - Tek adimda kaydetme
+- Kamp Programlari ve Kamp Donemleri ekranlarina "Puan Kurallari" hizli gecis butonu eklendi.
+- Yeni route eklendi:
+  - `/kamp-puan-kurallari` (breadcrumb: Isletme > Kamp Yonetimi > Puan Kurallari)
+
+### Yeni Dosyalar
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Services/IKampPuanKuraliYonetimService.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- backend/Kamp/Controllers/KampPuanKuraliController.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.scss
+
+### Degisen Dosyalar
+- backend/Program.cs
+- frontend/src/app.routes.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.service.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-tanim-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-tanim-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 10)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Notlar
+- Yetkilendirme icin mevcut kamp tanim yonetimi yetkileri kullanildi (yeni permission/migration eklenmedi).
+
+## Tur 11 - Menu Bazli Ayrik Yetkilendirme (Kamp Puan Kurallari)
+
+### Yapilanlar
+- `Kamp Puan Kurallari` ekrani icin paylasimli kamp tanim yetkileri birakildi; menuye ozel yeni yetki grubu tanimlandi:
+  - `KampPuanKuraliYonetimi.Menu`
+  - `KampPuanKuraliYonetimi.View`
+  - `KampPuanKuraliYonetimi.Manage`
+- Erisim tesisi modullerine `/kamp-puan-kurallari` route'u menuye ozel yetki seti ile eklendi.
+- API endpoint yetkilendirmeleri menuye ozel izinlere cekildi:
+  - `GET /ui/kamppuankurali/yonetim-baglam` -> `KampPuanKuraliYonetimi.View`
+  - `PUT /ui/kamppuankurali/yonetim-baglam` -> `KampPuanKuraliYonetimi.Manage`
+- Frontend tarafinda sayfa ve hizli erisim butonlari yeni menuye ozel izin adlari ile guncellendi; manage yetkisi olmayan kullanicida duzenleme kontrolleri read-only oldu.
+- Yeni migration eklendi:
+  - `20260406120000_AddKampPuanKuraliPermissionsAndMenu`
+  - TODBase tarafinda role/menu/menu-role seedleri eklendi.
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs
+- backend/Kamp/Controllers/KampPuanKuraliController.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406120000_AddKampPuanKuraliPermissionsAndMenu.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-tanim-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 11)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Notlar
+- `ErisimTeshisModulTanimlari` icin yapilan kontrolde modul satiri sayisi ve tekil permission grubu sayisi esit (27/27); yani mevcut modul/menu yapisi genel olarak menu-bazli ayrik izin prensibine uygun.
+
+## Tur 12 - Kamp Puan Kurallari Program Bazli Hale Getirildi
+
+### Yapilanlar
+- Kamp puanlama kural seti secimi `kamp yili` yerine `kamp programi + kamp yili` kombinasyonuna cevrildi.
+- `KampKuralSeti` modeline `KampProgramiId` eklendi ve kural seti benzersizlik kuralı `(KampProgramiId, KampYili)` olacak sekilde guncellendi.
+- Basvuru onizleme/validasyon akisinda ilgili donemin programina ait aktif kural seti kullanilmaya baslandi.
+- Puan kurali yonetim baglamina `Programlar` listesi eklendi.
+- Puan kurali ekraninda kural seti satirlarina `Kamp Programi` kolonu eklendi; yeni satirlar program secimi ile olusturuluyor.
+- Yeni migration ile mevcut yil bazli kural setleri program bazina tasindi:
+  - Aktif programlar icin mevcut satirlar program bazinda cogaltildi,
+  - eski (programsiz) satirlar temizlendi,
+  - FK + unique index eklendi.
+
+### Yeni Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260406170000_MakeKampKuralSetleriProgramScoped.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampKuralSeti.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- backend/Kamp/Services/IKampPuanlamaService.cs
+- backend/Kamp/Services/KampPuanlamaService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- tests/STYS.Tests/KampKurallariTests.cs
+- changes.md
+
+### Build Sonuclari (Tur 12)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Test Notu
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --no-build --filter "FullyQualifiedName~KampKurallariTests"` kosuldu.
+- Sonuc: 3 testten 2'si basarili, 1'i basarisiz (`UcretHesaplama_CocukKurallariVeEkHizmetleriUygular` beklenen/gerceklesen tutar farki; bu turdaki program bazli kural seti degisikliginden bagimsiz gorunuyor).
+
+## Tur 13 - Global Baslik + Programa Bagli Puanlama Kurallari (Minimum Mudahale)
+
+### Hedef
+- Basvuru sahibi tipleri global sozluk olarak kalsin.
+- Her kamp programi icin bu global tiplerden secilerek farkli puanlama kurali tanimlanabilsin.
+- Katilimci basina puan degeri global tek parametre yerine program/yil kural setinde tanimlanabilsin.
+
+### Yapilanlar
+- Yeni entity/tablo eklendi: `KampProgramiBasvuruSahibiTipKurallari`
+  - Program + global basvuru sahibi tipi bazinda puanlama alanlari tutuluyor:
+    - OncelikSirasi, TabanPuan, HizmetYiliPuaniAktifMi, EmekliBonusPuani, VarsayilanKatilimciTipiKodu, AktifMi
+- `KampKuralSeti` genisletildi:
+  - `KatilimciBasinaPuan` alani eklendi (artik kural seti satirinda)
+- Puanlama servisi guncellendi:
+  - Basvuru tipi once global sozlukten bulunuyor (kod ile),
+  - Ardindan secili programa ait tip-kural kaydindan puanlama degerleri aliniyor,
+  - Katilimci basina puan kural setinin kendi alanindan aliniyor.
+- Kamp puan kurali yonetim baglami/saklama akisi guncellendi:
+  - Global tip listesi ayri donuyor,
+  - Program + tip kural satirlari ayri yonetiliyor,
+  - Kural setinde `KatilimciBasinaPuan` kolon bazinda kaydediliyor.
+- Frontend puan kurali ekrani guncellendi:
+  - Basvuru sahibi tipi kurallarinda serbest kod/ad girisi kaldirildi,
+  - Program secimi + global tip secimi ile kural satiri olusturma modeline gecildi,
+  - Kural seti tablosuna `Katilimci Basina Puan` kolonu eklendi.
+
+### Yeni Dosyalar
+- backend/Kamp/Entities/KampProgramiBasvuruSahibiTipKurali.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406190000_AddProgramScopedBasvuruSahibiTipKurallari.cs
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampKuralSeti.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- backend/Kamp/Services/KampPuanlamaService.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Dto/KampBasvuruBaglamDto.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- tests/STYS.Tests/KampKurallariTests.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 13)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+### Test Notu
+- Hedefli test: `KampKurallariTests.Puanlama_TarimOrmanPersoneliIcinTalimatPuanlariniUygular` BASARILI.

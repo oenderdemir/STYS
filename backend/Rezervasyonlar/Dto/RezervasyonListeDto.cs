@@ -5,6 +5,7 @@ public class RezervasyonListeDto
     public int Id { get; set; }
 
     public string ReferansNo { get; set; } = string.Empty;
+    public string Kaynak { get; set; } = string.Empty;
 
     public int TesisId { get; set; }
 

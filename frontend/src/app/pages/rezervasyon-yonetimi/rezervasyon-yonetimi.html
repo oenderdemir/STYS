@@ -345,6 +345,7 @@
                 <tr>
                     <th style="width: 4rem"></th>
                     <th>Referans</th>
+                    <th>Kaynak</th>
                     <th>Misafir Ad Soyad</th>
                     <th>Cinsiyet</th>
                     <th>TC Kimlik No</th>
@@ -377,6 +378,9 @@
                                 <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
                             }
                         </div>
+                    </td>
+                    <td>
+                        <p-tag [value]="kayit.kaynak || 'Normal'" [severity]="kayit.kaynak === 'Kamp' ? 'info' : 'secondary'" [rounded]="true" />
                     </td>
                     <td>{{ kayit.misafirAdiSoyadi }}</td>
                     <td>{{ kayit.misafirCinsiyeti || '-' }}</td>
@@ -438,7 +442,7 @@
 	            </ng-template>
             <ng-template #expandedrow let-kayit>
                 <tr>
-                    <td colspan="15">
+                    <td colspan="16">
                         <div class="p-3">
                             @if (isRezervasyonDetayLoading(kayit.id)) {
                                 <span class="text-color-secondary">Rezervasyon detayi yukleniyor...</span>

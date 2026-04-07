@@ -208,6 +208,7 @@ export interface RezervasyonCheckInKontrolDto {
 export interface RezervasyonListeDto {
     id: number;
     referansNo: string;
+    kaynak: string;
     tesisId: number;
     misafirAdiSoyadi: string;
     misafirTelefon: string;

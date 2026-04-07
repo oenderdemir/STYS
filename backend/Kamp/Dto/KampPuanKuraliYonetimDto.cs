@@ -8,6 +8,8 @@ public class KampPuanKuraliYonetimBaglamDto
 
     public List<KampProgramiParametreAyariDto> ProgramParametreAyarlari { get; set; } = [];
 
+    public List<KampKonaklamaTarifeYonetimDto> KonaklamaTarifeleri { get; set; } = [];
+
     public List<KampPuanKuralSetiDto> KuralSetleri { get; set; } = [];
 
     public List<KampPuanBasvuruSahibiTipiDto> BasvuruSahibiTipleri { get; set; } = [];
@@ -34,6 +36,8 @@ public class KampPuanKuraliYonetimKaydetRequestDto
 
     public List<KampProgramiParametreAyariDto> ProgramParametreAyarlari { get; set; } = [];
 
+    public List<KampKonaklamaTarifeYonetimDto> KonaklamaTarifeleri { get; set; } = [];
+
     public KampYasUcretKuraliDto YasUcretKurali { get; set; } = new();
 }
 
@@ -54,6 +58,31 @@ public class KampProgramiParametreAyariDto
     public decimal GecBildirimGunlukKesintiyUzdesi { get; set; } = 0.05m;
 
     public int NoShowSuresiGun { get; set; } = 2;
+
+    public bool AktifMi { get; set; } = true;
+}
+
+public class KampKonaklamaTarifeYonetimDto
+{
+    public int? Id { get; set; }
+
+    public string Kod { get; set; } = string.Empty;
+
+    public string Ad { get; set; } = string.Empty;
+
+    public int MinimumKisi { get; set; }
+
+    public int MaksimumKisi { get; set; }
+
+    public decimal KamuGunlukUcret { get; set; }
+
+    public decimal DigerGunlukUcret { get; set; }
+
+    public decimal BuzdolabiGunlukUcret { get; set; }
+
+    public decimal TelevizyonGunlukUcret { get; set; }
+
+    public decimal KlimaGunlukUcret { get; set; }
 
     public bool AktifMi { get; set; } = true;
 }

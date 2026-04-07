@@ -228,6 +228,7 @@ public class RezervasyonService : IRezervasyonService
             {
                 Id = x.Id,
                 ReferansNo = x.ReferansNo,
+                Kaynak = x.ReferansNo.StartsWith("KAMP-") ? "Kamp" : "Normal",
                 TesisId = x.TesisId,
                 MisafirAdiSoyadi = x.MisafirAdiSoyadi,
                 MisafirTelefon = x.MisafirTelefon,

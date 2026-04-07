@@ -1129,3 +1129,121 @@ Kamp Yonetimi (top-level, fa-campground)
 ### Build Sonuclari (Tur 29)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
 - Not: Mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.
+
+## Tur 30 - Konaklama Ucret Konfigurasyonu Yonetimi Eklendi + Kapasite Esleme Fallback
+
+### Yapilanlar
+- `KampUcretHesaplamaService` ve `KampBasvuruService` icindeki konaklama tarife esleme akisi iyilestirildi.
+  - Esleme sirasi: `birebir min-max` -> `araligi kapsayan en uygun tarife` -> `ortusen en yakin tarife`.
+  - Bu sayede bina kapasitesi birebir esit degilse de "uygun ucret konfigurasyonu bulunamadi" hatasi azaltildi.
+- Kullanici talebiyle ucret konfigurasyonu giris/guncelleme ekrani eklendi:
+  - Mevcut `Kamp Puan Kurallari` yonetim ekranina yeni bolum: **Konaklama Ucret Konfigurasyonu**.
+  - Alanlar:
+    - `Kod`, `Ad`
+    - `MinimumKisi`, `MaksimumKisi`
+    - `KamuGunlukUcret`, `DigerGunlukUcret`
+    - `BuzdolabiGunlukUcret`, `TelevizyonGunlukUcret`, `KlimaGunlukUcret`
+    - `AktifMi`
+- Backend `yonetim-baglam` ve `kaydet` akisi genisletildi:
+  - `KonaklamaTarifeleri` listesi GET/PUT akisina dahil edildi.
+  - Upsert (insert/update) mantigi eklendi.
+  - Validasyonlar eklendi:
+    - en az bir tarife zorunlu
+    - kod/ad zorunlu
+    - kod tekil olmalı
+    - kisi araligi gecerlilik kontrolu
+    - ucretlerde negatif deger engeli
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 30)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Mevcut eski migration dosyasi nedeniyle backend buildde 2 adet `CS8981` warning devam ediyor.
+
+## Tur 31 - Kamp Rezervasyonu ile Normal Rezervasyonu Ilk Fazda Baglama
+
+### Yapilanlar
+- Kamp ve normal rezervasyon akislari arasinda ilk faz entegrasyon eklendi.
+- `KampRezervasyonService.UretAsync` guncellendi:
+  - Kamp rezervasyonu olusturulurken ayni referans numarasi (`KAMP-YYYY-XXXX`) ile `Rezervasyonlar` tablosuna da otomatik kayit aciliyor.
+  - Islemler tek transaction icinde yapiliyor (kamp + normal rezervasyon birlikte commit).
+- Normal rezervasyon kaydi icin kamp verilerinden temel alanlar map edildi:
+  - `TesisId`, `KisiSayisi`, `GirisTarihi`, `CikisTarihi`, `ToplamBazUcret`, `ToplamUcret`, `MisafirAdiSoyadi`, `TcKimlikNo`
+  - `RezervasyonDurumu = Onayli`
+  - `Notlar` alanina kamp kaynak bilgisi yazildi.
+- `KampRezervasyonService.IptalEtAsync` guncellendi:
+  - Kamp rezervasyonu iptal edilince, ayni referans numarasina sahip normal rezervasyon da `Iptal` durumuna cekiliyor.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampRezervasyonService.cs
+- changes.md
+
+### Build Sonuclari (Tur 31)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Backend build'de mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.
+
+## Tur 32 - Faz 2 Baslangici: Kamp Rezervasyonundan Normal Rezervasyona Otomatik Segment/Oda Atamasi
+
+### Yapilanlar
+- Kamp ve normal rezervasyon entegrasyonu bir adim daha ileri tasindi.
+- `KampRezervasyonService.UretAsync` icinde normal rezervasyon olusurken artik:
+  - tek segment otomatik uretiliyor,
+  - bu segmente otomatik oda atamalari yapiliyor.
+
+### Oda Atama Kurali
+- Secili `KonaklamaBirimiTipi` (artik bina adi) once hedeflenir.
+- O binada uygun aktif odalar yoksa, tesis genelindeki aktif odalara fallback yapilir.
+- Oda doluluk hesabi mevcut normal rezervasyon segment/oda atamalarindan alinır.
+  - Cakisan tarih araliginda `Iptal` disi rezervasyonlar dikkate alinir.
+- Kapasite dagitimi:
+  - Paylasimsiz odada doluluk varsa oda kullanilmaz.
+  - Paylasimli odada kalan kapasite kadar kisi atanir.
+  - Kisi sayisi birden fazla odaya bolunerek atanabilir.
+- Yeterli kapasite yoksa kamp rezervasyonu olusturma islemi hata ile durur.
+
+### Ek Iyilestirme
+- Kamp rezervasyon numarasi uretiminde, ayni referansin normal rezervasyon tablosunda da tekil olmasi garanti edildi.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampRezervasyonService.cs
+- changes.md
+
+### Build Sonuclari (Tur 32)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Backend build'de mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.
+
+## Tur 33 - Normal Rezervasyon Listesinde Kaynak (Kamp/Normal) Gorunurlugu
+
+### Yapilanlar
+- Kullanici talebine gore `Kayitli Rezervasyonlar` tablosuna rezervasyon kaynagini gosteren yeni alan eklendi.
+- Backend rezervasyon liste DTO'su genisletildi:
+  - yeni alan: `Kaynak`
+  - degerleme kurali: `ReferansNo` `KAMP-` ile basliyorsa `Kamp`, degilse `Normal`.
+- Frontend rezervasyon liste DTO'su guncellendi (`kaynak` alanı eklendi).
+- `Rezervasyon Yonetimi` ekranindaki `Kayitli Rezervasyonlar` tablosuna `Kaynak` sutunu eklendi.
+  - `Kamp` kayitlari `info` etiketi ile,
+  - `Normal` kayitlar `secondary` etiketi ile gosteriliyor.
+- Tablo genisletme satiri (`expanded row`) yeni sutun sayisina gore guncellendi.
+
+### Degisen Dosyalar
+- backend/Rezervasyonlar/Dto/RezervasyonListeDto.cs
+- backend/Rezervasyonlar/Services/RezervasyonService.cs
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.dto.ts
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 33)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Backend build'de mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.

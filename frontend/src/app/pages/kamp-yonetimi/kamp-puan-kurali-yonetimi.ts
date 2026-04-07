@@ -12,7 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
-import { KampProgramiParametreAyariDto, KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
+import { KampKonaklamaTarifeYonetimDto, KampProgramiParametreAyariDto, KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 import { AuthService } from '../auth';
 
@@ -35,6 +35,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     programlar: KampProgramiSecenekDto[] = [];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[] = [];
     programParametreAyarlari: KampProgramiParametreAyariDto[] = [];
+    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[] = [];
     kuralSetleri: KampPuanKuralSetiDto[] = [];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[] = [];
     katilimciTipleri: KampSecenekDto[] = [];
@@ -81,6 +82,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                         const adB = b.kampProgramiAd ?? '';
                         return adA.localeCompare(adB);
                     });
+                    this.konaklamaTarifeleri = [...baglam.konaklamaTarifeleri].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
                         const adA = a.kampProgramiAd ?? '';
                         const adB = b.kampProgramiAd ?? '';
@@ -155,6 +157,25 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         ];
     }
 
+    addKonaklamaTarifesi(): void {
+        const next = this.konaklamaTarifeleri.length + 1;
+        this.konaklamaTarifeleri = [
+            ...this.konaklamaTarifeleri,
+            {
+                kod: `TARIFE_${next}`,
+                ad: `Tarife ${next}`,
+                minimumKisi: 2,
+                maksimumKisi: 4,
+                kamuGunlukUcret: 0,
+                digerGunlukUcret: 0,
+                buzdolabiGunlukUcret: 0,
+                televizyonGunlukUcret: 0,
+                klimaGunlukUcret: 0,
+                aktifMi: true
+            }
+        ];
+    }
+
     removeKuralSeti(index: number): void {
         this.kuralSetleri = this.kuralSetleri.filter((_, i) => i !== index);
     }
@@ -165,6 +186,10 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     removeBasvuruSahibiTipi(index: number): void {
         this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter((_, i) => i !== index);
+    }
+
+    removeKonaklamaTarifesi(index: number): void {
+        this.konaklamaTarifeleri = this.konaklamaTarifeleri.filter((_, i) => i !== index);
     }
 
     save(): void {
@@ -178,6 +203,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 kuralSetleri: this.kuralSetleri,
                 basvuruSahibiTipleri: this.basvuruSahibiTipleri,
                 programParametreAyarlari: this.programParametreAyarlari,
+                konaklamaTarifeleri: this.konaklamaTarifeleri,
                 yasUcretKurali: this.yasUcretKurali
             })
             .pipe(finalize(() => {
@@ -193,6 +219,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                         const adB = b.kampProgramiAd ?? '';
                         return adA.localeCompare(adB);
                     });
+                    this.konaklamaTarifeleri = [...baglam.konaklamaTarifeleri].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
                         const adA = a.kampProgramiAd ?? '';
                         const adB = b.kampProgramiAd ?? '';

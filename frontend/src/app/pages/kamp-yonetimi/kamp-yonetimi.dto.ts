@@ -54,10 +54,25 @@ export interface KampProgramiParametreAyariDto {
     aktifMi: boolean;
 }
 
+export interface KampKonaklamaTarifeYonetimDto {
+    id?: number | null;
+    kod: string;
+    ad: string;
+    minimumKisi: number;
+    maksimumKisi: number;
+    kamuGunlukUcret: number;
+    digerGunlukUcret: number;
+    buzdolabiGunlukUcret: number;
+    televizyonGunlukUcret: number;
+    klimaGunlukUcret: number;
+    aktifMi: boolean;
+}
+
 export interface KampPuanKuraliYonetimBaglamDto {
     programlar: KampProgramiSecenekDto[];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[];
     programParametreAyarlari: KampProgramiParametreAyariDto[];
+    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[];
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     katilimciTipleri: KampSecenekDto[];
@@ -68,6 +83,7 @@ export interface KampPuanKuraliYonetimKaydetRequestDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     programParametreAyarlari: KampProgramiParametreAyariDto[];
+    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[];
     yasUcretKurali: KampYasUcretKuraliDto;
 }
 

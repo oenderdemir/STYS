@@ -95,6 +95,26 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             })
             .ToListAsync(cancellationToken);
 
+        var konaklamaTarifeleri = await _dbContext.KampKonaklamaTarifeleri
+            .AsNoTracking()
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Kod)
+            .Select(x => new KampKonaklamaTarifeYonetimDto
+            {
+                Id = x.Id,
+                Kod = x.Kod,
+                Ad = x.Ad,
+                MinimumKisi = x.MinimumKisi,
+                MaksimumKisi = x.MaksimumKisi,
+                KamuGunlukUcret = x.KamuGunlukUcret,
+                DigerGunlukUcret = x.DigerGunlukUcret,
+                BuzdolabiGunlukUcret = x.BuzdolabiGunlukUcret,
+                TelevizyonGunlukUcret = x.TelevizyonGunlukUcret,
+                KlimaGunlukUcret = x.KlimaGunlukUcret,
+                AktifMi = x.AktifMi
+            })
+            .ToListAsync(cancellationToken);
+
         var kuralSetleri = await _dbContext.KampKuralSetleri
             .AsNoTracking()
             .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
@@ -146,6 +166,7 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             Programlar = programlar,
             GlobalBasvuruSahibiTipleri = globalBasvuruSahibiTipleri,
             ProgramParametreAyarlari = programParametreAyarlari,
+            KonaklamaTarifeleri = konaklamaTarifeleri,
             KuralSetleri = kuralSetleri,
             BasvuruSahibiTipleri = tipKurallari,
             KatilimciTipleri = katilimciTipleri,
@@ -162,6 +183,7 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         await UpsertKuralSetleriAsync(request.KuralSetleri, cancellationToken);
         await UpsertBasvuruSahibiTipKurallariAsync(request.BasvuruSahibiTipleri, cancellationToken);
         await UpsertProgramParametreAyarlariAsync(request.ProgramParametreAyarlari, cancellationToken);
+        await UpsertKonaklamaTarifeleriAsync(request.KonaklamaTarifeleri, cancellationToken);
         await UpsertYasUcretKuraliAsync(request.YasUcretKurali, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -299,6 +321,48 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         existing.IsDeleted = false;
     }
 
+    private async Task UpsertKonaklamaTarifeleriAsync(List<KampKonaklamaTarifeYonetimDto> dtos, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.KampKonaklamaTarifeleri.ToListAsync(cancellationToken);
+        var existingById = existing.ToDictionary(x => x.Id, x => x);
+
+        foreach (var dto in dtos)
+        {
+            var normalizedKod = dto.Kod.Trim();
+            var normalizedAd = dto.Ad.Trim();
+
+            if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var entity))
+            {
+                entity.Kod = normalizedKod;
+                entity.Ad = normalizedAd;
+                entity.MinimumKisi = dto.MinimumKisi;
+                entity.MaksimumKisi = dto.MaksimumKisi;
+                entity.KamuGunlukUcret = dto.KamuGunlukUcret;
+                entity.DigerGunlukUcret = dto.DigerGunlukUcret;
+                entity.BuzdolabiGunlukUcret = dto.BuzdolabiGunlukUcret;
+                entity.TelevizyonGunlukUcret = dto.TelevizyonGunlukUcret;
+                entity.KlimaGunlukUcret = dto.KlimaGunlukUcret;
+                entity.AktifMi = dto.AktifMi;
+                entity.IsDeleted = false;
+                continue;
+            }
+
+            _dbContext.KampKonaklamaTarifeleri.Add(new KampKonaklamaTarifesi
+            {
+                Kod = normalizedKod,
+                Ad = normalizedAd,
+                MinimumKisi = dto.MinimumKisi,
+                MaksimumKisi = dto.MaksimumKisi,
+                KamuGunlukUcret = dto.KamuGunlukUcret,
+                DigerGunlukUcret = dto.DigerGunlukUcret,
+                BuzdolabiGunlukUcret = dto.BuzdolabiGunlukUcret,
+                TelevizyonGunlukUcret = dto.TelevizyonGunlukUcret,
+                KlimaGunlukUcret = dto.KlimaGunlukUcret,
+                AktifMi = dto.AktifMi
+            });
+        }
+    }
+
     private static void ValidateRequest(KampPuanKuraliYonetimKaydetRequestDto request)
     {
         if (request.KuralSetleri.Count == 0)
@@ -314,6 +378,11 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         if (request.ProgramParametreAyarlari.Count == 0)
         {
             throw new BaseException("En az bir program parametre ayari zorunludur.", 400);
+        }
+
+        if (request.KonaklamaTarifeleri.Count == 0)
+        {
+            throw new BaseException("En az bir konaklama tarife tanimi zorunludur.", 400);
         }
 
         var duplicateYears = request.KuralSetleri
@@ -338,6 +407,14 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         if (duplicateProgramParam is not null)
         {
             throw new BaseException($"Program {duplicateProgramParam.Key} icin birden fazla parametre ayari kaydi gonderildi.", 400);
+        }
+
+        var duplicateTarifeKod = request.KonaklamaTarifeleri
+            .GroupBy(x => x.Kod.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (duplicateTarifeKod is not null)
+        {
+            throw new BaseException($"Konaklama tarife kodu tekrari var: {duplicateTarifeKod.Key}", 400);
         }
 
         foreach (var kuralSeti in request.KuralSetleri)
@@ -426,6 +503,33 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             if (ayar.NoShowSuresiGun < KampValidasyonKurallari.NoShowSuresiGun.Min || ayar.NoShowSuresiGun > KampValidasyonKurallari.NoShowSuresiGun.Max)
             {
                 throw new BaseException("No-show suresi 0 - 30 gun araliginda olmalidir.", 400);
+            }
+        }
+
+        foreach (var tarife in request.KonaklamaTarifeleri)
+        {
+            if (string.IsNullOrWhiteSpace(tarife.Kod))
+            {
+                throw new BaseException("Konaklama tarife kodu zorunludur.", 400);
+            }
+
+            if (string.IsNullOrWhiteSpace(tarife.Ad))
+            {
+                throw new BaseException("Konaklama tarife adi zorunludur.", 400);
+            }
+
+            if (tarife.MinimumKisi <= 0 || tarife.MaksimumKisi <= 0 || tarife.MinimumKisi > tarife.MaksimumKisi)
+            {
+                throw new BaseException("Konaklama tarife kisi araligi gecersiz.", 400);
+            }
+
+            if (tarife.KamuGunlukUcret < 0
+                || tarife.DigerGunlukUcret < 0
+                || tarife.BuzdolabiGunlukUcret < 0
+                || tarife.TelevizyonGunlukUcret < 0
+                || tarife.KlimaGunlukUcret < 0)
+            {
+                throw new BaseException("Konaklama tarife ucretleri negatif olamaz.", 400);
             }
         }
 

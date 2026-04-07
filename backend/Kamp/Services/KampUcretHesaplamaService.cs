@@ -126,8 +126,7 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
 
         var minimum = kapasiteListesi.Min();
         var maksimum = kapasiteListesi.Max();
-        var secilen = tarifeler
-            .FirstOrDefault(x => x.MinimumKisi == minimum && x.MaksimumKisi == maksimum);
+        var secilen = SelectBestTarifeByKapasite(tarifeler, minimum, maksimum);
         if (secilen is null)
         {
             throw new InvalidOperationException($"Konaklama birimi icin uygun ucret konfigurasyonu bulunamadi ({minimum}-{maksimum}).");
@@ -203,6 +202,33 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
         }
 
         return result;
+    }
+
+    private static KampKonaklamaKonfigurasyonu? SelectBestTarifeByKapasite(
+        IReadOnlyCollection<KampKonaklamaKonfigurasyonu> tarifeler,
+        int minimum,
+        int maksimum)
+    {
+        var exact = tarifeler.FirstOrDefault(x => x.MinimumKisi == minimum && x.MaksimumKisi == maksimum);
+        if (exact is not null)
+        {
+            return exact;
+        }
+
+        var kapsayan = tarifeler
+            .Where(x => x.MinimumKisi <= minimum && x.MaksimumKisi >= maksimum)
+            .OrderBy(x => (x.MaksimumKisi - x.MinimumKisi))
+            .ThenBy(x => Math.Abs(x.MinimumKisi - minimum) + Math.Abs(x.MaksimumKisi - maksimum))
+            .FirstOrDefault();
+        if (kapsayan is not null)
+        {
+            return kapsayan;
+        }
+
+        return tarifeler
+            .Where(x => x.MinimumKisi <= maksimum && x.MaksimumKisi >= minimum)
+            .OrderBy(x => Math.Abs(x.MinimumKisi - minimum) + Math.Abs(x.MaksimumKisi - maksimum))
+            .FirstOrDefault();
     }
 
     private static decimal HesaplaKatilimciGunlukTutari(

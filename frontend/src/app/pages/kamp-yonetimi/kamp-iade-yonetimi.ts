@@ -101,6 +101,7 @@ export class KampIadeYonetimiPage implements OnInit {
 
         this.service.hesaplaIadeKarari({
             basvuruDurumu: this.selectedBasvuru.durum,
+            kampDonemiId: this.selectedBasvuru.kampDonemiId,
             kampBaslangicTarihi: this.selectedBasvuru.konaklamaBaslangicTarihi,
             toplamGunSayisi: this.toplamGunSayisi,
             vazgecmeTarihi: this.vazgecmeTarihi || null,

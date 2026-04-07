@@ -41,6 +41,36 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             })
             .ToListAsync(cancellationToken);
 
+        var programParametreAyarlari = await _dbContext.KampProgramiParametreAyarlari
+            .AsNoTracking()
+            .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
+            .OrderBy(x => x.KampProgrami!.Ad)
+            .ThenBy(x => x.Id)
+            .Select(x => new KampProgramiParametreAyariDto
+            {
+                Id = x.Id,
+                KampProgramiId = x.KampProgramiId,
+                KampProgramiAd = x.KampProgrami != null ? x.KampProgrami.Ad : null,
+                KamuAvansKisiBasi = x.KamuAvansKisiBasi ?? KampBasvuruKurallari.KamuAvansKisiBasi,
+                DigerAvansKisiBasi = x.DigerAvansKisiBasi ?? KampBasvuruKurallari.DigerAvansKisiBasi,
+                VazgecmeIadeGunSayisi = x.VazgecmeIadeGunSayisi ?? 7,
+                GecBildirimGunlukKesintiyUzdesi = x.GecBildirimGunlukKesintiyUzdesi ?? 0.05m,
+                NoShowSuresiGun = x.NoShowSuresiGun ?? 2,
+                AktifMi = x.AktifMi
+            })
+            .ToListAsync(cancellationToken);
+
+        if (programParametreAyarlari.Count == 0)
+        {
+            programParametreAyarlari = programlar
+                .Select(x => new KampProgramiParametreAyariDto
+                {
+                    KampProgramiId = x.Id,
+                    KampProgramiAd = x.Ad
+                })
+                .ToList();
+        }
+
         var tipKurallari = await _dbContext.KampProgramiBasvuruSahibiTipKurallari
             .AsNoTracking()
             .Include(x => x.KampBasvuruSahibiTipi)
@@ -115,6 +145,7 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         {
             Programlar = programlar,
             GlobalBasvuruSahibiTipleri = globalBasvuruSahibiTipleri,
+            ProgramParametreAyarlari = programParametreAyarlari,
             KuralSetleri = kuralSetleri,
             BasvuruSahibiTipleri = tipKurallari,
             KatilimciTipleri = katilimciTipleri,
@@ -130,6 +161,7 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
 
         await UpsertKuralSetleriAsync(request.KuralSetleri, cancellationToken);
         await UpsertBasvuruSahibiTipKurallariAsync(request.BasvuruSahibiTipleri, cancellationToken);
+        await UpsertProgramParametreAyarlariAsync(request.ProgramParametreAyarlari, cancellationToken);
         await UpsertYasUcretKuraliAsync(request.YasUcretKurali, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -208,6 +240,39 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         }
     }
 
+    private async Task UpsertProgramParametreAyarlariAsync(List<KampProgramiParametreAyariDto> dtos, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.KampProgramiParametreAyarlari.ToListAsync(cancellationToken);
+        var existingById = existing.ToDictionary(x => x.Id, x => x);
+
+        foreach (var dto in dtos)
+        {
+            if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var entity))
+            {
+                entity.KampProgramiId = dto.KampProgramiId;
+                entity.KamuAvansKisiBasi = dto.KamuAvansKisiBasi;
+                entity.DigerAvansKisiBasi = dto.DigerAvansKisiBasi;
+                entity.VazgecmeIadeGunSayisi = dto.VazgecmeIadeGunSayisi;
+                entity.GecBildirimGunlukKesintiyUzdesi = dto.GecBildirimGunlukKesintiyUzdesi;
+                entity.NoShowSuresiGun = dto.NoShowSuresiGun;
+                entity.AktifMi = dto.AktifMi;
+                entity.IsDeleted = false;
+                continue;
+            }
+
+            _dbContext.KampProgramiParametreAyarlari.Add(new KampProgramiParametreAyari
+            {
+                KampProgramiId = dto.KampProgramiId,
+                KamuAvansKisiBasi = dto.KamuAvansKisiBasi,
+                DigerAvansKisiBasi = dto.DigerAvansKisiBasi,
+                VazgecmeIadeGunSayisi = dto.VazgecmeIadeGunSayisi,
+                GecBildirimGunlukKesintiyUzdesi = dto.GecBildirimGunlukKesintiyUzdesi,
+                NoShowSuresiGun = dto.NoShowSuresiGun,
+                AktifMi = dto.AktifMi
+            });
+        }
+    }
+
     private async Task UpsertYasUcretKuraliAsync(KampYasUcretKuraliDto dto, CancellationToken cancellationToken)
     {
         var existing = await _dbContext.KampYasUcretKurallari
@@ -246,6 +311,11 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             throw new BaseException("En az bir basvuru sahibi tipi tanimi zorunludur.", 400);
         }
 
+        if (request.ProgramParametreAyarlari.Count == 0)
+        {
+            throw new BaseException("En az bir program parametre ayari zorunludur.", 400);
+        }
+
         var duplicateYears = request.KuralSetleri
             .GroupBy(x => new { x.KampProgramiId, x.KampYili })
             .FirstOrDefault(x => x.Count() > 1);
@@ -260,6 +330,14 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         if (duplicateKod is not null)
         {
             throw new BaseException($"Program {duplicateKod.Key.KampProgramiId} icin basvuru sahibi tipi tekrari var.", 400);
+        }
+
+        var duplicateProgramParam = request.ProgramParametreAyarlari
+            .GroupBy(x => x.KampProgramiId)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (duplicateProgramParam is not null)
+        {
+            throw new BaseException($"Program {duplicateProgramParam.Key} icin birden fazla parametre ayari kaydi gonderildi.", 400);
         }
 
         foreach (var kuralSeti in request.KuralSetleri)
@@ -315,6 +393,39 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             if (tip.EmekliBonusPuani < KampValidasyonKurallari.EmekliBonusPuani.Min || tip.EmekliBonusPuani > KampValidasyonKurallari.EmekliBonusPuani.Max)
             {
                 throw new BaseException("Emekli bonus puani 0-1000 araliginda olmalidir.", 400);
+            }
+        }
+
+        foreach (var ayar in request.ProgramParametreAyarlari)
+        {
+            if (ayar.KampProgramiId <= 0)
+            {
+                throw new BaseException("Program parametre ayari icin kamp programi secimi zorunludur.", 400);
+            }
+
+            if (ayar.KamuAvansKisiBasi < KampValidasyonKurallari.AvansKisiBasi.Min || ayar.KamuAvansKisiBasi > KampValidasyonKurallari.AvansKisiBasi.Max)
+            {
+                throw new BaseException("Kamu avans kisi basi tutari 0 - 50000 araliginda olmalidir.", 400);
+            }
+
+            if (ayar.DigerAvansKisiBasi < KampValidasyonKurallari.AvansKisiBasi.Min || ayar.DigerAvansKisiBasi > KampValidasyonKurallari.AvansKisiBasi.Max)
+            {
+                throw new BaseException("Diger avans kisi basi tutari 0 - 50000 araliginda olmalidir.", 400);
+            }
+
+            if (ayar.VazgecmeIadeGunSayisi < KampValidasyonKurallari.VazgecmeIadeGunSayisi.Min || ayar.VazgecmeIadeGunSayisi > KampValidasyonKurallari.VazgecmeIadeGunSayisi.Max)
+            {
+                throw new BaseException("Vazgecme iade gun sayisi 0 - 60 araliginda olmalidir.", 400);
+            }
+
+            if (ayar.GecBildirimGunlukKesintiyUzdesi < KampValidasyonKurallari.GecBildirimGunlukKesintiOrani.Min || ayar.GecBildirimGunlukKesintiyUzdesi > KampValidasyonKurallari.GecBildirimGunlukKesintiOrani.Max)
+            {
+                throw new BaseException("Gec bildirim gunluk kesinti orani 0.00 - 1.00 araliginda olmalidir.", 400);
+            }
+
+            if (ayar.NoShowSuresiGun < KampValidasyonKurallari.NoShowSuresiGun.Min || ayar.NoShowSuresiGun > KampValidasyonKurallari.NoShowSuresiGun.Max)
+            {
+                throw new BaseException("No-show suresi 0 - 30 gun araliginda olmalidir.", 400);
             }
         }
 

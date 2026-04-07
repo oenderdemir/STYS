@@ -163,6 +163,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         }
 
         var programlar = await _stysDbContext.KampProgramlari
+            .Where(x => x.AktifMi)
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
             .Select(x => new KampProgramiSecenekDto
@@ -296,6 +297,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
     {
         var query = _stysDbContext.KampDonemleri
             .Include(x => x.KampProgrami)
+            .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
             .AsQueryable();
 
         return include is null ? query : include(query);
@@ -317,10 +319,10 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
             throw new BaseException("Kamp programi secimi zorunludur.", 400);
         }
 
-        var exists = await _stysDbContext.KampProgramlari.AnyAsync(x => x.Id == kampProgramiId);
+        var exists = await _stysDbContext.KampProgramlari.AnyAsync(x => x.Id == kampProgramiId && x.AktifMi);
         if (!exists)
         {
-            throw new BaseException("Secilen kamp programi bulunamadi.", 404);
+            throw new BaseException("Secilen kamp programi bulunamadi veya aktif degil.", 404);
         }
     }
 

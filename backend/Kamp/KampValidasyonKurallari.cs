@@ -65,4 +65,28 @@ public static class KampValidasyonKurallari
         public const decimal Min = 0.00m;
         public const decimal Max = 1.00m;
     }
+
+    public static class AvansKisiBasi
+    {
+        public const decimal Min = 0.00m;
+        public const decimal Max = 50000.00m;
+    }
+
+    public static class VazgecmeIadeGunSayisi
+    {
+        public const int Min = 0;
+        public const int Max = 60;
+    }
+
+    public static class GecBildirimGunlukKesintiOrani
+    {
+        public const decimal Min = 0.00m;
+        public const decimal Max = 1.00m;
+    }
+
+    public static class NoShowSuresiGun
+    {
+        public const int Min = 0;
+        public const int Max = 30;
+    }
 }

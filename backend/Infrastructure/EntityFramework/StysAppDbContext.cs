@@ -66,6 +66,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KampBasvuruGecmisKatilim> KampBasvuruGecmisKatilimlari => Set<KampBasvuruGecmisKatilim>();
     public DbSet<KampKuralSeti> KampKuralSetleri => Set<KampKuralSeti>();
     public DbSet<KampProgramiBasvuruSahibiTipKurali> KampProgramiBasvuruSahibiTipKurallari => Set<KampProgramiBasvuruSahibiTipKurali>();
+    public DbSet<KampProgramiParametreAyari> KampProgramiParametreAyarlari => Set<KampProgramiParametreAyari>();
     public DbSet<KampKonaklamaTarifesi> KampKonaklamaTarifeleri => Set<KampKonaklamaTarifesi>();
     public DbSet<KampYasUcretKurali> KampYasUcretKurallari => Set<KampYasUcretKurali>();
     public DbSet<KampBasvuruSahibiTipi> KampBasvuruSahibiTipleri => Set<KampBasvuruSahibiTipi>();
@@ -579,6 +580,22 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KampBasvuruSahibiTipi)
                 .WithMany()
                 .HasForeignKey(x => x.KampBasvuruSahibiTipiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampProgramiParametreAyari>(entity =>
+        {
+            entity.ToTable("KampProgramiParametreAyarlari", "dbo");
+            entity.Property(x => x.KamuAvansKisiBasi).HasPrecision(18, 2);
+            entity.Property(x => x.DigerAvansKisiBasi).HasPrecision(18, 2);
+            entity.Property(x => x.GecBildirimGunlukKesintiyUzdesi).HasPrecision(18, 4);
+            entity.HasIndex(x => x.KampProgramiId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampProgrami)
+                .WithMany()
+                .HasForeignKey(x => x.KampProgramiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -12,7 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
-import { KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
+import { KampProgramiParametreAyariDto, KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 import { AuthService } from '../auth';
 
@@ -34,6 +34,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     saving = false;
     programlar: KampProgramiSecenekDto[] = [];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[] = [];
+    programParametreAyarlari: KampProgramiParametreAyariDto[] = [];
     kuralSetleri: KampPuanKuralSetiDto[] = [];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[] = [];
     katilimciTipleri: KampSecenekDto[] = [];
@@ -75,6 +76,11 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.globalBasvuruSahibiTipleri = [...baglam.globalBasvuruSahibiTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
+                    this.programParametreAyarlari = [...baglam.programParametreAyarlari].sort((a, b) => {
+                        const adA = a.kampProgramiAd ?? '';
+                        const adB = b.kampProgramiAd ?? '';
+                        return adA.localeCompare(adB);
+                    });
                     this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
                         const adA = a.kampProgramiAd ?? '';
                         const adB = b.kampProgramiAd ?? '';
@@ -112,6 +118,22 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         ];
     }
 
+    addProgramParametreAyari(): void {
+        const defaultProgramId = this.programlar[0]?.id ?? 0;
+        this.programParametreAyarlari = [
+            ...this.programParametreAyarlari,
+            {
+                kampProgramiId: defaultProgramId,
+                kamuAvansKisiBasi: 1700,
+                digerAvansKisiBasi: 2550,
+                vazgecmeIadeGunSayisi: 7,
+                gecBildirimGunlukKesintiyUzdesi: 0.05,
+                noShowSuresiGun: 2,
+                aktifMi: true
+            }
+        ];
+    }
+
     addBasvuruSahibiTipi(): void {
         const maxOncelik = this.basvuruSahibiTipleri.length > 0 ? Math.max(...this.basvuruSahibiTipleri.map((x) => x.oncelikSirasi)) : 0;
         const defaultProgramId = this.programlar[0]?.id ?? 0;
@@ -137,6 +159,10 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         this.kuralSetleri = this.kuralSetleri.filter((_, i) => i !== index);
     }
 
+    removeProgramParametreAyari(index: number): void {
+        this.programParametreAyarlari = this.programParametreAyarlari.filter((_, i) => i !== index);
+    }
+
     removeBasvuruSahibiTipi(index: number): void {
         this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter((_, i) => i !== index);
     }
@@ -151,6 +177,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
             .kaydetKampPuanKuraliYonetimBaglam({
                 kuralSetleri: this.kuralSetleri,
                 basvuruSahibiTipleri: this.basvuruSahibiTipleri,
+                programParametreAyarlari: this.programParametreAyarlari,
                 yasUcretKurali: this.yasUcretKurali
             })
             .pipe(finalize(() => {
@@ -161,6 +188,11 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.globalBasvuruSahibiTipleri = [...baglam.globalBasvuruSahibiTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
+                    this.programParametreAyarlari = [...baglam.programParametreAyarlari].sort((a, b) => {
+                        const adA = a.kampProgramiAd ?? '';
+                        const adB = b.kampProgramiAd ?? '';
+                        return adA.localeCompare(adB);
+                    });
                     this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
                         const adA = a.kampProgramiAd ?? '';
                         const adB = b.kampProgramiAd ?? '';

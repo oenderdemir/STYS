@@ -20,6 +20,7 @@ public class KampTahsisService : IKampTahsisService
     public async Task<KampTahsisBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
     {
         var donemler = await _dbContext.KampDonemleri
+            .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
             .OrderByDescending(x => x.Yil)
             .ThenBy(x => x.KonaklamaBaslangicTarihi)
             .Select(x => new KampTahsisDonemSecenekDto
@@ -53,6 +54,7 @@ public class KampTahsisService : IKampTahsisService
             .AsNoTracking()
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
+            .Where(x => x.KampDonemi != null && x.KampDonemi.KampProgrami != null && x.KampDonemi.KampProgrami.AktifMi)
             .AsQueryable();
 
         if (filter.KampDonemiId.HasValue && filter.KampDonemiId.Value > 0)
@@ -252,7 +254,13 @@ public class KampTahsisService : IKampTahsisService
 
         // Talimat: "donemin baslamasindan itibaren ikinci gunun sonuna kadar kampa katilmayanlarin tahsisi iptal edilecektir"
         // Bu islem ancak donem basladiktan 2 gun sonra calistiriabilir.
-        var noShowGunSayisi = _parametreService.GetInt(KampParametreKodlari.NoShowSuresiGun, 2);
+        var ayar = await _dbContext.KampProgramiParametreAyarlari
+            .AsNoTracking()
+            .Where(x => x.AktifMi && x.KampProgramiId == donem.KampProgramiId)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        var noShowGunSayisi = ayar?.NoShowSuresiGun
+            ?? _parametreService.GetInt(KampParametreKodlari.NoShowSuresiGun, 2);
         var noShowSinirTarihi = donem.KonaklamaBaslangicTarihi.Date.AddDays(noShowGunSayisi);
         if (DateTime.UtcNow.Date < noShowSinirTarihi)
         {

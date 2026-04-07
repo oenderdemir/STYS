@@ -1011,3 +1011,121 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Build Sonuclari (Tur 25)
 - Backend build bu turda yeniden kosulmadi (ortamda calisan `STYS` process lock riski var).
+
+## Tur 26 - Kamp Parametrelerini Program Bazinda Ayrisma (Avans/Iade/No-Show)
+
+### Yapilanlar
+- Program bazli ayar tablosu eklendi: `KampProgramiParametreAyarlari`
+  - `KamuAvansKisiBasi`
+  - `DigerAvansKisiBasi`
+  - `VazgecmeIadeGunSayisi`
+  - `GecBildirimGunlukKesintiyUzdesi`
+  - `NoShowSuresiGun`
+- Migration ile aktif kamp programlari icin baslangic kayitlari otomatik olusturuldu.
+  - Degerler mevcut global `KampParametreleri` kayitlarindan alinir.
+- Ucret hesaplama servisinde avans tutarlari artik `kampProgramiId` bazli okunuyor.
+  - Sira: `program ayari` -> `global parametre` -> `kod default`.
+- Tahsis servisinde no-show gunu artik `kampProgramiId` bazli okunuyor.
+  - Sira: `program ayari` -> `global parametre`.
+- Iade servisinde vazgecme gunu ve gec bildirim kesintisi program bazli okunuyor.
+  - `KampIadeHesaplamaRequestDto` icine `KampDonemiId` eklendi.
+  - Frontend iade hesaplama cagrisi bu alanı gonderir hale getirildi.
+  - Sira: `program ayari` -> `global parametre`.
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampProgramiParametreAyari.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260407083248_AddKampProgramiParametreAyarlari.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260407083248_AddKampProgramiParametreAyarlari.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- backend/Kamp/Services/KampTahsisService.cs
+- backend/Kamp/Services/KampIadeService.cs
+- backend/Kamp/Dto/KampIadeHesaplamaRequestDto.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-iade-yonetimi.ts
+- changes.md
+
+### Build Sonuclari (Tur 26)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 27 - Kamp Programina Gore Kural Duzenleme Alani Eklendi
+
+### Yapilanlar
+- `Kamp Puan Kurallari` yonetim ekranina yeni bolum eklendi: **Program Bazli Parametreler**.
+- Bu bolumde her kamp programi icin su kurallar ayri ayri duzenlenebilir hale getirildi:
+  - `KamuAvansKisiBasi`
+  - `DigerAvansKisiBasi`
+  - `VazgecmeIadeGunSayisi`
+  - `GecBildirimGunlukKesintiyUzdesi`
+  - `NoShowSuresiGun`
+  - `AktifMi`
+- Backend `yonetim-baglam` GET/PUT akisina `ProgramParametreAyarlari` dahil edildi.
+- Kaydetme sirasinda program parametreleri icin upsert eklendi (mevcut satir update, yeni satir insert).
+- Validasyonlar eklendi:
+  - Program secimi zorunlu
+  - Program bazli tekillik (bir programa bir satir)
+  - Avans tutarlari, iade/no-show gunleri ve kesinti orani icin min/max kontrolu
+- Tabloda kayit yoksa ekranin bos gelmemesi icin, aktif programlardan varsayilan satirlar uretilir hale getirildi.
+- Frontend DTO/ekran kaydet payload'i yeni alanla guncellendi.
+
+### Degisen Dosyalar
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- backend/Kamp/KampValidasyonKurallari.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 27)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Backend build'de mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning goruldu (bu tur degisikliginden bagimsiz).
+
+## Tur 28 - Aktif Olmayan Kamp Programlarini Operasyon Ekranlarindan Filtreleme
+
+### Yapilanlar
+- Aktif olmayan kamp programlarinin diger ekranlarda gorunmesini engellemek icin operasyonel baglam sorgularina `KampProgrami.AktifMi` filtresi eklendi.
+- Kamp Basvuru baglami:
+  - Donem listesi artik sadece aktif programlara ait aktif donemleri getiriyor.
+  - Basvuru onizleme validasyonuna, secili donemin programi aktif degilse hata ekleyen kontrol eklendi.
+- Kamp Tahsis baglami ve listeleme:
+  - Donem dropdown listesi aktif programlarla sinirlandi.
+  - Basvuru listesi sorgusu aktif programli donemler ile sinirlandi.
+- Kamp Rezervasyon baglami ve listeleme:
+  - Donem dropdown listesi aktif programlarla sinirlandi.
+  - Rezervasyon listesi sorgusu aktif programli donemler ile sinirlandi.
+- Kamp Donemi yonetim baglami:
+  - Program secenekleri sadece aktif programlardan getiriliyor.
+  - Donem ekleme/guncellemede secilen programin aktif olmasi zorunlu hale getirildi.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampTahsisService.cs
+- backend/Kamp/Services/KampRezervasyonService.cs
+- backend/Kamp/Services/KampDonemiService.cs
+- changes.md
+
+### Build Sonuclari (Tur 28)
+- Backend: Bu turda build lock nedeniyle dogrulanamadi (`STYS` ve `Visual Studio` processleri DLL dosyalarini kilitliyor).
+
+## Tur 29 - Donemler Ekraninda da Inaktif Program Donemlerini Gizleme
+
+### Yapilanlar
+- Kullanici talebine uygun olarak `Donemler` ekranini besleyen sorgulara da aktif program filtresi uygulandi.
+- `KampDonemiService` icindeki temel include/liste sorgusu guncellendi:
+  - artik sadece `KampProgrami.AktifMi = true` olan donemler donuyor.
+- Bu degisiklikle:
+  - `Kamp Donemleri` listesi,
+  - `Kamp Donemi Tesis Atama` ekraninin kullandigi donem kaynagi
+  inaktif programa bagli donemleri gostermez.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampDonemiService.cs
+- changes.md
+
+### Build Sonuclari (Tur 29)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Not: Mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.

@@ -21,6 +21,7 @@ public class KampRezervasyonService : IKampRezervasyonService
     public async Task<KampRezervasyonBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
     {
         var donemler = await _dbContext.KampDonemleri
+            .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
             .OrderByDescending(x => x.Yil)
             .ThenBy(x => x.KonaklamaBaslangicTarihi)
             .Select(x => new KampRezervasyonDonemSecenekDto
@@ -50,6 +51,7 @@ public class KampRezervasyonService : IKampRezervasyonService
             .AsNoTracking()
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
+            .Where(x => x.KampDonemi != null && x.KampDonemi.KampProgrami != null && x.KampDonemi.KampProgrami.AktifMi)
             .AsQueryable();
 
         if (filter.KampDonemiId.HasValue && filter.KampDonemiId.Value > 0)

@@ -37,7 +37,7 @@ public class KampBasvuruService : IKampBasvuruService
         await _parametreService.LoadAsync(cancellationToken);
         var lookupBaglami = await LoadLookupBaglamiAsync(cancellationToken);
         var donemler = await _dbContext.KampDonemleri
-            .Where(x => x.AktifMi)
+            .Where(x => x.AktifMi && x.KampProgrami != null && x.KampProgrami.AktifMi)
             .Include(x => x.KampProgrami)
             .Include(x => x.TesisAtamalari.Where(y => y.AktifMi && y.BasvuruyaAcikMi))
             .ThenInclude(x => x.Tesis)
@@ -325,6 +325,14 @@ public class KampBasvuruService : IKampBasvuruService
         if (!kampDonemi.AktifMi)
         {
             onizleme.Hatalar.Add("Secilen kamp donemi aktif degil.");
+        }
+
+        var programAktifMi = await _dbContext.KampProgramlari
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == kampDonemi.KampProgramiId && x.AktifMi, cancellationToken);
+        if (!programAktifMi)
+        {
+            onizleme.Hatalar.Add("Secilen kamp doneminin kamp programi aktif degil.");
         }
 
         var bugun = DateTime.UtcNow.Date;

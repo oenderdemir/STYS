@@ -33,8 +33,7 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
             .Where(x => x.AktifMi)
             .ToDictionaryAsync(x => x.Kod, x => x.KamuTarifesiUygulanirMi, cancellationToken);
 
-        var kamuAvans = _params.GetDecimal(KampParametreKodlari.KamuAvansKisiBasi, KampBasvuruKurallari.KamuAvansKisiBasi);
-        var digerAvans = _params.GetDecimal(KampParametreKodlari.DigerAvansKisiBasi, KampBasvuruKurallari.DigerAvansKisiBasi);
+        var (kamuAvans, digerAvans) = await ResolveAvansAyarlariAsync(kampDonemi.KampProgramiId, cancellationToken);
         var yasKurali = await ResolveYasKuraliAsync(cancellationToken);
 
         foreach (var katilimci in request.Katilimcilar)
@@ -135,6 +134,22 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
         }
 
         return secilen;
+    }
+
+    private async Task<(decimal kamuAvans, decimal digerAvans)> ResolveAvansAyarlariAsync(int kampProgramiId, CancellationToken cancellationToken)
+    {
+        var ayar = await _dbContext.KampProgramiParametreAyarlari
+            .AsNoTracking()
+            .Where(x => x.AktifMi && x.KampProgramiId == kampProgramiId)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var kamuAvans = ayar?.KamuAvansKisiBasi
+            ?? _params.GetDecimal(KampParametreKodlari.KamuAvansKisiBasi, KampBasvuruKurallari.KamuAvansKisiBasi);
+        var digerAvans = ayar?.DigerAvansKisiBasi
+            ?? _params.GetDecimal(KampParametreKodlari.DigerAvansKisiBasi, KampBasvuruKurallari.DigerAvansKisiBasi);
+
+        return (kamuAvans, digerAvans);
     }
 
     private List<KampKonaklamaKonfigurasyonu> GetAktifKonaklamaTarifeleri()

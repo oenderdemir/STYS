@@ -6,6 +6,8 @@ public class KampPuanKuraliYonetimBaglamDto
 
     public List<KampPuanBasvuruSahibiTipSecenekDto> GlobalBasvuruSahibiTipleri { get; set; } = [];
 
+    public List<KampProgramiParametreAyariDto> ProgramParametreAyarlari { get; set; } = [];
+
     public List<KampPuanKuralSetiDto> KuralSetleri { get; set; } = [];
 
     public List<KampPuanBasvuruSahibiTipiDto> BasvuruSahibiTipleri { get; set; } = [];
@@ -30,7 +32,30 @@ public class KampPuanKuraliYonetimKaydetRequestDto
 
     public List<KampPuanBasvuruSahibiTipiDto> BasvuruSahibiTipleri { get; set; } = [];
 
+    public List<KampProgramiParametreAyariDto> ProgramParametreAyarlari { get; set; } = [];
+
     public KampYasUcretKuraliDto YasUcretKurali { get; set; } = new();
+}
+
+public class KampProgramiParametreAyariDto
+{
+    public int? Id { get; set; }
+
+    public int KampProgramiId { get; set; }
+
+    public string? KampProgramiAd { get; set; }
+
+    public decimal KamuAvansKisiBasi { get; set; } = 1700m;
+
+    public decimal DigerAvansKisiBasi { get; set; } = 2550m;
+
+    public int VazgecmeIadeGunSayisi { get; set; } = 7;
+
+    public decimal GecBildirimGunlukKesintiyUzdesi { get; set; } = 0.05m;
+
+    public int NoShowSuresiGun { get; set; } = 2;
+
+    public bool AktifMi { get; set; } = true;
 }
 
 public class KampYasUcretKuraliDto

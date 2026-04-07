@@ -42,9 +42,22 @@ export interface KampPuanBasvuruSahibiTipSecenekDto {
     ad: string;
 }
 
+export interface KampProgramiParametreAyariDto {
+    id?: number | null;
+    kampProgramiId: number;
+    kampProgramiAd?: string | null;
+    kamuAvansKisiBasi: number;
+    digerAvansKisiBasi: number;
+    vazgecmeIadeGunSayisi: number;
+    gecBildirimGunlukKesintiyUzdesi: number;
+    noShowSuresiGun: number;
+    aktifMi: boolean;
+}
+
 export interface KampPuanKuraliYonetimBaglamDto {
     programlar: KampProgramiSecenekDto[];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[];
+    programParametreAyarlari: KampProgramiParametreAyariDto[];
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     katilimciTipleri: KampSecenekDto[];
@@ -54,6 +67,7 @@ export interface KampPuanKuraliYonetimBaglamDto {
 export interface KampPuanKuraliYonetimKaydetRequestDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
+    programParametreAyarlari: KampProgramiParametreAyariDto[];
     yasUcretKurali: KampYasUcretKuraliDto;
 }
 
@@ -237,6 +251,7 @@ export interface KampKatilimciIptalSonucDto {
 
 export interface KampIadeHesaplamaRequestDto {
     basvuruDurumu: string;
+    kampDonemiId?: number | null;
     kampBaslangicTarihi: string;
     toplamGunSayisi: number;
     vazgecmeTarihi?: string | null;

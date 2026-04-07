@@ -3,6 +3,7 @@ namespace STYS.Kamp.Dto;
 public class KampIadeHesaplamaRequestDto
 {
     public string BasvuruDurumu { get; set; } = KampBasvuruDurumlari.Beklemede;
+    public int? KampDonemiId { get; set; }
     public DateTime KampBaslangicTarihi { get; set; }
     public int ToplamGunSayisi { get; set; }
     public DateTime? VazgecmeTarihi { get; set; }

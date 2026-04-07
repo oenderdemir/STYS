@@ -11,6 +11,8 @@ public class KampPuanKuraliYonetimBaglamDto
     public List<KampPuanBasvuruSahibiTipiDto> BasvuruSahibiTipleri { get; set; } = [];
 
     public List<KampSecenekDto> KatilimciTipleri { get; set; } = [];
+
+    public KampYasUcretKuraliDto YasUcretKurali { get; set; } = new();
 }
 
 public class KampPuanBasvuruSahibiTipSecenekDto
@@ -27,6 +29,21 @@ public class KampPuanKuraliYonetimKaydetRequestDto
     public List<KampPuanKuralSetiDto> KuralSetleri { get; set; } = [];
 
     public List<KampPuanBasvuruSahibiTipiDto> BasvuruSahibiTipleri { get; set; } = [];
+
+    public KampYasUcretKuraliDto YasUcretKurali { get; set; } = new();
+}
+
+public class KampYasUcretKuraliDto
+{
+    public int? Id { get; set; }
+
+    public int UcretsizCocukMaxYas { get; set; } = 2;
+
+    public int YarimUcretliCocukMaxYas { get; set; } = 6;
+
+    public decimal YemekOrani { get; set; } = 0.50m;
+
+    public bool AktifMi { get; set; } = true;
 }
 
 public class KampPuanKuralSetiDto

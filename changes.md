@@ -746,3 +746,268 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Test Notu
 - Hedefli test: `KampKurallariTests.Puanlama_TarimOrmanPersoneliIcinTalimatPuanlariniUygular` BASARILI.
+
+## Tur 14 - Kamp Puan Kurali Ekrani Dropdown Gorunumu Duzeltmesi
+
+### Yapilanlar
+- Ekrandaki native/uyumsuz dropdown gorunumu duzeltildi.
+- `kamp-puan-kurali-yonetimi` sayfasindaki secimler `p-dropdown` yerine PrimeNG `p-select` ile standart hale getirildi.
+- Program, Global Tip ve Varsayilan Katilimci Tipi alanlarina `appendTo='body'` eklendi (tablo icinde overlay kesilmesini onlemek icin).
+- Global tip secenegi icin okunabilir etiket formatina gecildi: `Ad (Kod)`.
+- Tablo icinde `p-select` icin genislik/min-width stili eklendi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.scss
+- changes.md
+
+### Build Sonuclari (Tur 14)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 15 - Donem Etiketlerini Program / Donem Formatina Getirme
+
+### Yapilanlar
+- Kamp baglam DTO'larina donem secenekleri icin `KampProgramiAd` alani eklendi:
+  - Basvuru, Tahsis, Rezervasyon baglamlari.
+- Backend'de ilgili baglam sorgulari program adini da donecek sekilde guncellendi.
+- Frontend'de donem dropdown etiketleri `Program / Donem` formatina cekildi:
+  - Kamp Basvuru
+  - Kamp Tahsis
+  - Kamp Rezervasyon
+  - Kamp Iade
+
+### Degisen Dosyalar
+- backend/Kamp/Dto/KampBasvuruBaglamDto.cs
+- backend/Kamp/Dto/KampTahsisBaglamDto.cs
+- backend/Kamp/Dto/KampRezervasyonDto.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampTahsisService.cs
+- backend/Kamp/Services/KampRezervasyonService.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-tahsis-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-rezervasyonlari.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-iade-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 15)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 16 - Kamp Donemi Tesis Atamasi Ekraninda Toplu Donem Uygulamasi
+
+### Yapilanlar
+- `Kamp Donemi Tesis Atamasi` ekranina toplu uygulama akisi eklendi.
+- Secili donemin mevcut tesis atama konfigurasyonu, birden fazla doneme tek seferde uygulanabilir hale getirildi.
+- Yeni UI alanlari:
+  - `Toplu Uygulama Donemleri` (coklu secim)
+  - `Ayni Program+Yil Donemlerini Sec` hizli secim butonu
+  - `Secili Donemlere Toplu Uygula` kaydetme butonu
+- Is kurali:
+  - Toplu aday listesi, secili donem ile ayni `program + yil` kapsamindaki donemlerden otomatik uretilir.
+  - Toplu kayit, secili hedef donemlerin tamamina ayni tesis atama payload'ini gonderir.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.scss
+- changes.md
+
+### Build Sonuclari (Tur 16)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 17 - Kamp Sezonu Bazli Filtreleme (Donem Atama Ekrani)
+
+### Yapilanlar
+- `Kamp Donemi Tesis Atamasi` ekranina `Kamp Sezonu` secimi eklendi.
+- Ekran akisina sezon -> donem hiyerarsisi getirildi:
+  - Sezon secilince donem dropdown'i otomatik filtrelenir.
+  - Toplu uygulama donem listesi de ayni sezon kapsamiyla filtrelenir.
+  - Sezon degisince secili donem ve atama tablosu yeni filtreye gore otomatik yenilenir.
+- Toplu uygulama ozelligi korunup sezona baglandi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.scss
+- changes.md
+
+### Build Sonuclari (Tur 17)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 18 - Donem Atama Ekraninda Tek Donem Dropdown'ina Gecis
+
+### Yapilanlar
+- `Kamp Donemi` tekli dropdown kaldirildi.
+- Ekranda sadece bir adet donem secim kontrolu birakildi: `Kamp Donemleri (Coklu Secim)`.
+- Bu coklu secim artik hem:
+  - duzenlenecek kaynak donemi (ilk secili donem),
+  - hem de toplu uygulama hedef donemlerini
+  belirliyor.
+- Coklu secim bosalsa bile alan gizlenmiyor (yetkisi olan kullanici tekrar secim yapabiliyor).
+
+### Degisen Dosyalar
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-donemi-atama-yonetimi.scss
+- changes.md
+
+### Build Sonuclari (Tur 18)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 19 - Cocuk Ucretlendirmesinde Parametreden Yas Kurali Tablosuna Gecis
+
+### Yapilanlar
+- Cocuk ucretlendirme kurali, sabit tarih parametresi yerine kamp tarihindeki yasi esas alacak sekilde guncellendi.
+- Yeni tablo eklendi: `KampYasUcretKurallari`
+  - `UcretsizCocukMaxYas`
+  - `YarimUcretliCocukMaxYas`
+  - `YemekOrani`
+  - `AktifMi`
+- Ucret hesaplama akisinda:
+  - aktif yas-kurali kaydi veritabanindan okunuyor,
+  - katilimci yasi `kampDonemi.KonaklamaBaslangicTarihi` referans alinarak hesaplaniyor,
+  - kural yoksa fallback olarak kod tarafindaki varsayilan degerler kullaniliyor.
+- Migration ile varsayilan bir aktif kural kaydi seed edildi (`2 / 6 / 0.50`).
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampYasUcretKurali.cs
+- backend/Kamp/KampBasvuruKurallari.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406200416_AddKampYasUcretKurallari.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406200416_AddKampYasUcretKurallari.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- changes.md
+
+### Build Sonuclari (Tur 19)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 20 - Yas/Ucret Kurallarini Kamp Puan Kurallari Ekranina Ekleme
+
+### Yapilanlar
+- `Kamp Puan Kurallari` ekranina yeni bir global bolum eklendi:
+  - `Ucretsiz Cocuk Max Yas`
+  - `Yarim Ucretli Cocuk Max Yas`
+  - `Yemek Orani (0-1)`
+  - `Aktif`
+- Bu alanlar mevcut `yonetim-baglam` GET/PUT akisi icine dahil edildi:
+  - baglam okunurken aktif yas/ucret kurali ekrana geliyor,
+  - kaydetmede ayni istekle yas/ucret kurali da guncelleniyor.
+- Backend validasyonlari eklendi:
+  - yas alanlari `0-18`,
+  - `yarim max yas >= ucretsiz max yas`,
+  - `yemek orani 0.00-1.00`.
+- Kayit mantigi:
+  - mevcut kayit varsa update,
+  - yoksa yeni kayit olustur.
+
+### Degisen Dosyalar
+- backend/Kamp/Dto/KampPuanKuraliYonetimDto.cs
+- backend/Kamp/Services/KampPuanKuraliYonetimService.cs
+- backend/Kamp/KampValidasyonKurallari.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.html
+- frontend/src/app/pages/kamp-yonetimi/kamp-puan-kurali-yonetimi.scss
+- changes.md
+
+### Build Sonuclari (Tur 20)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 21 - Konaklama Birimlerini Tesis Binalarindan Uretme
+
+### Yapilanlar
+- Kamp basvuru baglaminda `Konaklama Birimi` listesi, artik global parametre listesi yerine secili tesisin aktif binalarindan uretiliyor.
+- Her bina icin aktif odalarin oda tipi kapasiteleri okunup min/max kapasite hesaplandi.
+- Hesaplanan kapasite araligina gore mevcut konaklama ucret parametrelerinden uygun konfigurasyon eslestirildi.
+- Basvuru dogrulama ve ucret hesaplama akisinda:
+  - once geriye donuk destek icin direkt parametre kodu cozumleniyor,
+  - olmazsa secili tesis + bina adi uzerinden kapasite esleme ile konaklama konfigurasyonu bulunuyor.
+- Bu sayede ekrandaki secim kaynagi bina bazli hale geldi; mevcut fiyat hesaplama akisi da korunmus oldu.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- changes.md
+
+### Build Sonuclari (Tur 21)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 22 - Konaklama Parametrelerini Tabloya Tasima (Ilk Faz)
+
+### Yapilanlar
+- `Konaklama.*` parametreleri yerine yeni global tablo eklendi: `KampKonaklamaTarifeleri`.
+- Yeni tablo alani:
+  - `Kod`, `Ad`
+  - `MinimumKisi`, `MaksimumKisi`
+  - `KamuGunlukUcret`, `DigerGunlukUcret`
+  - `BuzdolabiGunlukUcret`, `TelevizyonGunlukUcret`, `KlimaGunlukUcret`
+  - `AktifMi`
+- Migration icinde otomatik veri tasima eklendi:
+  - mevcut `KampParametreleri` icindeki `Konaklama.<Kod>.<Alan>` kayitlari parse edilerek yeni tabloya insert ediliyor.
+- Kamp basvuru baglami ve ucret/cozumleme akislari yeni tabloyu kullanacak sekilde guncellendi.
+- Geriye donuk uyumluluk:
+  - Eski kayitlarda `KonaklamaBirimiTipi` alaninda tarifenin eski kodu varsa (`Standart34` vb.), yeni tabloda `Kod` alanindan cozumlenmeye devam ediyor.
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampKonaklamaTarifesi.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406203256_AddKampKonaklamaTarifeleri.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260406203256_AddKampKonaklamaTarifeleri.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- changes.md
+
+### Build Sonuclari (Tur 22)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 23 - Kamp Donemleri Bos Gelme Hotfix'i
+
+### Yapilanlar
+- `Kamp donemleri dolmuyor` problemi icin gecis fallback'i tamamlandi.
+- Neden:
+  - `KampKonaklamaTarifeleri` tablosu henuz dolu degilse baglam uretilirken konaklama birimleri bos kaliyor ve donem listesi filtreleniyordu.
+- Cozum:
+  - `KampBasvuruService` icindeki fallback'e ek olarak,
+  - `KampUcretHesaplamaService` icinde de ayni fallback eklendi.
+  - Boyeclikle yeni tablo bos olsa bile eski `Konaklama.*` parametrelerinden gecici olarak konaklama tarifeleri okunuyor.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampUcretHesaplamaService.cs
+- changes.md
+
+### Build Sonuclari (Tur 23)
+- Backend build bu turda dogrulanamadi (calisan `STYS` process'i DLL lock nedeniyle `dotnet build` kopyalama asamasinda durdu).
+
+## Tur 24 - Kamp Donemleri Bos Gelme Icin Ek Fallback
+
+### Yapilanlar
+- Donem listesinin hala bos gelmesi senaryosu icin ikinci fallback eklendi.
+- `KampBasvuruService.BuildBirimler`:
+  - Tesisin bina/oda eslesmesinden birim cikmazsa, gecis doneminde aktif konaklama tarifelerini direkt secenek olarak dondurur.
+- Bu sayede tesis tarafi henuz tam modellenmemis ortamlarda da donem/birim secimleri bos kalmaz.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampBasvuruService.cs
+- changes.md
+
+### Build Sonuclari (Tur 24)
+- Backend build bu turda da dogrulanamadi (calisan `STYS` process'i DLL lock nedeniyle `dotnet build` kopyalama asamasinda durdu).
+
+## Tur 25 - Kamp Basvurusunda Konaklama Birimini Dogrudan Bina Adindan Gosterme
+
+### Yapilanlar
+- `Kamp Basvurusu` ekranindaki `Konaklama Birimi` secenekleri icin eski tarife/fallback adlari kaldirildi.
+- `KampBasvuruService.BuildBirimler` artik secenekleri sadece secili tesisin aktif bina adlarindan uretiyor.
+- Boyeclikle dropdown'da `Alata/Foca` gibi eski parametre kaynakli adlar yerine dogrudan tesisin bina adlari listelenir.
+
+### Degisen Dosyalar
+- backend/Kamp/Services/KampBasvuruService.cs
+- changes.md
+
+### Build Sonuclari (Tur 25)
+- Backend build bu turda yeniden kosulmadi (ortamda calisan `STYS` process lock riski var).

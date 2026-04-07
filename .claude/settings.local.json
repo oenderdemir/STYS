@@ -6,7 +6,9 @@
       "Bash(xargs ls:*)",
       "Bash(find /c/Users/cuce/source/repos/STYS/frontend/src/app/pages/kamp-yonetimi -name \"*.ts\" -exec grep -l \"GetById\\\\|Update\\\\|Delete\" {} \\\\;)",
       "Bash(ls -1 /c/Users/cuce/source/repos/STYS/frontend/src/app/pages/kamp-yonetimi/*.ts)",
-      "Bash(xargs basename:*)"
+      "Bash(xargs basename:*)",
+      "Bash(dotnet test:*)",
+      "Bash(grep \"^??.*\\\\.cs$\")"
     ]
   }
 }

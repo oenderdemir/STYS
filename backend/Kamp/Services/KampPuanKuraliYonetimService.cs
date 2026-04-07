@@ -96,13 +96,29 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             })
             .ToListAsync(cancellationToken);
 
+        var yasUcretKurali = await _dbContext.KampYasUcretKurallari
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderByDescending(x => x.Id)
+            .Select(x => new KampYasUcretKuraliDto
+            {
+                Id = x.Id,
+                UcretsizCocukMaxYas = x.UcretsizCocukMaxYas,
+                YarimUcretliCocukMaxYas = x.YarimUcretliCocukMaxYas,
+                YemekOrani = x.YemekOrani,
+                AktifMi = x.AktifMi
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? new KampYasUcretKuraliDto();
+
         return new KampPuanKuraliYonetimBaglamDto
         {
             Programlar = programlar,
             GlobalBasvuruSahibiTipleri = globalBasvuruSahibiTipleri,
             KuralSetleri = kuralSetleri,
             BasvuruSahibiTipleri = tipKurallari,
-            KatilimciTipleri = katilimciTipleri
+            KatilimciTipleri = katilimciTipleri,
+            YasUcretKurali = yasUcretKurali
         };
     }
 
@@ -114,6 +130,7 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
 
         await UpsertKuralSetleriAsync(request.KuralSetleri, cancellationToken);
         await UpsertBasvuruSahibiTipKurallariAsync(request.BasvuruSahibiTipleri, cancellationToken);
+        await UpsertYasUcretKuraliAsync(request.YasUcretKurali, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -191,6 +208,32 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         }
     }
 
+    private async Task UpsertYasUcretKuraliAsync(KampYasUcretKuraliDto dto, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.KampYasUcretKurallari
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existing is null)
+        {
+            _dbContext.KampYasUcretKurallari.Add(new KampYasUcretKurali
+            {
+                UcretsizCocukMaxYas = dto.UcretsizCocukMaxYas,
+                YarimUcretliCocukMaxYas = dto.YarimUcretliCocukMaxYas,
+                YemekOrani = dto.YemekOrani,
+                AktifMi = dto.AktifMi
+            });
+
+            return;
+        }
+
+        existing.UcretsizCocukMaxYas = dto.UcretsizCocukMaxYas;
+        existing.YarimUcretliCocukMaxYas = dto.YarimUcretliCocukMaxYas;
+        existing.YemekOrani = dto.YemekOrani;
+        existing.AktifMi = dto.AktifMi;
+        existing.IsDeleted = false;
+    }
+
     private static void ValidateRequest(KampPuanKuraliYonetimKaydetRequestDto request)
     {
         if (request.KuralSetleri.Count == 0)
@@ -226,22 +269,22 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
                 throw new BaseException("Kural seti icin kamp programi secimi zorunludur.", 400);
             }
 
-            if (kuralSeti.KampYili < 2000 || kuralSeti.KampYili > 2100)
+            if (kuralSeti.KampYili < KampValidasyonKurallari.YilRange.Min || kuralSeti.KampYili > KampValidasyonKurallari.YilRange.Max)
             {
                 throw new BaseException("Kamp yili 2000-2100 araliginda olmalidir.", 400);
             }
 
-            if (kuralSeti.OncekiYilSayisi < 0 || kuralSeti.OncekiYilSayisi > 10)
+            if (kuralSeti.OncekiYilSayisi < KampValidasyonKurallari.OncekiYilSayisi.Min || kuralSeti.OncekiYilSayisi > KampValidasyonKurallari.OncekiYilSayisi.Max)
             {
                 throw new BaseException("Onceki yil sayisi 0-10 araliginda olmalidir.", 400);
             }
 
-            if (kuralSeti.KatilimCezaPuani < 0 || kuralSeti.KatilimCezaPuani > 1000)
+            if (kuralSeti.KatilimCezaPuani < KampValidasyonKurallari.KatilimCezaPuani.Min || kuralSeti.KatilimCezaPuani > KampValidasyonKurallari.KatilimCezaPuani.Max)
             {
                 throw new BaseException("Katilim ceza puani 0-1000 araliginda olmalidir.", 400);
             }
 
-            if (kuralSeti.KatilimciBasinaPuan < 0 || kuralSeti.KatilimciBasinaPuan > 1000)
+            if (kuralSeti.KatilimciBasinaPuan < KampValidasyonKurallari.KatilimciBasinaPuan.Min || kuralSeti.KatilimciBasinaPuan > KampValidasyonKurallari.KatilimciBasinaPuan.Max)
             {
                 throw new BaseException("Katilimci basina puan 0-1000 araliginda olmalidir.", 400);
             }
@@ -259,20 +302,43 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
                 throw new BaseException("Basvuru sahibi tipi kurali icin global tip secimi zorunludur.", 400);
             }
 
-            if (tip.OncelikSirasi < 0 || tip.OncelikSirasi > 999)
+            if (tip.OncelikSirasi < KampValidasyonKurallari.OncelikSirasi.Min || tip.OncelikSirasi > KampValidasyonKurallari.OncelikSirasi.Max)
             {
                 throw new BaseException("Oncelik sirasi 0-999 araliginda olmalidir.", 400);
             }
 
-            if (tip.TabanPuan < 0 || tip.TabanPuan > 5000)
+            if (tip.TabanPuan < KampValidasyonKurallari.TabanPuan.Min || tip.TabanPuan > KampValidasyonKurallari.TabanPuan.Max)
             {
                 throw new BaseException("Taban puan 0-5000 araliginda olmalidir.", 400);
             }
 
-            if (tip.EmekliBonusPuani < 0 || tip.EmekliBonusPuani > 1000)
+            if (tip.EmekliBonusPuani < KampValidasyonKurallari.EmekliBonusPuani.Min || tip.EmekliBonusPuani > KampValidasyonKurallari.EmekliBonusPuani.Max)
             {
                 throw new BaseException("Emekli bonus puani 0-1000 araliginda olmalidir.", 400);
             }
+        }
+
+        if (request.YasUcretKurali.UcretsizCocukMaxYas < KampValidasyonKurallari.UcretsizCocukMaxYas.Min
+            || request.YasUcretKurali.UcretsizCocukMaxYas > KampValidasyonKurallari.UcretsizCocukMaxYas.Max)
+        {
+            throw new BaseException("Ucretsiz cocuk max yas 0-18 araliginda olmalidir.", 400);
+        }
+
+        if (request.YasUcretKurali.YarimUcretliCocukMaxYas < KampValidasyonKurallari.YarimUcretliCocukMaxYas.Min
+            || request.YasUcretKurali.YarimUcretliCocukMaxYas > KampValidasyonKurallari.YarimUcretliCocukMaxYas.Max)
+        {
+            throw new BaseException("Yarim ucretli cocuk max yas 0-18 araliginda olmalidir.", 400);
+        }
+
+        if (request.YasUcretKurali.YarimUcretliCocukMaxYas < request.YasUcretKurali.UcretsizCocukMaxYas)
+        {
+            throw new BaseException("Yarim ucretli cocuk max yas, ucretsiz cocuk max yastan kucuk olamaz.", 400);
+        }
+
+        if (request.YasUcretKurali.YemekOrani < KampValidasyonKurallari.YemekOrani.Min
+            || request.YasUcretKurali.YemekOrani > KampValidasyonKurallari.YemekOrani.Max)
+        {
+            throw new BaseException("Yemek orani 0.00 - 1.00 araliginda olmalidir.", 400);
         }
     }
 }

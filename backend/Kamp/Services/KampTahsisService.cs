@@ -9,10 +9,12 @@ namespace STYS.Kamp.Services;
 public class KampTahsisService : IKampTahsisService
 {
     private readonly StysAppDbContext _dbContext;
+    private readonly IKampParametreService _parametreService;
 
-    public KampTahsisService(StysAppDbContext dbContext)
+    public KampTahsisService(StysAppDbContext dbContext, IKampParametreService parametreService)
     {
         _dbContext = dbContext;
+        _parametreService = parametreService;
     }
 
     public async Task<KampTahsisBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -23,6 +25,7 @@ public class KampTahsisService : IKampTahsisService
             .Select(x => new KampTahsisDonemSecenekDto
             {
                 Id = x.Id,
+                KampProgramiAd = x.KampProgrami != null ? x.KampProgrami.Ad : null,
                 Ad = x.Ad
             })
             .ToListAsync(cancellationToken);
@@ -249,7 +252,8 @@ public class KampTahsisService : IKampTahsisService
 
         // Talimat: "donemin baslamasindan itibaren ikinci gunun sonuna kadar kampa katilmayanlarin tahsisi iptal edilecektir"
         // Bu islem ancak donem basladiktan 2 gun sonra calistiriabilir.
-        var noShowSinirTarihi = donem.KonaklamaBaslangicTarihi.Date.AddDays(2);
+        var noShowGunSayisi = _parametreService.GetInt(KampParametreKodlari.NoShowSuresiGun, 2);
+        var noShowSinirTarihi = donem.KonaklamaBaslangicTarihi.Date.AddDays(noShowGunSayisi);
         if (DateTime.UtcNow.Date < noShowSinirTarihi)
         {
             throw new BaseException($"No-show iptali, kamp doneminin baslamasindan en az 2 gun sonra uygulanabilir. Erken tarih: {noShowSinirTarihi:dd.MM.yyyy}", 400);

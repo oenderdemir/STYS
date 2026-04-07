@@ -17,26 +17,53 @@
                 <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [loading]="loadingBaglam || loadingAtamalar" (onClick)="refresh()" />
                 @if (canManageAssignments) {
                     <p-button label="Atamalari Kaydet" icon="pi pi-check" [loading]="savingAtamalar" (onClick)="kaydetTesisAtamalari()" />
+                    <p-button
+                        label="Secili Donemlere Toplu Uygula"
+                        icon="pi pi-clone"
+                        severity="secondary"
+                        [outlined]="true"
+                        [loading]="savingTopluAtamalar"
+                        [disabled]="!canRunTopluApply"
+                        (onClick)="kaydetSeciliDonemlereToplu()" />
                 }
             </div>
         </div>
 
         <div class="assignment-controls">
             <div>
-                <label for="kampDonemiSecimi" class="block font-medium mb-2">Kamp Donemi</label>
+                <label for="kampSezonSecimi" class="block font-medium mb-2">Kamp Sezonu</label>
                 <p-select
-                    inputId="kampDonemiSecimi"
-                    [options]="donemSecenekleri"
+                    inputId="kampSezonSecimi"
+                    [options]="sezonSecenekleri"
                     optionLabel="label"
                     optionValue="value"
-                    [(ngModel)]="selectedKampDonemiId"
+                    [(ngModel)]="selectedSezonKey"
                     [showClear]="false"
-                    placeholder="Kamp donemi secin"
+                    placeholder="Kamp sezonu secin"
                     class="w-full"
                     [disabled]="loadingBaglam || loadingAtamalar"
-                    (ngModelChange)="onKampDonemiChange()"
+                    (ngModelChange)="onSezonChange()"
                 />
             </div>
+
+            @if (canManagePermission) {
+                <div>
+                    <label for="topluDonemSecimi" class="block font-medium mb-2">Kamp Donemleri (Coklu Secim)</label>
+                    <p-multiSelect
+                        inputId="topluDonemSecimi"
+                        [options]="topluAdayDonemSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="topluHedefDonemIds"
+                        placeholder="Donem secin"
+                        defaultLabel="Donem secin"
+                        class="w-full"
+                        [filter]="true"
+                        [disabled]="loadingBaglam || loadingAtamalar || savingTopluAtamalar"
+                        [appendTo]="'body'"
+                        (ngModelChange)="onTopluDonemlerChange()" />
+                </div>
+            }
         </div>
 
         <p-table

@@ -11,8 +11,8 @@ public static class KampParametreKodlari
     public const string KatilimciBasinaPuan = "KatilimciBasinaPuan";
     public const string OncekiYilKatilimPenalti = "OncekiYilKatilimPenalti";
 
-    public const string TabanPuanTarimOrmanPersoneli = "TabanPuan.TarimOrmanPersoneli";
-    public const string TabanPuanTarimOrmanEmeklisi = "TabanPuan.TarimOrmanEmeklisi";
+    public const string TabanPuanKurumPersoneli = "TabanPuan.KurumPersoneli";
+    public const string TabanPuanKurumEmeklisi = "TabanPuan.KurumEmeklisi";
     public const string TabanPuanBagliKurulus = "TabanPuan.BagliKurulus";
     public const string TabanPuanDigerKamu = "TabanPuan.DigerKamu";
     public const string TabanPuanDiger = "TabanPuan.Diger";
@@ -26,4 +26,11 @@ public static class KampParametreKodlari
     public const string KonaklamaAlanBuzdolabiGunluk = "BuzdolabiGunluk";
     public const string KonaklamaAlanTelevizyonGunluk = "TelevizyonGunluk";
     public const string KonaklamaAlanKlimaGunluk = "KlimaGunluk";
+
+    // İade ve tahsis politikaları
+    public const string VazgecmeIadeGunSayisi = "VazgecmeIadeGunSayisi";
+    public const string GecBildirimGunlukKesintiyUzdesi = "GecBildirimGunlukKesintiyUzdesi";
+    public const string NoShowSuresiGun = "NoShowSuresiGun";
+    public const string YilAraligiBas = "YilAraligiBas";
+    public const string YilAraligiBit = "YilAraligiBit";
 }

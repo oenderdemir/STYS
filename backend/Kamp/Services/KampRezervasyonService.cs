@@ -23,7 +23,12 @@ public class KampRezervasyonService : IKampRezervasyonService
         var donemler = await _dbContext.KampDonemleri
             .OrderByDescending(x => x.Yil)
             .ThenBy(x => x.KonaklamaBaslangicTarihi)
-            .Select(x => new KampRezervasyonDonemSecenekDto { Id = x.Id, Ad = x.Ad })
+            .Select(x => new KampRezervasyonDonemSecenekDto
+            {
+                Id = x.Id,
+                KampProgramiAd = x.KampProgrami != null ? x.KampProgrami.Ad : null,
+                Ad = x.Ad
+            })
             .ToListAsync(cancellationToken);
 
         var tesisler = await _dbContext.Tesisler

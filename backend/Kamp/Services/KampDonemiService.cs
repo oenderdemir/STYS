@@ -395,7 +395,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
             throw new BaseException("Kamp donemi adi zorunludur.", 400);
         }
 
-        if (dto.Yil < 2000 || dto.Yil > 2100)
+        if (dto.Yil < KampValidasyonKurallari.YilRange.Min || dto.Yil > KampValidasyonKurallari.YilRange.Max)
         {
             throw new BaseException("Kamp donemi yili gecersiz.", 400);
         }

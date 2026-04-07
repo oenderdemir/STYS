@@ -20,7 +20,7 @@
                     <span>Donem</span>
                     <select [(ngModel)]="selectedKampDonemiId" (ngModelChange)="onFiltersChanged()">
                         <option [ngValue]="0">Tum donemler</option>
-                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.ad }}</option>
+                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.kampProgramiAd ? (donem.kampProgramiAd + ' / ' + donem.ad) : donem.ad }}</option>
                     </select>
                 </label>
 

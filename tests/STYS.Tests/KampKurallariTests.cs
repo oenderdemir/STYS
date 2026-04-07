@@ -20,7 +20,7 @@ public class KampKurallariTests
         var onizleme = new KampBasvuruOnizlemeDto();
         var request = new KampBasvuruRequestDto
         {
-            BasvuruSahibiTipi = "TarimOrmanPersoneli",
+            BasvuruSahibiTipi = "KurumPersoneli",
             HizmetYili = 12,
             GecmisKatilimYillari = [2023],
             Katilimcilar =
@@ -75,7 +75,8 @@ public class KampKurallariTests
     [Fact]
     public void IadeHesaplama_BirHaftadanAzKalaGunlukKesintiUygular()
     {
-        var service = new KampIadeService();
+        var fakeParams = new FakeKampParametreService();
+        var service = new KampIadeService(fakeParams);
         var result = service.Hesapla(new KampIadeHesaplamaRequestDto
         {
             BasvuruDurumu = KampBasvuruDurumlari.Beklemede,
@@ -116,8 +117,8 @@ public class KampKurallariTests
 
         dbContext.KampBasvuruSahibiTipleri.Add(new KampBasvuruSahibiTipi
         {
-            Kod = "TarimOrmanPersoneli",
-            Ad = "Tarim ve Orman Personeli",
+            Kod = "KurumPersoneli",
+            Ad = "Kurum Personeli",
             OncelikSirasi = 1,
             TabanPuan = 40,
             HizmetYiliPuaniAktifMi = true,

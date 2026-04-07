@@ -26,6 +26,29 @@
         }
 
         <div class="flex justify-content-between align-items-center mb-2">
+            <h3 class="m-0 text-lg">Yas ve Ucret Kurali (Global)</h3>
+        </div>
+
+        <div class="puan-parametre-card mb-4">
+            <label>
+                <span>Ucretsiz Cocuk Max Yas</span>
+                <input pInputText type="number" min="0" max="18" [(ngModel)]="yasUcretKurali.ucretsizCocukMaxYas" [disabled]="loading || saving || !canManage" />
+            </label>
+            <label>
+                <span>Yarim Ucretli Cocuk Max Yas</span>
+                <input pInputText type="number" min="0" max="18" [(ngModel)]="yasUcretKurali.yarimUcretliCocukMaxYas" [disabled]="loading || saving || !canManage" />
+            </label>
+            <label>
+                <span>Yemek Orani (0-1)</span>
+                <input pInputText type="number" min="0" max="1" step="0.01" [(ngModel)]="yasUcretKurali.yemekOrani" [disabled]="loading || saving || !canManage" />
+            </label>
+            <label>
+                <span>Aktif</span>
+                <input type="checkbox" [(ngModel)]="yasUcretKurali.aktifMi" [disabled]="loading || saving || !canManage" />
+            </label>
+        </div>
+
+        <div class="flex justify-content-between align-items-center mb-2">
             <h3 class="m-0 text-lg">Kural Setleri (Program + Yil Bazli)</h3>
             <p-button label="Kural Seti Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addKuralSeti()" />
         </div>
@@ -45,11 +68,15 @@
             <ng-template #body let-item let-rowIndex="rowIndex">
                 <tr>
                     <td>
-                        <select [(ngModel)]="item.kampProgramiId" [disabled]="loading || saving || !canManage">
-                            @for (program of programlar; track program.id) {
-                                <option [ngValue]="program.id">{{ program.ad }}</option>
-                            }
-                        </select>
+                        <p-select
+                            [(ngModel)]="item.kampProgramiId"
+                            [options]="programlar"
+                            optionLabel="ad"
+                            optionValue="id"
+                            [appendTo]="'body'"
+                            [disabled]="loading || saving || !canManage"
+                            [showClear]="false"
+                            styleClass="w-full" />
                     </td>
                     <td><input pInputText type="number" min="2000" max="2100" [(ngModel)]="item.kampYili" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="10" [(ngModel)]="item.oncekiYilSayisi" [disabled]="loading || saving || !canManage" /></td>
@@ -85,30 +112,42 @@
             <ng-template #body let-item let-rowIndex="rowIndex">
                 <tr>
                     <td>
-                        <select [(ngModel)]="item.kampProgramiId" [disabled]="loading || saving || !canManage">
-                            @for (program of programlar; track program.id) {
-                                <option [ngValue]="program.id">{{ program.ad }}</option>
-                            }
-                        </select>
+                        <p-select
+                            [(ngModel)]="item.kampProgramiId"
+                            [options]="programlar"
+                            optionLabel="ad"
+                            optionValue="id"
+                            [appendTo]="'body'"
+                            [disabled]="loading || saving || !canManage"
+                            [showClear]="false"
+                            styleClass="w-full" />
                     </td>
                     <td>
-                        <select [(ngModel)]="item.kampBasvuruSahibiTipiId" [disabled]="loading || saving || !canManage" (ngModelChange)="onBasvuruSahibiTipiChange(item)">
-                            @for (tip of globalBasvuruSahibiTipleri; track tip.id) {
-                                <option [ngValue]="tip.id">{{ tip.ad }} ({{ tip.kod }})</option>
-                            }
-                        </select>
+                        <p-select
+                            [(ngModel)]="item.kampBasvuruSahibiTipiId"
+                            [options]="globalBasvuruSahibiTipiOptions"
+                            optionLabel="label"
+                            optionValue="id"
+                            [appendTo]="'body'"
+                            [disabled]="loading || saving || !canManage"
+                            (ngModelChange)="onBasvuruSahibiTipiChange(item)"
+                            [showClear]="false"
+                            styleClass="w-full" />
                     </td>
                     <td><input pInputText type="number" min="0" max="999" [(ngModel)]="item.oncelikSirasi" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="5000" [(ngModel)]="item.tabanPuan" [disabled]="loading || saving || !canManage" /></td>
                     <td><input type="checkbox" [(ngModel)]="item.hizmetYiliPuaniAktifMi" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.emekliBonusPuani" [disabled]="loading || saving || !canManage" /></td>
                     <td>
-                        <select [(ngModel)]="item.varsayilanKatilimciTipiKodu" [disabled]="loading || saving || !canManage">
-                            <option [ngValue]="null">-</option>
-                            @for (tip of katilimciTipleri; track tip.kod) {
-                                <option [ngValue]="tip.kod">{{ tip.ad }}</option>
-                            }
-                        </select>
+                        <p-select
+                            [(ngModel)]="item.varsayilanKatilimciTipiKodu"
+                            [options]="katilimciTipleri"
+                            optionLabel="ad"
+                            optionValue="kod"
+                            [appendTo]="'body'"
+                            [disabled]="loading || saving || !canManage"
+                            [showClear]="true"
+                            styleClass="w-full" />
                     </td>
                     <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
                     <td>

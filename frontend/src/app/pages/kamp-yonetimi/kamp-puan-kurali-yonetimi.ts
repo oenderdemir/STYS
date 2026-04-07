@@ -6,19 +6,20 @@ import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
-import { KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto } from './kamp-yonetimi.dto';
+import { KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 import { AuthService } from '../auth';
 
 @Component({
     selector: 'app-kamp-puan-kurali-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kamp-puan-kurali-yonetimi.html',
     styleUrl: './kamp-puan-kurali-yonetimi.scss',
     providers: [MessageService]
@@ -36,6 +37,19 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     kuralSetleri: KampPuanKuralSetiDto[] = [];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[] = [];
     katilimciTipleri: KampSecenekDto[] = [];
+    yasUcretKurali: KampYasUcretKuraliDto = {
+        ucretsizCocukMaxYas: 2,
+        yarimUcretliCocukMaxYas: 6,
+        yemekOrani: 0.5,
+        aktifMi: true
+    };
+
+    get globalBasvuruSahibiTipiOptions(): Array<{ id: number; label: string }> {
+        return this.globalBasvuruSahibiTipleri.map((x) => ({
+            id: x.id,
+            label: `${x.ad} (${x.kod})`
+        }));
+    }
 
     get canView(): boolean {
         return this.hasAnyPermission('KampPuanKuraliYonetimi.View', 'KampPuanKuraliYonetimi.Menu');
@@ -72,6 +86,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                     });
                     this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri].sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
                     this.katilimciTipleri = [...baglam.katilimciTipleri];
+                    this.yasUcretKurali = { ...baglam.yasUcretKurali };
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -135,7 +150,8 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         this.service
             .kaydetKampPuanKuraliYonetimBaglam({
                 kuralSetleri: this.kuralSetleri,
-                basvuruSahibiTipleri: this.basvuruSahibiTipleri
+                basvuruSahibiTipleri: this.basvuruSahibiTipleri,
+                yasUcretKurali: this.yasUcretKurali
             })
             .pipe(finalize(() => {
                 this.saving = false;
@@ -156,6 +172,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                     });
                     this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri].sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
                     this.katilimciTipleri = [...baglam.katilimciTipleri];
+                    this.yasUcretKurali = { ...baglam.yasUcretKurali };
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kamp puan kurallari kaydedildi.' });
                     this.cdr.detectChanges();
                 },

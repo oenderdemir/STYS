@@ -48,11 +48,21 @@ export interface KampPuanKuraliYonetimBaglamDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     katilimciTipleri: KampSecenekDto[];
+    yasUcretKurali: KampYasUcretKuraliDto;
 }
 
 export interface KampPuanKuraliYonetimKaydetRequestDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
+    yasUcretKurali: KampYasUcretKuraliDto;
+}
+
+export interface KampYasUcretKuraliDto {
+    id?: number | null;
+    ucretsizCocukMaxYas: number;
+    yarimUcretliCocukMaxYas: number;
+    yemekOrani: number;
+    aktifMi: boolean;
 }
 
 export interface KampTesisDto {
@@ -106,6 +116,7 @@ export interface KampBasvuruBaglamDto {
 export interface KampBasvuruDonemSecenekDto {
     id: number;
     kampProgramiId: number;
+    kampProgramiAd?: string | null;
     ad: string;
     yil: number;
     konaklamaBaslangicTarihi: string;
@@ -251,6 +262,7 @@ export interface KampTahsisBaglamDto {
 
 export interface KampTahsisDonemSecenekDto {
     id: number;
+    kampProgramiAd?: string | null;
     ad: string;
 }
 
@@ -309,6 +321,7 @@ export interface KampRezervasyonBaglamDto {
 
 export interface KampRezervasyonDonemSecenekDto {
     id: number;
+    kampProgramiAd?: string | null;
     ad: string;
 }
 

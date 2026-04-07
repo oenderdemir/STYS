@@ -24,7 +24,7 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
         KampBasvuruOnizlemeDto onizleme,
         CancellationToken cancellationToken = default)
     {
-        var konfigurasyon = KampBasvuruKurallari.ResolveKonaklama(_params, request.KonaklamaBirimiTipi);
+        var konfigurasyon = await ResolveKonaklamaKonfigurasyonuAsync(tesis.Id, request.KonaklamaBirimiTipi, cancellationToken);
         var gunSayisi = (kampDonemi.KonaklamaBitisTarihi.Date - kampDonemi.KonaklamaBaslangicTarihi.Date).Days + 1;
         var toplamGunluk = 0m;
         var avansToplami = 0m;
@@ -35,15 +35,19 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
 
         var kamuAvans = _params.GetDecimal(KampParametreKodlari.KamuAvansKisiBasi, KampBasvuruKurallari.KamuAvansKisiBasi);
         var digerAvans = _params.GetDecimal(KampParametreKodlari.DigerAvansKisiBasi, KampBasvuruKurallari.DigerAvansKisiBasi);
-        var yemekOrani = _params.GetDecimal(KampParametreKodlari.YemekOrani, KampBasvuruKurallari.YemekOrani);
-        var ucretsizSinir = _params.GetDate(KampParametreKodlari.UcretsizCocukSiniri, KampBasvuruKurallari.UcretsizCocukSiniri);
-        var yarimUcretSinir = _params.GetDate(KampParametreKodlari.YarimUcretliCocukSiniri, KampBasvuruKurallari.YarimUcretliCocukSiniri);
+        var yasKurali = await ResolveYasKuraliAsync(cancellationToken);
 
         foreach (var katilimci in request.Katilimcilar)
         {
             var kamuTarifesiMi = katilimciTipleri.GetValueOrDefault(katilimci.KatilimciTipi);
             var tamGunlukTutar = kamuTarifesiMi ? konfigurasyon.KamuGunlukUcret : konfigurasyon.DigerGunlukUcret;
-            var katilimciGunlukTutari = HesaplaKatilimciGunlukTutari(katilimci, tamGunlukTutar, yemekOrani, ucretsizSinir, yarimUcretSinir);
+            var katilimciGunlukTutari = HesaplaKatilimciGunlukTutari(
+                katilimci,
+                kampDonemi.KonaklamaBaslangicTarihi.Date,
+                tamGunlukTutar,
+                yasKurali.YemekOrani,
+                yasKurali.UcretsizCocukMaxYas,
+                yasKurali.YarimUcretliCocukMaxYas);
             toplamGunluk += katilimciGunlukTutari;
             avansToplami += Math.Min(kamuTarifesiMi ? kamuAvans : digerAvans, katilimciGunlukTutari * gunSayisi);
         }
@@ -70,21 +74,154 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
         onizleme.KalanOdemeTutari = decimal.Round(Math.Max(0m, donemToplami - avansToplami), 2, MidpointRounding.AwayFromZero);
     }
 
-    private static decimal HesaplaKatilimciGunlukTutari(KampBasvuruKatilimciDto katilimci, decimal tamGunlukTutar, decimal yemekOrani, DateTime ucretsizSinir, DateTime yarimUcretSinir)
+    private async Task<KampYasUcretKurali> ResolveYasKuraliAsync(CancellationToken cancellationToken)
     {
-        var dogumTarihi = katilimci.DogumTarihi.Date;
-        if (dogumTarihi > ucretsizSinir)
+        var entity = await _dbContext.KampYasUcretKurallari
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (entity is not null)
+        {
+            return entity;
+        }
+
+        return new KampYasUcretKurali
+        {
+            UcretsizCocukMaxYas = KampBasvuruKurallari.UcretsizCocukMaxYas,
+            YarimUcretliCocukMaxYas = KampBasvuruKurallari.YarimUcretliCocukMaxYas,
+            YemekOrani = KampBasvuruKurallari.YemekOrani
+        };
+    }
+
+    private async Task<KampKonaklamaKonfigurasyonu> ResolveKonaklamaKonfigurasyonuAsync(int tesisId, string secilenBirim, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(secilenBirim))
+        {
+            throw new InvalidOperationException("Konaklama birimi secimi zorunludur.");
+        }
+
+        var normalizedSecim = secilenBirim.Trim();
+
+        var tarifeler = GetAktifKonaklamaTarifeleri();
+        var seciliTarife = tarifeler.FirstOrDefault(x => string.Equals(x.Kod, normalizedSecim, StringComparison.OrdinalIgnoreCase));
+        if (seciliTarife is not null)
+        {
+            return seciliTarife;
+        }
+
+        var binaKapasiteleri = await _dbContext.Binalar
+            .AsNoTracking()
+            .Where(x => x.AktifMi && x.TesisId == tesisId && x.Ad.ToLower() == normalizedSecim.ToLower())
+            .Select(x => x.Odalar
+                .Where(o => o.AktifMi && o.TesisOdaTipi != null && o.TesisOdaTipi.AktifMi)
+                .Select(o => o.TesisOdaTipi!.Kapasite))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var kapasiteListesi = binaKapasiteleri?.ToList() ?? [];
+        if (kapasiteListesi.Count == 0)
+        {
+            throw new InvalidOperationException("Secilen konaklama birimi bu tesiste aktif oda tipleriyle eslesmiyor.");
+        }
+
+        var minimum = kapasiteListesi.Min();
+        var maksimum = kapasiteListesi.Max();
+        var secilen = tarifeler
+            .FirstOrDefault(x => x.MinimumKisi == minimum && x.MaksimumKisi == maksimum);
+        if (secilen is null)
+        {
+            throw new InvalidOperationException($"Konaklama birimi icin uygun ucret konfigurasyonu bulunamadi ({minimum}-{maksimum}).");
+        }
+
+        return secilen;
+    }
+
+    private List<KampKonaklamaKonfigurasyonu> GetAktifKonaklamaTarifeleri()
+    {
+        var tarifeler = _dbContext.KampKonaklamaTarifeleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi)
+            .OrderByDescending(x => x.Id)
+            .Select(x => new KampKonaklamaKonfigurasyonu(
+                x.Kod,
+                x.MinimumKisi,
+                x.MaksimumKisi,
+                x.KamuGunlukUcret,
+                x.DigerGunlukUcret,
+                x.BuzdolabiGunlukUcret,
+                x.TelevizyonGunlukUcret,
+                x.KlimaGunlukUcret))
+            .ToList();
+
+        if (tarifeler.Count > 0)
+        {
+            return tarifeler;
+        }
+
+        // Gecis donemi fallback: migration uygulanmamis ortamlarda eski parametrelerden devam et.
+        var byPrefix = _params.GetByPrefix(KampKonaklamaBirimiTipleri.ParametrePrefix);
+        if (byPrefix.Count == 0)
+        {
+            return [];
+        }
+
+        var birimKodlari = byPrefix.Keys
+            .Select(x => x.Split('.', StringSplitOptions.RemoveEmptyEntries))
+            .Where(x => x.Length >= 3)
+            .Select(x => x[1])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var result = new List<KampKonaklamaKonfigurasyonu>();
+        foreach (var birimKodu in birimKodlari)
+        {
+            try
+            {
+                result.Add(KampBasvuruKurallari.ResolveKonaklama(_params, birimKodu));
+            }
+            catch
+            {
+                // Eksik/gecersiz parametreli birimler atlanir.
+            }
+        }
+
+        return result;
+    }
+
+    private static decimal HesaplaKatilimciGunlukTutari(
+        KampBasvuruKatilimciDto katilimci,
+        DateTime referansTarih,
+        decimal tamGunlukTutar,
+        decimal yemekOrani,
+        int ucretsizCocukMaxYas,
+        int yarimUcretliCocukMaxYas)
+    {
+        var yas = YasHesapla(katilimci.DogumTarihi.Date, referansTarih);
+        if (yas <= ucretsizCocukMaxYas)
         {
             return katilimci.YemekTalepEdiyorMu
                 ? decimal.Round(tamGunlukTutar * yemekOrani / 2m, 2, MidpointRounding.AwayFromZero)
                 : 0m;
         }
 
-        if (dogumTarihi >= yarimUcretSinir && dogumTarihi <= ucretsizSinir)
+        if (yas <= yarimUcretliCocukMaxYas)
         {
             return decimal.Round(tamGunlukTutar / 2m, 2, MidpointRounding.AwayFromZero);
         }
 
         return tamGunlukTutar;
+    }
+
+    private static int YasHesapla(DateTime dogumTarihi, DateTime referansTarih)
+    {
+        var yas = referansTarih.Year - dogumTarihi.Year;
+        if (dogumTarihi.Date > referansTarih.Date.AddYears(-yas))
+        {
+            yas--;
+        }
+
+        return Math.Max(0, yas);
     }
 }

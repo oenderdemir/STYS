@@ -52,7 +52,7 @@
                     <span>Donem</span>
                     <select formControlName="kampDonemiId">
                         <option [ngValue]="0">Seciniz</option>
-                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.ad }}</option>
+                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.kampProgramiAd ? (donem.kampProgramiAd + ' / ' + donem.ad) : donem.ad }}</option>
                     </select>
                 </label>
 

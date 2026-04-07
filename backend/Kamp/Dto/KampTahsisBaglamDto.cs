@@ -13,6 +13,8 @@ public class KampTahsisDonemSecenekDto
 {
     public int Id { get; set; }
 
+    public string? KampProgramiAd { get; set; }
+
     public string Ad { get; set; } = string.Empty;
 }
 

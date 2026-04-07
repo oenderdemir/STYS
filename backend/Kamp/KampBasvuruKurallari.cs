@@ -62,8 +62,8 @@ public static class KampIadeNedenleri
 
 public static class KampBasvuruKurallari
 {
-    public static readonly DateTime UcretsizCocukSiniri = new(2023, 1, 1);
-    public static readonly DateTime YarimUcretliCocukSiniri = new(2020, 1, 1);
+    public const int UcretsizCocukMaxYas = 2;
+    public const int YarimUcretliCocukMaxYas = 6;
     public const decimal KamuAvansKisiBasi = 1700m;
     public const decimal DigerAvansKisiBasi = 2550m;
     public const decimal YemekOrani = 0.50m;

@@ -66,6 +66,8 @@ public class StysAppDbContext : DbContext
     public DbSet<KampBasvuruGecmisKatilim> KampBasvuruGecmisKatilimlari => Set<KampBasvuruGecmisKatilim>();
     public DbSet<KampKuralSeti> KampKuralSetleri => Set<KampKuralSeti>();
     public DbSet<KampProgramiBasvuruSahibiTipKurali> KampProgramiBasvuruSahibiTipKurallari => Set<KampProgramiBasvuruSahibiTipKurali>();
+    public DbSet<KampKonaklamaTarifesi> KampKonaklamaTarifeleri => Set<KampKonaklamaTarifesi>();
+    public DbSet<KampYasUcretKurali> KampYasUcretKurallari => Set<KampYasUcretKurali>();
     public DbSet<KampBasvuruSahibiTipi> KampBasvuruSahibiTipleri => Set<KampBasvuruSahibiTipi>();
     public DbSet<KampKatilimciTipi> KampKatilimciTipleri => Set<KampKatilimciTipi>();
     public DbSet<KampAkrabalikTipi> KampAkrabalikTipleri => Set<KampAkrabalikTipi>();
@@ -578,6 +580,31 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.KampBasvuruSahibiTipiId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampKonaklamaTarifesi>(entity =>
+        {
+            entity.ToTable("KampKonaklamaTarifeleri", "dbo");
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.KamuGunlukUcret).HasPrecision(18, 2);
+            entity.Property(x => x.DigerGunlukUcret).HasPrecision(18, 2);
+            entity.Property(x => x.BuzdolabiGunlukUcret).HasPrecision(18, 2);
+            entity.Property(x => x.TelevizyonGunlukUcret).HasPrecision(18, 2);
+            entity.Property(x => x.KlimaGunlukUcret).HasPrecision(18, 2);
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.AktifMi)
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<KampYasUcretKurali>(entity =>
+        {
+            entity.ToTable("KampYasUcretKurallari", "dbo");
+            entity.Property(x => x.YemekOrani).HasPrecision(5, 2);
+            entity.HasIndex(x => x.AktifMi)
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<KampBasvuruSahibiTipi>(entity =>

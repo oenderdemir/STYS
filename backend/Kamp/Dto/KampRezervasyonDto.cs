@@ -38,6 +38,7 @@ public class KampRezervasyonBaglamDto
 public class KampRezervasyonDonemSecenekDto
 {
     public int Id { get; set; }
+    public string? KampProgramiAd { get; set; }
     public string Ad { get; set; } = string.Empty;
 }
 

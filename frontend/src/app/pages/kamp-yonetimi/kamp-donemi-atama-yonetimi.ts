@@ -8,6 +8,7 @@ import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { InputTextModule } from 'primeng/inputtext';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
@@ -21,7 +22,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
 @Component({
     selector: 'app-kamp-donemi-atama-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kamp-donemi-atama-yonetimi.html',
     styleUrl: './kamp-donemi-atama-yonetimi.scss',
     providers: [MessageService]
@@ -34,22 +35,72 @@ export class KampDonemiAtamaYonetimi implements OnInit {
     private readonly cdr = inject(ChangeDetectorRef);
 
     kampDonemleri: KampDonemiDto[] = [];
+    selectedSezonKey: string | null = null;
     selectedKampDonemiId: number | null = null;
+    topluHedefDonemIds: number[] = [];
     tesisAtamalari: KampDonemiTesisAtamaDto[] = [];
 
     loadingBaglam = false;
     loadingAtamalar = false;
     savingAtamalar = false;
+    savingTopluAtamalar = false;
 
     get donemSecenekleri(): Array<{ label: string; value: number }> {
-        return this.kampDonemleri.map((item) => ({
+        return this.filteredDonemler.map((item) => ({
             label: `${item.yil} - ${item.kampProgramiAd || '-'} / ${item.ad}`,
             value: item.id!
         }));
     }
 
+    get sezonSecenekleri(): Array<{ label: string; value: string }> {
+        const unique = new Map<string, { label: string; value: string }>();
+        for (const item of this.kampDonemleri) {
+            const value = this.buildSezonKey(item.kampProgramiId, item.yil);
+            if (!unique.has(value)) {
+                unique.set(value, {
+                    label: `${item.yil} - ${item.kampProgramiAd || '-'}`,
+                    value
+                });
+            }
+        }
+
+        return [...unique.values()].sort((a, b) => b.label.localeCompare(a.label));
+    }
+
+    get filteredDonemler(): KampDonemiDto[] {
+        if (!this.selectedSezonKey) {
+            return this.kampDonemleri;
+        }
+
+        return this.kampDonemleri.filter((x) => this.buildSezonKey(x.kampProgramiId, x.yil) === this.selectedSezonKey);
+    }
+
     get canManageAssignments(): boolean {
-        return this.hasAnyPermission('KampDonemiTesisAtamaYonetimi.Manage', 'KampDonemiYonetimi.Manage') && !!this.selectedKampDonemiId;
+        return this.canManagePermission && !!this.selectedKampDonemiId;
+    }
+
+    get canManagePermission(): boolean {
+        return this.hasAnyPermission('KampDonemiTesisAtamaYonetimi.Manage', 'KampDonemiYonetimi.Manage');
+    }
+
+    get seciliDonem(): KampDonemiDto | null {
+        if (!this.selectedKampDonemiId) {
+            return null;
+        }
+
+        return this.kampDonemleri.find((x) => x.id === this.selectedKampDonemiId) ?? null;
+    }
+
+    get topluAdayDonemSecenekleri(): Array<{ label: string; value: number }> {
+        return this.filteredDonemler
+            .map((x) => ({
+                label: `${x.kampProgramiAd || '-'} / ${x.ad}`,
+                value: x.id!
+            }));
+    }
+
+    get canRunTopluApply(): boolean {
+        return this.canManageAssignments && this.topluHedefDonemIds.length > 0 && !this.savingTopluAtamalar && this.tesisAtamalari.length > 0;
     }
 
     get canViewDonemDefinitions(): boolean {
@@ -64,7 +115,15 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         this.loadPageContext();
     }
 
-    onKampDonemiChange(): void {
+    onTopluDonemlerChange(): void {
+        this.selectedKampDonemiId = this.topluHedefDonemIds[0] ?? null;
+        this.loadTesisAtamalari();
+    }
+
+    onSezonChange(): void {
+        const firstDonemId = this.filteredDonemler[0]?.id ?? null;
+        this.topluHedefDonemIds = firstDonemId ? [firstDonemId] : [];
+        this.selectedKampDonemiId = firstDonemId;
         this.loadTesisAtamalari();
     }
 
@@ -104,6 +163,41 @@ export class KampDonemiAtamaYonetimi implements OnInit {
             });
     }
 
+    kaydetSeciliDonemlereToplu(): void {
+        if (!this.canRunTopluApply) {
+            return;
+        }
+
+        this.savingTopluAtamalar = true;
+        forkJoin(this.topluHedefDonemIds.map((donemId) => this.service.kaydetTesisAtamalari(donemId, this.tesisAtamalari)))
+            .pipe(finalize(() => {
+                this.savingTopluAtamalar = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (results) => {
+                    const seciliId = this.selectedKampDonemiId;
+                    if (seciliId) {
+                        const seciliIndex = this.topluHedefDonemIds.findIndex((x) => x === seciliId);
+                        if (seciliIndex >= 0) {
+                            this.tesisAtamalari = results[seciliIndex];
+                        }
+                    }
+
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Basarili',
+                        detail: `${this.topluHedefDonemIds.length} donem icin tesis atamalari kaydedildi.`
+                    });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
     trackByTesis(index: number, item: KampDonemiTesisAtamaDto): number {
         return item.tesisId;
     }
@@ -133,6 +227,20 @@ export class KampDonemiAtamaYonetimi implements OnInit {
 
                     if (!this.selectedKampDonemiId) {
                         this.selectedKampDonemiId = this.kampDonemleri.find((item) => item.aktifMi)?.id ?? this.kampDonemleri[0]?.id ?? null;
+                    }
+
+                    if (this.selectedKampDonemiId) {
+                        const secili = this.kampDonemleri.find((x) => x.id === this.selectedKampDonemiId);
+                        if (secili) {
+                            this.selectedSezonKey = this.buildSezonKey(secili.kampProgramiId, secili.yil);
+                        }
+                    } else {
+                        this.selectedSezonKey = this.sezonSecenekleri[0]?.value ?? null;
+                        this.selectedKampDonemiId = this.filteredDonemler[0]?.id ?? null;
+                    }
+
+                    if (this.selectedKampDonemiId) {
+                        this.topluHedefDonemIds = [this.selectedKampDonemiId];
                     }
 
                     this.loadTesisAtamalari();
@@ -191,5 +299,9 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         }
 
         return 'Beklenmeyen bir hata olustu.';
+    }
+
+    private buildSezonKey(kampProgramiId: number, yil: number): string {
+        return `${kampProgramiId}-${yil}`;
     }
 }

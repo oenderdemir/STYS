@@ -27,7 +27,7 @@ public class KampTahsisServiceTests
                 KampBasvuruSahibiId = 100,
                 KonaklamaBirimiTipi = "TestBirim",
                 BasvuruSahibiAdiSoyadiSnapshot = "Birinci Aday",
-                BasvuruSahibiTipiSnapshot = "TarimOrmanPersoneli",
+                BasvuruSahibiTipiSnapshot = "KurumPersoneli",
                 Durum = KampBasvuruDurumlari.TahsisEdildi,
                 KatilimciSayisi = 4,
                 OncelikSirasi = 1,
@@ -90,7 +90,8 @@ public class KampTahsisServiceTests
 
         await dbContext.SaveChangesAsync();
 
-        var service = new KampTahsisService(dbContext);
+        var fakeParams = new FakeKampParametreService();
+        var service = new KampTahsisService(dbContext, fakeParams);
         var result = await service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
             KampDonemiId = 10,
@@ -121,7 +122,8 @@ public class KampTahsisServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedFixtureAsync(dbContext, atamaEkle: false);
-        var service = new KampTahsisService(dbContext);
+        var fakeParams = new FakeKampParametreService();
+        var service = new KampTahsisService(dbContext, fakeParams);
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
@@ -185,7 +187,7 @@ public class KampTahsisServiceTests
         });
 
         dbContext.KampBasvuruSahipleri.AddRange(
-            new KampBasvuruSahibi { Id = 100, AdSoyad = "Birinci Aday", BasvuruSahibiTipi = "TarimOrmanPersoneli", HizmetYili = 0, AktifMi = true },
+            new KampBasvuruSahibi { Id = 100, AdSoyad = "Birinci Aday", BasvuruSahibiTipi = "KurumPersoneli", HizmetYili = 0, AktifMi = true },
             new KampBasvuruSahibi { Id = 101, AdSoyad = "Ikinci Aday", BasvuruSahibiTipi = "BagliKurulusPersoneli", HizmetYili = 0, AktifMi = true },
             new KampBasvuruSahibi { Id = 102, AdSoyad = "Ucuncu Aday", BasvuruSahibiTipi = "Diger", HizmetYili = 0, AktifMi = true },
             new KampBasvuruSahibi { Id = 103, AdSoyad = "Iptal Kayit", BasvuruSahibiTipi = "Diger", HizmetYili = 0, AktifMi = true });
@@ -204,5 +206,31 @@ public class KampTahsisServiceTests
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private sealed class FakeKampParametreService : IKampParametreService
+    {
+        private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [KampParametreKodlari.NoShowSuresiGun] = "2"
+        };
+
+        public Task LoadAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public decimal GetDecimal(string kod, decimal defaultValue = 0m)
+            => _values.TryGetValue(kod, out var value) && decimal.TryParse(value, out var parsed) ? parsed : defaultValue;
+
+        public int GetInt(string kod, int defaultValue = 0)
+            => _values.TryGetValue(kod, out var value) && int.TryParse(value, out var parsed) ? parsed : defaultValue;
+
+        public DateTime GetDate(string kod, DateTime defaultValue = default) => defaultValue;
+
+        public string? GetString(string kod, string? defaultValue = null)
+            => _values.TryGetValue(kod, out var value) ? value : defaultValue;
+
+        public IReadOnlyDictionary<string, string> GetByPrefix(string prefix)
+            => _values
+                .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
     }
 }

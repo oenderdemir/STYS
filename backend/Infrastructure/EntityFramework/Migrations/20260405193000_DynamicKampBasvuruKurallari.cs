@@ -256,8 +256,8 @@ VALUES
 
 INSERT INTO dbo.KampBasvuruSahibiTipleri (Kod, Ad, OncelikSirasi, TabanPuan, HizmetYiliPuaniAktifMi, EmekliBonusPuani, VarsayilanKatilimciTipiKodu, AktifMi, IsDeleted, CreatedAt, UpdatedAt, CreatedBy, UpdatedBy)
 VALUES
-    (N'TarimOrmanPersoneli', N'Tarim ve Orman Personeli', 1, 40, 1, 0, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
-    (N'TarimOrmanEmeklisi', N'Tarim ve Orman Emeklisi', 1, 20, 0, 30, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
+    (N'KurumPersoneli', N'Kurum Personeli', 1, 40, 1, 0, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
+    (N'KurumEmeklisi', N'Kurum Emeklisi', 1, 20, 0, 30, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
     (N'BagliKurulusPersoneli', N'Bagli / Ilgili Kurulus Personeli', 2, 15, 0, 0, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
     (N'BagliKurulusEmeklisi', N'Bagli / Ilgili Kurulus Emeklisi', 2, 15, 0, 0, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),
     (N'DigerKamuPersoneli', N'Diger Kamu Personeli', 3, 10, 0, 0, N'Kamu', 1, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'migration', N'migration'),

@@ -37,7 +37,7 @@
 
 .assignment-controls {
     display: grid;
-    grid-template-columns: minmax(22rem, 32rem);
+    grid-template-columns: repeat(2, minmax(18rem, 1fr));
     gap: 1rem;
     align-items: end;
     margin-bottom: 1rem;

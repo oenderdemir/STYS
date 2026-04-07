@@ -9,8 +9,7 @@
       "Bash(xargs basename:*)",
       "Bash(dotnet test:*)",
       "Bash(grep \"^??.*\\\\.cs$\")",
-      "Bash(npm run:*)",
-      "Bash(git add:*)"
+      "Bash(npm run:*)"
     ]
   }
 }

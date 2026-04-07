@@ -1,9 +1,12 @@
+using STYS.Kamp.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kamp.Entities;
 
 public class KampKonaklamaTarifesi : BaseEntity<int>
 {
+    public int KampProgramiId { get; set; }
+
     public string Kod { get; set; } = string.Empty;
 
     public string Ad { get; set; } = string.Empty;
@@ -23,4 +26,6 @@ public class KampKonaklamaTarifesi : BaseEntity<int>
     public decimal KlimaGunlukUcret { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    public KampProgrami? KampProgrami { get; set; }
 }

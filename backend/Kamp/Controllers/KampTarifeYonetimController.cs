@@ -1,0 +1,46 @@
+using Microsoft.AspNetCore.Mvc;
+using STYS.Kamp.Dto;
+using STYS.Kamp.Services;
+using TOD.Platform.AspNetCore.Authorization;
+using TOD.Platform.AspNetCore.Controllers;
+
+namespace STYS.Kamp.Controllers;
+
+[Route("ui/kamptarife")]
+[ApiController]
+public class KampTarifeYonetimController : UIController
+{
+    private readonly IKampTarifeYonetimService _service;
+
+    public KampTarifeYonetimController(IKampTarifeYonetimService service)
+    {
+        _service = service;
+    }
+
+    [HttpGet("baglam")]
+    [Permission(StructurePermissions.KampTarifeYonetimi.View)]
+    public async Task<ActionResult<KampTarifeYonetimBaglamDto>> GetBaglam(CancellationToken cancellationToken = default)
+    {
+        var result = await _service.GetBaglamAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("{kampProgramiId:int}/tarifeler")]
+    [Permission(StructurePermissions.KampTarifeYonetimi.View)]
+    public async Task<ActionResult<List<KampKonaklamaTarifeYonetimDto>>> GetTarifeler(int kampProgramiId, CancellationToken cancellationToken = default)
+    {
+        var result = await _service.GetTarifelerAsync(kampProgramiId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("{kampProgramiId:int}/tarifeler")]
+    [Permission(StructurePermissions.KampTarifeYonetimi.Manage)]
+    public async Task<ActionResult<List<KampKonaklamaTarifeYonetimDto>>> Kaydet(
+        int kampProgramiId,
+        [FromBody] KampTarifeKaydetRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _service.KaydetAsync(kampProgramiId, request, cancellationToken);
+        return Ok(result);
+    }
+}

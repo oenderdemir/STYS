@@ -609,7 +609,11 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.BuzdolabiGunlukUcret).HasPrecision(18, 2);
             entity.Property(x => x.TelevizyonGunlukUcret).HasPrecision(18, 2);
             entity.Property(x => x.KlimaGunlukUcret).HasPrecision(18, 2);
-            entity.HasIndex(x => x.Kod)
+            entity.HasOne(x => x.KampProgrami)
+                .WithMany()
+                .HasForeignKey(x => x.KampProgramiId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.KampProgramiId, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.AktifMi)

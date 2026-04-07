@@ -191,6 +191,13 @@ public static class StructurePermissions
         public const string Manage = "KampPuanKuraliYonetimi.Manage";
     }
 
+    public static class KampTarifeYonetimi
+    {
+        public const string Menu = "KampTarifeYonetimi.Menu";
+        public const string View = "KampTarifeYonetimi.View";
+        public const string Manage = "KampTarifeYonetimi.Manage";
+    }
+
     public static class SezonYonetimi
     {
         public const string Menu = "SezonYonetimi.Menu";

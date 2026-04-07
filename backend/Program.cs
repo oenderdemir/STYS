@@ -65,6 +65,7 @@ builder.Services.AddScoped<IErisimTeshisService, ErisimTeshisService>();
 builder.Services.AddScoped<IKampParametreService, KampParametreService>();
 builder.Services.AddScoped<IKampPuanlamaService, KampPuanlamaService>();
 builder.Services.AddScoped<IKampPuanKuraliYonetimService, KampPuanKuraliYonetimService>();
+builder.Services.AddScoped<IKampTarifeYonetimService, KampTarifeYonetimService>();
 builder.Services.AddScoped<IKampUcretHesaplamaService, KampUcretHesaplamaService>();
 builder.Services.AddScoped<IKampIadeService, KampIadeService>();
 builder.Services.AddScoped<IKampBasvuruService, KampBasvuruService>();

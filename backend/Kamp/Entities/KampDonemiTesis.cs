@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -18,6 +20,20 @@ public class KampDonemiTesis : BaseEntity<int>
 
     [MaxLength(512)]
     public string? Aciklama { get; set; }
+
+    [MaxLength(2048)]
+    public string? KonaklamaTarifeKodlariJson { get; set; }
+
+    [NotMapped]
+    public List<string> KonaklamaTarifeKodlari
+    {
+        get => string.IsNullOrEmpty(KonaklamaTarifeKodlariJson)
+            ? []
+            : JsonSerializer.Deserialize<List<string>>(KonaklamaTarifeKodlariJson) ?? [];
+        set => KonaklamaTarifeKodlariJson = value.Count == 0
+            ? null
+            : JsonSerializer.Serialize(value);
+    }
 
     public KampDonemi? KampDonemi { get; set; }
 

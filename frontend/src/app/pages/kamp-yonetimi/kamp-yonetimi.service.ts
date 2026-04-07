@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampNoShowIptalSonucDto, KampProgramiDto, KampPuanKuraliYonetimBaglamDto, KampPuanKuraliYonetimKaydetRequestDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto } from './kamp-yonetimi.dto';
+import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampKonaklamaTarifeYonetimDto, KampNoShowIptalSonucDto, KampProgramiDto, KampPuanKuraliYonetimBaglamDto, KampPuanKuraliYonetimKaydetRequestDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto } from './kamp-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KampYonetimiService {
@@ -97,6 +97,12 @@ export class KampYonetimiService {
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp puan kurali baglami alinamadi.');
             })
+        );
+    }
+
+    getKampDonemiAtamaKonaklamaTarifeleri(): Observable<KampKonaklamaTarifeYonetimDto[]> {
+        return this.getKampPuanKuraliYonetimBaglam().pipe(
+            map(x => x.konaklamaTarifeleri.filter(t => t.aktifMi))
         );
     }
 
@@ -225,7 +231,8 @@ export class KampYonetimiService {
                 donemdeAktifMi: item.donemdeAktifMi,
                 basvuruyaAcikMi: item.basvuruyaAcikMi,
                 toplamKontenjan: item.toplamKontenjan,
-                aciklama: item.aciklama ?? null
+                aciklama: item.aciklama ?? null,
+                konaklamaTarifeKodlari: item.konaklamaTarifeKodlari ?? []
             }))
         }).pipe(
             map((responseEnvelope) => {

@@ -214,7 +214,8 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
                     DonemdeAktifMi = existing?.AktifMi ?? true,
                     BasvuruyaAcikMi = existing?.BasvuruyaAcikMi ?? true,
                     ToplamKontenjan = existing?.ToplamKontenjan ?? 0,
-                    Aciklama = existing?.Aciklama
+                    Aciklama = existing?.Aciklama,
+                    KonaklamaTarifeKodlari = existing?.KonaklamaTarifeKodlari ?? []
                 };
             })
             .ToList();
@@ -270,6 +271,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
                 existing.BasvuruyaAcikMi = kayit.BasvuruyaAcikMi;
                 existing.ToplamKontenjan = kayit.ToplamKontenjan;
                 existing.Aciklama = NormalizeAciklama(kayit.Aciklama);
+                existing.KonaklamaTarifeKodlari = kayit.KonaklamaTarifeKodlari;
                 continue;
             }
 
@@ -285,7 +287,8 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
                 AktifMi = kayit.DonemdeAktifMi,
                 BasvuruyaAcikMi = kayit.BasvuruyaAcikMi,
                 ToplamKontenjan = kayit.ToplamKontenjan,
-                Aciklama = NormalizeAciklama(kayit.Aciklama)
+                Aciklama = NormalizeAciklama(kayit.Aciklama),
+                KonaklamaTarifeKodlari = kayit.KonaklamaTarifeKodlari
             }, cancellationToken);
         }
 

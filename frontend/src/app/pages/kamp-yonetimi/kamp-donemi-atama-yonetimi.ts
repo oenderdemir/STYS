@@ -16,7 +16,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import { KampDonemiDto, KampDonemiTesisAtamaDto } from './kamp-yonetimi.dto';
+import { KampDonemiDto, KampDonemiTesisAtamaDto, KampKonaklamaTarifeYonetimDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 
 @Component({
@@ -39,6 +39,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
     selectedKampDonemiId: number | null = null;
     topluHedefDonemIds: number[] = [];
     tesisAtamalari: KampDonemiTesisAtamaDto[] = [];
+    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[] = [];
 
     loadingBaglam = false;
     loadingAtamalar = false;
@@ -99,6 +100,13 @@ export class KampDonemiAtamaYonetimi implements OnInit {
             }));
     }
 
+    get tarifeSecenekleri(): Array<{ label: string; value: string }> {
+        return this.konaklamaTarifeleri.map(t => ({
+            label: `${t.ad} (${t.kod})`,
+            value: t.kod
+        }));
+    }
+
     get canRunTopluApply(): boolean {
         return this.canManageAssignments && this.topluHedefDonemIds.length > 0 && !this.savingTopluAtamalar && this.tesisAtamalari.length > 0;
     }
@@ -135,6 +143,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         item.atamaVarMi = checked;
         if (!checked) {
             item.basvuruyaAcikMi = false;
+            item.konaklamaTarifeKodlari = [];
         }
     }
 
@@ -205,14 +214,16 @@ export class KampDonemiAtamaYonetimi implements OnInit {
     private loadPageContext(): void {
         this.loadingBaglam = true;
         forkJoin({
-            donemler: this.service.getKampDonemleri()
+            donemler: this.service.getKampDonemleri(),
+            tarifeler: this.service.getKampDonemiAtamaKonaklamaTarifeleri()
         })
             .pipe(finalize(() => {
                 this.loadingBaglam = false;
                 this.cdr.detectChanges();
             }))
             .subscribe({
-                next: ({ donemler }) => {
+                next: ({ donemler, tarifeler }) => {
+                    this.konaklamaTarifeleri = tarifeler;
                     this.kampDonemleri = [...donemler].sort((a, b) => {
                         if (a.yil !== b.yil) {
                             return b.yil - a.yil;

@@ -79,6 +79,10 @@ export interface KampPuanKuraliYonetimBaglamDto {
     yasUcretKurali: KampYasUcretKuraliDto;
 }
 
+export interface KampDonemiAtamaBaglamDto {
+    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[];
+}
+
 export interface KampPuanKuraliYonetimKaydetRequestDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
@@ -134,6 +138,7 @@ export interface KampDonemiTesisAtamaDto {
     basvuruyaAcikMi: boolean;
     toplamKontenjan: number;
     aciklama?: string | null;
+    konaklamaTarifeKodlari: string[];
 }
 
 export interface KampBasvuruBaglamDto {

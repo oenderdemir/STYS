@@ -70,7 +70,7 @@
             [value]="tesisAtamalari"
             dataKey="tesisId"
             [loading]="loadingAtamalar"
-            [tableStyle]="{ 'min-width': '72rem' }"
+            [tableStyle]="{ 'min-width': '90rem' }"
             styleClass="kamp-table"
         >
             <ng-template #header>
@@ -80,6 +80,7 @@
                     <th style="width: 8rem;">Donem Aktif</th>
                     <th style="width: 8rem;">Basvuru Acik</th>
                     <th style="width: 10rem;">Kontenjan</th>
+                    <th style="width: 18rem;">Tarifeler</th>
                     <th>Aciklama</th>
                 </tr>
             </ng-template>
@@ -103,6 +104,17 @@
                     </td>
                     <td>
                         <input pInputText type="number" min="0" class="w-full" [(ngModel)]="item.toplamKontenjan" [disabled]="!canManageAssignments || !item.atamaVarMi" />
+                    </td>
+                    <td>
+                        <p-multiSelect
+                            [(ngModel)]="item.konaklamaTarifeKodlari"
+                            [options]="tarifeSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [disabled]="!canManageAssignments || !item.atamaVarMi"
+                            placeholder="Tarife sec..."
+                            [appendTo]="'body'"
+                            styleClass="w-full" />
                     </td>
                     <td>
                         <input pInputText type="text" class="w-full" [(ngModel)]="item.aciklama" [disabled]="!canManageAssignments || !item.atamaVarMi" maxlength="512" />

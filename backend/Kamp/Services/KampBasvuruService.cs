@@ -64,7 +64,7 @@ public class KampBasvuruService : IKampBasvuruService
                             TesisId = y.TesisId,
                             TesisAd = y.Tesis!.Ad,
                             ToplamKontenjan = y.ToplamKontenjan,
-                            Birimler = BuildBirimler(y.TesisId)
+                            Birimler = BuildBirimler(y.KonaklamaTarifeKodlari)
                         })
                         .Where(y => y.Birimler.Count > 0)
                         .OrderBy(y => y.TesisAd)
@@ -696,39 +696,24 @@ public class KampBasvuruService : IKampBasvuruService
             ? string.Empty
             : basvuruNo.Trim().ToUpperInvariant();
 
-    private List<KampKonaklamaBirimiSecenekDto> BuildBirimler(int tesisId)
+    private List<KampKonaklamaBirimiSecenekDto> BuildBirimler(IReadOnlyList<string> tarifeKodlari)
     {
-        var binaBilgileri = _dbContext.Binalar
-            .AsNoTracking()
-            .Where(x => x.AktifMi && x.TesisId == tesisId)
-            .Select(x => new
-            {
-                x.Ad,
-                Kapasiteler = x.Odalar
-                    .Where(o => o.AktifMi && o.TesisOdaTipi != null && o.TesisOdaTipi.AktifMi)
-                    .Select(o => o.TesisOdaTipi!.Kapasite)
-            })
-            .ToList();
+        var aktifTarifeler = GetAktifKonaklamaTarifeleri();
 
-        var result = new List<KampKonaklamaBirimiSecenekDto>();
-        foreach (var bina in binaBilgileri)
+        // Tarife kodu listesi varsa filtrele; yoksa tüm aktif tarifeleri getir (fallback)
+        var tarifeler = tarifeKodlari.Count > 0
+            ? aktifTarifeler.Where(x => tarifeKodlari.Contains(x.Kod, StringComparer.OrdinalIgnoreCase)).ToList()
+            : aktifTarifeler;
+
+        return tarifeler.Select(x => new KampKonaklamaBirimiSecenekDto
         {
-            var kapasiteListesi = bina.Kapasiteler.ToList();
-            var minimum = kapasiteListesi.Count > 0 ? kapasiteListesi.Min() : 0;
-            var maksimum = kapasiteListesi.Count > 0 ? kapasiteListesi.Max() : 0;
-
-            result.Add(new KampKonaklamaBirimiSecenekDto
-            {
-                Kod = bina.Ad,
-                Ad = bina.Ad,
-                MinimumKisi = minimum,
-                MaksimumKisi = maksimum
-            });
-        }
-
-        return result
-            .OrderBy(x => x.Ad)
-            .ToList();
+            Kod = x.Kod,
+            Ad = _parametreService.GetString(
+                KampKonaklamaBirimiTipleri.BuildParametreKodu(x.Kod, KampKonaklamaBirimiTipleri.AlanAd),
+                x.Kod),
+            MinimumKisi = x.MinimumKisi,
+            MaksimumKisi = x.MaksimumKisi
+        }).ToList();
     }
 
     private async Task<KampKonaklamaKonfigurasyonu> ResolveKonaklamaKonfigurasyonuAsync(int tesisId, string secilenBirim, CancellationToken cancellationToken)

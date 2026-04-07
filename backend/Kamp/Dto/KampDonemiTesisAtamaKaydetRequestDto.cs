@@ -18,4 +18,6 @@ public class KampDonemiTesisAtamaKayitDto
     public int ToplamKontenjan { get; set; }
 
     public string? Aciklama { get; set; }
+
+    public List<string> KonaklamaTarifeKodlari { get; set; } = [];
 }

@@ -12,8 +12,8 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    [Migration("20260407204925_UpdateSnapshotForTarifeleri")]
-    partial class UpdateSnapshotForTarifeleri
+    [Migration("20260408073029_AddKampProgramiIdToKampKonaklamaTarifeleri")]
+    partial class AddKampProgramiIdToKampKonaklamaTarifeleri
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

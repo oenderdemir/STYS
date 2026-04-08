@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, SortDirection, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampKonaklamaTarifeYonetimDto, KampNoShowIptalSonucDto, KampProgramiDto, KampPuanKuraliYonetimBaglamDto, KampPuanKuraliYonetimKaydetRequestDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto } from './kamp-yonetimi.dto';
+import { KampBasvuruBaglamDto, KampBasvuruDto, KampBasvuruOnizlemeDto, KampBasvuruRequestDto, KampDonemiDto, KampDonemiTesisAtamaDto, KampDonemiYonetimBaglamDto, KampIadeHesaplamaRequestDto, KampIadeKarariDto, KampKatilimciIptalSonucDto, KampKonaklamaTarifeYonetimDto, KampNoShowIptalSonucDto, KampProgramiDto, KampPuanKuraliYonetimBaglamDto, KampPuanKuraliYonetimKaydetRequestDto, KampRezervasyonBaglamDto, KampRezervasyonIptalRequestDto, KampRezervasyonListeDto, KampRezervasyonUretSonucDto, KampTahsisBaglamDto, KampTahsisKararRequestDto, KampTahsisListeDto, KampTahsisOtomatikKararRequestDto, KampTahsisOtomatikKararSonucDto, KampTarifeYonetimBaglamDto, KampTarifeKaydetRequestDto } from './kamp-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KampYonetimiService {
@@ -508,5 +508,41 @@ export class KampYonetimiService {
                 dogumTarihi: this.normalizeDate(x.dogumTarihi)
             }))
         };
+    }
+
+    getKampTarifeYonetimBaglam(): Observable<KampTarifeYonetimBaglamDto> {
+        return this.http.get<ApiResponse<KampTarifeYonetimBaglamDto>>(`${this.apiBaseUrl}/ui/kamptarife/baglam`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp tarife baglami alinamadi.');
+            })
+        );
+    }
+
+    getKampTarifeleri(kampProgramiId: number): Observable<KampKonaklamaTarifeYonetimDto[]> {
+        return this.http.get<ApiResponse<KampKonaklamaTarifeYonetimDto[]>>(`${this.apiBaseUrl}/ui/kamptarife/${kampProgramiId}/tarifeler`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp tarifeleri alinamadi.');
+            })
+        );
+    }
+
+    kaydetKampTarifeleri(kampProgramiId: number, request: KampTarifeKaydetRequestDto): Observable<KampKonaklamaTarifeYonetimDto[]> {
+        return this.http.put<ApiResponse<KampKonaklamaTarifeYonetimDto[]>>(`${this.apiBaseUrl}/ui/kamptarife/${kampProgramiId}/tarifeler`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp tarifeleri kaydedilemedi.');
+            })
+        );
     }
 }

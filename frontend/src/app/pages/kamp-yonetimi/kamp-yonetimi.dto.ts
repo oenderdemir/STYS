@@ -56,6 +56,7 @@ export interface KampProgramiParametreAyariDto {
 
 export interface KampKonaklamaTarifeYonetimDto {
     id?: number | null;
+    kampProgramiId?: number;
     kod: string;
     ad: string;
     minimumKisi: number;
@@ -400,4 +401,12 @@ export interface KampNoShowIptalSonucDto {
     kampDonemiAd: string;
     degerlendirilenBasvuruSayisi: number;
     iptalEdilenSayisi: number;
+}
+
+export interface KampTarifeYonetimBaglamDto {
+    programlar: KampProgramiSecenekDto[];
+}
+
+export interface KampTarifeKaydetRequestDto {
+    tarifeler: KampKonaklamaTarifeYonetimDto[];
 }

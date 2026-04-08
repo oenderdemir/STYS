@@ -64,7 +64,7 @@ public class KampBasvuruService : IKampBasvuruService
                             TesisId = y.TesisId,
                             TesisAd = y.Tesis!.Ad,
                             ToplamKontenjan = y.ToplamKontenjan,
-                            Birimler = BuildBirimler(y.KonaklamaTarifeKodlari)
+                            Birimler = BuildBirimler(x.KampProgramiId, y.KonaklamaTarifeKodlari)
                         })
                         .Where(y => y.Birimler.Count > 0)
                         .OrderBy(y => y.TesisAd)
@@ -365,7 +365,7 @@ public class KampBasvuruService : IKampBasvuruService
         KampKonaklamaKonfigurasyonu konfigurasyon;
         try
         {
-            konfigurasyon = await ResolveKonaklamaKonfigurasyonuAsync(request.TesisId, request.KonaklamaBirimiTipi, cancellationToken);
+            konfigurasyon = await ResolveKonaklamaKonfigurasyonuAsync(kampDonemi.KampProgramiId, request.TesisId, request.KonaklamaBirimiTipi, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -696,9 +696,9 @@ public class KampBasvuruService : IKampBasvuruService
             ? string.Empty
             : basvuruNo.Trim().ToUpperInvariant();
 
-    private List<KampKonaklamaBirimiSecenekDto> BuildBirimler(IReadOnlyList<string> tarifeKodlari)
+    private List<KampKonaklamaBirimiSecenekDto> BuildBirimler(int kampProgramiId, IReadOnlyList<string> tarifeKodlari)
     {
-        var aktifTarifeler = GetAktifKonaklamaTarifeleri();
+        var aktifTarifeler = GetAktifKonaklamaTarifeleri(kampProgramiId);
 
         // Tarife kodu listesi varsa filtrele; yoksa tüm aktif tarifeleri getir (fallback)
         var tarifeler = tarifeKodlari.Count > 0
@@ -716,7 +716,7 @@ public class KampBasvuruService : IKampBasvuruService
         }).ToList();
     }
 
-    private async Task<KampKonaklamaKonfigurasyonu> ResolveKonaklamaKonfigurasyonuAsync(int tesisId, string secilenBirim, CancellationToken cancellationToken)
+    private async Task<KampKonaklamaKonfigurasyonu> ResolveKonaklamaKonfigurasyonuAsync(int kampProgramiId, int tesisId, string secilenBirim, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(secilenBirim))
         {
@@ -725,7 +725,7 @@ public class KampBasvuruService : IKampBasvuruService
 
         var normalizedSecim = secilenBirim.Trim();
 
-        var tarifeler = GetAktifKonaklamaTarifeleri();
+        var tarifeler = GetAktifKonaklamaTarifeleri(kampProgramiId);
         var seciliTarife = tarifeler.FirstOrDefault(x => string.Equals(x.Kod, normalizedSecim, StringComparison.OrdinalIgnoreCase));
         if (seciliTarife is not null)
         {
@@ -758,11 +758,11 @@ public class KampBasvuruService : IKampBasvuruService
         return secilen;
     }
 
-    private List<KampKonaklamaKonfigurasyonu> GetAktifKonaklamaTarifeleri()
+    private List<KampKonaklamaKonfigurasyonu> GetAktifKonaklamaTarifeleri(int kampProgramiId)
     {
         var tarifeler = _dbContext.KampKonaklamaTarifeleri
             .AsNoTracking()
-            .Where(x => x.AktifMi)
+            .Where(x => x.AktifMi && x.KampProgramiId == kampProgramiId)
             .OrderByDescending(x => x.Id)
             .Select(x => new KampKonaklamaKonfigurasyonu(
                 x.Kod,

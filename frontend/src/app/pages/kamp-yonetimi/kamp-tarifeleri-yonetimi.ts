@@ -29,6 +29,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
         InputNumberModule,
         InputTextModule
     ],
+    providers: [MessageService],
     template: `
         <p-toast></p-toast>
         <div class="card">
@@ -69,51 +70,55 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
                 [value]="tarifeler"
                 [loading]="loading"
                 styleClass="kamp-table"
-                [tableStyle]="{ 'min-width': '92rem' }"
+              
                 responsiveLayout="scroll">
                 <ng-template pTemplate="header">
                     <tr>
-                        <th style="width:8rem">Kod</th>
-                        <th>Ad</th>
-                        <th style="width:6rem">Min Kişi</th>
-                        <th style="width:6rem">Maks Kişi</th>
-                        <th style="width:9rem">Kamu Günlük</th>
-                        <th style="width:9rem">Diğer Günlük</th>
-                        <th style="width:8rem">Buzdolabı</th>
-                        <th style="width:8rem">TV</th>
-                        <th style="width:8rem">Klima</th>
-                        <th style="width:5rem">Aktif</th>
-                        <th style="width:5rem">İşlem</th>
+                        <th >Kod</th>
+                        <th >Ad</th>
+                        <th >Min Kişi</th>
+                        <th >Maks Kişi</th>
+                        <th >Kamu Günlük</th>
+                        <th >Diğer Günlük</th>
+                        <th >Buzdolabı</th>
+                        <th >TV</th>
+                        <th >Klima</th>
+                        <th >Aktif</th>
+                        <th >İşlem</th>
                     </tr>
                 </ng-template>
                 <ng-template pTemplate="body" let-tarife let-rowIndex="rowIndex">
                     <tr>
-                        <td>
+                        <td >
                             <input
                                 pInputText
                                 [(ngModel)]="tarife.kod"
                                 [disabled]="!canManage"
-                                class="w-full">
+                                placeholder="Kod"
+                                >
                         </td>
-                        <td>
+                        <td >
                             <input
                                 pInputText
                                 [(ngModel)]="tarife.ad"
                                 [disabled]="!canManage"
-                                class="w-full">
+                                placeholder="Ad"
+                                >
                         </td>
                         <td>
                             <p-inputNumber
                                 [(ngModel)]="tarife.minimumKisi"
                                 [disabled]="!canManage"
-                                [useGrouping]="false">
+                                [useGrouping]="false"
+                            >
                             </p-inputNumber>
                         </td>
-                        <td>
+                        <td >
                             <p-inputNumber
                                 [(ngModel)]="tarife.maksimumKisi"
                                 [disabled]="!canManage"
-                                [useGrouping]="false">
+                                [useGrouping]="false"
+                               >
                             </p-inputNumber>
                         </td>
                         <td>

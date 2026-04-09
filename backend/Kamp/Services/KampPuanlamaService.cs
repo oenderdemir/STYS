@@ -17,7 +17,6 @@ public class KampPuanlamaService : IKampPuanlamaService
         KampBasvuruRequestDto request,
         KampBasvuruOnizlemeDto onizleme,
         int kampProgramiId,
-        int kampYili,
         IReadOnlyCollection<int> gecmisKatilimYillari,
         CancellationToken cancellationToken = default)
     {
@@ -33,11 +32,12 @@ public class KampPuanlamaService : IKampPuanlamaService
 
         var kuralSeti = await _dbContext.KampKuralSetleri
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.AktifMi && x.KampProgramiId == kampProgramiId && x.KampYili == kampYili, cancellationToken);
+            .Include(x => x.KampProgrami)
+            .FirstOrDefaultAsync(x => x.AktifMi && x.KampProgramiId == kampProgramiId, cancellationToken);
 
         if (kuralSeti is null)
         {
-            onizleme.Hatalar.Add($"{kampYili} yili icin aktif kamp kural seti bulunamadi.");
+            onizleme.Hatalar.Add("Secili program icin aktif kamp kural seti bulunamadi.");
             return onizleme;
         }
 
@@ -65,6 +65,7 @@ public class KampPuanlamaService : IKampPuanlamaService
 
         puan += request.Katilimcilar.Count * Math.Max(0, kuralSeti.KatilimciBasinaPuan);
 
+        var kampYili = kuralSeti.KampProgrami!.Yil;
         var dikkateAlinanGecmisYillar = GetDikkateAlinanGecmisYillar(kampYili, kuralSeti.OncekiYilSayisi, gecmisKatilimYillari);
         puan -= dikkateAlinanGecmisYillar.Count * Math.Max(0, kuralSeti.KatilimCezaPuani);
 

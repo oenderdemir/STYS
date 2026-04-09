@@ -470,10 +470,11 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(512);
-            entity.HasIndex(x => x.Kod)
+            entity.Property(x => x.Yil).IsRequired();
+            entity.HasIndex(x => new { x.Yil, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => x.Ad)
+            entity.HasIndex(x => new { x.Yil, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
         });
@@ -491,7 +492,7 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.Kod)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KampProgramiId, x.Yil, x.Ad })
+            entity.HasIndex(x => new { x.KampProgramiId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
 
@@ -554,7 +555,7 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<KampKuralSeti>(entity =>
         {
             entity.ToTable("KampKuralSetleri", "dbo");
-            entity.HasIndex(x => new { x.KampProgramiId, x.KampYili })
+            entity.HasIndex(x => x.KampProgramiId)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
 

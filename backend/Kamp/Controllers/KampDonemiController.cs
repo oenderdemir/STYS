@@ -83,7 +83,7 @@ public class KampDonemiController : UIController
                 : x => x.Ad.Contains(normalizedQuery)
                     || x.Kod.Contains(normalizedQuery)
                     || (x.KampProgrami != null && x.KampProgrami.Ad.Contains(normalizedQuery)),
-            orderBy: orderBy ?? (q => q.OrderByDescending(x => x.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad)),
+            orderBy: orderBy ?? (q => q.OrderByDescending(x => x.KampProgrami!.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad)),
             cancellationToken: cancellationToken);
         return Ok(result);
     }
@@ -145,7 +145,7 @@ public class KampDonemiController : UIController
         var normalized = sortBy.Trim().ToLowerInvariant();
         return normalized switch
         {
-            "yil" => desc ? q => q.OrderByDescending(x => x.Yil).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Yil).ThenBy(x => x.Id),
+            "yil" => desc ? q => q.OrderByDescending(x => x.KampProgrami!.Yil).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KampProgrami!.Yil).ThenBy(x => x.Id),
             "program" => desc ? q => q.OrderByDescending(x => x.KampProgrami!.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Id),
             "kod" => desc ? q => q.OrderByDescending(x => x.Kod).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Kod).ThenBy(x => x.Id),
             "ad" => desc ? q => q.OrderByDescending(x => x.Ad).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id),

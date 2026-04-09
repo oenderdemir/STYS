@@ -13,5 +13,8 @@ public class KampProgramiDto : BaseRdbmsDto<int>
 
     public string? Aciklama { get; set; }
 
+    [Required]
+    public int Yil { get; set; }
+
     public bool AktifMi { get; set; } = true;
 }

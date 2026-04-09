@@ -61,7 +61,6 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         entity.KampProgramiId = dto.KampProgramiId;
         entity.Kod = dto.Kod;
         entity.Ad = dto.Ad;
-        entity.Yil = dto.Yil;
         entity.BasvuruBaslangicTarihi = dto.BasvuruBaslangicTarihi.Date;
         entity.BasvuruBitisTarihi = dto.BasvuruBitisTarihi.Date;
         entity.KonaklamaBaslangicTarihi = dto.KonaklamaBaslangicTarihi.Date;
@@ -94,7 +93,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
     {
         var query = BuildIncludedQuery(include);
         var items = await query
-            .OrderByDescending(x => x.Yil)
+            .OrderBy(x => x.KampProgrami!.Yil)
             .ThenBy(x => x.KampProgrami!.Ad)
             .ThenBy(x => x.Ad)
             .ToListAsync(cancellationToken);
@@ -142,7 +141,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         var pageSize = request.PageSize <= 0 ? 10 : request.PageSize;
         var ordered = orderBy is not null
             ? orderBy(query)
-            : query.OrderByDescending(x => x.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad);
+            : query.OrderBy(x => x.KampProgrami!.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad);
 
         var items = await ordered
             .Skip((pageNumber - 1) * pageSize)
@@ -169,7 +168,8 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
             .Select(x => new KampProgramiSecenekDto
             {
                 Id = x.Id,
-                Ad = x.Ad
+                Ad = x.Ad,
+                Yil = x.Yil
             })
             .ToListAsync(cancellationToken);
 
@@ -346,12 +346,11 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         var adExists = await _stysDbContext.KampDonemleri.AnyAsync(x =>
             (!excludedId.HasValue || x.Id != excludedId.Value)
             && x.KampProgramiId == dto.KampProgramiId
-            && x.Yil == dto.Yil
             && x.Ad.ToUpper() == normalizedAd);
 
         if (adExists)
         {
-            throw new BaseException("Ayni program ve yil altinda ayni ada sahip baska bir kamp donemi zaten mevcut.", 400);
+            throw new BaseException("Ayni program altinda ayni ada sahip baska bir kamp donemi zaten mevcut.", 400);
         }
     }
 
@@ -398,11 +397,6 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         if (string.IsNullOrWhiteSpace(dto.Ad))
         {
             throw new BaseException("Kamp donemi adi zorunludur.", 400);
-        }
-
-        if (dto.Yil < KampValidasyonKurallari.YilRange.Min || dto.Yil > KampValidasyonKurallari.YilRange.Max)
-        {
-            throw new BaseException("Kamp donemi yili gecersiz.", 400);
         }
 
         if (dto.BasvuruBaslangicTarihi.Date > dto.BasvuruBitisTarihi.Date)

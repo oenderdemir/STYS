@@ -29,13 +29,9 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
             }
 
             <div class="grid grid-cols-12 gap-4">
-                <div class="col-span-12 md:col-span-6">
+                <div class="col-span-12 md:col-span-8">
                     <label for="kampProgramiId" class="block font-medium mb-2">Kamp Programi</label>
                     <p-select inputId="kampProgramiId" class="w-full" [options]="programOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.kampProgramiId" [appendTo]="'body'" [disabled]="isReadOnly || saving" />
-                </div>
-                <div class="col-span-12 md:col-span-2">
-                    <label for="yil" class="block font-medium mb-2">Yil</label>
-                    <input id="yil" pInputText type="number" min="2000" max="2100" class="w-full" [(ngModel)]="workingModel.yil" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="kod" class="block font-medium mb-2">Kod</label>
@@ -115,7 +111,7 @@ export class KampDonemiDialog implements OnChanges {
     workingModel: KampDonemiDto = this.emptyModel();
 
     get programOptions(): Array<{ label: string; value: number }> {
-        return this.programlar.map((item) => ({ label: item.ad, value: item.id }));
+        return this.programlar.map((item) => ({ label: `${item.yil} - ${item.ad}`, value: item.id }));
     }
 
     get isReadOnly(): boolean {
@@ -172,14 +168,13 @@ export class KampDonemiDialog implements OnChanges {
         const hasProgram = (this.workingModel.kampProgramiId ?? 0) > 0;
         const hasKod = (this.workingModel.kod?.trim().length ?? 0) > 0;
         const hasAd = (this.workingModel.ad?.trim().length ?? 0) > 0;
-        const validYear = Number(this.workingModel.yil) >= 2000 && Number(this.workingModel.yil) <= 2100;
         const validMin = Number(this.workingModel.minimumGece) >= 1;
         const validMax = Number(this.workingModel.maksimumGece) >= Number(this.workingModel.minimumGece);
         const basvuruOk = !!this.workingModel.basvuruBaslangicTarihi && !!this.workingModel.basvuruBitisTarihi && this.workingModel.basvuruBaslangicTarihi <= this.workingModel.basvuruBitisTarihi;
         const konaklamaOk = !!this.workingModel.konaklamaBaslangicTarihi && !!this.workingModel.konaklamaBitisTarihi && this.workingModel.konaklamaBaslangicTarihi <= this.workingModel.konaklamaBitisTarihi;
         const iptalOk = !this.workingModel.iptalSonGun || this.workingModel.iptalSonGun <= this.workingModel.konaklamaBaslangicTarihi;
 
-        return hasProgram && hasKod && hasAd && validYear && validMin && validMax && basvuruOk && konaklamaOk && iptalOk;
+        return hasProgram && hasKod && hasAd && validMin && validMax && basvuruOk && konaklamaOk && iptalOk;
     }
 
     submit(): void {
@@ -193,7 +188,6 @@ export class KampDonemiDialog implements OnChanges {
             kampProgramiId: Number(this.workingModel.kampProgramiId),
             kod: this.workingModel.kod.trim().toUpperCase(),
             ad: this.workingModel.ad.trim(),
-            yil: Number(this.workingModel.yil),
             minimumGece: Number(this.workingModel.minimumGece),
             maksimumGece: Number(this.workingModel.maksimumGece),
             iptalSonGun: this.workingModel.iptalSonGun || null
@@ -223,7 +217,6 @@ export class KampDonemiDialog implements OnChanges {
             kampProgramiId: 0,
             kod: '',
             ad: '',
-            yil: new Date().getFullYear(),
             basvuruBaslangicTarihi: '',
             basvuruBitisTarihi: '',
             konaklamaBaslangicTarihi: '',

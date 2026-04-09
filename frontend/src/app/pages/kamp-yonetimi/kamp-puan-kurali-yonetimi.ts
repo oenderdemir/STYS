@@ -53,7 +53,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     get filteredKuralSetleri(): KampPuanKuralSetiDto[] {
         if (!this.selectedProgramId) return [];
-        return this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId).sort((a, b) => b.kampYili - a.kampYili);
+        return this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId);
     }
 
     get filteredBasvuruSahibiTipleri(): KampPuanBasvuruSahibiTipiDto[] {
@@ -111,12 +111,9 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     addKuralSeti(): void {
         if (!this.selectedProgramId) return;
-        const programKuralSetleri = this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId);
-        const maxYil = programKuralSetleri.length > 0 ? Math.max(...programKuralSetleri.map((x) => x.kampYili)) : new Date().getFullYear();
         this.kuralSetleri = [
             {
                 kampProgramiId: this.selectedProgramId,
-                kampYili: maxYil + 1,
                 oncekiYilSayisi: 2,
                 katilimCezaPuani: 20,
                 katilimciBasinaPuan: 10,
@@ -183,7 +180,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     removeKuralSetiByItem(item: KampPuanKuralSetiDto): void {
-        this.kuralSetleri = this.kuralSetleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.kampYili === item.kampYili));
+        this.kuralSetleri = this.kuralSetleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.id === item.id));
     }
 
     removeBasvuruSahibiTipi(index: number): void {

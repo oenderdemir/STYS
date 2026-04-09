@@ -48,7 +48,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
 
     get donemSecenekleri(): Array<{ label: string; value: number }> {
         return this.filteredDonemler.map((item) => ({
-            label: `${item.yil} - ${item.kampProgramiAd || '-'} / ${item.ad}`,
+            label: `${item.kampProgramiYil} - ${item.kampProgramiAd || '-'} / ${item.ad}`,
             value: item.id!
         }));
     }
@@ -56,10 +56,10 @@ export class KampDonemiAtamaYonetimi implements OnInit {
     get sezonSecenekleri(): Array<{ label: string; value: string }> {
         const unique = new Map<string, { label: string; value: string }>();
         for (const item of this.kampDonemleri) {
-            const value = this.buildSezonKey(item.kampProgramiId, item.yil);
+            const value = this.buildSezonKey(item.kampProgramiId, item.kampProgramiYil || 0);
             if (!unique.has(value)) {
                 unique.set(value, {
-                    label: `${item.yil} - ${item.kampProgramiAd || '-'}`,
+                    label: `${item.kampProgramiYil || ''} - ${item.kampProgramiAd || '-'}`,
                     value
                 });
             }
@@ -73,7 +73,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
             return this.kampDonemleri;
         }
 
-        return this.kampDonemleri.filter((x) => this.buildSezonKey(x.kampProgramiId, x.yil) === this.selectedSezonKey);
+        return this.kampDonemleri.filter((x) => this.buildSezonKey(x.kampProgramiId, x.kampProgramiYil || 0) === this.selectedSezonKey);
     }
 
     get canManageAssignments(): boolean {
@@ -225,8 +225,8 @@ export class KampDonemiAtamaYonetimi implements OnInit {
                 next: ({ donemler, tarifeler }) => {
                     this.konaklamaTarifeleri = tarifeler;
                     this.kampDonemleri = [...donemler].sort((a, b) => {
-                        if (a.yil !== b.yil) {
-                            return b.yil - a.yil;
+                        if ((a.kampProgramiYil || 0) !== (b.kampProgramiYil || 0)) {
+                            return (b.kampProgramiYil || 0) - (a.kampProgramiYil || 0);
                         }
 
                         return `${a.kampProgramiAd || ''}${a.ad}`.localeCompare(`${b.kampProgramiAd || ''}${b.ad}`);
@@ -243,7 +243,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
                     if (this.selectedKampDonemiId) {
                         const secili = this.kampDonemleri.find((x) => x.id === this.selectedKampDonemiId);
                         if (secili) {
-                            this.selectedSezonKey = this.buildSezonKey(secili.kampProgramiId, secili.yil);
+                            this.selectedSezonKey = this.buildSezonKey(secili.kampProgramiId, secili.kampProgramiYil || 0);
                         }
                     } else {
                         this.selectedSezonKey = this.sezonSecenekleri[0]?.value ?? null;

@@ -13,8 +13,8 @@ public class KampBasvuruDonemSecenekDto
     public int Id { get; set; }
     public int KampProgramiId { get; set; }
     public string? KampProgramiAd { get; set; }
+    public int KampProgramiYil { get; set; }
     public string Ad { get; set; } = string.Empty;
-    public int Yil { get; set; }
     public DateTime KonaklamaBaslangicTarihi { get; set; }
     public DateTime KonaklamaBitisTarihi { get; set; }
     public List<int> GecmisKatilimYillari { get; set; } = [];

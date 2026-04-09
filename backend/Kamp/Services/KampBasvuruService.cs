@@ -52,11 +52,11 @@ public class KampBasvuruService : IKampBasvuruService
                     Id = x.Id,
                     KampProgramiId = x.KampProgramiId,
                     KampProgramiAd = x.KampProgrami != null ? x.KampProgrami.Ad : null,
+                    KampProgramiYil = x.KampProgrami != null ? x.KampProgrami.Yil : 0,
                     Ad = x.Ad,
-                    Yil = x.Yil,
                     KonaklamaBaslangicTarihi = x.KonaklamaBaslangicTarihi,
                     KonaklamaBitisTarihi = x.KonaklamaBitisTarihi,
-                    GecmisKatilimYillari = BuildGecmisKatilimYillari(x.Yil, lookupBaglami.GetKuralSeti(x.KampProgramiId, x.Yil)),
+                    GecmisKatilimYillari = BuildGecmisKatilimYillari(x.KampProgrami!.Yil, lookupBaglami.GetKuralSeti(x.KampProgramiId)),
                     Tesisler = x.TesisAtamalari
                         .Where(y => y.Tesis != null)
                         .Select(y => new KampBasvuruTesisSecenekDto
@@ -114,7 +114,7 @@ public class KampBasvuruService : IKampBasvuruService
             : await FindBasvuruSahibiAsync(NormalizeNullable(basvuruSahibi.TcKimlikNo), cancellationToken);
 
         var birlesikGecmisKatilimYillari = await BuildBirlesikGecmisKatilimYillariAsync(
-            kampDonemi.Yil,
+            kampDonemi.KampProgrami!.Yil,
             request.GecmisKatilimYillari,
             mevcutSahip?.Id,
             cancellationToken);
@@ -122,7 +122,7 @@ public class KampBasvuruService : IKampBasvuruService
         onizleme.GecmisKatilimYillari = birlesikGecmisKatilimYillari;
 
         await PopulateKontenjanAsync(request, atama, onizleme, cancellationToken);
-        await _puanlamaService.PuanlaAsync(request, onizleme, kampDonemi.KampProgramiId, kampDonemi.Yil, birlesikGecmisKatilimYillari, cancellationToken);
+        await _puanlamaService.PuanlaAsync(request, onizleme, kampDonemi.KampProgramiId, birlesikGecmisKatilimYillari, cancellationToken);
         await _ucretHesaplamaService.HesaplaAsync(request, kampDonemi, tesis, onizleme, cancellationToken);
         onizleme.BasvuruGecerliMi = onizleme.Hatalar.Count == 0;
         return onizleme;
@@ -159,7 +159,7 @@ public class KampBasvuruService : IKampBasvuruService
             KampDonemiId = request.KampDonemiId,
             TesisId = request.TesisId,
             KonaklamaBirimiTipi = request.KonaklamaBirimiTipi,
-            BasvuruNo = await GenerateBasvuruNoAsync(kampDonemi.Yil, cancellationToken),
+            BasvuruNo = await GenerateBasvuruNoAsync(kampDonemi.KampProgrami!.Yil, cancellationToken),
             KampBasvuruSahibi = kampBasvuruSahibi,
             BasvuruSahibiAdiSoyadiSnapshot = basvuruSahibi.AdSoyad.Trim(),
             BasvuruSahibiTipiSnapshot = request.BasvuruSahibiTipi,
@@ -351,10 +351,10 @@ public class KampBasvuruService : IKampBasvuruService
             onizleme.Hatalar.Add("Basvuru sahibi tipi gecersiz.");
         }
 
-        var kuralSeti = lookupBaglami.GetKuralSeti(kampDonemi.KampProgramiId, kampDonemi.Yil);
+        var kuralSeti = lookupBaglami.GetKuralSeti(kampDonemi.KampProgramiId);
         if (kuralSeti is null)
         {
-            onizleme.Hatalar.Add($"{kampDonemi.Yil} yili ve secili program icin aktif kamp kural seti bulunamadi.");
+            onizleme.Hatalar.Add("Secili program icin aktif kamp kural seti bulunamadi.");
         }
 
         if (!atama.AktifMi || !atama.BasvuruyaAcikMi)
@@ -397,7 +397,7 @@ public class KampBasvuruService : IKampBasvuruService
 
         var izinliGecmisYillar = kuralSeti is null
             ? []
-            : BuildGecmisKatilimYillari(kampDonemi.Yil, kuralSeti);
+            : BuildGecmisKatilimYillari(kampDonemi.KampProgrami!.Yil, kuralSeti);
 
         foreach (var yil in request.GecmisKatilimYillari.Distinct())
         {
@@ -859,7 +859,7 @@ public class KampBasvuruService : IKampBasvuruService
             BasvuruSahibiTipi = entity.BasvuruSahibiTipiSnapshot,
             HizmetYili = entity.HizmetYiliSnapshot,
             GecmisKatilimYillari = (gecmisKatilimYillari ?? entity.KampBasvuruSahibi?.GecmisKatilimlar
-                    .Where(x => x.AktifMi && x.KatilimYili < kampDonemi.Yil)
+                    .Where(x => x.AktifMi && x.KatilimYili < kampDonemi.KampProgrami!.Yil)
                     .Select(x => x.KatilimYili)
                     .Distinct()
                     .OrderByDescending(x => x)
@@ -924,9 +924,9 @@ public class KampBasvuruService : IKampBasvuruService
             BasvuruSahibiTipleri = basvuruSahibiTipleri;
             KatilimciTipleri = katilimciTipleri;
             AkrabalikTipleri = akrabalikTipleri;
-            KuralSetleriByProgramYil = kuralSetleri
-                .GroupBy(x => new { x.KampProgramiId, x.KampYili })
-                .ToDictionary(x => (x.Key.KampProgramiId, x.Key.KampYili), x => x.OrderByDescending(y => y.Id).First());
+            KuralSetleriById = kuralSetleri
+                .GroupBy(x => x.KampProgramiId)
+                .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Id).First());
             BasvuruSahibiTipleriByKod = basvuruSahibiTipleri.ToDictionary(x => x.Kod, x => x);
             KatilimciTipleriByKod = katilimciTipleri.ToDictionary(x => x.Kod, x => x);
             AkrabalikTipleriByKod = akrabalikTipleri.ToDictionary(x => x.Kod, x => x);
@@ -945,11 +945,11 @@ public class KampBasvuruService : IKampBasvuruService
 
         public Dictionary<string, KampAkrabalikTipi> AkrabalikTipleriByKod { get; }
 
-        public Dictionary<(int KampProgramiId, int KampYili), KampKuralSeti> KuralSetleriByProgramYil { get; }
+        public Dictionary<int, KampKuralSeti> KuralSetleriById { get; }
 
         public string? BasvuruSahibiAkrabalikKodu { get; }
 
-        public KampKuralSeti? GetKuralSeti(int kampProgramiId, int kampYili)
-            => KuralSetleriByProgramYil.GetValueOrDefault((kampProgramiId, kampYili));
+        public KampKuralSeti? GetKuralSeti(int kampProgramiId)
+            => KuralSetleriById.GetValueOrDefault(kampProgramiId);
     }
 }

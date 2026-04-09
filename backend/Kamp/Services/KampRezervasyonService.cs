@@ -24,7 +24,7 @@ public class KampRezervasyonService : IKampRezervasyonService
     {
         var donemler = await _dbContext.KampDonemleri
             .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
-            .OrderByDescending(x => x.Yil)
+            .OrderByDescending(x => x.KampProgrami!.Yil)
             .ThenBy(x => x.KonaklamaBaslangicTarihi)
             .Select(x => new KampRezervasyonDonemSecenekDto
             {
@@ -110,7 +110,7 @@ public class KampRezervasyonService : IKampRezervasyonService
             .FirstOrDefaultAsync(x => x.Id == basvuru.KampDonemiId, cancellationToken)
             ?? throw new BaseException("Kamp donemi bulunamadi.", 404);
 
-        var rezervasyonNo = await GenerateRezervasyonNoAsync(donem.Yil, cancellationToken);
+        var rezervasyonNo = await GenerateRezervasyonNoAsync(donem.KampProgrami!.Yil, cancellationToken);
         var girisTarihi = donem.KonaklamaBaslangicTarihi.Date;
         var cikisTarihi = donem.KonaklamaBitisTarihi.Date.AddDays(1);
         var odaAtamalari = await BuildAutoRoomAssignmentsAsync(

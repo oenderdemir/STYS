@@ -24,7 +24,8 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             .Select(x => new KampProgramiSecenekDto
             {
                 Id = x.Id,
-                Ad = x.Ad
+                Ad = x.Ad,
+                Yil = x.Yil
             })
             .ToListAsync(cancellationToken);
 
@@ -120,14 +121,12 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
             .Include(x => x.KampProgrami)
             .OrderBy(x => x.KampProgrami!.Ad)
-            .ThenByDescending(x => x.KampYili)
             .ThenByDescending(x => x.Id)
             .Select(x => new KampPuanKuralSetiDto
             {
                 Id = x.Id,
                 KampProgramiId = x.KampProgramiId,
                 KampProgramiAd = x.KampProgrami != null ? x.KampProgrami.Ad : null,
-                KampYili = x.KampYili,
                 OncekiYilSayisi = x.OncekiYilSayisi,
                 KatilimCezaPuani = x.KatilimCezaPuani,
                 KatilimciBasinaPuan = x.KatilimciBasinaPuan,
@@ -201,7 +200,6 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
         {
             if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var entity))
             {
-                entity.KampYili = dto.KampYili;
                 entity.KampProgramiId = dto.KampProgramiId;
                 entity.OncekiYilSayisi = dto.OncekiYilSayisi;
                 entity.KatilimCezaPuani = dto.KatilimCezaPuani;
@@ -214,7 +212,6 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             _dbContext.KampKuralSetleri.Add(new KampKuralSeti
             {
                 KampProgramiId = dto.KampProgramiId,
-                KampYili = dto.KampYili,
                 OncekiYilSayisi = dto.OncekiYilSayisi,
                 KatilimCezaPuani = dto.KatilimCezaPuani,
                 KatilimciBasinaPuan = dto.KatilimciBasinaPuan,
@@ -380,17 +377,12 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             throw new BaseException("En az bir program parametre ayari zorunludur.", 400);
         }
 
-        if (request.KonaklamaTarifeleri.Count == 0)
-        {
-            throw new BaseException("En az bir konaklama tarife tanimi zorunludur.", 400);
-        }
-
-        var duplicateYears = request.KuralSetleri
-            .GroupBy(x => new { x.KampProgramiId, x.KampYili })
+        var duplicatePrograms = request.KuralSetleri
+            .GroupBy(x => x.KampProgramiId)
             .FirstOrDefault(x => x.Count() > 1);
-        if (duplicateYears is not null)
+        if (duplicatePrograms is not null)
         {
-            throw new BaseException($"Program {duplicateYears.Key.KampProgramiId} ve {duplicateYears.Key.KampYili} yili icin birden fazla kural seti kaydi gonderildi.", 400);
+            throw new BaseException($"Program {duplicatePrograms.Key} icin birden fazla kural seti kaydi gonderildi.", 400);
         }
 
         var duplicateKod = request.BasvuruSahibiTipleri
@@ -422,11 +414,6 @@ public class KampPuanKuraliYonetimService : IKampPuanKuraliYonetimService
             if (kuralSeti.KampProgramiId <= 0)
             {
                 throw new BaseException("Kural seti icin kamp programi secimi zorunludur.", 400);
-            }
-
-            if (kuralSeti.KampYili < KampValidasyonKurallari.YilRange.Min || kuralSeti.KampYili > KampValidasyonKurallari.YilRange.Max)
-            {
-                throw new BaseException("Kamp yili 2000-2100 araliginda olmalidir.", 400);
             }
 
             if (kuralSeti.OncekiYilSayisi < KampValidasyonKurallari.OncekiYilSayisi.Min || kuralSeti.OncekiYilSayisi > KampValidasyonKurallari.OncekiYilSayisi.Max)

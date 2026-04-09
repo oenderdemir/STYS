@@ -32,9 +32,13 @@ import { KampProgramiDto } from './kamp-yonetimi.dto';
                     <label for="kod" class="block font-medium mb-2">Kod</label>
                     <input id="kod" pInputText [(ngModel)]="workingModel.kod" class="w-full" [disabled]="isReadOnly || saving" maxlength="64" />
                 </div>
-                <div class="col-span-12 md:col-span-8">
+                <div class="col-span-12 md:col-span-5">
                     <label for="ad" class="block font-medium mb-2">Ad</label>
                     <input id="ad" pInputText [(ngModel)]="workingModel.ad" class="w-full" [disabled]="isReadOnly || saving" maxlength="128" />
+                </div>
+                <div class="col-span-12 md:col-span-3">
+                    <label for="yil" class="block font-medium mb-2">Yil</label>
+                    <input id="yil" pInputText [(ngModel)]="workingModel.yil" class="w-full" [disabled]="isReadOnly || saving" type="number" />
                 </div>
                 <div class="col-span-12">
                     <label for="aciklama" class="block font-medium mb-2">Aciklama</label>
@@ -58,7 +62,7 @@ import { KampProgramiDto } from './kamp-yonetimi.dto';
 export class KampProgramiDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: KampProgramiDto = { kod: '', ad: '', aciklama: null, aktifMi: true };
+    @Input() model: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), aktifMi: true };
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -66,7 +70,7 @@ export class KampProgramiDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<KampProgramiDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: KampProgramiDto = { kod: '', ad: '', aciklama: null, aktifMi: true };
+    workingModel: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), aktifMi: true };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -132,6 +136,7 @@ export class KampProgramiDialog implements OnChanges {
             kod: this.workingModel.kod.trim().toUpperCase(),
             ad: this.workingModel.ad.trim(),
             aciklama: this.workingModel.aciklama?.trim() || null,
+            yil: this.workingModel.yil,
             aktifMi: this.workingModel.aktifMi
         });
     }

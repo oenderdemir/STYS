@@ -7,8 +7,6 @@ public class KampKuralSeti : BaseEntity<int>
 {
     public int KampProgramiId { get; set; }
 
-    public int KampYili { get; set; }
-
     public int OncekiYilSayisi { get; set; }
 
     public int KatilimCezaPuani { get; set; }

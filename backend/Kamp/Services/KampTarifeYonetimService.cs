@@ -24,7 +24,8 @@ public class KampTarifeYonetimService : IKampTarifeYonetimService
             .Select(x => new KampProgramiSecenekDto
             {
                 Id = x.Id,
-                Ad = x.Ad
+                Ad = x.Ad,
+                Yil = x.Yil
             })
             .ToListAsync(cancellationToken);
 

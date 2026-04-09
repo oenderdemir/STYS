@@ -61,7 +61,6 @@
 
             <ng-template #header>
                 <tr>
-                    <th pSortableColumn="yil">Yil <p-sortIcon field="yil" /></th>
                     <th pSortableColumn="program">Program <p-sortIcon field="program" /></th>
                     <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
                     <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
@@ -74,7 +73,6 @@
 
             <ng-template #body let-item>
                 <tr>
-                    <td>{{ item.yil }}</td>
                     <td>{{ item.kampProgramiAd || '-' }}</td>
                     <td>{{ item.kod }}</td>
                     <td>{{ item.ad }}</td>

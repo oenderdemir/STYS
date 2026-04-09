@@ -15,8 +15,6 @@ public class KampDonemi : BaseEntity<int>
     [MaxLength(160)]
     public string Ad { get; set; } = string.Empty;
 
-    public int Yil { get; set; }
-
     public DateTime BasvuruBaslangicTarihi { get; set; }
 
     public DateTime BasvuruBitisTarihi { get; set; }

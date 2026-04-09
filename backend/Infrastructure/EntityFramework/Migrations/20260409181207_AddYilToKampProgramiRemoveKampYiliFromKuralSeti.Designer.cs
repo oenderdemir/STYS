@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260409181207_AddYilToKampProgramiRemoveKampYiliFromKuralSeti")]
+    partial class AddYilToKampProgramiRemoveKampYiliFromKuralSeti
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1521,13 +1524,16 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("Yil")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Kod")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.HasIndex("KampProgramiId", "Ad")
+                    b.HasIndex("KampProgramiId", "Yil", "Ad")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 

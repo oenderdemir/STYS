@@ -57,6 +57,7 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         entity.Kod = dto.Kod;
         entity.Ad = dto.Ad;
         entity.Aciklama = dto.Aciklama;
+        entity.Yil = dto.Yil;
         entity.AktifMi = dto.AktifMi;
 
         _kampProgramiRepository.Update(entity);
@@ -97,13 +98,24 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         var normalizedKod = dto.Kod.Trim().ToUpperInvariant();
         var normalizedAd = dto.Ad.Trim().ToUpperInvariant();
 
-        var exists = await _stysDbContext.KampProgramlari.AnyAsync(x =>
+        var existsKod = await _stysDbContext.KampProgramlari.AnyAsync(x =>
             (!excludedId.HasValue || x.Id != excludedId.Value)
-            && (x.Kod.ToUpper() == normalizedKod || x.Ad.ToUpper() == normalizedAd));
+            && x.Yil == dto.Yil
+            && x.Kod.ToUpper() == normalizedKod);
 
-        if (exists)
+        if (existsKod)
         {
-            throw new BaseException("Ayni kod veya ada sahip baska bir kamp programi zaten mevcut.", 400);
+            throw new BaseException($"{dto.Yil} yilinda ayni koda sahip baska bir kamp programi zaten mevcut.", 400);
+        }
+
+        var existsAd = await _stysDbContext.KampProgramlari.AnyAsync(x =>
+            (!excludedId.HasValue || x.Id != excludedId.Value)
+            && x.Yil == dto.Yil
+            && x.Ad.ToUpper() == normalizedAd);
+
+        if (existsAd)
+        {
+            throw new BaseException($"{dto.Yil} yilinda ayni ada sahip baska bir kamp programi zaten mevcut.", 400);
         }
     }
 
@@ -117,6 +129,11 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         if (string.IsNullOrWhiteSpace(dto.Ad))
         {
             throw new BaseException("Kamp programi adi zorunludur.", 400);
+        }
+
+        if (dto.Yil < 2000 || dto.Yil > 2100)
+        {
+            throw new BaseException("Kamp programi yili 2000-2100 araliginda olmalidir.", 400);
         }
 
         dto.Kod = dto.Kod.Trim().ToUpperInvariant();

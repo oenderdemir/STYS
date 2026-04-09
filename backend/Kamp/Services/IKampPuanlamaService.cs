@@ -8,7 +8,6 @@ public interface IKampPuanlamaService
         KampBasvuruRequestDto request,
         KampBasvuruOnizlemeDto onizleme,
         int kampProgramiId,
-        int kampYili,
         IReadOnlyCollection<int> gecmisKatilimYillari,
         CancellationToken cancellationToken = default);
 }

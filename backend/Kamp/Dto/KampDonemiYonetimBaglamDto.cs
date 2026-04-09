@@ -14,6 +14,8 @@ public class KampProgramiSecenekDto
     public int Id { get; set; }
 
     public string Ad { get; set; } = string.Empty;
+
+    public int Yil { get; set; }
 }
 
 public class KampTesisDto

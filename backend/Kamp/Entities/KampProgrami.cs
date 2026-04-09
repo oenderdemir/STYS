@@ -16,6 +16,8 @@ public class KampProgrami : BaseEntity<int>
     [MaxLength(512)]
     public string? Aciklama { get; set; }
 
+    public int Yil { get; set; }
+
     public bool AktifMi { get; set; } = true;
 
     public ICollection<KampDonemi> KampDonemleri { get; set; } = [];

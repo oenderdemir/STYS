@@ -21,7 +21,7 @@ public class KampTahsisService : IKampTahsisService
     {
         var donemler = await _dbContext.KampDonemleri
             .Where(x => x.KampProgrami != null && x.KampProgrami.AktifMi)
-            .OrderByDescending(x => x.Yil)
+            .OrderByDescending(x => x.KampProgrami!.Yil)
             .ThenBy(x => x.KonaklamaBaslangicTarihi)
             .Select(x => new KampTahsisDonemSecenekDto
             {

@@ -310,7 +310,6 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
             kampProgramiId: 0,
             kod: '',
             ad: '',
-            yil: new Date().getFullYear(),
             basvuruBaslangicTarihi: '',
             basvuruBitisTarihi: '',
             konaklamaBaslangicTarihi: '',

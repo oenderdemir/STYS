@@ -110,8 +110,6 @@ public class KampPuanKuralSetiDto
 
     public string? KampProgramiAd { get; set; }
 
-    public int KampYili { get; set; }
-
     public int OncekiYilSayisi { get; set; }
 
     public int KatilimCezaPuani { get; set; }

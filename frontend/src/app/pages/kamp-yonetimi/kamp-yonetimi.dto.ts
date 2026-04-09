@@ -3,19 +3,20 @@ export interface KampProgramiDto {
     kod: string;
     ad: string;
     aciklama?: string | null;
+    yil: number;
     aktifMi: boolean;
 }
 
 export interface KampProgramiSecenekDto {
     id: number;
     ad: string;
+    yil: number;
 }
 
 export interface KampPuanKuralSetiDto {
     id?: number | null;
     kampProgramiId: number;
     kampProgramiAd?: string | null;
-    kampYili: number;
     oncekiYilSayisi: number;
     katilimCezaPuani: number;
     katilimciBasinaPuan: number;
@@ -109,9 +110,9 @@ export interface KampDonemiDto {
     id?: number | null;
     kampProgramiId: number;
     kampProgramiAd?: string | null;
+    kampProgramiYil?: number;
     kod: string;
     ad: string;
-    yil: number;
     basvuruBaslangicTarihi: string;
     basvuruBitisTarihi: string;
     konaklamaBaslangicTarihi: string;
@@ -153,8 +154,8 @@ export interface KampBasvuruDonemSecenekDto {
     id: number;
     kampProgramiId: number;
     kampProgramiAd?: string | null;
+    kampProgramiYil: number;
     ad: string;
-    yil: number;
     konaklamaBaslangicTarihi: string;
     konaklamaBitisTarihi: string;
     gecmisKatilimYillari: number[];

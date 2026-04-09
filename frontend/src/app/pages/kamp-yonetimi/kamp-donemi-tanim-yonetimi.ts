@@ -10,6 +10,7 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -24,7 +25,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
 @Component({
     selector: 'app-kamp-donemi-tanim-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, KampDonemiDialog],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, KampDonemiDialog],
     templateUrl: './kamp-donemi-tanim-yonetimi.html',
     styleUrl: './kamp-donemi-tanim-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
@@ -40,6 +41,7 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
     kampDonemleri: KampDonemiDto[] = [];
     selectedKampDonemi: KampDonemiDto = this.getEmptyModel();
     programlar: KampProgramiSecenekDto[] = [];
+    selectedProgramId: number | null = null;
 
     loading = false;
     saving = false;
@@ -49,8 +51,8 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
     pageSize = 10;
     totalRecords = 0;
     searchQuery = '';
-    sortBy = 'yil';
-    sortDir: SortDirection = 'desc';
+    sortBy = 'ad';
+    sortDir: SortDirection = 'asc';
 
     private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -68,6 +70,20 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
 
     get canViewPuanKurallari(): boolean {
         return this.hasAnyPermission('KampPuanKuraliYonetimi.View', 'KampPuanKuraliYonetimi.Menu');
+    }
+
+    get filteredKampDonemleri(): KampDonemiDto[] {
+        if (!this.selectedProgramId) {
+            return this.kampDonemleri;
+        }
+        return this.kampDonemleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+    }
+
+    get programOptions(): Array<{ label: string; value: number }> {
+        return this.programlar.map((item) => ({
+            label: `${item.yil} - ${item.ad}`,
+            value: item.id
+        }));
     }
 
     ngOnInit(): void {
@@ -110,6 +126,11 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
             this.loadKampDonemleri(this.pageNumber, this.pageSize);
             this.searchDebounceHandle = null;
         }, 300);
+    }
+
+    onProgramChange(): void {
+        this.pageNumber = 1;
+        this.loadKampDonemleri(this.pageNumber, this.pageSize);
     }
 
     refresh(): void {

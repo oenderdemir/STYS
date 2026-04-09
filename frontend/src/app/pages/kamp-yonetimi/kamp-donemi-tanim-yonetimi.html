@@ -28,8 +28,23 @@
             </div>
         </div>
 
+        <div class="mb-3">
+            <label for="programFilter" class="block font-medium mb-2">Kamp Programi</label>
+            <p-select
+                inputId="programFilter"
+                class="w-full"
+                [options]="programOptions"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedProgramId"
+                (onChange)="onProgramChange()"
+                [appendTo]="'body'"
+                [showClear]="true"
+            />
+        </div>
+
         <p-table
-            [value]="kampDonemleri"
+            [value]="filteredKampDonemleri"
             [loading]="loading"
             dataKey="id"
             [lazy]="true"

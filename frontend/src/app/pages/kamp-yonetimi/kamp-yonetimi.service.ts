@@ -100,11 +100,6 @@ export class KampYonetimiService {
         );
     }
 
-    getKampDonemiAtamaKonaklamaTarifeleri(): Observable<KampKonaklamaTarifeYonetimDto[]> {
-        return this.getKampPuanKuraliYonetimBaglam().pipe(
-            map(x => x.konaklamaTarifeleri.filter(t => t.aktifMi))
-        );
-    }
 
     kaydetKampPuanKuraliYonetimBaglam(payload: KampPuanKuraliYonetimKaydetRequestDto): Observable<KampPuanKuraliYonetimBaglamDto> {
         return this.http.put<ApiResponse<KampPuanKuraliYonetimBaglamDto>>(`${this.apiBaseUrl}/ui/kamppuankurali/yonetim-baglam`, payload).pipe(
@@ -114,6 +109,18 @@ export class KampYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kamp puan kurallari kaydedilemedi.');
+            })
+        );
+    }
+
+    getAktifKonaklamaTarifeleri(): Observable<KampKonaklamaTarifeYonetimDto[]> {
+        return this.http.get<ApiResponse<KampKonaklamaTarifeYonetimDto[]>>(`${this.apiBaseUrl}/ui/kamptarife/aktif`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Konaklama tarifeleri alinamadi.');
             })
         );
     }

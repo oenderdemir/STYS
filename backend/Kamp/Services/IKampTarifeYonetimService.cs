@@ -9,4 +9,6 @@ public interface IKampTarifeYonetimService
     Task<List<KampKonaklamaTarifeYonetimDto>> GetTarifelerAsync(int kampProgramiId, CancellationToken cancellationToken = default);
 
     Task<List<KampKonaklamaTarifeYonetimDto>> KaydetAsync(int kampProgramiId, KampTarifeKaydetRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<List<KampKonaklamaTarifeYonetimDto>> GetAktifTarifelerAsync(CancellationToken cancellationToken = default);
 }

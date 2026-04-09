@@ -12,7 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
-import { KampKonaklamaTarifeYonetimDto, KampProgramiParametreAyariDto, KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
+import { KampProgramiParametreAyariDto, KampProgramiSecenekDto, KampPuanBasvuruSahibiTipiDto, KampPuanBasvuruSahibiTipSecenekDto, KampPuanKuralSetiDto, KampSecenekDto, KampYasUcretKuraliDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 import { AuthService } from '../auth';
 
@@ -32,10 +32,10 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     loading = false;
     saving = false;
+    selectedProgramId: number | null = null;
     programlar: KampProgramiSecenekDto[] = [];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[] = [];
     programParametreAyarlari: KampProgramiParametreAyariDto[] = [];
-    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[] = [];
     kuralSetleri: KampPuanKuralSetiDto[] = [];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[] = [];
     katilimciTipleri: KampSecenekDto[] = [];
@@ -45,6 +45,21 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         yemekOrani: 0.5,
         aktifMi: true
     };
+
+    get filteredProgramParametreAyarlari(): KampProgramiParametreAyariDto[] {
+        if (!this.selectedProgramId) return [];
+        return this.programParametreAyarlari.filter(x => x.kampProgramiId === this.selectedProgramId);
+    }
+
+    get filteredKuralSetleri(): KampPuanKuralSetiDto[] {
+        if (!this.selectedProgramId) return [];
+        return this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId).sort((a, b) => b.kampYili - a.kampYili);
+    }
+
+    get filteredBasvuruSahibiTipleri(): KampPuanBasvuruSahibiTipiDto[] {
+        if (!this.selectedProgramId) return [];
+        return this.basvuruSahibiTipleri.filter(x => x.kampProgramiId === this.selectedProgramId).sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
+    }
 
     get globalBasvuruSahibiTipiOptions(): Array<{ id: number; label: string }> {
         return this.globalBasvuruSahibiTipleri.map((x) => ({
@@ -76,23 +91,13 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
             .subscribe({
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
+                    if (this.programlar.length > 0 && !this.selectedProgramId) {
+                        this.selectedProgramId = this.programlar[0].id;
+                    }
                     this.globalBasvuruSahibiTipleri = [...baglam.globalBasvuruSahibiTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.programParametreAyarlari = [...baglam.programParametreAyarlari].sort((a, b) => {
-                        const adA = a.kampProgramiAd ?? '';
-                        const adB = b.kampProgramiAd ?? '';
-                        return adA.localeCompare(adB);
-                    });
-                    this.konaklamaTarifeleri = [...baglam.konaklamaTarifeleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
-                        const adA = a.kampProgramiAd ?? '';
-                        const adB = b.kampProgramiAd ?? '';
-                        if (adA !== adB) {
-                            return adA.localeCompare(adB);
-                        }
-
-                        return b.kampYili - a.kampYili;
-                    });
-                    this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri].sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
+                    this.programParametreAyarlari = [...baglam.programParametreAyarlari];
+                    this.kuralSetleri = [...baglam.kuralSetleri];
+                    this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri];
                     this.katilimciTipleri = [...baglam.katilimciTipleri];
                     this.yasUcretKurali = { ...baglam.yasUcretKurali };
                     this.cdr.detectChanges();
@@ -105,11 +110,12 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     addKuralSeti(): void {
-        const maxYil = this.kuralSetleri.length > 0 ? Math.max(...this.kuralSetleri.map((x) => x.kampYili)) : new Date().getFullYear();
-        const defaultProgramId = this.programlar[0]?.id ?? 0;
+        if (!this.selectedProgramId) return;
+        const programKuralSetleri = this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+        const maxYil = programKuralSetleri.length > 0 ? Math.max(...programKuralSetleri.map((x) => x.kampYili)) : new Date().getFullYear();
         this.kuralSetleri = [
             {
-                kampProgramiId: defaultProgramId,
+                kampProgramiId: this.selectedProgramId,
                 kampYili: maxYil + 1,
                 oncekiYilSayisi: 2,
                 katilimCezaPuani: 20,
@@ -121,11 +127,16 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     addProgramParametreAyari(): void {
-        const defaultProgramId = this.programlar[0]?.id ?? 0;
+        if (!this.selectedProgramId) return;
+        // Check if parametre already exists for this program
+        if (this.programParametreAyarlari.some(x => x.kampProgramiId === this.selectedProgramId)) {
+            this.messageService.add({ severity: 'warning', summary: 'Uyarı', detail: 'Bu program için zaten bir parametre bulunmaktadır.' });
+            return;
+        }
         this.programParametreAyarlari = [
             ...this.programParametreAyarlari,
             {
-                kampProgramiId: defaultProgramId,
+                kampProgramiId: this.selectedProgramId,
                 kamuAvansKisiBasi: 1700,
                 digerAvansKisiBasi: 2550,
                 vazgecmeIadeGunSayisi: 7,
@@ -137,13 +148,14 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     addBasvuruSahibiTipi(): void {
-        const maxOncelik = this.basvuruSahibiTipleri.length > 0 ? Math.max(...this.basvuruSahibiTipleri.map((x) => x.oncelikSirasi)) : 0;
-        const defaultProgramId = this.programlar[0]?.id ?? 0;
+        if (!this.selectedProgramId) return;
+        const programTipleri = this.basvuruSahibiTipleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+        const maxOncelik = programTipleri.length > 0 ? Math.max(...programTipleri.map((x) => x.oncelikSirasi)) : 0;
         const defaultTip = this.globalBasvuruSahibiTipleri[0];
         this.basvuruSahibiTipleri = [
             ...this.basvuruSahibiTipleri,
             {
-                kampProgramiId: defaultProgramId,
+                kampProgramiId: this.selectedProgramId,
                 kampBasvuruSahibiTipiId: defaultTip?.id ?? 0,
                 kod: defaultTip?.kod ?? '',
                 ad: defaultTip?.ad ?? '',
@@ -157,24 +169,6 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         ];
     }
 
-    addKonaklamaTarifesi(): void {
-        const next = this.konaklamaTarifeleri.length + 1;
-        this.konaklamaTarifeleri = [
-            ...this.konaklamaTarifeleri,
-            {
-                kod: `TARIFE_${next}`,
-                ad: `Tarife ${next}`,
-                minimumKisi: 2,
-                maksimumKisi: 4,
-                kamuGunlukUcret: 0,
-                digerGunlukUcret: 0,
-                buzdolabiGunlukUcret: 0,
-                televizyonGunlukUcret: 0,
-                klimaGunlukUcret: 0,
-                aktifMi: true
-            }
-        ];
-    }
 
     removeKuralSeti(index: number): void {
         this.kuralSetleri = this.kuralSetleri.filter((_, i) => i !== index);
@@ -184,13 +178,22 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         this.programParametreAyarlari = this.programParametreAyarlari.filter((_, i) => i !== index);
     }
 
+    removeProgramParametreAyariByItem(item: KampProgramiParametreAyariDto): void {
+        this.programParametreAyarlari = this.programParametreAyarlari.filter(x => x.kampProgramiId !== item.kampProgramiId || x.kamuAvansKisiBasi !== item.kamuAvansKisiBasi);
+    }
+
+    removeKuralSetiByItem(item: KampPuanKuralSetiDto): void {
+        this.kuralSetleri = this.kuralSetleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.kampYili === item.kampYili));
+    }
+
     removeBasvuruSahibiTipi(index: number): void {
         this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter((_, i) => i !== index);
     }
 
-    removeKonaklamaTarifesi(index: number): void {
-        this.konaklamaTarifeleri = this.konaklamaTarifeleri.filter((_, i) => i !== index);
+    removeBasvuruSahibiTipiByItem(item: KampPuanBasvuruSahibiTipiDto): void {
+        this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.kampBasvuruSahibiTipiId === item.kampBasvuruSahibiTipiId));
     }
+
 
     save(): void {
         if (this.saving || !this.canManage) {
@@ -203,7 +206,6 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 kuralSetleri: this.kuralSetleri,
                 basvuruSahibiTipleri: this.basvuruSahibiTipleri,
                 programParametreAyarlari: this.programParametreAyarlari,
-                konaklamaTarifeleri: this.konaklamaTarifeleri,
                 yasUcretKurali: this.yasUcretKurali
             })
             .pipe(finalize(() => {
@@ -214,22 +216,9 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.globalBasvuruSahibiTipleri = [...baglam.globalBasvuruSahibiTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.programParametreAyarlari = [...baglam.programParametreAyarlari].sort((a, b) => {
-                        const adA = a.kampProgramiAd ?? '';
-                        const adB = b.kampProgramiAd ?? '';
-                        return adA.localeCompare(adB);
-                    });
-                    this.konaklamaTarifeleri = [...baglam.konaklamaTarifeleri].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.kuralSetleri = [...baglam.kuralSetleri].sort((a, b) => {
-                        const adA = a.kampProgramiAd ?? '';
-                        const adB = b.kampProgramiAd ?? '';
-                        if (adA !== adB) {
-                            return adA.localeCompare(adB);
-                        }
-
-                        return b.kampYili - a.kampYili;
-                    });
-                    this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri].sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
+                    this.programParametreAyarlari = [...baglam.programParametreAyarlari];
+                    this.kuralSetleri = [...baglam.kuralSetleri];
+                    this.basvuruSahibiTipleri = [...baglam.basvuruSahibiTipleri];
                     this.katilimciTipleri = [...baglam.katilimciTipleri];
                     this.yasUcretKurali = { ...baglam.yasUcretKurali };
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kamp puan kurallari kaydedildi.' });

@@ -215,7 +215,7 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         this.loadingBaglam = true;
         forkJoin({
             donemler: this.service.getKampDonemleri(),
-            tarifeler: this.service.getKampDonemiAtamaKonaklamaTarifeleri()
+            tarifeler: this.service.getAktifKonaklamaTarifeleri()
         })
             .pipe(finalize(() => {
                 this.loadingBaglam = false;

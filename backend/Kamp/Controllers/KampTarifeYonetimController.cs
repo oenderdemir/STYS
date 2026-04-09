@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Services;
@@ -41,6 +42,14 @@ public class KampTarifeYonetimController : UIController
         CancellationToken cancellationToken = default)
     {
         var result = await _service.KaydetAsync(kampProgramiId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("aktif")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<KampKonaklamaTarifeYonetimDto>>> GetAktifTarifeler(CancellationToken cancellationToken = default)
+    {
+        var result = await _service.GetAktifTarifelerAsync(cancellationToken);
         return Ok(result);
     }
 }

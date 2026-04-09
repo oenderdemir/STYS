@@ -129,4 +129,31 @@ public class KampTarifeYonetimService : IKampTarifeYonetimService
         await _dbContext.SaveChangesAsync(cancellationToken);
         return await GetTarifelerAsync(kampProgramiId, cancellationToken);
     }
+
+    public async Task<List<KampKonaklamaTarifeYonetimDto>> GetAktifTarifelerAsync(CancellationToken cancellationToken = default)
+    {
+        var tarifeler = await _dbContext.KampKonaklamaTarifeleri
+            .AsNoTracking()
+            .Where(x => x.AktifMi && !x.IsDeleted)
+            .OrderBy(x => x.KampProgramiId)
+            .ThenBy(x => x.Ad)
+            .Select(x => new KampKonaklamaTarifeYonetimDto
+            {
+                Id = x.Id,
+                KampProgramiId = x.KampProgramiId,
+                Kod = x.Kod,
+                Ad = x.Ad,
+                MinimumKisi = x.MinimumKisi,
+                MaksimumKisi = x.MaksimumKisi,
+                KamuGunlukUcret = x.KamuGunlukUcret,
+                DigerGunlukUcret = x.DigerGunlukUcret,
+                BuzdolabiGunlukUcret = x.BuzdolabiGunlukUcret,
+                TelevizyonGunlukUcret = x.TelevizyonGunlukUcret,
+                KlimaGunlukUcret = x.KlimaGunlukUcret,
+                AktifMi = x.AktifMi
+            })
+            .ToListAsync(cancellationToken);
+
+        return tarifeler;
+    }
 }

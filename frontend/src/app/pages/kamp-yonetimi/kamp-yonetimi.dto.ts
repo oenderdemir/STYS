@@ -73,7 +73,7 @@ export interface KampPuanKuraliYonetimBaglamDto {
     programlar: KampProgramiSecenekDto[];
     globalBasvuruSahibiTipleri: KampPuanBasvuruSahibiTipSecenekDto[];
     programParametreAyarlari: KampProgramiParametreAyariDto[];
-    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[];
+    konaklamaTarifeleri?: KampKonaklamaTarifeYonetimDto[];
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     katilimciTipleri: KampSecenekDto[];
@@ -88,7 +88,7 @@ export interface KampPuanKuraliYonetimKaydetRequestDto {
     kuralSetleri: KampPuanKuralSetiDto[];
     basvuruSahibiTipleri: KampPuanBasvuruSahibiTipiDto[];
     programParametreAyarlari: KampProgramiParametreAyariDto[];
-    konaklamaTarifeleri: KampKonaklamaTarifeYonetimDto[];
+    konaklamaTarifeleri?: KampKonaklamaTarifeYonetimDto[];
     yasUcretKurali: KampYasUcretKuraliDto;
 }
 

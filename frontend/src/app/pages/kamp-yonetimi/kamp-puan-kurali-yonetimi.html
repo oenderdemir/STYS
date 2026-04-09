@@ -48,15 +48,30 @@
             </label>
         </div>
 
-        <div class="flex justify-content-between align-items-center mb-2">
-            <h3 class="m-0 text-lg">Program Bazli Parametreler</h3>
-            <p-button label="Parametre Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addProgramParametreAyari()" />
+        <div class="mb-4">
+            <label class="block mb-2">
+                <span class="font-bold">Kamp Programı Seçiniz</span>
+                <p-select
+                    [(ngModel)]="selectedProgramId"
+                    [options]="programlar"
+                    optionLabel="ad"
+                    optionValue="id"
+                    placeholder="Program seçiniz"
+                    [appendTo]="'body'"
+                    [disabled]="loading || saving || programlar.length === 0"
+                    [showClear]="false"
+                    styleClass="w-full" />
+            </label>
         </div>
 
-        <p-table [value]="programParametreAyarlari" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '72rem' }">
+        <div class="flex justify-content-between align-items-center mb-2">
+            <h3 class="m-0 text-lg">Program Parametreleri</h3>
+            <p-button label="Parametre Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage || !selectedProgramId" (onClick)="addProgramParametreAyari()" />
+        </div>
+
+        <p-table [value]="filteredProgramParametreAyarlari" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '60rem' }">
             <ng-template #header>
                 <tr>
-                    <th>Kamp Programi</th>
                     <th>Kamu Avans</th>
                     <th>Diger Avans</th>
                     <th>Vazgecme/Iade Gun</th>
@@ -66,19 +81,8 @@
                     <th style="width: 6rem">Islem</th>
                 </tr>
             </ng-template>
-            <ng-template #body let-item let-rowIndex="rowIndex">
+            <ng-template #body let-item>
                 <tr>
-                    <td>
-                        <p-select
-                            [(ngModel)]="item.kampProgramiId"
-                            [options]="programlar"
-                            optionLabel="ad"
-                            optionValue="id"
-                            [appendTo]="'body'"
-                            [disabled]="loading || saving || !canManage"
-                            [showClear]="false"
-                            styleClass="w-full" />
-                    </td>
                     <td><input pInputText type="number" min="0" max="50000" step="0.01" [(ngModel)]="item.kamuAvansKisiBasi" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="50000" step="0.01" [(ngModel)]="item.digerAvansKisiBasi" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="60" [(ngModel)]="item.vazgecmeIadeGunSayisi" [disabled]="loading || saving || !canManage" /></td>
@@ -86,61 +90,20 @@
                     <td><input pInputText type="number" min="0" max="30" [(ngModel)]="item.noShowSuresiGun" [disabled]="loading || saving || !canManage" /></td>
                     <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
                     <td>
-                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeProgramParametreAyari(rowIndex)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeProgramParametreAyariByItem(item)" />
                     </td>
                 </tr>
             </ng-template>
         </p-table>
 
         <div class="flex justify-content-between align-items-center mb-2">
-            <h3 class="m-0 text-lg">Konaklama Ucret Konfigurasyonu</h3>
-            <p-button label="Tarife Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addKonaklamaTarifesi()" />
+            <h3 class="m-0 text-lg">Kural Setleri</h3>
+            <p-button label="Kural Seti Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage || !selectedProgramId" (onClick)="addKuralSeti()" />
         </div>
 
-        <p-table [value]="konaklamaTarifeleri" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '90rem' }">
+        <p-table [value]="filteredKuralSetleri" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '48rem' }">
             <ng-template #header>
                 <tr>
-                    <th>Kod</th>
-                    <th>Ad</th>
-                    <th>Min Kisi</th>
-                    <th>Maks Kisi</th>
-                    <th>Kamu Gunluk</th>
-                    <th>Diger Gunluk</th>
-                    <th>Buzdolabi</th>
-                    <th>Televizyon</th>
-                    <th>Klima</th>
-                    <th>Aktif</th>
-                    <th style="width: 6rem">Islem</th>
-                </tr>
-            </ng-template>
-            <ng-template #body let-item let-rowIndex="rowIndex">
-                <tr>
-                    <td><input pInputText type="text" [(ngModel)]="item.kod" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="text" [(ngModel)]="item.ad" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="1" max="50" [(ngModel)]="item.minimumKisi" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="1" max="50" [(ngModel)]="item.maksimumKisi" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="0" step="0.01" [(ngModel)]="item.kamuGunlukUcret" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="0" step="0.01" [(ngModel)]="item.digerGunlukUcret" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="0" step="0.01" [(ngModel)]="item.buzdolabiGunlukUcret" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="0" step="0.01" [(ngModel)]="item.televizyonGunlukUcret" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input pInputText type="number" min="0" step="0.01" [(ngModel)]="item.klimaGunlukUcret" [disabled]="loading || saving || !canManage" /></td>
-                    <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
-                    <td>
-                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeKonaklamaTarifesi(rowIndex)" />
-                    </td>
-                </tr>
-            </ng-template>
-        </p-table>
-
-        <div class="flex justify-content-between align-items-center mb-2">
-            <h3 class="m-0 text-lg">Kural Setleri (Program + Yil Bazli)</h3>
-            <p-button label="Kural Seti Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addKuralSeti()" />
-        </div>
-
-        <p-table [value]="kuralSetleri" [loading]="loading" dataKey="id" styleClass="kamp-table mb-4" [tableStyle]="{ 'min-width': '54rem' }">
-            <ng-template #header>
-                <tr>
-                    <th>Kamp Programi</th>
                     <th>Yil</th>
                     <th>Onceki Yil Sayisi</th>
                     <th>Katilim Ceza Puani</th>
@@ -149,26 +112,15 @@
                     <th style="width: 6rem">Islem</th>
                 </tr>
             </ng-template>
-            <ng-template #body let-item let-rowIndex="rowIndex">
+            <ng-template #body let-item>
                 <tr>
-                    <td>
-                        <p-select
-                            [(ngModel)]="item.kampProgramiId"
-                            [options]="programlar"
-                            optionLabel="ad"
-                            optionValue="id"
-                            [appendTo]="'body'"
-                            [disabled]="loading || saving || !canManage"
-                            [showClear]="false"
-                            styleClass="w-full" />
-                    </td>
                     <td><input pInputText type="number" min="2000" max="2100" [(ngModel)]="item.kampYili" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="10" [(ngModel)]="item.oncekiYilSayisi" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.katilimCezaPuani" [disabled]="loading || saving || !canManage" /></td>
                     <td><input pInputText type="number" min="0" max="1000" [(ngModel)]="item.katilimciBasinaPuan" [disabled]="loading || saving || !canManage" /></td>
                     <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
                     <td>
-                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeKuralSeti(rowIndex)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeKuralSetiByItem(item)" />
                     </td>
                 </tr>
             </ng-template>
@@ -176,13 +128,12 @@
 
         <div class="flex justify-content-between align-items-center mb-2">
             <h3 class="m-0 text-lg">Basvuru Sahibi Tipleri</h3>
-            <p-button label="Tip Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="addBasvuruSahibiTipi()" />
+            <p-button label="Tip Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" [disabled]="loading || saving || !canManage || !selectedProgramId" (onClick)="addBasvuruSahibiTipi()" />
         </div>
 
-        <p-table [value]="basvuruSahibiTipleri" [loading]="loading" dataKey="id" styleClass="kamp-table" [tableStyle]="{ 'min-width': '82rem' }">
+        <p-table [value]="filteredBasvuruSahibiTipleri" [loading]="loading" dataKey="id" styleClass="kamp-table" [tableStyle]="{ 'min-width': '82rem' }">
             <ng-template #header>
                 <tr>
-                    <th>Program</th>
                     <th>Global Tip</th>
                     <th>Oncelik</th>
                     <th>Taban Puan</th>
@@ -193,19 +144,8 @@
                     <th style="width: 6rem">Islem</th>
                 </tr>
             </ng-template>
-            <ng-template #body let-item let-rowIndex="rowIndex">
+            <ng-template #body let-item>
                 <tr>
-                    <td>
-                        <p-select
-                            [(ngModel)]="item.kampProgramiId"
-                            [options]="programlar"
-                            optionLabel="ad"
-                            optionValue="id"
-                            [appendTo]="'body'"
-                            [disabled]="loading || saving || !canManage"
-                            [showClear]="false"
-                            styleClass="w-full" />
-                    </td>
                     <td>
                         <p-select
                             [(ngModel)]="item.kampBasvuruSahibiTipiId"
@@ -235,7 +175,7 @@
                     </td>
                     <td><input type="checkbox" [(ngModel)]="item.aktifMi" [disabled]="loading || saving || !canManage" /></td>
                     <td>
-                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeBasvuruSahibiTipi(rowIndex)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="loading || saving || !canManage" (onClick)="removeBasvuruSahibiTipiByItem(item)" />
                     </td>
                 </tr>
             </ng-template>

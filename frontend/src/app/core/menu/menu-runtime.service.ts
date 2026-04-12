@@ -264,6 +264,13 @@ export class MenuRuntimeService {
                 routerLink: ['/restoran-siparis-yonetimi'],
                 roles: ['RestoranSiparisYonetimi.Menu'],
                 path: '/menu/restoran/siparis'
+            },
+            {
+                label: 'Garson Servis',
+                icon: 'pi pi-bolt',
+                routerLink: ['/garson-servis'],
+                roles: ['RestoranSiparisYonetimi.Menu'],
+                path: '/menu/restoran/garson-servis'
             }
         ];
 

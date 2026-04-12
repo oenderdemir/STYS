@@ -9,7 +9,7 @@ export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
     const apiBaseUrl = getApiBaseUrl();
     const normalizedUrl = request.url.toLowerCase();
     const isBackendRequest = isBackendApiRequest(normalizedUrl, apiBaseUrl);
-    const isAnonymousUiRequest = isAnonymousKampBasvuruRequest(normalizedUrl);
+    const isAnonymousUiRequest = isAnonymousPublicRequest(normalizedUrl);
     const isAuthRequest = normalizedUrl.includes('/auth/auth/login');
     const isRefreshRequest = normalizedUrl.includes('/auth/auth/refresh');
     const isLogoutRequest = normalizedUrl.includes('/auth/auth/logout');
@@ -100,11 +100,12 @@ function isBackendApiRequest(normalizedRequestUrl: string, apiBaseUrl: string): 
     return normalizedRequestUrl.startsWith(`${normalizedApiBaseUrl}/`) || normalizedRequestUrl === normalizedApiBaseUrl;
 }
 
-function isAnonymousKampBasvuruRequest(normalizedRequestUrl: string): boolean {
+function isAnonymousPublicRequest(normalizedRequestUrl: string): boolean {
     return normalizedRequestUrl.includes('/ui/kampbasvuru/baglam')
         || normalizedRequestUrl.includes('/ui/kampbasvuru/onizleme')
         || normalizedRequestUrl.includes('/ui/kampbasvuru/basvuru-no/')
-        || /\/ui\/kampbasvuru(?:\?.*)?$/.test(normalizedRequestUrl);
+        || /\/ui\/kampbasvuru(?:\?.*)?$/.test(normalizedRequestUrl)
+        || normalizedRequestUrl.includes('/api/musteri-menu/');
 }
 
 function looksLikeExpiredToken(error: HttpErrorResponse): boolean {

@@ -1730,3 +1730,66 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Build Sonuclari (Tur 53)
 - Frontend: BASARILI (`npm run build`)
+
+## Tur 54 - Musteri Menu Icin Login Zorunlulugu Kaldirildi (Frontend Interceptor)
+
+### Yapilanlar
+- `auth-token.interceptor` anonim istek allowlist'i genisletildi.
+- `GET /api/musteri-menu/{restoranId}` cagrilari token zorunlulugundan muaf tutuldu.
+- Helper isimlendirmesi genellestirildi:
+  - `isAnonymousKampBasvuruRequest` -> `isAnonymousPublicRequest`
+- Sonuc: `/musteri-menu/:restoranId` sayfasi login olmadan acildiginda API istegi client tarafinda 401'e dusmeden backend'e gider.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/auth/auth-token.interceptor.ts
+- changes.md
+
+## Tur 55 - Garson Servis Ekrani (Masa Oturumu) Eklendi
+
+### Yapilanlar
+- Restoran modulu icin hizli operasyon odakli yeni backend API yuzeyi eklendi:
+  - `api/garson/restoranlar/{restoranId}/masalar`
+  - `api/garson/masalar/{masaId}/oturum` (GET)
+  - `api/garson/masalar/{masaId}/oturum` (POST: acik oturum yoksa olustur)
+  - `api/garson/oturumlar/{oturumId}/kalemler` (POST)
+  - `api/garson/oturumlar/{oturumId}/kalemler/{kalemId}` (PUT/DELETE)
+  - `api/garson/oturumlar/{oturumId}/not` (PUT)
+  - `api/garson/oturumlar/{oturumId}/durum` (PUT)
+  - `api/garson/restoranlar/{restoranId}/menu`
+- Mevcut `RestoranSiparis` entity'si korunarak garson akisinda teknik olarak "Masa Oturumu" kavrami saglandi.
+- Is kurallari uygulandi:
+  - ayni masada tek acik oturum
+  - pasif/kapali masa icin oturum acmama
+  - pasif urun/kategori engeli
+  - kapali oturumda kalem degisiklik engeli
+  - kalem eklemede ayni urun+not icin miktar arttirma
+  - toplamlarin backend tarafinda yeniden hesaplanmasi
+- Frontend'e yeni `garson-servis` operasyon sayfasi eklendi:
+  - sol panel: restoran secimi + masa kart gridi
+  - sag panel: secili masa oturumu, kalemler, notlar, hizli urun ekleme
+  - kategori sekmeli urun secimi + urun arama
+  - miktar +/- , kalem notu, kalem silme
+  - oturum notu kaydetme
+  - "Servise Al", "Hesaba Devret", "Oturumu Kapat" aksiyonlari
+  - dokunmatik kullanima uygun kart/buton yogun layout
+- Route eklendi: `/garson-servis`
+- Restoran menu altina `Garson Servis` menusu eklendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/GarsonServis/Dtos/GarsonServisDtos.cs
+- backend/RestoranYonetimi/GarsonServis/Services/IGarsonServisService.cs
+- backend/RestoranYonetimi/GarsonServis/Services/GarsonServisService.cs
+- backend/RestoranYonetimi/GarsonServis/Controllers/GarsonServisController.cs
+- backend/Program.cs
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.service.ts
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.ts
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.html
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.scss
+- frontend/src/app.routes.ts
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- changes.md
+
+### Build Sonuclari (Tur 55)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)

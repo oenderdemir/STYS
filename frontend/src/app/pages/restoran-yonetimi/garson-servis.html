@@ -1,0 +1,167 @@
+<p-toast />
+
+<div class="garson-shell">
+    <div class="garson-header card">
+        <div>
+            <h2>Garson Servis</h2>
+            <p>Masa oturumu ile hizli servis operasyonu.</p>
+        </div>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" [disabled]="loading || masalarLoading || oturumLoading" />
+    </div>
+
+    <div class="garson-layout">
+        <div class="left-panel card">
+            <label class="field-label">Restoran</label>
+            <p-select class="w-full" [options]="restoranlar" optionLabel="ad" optionValue="id" [(ngModel)]="selectedRestoranId" [appendTo]="'body'" [showClear]="false" (onChange)="onRestoranChange()" />
+
+            <p-divider />
+
+            <div class="masalar-title">
+                <h3>Masalar</h3>
+                @if (masalarLoading) {
+                    <p-progressspinner [style]="{ width: '1.4rem', height: '1.4rem' }" strokeWidth="6" />
+                }
+            </div>
+
+            <div class="masa-grid">
+                @for (masa of masalar; track masa.masaId) {
+                    <button type="button" class="masa-card" [class.selected]="selectedMasaId === masa.masaId" [class.kapali]="masa.durum === 'Kapali'" (click)="selectMasa(masa)">
+                        <div class="masa-top">
+                            <strong>Masa {{ masa.masaNo }}</strong>
+                            <p-tag [value]="masa.durum" [severity]="getMasaDurumSeverityValue(masa.durum)" [rounded]="true" />
+                        </div>
+
+                        <div class="masa-meta">
+                            @if (masa.aktifOturumId) {
+                                <span>Acik Oturum #{{ masa.aktifOturumId }}</span>
+                                <span>{{ masa.aktifKalemSayisi }} kalem</span>
+                                <span>{{ masa.aktifOturumToplamTutar || 0 | number: '1.2-2' }} TRY</span>
+                            } @else {
+                                <span>Acik oturum yok</span>
+                            }
+                        </div>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="right-panel card">
+            @if (!selectedMasaId) {
+                <div class="empty-state">
+                    <i class="pi pi-hand-point-left"></i>
+                    <p>Soldan bir masa secerek oturum baslatin.</p>
+                </div>
+            } @else if (oturumLoading) {
+                <div class="empty-state">
+                    <p-progressspinner [style]="{ width: '2rem', height: '2rem' }" strokeWidth="5" />
+                    <p>Masa oturumu yukleniyor...</p>
+                </div>
+            } @else if (oturum) {
+                <div class="oturum-header">
+                    <div>
+                        <h3>Masa {{ oturum.masaNo }} - Oturum #{{ oturum.oturumId }}</h3>
+                        <small>{{ oturum.siparisTarihi | date: 'dd.MM.yyyy HH:mm' }}</small>
+                    </div>
+                    <p-tag [value]="oturum.durum" [severity]="getOturumDurumSeverityValue(oturum.durum)" [rounded]="true" />
+                </div>
+
+                <div class="oturum-summary">
+                    <div>
+                        <span>Kalem</span>
+                        <strong>{{ toplamKalemSayisi }}</strong>
+                    </div>
+                    <div>
+                        <span>Toplam</span>
+                        <strong>{{ oturum.toplamTutar | number: '1.2-2' }} {{ oturum.paraBirimi }}</strong>
+                    </div>
+                </div>
+
+                <div class="oturum-not">
+                    <label class="field-label">Oturum Notu</label>
+                    <div class="note-row">
+                        <textarea pInputTextarea rows="2" [(ngModel)]="oturumNotu" placeholder="Masa oturumu notu..." [disabled]="!canManage"></textarea>
+                        <p-button label="Kaydet" icon="pi pi-save" size="small" severity="secondary" [outlined]="true" (onClick)="oturumNotunuKaydet()" [disabled]="!canManage || saving" />
+                    </div>
+                </div>
+
+                <p-divider />
+
+                <div class="kalem-list">
+                    <h4>Kalemler</h4>
+                    @if (oturum.kalemler.length === 0) {
+                        <div class="mini-empty">Urun eklenmedi.</div>
+                    } @else {
+                        @for (kalem of oturum.kalemler; track kalem.id) {
+                            <div class="kalem-row">
+                                <div class="kalem-main">
+                                    <strong>{{ kalem.urunAdi }}</strong>
+                                    <small>{{ kalem.birimFiyat | number: '1.2-2' }} {{ oturum.paraBirimi }}</small>
+                                </div>
+
+                                <div class="kalem-actions">
+                                    <p-button icon="pi pi-minus" size="small" severity="secondary" [outlined]="true" (onClick)="kalemMiktarDegistir(kalem, -1)" [disabled]="!canManage || saving" />
+                                    <span class="qty">{{ kalem.miktar }}</span>
+                                    <p-button icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" (onClick)="kalemMiktarDegistir(kalem, 1)" [disabled]="!canManage || saving" />
+                                    <strong class="line-total">{{ kalem.satirToplam | number: '1.2-2' }} {{ oturum.paraBirimi }}</strong>
+                                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="kalemSil(kalem)" [disabled]="!canManage || saving" />
+                                </div>
+
+                                <div class="kalem-note">
+                                    <input pInputText [(ngModel)]="kalem.notlar" placeholder="Kalem notu..." [disabled]="!canManage" />
+                                    <p-button icon="pi pi-check" size="small" severity="secondary" [outlined]="true" (onClick)="kalemNotunuKaydet(kalem)" [disabled]="!canManage || saving" />
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <p-divider />
+
+                <div class="urun-ekle">
+                    <div class="urun-ekle-header">
+                        <h4>Urun Ekle</h4>
+                        <input pInputText [(ngModel)]="urunArama" placeholder="Urun ara..." />
+                    </div>
+
+                    @if (menu && menu.kategoriler.length > 0) {
+                        <p-tabs [value]="selectedKategoriId ? selectedKategoriId.toString() : (menu.kategoriler[0].id.toString())" (valueChange)="selectedKategoriId = $event ? +$event : null">
+                            <p-tablist>
+                                @for (kategori of menu.kategoriler; track kategori.id) {
+                                    <p-tab [value]="kategori.id.toString()">{{ kategori.ad }}</p-tab>
+                                }
+                            </p-tablist>
+                            <p-tabpanels>
+                                @for (kategori of menu.kategoriler; track kategori.id) {
+                                    <p-tabpanel [value]="kategori.id.toString()">
+                                        <div class="urun-grid">
+                                            @for (urun of selectedKategoriId === kategori.id ? selectedKategoriUrunleri : []; track urun.id) {
+                                                <button type="button" class="urun-card" (click)="urunEkle(urun)" [disabled]="!canManage || saving">
+                                                    <strong>{{ urun.ad }}</strong>
+                                                    <small>{{ urun.aciklama || '-' }}</small>
+                                                    <div class="urun-meta">
+                                                        <span>{{ urun.fiyat | number: '1.2-2' }} {{ urun.paraBirimi }}</span>
+                                                        <span>{{ urun.hazirlamaSuresiDakika }} dk</span>
+                                                    </div>
+                                                </button>
+                                            }
+                                        </div>
+                                    </p-tabpanel>
+                                }
+                            </p-tabpanels>
+                        </p-tabs>
+                    } @else {
+                        <div class="mini-empty">Aktif menu bulunamadi.</div>
+                    }
+                </div>
+
+                <p-divider />
+
+                <div class="oturum-footer">
+                    <p-button label="Servise Al" icon="pi pi-send" severity="info" [outlined]="true" (onClick)="oturumDurumGuncelle('Serviste')" [disabled]="!canManage || saving" />
+                    <p-button label="Hesaba Devret" icon="pi pi-receipt" severity="warn" [outlined]="true" (onClick)="oturumDurumGuncelle('HesapIstendi')" [disabled]="!canManage || saving" />
+                    <p-button label="Oturumu Kapat" icon="pi pi-check-circle" (onClick)="oturumDurumGuncelle('Kapatildi')" [disabled]="!canManage || saving" />
+                </div>
+            }
+        </div>
+    </div>
+</div>

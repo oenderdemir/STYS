@@ -8,6 +8,7 @@ using STYS.Bildirimler.Hubs;
 using STYS.Bildirimler.Services;
 using STYS.Countries.Mapping;
 using STYS.ErisimTeshis.Services;
+using STYS.GarsonServis.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
 using STYS.Kullanicilar.Services;
@@ -99,6 +100,7 @@ builder.Services.AddScoped<IRestoranMenuUrunService, RestoranMenuUrunService>();
 builder.Services.AddScoped<IRestoranSiparisService, RestoranSiparisService>();
 builder.Services.AddScoped<IRestoranOdemeService, RestoranOdemeService>();
 builder.Services.AddScoped<IMusteriMenuService, MusteriMenuService>();
+builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddSignalR();
 

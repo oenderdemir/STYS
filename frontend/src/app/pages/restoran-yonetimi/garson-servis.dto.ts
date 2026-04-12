@@ -15,6 +15,7 @@ export interface MasaOturumuKalemiModel {
     birimFiyat: number;
     miktar: number;
     satirToplam: number;
+    durum: string;
     notlar?: string | null;
 }
 
@@ -43,6 +44,7 @@ export interface AddMasaOturumuKalemiRequest {
 
 export interface UpdateMasaOturumuKalemiRequest {
     miktar: number;
+    durum?: string | null;
     notlar?: string | null;
 }
 
@@ -106,6 +108,29 @@ export function getMasaOturumuDurumSeverity(durum: string): 'success' | 'info' |
             return 'danger';
         case 'Tamamlandi':
             return 'success';
+        case 'Iptal':
+            return 'danger';
+        default:
+            return 'secondary';
+    }
+}
+
+export const MASA_OTURUMU_KALEM_DURUMLARI = [
+    'Beklemede',
+    'Hazirlaniyor',
+    'Hazir',
+    'ServisEdildi',
+    'Iptal'
+] as const;
+
+export function getKalemDurumSeverity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch (durum) {
+        case 'ServisEdildi':
+            return 'success';
+        case 'Hazir':
+            return 'info';
+        case 'Hazirlaniyor':
+            return 'warn';
         case 'Iptal':
             return 'danger';
         default:

@@ -22,8 +22,10 @@ import {
     GarsonMenuKategoriModel,
     GarsonMenuModel,
     GarsonMenuUrunModel,
+    getKalemDurumSeverity,
     getGarsonMasaDurumSeverity,
     getMasaOturumuDurumSeverity,
+    MASA_OTURUMU_KALEM_DURUMLARI,
     MasaOturumuKalemiModel,
     MasaOturumuModel
 } from './garson-servis.dto';
@@ -102,6 +104,8 @@ export class GarsonServisPage implements OnInit {
         return this.filterUrunler(kategori.urunler);
     }
 
+    readonly kalemDurumlari = [...MASA_OTURUMU_KALEM_DURUMLARI];
+
     get toplamKalemSayisi(): number {
         if (!this.oturum) {
             return 0;
@@ -170,7 +174,7 @@ export class GarsonServisPage implements OnInit {
         this.saving = true;
 
         this.service
-            .updateKalem(this.oturum.oturumId, kalem.id, { miktar: yeniMiktar, notlar: kalem.notlar ?? null })
+            .updateKalem(this.oturum.oturumId, kalem.id, { miktar: yeniMiktar, durum: kalem.durum, notlar: kalem.notlar ?? null })
             .pipe(
                 finalize(() => {
                     this.saving = false;
@@ -192,7 +196,29 @@ export class GarsonServisPage implements OnInit {
 
         this.saving = true;
         this.service
-            .updateKalem(this.oturum.oturumId, kalem.id, { miktar: kalem.miktar, notlar: kalem.notlar ?? null })
+            .updateKalem(this.oturum.oturumId, kalem.id, { miktar: kalem.miktar, durum: kalem.durum, notlar: kalem.notlar ?? null })
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (updated) => {
+                    this.applyOturumUpdate(updated, false);
+                },
+                error: (error: unknown) => this.showError(error)
+            });
+    }
+
+    kalemDurumGuncelle(kalem: MasaOturumuKalemiModel, durum: string): void {
+        if (!this.oturum || !this.canManage || this.saving || kalem.durum === durum) {
+            return;
+        }
+
+        this.saving = true;
+        this.service
+            .updateKalem(this.oturum.oturumId, kalem.id, { miktar: kalem.miktar, durum, notlar: kalem.notlar ?? null })
             .pipe(
                 finalize(() => {
                     this.saving = false;
@@ -286,6 +312,10 @@ export class GarsonServisPage implements OnInit {
 
     getOturumDurumSeverityValue(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
         return getMasaOturumuDurumSeverity(durum);
+    }
+
+    getKalemDurumSeverityValue(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+        return getKalemDurumSeverity(durum);
     }
 
     private loadInitial(): void {

@@ -6,6 +6,7 @@ using STYS.RestoranMenuUrunleri.Entities;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranSiparisleri.Repositories;
+using STYS.RestoranYonetimi.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranSiparisleri.Services;
@@ -15,12 +16,14 @@ public class RestoranSiparisService : IRestoranSiparisService
     private readonly StysAppDbContext _dbContext;
     private readonly IRestoranSiparisRepository _siparisRepository;
     private readonly IMapper _mapper;
+    private readonly IRestoranErisimService _restoranErisimService;
 
-    public RestoranSiparisService(StysAppDbContext dbContext, IRestoranSiparisRepository siparisRepository, IMapper mapper)
+    public RestoranSiparisService(StysAppDbContext dbContext, IRestoranSiparisRepository siparisRepository, IMapper mapper, IRestoranErisimService restoranErisimService)
     {
         _dbContext = dbContext;
         _siparisRepository = siparisRepository;
         _mapper = mapper;
+        _restoranErisimService = restoranErisimService;
     }
 
     public async Task<List<RestoranSiparisDto>> GetListAsync(int? restoranId, CancellationToken cancellationToken = default)
@@ -28,13 +31,23 @@ public class RestoranSiparisService : IRestoranSiparisService
         List<RestoranSiparis> items;
         if (restoranId.HasValue && restoranId.Value > 0)
         {
+            await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId.Value, cancellationToken);
             items = await _siparisRepository.GetByRestoranIdAsync(restoranId.Value, cancellationToken);
         }
         else
         {
-            items = await _dbContext.RestoranSiparisleri
+            var query = _dbContext.RestoranSiparisleri
                 .Include(x => x.Kalemler)
                 .Include(x => x.Odemeler)
+                .AsQueryable();
+
+            var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
+            if (yetkiliRestoranlar is not null)
+            {
+                query = query.Where(x => yetkiliRestoranlar.Contains(x.RestoranId));
+            }
+
+            items = await query
                 .OrderByDescending(x => x.SiparisTarihi)
                 .ThenByDescending(x => x.Id)
                 .ToListAsync(cancellationToken);
@@ -44,14 +57,31 @@ public class RestoranSiparisService : IRestoranSiparisService
     }
 
     public async Task<List<RestoranSiparisDto>> GetByRestoranIdAsync(int restoranId, CancellationToken cancellationToken = default)
-        => _mapper.Map<List<RestoranSiparisDto>>(await _siparisRepository.GetByRestoranIdAsync(restoranId, cancellationToken));
+    {
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
+        return _mapper.Map<List<RestoranSiparisDto>>(await _siparisRepository.GetByRestoranIdAsync(restoranId, cancellationToken));
+    }
 
     public async Task<List<RestoranSiparisDto>> GetAcikSiparislerAsync(int? masaId, CancellationToken cancellationToken = default)
-        => _mapper.Map<List<RestoranSiparisDto>>(await _siparisRepository.GetAcikSiparislerAsync(masaId, cancellationToken));
+    {
+        var items = await _siparisRepository.GetAcikSiparislerAsync(masaId, cancellationToken);
+        var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
+        if (yetkiliRestoranlar is not null)
+        {
+            items = items.Where(x => yetkiliRestoranlar.Contains(x.RestoranId)).ToList();
+        }
+
+        return _mapper.Map<List<RestoranSiparisDto>>(items);
+    }
 
     public async Task<RestoranSiparisDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         var entity = await _siparisRepository.GetDetayByIdAsync(id, cancellationToken);
+        if (entity is not null)
+        {
+            await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
+        }
+
         return entity is null ? null : _mapper.Map<RestoranSiparisDto>(entity);
     }
 
@@ -61,6 +91,7 @@ public class RestoranSiparisService : IRestoranSiparisService
 
         var restoran = await _dbContext.Restoranlar.FirstOrDefaultAsync(x => x.Id == request.RestoranId, cancellationToken)
             ?? throw new BaseException("Restoran bulunamadi.", 400);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
 
         if (!restoran.AktifMi)
         {
@@ -108,6 +139,7 @@ public class RestoranSiparisService : IRestoranSiparisService
     {
         var entity = await _siparisRepository.GetDetayByIdAsync(id, cancellationToken)
             ?? throw new BaseException("Siparis bulunamadi.", 404);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
 
         EnsureMutable(entity);
 
@@ -143,6 +175,7 @@ public class RestoranSiparisService : IRestoranSiparisService
 
         var entity = await _siparisRepository.GetDetayByIdAsync(id, cancellationToken)
             ?? throw new BaseException("Siparis bulunamadi.", 404);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
 
         var newStatus = request.SiparisDurumu.Trim();
         ValidateStatusTransition(entity, newStatus);
@@ -280,6 +313,7 @@ public class RestoranSiparisService : IRestoranSiparisService
                 BirimFiyat = urun.Fiyat,
                 Miktar = request.Miktar,
                 SatirToplam = satirToplam,
+                Durum = RestoranSiparisKalemDurumlari.Beklemede,
                 Notlar = NormalizeOptional(request.Notlar, 512)
             });
         }

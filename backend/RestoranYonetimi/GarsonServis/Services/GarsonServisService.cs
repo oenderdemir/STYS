@@ -5,6 +5,7 @@ using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuUrunleri.Entities;
 using STYS.RestoranOdemeleri.Entities;
 using STYS.RestoranSiparisleri.Entities;
+using STYS.RestoranYonetimi.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.GarsonServis.Services;
@@ -12,14 +13,18 @@ namespace STYS.GarsonServis.Services;
 public class GarsonServisService : IGarsonServisService
 {
     private readonly StysAppDbContext _dbContext;
+    private readonly IRestoranErisimService _restoranErisimService;
 
-    public GarsonServisService(StysAppDbContext dbContext)
+    public GarsonServisService(StysAppDbContext dbContext, IRestoranErisimService restoranErisimService)
     {
         _dbContext = dbContext;
+        _restoranErisimService = restoranErisimService;
     }
 
     public async Task<List<GarsonMasaDto>> GetMasalarAsync(int restoranId, CancellationToken cancellationToken = default)
     {
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
+
         var masalar = await _dbContext.RestoranMasalari
             .Where(x => x.RestoranId == restoranId && x.AktifMi)
             .OrderBy(x => x.MasaNo)
@@ -55,6 +60,16 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto?> GetMasaOturumuByMasaAsync(int masaId, CancellationToken cancellationToken = default)
     {
+        var masaRestoranId = await _dbContext.RestoranMasalari
+            .Where(x => x.Id == masaId)
+            .Select(x => x.RestoranId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (masaRestoranId > 0)
+        {
+            await _restoranErisimService.EnsureRestoranErisimiAsync(masaRestoranId, cancellationToken);
+        }
+
         var entity = await _dbContext.RestoranSiparisleri
             .Include(x => x.Kalemler)
             .Include(x => x.Odemeler)
@@ -72,6 +87,8 @@ public class GarsonServisService : IGarsonServisService
             .Include(x => x.Restoran)
             .FirstOrDefaultAsync(x => x.Id == masaId, cancellationToken)
             ?? throw new BaseException("Masa bulunamadi.", 404);
+
+        await _restoranErisimService.EnsureRestoranErisimiAsync(masa.RestoranId, cancellationToken);
 
         if (!masa.AktifMi)
         {
@@ -149,6 +166,8 @@ public class GarsonServisService : IGarsonServisService
         var normalizedKalemNotu = NormalizeOptional(request.Notlar, 512);
         var existingKalem = oturum.Kalemler.FirstOrDefault(x =>
             x.RestoranMenuUrunId == urun.Id
+            && x.Durum != RestoranSiparisKalemDurumlari.ServisEdildi
+            && x.Durum != RestoranSiparisKalemDurumlari.Iptal
             && string.Equals(x.Notlar ?? string.Empty, normalizedKalemNotu ?? string.Empty, StringComparison.Ordinal));
 
         if (existingKalem is not null)
@@ -166,6 +185,7 @@ public class GarsonServisService : IGarsonServisService
                 BirimFiyat = urun.Fiyat,
                 Miktar = Math.Round(request.Miktar, 2, MidpointRounding.AwayFromZero),
                 SatirToplam = Math.Round(request.Miktar * urun.Fiyat, 2, MidpointRounding.AwayFromZero),
+                Durum = RestoranSiparisKalemDurumlari.Beklemede,
                 Notlar = normalizedKalemNotu
             };
 
@@ -191,6 +211,7 @@ public class GarsonServisService : IGarsonServisService
         else
         {
             kalem.Miktar = Math.Round(request.Miktar, 2, MidpointRounding.AwayFromZero);
+            kalem.Durum = NormalizeKalemDurumu(request.Durum, kalem.Durum);
             kalem.Notlar = NormalizeOptional(request.Notlar, 512);
             kalem.SatirToplam = Math.Round(kalem.Miktar * kalem.BirimFiyat, 2, MidpointRounding.AwayFromZero);
         }
@@ -256,6 +277,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<GarsonMenuDto> GetMenuAsync(int restoranId, CancellationToken cancellationToken = default)
     {
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
+
         var restoranAktifMi = await _dbContext.Restoranlar
             .Where(x => x.Id == restoranId)
             .Select(x => x.AktifMi)
@@ -317,6 +340,8 @@ public class GarsonServisService : IGarsonServisService
             .Include(x => x.RestoranMasa)
             .FirstOrDefaultAsync(x => x.Id == oturumId, cancellationToken)
             ?? throw new BaseException("Masa oturumu bulunamadi.", 404);
+
+        await _restoranErisimService.EnsureRestoranErisimiAsync(oturum.RestoranId, cancellationToken);
 
         EnsureOpenOturum(oturum);
         return oturum;
@@ -455,10 +480,24 @@ public class GarsonServisService : IGarsonServisService
                     BirimFiyat = x.BirimFiyat,
                     Miktar = x.Miktar,
                     SatirToplam = x.SatirToplam,
+                    Durum = string.IsNullOrWhiteSpace(x.Durum) ? RestoranSiparisKalemDurumlari.Beklemede : x.Durum,
                     Notlar = x.Notlar
                 })
                 .ToList()
         };
+    }
+
+    private static string NormalizeKalemDurumu(string? requestedDurum, string currentDurum)
+    {
+        if (string.IsNullOrWhiteSpace(requestedDurum))
+        {
+            return currentDurum;
+        }
+
+        var normalized = requestedDurum.Trim();
+        return RestoranSiparisKalemDurumlari.TumDurumlar.Contains(normalized)
+            ? normalized
+            : throw new BaseException("Gecersiz kalem durumu.", 400);
     }
 
     private async Task<string> GenerateSiparisNoAsync(CancellationToken cancellationToken)

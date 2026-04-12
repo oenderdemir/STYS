@@ -4,6 +4,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.RestoranMasalari.Dtos;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMasalari.Repositories;
+using STYS.RestoranYonetimi.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranMasalari.Services;
@@ -13,12 +14,14 @@ public class RestoranMasaService : IRestoranMasaService
     private readonly StysAppDbContext _dbContext;
     private readonly IRestoranMasaRepository _masaRepository;
     private readonly IMapper _mapper;
+    private readonly IRestoranErisimService _restoranErisimService;
 
-    public RestoranMasaService(StysAppDbContext dbContext, IRestoranMasaRepository masaRepository, IMapper mapper)
+    public RestoranMasaService(StysAppDbContext dbContext, IRestoranMasaRepository masaRepository, IMapper mapper, IRestoranErisimService restoranErisimService)
     {
         _dbContext = dbContext;
         _masaRepository = masaRepository;
         _mapper = mapper;
+        _restoranErisimService = restoranErisimService;
     }
 
     public async Task<List<RestoranMasaDto>> GetListAsync(int? restoranId, CancellationToken cancellationToken = default)
@@ -26,7 +29,16 @@ public class RestoranMasaService : IRestoranMasaService
         var query = _dbContext.RestoranMasalari.AsQueryable();
         if (restoranId.HasValue && restoranId.Value > 0)
         {
+            await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId.Value, cancellationToken);
             query = query.Where(x => x.RestoranId == restoranId.Value);
+        }
+        else
+        {
+            var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
+            if (yetkiliRestoranlar is not null)
+            {
+                query = query.Where(x => yetkiliRestoranlar.Contains(x.RestoranId));
+            }
         }
 
         var items = await query.OrderBy(x => x.MasaNo).ThenBy(x => x.Id).ToListAsync(cancellationToken);
@@ -40,6 +52,7 @@ public class RestoranMasaService : IRestoranMasaService
             return [];
         }
 
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
         var items = await _masaRepository.GetByRestoranIdAsync(restoranId, cancellationToken);
         return _mapper.Map<List<RestoranMasaDto>>(items);
     }
@@ -47,12 +60,18 @@ public class RestoranMasaService : IRestoranMasaService
     public async Task<RestoranMasaDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         var entity = await _dbContext.RestoranMasalari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is not null)
+        {
+            await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
+        }
+
         return entity is null ? null : _mapper.Map<RestoranMasaDto>(entity);
     }
 
     public async Task<RestoranMasaDto> CreateAsync(CreateRestoranMasaRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request.RestoranId, request.MasaNo, request.Kapasite, request.Durum);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
 
         var restoranExists = await _dbContext.Restoranlar.AnyAsync(x => x.Id == request.RestoranId, cancellationToken);
         if (!restoranExists)
@@ -88,6 +107,9 @@ public class RestoranMasaService : IRestoranMasaService
         var entity = await _dbContext.RestoranMasalari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new BaseException("Masa bulunamadi.", 404);
 
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
+
         var restoranExists = await _dbContext.Restoranlar.AnyAsync(x => x.Id == request.RestoranId, cancellationToken);
         if (!restoranExists)
         {
@@ -115,6 +137,8 @@ public class RestoranMasaService : IRestoranMasaService
     {
         var entity = await _dbContext.RestoranMasalari.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new BaseException("Masa bulunamadi.", 404);
+
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
 
         _dbContext.RestoranMasalari.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);

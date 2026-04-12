@@ -9,6 +9,7 @@ using STYS.RestoranOdemeleri.Repositories;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranSiparisleri.Repositories;
+using STYS.RestoranYonetimi.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranOdemeleri.Services;
@@ -19,21 +20,27 @@ public class RestoranOdemeService : IRestoranOdemeService
     private readonly IRestoranSiparisRepository _siparisRepository;
     private readonly IRestoranOdemeRepository _odemeRepository;
     private readonly IMapper _mapper;
+    private readonly IRestoranErisimService _restoranErisimService;
 
     public RestoranOdemeService(
         StysAppDbContext dbContext,
         IRestoranSiparisRepository siparisRepository,
         IRestoranOdemeRepository odemeRepository,
-        IMapper mapper)
+        IMapper mapper,
+        IRestoranErisimService restoranErisimService)
     {
         _dbContext = dbContext;
         _siparisRepository = siparisRepository;
         _odemeRepository = odemeRepository;
         _mapper = mapper;
+        _restoranErisimService = restoranErisimService;
     }
 
     public async Task<List<RestoranOdemeDto>> GetBySiparisIdAsync(int siparisId, CancellationToken cancellationToken = default)
     {
+        var siparis = await GetSiparisForPaymentAsync(siparisId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(siparis.RestoranId, cancellationToken);
+
         var list = await _odemeRepository.GetBySiparisIdAsync(siparisId, cancellationToken);
         return _mapper.Map<List<RestoranOdemeDto>>(list);
     }
@@ -41,6 +48,7 @@ public class RestoranOdemeService : IRestoranOdemeService
     public async Task<RestoranSiparisOdemeOzetiDto> GetOdemeOzetiAsync(int siparisId, CancellationToken cancellationToken = default)
     {
         var siparis = await GetSiparisForPaymentAsync(siparisId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(siparis.RestoranId, cancellationToken);
         RecalculateSiparisTotals(siparis);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -68,6 +76,7 @@ public class RestoranOdemeService : IRestoranOdemeService
         }
 
         var siparis = await GetSiparisForPaymentAsync(siparisId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(siparis.RestoranId, cancellationToken);
         EnsureSiparisCanBePaid(siparis);
 
         if (request.Tutar > siparis.KalanTutar)
@@ -163,6 +172,7 @@ public class RestoranOdemeService : IRestoranOdemeService
         }
 
         var siparis = await GetSiparisForPaymentAsync(siparisId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(siparis.RestoranId, cancellationToken);
         EnsureSiparisCanBePaid(siparis);
 
         if (tutar > siparis.KalanTutar)

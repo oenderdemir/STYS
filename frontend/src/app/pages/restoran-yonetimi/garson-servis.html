@@ -95,7 +95,10 @@
                             <div class="kalem-row">
                                 <div class="kalem-main">
                                     <strong>{{ kalem.urunAdi }}</strong>
-                                    <small>{{ kalem.birimFiyat | number: '1.2-2' }} {{ oturum.paraBirimi }}</small>
+                                    <div class="kalem-main-right">
+                                        <small>{{ kalem.birimFiyat | number: '1.2-2' }} {{ oturum.paraBirimi }}</small>
+                                        <p-tag [value]="kalem.durum" [severity]="getKalemDurumSeverityValue(kalem.durum)" [rounded]="true" />
+                                    </div>
                                 </div>
 
                                 <div class="kalem-actions">
@@ -104,6 +107,13 @@
                                     <p-button icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" (onClick)="kalemMiktarDegistir(kalem, 1)" [disabled]="!canManage || saving" />
                                     <strong class="line-total">{{ kalem.satirToplam | number: '1.2-2' }} {{ oturum.paraBirimi }}</strong>
                                     <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="kalemSil(kalem)" [disabled]="!canManage || saving" />
+                                </div>
+
+                                <div class="kalem-durum-actions">
+                                    <p-button size="small" severity="secondary" [outlined]="true" label="Beklemede" (onClick)="kalemDurumGuncelle(kalem, 'Beklemede')" [disabled]="!canManage || saving || kalem.durum === 'Beklemede'" />
+                                    <p-button size="small" severity="warn" [outlined]="true" label="Hazirlaniyor" (onClick)="kalemDurumGuncelle(kalem, 'Hazirlaniyor')" [disabled]="!canManage || saving || kalem.durum === 'Hazirlaniyor'" />
+                                    <p-button size="small" severity="info" [outlined]="true" label="Hazir" (onClick)="kalemDurumGuncelle(kalem, 'Hazir')" [disabled]="!canManage || saving || kalem.durum === 'Hazir'" />
+                                    <p-button size="small" label="Servis Edildi" (onClick)="kalemDurumGuncelle(kalem, 'ServisEdildi')" [disabled]="!canManage || saving || kalem.durum === 'ServisEdildi'" />
                                 </div>
 
                                 <div class="kalem-note">

@@ -1793,3 +1793,97 @@ Kamp Yonetimi (top-level, fa-campground)
 ### Build Sonuclari (Tur 55)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
 - Frontend: BASARILI (`npm run build`)
+
+## Tur 56 - Garson Ekraninda Kalem Bazli Durum Takibi (Masa Oturumu)
+
+### Yapilanlar
+- Masa oturumu kalemlerine durum alani eklendi:
+  - `Beklemede`, `Hazirlaniyor`, `Hazir`, `ServisEdildi`, `Iptal`
+- Backend entity/model:
+  - `RestoranSiparisKalemi.Durum` alani eklendi (default: `Beklemede`).
+  - yeni sabit sinifi: `RestoranSiparisKalemDurumlari`.
+- Garson API guncellendi:
+  - kalem DTO'su artik `Durum` donuyor.
+  - kalem update isteginde `Durum` gonderilebiliyor.
+  - ayni urun ekleme birlestirmesi, `ServisEdildi/Iptal` kalemleriyle birlesmeyecek sekilde daraltildi.
+- Frontend garson servis ekrani guncellendi:
+  - her kalem satirinda durum tag'i gosterimi eklendi.
+  - hizli durum aksiyonlari eklendi:
+    - Beklemede
+    - Hazirlaniyor
+    - Hazir
+    - Servis Edildi
+  - kalem not/miktar guncelleme istekleri durum bilgisini de koruyacak sekilde guncellendi.
+
+### Migration
+- yeni migration: `20260412190000_AddRestoranSiparisKalemiDurumu`
+  - `[restoran].[RestoranSiparisKalemleri]` tablosuna `Durum` kolonu eklendi (`nvarchar(32)`, not null, default `Beklemede`)
+  - mevcut kayitlar icin backfill SQL eklendi.
+- `StysAppDbContextModelSnapshot` guncellendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranSiparisleri/Entities/RestoranSiparisKalemi.cs
+- backend/RestoranYonetimi/RestoranSiparisleri/Entities/RestoranSiparisKalemDurumlari.cs
+- backend/RestoranYonetimi/RestoranSiparisleri/Dtos/RestoranSiparisDtos.cs
+- backend/RestoranYonetimi/RestoranSiparisleri/Services/RestoranSiparisService.cs
+- backend/RestoranYonetimi/GarsonServis/Dtos/GarsonServisDtos.cs
+- backend/RestoranYonetimi/GarsonServis/Services/GarsonServisService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412190000_AddRestoranSiparisKalemiDurumu.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.ts
+- frontend/src/app/pages/restoran-yonetimi/garson-servis.html
+- changes.md
+
+### Build Sonuclari (Tur 56)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 57 - Restoran Yoneticisi Erisim Kapsami (Sadece Kendi Restoranlari)
+
+### Yapilanlar
+- Restoran modulu icin ortak erisim servisi eklendi:
+  - `IRestoranErisimService`
+  - `RestoranErisimService`
+- Kural:
+  - Kullanici `RestoranYoneticileri` tablosunda restoran(lar)a atanmis ise,
+  - ve `KullaniciAtama.RestoranYoneticisiAtayabilir` yetkisi yoksa,
+  - restoran modulunde yalnizca atandigi restoranlarin verisini gorebilir/isleyebilir.
+- Admin ve restoran yonetici atama yetkisi olan kullanicilarin mevcut genis gorunumu korunur.
+
+### Scope Uygulanan Servisler
+- `RestoranService`
+  - listeleme ve detay erisim filtrelendi
+  - update/delete icin restoran erisim kontrolu eklendi
+- `RestoranMasaService`
+  - listeleme, detay, create/update/delete restoran erisim kontrolu eklendi
+- `RestoranMenuKategoriService`
+  - listeleme, detay, menu getirme, atama baglami/atama kayit restoran erisim kontrolu eklendi
+- `RestoranMenuUrunService`
+  - kategori/restoran bagina gore listeleme, detay, create/update/delete restoran erisim kontrolu eklendi
+- `RestoranSiparisService`
+  - listeleme, detay, restoran bazli cagrilar, create/update/durum guncelleme restoran erisim kontrolu eklendi
+- `RestoranOdemeService`
+  - odeme liste/ozet ve odeme olusturma akislarinda siparisin restoranina erisim kontrolu eklendi
+- `GarsonServisService`
+  - restoran bazli masa/menu endpointleri ve masa/oturum bazli islemlerde restoran erisim kontrolu eklendi
+
+### DI
+- `Program.cs` icine `IRestoranErisimService -> RestoranErisimService` kaydi eklendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/Services/IRestoranErisimService.cs
+- backend/RestoranYonetimi/Services/RestoranErisimService.cs
+- backend/Program.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/RestoranYonetimi/RestoranMasalari/Services/RestoranMasaService.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Services/RestoranMenuKategoriService.cs
+- backend/RestoranYonetimi/RestoranMenuUrunleri/Services/RestoranMenuUrunService.cs
+- backend/RestoranYonetimi/RestoranSiparisleri/Services/RestoranSiparisService.cs
+- backend/RestoranYonetimi/RestoranOdemeleri/Services/RestoranOdemeService.cs
+- backend/RestoranYonetimi/GarsonServis/Services/GarsonServisService.cs
+- changes.md
+
+### Build Sonuclari (Tur 57)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)

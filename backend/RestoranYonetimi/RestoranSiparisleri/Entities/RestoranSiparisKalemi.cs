@@ -20,6 +20,10 @@ public class RestoranSiparisKalemi : BaseEntity<int>
 
     public decimal SatirToplam { get; set; }
 
+    [Required]
+    [MaxLength(32)]
+    public string Durum { get; set; } = RestoranSiparisKalemDurumlari.Beklemede;
+
     [MaxLength(512)]
     public string? Notlar { get; set; }
 

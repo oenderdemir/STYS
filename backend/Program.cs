@@ -25,6 +25,7 @@ using STYS.RestoranMenuUrunleri.Repositories;
 using STYS.RestoranMenuUrunleri.Services;
 using STYS.RestoranSiparisleri.Repositories;
 using STYS.RestoranSiparisleri.Services;
+using STYS.RestoranYonetimi.Services;
 using STYS.RestoranOdemeleri.Repositories;
 using STYS.RestoranOdemeleri.Services;
 using STYS.MusteriMenu.Services;
@@ -101,6 +102,7 @@ builder.Services.AddScoped<IRestoranSiparisService, RestoranSiparisService>();
 builder.Services.AddScoped<IRestoranOdemeService, RestoranOdemeService>();
 builder.Services.AddScoped<IMusteriMenuService, MusteriMenuService>();
 builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
+builder.Services.AddScoped<IRestoranErisimService, RestoranErisimService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddSignalR();
 

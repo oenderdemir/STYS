@@ -11,6 +11,7 @@ public class RestoranSiparisKalemiDto
     public decimal BirimFiyat { get; set; }
     public decimal Miktar { get; set; }
     public decimal SatirToplam { get; set; }
+    public string Durum { get; set; } = string.Empty;
     public string? Notlar { get; set; }
 }
 

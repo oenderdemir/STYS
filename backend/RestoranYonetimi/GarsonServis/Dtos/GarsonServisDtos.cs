@@ -21,6 +21,7 @@ public class MasaOturumuKalemiDto
     public decimal BirimFiyat { get; set; }
     public decimal Miktar { get; set; }
     public decimal SatirToplam { get; set; }
+    public string Durum { get; set; } = string.Empty;
     public string? Notlar { get; set; }
 }
 
@@ -59,6 +60,8 @@ public class UpdateMasaOturumuKalemiRequest
 {
     [Range(0, 99999)]
     public decimal Miktar { get; set; }
+
+    public string? Durum { get; set; }
 
     public string? Notlar { get; set; }
 }

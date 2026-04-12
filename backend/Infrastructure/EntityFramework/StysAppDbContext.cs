@@ -1314,6 +1314,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
             entity.Property(x => x.Miktar).HasPrecision(18, 2);
             entity.Property(x => x.SatirToplam).HasPrecision(18, 2);
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired().HasDefaultValue(RestoranSiparisKalemDurumlari.Beklemede);
             entity.Property(x => x.Notlar).HasMaxLength(512);
             entity.HasIndex(x => x.RestoranSiparisId)
                 .HasFilter("[IsDeleted] = 0");

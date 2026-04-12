@@ -26,6 +26,7 @@ using STYS.RestoranSiparisleri.Repositories;
 using STYS.RestoranSiparisleri.Services;
 using STYS.RestoranOdemeleri.Repositories;
 using STYS.RestoranOdemeleri.Services;
+using STYS.MusteriMenu.Services;
 using STYS.YoneticiAdaylari.Services;
 using TOD.Platform.AspNetCore;
 using TOD.Platform.AspNetCore.Authorization;
@@ -97,6 +98,7 @@ builder.Services.AddScoped<IRestoranMenuKategoriService, RestoranMenuKategoriSer
 builder.Services.AddScoped<IRestoranMenuUrunService, RestoranMenuUrunService>();
 builder.Services.AddScoped<IRestoranSiparisService, RestoranSiparisService>();
 builder.Services.AddScoped<IRestoranOdemeService, RestoranOdemeService>();
+builder.Services.AddScoped<IMusteriMenuService, MusteriMenuService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddSignalR();
 

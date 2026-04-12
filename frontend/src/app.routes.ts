@@ -45,6 +45,7 @@ import { RestoranMasaYonetimi } from './app/pages/restoran-yonetimi/restoran-mas
 import { RestoranMenuYonetimi } from './app/pages/restoran-yonetimi/restoran-menu-yonetimi';
 import { RestoranKategoriHavuzuYonetimi } from './app/pages/restoran-yonetimi/restoran-kategori-havuzu-yonetimi';
 import { RestoranSiparisYonetimi } from './app/pages/restoran-yonetimi/restoran-siparis-yonetimi';
+import { MusteriMenuPage } from './app/pages/musteri-menu/musteri-menu';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
@@ -60,6 +61,7 @@ export const appRoutes: Routes = [
             { path: '', component: KampBasvuruPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurusu'] } }
         ]
     },
+    { path: 'musteri-menu/:restoranId', component: MusteriMenuPage, data: { breadcrumb: ['Musteri Menusu'] } },
     {
         path: '',
         component: AppLayout,

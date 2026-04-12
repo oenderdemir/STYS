@@ -1,0 +1,104 @@
+<div class="musteri-menu-page">
+    <ng-container *ngIf="loading; else loadedState">
+        <section class="menu-hero">
+            <p-skeleton width="16rem" height="2rem"></p-skeleton>
+            <p-skeleton width="24rem" height="1rem"></p-skeleton>
+        </section>
+        <section class="menu-toolbar">
+            <p-skeleton width="100%" height="2.5rem"></p-skeleton>
+        </section>
+        <section class="menu-grid">
+            <p-card *ngFor="let _ of [1, 2, 3, 4, 5, 6]">
+                <ng-template pTemplate="content">
+                    <p-skeleton width="70%" height="1.2rem"></p-skeleton>
+                    <p-skeleton width="100%" height="0.9rem" styleClass="mt-2"></p-skeleton>
+                    <p-skeleton width="45%" height="0.9rem" styleClass="mt-2"></p-skeleton>
+                </ng-template>
+            </p-card>
+        </section>
+    </ng-container>
+
+    <ng-template #loadedState>
+        <section class="menu-error" *ngIf="errorMessage; else menuState">
+            <p-tag severity="danger" [value]="errorMessage"></p-tag>
+        </section>
+
+        <ng-template #menuState>
+            <ng-container *ngIf="menu as m">
+                <section class="menu-hero">
+                    <h1>{{ m.restoran.ad }} Menu</h1>
+                    <p *ngIf="m.restoran.aciklama">{{ m.restoran.aciklama }}</p>
+                </section>
+
+                <section class="menu-toolbar">
+                    <div class="kategori-scroll">
+                        <p-chip
+                            label="Tum Urunler"
+                            [styleClass]="seciliKategoriId === null ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
+                            (click)="selectKategori(null)"></p-chip>
+                        <p-chip
+                            *ngFor="let kategori of m.kategoriler; trackBy: trackByKategoriId"
+                            [label]="kategori.ad"
+                            [styleClass]="seciliKategoriId === kategori.id ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
+                            (click)="selectKategori(kategori.id)"></p-chip>
+                    </div>
+                    <div class="arama-alani">
+                        <input pInputText class="w-full" [(ngModel)]="aramaMetni" (ngModelChange)="onAramaDegisti()" placeholder="Menu icinde ara..." />
+                    </div>
+                </section>
+
+                <section class="menu-kategori" *ngFor="let kategori of gorunenKategoriler; trackBy: trackByKategoriId">
+                    <div class="menu-kategori__header">
+                        <h2>{{ kategori.ad }}</h2>
+                        <p-tag [value]="kategori.urunler.length + ' urun'" severity="secondary"></p-tag>
+                    </div>
+                    <p-divider></p-divider>
+                    <div class="menu-grid">
+                        <p-card class="urun-kart" *ngFor="let urun of kategori.urunler; trackBy: trackByUrunId">
+                            <div class="urun-gorsel-wrap">
+                                <img class="urun-gorsel" [src]="getUrunGorselUrl(urun)" [alt]="urun.ad" loading="lazy" (error)="onUrunGorselHata($event)" />
+                            </div>
+                            <ng-template pTemplate="title">{{ urun.ad }}</ng-template>
+                            <ng-template pTemplate="subtitle">
+                                <div class="urun-kategori">{{ kategori.ad }}</div>
+                            </ng-template>
+                            <ng-template pTemplate="content">
+                                <p class="urun-aciklama">{{ urun.aciklama || 'Aciklama bulunmuyor.' }}</p>
+                                <div class="urun-alt">
+                                    <span class="urun-fiyat">{{ urun.fiyat | number:'1.2-2' }} {{ urun.paraBirimi }}</span>
+                                    <p-tag *ngIf="urun.hazirlamaSuresiDakika > 0" [value]="urun.hazirlamaSuresiDakika + ' dk'" severity="info"></p-tag>
+                                </div>
+                            </ng-template>
+                            <ng-template pTemplate="footer">
+                                <p-button label="Detay" icon="pi pi-eye" severity="secondary" [outlined]="true" size="small" (onClick)="openUrunDetay(urun)"></p-button>
+                            </ng-template>
+                        </p-card>
+                    </div>
+                </section>
+            </ng-container>
+        </ng-template>
+    </ng-template>
+</div>
+
+<p-dialog
+    [(visible)]="urunDetayDialogVisible"
+    [modal]="true"
+    [closable]="true"
+    [style]="{ width: '30rem', 'max-width': '95vw' }"
+    [header]="seciliUrun?.ad || 'Urun Detayi'">
+    <div class="urun-detay" *ngIf="seciliUrun as urun">
+        <div class="urun-detay__gorsel-wrap">
+            <img class="urun-detay__gorsel" [src]="getUrunGorselUrl(urun)" [alt]="urun.ad" (error)="onUrunGorselHata($event)" />
+        </div>
+        <p-tag severity="secondary" [value]="getKategoriAdi(urun.kategoriId)"></p-tag>
+        <p class="urun-detay__aciklama">{{ urun.aciklama || 'Aciklama bulunmuyor.' }}</p>
+        <div class="urun-detay__satir">
+            <span>Fiyat</span>
+            <strong>{{ urun.fiyat | number:'1.2-2' }} {{ urun.paraBirimi }}</strong>
+        </div>
+        <div class="urun-detay__satir">
+            <span>Hazirlama Suresi</span>
+            <strong>{{ urun.hazirlamaSuresiDakika }} dk</strong>
+        </div>
+    </div>
+</p-dialog>

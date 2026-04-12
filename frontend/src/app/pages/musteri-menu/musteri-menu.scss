@@ -1,0 +1,231 @@
+.musteri-menu-page {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.menu-hero {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--surface-border, #e5e7eb);
+    border-radius: 0.9rem;
+    padding: 0.9rem 1rem;
+}
+
+.menu-hero h1 {
+    margin: 0;
+    font-size: 1.85rem;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+}
+
+.menu-hero p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+}
+
+.menu-toolbar {
+    display: grid;
+    gap: 0.6rem;
+    background: var(--surface-card, #fff);
+    border: 1px solid var(--surface-border, #e5e7eb);
+    border-radius: 0.9rem;
+    padding: 0.65rem 0.75rem;
+}
+
+.kategori-scroll {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+    scrollbar-width: thin;
+}
+
+.kategori-chip {
+    cursor: pointer;
+    white-space: nowrap;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.kategori-chip--active {
+    border-color: #16a34a;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.menu-kategori {
+    background: var(--surface-card, #fff);
+    border: 1px solid var(--surface-border, #e5e7eb);
+    border-radius: 0.9rem;
+    padding: 0.75rem;
+}
+
+.menu-kategori__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.menu-kategori__header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    letter-spacing: -0.01em;
+}
+
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.6rem;
+    align-items: stretch;
+}
+
+.urun-kart {
+    height: 100%;
+    border-radius: 0.85rem;
+    border: 1px solid #e2e8f0;
+}
+
+.urun-gorsel-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.7rem;
+    overflow: hidden;
+    background: #f1f5f9;
+    margin-bottom: 0.55rem;
+}
+
+.urun-gorsel {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.urun-kategori {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.urun-aciklama {
+    margin: 0.15rem 0 0;
+    color: #475569;
+    min-height: 2rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.urun-alt {
+    margin-top: 0.55rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.urun-fiyat {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.menu-error {
+    padding: 0.5rem;
+}
+
+.urun-detay {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.urun-detay__gorsel-wrap {
+    width: 100%;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #f1f5f9;
+}
+
+.urun-detay__gorsel {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    display: block;
+}
+
+.urun-detay__aciklama {
+    margin: 0;
+    color: #334155;
+}
+
+.urun-detay__satir {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.6rem;
+}
+
+/* PrimeNG card ic bosluklarini bu ekran icin daha kompakt tut */
+:host ::ng-deep .urun-kart .p-card-body {
+    padding: 0.8rem;
+}
+
+:host ::ng-deep .urun-kart .p-card-title {
+    font-size: 1.25rem;
+    line-height: 1.15;
+    margin-bottom: 0.15rem;
+}
+
+:host ::ng-deep .urun-kart .p-card-content {
+    padding: 0.25rem 0;
+}
+
+:host ::ng-deep .urun-kart .p-card-footer {
+    padding-top: 0.4rem;
+}
+
+@media (max-width: 1024px) {
+    .musteri-menu-page {
+        max-width: 100%;
+    }
+
+    .menu-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .musteri-menu-page {
+        padding: 0.5rem;
+        gap: 0.55rem;
+    }
+
+    .menu-hero {
+        padding: 0.75rem;
+    }
+
+    .menu-hero h1 {
+        font-size: 1.45rem;
+    }
+
+    .menu-toolbar {
+        padding: 0.55rem;
+    }
+
+    .menu-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .menu-kategori {
+        padding: 0.65rem;
+    }
+
+    .menu-kategori__header h2 {
+        font-size: 1.05rem;
+    }
+}

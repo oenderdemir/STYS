@@ -1642,3 +1642,91 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Build Sonuclari (Tur 49)
 - Frontend: BASARILI (`npm run build`)
+
+## Tur 50 - Musteri Dijital Menu Ekrani Eklendi
+
+### Yapilanlar
+- Musteri odakli sade dijital menu endpointi eklendi:
+  - `GET /api/musteri-menu/{restoranId}`
+  - sadece aktif restoran, aktif kategori ve aktif urunler doner.
+  - kategori siralamasi `SiraNo` + `Ad`.
+  - urun siralamasi `Ad`.
+- Yeni backend DTO/service/controller eklendi (minimum kapsam).
+- Yeni frontend ekran eklendi:
+  - route: `/musteri-menu/:restoranId`
+  - restoran ozet bilgi alani
+  - yatay kategori chip filtresi
+  - ad/aciklama bazli arama
+  - kart bazli urun listesi
+  - urun detay popup (kategori, fiyat, hazirlama suresi)
+  - mobil uyumlu stil
+- Mevcut admin/siparis akislari degistirilmedi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/MusteriMenu/Dtos/MusteriMenuDtos.cs
+- backend/RestoranYonetimi/MusteriMenu/Services/IMusteriMenuService.cs
+- backend/RestoranYonetimi/MusteriMenu/Services/MusteriMenuService.cs
+- backend/RestoranYonetimi/MusteriMenu/Controllers/MusteriMenuController.cs
+- backend/Program.cs
+- frontend/src/app/pages/musteri-menu/musteri-menu.model.ts
+- frontend/src/app/pages/musteri-menu/musteri-menu.service.ts
+- frontend/src/app/pages/musteri-menu/musteri-menu.ts
+- frontend/src/app/pages/musteri-menu/musteri-menu.html
+- frontend/src/app/pages/musteri-menu/musteri-menu.scss
+- frontend/src/app.routes.ts
+- changes.md
+
+### Build Sonuclari (Tur 50)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 51 - Musteri Menu Route Dogrudan Sayfaya Alindi
+
+### Yapilanlar
+- `musteri-menu` route'u `AppLayout` cocuk route yapisindan cikarilip dogrudan component route yapildi:
+  - `/musteri-menu/:restoranId` artik direkt `MusteriMenuPage` render eder.
+- Amac: URL ile direkt acilista sayfanin bos kalmasini/on yukleme sorunlarini engellemek.
+
+### Degisen Dosyalar
+- frontend/src/app.routes.ts
+- changes.md
+
+### Build Sonuclari (Tur 51)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 52 - Musteri Menu Ekrani Gorsel Sadelestirme ve Mobil Sıkılastirma
+
+### Yapilanlar
+- Musteri menu ekraninin genel bosluklari azaltildi, container merkezlenip max-genislik verildi.
+- Hero ve toolbar kartlari daha kompakt ve daha temiz gorunume alindi.
+- Kategori chip satiri ve kart araliklari sikilastirildi.
+- Urun karti ic padding ve tipografi PrimeNG card override ile optimize edildi.
+- Grid davranisi iyilestirildi:
+  - Desktop: daha dengeli kart dagilimi (`minmax(260px, 1fr)`)
+  - Tablet: 2 kolon
+  - Mobil: 1 kolon
+- Mobil breakpointlerde baslik/padding/section olculeri ayrica optimize edildi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/musteri-menu/musteri-menu.scss
+- changes.md
+
+### Build Sonuclari (Tur 52)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 53 - Musteri Menu Urun Kartlarina Kucuk Gorsel Eklendi
+
+### Yapilanlar
+- Urun kartlarina kucuk thumbnail gorsel alani eklendi.
+- Urun detay dialoguna da buyukce gorsel alani eklendi.
+- Gorseller `public/demo/images/product` altindaki mevcut gorsellerden urun id bazli otomatik seciliyor.
+- Gorsel yuklenemezse fallback olarak `product-placeholder.svg` kullaniliyor.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/musteri-menu/musteri-menu.ts
+- frontend/src/app/pages/musteri-menu/musteri-menu.html
+- frontend/src/app/pages/musteri-menu/musteri-menu.scss
+- changes.md
+
+### Build Sonuclari (Tur 53)
+- Frontend: BASARILI (`npm run build`)

@@ -105,4 +105,16 @@ export class RestoranYonetimiService {
             })
         );
     }
+
+    getGarsonAdaylari(): Observable<ManagerCandidateDto[]> {
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday/restoran-garsonlari`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Garson aday listesi alinamadi.');
+            })
+        );
+    }
 }

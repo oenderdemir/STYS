@@ -47,6 +47,14 @@ public class YoneticiAdayController : UIController
         return Ok(result);
     }
 
+    [HttpGet("restoran-garsonlari")]
+    [Permission(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir)]
+    public async Task<ActionResult<List<YoneticiAdayDto>>> GetRestoranGarsonAdaylari(CancellationToken cancellationToken)
+    {
+        var result = await _yoneticiAdayService.GetRestoranGarsonAdaylariAsync(cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("resepsiyonistler")]
     [Permission(StructurePermissions.TesisYonetimi.Manage)]
     public async Task<ActionResult<List<YoneticiAdayDto>>> GetResepsiyonistAdaylari(CancellationToken cancellationToken)

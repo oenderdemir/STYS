@@ -285,6 +285,8 @@ public static class StructurePermissions
         public const string BinaYoneticisiAtayabilir = "KullaniciAtama.BinaYoneticisiAtayabilir";
         public const string RestoranYoneticisiAtanabilir = "KullaniciAtama.RestoranYoneticisiAtanabilir";
         public const string RestoranYoneticisiAtayabilir = "KullaniciAtama.RestoranYoneticisiAtayabilir";
+        public const string RestoranGarsonuAtanabilir = "KullaniciAtama.RestoranGarsonuAtanabilir";
+        public const string RestoranGarsonuAtayabilir = "KullaniciAtama.RestoranGarsonuAtayabilir";
         public const string ResepsiyonistAtanabilir = "KullaniciAtama.ResepsiyonistAtanabilir";
         public const string ResepsiyonistAtayabilir = "KullaniciAtama.ResepsiyonistAtayabilir";
     }

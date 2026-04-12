@@ -82,6 +82,8 @@ public class AccessScopeProvider : IAccessScopeProvider
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir)
+                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir)
+                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir)))
                     || (ugr.Role.Domain == nameof(StructurePermissions.OdaTemizlikYonetimi)
@@ -102,6 +104,8 @@ public class AccessScopeProvider : IAccessScopeProvider
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir)
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir)
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir);
 

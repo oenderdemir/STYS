@@ -119,6 +119,13 @@ public class YoneticiAdayService : IYoneticiAdayService
             cancellationToken);
     }
 
+    public Task<List<YoneticiAdayDto>> GetRestoranGarsonAdaylariAsync(CancellationToken cancellationToken = default)
+    {
+        return GetScopedCandidatesByMarkerAsync(
+            StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir,
+            cancellationToken);
+    }
+
     public async Task<List<YoneticiAdayDto>> GetResepsiyonistAdaylariAsync(CancellationToken cancellationToken = default)
     {
         var receptionistCandidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(
@@ -172,6 +179,9 @@ public class YoneticiAdayService : IYoneticiAdayService
         var allBinaManagerUserIds = await GetUserIdsByTargetGroupMarkerAsync(
             StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
             cancellationToken);
+        var allRestoranGarsonUserIds = await GetUserIdsByTargetGroupMarkerAsync(
+            StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir,
+            cancellationToken);
         var allReceptionistUserIds = await GetUserIdsByTargetGroupMarkerAsync(
             StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
             cancellationToken);
@@ -194,6 +204,15 @@ public class YoneticiAdayService : IYoneticiAdayService
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var restoranGarsonUserIds = await (
+            from rg in _stysDbContext.RestoranGarsonlari
+            join r in _stysDbContext.Restoranlar on rg.RestoranId equals r.Id
+            where scope.TesisIds.Contains(r.TesisId)
+            select rg.UserId
+        )
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         var ownerAllowedTesisManagerUserIds = await GetOwnerAllowedUserIdsAsync(
             allTesisManagerUserIds,
             scope,
@@ -209,10 +228,17 @@ public class YoneticiAdayService : IYoneticiAdayService
             scope,
             cancellationToken);
 
+        var ownerAllowedRestoranGarsonUserIds = await GetOwnerAllowedUserIdsAsync(
+            allRestoranGarsonUserIds,
+            scope,
+            cancellationToken);
+
         return tesisManagerUserIds
             .Concat(ownerAllowedTesisManagerUserIds)
             .Concat(receptionistUserIds)
             .Concat(ownerAllowedReceptionistUserIds)
+            .Concat(restoranGarsonUserIds)
+            .Concat(ownerAllowedRestoranGarsonUserIds)
             .Concat(binaManagerUserIds)
             .Concat(ownerAllowedBinaManagerUserIds)
             .ToHashSet();

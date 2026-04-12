@@ -103,6 +103,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
+    public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
     public DbSet<RestoranMasa> RestoranMasalari => Set<RestoranMasa>();
     public DbSet<RestoranMenuKategori> RestoranMenuKategorileri => Set<RestoranMenuKategori>();
     public DbSet<RestoranMenuUrun> RestoranMenuUrunleri => Set<RestoranMenuUrun>();
@@ -1226,6 +1227,21 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.Restoran)
                 .WithMany(x => x.Yoneticiler)
+                .HasForeignKey(x => x.RestoranId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranGarson>(entity =>
+        {
+            entity.ToTable("RestoranGarsonlari", restoranSchema);
+            entity.HasIndex(x => new { x.RestoranId, x.UserId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UserId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Restoran)
+                .WithMany(x => x.Garsonlar)
                 .HasForeignKey(x => x.RestoranId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

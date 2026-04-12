@@ -24,28 +24,28 @@ import { AppFloatingConfigurator } from '../../layout/component/app.floatingconf
                 <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                     <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
                         <div class="text-center mb-8">
-                            <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome to STYS</div>
-                            <span class="text-muted-color font-medium">Sign in to continue</span>
+                            <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">STYS - Hoşgeldiniz</div>
+                            <span class="text-muted-color font-medium">Lütfen Giriş Yapınız</span>
                         </div>
 
                         <div>
-                            <label for="username1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Username</label>
+                            <label for="username1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Kullanıcı Adı</label>
                             <input
                                 pInputText
                                 id="username1"
                                 type="text"
-                                placeholder="Username"
+                                placeholder="Kullanıcı Adı"
                                 class="w-full md:w-120 mb-8"
                                 [(ngModel)]="userName"
                                 [disabled]="isSubmitting"
                                 (keyup.enter)="signIn()"
                             />
 
-                            <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Password</label>
+                            <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Parola</label>
                             <p-password
                                 id="password1"
                                 [(ngModel)]="password"
-                                placeholder="Password"
+                                placeholder="Parola"
                                 [toggleMask]="true"
                                 styleClass="mb-4"
                                 [fluid]="true"
@@ -54,19 +54,21 @@ import { AppFloatingConfigurator } from '../../layout/component/app.floatingconf
                                 (keyup.enter)="signIn()"
                             ></p-password>
 
+                            <!--
                             <div class="flex items-center justify-between mt-2 mb-4 gap-8">
                                 <div class="flex items-center">
                                     <p-checkbox [(ngModel)]="checked" id="rememberme1" binary class="mr-2"></p-checkbox>
                                     <label for="rememberme1">Remember me</label>
                                 </div>
                             </div>
+                            -->
 
                             @if (errorMessage) {
                                 <small class="block mb-4 text-red-500">{{ errorMessage }}</small>
                             }
 
                             <p-button
-                                [label]="isSubmitting ? 'Signing In...' : 'Sign In'"
+                                [label]="isSubmitting ? 'Kontrol Ediliyor...' : 'Giriş Yap'"
                                 styleClass="w-full"
                                 [disabled]="isSubmitting || !userName || !password"
                                 (onClick)="signIn()"

@@ -43,6 +43,7 @@ export class RestoranYonetimi implements OnInit {
     tesisler: TesisSecenekModel[] = [];
     isletmeAlanlari: RestoranIsletmeAlaniSecenekModel[] = [];
     yoneticiAdaylari: ManagerCandidateDto[] = [];
+    garsonAdaylari: ManagerCandidateDto[] = [];
     restoranlar: RestoranModel[] = [];
     selectedTesisId: number | null = null;
 
@@ -54,6 +55,10 @@ export class RestoranYonetimi implements OnInit {
 
     get canAssignRestoranYonetici(): boolean {
         return this.authService.hasPermission('KullaniciAtama.RestoranYoneticisiAtayabilir');
+    }
+
+    get canAssignRestoranGarsonu(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.RestoranGarsonuAtayabilir');
     }
 
     ngOnInit(): void {
@@ -95,6 +100,7 @@ export class RestoranYonetimi implements OnInit {
             tesisId: item.tesisId,
             isletmeAlaniId: item.isletmeAlaniId ?? null,
             yoneticiUserIds: item.yoneticiUserIds ? [...item.yoneticiUserIds] : [],
+            garsonUserIds: item.garsonUserIds ? [...item.garsonUserIds] : [],
             ad: item.ad,
             aciklama: item.aciklama ?? null,
             aktifMi: item.aktifMi
@@ -128,6 +134,7 @@ export class RestoranYonetimi implements OnInit {
             tesisId: this.model.tesisId,
             isletmeAlaniId: this.model.isletmeAlaniId ?? null,
             yoneticiUserIds: this.canAssignRestoranYonetici ? (this.model.yoneticiUserIds ?? []) : null,
+            garsonUserIds: this.canAssignRestoranGarsonu ? (this.model.garsonUserIds ?? []) : null,
             ad: this.model.ad.trim(),
             aciklama: this.model.aciklama?.trim() || null,
             aktifMi: this.model.aktifMi
@@ -218,8 +225,19 @@ export class RestoranYonetimi implements OnInit {
         }));
     }
 
+    get garsonSecenekleri(): Array<{ label: string; value: string }> {
+        return this.garsonAdaylari.map((item) => ({
+            value: item.id,
+            label: this.formatYoneticiLabel(item)
+        }));
+    }
+
     getYoneticiSayisi(item: RestoranModel): number {
         return item.yoneticiUserIds?.length ?? 0;
+    }
+
+    getGarsonSayisi(item: RestoranModel): number {
+        return item.garsonUserIds?.length ?? 0;
     }
 
     private loadData(): void {
@@ -227,17 +245,19 @@ export class RestoranYonetimi implements OnInit {
         forkJoin({
             tesisler: this.service.getTesisler(),
             restoranlar: this.service.getAll(this.selectedTesisId),
-            yoneticiAdaylari: this.canManage && this.canAssignRestoranYonetici ? this.service.getYoneticiAdaylari() : of([])
+            yoneticiAdaylari: this.canManage && this.canAssignRestoranYonetici ? this.service.getYoneticiAdaylari() : of([]),
+            garsonAdaylari: this.canManage && this.canAssignRestoranGarsonu ? this.service.getGarsonAdaylari() : of([])
         })
             .pipe(finalize(() => {
                 this.loading = false;
                 this.cdr.detectChanges();
             }))
             .subscribe({
-                next: ({ tesisler, restoranlar, yoneticiAdaylari }) => {
+                next: ({ tesisler, restoranlar, yoneticiAdaylari, garsonAdaylari }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.restoranlar = restoranlar;
                     this.yoneticiAdaylari = yoneticiAdaylari;
+                    this.garsonAdaylari = garsonAdaylari;
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
@@ -267,6 +287,7 @@ export class RestoranYonetimi implements OnInit {
             tesisId: 0,
             isletmeAlaniId: null,
             yoneticiUserIds: [],
+            garsonUserIds: [],
             ad: '',
             aciklama: null,
             aktifMi: true

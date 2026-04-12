@@ -39,6 +39,7 @@
             <th>Tesis</th>
             <th>Isletme Alani</th>
             <th>Yonetici Sayisi</th>
+            <th>Garson Sayisi</th>
             <th>Aciklama</th>
             <th>Durum</th>
             <th style="width: 12rem">Islem</th>
@@ -50,6 +51,7 @@
             <td>{{ getTesisAdi(item.tesisId) }}</td>
             <td>{{ getIsletmeAlaniAdi(item) }}</td>
             <td>{{ getYoneticiSayisi(item) }}</td>
+            <td>{{ getGarsonSayisi(item) }}</td>
             <td>{{ item.aciklama || '-' }}</td>
             <td>
                 <p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" />
@@ -118,6 +120,21 @@
                     [filter]="true"
                     appendTo="body"
                     placeholder="Yoneticileri secin" />
+            </div>
+        }
+        @if (canAssignRestoranGarsonu) {
+            <div class="col-span-12">
+                <label class="block font-medium mb-2">Restoran Garsonlari</label>
+                <p-multiselect
+                    class="w-full"
+                    [options]="garsonSecenekleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="model.garsonUserIds"
+                    [showClear]="true"
+                    [filter]="true"
+                    appendTo="body"
+                    placeholder="Garsonlari secin" />
             </div>
         }
         <div class="col-span-12 flex align-items-center gap-2">

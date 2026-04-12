@@ -1887,3 +1887,52 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Build Sonuclari (Tur 57)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 58 - Tesis Yoneticisi Restoran Garsonu Olusturma/Atama
+
+### Yapilanlar
+- Yeni rol/yetkiler eklendi:
+  - `KullaniciAtama.RestoranGarsonuAtanabilir`
+  - `KullaniciAtama.RestoranGarsonuAtayabilir`
+- Restoran-garson iliskisi eklendi:
+  - yeni tablo/entity: `RestoranGarsonlari` (`RestoranId`, `UserId`)
+- Restoran CRUD akisina garson atama eklendi:
+  - `CreateRestoranRequest` ve `UpdateRestoranRequest` icine `GarsonUserIds`
+  - restoran detay/liste DTO'suna `GarsonUserIds`
+- Yonetici aday endpointi genisletildi:
+  - `GET /ui/yoneticiaday/restoran-garsonlari`
+- Restoran erisim kapsaminda garson atamalari da dikkate alindi:
+  - restoran yoneticisi + garson atamasi olan kullanicilar yalnizca kendi restoranlarini gorur.
+- Frontend restoran yonetimi ekranina garson atama alani eklendi:
+  - aday cekme + coklu secim + liste kolonu (garson sayisi)
+
+### Migration
+- yeni migration: `20260412193000_AddRestoranGarsonlariAndPermissions`
+  - `[restoran].[RestoranGarsonlari]` tablosu olusturuldu
+  - unique/index/FK tanimlari eklendi
+  - yeni roller TODBase'e seed edildi
+  - rol-atama map seed SQL'i eklendi
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/AccessScope/AccessScopeProvider.cs
+- backend/RestoranYonetimi/Restoranlar/Entities/RestoranGarson.cs
+- backend/RestoranYonetimi/Restoranlar/Entities/Restoran.cs
+- backend/RestoranYonetimi/Restoranlar/Dtos/RestoranDtos.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/RestoranYonetimi/Services/RestoranErisimService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/YoneticiAdaylari/Services/IYoneticiAdayService.cs
+- backend/YoneticiAdaylari/Services/YoneticiAdayService.cs
+- backend/YoneticiAdaylari/Controllers/YoneticiAdayController.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412193000_AddRestoranGarsonlariAndPermissions.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 58)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)

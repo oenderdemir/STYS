@@ -9,6 +9,7 @@ export interface RestoranModel {
     isletmeAlaniId?: number | null;
     isletmeAlaniAdi?: string | null;
     yoneticiUserIds?: string[] | null;
+    garsonUserIds?: string[] | null;
     ad: string;
     aciklama?: string | null;
     aktifMi: boolean;
@@ -18,6 +19,7 @@ export interface CreateRestoranRequest {
     tesisId: number;
     isletmeAlaniId?: number | null;
     yoneticiUserIds?: string[] | null;
+    garsonUserIds?: string[] | null;
     ad: string;
     aciklama?: string | null;
     aktifMi: boolean;
@@ -27,6 +29,7 @@ export interface UpdateRestoranRequest {
     tesisId: number;
     isletmeAlaniId?: number | null;
     yoneticiUserIds?: string[] | null;
+    garsonUserIds?: string[] | null;
     ad: string;
     aciklama?: string | null;
     aktifMi: boolean;

@@ -25,6 +25,7 @@ public class Restoran : BaseEntity<int>
     public Tesis? Tesis { get; set; }
     public IsletmeAlani? IsletmeAlani { get; set; }
     public ICollection<RestoranYonetici> Yoneticiler { get; set; } = [];
+    public ICollection<RestoranGarson> Garsonlar { get; set; } = [];
 
     public ICollection<RestoranMasa> Masalar { get; set; } = [];
 

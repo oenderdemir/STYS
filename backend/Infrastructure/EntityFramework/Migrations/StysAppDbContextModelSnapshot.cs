@@ -3522,6 +3522,53 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("RestoranYoneticileri", "restoran");
                 });
 
+            modelBuilder.Entity("STYS.Restoranlar.Entities.RestoranGarson", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RestoranId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RestoranId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RestoranGarsonlari", "restoran");
+                });
+
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
                 {
                     b.Property<int>("Id")
@@ -5098,6 +5145,17 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("IsletmeAlani");
 
                     b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.RestoranGarson", b =>
+                {
+                    b.HasOne("STYS.Restoranlar.Entities.Restoran", "Restoran")
+                        .WithMany("Garsonlar")
+                        .HasForeignKey("RestoranId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restoran");
                 });
 
             modelBuilder.Entity("STYS.Restoranlar.Entities.RestoranYonetici", b =>

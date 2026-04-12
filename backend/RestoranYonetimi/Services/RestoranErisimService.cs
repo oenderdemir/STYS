@@ -78,6 +78,7 @@ public class RestoranErisimService : IRestoranErisimService
         var isAdmin = userPermissions.Contains(TodPlatformAuthorizationConstants.AdminPermission)
             || userPermissions.Any(x => x.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
         var canAssignRestaurantManagers = userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir);
+        var canAssignRestaurantWaiters = userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir);
 
         var assignedRestoranIds = await _dbContext.RestoranYoneticileri
             .Where(x => x.UserId == userId.Value)
@@ -85,7 +86,18 @@ public class RestoranErisimService : IRestoranErisimService
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        if (assignedRestoranIds.Count == 0 || isAdmin || canAssignRestaurantManagers)
+        var assignedRestoranIdsAsGarson = await _dbContext.RestoranGarsonlari
+            .Where(x => x.UserId == userId.Value)
+            .Select(x => x.RestoranId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        assignedRestoranIds = assignedRestoranIds
+            .Concat(assignedRestoranIdsAsGarson)
+            .Distinct()
+            .ToList();
+
+        if (assignedRestoranIds.Count == 0 || isAdmin || canAssignRestaurantManagers || canAssignRestaurantWaiters)
         {
             _unrestricted = true;
             return;

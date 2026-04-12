@@ -52,6 +52,7 @@ public class RestoranService : IRestoranService
             .Include(x => x.IsletmeAlani)
             .ThenInclude(x => x!.IsletmeAlaniSinifi)
             .Include(x => x.Yoneticiler)
+            .Include(x => x.Garsonlar)
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
@@ -66,6 +67,10 @@ public class RestoranService : IRestoranService
             {
                 dto.IsletmeAlaniAdi = BuildIsletmeAlaniAdi(entity.IsletmeAlani);
                 dto.YoneticiUserIds = entity.Yoneticiler
+                    .Select(x => x.UserId)
+                    .Distinct()
+                    .ToList();
+                dto.GarsonUserIds = entity.Garsonlar
                     .Select(x => x.UserId)
                     .Distinct()
                     .ToList();
@@ -123,6 +128,7 @@ public class RestoranService : IRestoranService
             .Include(x => x.IsletmeAlani)
             .ThenInclude(x => x!.IsletmeAlaniSinifi)
             .Include(x => x.Yoneticiler)
+            .Include(x => x.Garsonlar)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -133,6 +139,10 @@ public class RestoranService : IRestoranService
         var dto = _mapper.Map<RestoranDto>(entity);
         dto.IsletmeAlaniAdi = BuildIsletmeAlaniAdi(entity.IsletmeAlani);
         dto.YoneticiUserIds = entity.Yoneticiler
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToList();
+        dto.GarsonUserIds = entity.Garsonlar
             .Select(x => x.UserId)
             .Distinct()
             .ToList();
@@ -150,6 +160,7 @@ public class RestoranService : IRestoranService
         }
         await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
         var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: false, cancellationToken);
+        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: false, cancellationToken);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
         var exists = await _dbContext.Restoranlar.AnyAsync(x => x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
@@ -170,6 +181,12 @@ public class RestoranService : IRestoranService
                 {
                     UserId = x
                 })
+                .ToList(),
+            Garsonlar = (garsonUserIds ?? [])
+                .Select(x => new RestoranGarson
+                {
+                    UserId = x
+                })
                 .ToList()
         };
 
@@ -178,6 +195,7 @@ public class RestoranService : IRestoranService
 
         var dto = _mapper.Map<RestoranDto>(entity);
         dto.YoneticiUserIds = entity.Yoneticiler.Select(x => x.UserId).Distinct().ToList();
+        dto.GarsonUserIds = entity.Garsonlar.Select(x => x.UserId).Distinct().ToList();
         return dto;
     }
 
@@ -191,6 +209,9 @@ public class RestoranService : IRestoranService
         await _dbContext.Entry(entity)
             .Collection(x => x.Yoneticiler)
             .LoadAsync(cancellationToken);
+        await _dbContext.Entry(entity)
+            .Collection(x => x.Garsonlar)
+            .LoadAsync(cancellationToken);
 
         var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi, cancellationToken);
         if (!tesisExists)
@@ -199,6 +220,7 @@ public class RestoranService : IRestoranService
         }
         await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
         var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: true, cancellationToken);
+        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: true, cancellationToken);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
         var exists = await _dbContext.Restoranlar.AnyAsync(x => x.Id != id && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
@@ -215,6 +237,10 @@ public class RestoranService : IRestoranService
         if (yoneticiUserIds is not null)
         {
             SyncYoneticiler(entity, yoneticiUserIds);
+        }
+        if (garsonUserIds is not null)
+        {
+            SyncGarsonlar(entity, garsonUserIds);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -351,6 +377,56 @@ public class RestoranService : IRestoranService
         return normalizedManagerIds;
     }
 
+    private async Task<List<Guid>?> NormalizeAndValidateGarsonIdsAsync(
+        ICollection<Guid>? garsonUserIds,
+        bool preserveWhenNull,
+        CancellationToken cancellationToken)
+    {
+        await EnsureCanAssignForPayloadAsync(
+            garsonUserIds,
+            StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir,
+            preserveWhenNull);
+
+        if (garsonUserIds is null)
+        {
+            return preserveWhenNull ? null : [];
+        }
+
+        var normalizedGarsonIds = garsonUserIds
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (normalizedGarsonIds.Count == 0)
+        {
+            return [];
+        }
+
+        var existingUserIds = await _userRepository
+            .Where(x => normalizedGarsonIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var missingUserIds = normalizedGarsonIds.Except(existingUserIds).ToList();
+        if (missingUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen garsonlardan en az biri bulunamadi.", 400);
+        }
+
+        var garsonMarkerUserIds = await GetUsersMatchingMarkerAsync(
+            normalizedGarsonIds,
+            nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir),
+            cancellationToken);
+
+        var invalidGroupUserIds = normalizedGarsonIds.Except(garsonMarkerUserIds).ToList();
+        if (invalidGroupUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen kullanicilar restoran garsonu atanabilir bir grupta olmalidir.", 400);
+        }
+
+        return normalizedGarsonIds;
+    }
+
     private async Task EnsureCanAssignForPayloadAsync(
         ICollection<Guid>? userIds,
         string requiredPermission,
@@ -443,6 +519,36 @@ public class RestoranService : IRestoranService
             }
 
             entity.Yoneticiler.Add(new RestoranYonetici
+            {
+                UserId = desiredUserId
+            });
+        }
+    }
+
+    private void SyncGarsonlar(Restoran entity, IReadOnlyCollection<Guid> garsonUserIds)
+    {
+        entity.Garsonlar ??= [];
+
+        var byUserId = entity.Garsonlar.ToDictionary(x => x.UserId);
+        var desiredUserIds = garsonUserIds.ToHashSet();
+
+        var toDelete = entity.Garsonlar
+            .Where(x => !desiredUserIds.Contains(x.UserId))
+            .ToList();
+
+        if (toDelete.Count > 0)
+        {
+            _dbContext.RestoranGarsonlari.RemoveRange(toDelete);
+        }
+
+        foreach (var desiredUserId in desiredUserIds)
+        {
+            if (byUserId.ContainsKey(desiredUserId))
+            {
+                continue;
+            }
+
+            entity.Garsonlar.Add(new RestoranGarson
             {
                 UserId = desiredUserId
             });

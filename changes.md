@@ -1247,3 +1247,247 @@ Kamp Yonetimi (top-level, fa-campground)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
 - Frontend: BASARILI (`npm run build`)
 - Not: Backend build'de mevcut eski migration dosyasi nedeniyle 2 adet `CS8981` warning devam ediyor.
+
+## Tur 34 - Restoran Modulu Ornek Seed Verisi (Migration)
+
+### Yapilanlar
+- Restoran modulu frontend testlerini hizlandirmak icin yeni seed migration eklendi.
+- Migration, idempotent calisir:
+  - daha once ayni seed tag ile veri varsa yeniden ekleme yapmaz.
+- Seed kapsami:
+  - aktif ilk tesis icin 1 restoran (`Ana Restoran`)
+  - 5 masa (Musait/Rezerve/Kapali kombinasyonu)
+  - 3 menu kategorisi + 6 urun
+  - 2 siparis:
+    - 1 acik siparis (`Hazirlaniyor`, odemesiz)
+    - 1 tamamlanmis siparis (`Tamamlandi`, tam odenmis)
+  - 1 nakit odeme kaydi
+- `Down` migration, seed tag ile olusan restoran verilerini iliski sirasina gore temizler.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260410211500_SeedRestaurantModuleData.cs
+- changes.md
+
+## Tur 35 - Restoran Yetkilendirmesini Controller Bazinda Ayrisma
+
+### Yapilanlar
+- Restoran modulu icin tek bir `RezervasyonYonetimi.*` yetkisine bagli kalan yapi ayrildi.
+- Yeni permission domainleri eklendi:
+  - `RestoranYonetimi` (RestoranlarController)
+  - `RestoranMasaYonetimi` (RestoranMasalariController)
+  - `RestoranMenuYonetimi` (RestoranMenuKategorileriController + RestoranMenuUrunleriController)
+  - `RestoranSiparisYonetimi` (RestoranSiparisleriController)
+  - `RestoranOdemeYonetimi` (RestoranOdemeleriController)
+- Backend controller `[Permission(...)]` attributeleri yeni domainlere cekildi.
+- Frontend tarafinda restoran ekranlarinin `canManage` kontrolleri yeni permission adlariyla guncellendi.
+- Restoran runtime menusu role mappingleri yeni menu permission'larina cekildi:
+  - `RestoranYonetimi.Menu`
+  - `RestoranMasaYonetimi.Menu`
+  - `RestoranMenuYonetimi.Menu`
+  - `RestoranSiparisYonetimi.Menu`
+- Siparis ekraninda odeme aksiyonlari icin ayri `RestoranOdemeYonetimi.Manage` kontrolu eklendi.
+- Yeni migration eklendi:
+  - `20260410214500_AddRestaurantControllerScopedPermissions`
+  - 5 domain x 3 role (`Menu/View/Manage`) olusturur
+  - Admin ve TesisManager gruplarina bu rolleri atar
+  - `Down` tarafinda ilgili role/grup baglantilarini temizler.
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/RestoranYonetimi/Restoranlar/Controllers/RestoranlarController.cs
+- backend/RestoranYonetimi/RestoranMasalari/Controllers/RestoranMasalariController.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Controllers/RestoranMenuKategorileriController.cs
+- backend/RestoranYonetimi/RestoranMenuUrunleri/Controllers/RestoranMenuUrunleriController.cs
+- backend/RestoranYonetimi/RestoranSiparisleri/Controllers/RestoranSiparisleriController.cs
+- backend/RestoranYonetimi/RestoranOdemeleri/Controllers/RestoranOdemeleriController.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260410214500_AddRestaurantControllerScopedPermissions.cs
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-masa-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-siparis-yonetimi.ts
+- changes.md
+
+## Tur 36 - Restoran Menusunu Top-Level Yapma + Tum Tesislere Restoran ve Ortak Kategori/Urun Seed
+
+### Yapilanlar
+- Restoran menusu, Isletme altina enjekte edilmek yerine dogrudan top-level (`Restoran`) olarak sabitlendi.
+- Eger top-level `Restoran` menusu zaten varsa duplicate olusturulmadan child itemlar merge edilir.
+- Yeni seed migration eklendi:
+  - Tum aktif tesislerde `Ana Restoran` yoksa otomatik olusturur.
+  - Her aktif restoran icin standart masa seti seed eder.
+  - Ortak kategori sablonunu her restorana uygular (tekrar kullanilabilir kategori seti):
+    - Corbalar
+    - Ana Yemekler
+    - Tatlilar
+    - Icecekler
+  - Her kategoriye urun sablonu seed eder.
+  - Islem idempotenttir (var olan kayitlari tekrar eklemez).
+
+### Degisen Dosyalar
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- backend/Infrastructure/EntityFramework/Migrations/20260410223000_SeedRestaurantsForAllTesisWithSharedMenuTemplates.cs
+- changes.md
+
+## Tur 37 - Global Kategori Havuzu + Restoran Bazli Kategori Atama Ekrani
+
+### Yapilanlar
+- Restoran urun kategorilerini ust seviyeden yonetmek icin global kategori API'leri eklendi.
+- Mimariyi bozmamak icin mevcut `RestoranMenuKategorileri` tablosu uzerinden isim-bazli ortak kategori havuzu kullanildi.
+- Backend yeni endpointler:
+  - `GET /api/restoran-menu-kategorileri/global`
+  - `POST /api/restoran-menu-kategorileri/global`
+  - `PUT /api/restoran-menu-kategorileri/global/{id}`
+  - `DELETE /api/restoran-menu-kategorileri/global/{id}`
+  - `GET /api/restoran-menu-kategorileri/atama-baglam?restoranId=...`
+  - `PUT /api/restoran-menu-kategorileri/atamalar`
+- Atama davranisi:
+  - Restoran icin secilen global kategoriler aktif edilir (yoksa olusturulur),
+  - secilmeyen global kategoriler restoran tarafinda pasiflenir.
+- Frontend yeni ekran eklendi:
+  - `restoran-kategori-havuzu`
+  - Sol tarafta global kategori CRUD, sag tarafta restoran secip coklu kategori atama.
+- Route ve menu entegrasyonu tamamlandi:
+  - yeni route: `/restoran-kategori-havuzu`
+  - Restoran top-level menusu altina `Kategori Havuzu` eklendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Dtos/RestoranMenuKategoriDtos.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Services/IRestoranMenuKategoriService.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Services/RestoranMenuKategoriService.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Controllers/RestoranMenuKategorileriController.cs
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-kategori-havuzu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-kategori-havuzu-yonetimi.html
+- frontend/src/app/app.routes.ts
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- changes.md
+
+### Build Sonuclari (Tur 37)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 38 - Global Menu Kategori Tablosu + LINQ Translation Hata Duzeltmesi
+
+### Yapilanlar
+- Uretimde alinan hata giderildi:
+  - `RestoranMenuKategoriService` icindeki `GroupBy + projection` sorgusu SQL'e cevrilemedigi icin `InvalidOperationException` aliyordu.
+  - Global kategori listeleme akisinda EF GroupBy projection kaldirildi; SQL tabanli okuma kullanildi.
+- Talebe uygun sekilde ayri bir global kategori tablosu eklendi:
+  - yeni tablo: `restoran.MenuKategoriTanimlari`
+  - alanlar: `Ad`, `SiraNo`, `AktifMi` + audit/soft-delete kolonlari
+  - `Ad` uzerinde unique index (`IsDeleted = 0` filtreli)
+  - migration sirasinda mevcut `RestoranMenuKategorileri` verilerinden backfill yapildi.
+- Global kategori CRUD ve restoran bazli atama akisi bu yeni tabloya baglandi:
+  - global kategori listesi/artirma/guncelleme/pasifleme artik `MenuKategoriTanimlari` tablosunu esas aliyor.
+  - restoran kategori atamalarinda secilen global kategoriler restoran tarafinda aktifleniyor/olusturuluyor,
+    secilmeyenler pasifleniyor.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Services/RestoranMenuKategoriService.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260410235500_AddRestoranMenuKategoriTanimlariTable.cs
+- changes.md
+
+### Build Sonuclari (Tur 38)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 39 - Restoran Menusunun Alt Menulerde Tekrar Etmesini Duzeltme
+
+### Yapilanlar
+- `menu-runtime.service.ts` icindeki restoran menu enjeksiyonu sadece kok menu seviyesinde calisacak sekilde duzeltildi.
+- Alt menu agaclarinda tekrar tekrar `Restoran` root eklenmesi engellendi.
+
+### Degisen Dosyalar
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- changes.md
+
+## Tur 40 - Restoran ile Isletme Alani (RESTORAN) Iliskisi
+
+### Yapilanlar
+- `Restoran` varligina `IsletmeAlaniId` (nullable) iliskisi eklendi.
+- Sadece ayni tesis altindaki ve `IsletmeAlaniSinifi.Kod = RESTORAN` olan aktif isletme alanlarinin secilebilmesi backend tarafinda zorunlu kilindi.
+- Yeni endpoint eklendi:
+  - `GET /api/restoranlar/isletme-alanlari?tesisId=...`
+- Restoran listesi/detay DTO'su isletme alani adini da donecek sekilde genislendi.
+- Restoran yonetimi ekranina tesis secimine bagli `Isletme Alani (RESTORAN)` dropdown'u eklendi.
+- Migration eklendi:
+  - `20260412105205_AddRestoranIsletmeAlaniIliskisi`
+  - `restoran.Restoranlar` tablosuna `IsletmeAlaniId` kolonu + FK + index
+  - Mevcut restoranlar icin ayni tesis altinda uygun RESTORAN isletme alani backfill SQL'i eklendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/Restoranlar/Entities/Restoran.cs
+- backend/RestoranYonetimi/Restoranlar/Dtos/RestoranDtos.cs
+- backend/RestoranYonetimi/Restoranlar/Services/IRestoranService.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/RestoranYonetimi/Restoranlar/Controllers/RestoranlarController.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412105205_AddRestoranIsletmeAlaniIliskisi.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412105205_AddRestoranIsletmeAlaniIliskisi.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 40)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 41 - RESTORAN Isletme Alani Secenek Sorgusu LINQ Translation Duzeltmesi
+
+### Yapilanlar
+- `RestoranService.GetIsletmeAlaniSecenekleriAsync` icindeki `OrderBy` tarafinda SQL'e cevrilemeyen string formatlama kaldirildi.
+- Sorgu SQL tarafinda yalniz ham alanlari cekiyor, ad olusturma ve siralama bellek tarafinda yapiliyor.
+- `string.Format` kaynakli `could not be translated` hatasi giderildi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- changes.md
+
+## Tur 42 - Restoran Yoneticisi Atama Altyapisi
+
+### Yapilanlar
+- Restoran icin yonetici atama iliskisi eklendi:
+  - yeni entity: `RestoranYonetici` (`RestoranId`, `UserId`)
+  - `Restoran` ile bire-cok iliski
+  - unique kisit: ayni restorana ayni kullanici ikinci kez atanamaz
+- `Restoran` DTO/request modelleri yonetici listesi destekleyecek sekilde genislendi:
+  - `YoneticiUserIds`
+- Restoran servisinde yonetici atama kurallari eklendi:
+  - create/update isteklerinde kullanici id'leri normalize edilir
+  - var olmayan kullanici id'leri engellenir
+  - restoran yonetici listesi senkronize edilir (ekle/sil)
+- Restoran yonetim ekraninda yonetici secimi eklendi:
+  - dialog icinde `Restoran Yoneticileri` coklu secim alani
+  - listede `Yonetici Sayisi` kolonu
+- Yonetici adaylari icin restoran yetkili endpoint eklendi:
+  - `GET /ui/yoneticiaday/restoran-yoneticileri`
+- Migration eklendi:
+  - `20260412111830_AddRestoranYoneticileri`
+  - yeni tablo: `[restoran].[RestoranYoneticileri]`
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/Restoranlar/Entities/RestoranYonetici.cs
+- backend/RestoranYonetimi/Restoranlar/Entities/Restoran.cs
+- backend/RestoranYonetimi/Restoranlar/Dtos/RestoranDtos.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/YoneticiAdaylari/Services/IYoneticiAdayService.cs
+- backend/YoneticiAdaylari/Services/YoneticiAdayService.cs
+- backend/YoneticiAdaylari/Controllers/YoneticiAdayController.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412111830_AddRestoranYoneticileri.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412111830_AddRestoranYoneticileri.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.dto.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 42)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)

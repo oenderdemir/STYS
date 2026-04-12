@@ -11,6 +11,12 @@ using STYS.Kamp.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
 using STYS.MisafirTipleri.Entities;
+using STYS.Restoranlar.Entities;
+using STYS.RestoranMasalari.Entities;
+using STYS.RestoranMenuKategorileri.Entities;
+using STYS.RestoranMenuUrunleri.Entities;
+using STYS.RestoranSiparisleri.Entities;
+using STYS.RestoranOdemeleri.Entities;
 using STYS.OdaKullanimBloklari.Entities;
 using STYS.OdaOzellikleri.Entities;
 using STYS.OdaSiniflari.Entities;
@@ -95,6 +101,14 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonKonaklamaHakkiTuketimKaydi> RezervasyonKonaklamaHakkiTuketimKayitlari => Set<RezervasyonKonaklamaHakkiTuketimKaydi>();
     public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
+    public DbSet<Restoran> Restoranlar => Set<Restoran>();
+    public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
+    public DbSet<RestoranMasa> RestoranMasalari => Set<RestoranMasa>();
+    public DbSet<RestoranMenuKategori> RestoranMenuKategorileri => Set<RestoranMenuKategori>();
+    public DbSet<RestoranMenuUrun> RestoranMenuUrunleri => Set<RestoranMenuUrun>();
+    public DbSet<RestoranSiparis> RestoranSiparisleri => Set<RestoranSiparis>();
+    public DbSet<RestoranSiparisKalemi> RestoranSiparisKalemleri => Set<RestoranSiparisKalemi>();
+    public DbSet<RestoranOdeme> RestoranOdemeleri => Set<RestoranOdeme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -114,6 +128,7 @@ public class StysAppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("dbo");
+        const string restoranSchema = "restoran";
 
         modelBuilder.Entity<Country>(entity =>
         {
@@ -1175,6 +1190,174 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Rezervasyon)
                 .WithMany(x => x.Odemeler)
                 .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Restoran>(entity =>
+        {
+            entity.ToTable("Restoranlar", restoranSchema);
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => new { x.TesisId, x.Ad })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+            entity.HasIndex(x => x.IsletmeAlaniId)
+                .HasFilter("[IsDeleted] = 0 AND [IsletmeAlaniId] IS NOT NULL");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IsletmeAlani)
+                .WithMany()
+                .HasForeignKey(x => x.IsletmeAlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranYonetici>(entity =>
+        {
+            entity.ToTable("RestoranYoneticileri", restoranSchema);
+            entity.HasIndex(x => new { x.RestoranId, x.UserId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UserId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Restoran)
+                .WithMany(x => x.Yoneticiler)
+                .HasForeignKey(x => x.RestoranId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranMasa>(entity =>
+        {
+            entity.ToTable("RestoranMasalari", restoranSchema);
+            entity.Property(x => x.MasaNo).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.RestoranId, x.MasaNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            entity.HasOne(x => x.Restoran)
+                .WithMany(x => x.Masalar)
+                .HasForeignKey(x => x.RestoranId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranMenuKategori>(entity =>
+        {
+            entity.ToTable("RestoranMenuKategorileri", restoranSchema);
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.RestoranId, x.Ad })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+            entity.HasIndex(x => new { x.RestoranId, x.SiraNo })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Restoran)
+                .WithMany(x => x.MenuKategorileri)
+                .HasForeignKey(x => x.RestoranId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranMenuUrun>(entity =>
+        {
+            entity.ToTable("RestoranMenuUrunleri", restoranSchema);
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.Fiyat).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.HasIndex(x => new { x.RestoranMenuKategoriId, x.Ad })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.RestoranMenuKategori)
+                .WithMany(x => x.Urunler)
+                .HasForeignKey(x => x.RestoranMenuKategoriId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranSiparis>(entity =>
+        {
+            entity.ToTable("RestoranSiparisleri", restoranSchema);
+            entity.Property(x => x.SiparisNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.SiparisDurumu).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ToplamTutar).HasPrecision(18, 2);
+            entity.Property(x => x.OdenenTutar).HasPrecision(18, 2);
+            entity.Property(x => x.KalanTutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.OdemeDurumu).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Notlar).HasMaxLength(1024);
+            entity.HasIndex(x => x.SiparisNo)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RestoranId, x.SiparisTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RestoranMasaId, x.SiparisDurumu })
+                .HasFilter("[IsDeleted] = 0 AND [RestoranMasaId] IS NOT NULL");
+
+            entity.HasOne(x => x.Restoran)
+                .WithMany(x => x.Siparisler)
+                .HasForeignKey(x => x.RestoranId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RestoranMasa)
+                .WithMany(x => x.Siparisler)
+                .HasForeignKey(x => x.RestoranMasaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranSiparisKalemi>(entity =>
+        {
+            entity.ToTable("RestoranSiparisKalemleri", restoranSchema);
+            entity.Property(x => x.UrunAdiSnapshot).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
+            entity.Property(x => x.Miktar).HasPrecision(18, 2);
+            entity.Property(x => x.SatirToplam).HasPrecision(18, 2);
+            entity.Property(x => x.Notlar).HasMaxLength(512);
+            entity.HasIndex(x => x.RestoranSiparisId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.RestoranSiparis)
+                .WithMany(x => x.Kalemler)
+                .HasForeignKey(x => x.RestoranSiparisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RestoranMenuUrun)
+                .WithMany(x => x.SiparisKalemleri)
+                .HasForeignKey(x => x.RestoranMenuUrunId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RestoranOdeme>(entity =>
+        {
+            entity.ToTable("RestoranOdemeleri", restoranSchema);
+            entity.Property(x => x.OdemeTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.IslemReferansNo).HasMaxLength(64);
+            entity.HasIndex(x => new { x.RestoranSiparisId, x.OdemeTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.RestoranSiparisId, x.RezervasyonId, x.OdemeTipi })
+                .HasFilter("[IsDeleted] = 0 AND [RezervasyonId] IS NOT NULL");
+            entity.HasIndex(x => x.IslemReferansNo)
+                .HasFilter("[IsDeleted] = 0 AND [IslemReferansNo] IS NOT NULL");
+
+            entity.HasOne(x => x.RestoranSiparis)
+                .WithMany(x => x.Odemeler)
+                .HasForeignKey(x => x.RestoranSiparisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Rezervasyon)
+                .WithMany()
+                .HasForeignKey(x => x.RezervasyonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.RezervasyonOdeme)
+                .WithMany()
+                .HasForeignKey(x => x.RezervasyonOdemeId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

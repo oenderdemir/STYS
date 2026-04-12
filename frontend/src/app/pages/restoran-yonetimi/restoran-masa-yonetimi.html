@@ -1,0 +1,96 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Masa" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label class="block font-medium mb-2">Restoran</label>
+            <p-select
+                class="w-full"
+                [options]="restoranlar"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedRestoranId"
+                [showClear]="true"
+                placeholder="Tum Restoranlar"
+                [appendTo]="'body'"
+                (onChange)="onRestoranChange()" />
+        </div>
+    </div>
+</div>
+
+<p-table [value]="masalar" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '60rem' }">
+    <ng-template #caption>
+        <h5 class="m-0">Restoran Masa Yonetimi</h5>
+    </ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Restoran</th>
+            <th>Masa No</th>
+            <th>Kapasite</th>
+            <th>Durum</th>
+            <th>Aktiflik</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ getRestoranAdi(item.restoranId) }}</td>
+            <td>{{ item.masaNo }}</td>
+            <td>{{ item.kapasite }}</td>
+            <td><p-tag [value]="item.durum" [severity]="getMasaDurumSeverityValue(item.durum)" [rounded]="true" /></td>
+            <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+            <td>
+                <div class="flex gap-2">
+                    @if (canManage) {
+                        <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '36rem', 'max-width': '95vw' }"
+    [header]="dialogMode === 'edit' ? 'Masa Duzenle' : 'Yeni Masa'">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Restoran</label>
+            <p-select class="w-full" [options]="restoranlar" optionLabel="ad" optionValue="id" [(ngModel)]="model.restoranId" [appendTo]="'body'" [showClear]="false" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Masa No</label>
+            <input pInputText class="w-full" [(ngModel)]="model.masaNo" maxlength="32" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Kapasite</label>
+            <p-inputNumber class="w-full" [(ngModel)]="model.kapasite" [min]="1" [max]="1000" [showButtons]="true" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Durum</label>
+            <p-select class="w-full" [options]="masaDurumlari" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" [appendTo]="'body'" [showClear]="false" />
+        </div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 mt-4">
+            <input id="masaAktifMi" type="checkbox" [(ngModel)]="model.aktifMi" />
+            <label for="masaAktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>

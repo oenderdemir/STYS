@@ -1,0 +1,131 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Restoran" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label for="restoranTesisFiltre" class="block font-medium mb-2">Tesis</label>
+            <p-select
+                inputId="restoranTesisFiltre"
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedTesisId"
+                [showClear]="true"
+                placeholder="Tum Tesisler"
+                [appendTo]="'body'"
+                (onChange)="onTesisFilterChange()" />
+        </div>
+    </div>
+</div>
+
+<p-table [value]="restoranlar" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '60rem' }">
+    <ng-template #caption>
+        <h5 class="m-0">Restoran Yonetimi</h5>
+    </ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Ad</th>
+            <th>Tesis</th>
+            <th>Isletme Alani</th>
+            <th>Yonetici Sayisi</th>
+            <th>Aciklama</th>
+            <th>Durum</th>
+            <th style="width: 12rem">Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ item.ad }}</td>
+            <td>{{ getTesisAdi(item.tesisId) }}</td>
+            <td>{{ getIsletmeAlaniAdi(item) }}</td>
+            <td>{{ getYoneticiSayisi(item) }}</td>
+            <td>{{ item.aciklama || '-' }}</td>
+            <td>
+                <p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" />
+            </td>
+            <td>
+                <div class="flex gap-2">
+                    @if (canManage) {
+                        <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    }
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '36rem', 'max-width': '95vw' }"
+    [header]="dialogMode === 'edit' ? 'Restoran Duzenle' : 'Yeni Restoran'">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Tesis</label>
+            <p-select
+                class="w-full"
+                [options]="tesisler"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="model.tesisId"
+                [appendTo]="'body'"
+                [showClear]="false"
+                (onChange)="onDialogTesisChange()" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Isletme Alani (RESTORAN)</label>
+            <p-select
+                class="w-full"
+                [options]="isletmeAlanlari"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="model.isletmeAlaniId"
+                [appendTo]="'body'"
+                [showClear]="true"
+                placeholder="Seciniz"
+                [disabled]="!model.tesisId || model.tesisId <= 0" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Ad</label>
+            <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="200" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Aciklama</label>
+            <input pInputText class="w-full" [(ngModel)]="model.aciklama" maxlength="512" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Restoran Yoneticileri</label>
+            <p-multiselect
+                class="w-full"
+                [options]="yoneticiSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="model.yoneticiUserIds"
+                [showClear]="true"
+                [filter]="true"
+                appendTo="body"
+                placeholder="Yoneticileri secin" />
+        </div>
+        <div class="col-span-12 flex align-items-center gap-2">
+            <input id="restoranAktifMi" type="checkbox" [(ngModel)]="model.aktifMi" />
+            <label for="restoranAktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>

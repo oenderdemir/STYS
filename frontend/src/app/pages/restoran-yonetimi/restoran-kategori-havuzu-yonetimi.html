@@ -1,0 +1,113 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 lg:col-span-7">
+        <div class="card">
+            <div class="flex items-center justify-between mb-3">
+                <h5 class="m-0">Global Kategori Havuzu</h5>
+                @if (canManage) {
+                    <p-button label="Kategori Ekle" icon="pi pi-plus" size="small" (onClick)="openNewKategori()" />
+                }
+            </div>
+
+            <p-table [value]="globalKategoriler" [loading]="loading" dataKey="id">
+                <ng-template #header>
+                    <tr>
+                        <th>Ad</th>
+                        <th>Sira</th>
+                        <th>Restoran Sayisi</th>
+                        <th>Durum</th>
+                        <th style="width: 10rem">Islem</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.ad }}</td>
+                        <td>{{ item.siraNo }}</td>
+                        <td>{{ item.restoranSayisi }}</td>
+                        <td>
+                            <p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" />
+                        </td>
+                        <td>
+                            <div class="flex gap-2">
+                                @if (canManage) {
+                                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEditKategori(item)" />
+                                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteKategori(item)" />
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </div>
+
+    <div class="col-span-12 lg:col-span-5">
+        <div class="card">
+            <h5 class="m-0 mb-3">Restoran Kategori Atamalari</h5>
+
+            <div class="mb-3">
+                <label class="block font-medium mb-2">Restoran</label>
+                <p-select
+                    class="w-full"
+                    [options]="restoranlar"
+                    optionLabel="ad"
+                    optionValue="id"
+                    [(ngModel)]="selectedRestoranId"
+                    [showClear]="false"
+                    [appendTo]="'body'"
+                    placeholder="Restoran Secin"
+                    (onChange)="onRestoranChange()" />
+            </div>
+
+            <div class="mb-3">
+                <label class="block font-medium mb-2">Kategoriler</label>
+                <p-multiSelect
+                    class="w-full"
+                    [options]="globalKategoriler"
+                    optionLabel="ad"
+                    optionValue="id"
+                    [(ngModel)]="seciliGlobalKategoriIdleri"
+                    [filter]="true"
+                    [showClear]="true"
+                    [appendTo]="'body'"
+                    placeholder="Kategori Secin" />
+            </div>
+
+            @if (canManage) {
+                <div class="flex justify-end">
+                    <p-button label="Atamalari Kaydet" icon="pi pi-check" [loading]="atamaSaving" [disabled]="!selectedRestoranId" (onClick)="saveAtamalar()" />
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<p-dialog [(visible)]="kategoriDialogVisible" [modal]="true" [style]="{ width: '34rem', 'max-width': '95vw' }" [header]="kategoriDialogMode === 'edit' ? 'Global Kategori Duzenle' : 'Global Kategori Ekle'">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Ad</label>
+            <input pInputText class="w-full" [(ngModel)]="kategoriModel.ad" maxlength="128" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Sira No</label>
+            <p-inputNumber class="w-full" [(ngModel)]="kategoriModel.siraNo" [min]="0" [showButtons]="true" />
+        </div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 mt-4">
+            <input id="globalKategoriAktifMi" type="checkbox" [(ngModel)]="kategoriModel.aktifMi" />
+            <label for="globalKategoriAktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="kategoriDialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="saveKategori()" />
+    </ng-template>
+</p-dialog>

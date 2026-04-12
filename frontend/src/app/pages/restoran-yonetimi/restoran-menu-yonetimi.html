@@ -1,0 +1,162 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label class="block font-medium mb-2">Restoran</label>
+            <p-select
+                class="w-full"
+                [options]="restoranlar"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedRestoranId"
+                [showClear]="false"
+                [appendTo]="'body'"
+                placeholder="Restoran Secin"
+                (onChange)="onRestoranChange()" />
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 lg:col-span-5">
+        <div class="card">
+            <div class="flex items-center justify-between mb-3">
+                <h5 class="m-0">Kategoriler</h5>
+                @if (canManage) {
+                    <p-button label="Kategori Ekle" icon="pi pi-plus" size="small" (onClick)="openNewKategori()" [disabled]="!selectedRestoranId" />
+                }
+            </div>
+
+            <p-table [value]="kategoriler" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '32rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Ad</th>
+                        <th>Sira</th>
+                        <th>Durum</th>
+                        <th style="width: 10rem">Islem</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr [class.bg-blue-50]="selectedKategoriId === item.id">
+                        <td>
+                            <button type="button" class="p-link text-left" (click)="selectKategori(item.id!)">{{ item.ad }}</button>
+                        </td>
+                        <td>{{ item.siraNo }}</td>
+                        <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+                        <td>
+                            <div class="flex gap-2">
+                                @if (canManage) {
+                                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEditKategori(item)" />
+                                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteKategori(item)" />
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </div>
+
+    <div class="col-span-12 lg:col-span-7">
+        <div class="card">
+            <div class="flex items-center justify-between mb-3">
+                <h5 class="m-0">Urunler</h5>
+                @if (canManage) {
+                    <p-button label="Urun Ekle" icon="pi pi-plus" size="small" (onClick)="openNewUrun()" [disabled]="!selectedKategoriId" />
+                }
+            </div>
+
+            <p-table [value]="selectedKategoriUrunleri" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '40rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Ad</th>
+                        <th>Fiyat</th>
+                        <th>Sure</th>
+                        <th>Durum</th>
+                        <th style="width: 10rem">Islem</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.ad }}</td>
+                        <td>{{ item.fiyat | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+                        <td>{{ item.hazirlamaSuresiDakika }} dk</td>
+                        <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+                        <td>
+                            <div class="flex gap-2">
+                                @if (canManage) {
+                                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEditUrun(item)" />
+                                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteUrun(item)" />
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </div>
+</div>
+
+<p-dialog [(visible)]="kategoriDialogVisible" [modal]="true" [style]="{ width: '34rem', 'max-width': '95vw' }" [header]="kategoriDialogMode === 'edit' ? 'Kategori Duzenle' : 'Yeni Kategori'">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Ad</label>
+            <input pInputText class="w-full" [(ngModel)]="kategoriModel.ad" maxlength="128" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Sira No</label>
+            <p-inputNumber class="w-full" [(ngModel)]="kategoriModel.siraNo" [min]="0" [showButtons]="true" />
+        </div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 mt-4">
+            <input id="kategoriAktifMi" type="checkbox" [(ngModel)]="kategoriModel.aktifMi" />
+            <label for="kategoriAktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="kategoriDialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="savingKategori" (onClick)="saveKategori()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="urunDialogVisible" [modal]="true" [style]="{ width: '38rem', 'max-width': '95vw' }" [header]="urunDialogMode === 'edit' ? 'Urun Duzenle' : 'Yeni Urun'">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Ad</label>
+            <input pInputText class="w-full" [(ngModel)]="urunModel.ad" maxlength="128" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Aciklama</label>
+            <input pInputText class="w-full" [(ngModel)]="urunModel.aciklama" maxlength="512" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Fiyat</label>
+            <p-inputNumber class="w-full" [(ngModel)]="urunModel.fiyat" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Para Birimi</label>
+            <p-select class="w-full" [options]="paraBirimiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="urunModel.paraBirimi" [appendTo]="'body'" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Hazirlama (dk)</label>
+            <p-inputNumber class="w-full" [(ngModel)]="urunModel.hazirlamaSuresiDakika" [min]="0" [showButtons]="true" />
+        </div>
+        <div class="col-span-12 flex align-items-center gap-2">
+            <input id="urunAktifMi" type="checkbox" [(ngModel)]="urunModel.aktifMi" />
+            <label for="urunAktifMi">Aktif</label>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="urunDialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="savingUrun" (onClick)="saveUrun()" />
+    </ng-template>
+</p-dialog>

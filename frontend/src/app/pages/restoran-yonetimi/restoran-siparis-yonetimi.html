@@ -1,0 +1,266 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        @if (canManage) {
+            <p-button label="Yeni Siparis" icon="pi pi-plus" class="mr-2" (onClick)="openCreateDialog()" [disabled]="!selectedRestoranId" />
+        }
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
+    </ng-template>
+</p-toolbar>
+
+<div class="card mb-4">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label class="block font-medium mb-2">Restoran</label>
+            <p-select class="w-full" [options]="restoranlar" optionLabel="ad" optionValue="id" [(ngModel)]="selectedRestoranId" [appendTo]="'body'" [showClear]="false" (onChange)="onRestoranChange()" />
+        </div>
+        <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label class="block font-medium mb-2">Masa Filtresi</label>
+            <p-select
+                class="w-full"
+                [options]="availableMasalar"
+                optionLabel="masaNo"
+                optionValue="id"
+                [(ngModel)]="selectedMasaId"
+                [appendTo]="'body'"
+                [showClear]="true"
+                placeholder="Tum Masalar"
+                (onChange)="onMasaFilterChange()" />
+        </div>
+    </div>
+</div>
+
+<p-table [value]="siparisler" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '75rem' }">
+    <ng-template #caption>
+        <h5 class="m-0">Restoran Siparis Yonetimi</h5>
+    </ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Siparis No</th>
+            <th>Masa</th>
+            <th>Durum</th>
+            <th>Odeme</th>
+            <th>Toplam</th>
+            <th>Odenen</th>
+            <th>Kalan</th>
+            <th>Tarih</th>
+            <th style="width: 10rem">Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ item.siparisNo }}</td>
+            <td>{{ getMasaAdi(item.restoranMasaId) }}</td>
+            <td><p-tag [value]="item.siparisDurumu" [severity]="getSiparisDurumSeverityValue(item.siparisDurumu)" [rounded]="true" /></td>
+            <td><p-tag [value]="item.odemeDurumu" [severity]="getOdemeDurumSeverityValue(item.odemeDurumu)" [rounded]="true" /></td>
+            <td>{{ item.toplamTutar | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+            <td>{{ item.odenenTutar | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+            <td>{{ item.kalanTutar | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+            <td>{{ item.siparisTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+            <td>
+                <p-button label="Detay" icon="pi pi-eye" size="small" severity="secondary" [outlined]="true" (onClick)="openDetail(item)" />
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '72rem', 'max-width': '98vw' }" header="Yeni Siparis">
+    <div class="grid grid-cols-12 gap-3 mb-3">
+        <div class="col-span-12 md:col-span-3">
+            <label class="block font-medium mb-2">Masa</label>
+            <p-select class="w-full" [options]="availableMasalar" optionLabel="masaNo" optionValue="id" [(ngModel)]="createModel.restoranMasaId" [appendTo]="'body'" [showClear]="true" placeholder="Masa Secin" />
+        </div>
+        <div class="col-span-12 md:col-span-3">
+            <label class="block font-medium mb-2">Para Birimi</label>
+            <p-select class="w-full" [options]="paraBirimiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="createModel.paraBirimi" [appendTo]="'body'" [showClear]="false" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Not</label>
+            <input pInputText class="w-full" [(ngModel)]="createModel.notlar" maxlength="1024" />
+        </div>
+    </div>
+
+    <p-table [value]="createKalemler" [tableStyle]="{ 'min-width': '64rem' }">
+        <ng-template #header>
+            <tr>
+                <th>Urun</th>
+                <th>Miktar</th>
+                <th>Not</th>
+                <th>Satir Toplam</th>
+                <th style="width: 6rem">Islem</th>
+            </tr>
+        </ng-template>
+        <ng-template #body let-line let-i="rowIndex">
+            <tr>
+                <td>
+                    <p-select class="w-full" [options]="urunler" optionLabel="ad" optionValue="id" [(ngModel)]="line.restoranMenuUrunId" [appendTo]="'body'" [showClear]="false" placeholder="Urun Secin" />
+                </td>
+                <td>
+                    <p-inputNumber class="w-full" [(ngModel)]="line.miktar" [min]="1" [showButtons]="true" />
+                </td>
+                <td>
+                    <input pInputText class="w-full" [(ngModel)]="line.notlar" />
+                </td>
+                <td>{{ getUrunFiyat(line) | number: '1.2-2' }} {{ createModel.paraBirimi }}</td>
+                <td>
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="removeKalemLine(i)" [disabled]="createKalemler.length <= 1" />
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+
+    <div class="flex items-center justify-between mt-3">
+        <p-button label="Kalem Ekle" icon="pi pi-plus" severity="secondary" [outlined]="true" (onClick)="addKalemLine()" />
+        <div class="text-lg font-semibold">Toplam: {{ createToplamTutar | number: '1.2-2' }} {{ createModel.paraBirimi }}</div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="createDialogVisible = false" />
+        <p-button label="Siparis Olustur" icon="pi pi-check" [loading]="saving" (onClick)="saveSiparis()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="detailDialogVisible" [modal]="true" [style]="{ width: '78rem', 'max-width': '98vw' }" header="Siparis Detayi">
+    @if (selectedSiparis) {
+        <div class="grid grid-cols-12 gap-3 mb-3">
+            <div class="col-span-12 md:col-span-4"><strong>Siparis No:</strong> {{ selectedSiparis.siparisNo }}</div>
+            <div class="col-span-12 md:col-span-4"><strong>Masa:</strong> {{ getMasaAdi(selectedSiparis.restoranMasaId) }}</div>
+            <div class="col-span-12 md:col-span-4"><strong>Tarih:</strong> {{ selectedSiparis.siparisTarihi | date: 'dd.MM.yyyy HH:mm' }}</div>
+        </div>
+
+        <p-tabs value="0">
+            <p-tablist>
+                <p-tab value="0">Kalemler</p-tab>
+                <p-tab value="1">Odeme</p-tab>
+            </p-tablist>
+            <p-tabpanels>
+            <p-tabpanel value="0">
+                <p-table [value]="selectedSiparis.kalemler" [tableStyle]="{ 'min-width': '56rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Urun</th>
+                            <th>Birim Fiyat</th>
+                            <th>Miktar</th>
+                            <th>Satir Toplam</th>
+                            <th>Not</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-kalem>
+                        <tr>
+                            <td>{{ kalem.urunAdiSnapshot }}</td>
+                            <td>{{ kalem.birimFiyat | number: '1.2-2' }} {{ selectedSiparis.paraBirimi }}</td>
+                            <td>{{ kalem.miktar }}</td>
+                            <td>{{ kalem.satirToplam | number: '1.2-2' }} {{ selectedSiparis.paraBirimi }}</td>
+                            <td>{{ kalem.notlar || '-' }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </p-tabpanel>
+
+            <p-tabpanel value="1">
+                @if (odemeOzeti) {
+                    <div class="grid grid-cols-12 gap-3 mb-3">
+                        <div class="col-span-12 md:col-span-3"><strong>Siparis Toplami:</strong><br />{{ odemeOzeti.siparisToplami | number: '1.2-2' }} {{ selectedSiparis.paraBirimi }}</div>
+                        <div class="col-span-12 md:col-span-3"><strong>Odenen:</strong><br />{{ odemeOzeti.odenenTutar | number: '1.2-2' }} {{ selectedSiparis.paraBirimi }}</div>
+                        <div class="col-span-12 md:col-span-3"><strong>Kalan:</strong><br />{{ odemeOzeti.kalanTutar | number: '1.2-2' }} {{ selectedSiparis.paraBirimi }}</div>
+                        <div class="col-span-12 md:col-span-3"><strong>Odeme Durumu:</strong><br /><p-tag [value]="odemeOzeti.odemeDurumu" [severity]="getOdemeDurumSeverityValue(odemeOzeti.odemeDurumu)" [rounded]="true" /></div>
+                    </div>
+
+                    <div class="grid grid-cols-12 gap-3 mb-3">
+                        <div class="col-span-12 md:col-span-4">
+                            <label class="block font-medium mb-2">Durum Guncelle</label>
+                            <p-select class="w-full" [options]="durumSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="selectedDurum" [appendTo]="'body'" [showClear]="false" />
+                        </div>
+                        <div class="col-span-12 md:col-span-2 flex align-items-end">
+                            <p-button label="Guncelle" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="guncelleDurum()" [disabled]="!canManage || paymentSaving" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-12 gap-3 mb-3">
+                        <div class="col-span-12 md:col-span-3">
+                            <label class="block font-medium mb-2">Odeme Tipi</label>
+                            <p-select class="w-full" [options]="odemeTipleri" optionLabel="label" optionValue="value" [(ngModel)]="odemeTipi" [appendTo]="'body'" [showClear]="false" [disabled]="!canTakePayment" />
+                        </div>
+                        <div class="col-span-12 md:col-span-3">
+                            <label class="block font-medium mb-2">Tutar</label>
+                            <p-inputNumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" [disabled]="!canTakePayment" />
+                        </div>
+                        <div class="col-span-12 md:col-span-4">
+                            <label class="block font-medium mb-2">Aciklama</label>
+                            <input pInputText class="w-full" [(ngModel)]="odemeAciklama" [disabled]="!canTakePayment" />
+                        </div>
+                        <div class="col-span-12 md:col-span-2 flex align-items-end gap-2">
+                            <p-button label="Odeme Al" icon="pi pi-money-bill" (onClick)="odemeAl()" [loading]="paymentSaving" [disabled]="!canTakePayment" />
+                            <p-button label="Odaya Ekle" icon="pi pi-home" severity="secondary" [outlined]="true" (onClick)="openOdayaEkleDialog()" [disabled]="!canTakePayment || !canManage" />
+                        </div>
+                    </div>
+
+                    <p-table [value]="odemeOzeti.odemeler" [tableStyle]="{ 'min-width': '56rem' }">
+                        <ng-template #header>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Tip</th>
+                                <th>Tutar</th>
+                                <th>Durum</th>
+                                <th>Aciklama</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template #body let-odeme>
+                            <tr>
+                                <td>{{ odeme.odemeTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                                <td>{{ odeme.odemeTipi }}</td>
+                                <td>{{ odeme.tutar | number: '1.2-2' }} {{ odeme.paraBirimi }}</td>
+                                <td>{{ odeme.durum }}</td>
+                                <td>{{ odeme.aciklama || '-' }}</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                }
+            </p-tabpanel>
+            </p-tabpanels>
+        </p-tabs>
+    }
+</p-dialog>
+
+<p-dialog [(visible)]="rezervasyonDialogVisible" [modal]="true" [style]="{ width: '52rem', 'max-width': '95vw' }" header="Odaya Ekle - Rezervasyon Secimi">
+    <div class="grid grid-cols-12 gap-3 mb-3">
+        <div class="col-span-12 md:col-span-8">
+            <label class="block font-medium mb-2">Ara (Oda No / Misafir / Rezervasyon No)</label>
+            <input pInputText class="w-full" [(ngModel)]="rezervasyonSearchTerm" (input)="searchRezervasyonlar()" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Tutar</label>
+            <p-inputNumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+        </div>
+    </div>
+
+    <p-table [value]="rezervasyonlar" dataKey="rezervasyonId" [tableStyle]="{ 'min-width': '48rem' }">
+        <ng-template #header>
+            <tr>
+                <th style="width: 4rem">Sec</th>
+                <th>Rezervasyon No</th>
+                <th>Misafir</th>
+                <th>Oda</th>
+                <th>Giris</th>
+                <th>Cikis</th>
+            </tr>
+        </ng-template>
+        <ng-template #body let-row>
+            <tr>
+                <td><input type="radio" name="rezSec" [value]="row.rezervasyonId" [(ngModel)]="selectedRezervasyonId" /></td>
+                <td>{{ row.referansNo }}</td>
+                <td>{{ row.misafirAdiSoyadi }}</td>
+                <td>{{ row.odaNo }}</td>
+                <td>{{ row.girisTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ row.cikisTarihi | date: 'dd.MM.yyyy' }}</td>
+            </tr>
+        </ng-template>
+    </p-table>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="rezervasyonDialogVisible = false" />
+        <p-button label="Odaya Ekle" icon="pi pi-check" [loading]="paymentSaving" (onClick)="confirmOdayaEkle()" [disabled]="!selectedRezervasyonId" />
+    </ng-template>
+</p-dialog>

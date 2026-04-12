@@ -76,22 +76,24 @@ export class MenuRuntimeService {
             });
     }
 
-    private mapMenuItems(menuTree: MenuItemDto[] | null | undefined): AppMenuItem[] {
+    private mapMenuItems(menuTree: MenuItemDto[] | null | undefined, injectRestaurant = true): AppMenuItem[] {
         if (!menuTree || menuTree.length === 0) {
-            return [];
+            return injectRestaurant ? this.injectRestaurantMenuItems([]) : [];
         }
 
-        return [...menuTree]
+        const mapped = [...menuTree]
             .sort((left, right) => (left.menuOrder ?? 0) - (right.menuOrder ?? 0))
             .map((menuItemDto) => this.mapMenuItem(menuItemDto, '/menu'))
             .filter((item): item is AppMenuItem => item !== null);
+
+        return injectRestaurant ? this.injectRestaurantMenuItems(mapped) : mapped;
     }
 
     private mapMenuItem(menuItemDto: MenuItemDto, parentPath: string): AppMenuItem | null {
         const itemKey = this.createPathKey(menuItemDto);
         const itemPath = `${parentPath}/${itemKey}`;
 
-        const children = this.mapMenuItems(menuItemDto.items);
+        const children = this.mapMenuItems(menuItemDto.items, false);
         const route = this.normalizeRoute(menuItemDto.route);
 
         if (!route && children.length === 0) {
@@ -224,6 +226,100 @@ export class MenuRuntimeService {
 
     private normalizePermission(permission: string): string {
         return permission.trim().toLowerCase();
+    }
+
+    private injectRestaurantMenuItems(items: AppMenuItem[]): AppMenuItem[] {
+        const restoranChildren: AppMenuItem[] = [
+            {
+                label: 'Restoran Yonetimi',
+                icon: 'pi pi-building',
+                routerLink: ['/restoran-yonetimi'],
+                roles: ['RestoranYonetimi.Menu'],
+                path: '/menu/restoran/yonetim'
+            },
+            {
+                label: 'Masa Yonetimi',
+                icon: 'pi pi-table',
+                routerLink: ['/restoran-masa-yonetimi'],
+                roles: ['RestoranMasaYonetimi.Menu'],
+                path: '/menu/restoran/masa'
+            },
+            {
+                label: 'Menu Yonetimi',
+                icon: 'pi pi-list',
+                routerLink: ['/restoran-menu-yonetimi'],
+                roles: ['RestoranMenuYonetimi.Menu'],
+                path: '/menu/restoran/menu'
+            },
+            {
+                label: 'Kategori Havuzu',
+                icon: 'pi pi-sitemap',
+                routerLink: ['/restoran-kategori-havuzu'],
+                roles: ['RestoranMenuYonetimi.Menu'],
+                path: '/menu/restoran/kategori-havuzu'
+            },
+            {
+                label: 'Siparis Yonetimi',
+                icon: 'pi pi-shopping-cart',
+                routerLink: ['/restoran-siparis-yonetimi'],
+                roles: ['RestoranSiparisYonetimi.Menu'],
+                path: '/menu/restoran/siparis'
+            }
+        ];
+
+        const restoranRoot: AppMenuItem = {
+            label: 'Restoran',
+            icon: 'pi pi-shop',
+            roles: ['RestoranYonetimi.Menu'],
+            path: '/menu/restoran',
+            items: restoranChildren
+        };
+
+        const restoranIndex = items.findIndex((item) => this.normalizeLabel(item.label) === 'restoran');
+        if (restoranIndex >= 0) {
+            const existing = items[restoranIndex];
+            const updated = [...items];
+            updated[restoranIndex] = {
+                ...existing,
+                icon: existing.icon ?? restoranRoot.icon,
+                roles: existing.roles?.length ? existing.roles : restoranRoot.roles,
+                items: this.mergeUniqueByLabel(existing.items ?? [], restoranChildren)
+            };
+            return updated;
+        }
+
+        return [...items, restoranRoot];
+    }
+
+    private mergeUniqueByLabel(base: AppMenuItem[], additions: AppMenuItem[]): AppMenuItem[] {
+        const existingKeys = new Set(base.map((item) => this.normalizeLabel(item.label)));
+        const merged = [...base];
+
+        for (const item of additions) {
+            const key = this.normalizeLabel(item.label);
+            if (!existingKeys.has(key)) {
+                merged.push(item);
+                existingKeys.add(key);
+            }
+        }
+
+        return merged;
+    }
+
+    private normalizeLabel(value: string | undefined): string {
+        if (!value) {
+            return '';
+        }
+
+        return value
+            .toLocaleLowerCase('tr-TR')
+            .replaceAll('ı', 'i')
+            .replaceAll('ş', 's')
+            .replaceAll('ğ', 'g')
+            .replaceAll('ç', 'c')
+            .replaceAll('ö', 'o')
+            .replaceAll('ü', 'u')
+            .trim();
     }
 }
 

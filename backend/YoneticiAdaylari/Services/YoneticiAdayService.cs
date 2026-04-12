@@ -112,6 +112,11 @@ public class YoneticiAdayService : IYoneticiAdayService
         return await QueryUsersAsCandidateDto(query, cancellationToken);
     }
 
+    public Task<List<YoneticiAdayDto>> GetRestoranYoneticiAdaylariAsync(CancellationToken cancellationToken = default)
+    {
+        return GetAllAsync(cancellationToken);
+    }
+
     public async Task<List<YoneticiAdayDto>> GetResepsiyonistAdaylariAsync(CancellationToken cancellationToken = default)
     {
         var receptionistCandidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(

@@ -234,6 +234,41 @@ public static class StructurePermissions
         public const string CustomIndirimGirebilir = "RezervasyonYonetimi.CustomIndirimGirebilir";
     }
 
+    public static class RestoranYonetimi
+    {
+        public const string Menu = "RestoranYonetimi.Menu";
+        public const string View = "RestoranYonetimi.View";
+        public const string Manage = "RestoranYonetimi.Manage";
+    }
+
+    public static class RestoranMasaYonetimi
+    {
+        public const string Menu = "RestoranMasaYonetimi.Menu";
+        public const string View = "RestoranMasaYonetimi.View";
+        public const string Manage = "RestoranMasaYonetimi.Manage";
+    }
+
+    public static class RestoranMenuYonetimi
+    {
+        public const string Menu = "RestoranMenuYonetimi.Menu";
+        public const string View = "RestoranMenuYonetimi.View";
+        public const string Manage = "RestoranMenuYonetimi.Manage";
+    }
+
+    public static class RestoranSiparisYonetimi
+    {
+        public const string Menu = "RestoranSiparisYonetimi.Menu";
+        public const string View = "RestoranSiparisYonetimi.View";
+        public const string Manage = "RestoranSiparisYonetimi.Manage";
+    }
+
+    public static class RestoranOdemeYonetimi
+    {
+        public const string Menu = "RestoranOdemeYonetimi.Menu";
+        public const string View = "RestoranOdemeYonetimi.View";
+        public const string Manage = "RestoranOdemeYonetimi.Manage";
+    }
+
     public static class IndirimKuraliYonetimi
     {
         public const string Menu = "IndirimKuraliYonetimi.Menu";

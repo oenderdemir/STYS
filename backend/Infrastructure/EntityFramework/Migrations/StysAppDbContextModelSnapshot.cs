@@ -2993,6 +2993,529 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("Odalar", "dbo");
                 });
 
+            modelBuilder.Entity("STYS.RestoranMasalari.Entities.RestoranMasa", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Durum")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Kapasite")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MasaNo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("RestoranId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestoranId", "MasaNo")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+                    b.ToTable("RestoranMasalari", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuKategorileri.Entities.RestoranMenuKategori", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RestoranId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SiraNo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestoranId", "Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+                    b.HasIndex("RestoranId", "SiraNo")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RestoranMenuKategorileri", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuUrunleri.Entities.RestoranMenuUrun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Fiyat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("HazirlamaSuresiDakika")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ParaBirimi")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<int>("RestoranMenuKategoriId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestoranMenuKategoriId", "Ad")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RestoranMenuUrunleri", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranOdemeleri.Entities.RestoranOdeme", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Durum")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("IslemReferansNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("OdemeTarihi")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OdemeTipi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ParaBirimi")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<int>("RestoranSiparisId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RezervasyonId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RezervasyonOdemeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Tutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IslemReferansNo")
+                        .HasFilter("[IsDeleted] = 0 AND [IslemReferansNo] IS NOT NULL");
+
+                    b.HasIndex("RezervasyonId");
+
+                    b.HasIndex("RezervasyonOdemeId");
+
+                    b.HasIndex("RestoranSiparisId", "OdemeTarihi")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RestoranSiparisId", "RezervasyonId", "OdemeTipi")
+                        .HasFilter("[IsDeleted] = 0 AND [RezervasyonId] IS NOT NULL");
+
+                    b.ToTable("RestoranOdemeleri", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranSiparisleri.Entities.RestoranSiparis", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("KalanTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notlar")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("OdemeDurumu")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<decimal>("OdenenTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ParaBirimi")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<int>("RestoranId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RestoranMasaId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SiparisDurumu")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("SiparisNo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("SiparisTarihi")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ToplamTutar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SiparisNo")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RestoranId", "SiparisTarihi")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RestoranMasaId", "SiparisDurumu")
+                        .HasFilter("[IsDeleted] = 0 AND [RestoranMasaId] IS NOT NULL");
+
+                    b.ToTable("RestoranSiparisleri", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranSiparisleri.Entities.RestoranSiparisKalemi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BirimFiyat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("Miktar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notlar")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("RestoranMenuUrunId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RestoranSiparisId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SatirToplam")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UrunAdiSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestoranMenuUrunId");
+
+                    b.HasIndex("RestoranSiparisId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RestoranSiparisKalemleri", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.Restoran", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("IsletmeAlaniId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsletmeAlaniId")
+                        .HasFilter("[IsDeleted] = 0 AND [IsletmeAlaniId] IS NOT NULL");
+
+                    b.HasIndex("TesisId", "Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+                    b.ToTable("Restoranlar", "restoran");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.RestoranYonetici", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("RestoranId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("RestoranId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("RestoranYoneticileri", "restoran");
+                });
+
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
                 {
                     b.Property<int>("Id")
@@ -4458,6 +4981,130 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("TesisOdaTipi");
                 });
 
+            modelBuilder.Entity("STYS.RestoranMasalari.Entities.RestoranMasa", b =>
+                {
+                    b.HasOne("STYS.Restoranlar.Entities.Restoran", "Restoran")
+                        .WithMany("Masalar")
+                        .HasForeignKey("RestoranId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuKategorileri.Entities.RestoranMenuKategori", b =>
+                {
+                    b.HasOne("STYS.Restoranlar.Entities.Restoran", "Restoran")
+                        .WithMany("MenuKategorileri")
+                        .HasForeignKey("RestoranId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restoran");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuUrunleri.Entities.RestoranMenuUrun", b =>
+                {
+                    b.HasOne("STYS.RestoranMenuKategorileri.Entities.RestoranMenuKategori", "RestoranMenuKategori")
+                        .WithMany("Urunler")
+                        .HasForeignKey("RestoranMenuKategoriId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("RestoranMenuKategori");
+                });
+
+            modelBuilder.Entity("STYS.RestoranOdemeleri.Entities.RestoranOdeme", b =>
+                {
+                    b.HasOne("STYS.RestoranSiparisleri.Entities.RestoranSiparis", "RestoranSiparis")
+                        .WithMany("Odemeler")
+                        .HasForeignKey("RestoranSiparisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Rezervasyonlar.Entities.Rezervasyon", "Rezervasyon")
+                        .WithMany()
+                        .HasForeignKey("RezervasyonId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("STYS.Rezervasyonlar.Entities.RezervasyonOdeme", "RezervasyonOdeme")
+                        .WithMany()
+                        .HasForeignKey("RezervasyonOdemeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("RestoranSiparis");
+
+                    b.Navigation("Rezervasyon");
+
+                    b.Navigation("RezervasyonOdeme");
+                });
+
+            modelBuilder.Entity("STYS.RestoranSiparisleri.Entities.RestoranSiparis", b =>
+                {
+                    b.HasOne("STYS.Restoranlar.Entities.Restoran", "Restoran")
+                        .WithMany("Siparisler")
+                        .HasForeignKey("RestoranId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.RestoranMasalari.Entities.RestoranMasa", "RestoranMasa")
+                        .WithMany("Siparisler")
+                        .HasForeignKey("RestoranMasaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Restoran");
+
+                    b.Navigation("RestoranMasa");
+                });
+
+            modelBuilder.Entity("STYS.RestoranSiparisleri.Entities.RestoranSiparisKalemi", b =>
+                {
+                    b.HasOne("STYS.RestoranMenuUrunleri.Entities.RestoranMenuUrun", "RestoranMenuUrun")
+                        .WithMany("SiparisKalemleri")
+                        .HasForeignKey("RestoranMenuUrunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.RestoranSiparisleri.Entities.RestoranSiparis", "RestoranSiparis")
+                        .WithMany("Kalemler")
+                        .HasForeignKey("RestoranSiparisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("RestoranMenuUrun");
+
+                    b.Navigation("RestoranSiparis");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.Restoran", b =>
+                {
+                    b.HasOne("STYS.IsletmeAlanlari.Entities.IsletmeAlani", "IsletmeAlani")
+                        .WithMany()
+                        .HasForeignKey("IsletmeAlaniId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IsletmeAlani");
+
+                    b.Navigation("Tesis");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.RestoranYonetici", b =>
+                {
+                    b.HasOne("STYS.Restoranlar.Entities.Restoran", "Restoran")
+                        .WithMany("Yoneticiler")
+                        .HasForeignKey("RestoranId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Restoran");
+                });
+
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>
                 {
                     b.HasOne("STYS.KonaklamaTipleri.Entities.KonaklamaTipi", "KonaklamaTipi")
@@ -4759,6 +5406,39 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("STYS.Odalar.Entities.Oda", b =>
                 {
                     b.Navigation("OdaOzellikDegerleri");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMasalari.Entities.RestoranMasa", b =>
+                {
+                    b.Navigation("Siparisler");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuKategorileri.Entities.RestoranMenuKategori", b =>
+                {
+                    b.Navigation("Urunler");
+                });
+
+            modelBuilder.Entity("STYS.RestoranMenuUrunleri.Entities.RestoranMenuUrun", b =>
+                {
+                    b.Navigation("SiparisKalemleri");
+                });
+
+            modelBuilder.Entity("STYS.RestoranSiparisleri.Entities.RestoranSiparis", b =>
+                {
+                    b.Navigation("Kalemler");
+
+                    b.Navigation("Odemeler");
+                });
+
+            modelBuilder.Entity("STYS.Restoranlar.Entities.Restoran", b =>
+                {
+                    b.Navigation("Masalar");
+
+                    b.Navigation("MenuKategorileri");
+
+                    b.Navigation("Siparisler");
+
+                    b.Navigation("Yoneticiler");
                 });
 
             modelBuilder.Entity("STYS.Rezervasyonlar.Entities.Rezervasyon", b =>

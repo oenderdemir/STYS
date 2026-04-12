@@ -1491,3 +1491,154 @@ Kamp Yonetimi (top-level, fa-campground)
 ### Build Sonuclari (Tur 42)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
 - Frontend: BASARILI (`npm run build`)
+
+## Tur 43 - Restoran Yoneticisi Atanabilir/Atayabilir Yetkileri
+
+### Yapilanlar
+- `KullaniciAtama` altina yeni izinler eklendi:
+  - `KullaniciAtama.RestoranYoneticisiAtanabilir`
+  - `KullaniciAtama.RestoranYoneticisiAtayabilir`
+- Restoran yonetici aday endpointi yeni atama iznine baglandi:
+  - `GET /ui/yoneticiaday/restoran-yoneticileri` artik `RestoranYoneticisiAtayabilir` ister.
+- Restoran yonetici aday listesi artik marker role'e gore filtreleniyor:
+  - sadece `RestoranYoneticisiAtanabilir` rolune sahip, scope icinde gorunebilen ve block olmayan kullanicilar listelenir.
+- Restoran create/update servisinde backend kurali eklendi:
+  - `yoneticiUserIds` gonderiliyorsa islem yapan kullanicida `RestoranYoneticisiAtayabilir` olmali
+  - secilen kullanicilar `RestoranYoneticisiAtanabilir` marker rolune sahip olmali
+- Frontend restoran yonetim ekraninda yonetici atama alani:
+  - sadece `RestoranYoneticisiAtayabilir` varsa gorunur
+  - bu yetki yoksa payload'a yonetici listesi gonderilmez (mevcut atamalar korunur)
+- Yeni migration eklendi:
+  - `20260412114000_AddRestaurantManagerAssignmentPermissions`
+  - yeni roller olusturuldu, grup atamalari yapildi:
+    - `Atanabilir`: Admin, TesisYonetici, BinaYonetici, Resepsiyonist
+    - `Atayabilir`: Admin, TesisYonetici
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/YoneticiAdaylari/Controllers/YoneticiAdayController.cs
+- backend/YoneticiAdaylari/Services/YoneticiAdayService.cs
+- backend/AccessScope/AccessScopeProvider.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260412114000_AddRestaurantManagerAssignmentPermissions.cs
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 43)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 44 - Restoran Menu Yonetimi Urun Formu Duzeltmeleri
+
+### Yapilanlar
+- Urun dialoguna kategori secimi eklendi (`Kategori` dropdown).
+- Urun guncellemede hata veren ana neden giderildi:
+  - menu response map'lenirken `restoranMenuKategoriId` urun modeline set edilmiyordu.
+  - artik her urun kaydi kendi kategori id'si ile mapleniyor.
+- Urun validasyon mesaji netlestirildi:
+  - `Kategori ve urun adi zorunludur.`
+- Edit modunda urun kaydinda kategori id bos gelirse secili kategoriye fallback eklendi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 44)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 45 - Restoran Menu Ekrani Sadelestirme (Kategori CRUD Kaldirildi)
+
+### Yapilanlar
+- `Restoran Menu Yonetimi` ekranindan kategori ekle/duzenle/sil alanlari kaldirildi.
+- Ekran artik sadece urun yonetimi odakli:
+  - urunler kategori bazli gruplanmis kartlar altinda listeleniyor.
+  - her kategori icin ayri "Bu Kategoriye Urun Ekle" aksiyonu eklendi.
+  - ustte genel "Urun Ekle" butonu korunarak kategori secimi urun dialogunda yapiliyor.
+- Urun dialogundaki kategori secimi, olusturma/guncelleme akisiyla uyumlu halde korundu.
+- Silinen component dosyasi yeniden olusturularak route baglantisi tekrar calisir hale getirildi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 45)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 46 - Pasif Urun Gorunurlugu ve Hazirlama Suresi UI Iyilestirme
+
+### Yapilanlar
+- Restoran menu yonetimi ekraninda urun verisi aktif menu endpointinden degil, yonetim endpointlerinden alinacak sekilde guncellendi.
+  - Boyunca kullanilan yeni servis metodu: `getYonetimMenuByRestoranId(restoranId)`
+  - Kategoriler: `GET /api/restoran-menu-kategorileri?restoranId=...`
+  - Urunler: `GET /api/restoran-menu-urunleri`
+  - Sonuc: pasif urunler artik listede kalir; tekrar aktif edilebilir.
+- Siparis ekranlarinin kullandigi mevcut `getMenuByRestoranId` (aktif menu) davranisi degistirilmedi.
+- Urun dialogundaki `Hazirlama (dk)` alani iyilestirildi:
+  - `p-inputgroup` + `dk` addon kullanildi.
+  - Spinner gorunumu sadeletildi (`showButtons` kaldirildi, tam sayi girisi korundu).
+  - Dialog genisligi bir miktar arttirildi (`40rem`) ve alan tasmasi azaltildi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.service.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 46)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 47 - Restoran Menu Ekraninda Kategori UI Temizligi
+
+### Yapilanlar
+- `restoran-menu-yonetimi` urun dialogundan kategori dropdown kaldirildi.
+- Kategoriye ozel aksiyon metinleri sadeletildi:
+  - "Bu Kategoriye Urun Ekle" -> "Urun Ekle"
+- Ustteki "Urun Ekle" butonu kategori secimi gostermeden ilk kategoriye urun olusturacak sekilde ayarlandi.
+- Validasyon mesajlari sadeletildi:
+  - "Kategori ve urun adi zorunludur." yerine "Urun adi zorunludur."
+  - kategori id yoksa ayri teknik uyari: "Urun kategorisi bulunamadi."
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 47)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 48 - Restoran Menu Ekrani UX Iyilestirmeleri
+
+### Yapilanlar
+- Kategori bloklari acilir/kapanir panele cevrildi (`p-panel [toggleable]=true`).
+- Uste urun arama alani eklendi:
+  - ad ve aciklama alanlarinda filtreleme yapiyor.
+  - arama sonucu kategori basliginda adet guncel gorunuyor.
+- Kategori tablolarinda baslik/kolon hizasi sabitlendi:
+  - `table-layout: fixed` ve ortak `colgroup` genislikleri eklendi.
+  - tum panellerde `Ad/Fiyat/Sure/Durum/Islem` kolonlari ayni hizada.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.ts
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 48)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 49 - Urun Dialogunda Kategori Secimi Geri Eklendi
+
+### Yapilanlar
+- `restoran-menu-yonetimi` ekraninda urun olusturma/duzenleme dialoguna kategori dropdown tekrar eklendi.
+- Boylece yeni urun eklerken kategori manuel secilebilir hale geldi.
+- Kategori yonetim paneli geri getirilmedi; sadece urun dialogundaki secim alani acildi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/restoran-yonetimi/restoran-menu-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 49)
+- Frontend: BASARILI (`npm run build`)

@@ -283,6 +283,8 @@ public static class StructurePermissions
         public const string TesisYoneticisiAtayabilir = "KullaniciAtama.TesisYoneticisiAtayabilir";
         public const string BinaYoneticisiAtanabilir = "KullaniciAtama.BinaYoneticisiAtanabilir";
         public const string BinaYoneticisiAtayabilir = "KullaniciAtama.BinaYoneticisiAtayabilir";
+        public const string RestoranYoneticisiAtanabilir = "KullaniciAtama.RestoranYoneticisiAtanabilir";
+        public const string RestoranYoneticisiAtayabilir = "KullaniciAtama.RestoranYoneticisiAtayabilir";
         public const string ResepsiyonistAtanabilir = "KullaniciAtama.ResepsiyonistAtanabilir";
         public const string ResepsiyonistAtayabilir = "KullaniciAtama.ResepsiyonistAtayabilir";
     }

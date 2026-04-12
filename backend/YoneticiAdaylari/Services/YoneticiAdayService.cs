@@ -114,7 +114,9 @@ public class YoneticiAdayService : IYoneticiAdayService
 
     public Task<List<YoneticiAdayDto>> GetRestoranYoneticiAdaylariAsync(CancellationToken cancellationToken = default)
     {
-        return GetAllAsync(cancellationToken);
+        return GetScopedCandidatesByMarkerAsync(
+            StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir,
+            cancellationToken);
     }
 
     public async Task<List<YoneticiAdayDto>> GetResepsiyonistAdaylariAsync(CancellationToken cancellationToken = default)
@@ -267,6 +269,37 @@ public class YoneticiAdayService : IYoneticiAdayService
             .Select(x => x.UserId)
             .Distinct()
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<YoneticiAdayDto>> GetScopedCandidatesByMarkerAsync(
+        string markerPermission,
+        CancellationToken cancellationToken)
+    {
+        var candidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(markerPermission, cancellationToken);
+        if (candidateUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            var visibleUserIds = await GetScopedUserIdsAsync(scope, cancellationToken);
+            candidateUserIds = candidateUserIds
+                .Where(visibleUserIds.Contains)
+                .ToList();
+        }
+
+        if (candidateUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var query = _userRepository
+            .Where(x => x.Status != UserStatus.Blocked)
+            .Where(x => candidateUserIds.Contains(x.Id));
+
+        return await QueryUsersAsCandidateDto(query, cancellationToken);
     }
 
     private static Task<List<YoneticiAdayDto>> QueryUsersAsCandidateDto(

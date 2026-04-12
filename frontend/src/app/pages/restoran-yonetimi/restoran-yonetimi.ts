@@ -52,6 +52,10 @@ export class RestoranYonetimi implements OnInit {
         return this.authService.hasPermission('RestoranYonetimi.Manage');
     }
 
+    get canAssignRestoranYonetici(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.RestoranYoneticisiAtayabilir');
+    }
+
     ngOnInit(): void {
         this.loadData();
     }
@@ -123,7 +127,7 @@ export class RestoranYonetimi implements OnInit {
         const payload: CreateRestoranRequest | UpdateRestoranRequest = {
             tesisId: this.model.tesisId,
             isletmeAlaniId: this.model.isletmeAlaniId ?? null,
-            yoneticiUserIds: this.model.yoneticiUserIds ?? [],
+            yoneticiUserIds: this.canAssignRestoranYonetici ? (this.model.yoneticiUserIds ?? []) : null,
             ad: this.model.ad.trim(),
             aciklama: this.model.aciklama?.trim() || null,
             aktifMi: this.model.aktifMi
@@ -223,7 +227,7 @@ export class RestoranYonetimi implements OnInit {
         forkJoin({
             tesisler: this.service.getTesisler(),
             restoranlar: this.service.getAll(this.selectedTesisId),
-            yoneticiAdaylari: this.canManage ? this.service.getYoneticiAdaylari() : of([])
+            yoneticiAdaylari: this.canManage && this.canAssignRestoranYonetici ? this.service.getYoneticiAdaylari() : of([])
         })
             .pipe(finalize(() => {
                 this.loading = false;

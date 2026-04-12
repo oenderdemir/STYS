@@ -105,19 +105,21 @@
             <label class="block font-medium mb-2">Aciklama</label>
             <input pInputText class="w-full" [(ngModel)]="model.aciklama" maxlength="512" />
         </div>
-        <div class="col-span-12">
-            <label class="block font-medium mb-2">Restoran Yoneticileri</label>
-            <p-multiselect
-                class="w-full"
-                [options]="yoneticiSecenekleri"
-                optionLabel="label"
-                optionValue="value"
-                [(ngModel)]="model.yoneticiUserIds"
-                [showClear]="true"
-                [filter]="true"
-                appendTo="body"
-                placeholder="Yoneticileri secin" />
-        </div>
+        @if (canAssignRestoranYonetici) {
+            <div class="col-span-12">
+                <label class="block font-medium mb-2">Restoran Yoneticileri</label>
+                <p-multiselect
+                    class="w-full"
+                    [options]="yoneticiSecenekleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="model.yoneticiUserIds"
+                    [showClear]="true"
+                    [filter]="true"
+                    appendTo="body"
+                    placeholder="Yoneticileri secin" />
+            </div>
+        }
         <div class="col-span-12 flex align-items-center gap-2">
             <input id="restoranAktifMi" type="checkbox" [(ngModel)]="model.aktifMi" />
             <label for="restoranAktifMi">Aktif</label>

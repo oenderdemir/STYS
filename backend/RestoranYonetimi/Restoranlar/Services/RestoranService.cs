@@ -4,7 +4,9 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Entities;
+using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Users.Repositories;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Restoranlar.Services;
@@ -15,12 +17,21 @@ public class RestoranService : IRestoranService
     private readonly StysAppDbContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IUserRepository _userRepository;
+    private readonly TodIdentityDbContext _identityDbContext;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
 
-    public RestoranService(StysAppDbContext dbContext, IMapper mapper, IUserRepository userRepository)
+    public RestoranService(
+        StysAppDbContext dbContext,
+        IMapper mapper,
+        IUserRepository userRepository,
+        TodIdentityDbContext identityDbContext,
+        ICurrentUserAccessor currentUserAccessor)
     {
         _dbContext = dbContext;
         _mapper = mapper;
         _userRepository = userRepository;
+        _identityDbContext = identityDbContext;
+        _currentUserAccessor = currentUserAccessor;
     }
 
     public async Task<List<RestoranDto>> GetListAsync(int? tesisId, CancellationToken cancellationToken = default)
@@ -132,7 +143,7 @@ public class RestoranService : IRestoranService
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
         await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
-        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, cancellationToken);
+        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: false, cancellationToken);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
         var exists = await _dbContext.Restoranlar.AnyAsync(x => x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
@@ -148,7 +159,7 @@ public class RestoranService : IRestoranService
             Ad = request.Ad.Trim(),
             Aciklama = NormalizeOptional(request.Aciklama, 512),
             AktifMi = request.AktifMi,
-            Yoneticiler = yoneticiUserIds
+            Yoneticiler = (yoneticiUserIds ?? [])
                 .Select(x => new RestoranYonetici
                 {
                     UserId = x
@@ -177,7 +188,7 @@ public class RestoranService : IRestoranService
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
         await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
-        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, cancellationToken);
+        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: true, cancellationToken);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
         var exists = await _dbContext.Restoranlar.AnyAsync(x => x.Id != id && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
@@ -191,7 +202,10 @@ public class RestoranService : IRestoranService
         entity.Ad = request.Ad.Trim();
         entity.Aciklama = NormalizeOptional(request.Aciklama, 512);
         entity.AktifMi = request.AktifMi;
-        SyncYoneticiler(entity, yoneticiUserIds);
+        if (yoneticiUserIds is not null)
+        {
+            SyncYoneticiler(entity, yoneticiUserIds);
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(entity.Id, cancellationToken) ?? _mapper.Map<RestoranDto>(entity);
@@ -275,13 +289,19 @@ public class RestoranService : IRestoranService
         return sinifAdi ?? binaAdi;
     }
 
-    private async Task<List<Guid>> NormalizeAndValidateManagerIdsAsync(
+    private async Task<List<Guid>?> NormalizeAndValidateManagerIdsAsync(
         ICollection<Guid>? managerUserIds,
+        bool preserveWhenNull,
         CancellationToken cancellationToken)
     {
+        await EnsureCanAssignForPayloadAsync(
+            managerUserIds,
+            StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir,
+            preserveWhenNull);
+
         if (managerUserIds is null)
         {
-            return [];
+            return preserveWhenNull ? null : [];
         }
 
         var normalizedManagerIds = managerUserIds
@@ -305,7 +325,86 @@ public class RestoranService : IRestoranService
             throw new BaseException("Secilen restoran yoneticilerinden en az biri bulunamadi.", 400);
         }
 
+        var restoranYoneticiUserIds = await GetUsersMatchingMarkerAsync(
+            normalizedManagerIds,
+            nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir),
+            cancellationToken);
+
+        var invalidGroupUserIds = normalizedManagerIds.Except(restoranYoneticiUserIds).ToList();
+        if (invalidGroupUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen kullanicilar restoran yoneticisi atanabilir bir grupta olmalidir.", 400);
+        }
+
         return normalizedManagerIds;
+    }
+
+    private async Task EnsureCanAssignForPayloadAsync(
+        ICollection<Guid>? userIds,
+        string requiredPermission,
+        bool preserveWhenNull = false)
+    {
+        if (userIds is null)
+        {
+            if (preserveWhenNull)
+            {
+                return;
+            }
+
+            return;
+        }
+
+        await EnsureCurrentUserHasPermissionAsync(requiredPermission);
+    }
+
+    private async Task EnsureCurrentUserHasPermissionAsync(string requiredPermission, CancellationToken cancellationToken = default)
+    {
+        var permissionSet = await GetCurrentUserPermissionSetAsync(cancellationToken);
+        if (permissionSet.Contains(requiredPermission))
+        {
+            return;
+        }
+
+        throw new BaseException("Bu islem icin gerekli kullanici atama yetkiniz bulunmuyor.", 403);
+    }
+
+    private async Task<HashSet<string>> GetCurrentUserPermissionSetAsync(CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUserAccessor.GetCurrentUserId();
+        if (!userId.HasValue)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var rows = await _identityDbContext.UserUserGroups
+            .Where(x => x.UserId == userId.Value)
+            .SelectMany(x => x.UserGroup.UserGroupRoles.Select(ugr => new { ugr.Role.Domain, ugr.Role.Name }))
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(x => $"{x.Domain}.{x.Name}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<List<Guid>> GetUsersMatchingMarkerAsync(
+        IReadOnlyCollection<Guid> userIds,
+        string markerRoleName,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _identityDbContext.UserUserGroups
+            .Where(x => userIds.Contains(x.UserId))
+            .Where(x => x.UserGroup.UserGroupRoles.Any(ugr =>
+                ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
+                && ugr.Role.Name == markerRoleName))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
     }
 
     private void SyncYoneticiler(Restoran entity, IReadOnlyCollection<Guid> managerUserIds)

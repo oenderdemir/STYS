@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map, Observable } from 'rxjs';
+import { forkJoin, map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import {
@@ -49,7 +49,49 @@ export class RestoranMenuYonetimiService {
 
                 const urunMap: Record<number, RestoranMenuUrunModel[]> = {};
                 for (const kategori of responseEnvelope.data.kategoriler) {
-                    urunMap[kategori.id] = kategori.urunler ?? [];
+                    urunMap[kategori.id] = (kategori.urunler ?? []).map((urun) => ({
+                        ...urun,
+                        restoranMenuKategoriId: kategori.id,
+                        aktifMi: urun.aktifMi ?? true
+                    }));
+                }
+
+                return { kategoriler, urunMap };
+            })
+        );
+    }
+
+    getYonetimMenuByRestoranId(restoranId: number): Observable<{ kategoriler: RestoranMenuKategoriModel[]; urunMap: Record<number, RestoranMenuUrunModel[]> }> {
+        const kategorilerRequest$ = this.http.get<ApiResponse<RestoranMenuKategoriModel[]>>(`${this.apiBaseUrl}/api/restoran-menu-kategorileri`, {
+            params: { restoranId }
+        });
+        const urunlerRequest$ = this.http.get<ApiResponse<RestoranMenuUrunModel[]>>(`${this.apiBaseUrl}/api/restoran-menu-urunleri`);
+
+        return forkJoin({
+            kategorilerEnvelope: kategorilerRequest$,
+            urunlerEnvelope: urunlerRequest$
+        }).pipe(
+            map(({ kategorilerEnvelope, urunlerEnvelope }) => {
+                if (!kategorilerEnvelope.success || !kategorilerEnvelope.data) {
+                    throw new Error(tryReadApiMessage(kategorilerEnvelope) ?? 'Kategori listesi alinamadi.');
+                }
+                if (!urunlerEnvelope.success || !urunlerEnvelope.data) {
+                    throw new Error(tryReadApiMessage(urunlerEnvelope) ?? 'Urun listesi alinamadi.');
+                }
+
+                const kategoriler = [...kategorilerEnvelope.data];
+                const kategoriIdSet = new Set(kategoriler.map((x) => x.id).filter((x): x is number => typeof x === 'number' && x > 0));
+                const urunler = urunlerEnvelope.data.filter((x) => kategoriIdSet.has(x.restoranMenuKategoriId));
+
+                const urunMap: Record<number, RestoranMenuUrunModel[]> = {};
+                for (const kategori of kategoriler) {
+                    if (!kategori.id) {
+                        continue;
+                    }
+
+                    urunMap[kategori.id] = urunler
+                        .filter((urun) => urun.restoranMenuKategoriId === kategori.id)
+                        .map((urun) => ({ ...urun, aktifMi: urun.aktifMi ?? true }));
                 }
 
                 return { kategoriler, urunMap };

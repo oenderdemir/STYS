@@ -40,7 +40,7 @@ public class YoneticiAdayController : UIController
     }
 
     [HttpGet("restoran-yoneticileri")]
-    [Permission(StructurePermissions.RestoranYonetimi.Manage)]
+    [Permission(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir)]
     public async Task<ActionResult<List<YoneticiAdayDto>>> GetRestoranYoneticiAdaylari(CancellationToken cancellationToken)
     {
         var result = await _yoneticiAdayService.GetRestoranYoneticiAdaylariAsync(cancellationToken);

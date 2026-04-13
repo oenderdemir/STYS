@@ -1,12 +1,13 @@
 import { Component, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
+import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { AppTopbar } from './app.topbar';
 import { AppSidebar } from './app.sidebar';
 import { AppFooter } from './app.footer';
 import { AppBreadcrumb } from './app.breadcrumb';
 import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
+import { filter } from 'rxjs';
 
 @Component({
     selector: 'app-layout',
@@ -36,15 +37,16 @@ import { AuthService } from '../../pages/auth';
 export class AppLayout {
     layoutService = inject(LayoutService);
     private readonly authService = inject(AuthService);
+    private readonly router = inject(Router);
 
     constructor() {
         effect(() => {
             const state = this.layoutService.layoutState();
-            if (state.mobileMenuActive) {
-                document.body.classList.add('blocked-scroll');
-            } else {
-                document.body.classList.remove('blocked-scroll');
-            }
+            this.syncBodyScrollState(state.mobileMenuActive);
+        });
+
+        this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => {
+            this.syncBodyScrollState(this.layoutService.layoutState().mobileMenuActive);
         });
     }
 
@@ -64,4 +66,17 @@ export class AppLayout {
         this.authService.sessionRevision();
         return this.authService.isAuthenticated();
     });
+
+    private syncBodyScrollState(mobileMenuActive: boolean): void {
+        if (mobileMenuActive) {
+            document.body.classList.add('blocked-scroll');
+            return;
+        }
+
+        const hasOverlayMask = !!document.querySelector('.p-overlay-mask.p-overlay-mask-enter');
+        if (!hasOverlayMask) {
+            document.body.classList.remove('blocked-scroll');
+            document.body.classList.remove('p-overflow-hidden');
+        }
+    }
 }

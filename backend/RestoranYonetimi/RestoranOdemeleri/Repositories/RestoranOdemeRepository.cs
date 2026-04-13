@@ -36,7 +36,6 @@ public class RestoranOdemeRepository : BaseRdbmsRepository<RestoranOdeme, int>, 
 
     public async Task<List<AktifRezervasyonAramaDto>> SearchAktifRezervasyonlarAsync(int tesisId, string? query, CancellationToken cancellationToken = default)
     {
-        var today = DateTime.UtcNow;
         var normalized = query?.Trim();
 
         var baseQuery = _dbContext.Rezervasyonlar
@@ -44,15 +43,14 @@ public class RestoranOdemeRepository : BaseRdbmsRepository<RestoranOdeme, int>, 
                 x.TesisId == tesisId
                 && x.AktifMi
                 && x.RezervasyonDurumu != RezervasyonDurumlari.Iptal
-                && x.GirisTarihi <= today
-                && x.CikisTarihi >= today);
+                && x.RezervasyonDurumu == RezervasyonDurumlari.CheckInTamamlandi);
 
         if (!string.IsNullOrWhiteSpace(normalized))
         {
             baseQuery = baseQuery.Where(x =>
                 x.ReferansNo.Contains(normalized)
                 || x.MisafirAdiSoyadi.Contains(normalized)
-                || x.Segmentler.Any(s => s.OdaAtamalari.Any(a => a.OdaNoSnapshot.Contains(normalized))));
+                || x.Segmentler.Any(s => s.OdaAtamalari.Any(a => a.OdaNoSnapshot != null && a.OdaNoSnapshot.Contains(normalized))));
         }
 
         return await baseQuery

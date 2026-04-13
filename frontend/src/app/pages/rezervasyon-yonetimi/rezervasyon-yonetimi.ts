@@ -309,6 +309,9 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     ngOnInit(): void {
+        // Defensive cleanup: stale scroll-lock classes can remain after modal/sidebar flows.
+        document.body.classList.remove('p-overflow-hidden');
+        document.body.classList.remove('blocked-scroll');
         this.loadReferences();
     }
 

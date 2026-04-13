@@ -28,6 +28,14 @@ public class RestoranOdemeleriController : UIController
     public async Task<ActionResult<RestoranSiparisOdemeOzetiDto>> GetOdemeOzeti(int siparisId, CancellationToken cancellationToken)
         => Ok(await _service.GetOdemeOzetiAsync(siparisId, cancellationToken));
 
+    [HttpGet("/api/restoran-siparisleri/aktif-rezervasyonlar")]
+    [Permission(StructurePermissions.RestoranOdemeYonetimi.View)]
+    public async Task<ActionResult<List<AktifRezervasyonAramaDto>>> SearchAktifRezervasyonlar(
+        [FromQuery] int tesisId,
+        [FromQuery(Name = "q")] string? query,
+        CancellationToken cancellationToken)
+        => Ok(await _service.SearchAktifRezervasyonlarAsync(tesisId, query, cancellationToken));
+
     [HttpPost("/api/restoran-siparisleri/{siparisId:int}/odemeler/nakit")]
     [Permission(StructurePermissions.RestoranOdemeYonetimi.Manage)]
     public async Task<ActionResult<RestoranOdemeDto>> NakitOdeme(int siparisId, [FromBody] CreateNakitOdemeRequest request, CancellationToken cancellationToken)

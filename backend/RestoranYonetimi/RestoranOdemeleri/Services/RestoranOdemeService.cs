@@ -62,6 +62,28 @@ public class RestoranOdemeService : IRestoranOdemeService
         };
     }
 
+    public async Task<List<AktifRezervasyonAramaDto>> SearchAktifRezervasyonlarAsync(int tesisId, string? query, CancellationToken cancellationToken = default)
+    {
+        if (tesisId <= 0)
+        {
+            throw new BaseException("Gecerli bir tesis secimi zorunludur.", 400);
+        }
+
+        var yetkiliRestoranIdleri = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
+        if (yetkiliRestoranIdleri is not null)
+        {
+            var tesisErisimiVar = await _dbContext.Restoranlar
+                .AnyAsync(x => x.TesisId == tesisId && yetkiliRestoranIdleri.Contains(x.Id), cancellationToken);
+
+            if (!tesisErisimiVar)
+            {
+                throw new BaseException("Bu tesis icin yetkiniz bulunmuyor.", 403);
+            }
+        }
+
+        return await _odemeRepository.SearchAktifRezervasyonlarAsync(tesisId, query, cancellationToken);
+    }
+
     public Task<RestoranOdemeDto> CreateNakitOdemeAsync(int siparisId, CreateNakitOdemeRequest request, CancellationToken cancellationToken = default)
         => CreateRegularPaymentAsync(siparisId, request.Tutar, request.Aciklama, RestoranOdemeTipleri.Nakit, cancellationToken);
 
@@ -189,7 +211,7 @@ public class RestoranOdemeService : IRestoranOdemeService
             OdemeTarihi = DateTime.UtcNow,
             Aciklama = NormalizeOptional(aciklama, 512),
             Durum = RestoranOdemeDurumlari.Tamamlandi,
-            IslemReferansNo = $"RSPPAY-{siparis.SiparisNo}-{Guid.NewGuid():N}"[..64]
+            IslemReferansNo = Truncate($"RSPPAY-{siparis.SiparisNo}-{Guid.NewGuid():N}", 64)
         };
 
         _dbContext.RestoranOdemeleri.Add(odeme);
@@ -264,4 +286,7 @@ public class RestoranOdemeService : IRestoranOdemeService
 
         return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
     }
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length > maxLength ? value[..maxLength] : value;
 }

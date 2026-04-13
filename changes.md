@@ -2404,3 +2404,59 @@ Kamp Yonetimi (top-level, fa-campground)
 - backend/Rezervasyonlar/Controllers/RezervasyonController.cs
 - changes.md
 
+## Tur 77 - Aktif Rezervasyon Arama Endpoint 404 Duzeltmesi
+
+### Sorun
+- `GET /api/restoran-siparisleri/aktif-rezervasyonlar?tesisId=...` cagrisi 404 donuyordu.
+- Neden: frontend cagrisi vardi ancak backend controller'da bu route tanimli degildi.
+
+### Duzeltme
+- `RestoranOdemeleriController` icine endpoint eklendi:
+  - `GET /api/restoran-siparisleri/aktif-rezervasyonlar`
+  - Parametreler: `tesisId`, `q`
+  - Permission: `RestoranOdemeYonetimi.View`
+- Servis katmanindaki mevcut `SearchAktifRezervasyonlarAsync` metodu endpoint'e baglandi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranOdemeleri/Controllers/RestoranOdemeleriController.cs
+- changes.md
+
+## Tur 78 - Odaya Ekle Rezervasyon Arama Filtresi Duzeltmesi
+
+### Sorun
+- Akif konaklama rezervasyonu olmasina ragmen `aktif-rezervasyonlar` aramasinda sonuc donmuyordu.
+- Saat bazli `UtcNow` karsilastirmasi, ozellikle gun icindeki kayitlarda filtreyi fazla daraltiyordu.
+
+### Duzeltme
+- Rezervasyon arama filtresi gun bazli hale getirildi:
+  - `DateTime.Today` kullanildi.
+  - `GirisTarihi.Date <= today && CikisTarihi.Date >= today`
+- Odaya ekleme kuraliyla uyumlu olacak sekilde sadece `CheckInTamamlandi` durumundaki rezervasyonlar listelenir hale getirildi.
+- Oda no filtrelemesinde null-guvenli kosul eklendi.
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranOdemeleri/Repositories/RestoranOdemeRepository.cs
+- changes.md
+
+## Tur 79 - Odaya Ekle Rezervasyon Aramasinda Tarih Filtresi Gevsetildi
+
+### Tespit
+- `RZV-20260413163903-56CFBE` kaydi veritabaninda mevcut:
+  - `TesisId=4`
+  - `RezervasyonDurumu=CheckInTamamlandi`
+  - `GirisTarihi=14/04/2026 14:00`
+  - `CikisTarihi=15/04/2026 10:00`
+- Bugun `13/04/2026` oldugu icin onceki gun filtresi nedeniyle aramada listelenmiyordu.
+
+### Duzeltme
+- `aktif-rezervasyonlar` aramasinda tarih kisiti kaldirildi.
+- Arama artik odaya-ekle is kurali ile uyumlu sekilde sadece su kosullari uygular:
+  - ayni tesis
+  - aktif rezervasyon
+  - `RezervasyonDurumu == CheckInTamamlandi`
+  - `Iptal` olmayan
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/RestoranOdemeleri/Repositories/RestoranOdemeRepository.cs
+- changes.md
+

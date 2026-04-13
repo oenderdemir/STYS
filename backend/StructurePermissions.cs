@@ -170,6 +170,13 @@ public static class StructurePermissions
         public const string Manage = "KampTahsisYonetimi.Manage";
     }
 
+    public static class KampBasvuruYonetimi
+    {
+        public const string Menu = "KampBasvuruYonetimi.Menu";
+        public const string View = "KampBasvuruYonetimi.View";
+        public const string Manage = "KampBasvuruYonetimi.Manage";
+    }
+
     public static class KampRezervasyonYonetimi
     {
         public const string Menu = "KampRezervasyonYonetimi.Menu";
@@ -255,11 +262,25 @@ public static class StructurePermissions
         public const string Manage = "RestoranMenuYonetimi.Manage";
     }
 
+    public static class RestoranKategoriHavuzuYonetimi
+    {
+        public const string Menu = "RestoranKategoriHavuzuYonetimi.Menu";
+        public const string View = "RestoranKategoriHavuzuYonetimi.View";
+        public const string Manage = "RestoranKategoriHavuzuYonetimi.Manage";
+    }
+
     public static class RestoranSiparisYonetimi
     {
         public const string Menu = "RestoranSiparisYonetimi.Menu";
         public const string View = "RestoranSiparisYonetimi.View";
         public const string Manage = "RestoranSiparisYonetimi.Manage";
+    }
+
+    public static class GarsonServisYonetimi
+    {
+        public const string Menu = "GarsonServisYonetimi.Menu";
+        public const string View = "GarsonServisYonetimi.View";
+        public const string Manage = "GarsonServisYonetimi.Manage";
     }
 
     public static class RestoranOdemeYonetimi

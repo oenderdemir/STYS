@@ -2201,3 +2201,137 @@ Kamp Yonetimi (top-level, fa-campground)
 ### Degisen Dosyalar
 - backend/Infrastructure/EntityFramework/Migrations/20260413124000_AddUiUserRoleToRestaurantGroups.cs
 - changes.md
+
+## Tur 68 - Kamp Basvurularim ve Restoran Menu Yetkilendirme Sertlestirmesi
+
+### Sorun
+- `Kamp Donemi Tesis Atamalari` menusu bazi ortamlarda rol baglantisi eksik oldugu icin herkese gorunebiliyordu.
+- `Basvurularim` menusu ve `benim-basvurularim` endpoint'i ayri bir yetki ile korunmuyordu.
+- Restoran menu itemleri runtime tarafinda enjekte edildigi icin `Yetkilendirme > Menuler` ekraninda kalici kayit olarak gorunmuyordu.
+
+### Yapilanlar
+- Yeni permission domain eklendi:
+  - `KampBasvuruYonetimi.Menu`
+  - `KampBasvuruYonetimi.View`
+  - `KampBasvuruYonetimi.Manage`
+- `KampBasvuruController.GetBenimBasvurularim` endpoint'i `KampBasvuruYonetimi.View` ile korundu.
+- Yeni migration ile:
+  - `KampBasvuruYonetimi` rolleri idempotent olarak olusturuldu.
+  - Admin, Tesis Yonetici ve Resepsiyonist gruplarina uygun kamp basvuru rolleri baglandi.
+  - `Basvurularim` menu item'ine `KampBasvuruYonetimi.Menu` rol baglantisi eklendi.
+  - `Kamp Donemi Tesis Atamalari` menu item'i icin `KampDonemiTesisAtamaYonetimi.Menu` baglantisi zorunlu olarak idempotent sekilde tamamlandi.
+  - Restoran ana menu ve alt menu itemleri `TODBase.MenuItems`/`TODBase.MenuItemRoles` tarafina kalici olarak seed edildi.
+- Frontend'de runtime restoran menu enjeksiyonu kaldirildi; menu sadece backend menu agacindan geliyor.
+
+### Migration
+- yeni migration: `20260413143000_FixKampBasvurularimAndRestaurantMenuAuthorizations`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/Kamp/Controllers/KampBasvuruController.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260413143000_FixKampBasvurularimAndRestaurantMenuAuthorizations.cs
+- frontend/src/app/core/menu/menu-runtime.service.ts
+- changes.md
+
+### Build Sonuclari (Tur 68)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 69 - Restoran MenuItems Kaynagini Kalici ve Generic Hale Getirme
+
+### Tespit
+- Sol menu kaynagi `GET /ui/menuitem/tree` uzerinden dogrudan `TODBase.MenuItems` tablosu.
+- Runtime tarafinda manuel menu uretimi kaldirildigi icin restoran menulerinin de `MenuItems` + `MenuItemRoles` tarafinda bulunmasi gerekiyor.
+
+### Duzeltme
+- Eski yaklasima uygun idempotent bir migration eklendi:
+  - `Restoran` ana menusu (top-level) yoksa olusturuyor, varsa normalize ediyor.
+  - Alt menu route'larini (`restoran-yonetimi`, `restoran-masa-yonetimi`, `restoran-menu-yonetimi`, `restoran-kategori-havuzu`, `restoran-siparis-yonetimi`, `garson-servis`) route bazli bulup yoksa olusturuyor, varsa parent/order/label olarak normalize ediyor.
+  - Ilgili `*.Menu` rolleri yoksa olusturuyor ve `MenuItemRoles` baglantilarini idempotent sekilde tamamliyor.
+- Bu sayede restoran menuleri hem uygulama menusunde hem de `Yetkilendirme > Menuler` ekraninda kalici kayit olarak gorunur.
+
+### Migration
+- yeni migration: `20260413151000_EnsureRestaurantMenusInMenuItems`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413151000_EnsureRestaurantMenusInMenuItems.cs
+- changes.md
+
+### Build Sonuclari (Tur 69)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 70 - Garson/Restoran Yonetici Icin Kamp Menu Gorunurlugu Kisitlama
+
+### Sorun
+- `garson.01` kullanicisinin `Kamp Yonetimi > Tesis Atamalari` menusunu gormesi beklenen davranis degildi.
+- Kök neden ortamlar arasi veri farkliliginda:
+  - restoran gruplarina kamp domain rolleri verilmis olabilmesi
+  - `kamp-donemi-atamalari` menu-role baginin eksik kalabilmesi
+
+### Duzeltme
+- Yeni migration eklendi:
+  - `GarsonGrubu` ve `RestoranYoneticiGrubu` uzerindeki tum kamp domain rolleri temizleniyor.
+  - `kamp-donemi-atamalari` menu item'i icin `KampDonemiTesisAtamaYonetimi.Menu` baglantisi route bazli idempotent olarak zorunlu hale getiriliyor.
+
+### Migration
+- yeni migration: `20260413154000_RestrictKampMenusForRestaurantGroups`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413154000_RestrictKampMenusForRestaurantGroups.cs
+- changes.md
+
+## Tur 71 - Duplicate Grup Kayitlarinda Garson/Restoran Yonetici Rol Normalizasyonu
+
+### Sorun
+- `garson.01` hala kamp menusu gorebiliyor ve restoran menulerini goremiyordu.
+- Muhtemel neden: ayni isimli birden fazla `GarsonGrubu`/`RestoranYoneticiGrubu` kaydi olan ortamlarda onceki migrationlar tek grup ID uzerinden calisiyordu.
+
+### Duzeltme
+- Yeni migration eklendi ve grup adina sahip tum group ID'leri hedeflenerek normalize edildi:
+  - Tum `GarsonGrubu` kayitlarina gerekli restoran + `KullaniciTipi.UIUser` rolleri eklendi.
+  - Tum `RestoranYoneticiGrubu` kayitlarina gerekli restoran + `KullaniciTipi.UIUser` rolleri eklendi.
+  - Bu iki grup tipinden tum kamp domain rolleri temizlendi.
+  - `kamp-donemi-atamalari` menu item'i icin `KampDonemiTesisAtamaYonetimi.Menu` bagi route bazli tekrar zorunlu kilindi.
+
+### Migration
+- yeni migration: `20260413162000_NormalizeRestaurantGroupRoleAssignments`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413162000_NormalizeRestaurantGroupRoleAssignments.cs
+- changes.md
+
+## Tur 72 - Restoran Yetkilerini Micro Seviyeye Ayirma
+
+### Talep
+- Restoran yetkilendirmelerinde ayni rollerin tekrar kullanilmasi yerine daha ince taneli yonetim istendi.
+
+### Yapilanlar
+- Yeni permission domain'leri eklendi:
+  - `RestoranKategoriHavuzuYonetimi.Menu/View/Manage`
+  - `GarsonServisYonetimi.Menu/View/Manage`
+- Controller permission ayrimi yapildi:
+  - `GarsonServisController` endpointleri `GarsonServisYonetimi` alanina tasindi.
+  - `RestoranMenuKategorileriController` icindeki `global` + `atama` endpointleri `RestoranKategoriHavuzuYonetimi` alanina tasindi.
+- Menu-role ayrimi icin yeni migration:
+  - `restoran-kategori-havuzu` artik `RestoranKategoriHavuzuYonetimi.Menu` ile korunuyor.
+  - `garson-servis` artik `GarsonServisYonetimi.Menu` ile korunuyor.
+  - Eski baglar (`RestoranMenuYonetimi.Menu` / `RestoranSiparisYonetimi.Menu`) bu iki menu item icin temizleniyor.
+- Grup bazli rol dagitimi idempotent eklendi:
+  - Admin + Tesis Yonetici: yeni iki domainin tum rolleri
+  - Restoran Yonetici: yeni iki domainin tum rolleri
+  - Garson: sadece `GarsonServisYonetimi` tum rolleri
+
+### Migration
+- yeni migration: `20260413170000_SplitRestaurantPermissionsForMicroAuthorization`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/StructurePermissions.cs
+- backend/RestoranYonetimi/GarsonServis/Controllers/GarsonServisController.cs
+- backend/RestoranYonetimi/RestoranMenuKategorileri/Controllers/RestoranMenuKategorileriController.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260413170000_SplitRestaurantPermissionsForMicroAuthorization.cs
+- changes.md

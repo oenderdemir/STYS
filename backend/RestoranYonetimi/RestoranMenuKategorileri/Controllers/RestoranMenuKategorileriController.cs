@@ -54,22 +54,22 @@ public class RestoranMenuKategorileriController : UIController
         => Ok(await _service.GetMenuByRestoranIdAsync(restoranId, cancellationToken));
 
     [HttpGet("global")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.View)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.View)]
     public async Task<ActionResult<List<RestoranGlobalMenuKategoriDto>>> GetGlobalList(CancellationToken cancellationToken)
         => Ok(await _service.GetGlobalListAsync(cancellationToken));
 
     [HttpPost("global")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.Manage)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.Manage)]
     public async Task<ActionResult<RestoranGlobalMenuKategoriDto>> CreateGlobal([FromBody] CreateRestoranGlobalMenuKategoriRequest request, CancellationToken cancellationToken)
         => Ok(await _service.CreateGlobalAsync(request, cancellationToken));
 
     [HttpPut("global/{id:int}")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.Manage)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.Manage)]
     public async Task<ActionResult<RestoranGlobalMenuKategoriDto>> UpdateGlobal(int id, [FromBody] UpdateRestoranGlobalMenuKategoriRequest request, CancellationToken cancellationToken)
         => Ok(await _service.UpdateGlobalAsync(id, request, cancellationToken));
 
     [HttpDelete("global/{id:int}")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.Manage)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.Manage)]
     public async Task<IActionResult> DeleteGlobal(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteGlobalAsync(id, cancellationToken);
@@ -77,12 +77,12 @@ public class RestoranMenuKategorileriController : UIController
     }
 
     [HttpGet("atama-baglam")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.View)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.View)]
     public async Task<ActionResult<RestoranKategoriAtamaBaglamDto>> GetAtamaBaglam([FromQuery] int restoranId, CancellationToken cancellationToken)
         => Ok(await _service.GetAtamaBaglamAsync(restoranId, cancellationToken));
 
     [HttpPut("atamalar")]
-    [Permission(StructurePermissions.RestoranMenuYonetimi.Manage)]
+    [Permission(StructurePermissions.RestoranKategoriHavuzuYonetimi.Manage)]
     public async Task<ActionResult<RestoranKategoriAtamaBaglamDto>> SaveAtamalar([FromBody] SaveRestoranKategoriAtamaRequest request, CancellationToken cancellationToken)
         => Ok(await _service.SaveAtamalarAsync(request, cancellationToken));
 }

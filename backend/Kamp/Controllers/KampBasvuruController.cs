@@ -24,6 +24,7 @@ public class KampBasvuruController : UIController
         => Ok(await _kampBasvuruService.GetBaglamAsync(cancellationToken));
 
     [HttpGet("benim-basvurularim")]
+    [Permission(StructurePermissions.KampBasvuruYonetimi.View)]
     public async Task<ActionResult<List<KampBasvuruDto>>> GetBenimBasvurularim(CancellationToken cancellationToken)
         => Ok(await _kampBasvuruService.GetBenimBasvurularimAsync(cancellationToken));
 

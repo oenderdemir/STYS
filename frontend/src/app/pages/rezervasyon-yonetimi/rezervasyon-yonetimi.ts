@@ -46,6 +46,7 @@ import {
     RezervasyonKonaklayanSegmentDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
+    RezervasyonOdemeDto,
     RezervasyonOdemeOzetDto,
     RezervasyonOdaDegisimKayitDto,
     RezervasyonOdaDegisimAdayOdaDto,
@@ -135,6 +136,7 @@ export class RezervasyonYonetimi implements OnInit {
     odemeReferansNo = '';
     odemeOzeti: RezervasyonOdemeOzetDto | null = null;
     odemeEkHizmetPanelExpanded = false;
+    odemeRestoranUcretPanelExpanded = false;
     odemeEkHizmetSecenekleri: RezervasyonEkHizmetSecenekleriDto | null = null;
     selectedEkHizmetKonaklayanId: number | null = null;
     selectedEkHizmetTarifeId: number | null = null;
@@ -294,6 +296,62 @@ export class RezervasyonYonetimi implements OnInit {
 
     get odemeEkHizmetToggleLabel(): string {
         return this.odemeEkHizmetPanelExpanded ? 'Ek Hizmetleri Gizle' : 'Ek Hizmetleri Goster';
+    }
+
+    get odemeRestoranUcretToggleLabel(): string {
+        return this.odemeRestoranUcretPanelExpanded ? 'Restoran Ucretlendirmelerini Gizle' : 'Restoran Ucretlendirmelerini Goster';
+    }
+
+    get restoranUcretlendirmeKayitlari(): RezervasyonOdemeDto[] {
+        if (!this.odemeOzeti) {
+            return [];
+        }
+
+        return this.odemeOzeti.odemeler.filter((x) => x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0);
+    }
+
+    get tahsilatKayitlari(): RezervasyonOdemeDto[] {
+        if (!this.odemeOzeti) {
+            return [];
+        }
+
+        return this.odemeOzeti.odemeler.filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0));
+    }
+
+    get restoranUcretlendirmeToplami(): number {
+        return this.restoranUcretlendirmeKayitlari.reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
+    }
+
+    get odemeDialogToplamBorc(): number {
+        if (!this.odemeOzeti) {
+            return 0;
+        }
+
+        return (this.odemeOzeti.konaklamaUcreti ?? 0) + (this.odemeOzeti.ekHizmetToplami ?? 0) + this.restoranUcretlendirmeToplami;
+    }
+
+    get odemeDialogOdenenToplam(): number {
+        return this.tahsilatKayitlari.reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
+    }
+
+    get odemeDialogKalanTutar(): number {
+        return Math.max(0, this.odemeDialogToplamBorc - this.odemeDialogOdenenToplam);
+    }
+
+    get odemeKaydetDisabled(): boolean {
+        return !this.odemeOzeti || this.odemeLoading || this.odemeDialogKalanTutar <= 0;
+    }
+
+    getOdemeTipiEtiket(odemeTipi: string): string {
+        if (odemeTipi === 'OdayaEkle') {
+            return 'Restoran Ucretlendirmesi';
+        }
+
+        return odemeTipi;
+    }
+
+    toPositiveAmount(value: number): number {
+        return Math.abs(Number(value ?? 0));
     }
 
     get odaDegisimBilgiMesaji(): string | null {
@@ -2090,6 +2148,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeReferansNo = kayit.referansNo;
         this.odemeOzeti = null;
         this.odemeEkHizmetPanelExpanded = false;
+        this.odemeRestoranUcretPanelExpanded = false;
         this.odemeTutari = null;
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
@@ -2114,6 +2173,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeReferansNo = '';
         this.odemeOzeti = null;
         this.odemeEkHizmetPanelExpanded = false;
+        this.odemeRestoranUcretPanelExpanded = false;
         this.odemeEkHizmetSecenekleri = null;
         this.selectedEkHizmetKonaklayanId = null;
         this.selectedEkHizmetTarifeId = null;
@@ -2229,7 +2289,7 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (result) => {
                     this.odemeOzeti = result;
                     this.applyOdemeOzetiToRezervasyon(result);
-                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
                     const message = this.editingEkHizmetId
                         ? 'Ek hizmet kaydi guncellendi.'
                         : 'Ek hizmet hesaba eklendi.';
@@ -2268,6 +2328,10 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeEkHizmetPanelExpanded = !this.odemeEkHizmetPanelExpanded;
     }
 
+    toggleOdemeRestoranUcretPanel(): void {
+        this.odemeRestoranUcretPanelExpanded = !this.odemeRestoranUcretPanelExpanded;
+    }
+
     ekHizmetDuzenlemeyiIptalEt(): void {
         this.resetEkHizmetForm();
     }
@@ -2294,7 +2358,7 @@ export class RezervasyonYonetimi implements OnInit {
                 next: (result) => {
                     this.odemeOzeti = result;
                     this.applyOdemeOzetiToRezervasyon(result);
-                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
                     if (this.editingEkHizmetId === hizmet.id) {
                         this.resetEkHizmetForm();
                     }
@@ -2341,7 +2405,7 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (result) => {
                     this.odemeOzeti = result;
-                    this.odemeTutari = result.kalanTutar > 0 ? result.kalanTutar : null;
+                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
                     this.odemeAciklama = '';
                     this.applyOdemeOzetiToRezervasyon(result);
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
@@ -2768,7 +2832,7 @@ export class RezervasyonYonetimi implements OnInit {
             .subscribe({
                 next: (ozet) => {
                     this.odemeOzeti = ozet;
-                    this.odemeTutari = ozet.kalanTutar > 0 ? ozet.kalanTutar : null;
+                    this.odemeTutari = this.getOdemeGorunumKalanTutar(ozet) > 0 ? this.getOdemeGorunumKalanTutar(ozet) : null;
                     if (ozet.odemeler.length > 0 && this.editingEkHizmetId) {
                         this.resetEkHizmetForm();
                     }
@@ -2821,6 +2885,19 @@ export class RezervasyonYonetimi implements OnInit {
             detay.toplamUcret = ozet.toplamUcret;
             detay.ekHizmetler = [...ozet.ekHizmetler];
         }
+    }
+
+    private getOdemeGorunumKalanTutar(ozet: RezervasyonOdemeOzetDto): number {
+        const restoranUcretlendirmeToplami = (ozet.odemeler ?? [])
+            .filter((x) => x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0)
+            .reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
+
+        const tahsilatToplami = (ozet.odemeler ?? [])
+            .filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0))
+            .reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
+
+        const toplamBorc = (ozet.konaklamaUcreti ?? 0) + (ozet.ekHizmetToplami ?? 0) + restoranUcretlendirmeToplami;
+        return Math.max(0, toplamBorc - tahsilatToplami);
     }
 
     private getSelectedEkHizmetTarife(): RezervasyonEkHizmetTarifeSecenekDto | null {

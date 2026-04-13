@@ -1373,15 +1373,19 @@
                 </div>
                 <div class="rez-odeme-summary-card is-primary">
                     <div class="rez-odeme-summary-label">Toplam</div>
-                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.toplamUcret, odemeOzeti.paraBirimi) }}</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeDialogToplamBorc, odemeOzeti.paraBirimi) }}</div>
                 </div>
                 <div class="rez-odeme-summary-card">
                     <div class="rez-odeme-summary-label">Odenen</div>
-                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.odenenTutar, odemeOzeti.paraBirimi) }}</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeDialogOdenenToplam, odemeOzeti.paraBirimi) }}</div>
                 </div>
                 <div class="rez-odeme-summary-card is-accent">
                     <div class="rez-odeme-summary-label">Kalan</div>
-                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeOzeti.kalanTutar, odemeOzeti.paraBirimi) }}</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(odemeDialogKalanTutar, odemeOzeti.paraBirimi) }}</div>
+                </div>
+                <div class="rez-odeme-summary-card">
+                    <div class="rez-odeme-summary-label">Restoran Ucretlendirmeleri</div>
+                    <div class="rez-odeme-summary-value">{{ formatCurrency(restoranUcretlendirmeToplami, odemeOzeti.paraBirimi) }}</div>
                 </div>
             </div>
 
@@ -1578,6 +1582,48 @@
             </div>
 
             <div class="rez-odeme-panel">
+                <div class="rez-odeme-panel-header compact">
+                    <div>
+                        <div class="rez-odeme-panel-title">Restoran Ucretlendirmeleri</div>
+                        <div class="rez-odeme-panel-subtitle">
+                            {{ restoranUcretlendirmeKayitlari.length }} kayit, toplam {{ formatCurrency(restoranUcretlendirmeToplami, odemeOzeti.paraBirimi) }}
+                        </div>
+                    </div>
+                    <p-button
+                        [label]="odemeRestoranUcretToggleLabel"
+                        [icon]="odemeRestoranUcretPanelExpanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                        severity="secondary"
+                        [text]="true"
+                        (onClick)="toggleOdemeRestoranUcretPanel()" />
+                </div>
+
+                @if (odemeRestoranUcretPanelExpanded) {
+                    @if (restoranUcretlendirmeKayitlari.length === 0) {
+                        <div class="text-sm text-color-secondary">Bu rezervasyonda restoran ucretlendirme kaydi bulunmuyor.</div>
+                    } @else {
+                        <p-table class="rez-odeme-history-table" [value]="restoranUcretlendirmeKayitlari" [tableStyle]="{ 'min-width': '42rem' }">
+                            <ng-template #header>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Tip</th>
+                                    <th>Tutar</th>
+                                    <th>Aciklama</th>
+                                </tr>
+                            </ng-template>
+                            <ng-template #body let-odeme>
+                                <tr>
+                                    <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
+                                    <td>{{ getOdemeTipiEtiket(odeme.odemeTipi) }}</td>
+                                    <td>{{ formatCurrency(toPositiveAmount(odeme.odemeTutari), odeme.paraBirimi) }}</td>
+                                    <td>{{ odeme.aciklama || '-' }}</td>
+                                </tr>
+                            </ng-template>
+                        </p-table>
+                    }
+                }
+            </div>
+
+            <div class="rez-odeme-panel">
                 <div class="rez-odeme-panel-header">
                     <div>
                         <div class="rez-odeme-panel-title">Odeme Islemleri</div>
@@ -1610,7 +1656,7 @@
                     </div>
                 </div>
 
-                <p-table class="rez-odeme-history-table" [value]="odemeOzeti.odemeler" [tableStyle]="{ 'min-width': '42rem' }">
+                <p-table class="rez-odeme-history-table" [value]="tahsilatKayitlari" [tableStyle]="{ 'min-width': '42rem' }">
                     <ng-template #header>
                         <tr>
                             <th>Tarih</th>
@@ -1622,7 +1668,7 @@
                     <ng-template #body let-odeme>
                         <tr>
                             <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
-                            <td>{{ odeme.odemeTipi }}</td>
+                            <td>{{ getOdemeTipiEtiket(odeme.odemeTipi) }}</td>
                             <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
                             <td>{{ odeme.aciklama || '-' }}</td>
                         </tr>
@@ -1638,7 +1684,7 @@
             label="Odeme Kaydet"
             icon="pi pi-check"
             [loading]="odemeSaving"
-            [disabled]="!odemeOzeti || odemeLoading || (odemeOzeti && odemeOzeti.kalanTutar <= 0)"
+            [disabled]="odemeKaydetDisabled"
             (onClick)="kaydetOdeme()"
         />
     </ng-template>

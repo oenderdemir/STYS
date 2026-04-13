@@ -2460,3 +2460,40 @@ Kamp Yonetimi (top-level, fa-campground)
 - backend/RestoranYonetimi/RestoranOdemeleri/Repositories/RestoranOdemeRepository.cs
 - changes.md
 
+## Tur 80 - Rezervasyon Odeme Ekraninda Restoran Ucretlendirmesi Ayrimi
+
+### Talep
+- `OdayaEkle` kaynakli hareketlerin `-85,00` gibi negatif tahsilat gorunmesi yerine,
+- ek hizmetlerden ayri bir `Restoran Ucretlendirmeleri` panelinde daha anlasilir gosterilmesi istendi.
+
+### Duzeltme
+- Rezervasyon odeme dialogunda hesaplama ve gorunum ayrildi:
+  - `Restoran Ucretlendirmeleri` (OdayaEkle/negatif kayitlar) ayri panelde listelenir.
+  - `Odeme Islemleri` tablosu yalnizca tahsilat kayitlarini gosterir.
+  - Ozet kartlari gorunumde su sekilde hesaplanir:
+    - `Toplam = Konaklama + Ek Hizmet + Restoran Ucretlendirmeleri`
+    - `Odenen = Tahsilat Toplami`
+    - `Kalan = Toplam - Odenen`
+- Odeme kaydet butonu ve odeme tutari varsayilani da ayni gorunum hesaplarini kullanacak sekilde guncellendi.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.ts
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.html
+- changes.md
+
+## Tur 81 - Restoran Ucretlendirmeleri Paneli Acilir/Kapanir Yapildi
+
+### Talep
+- Rezervasyon odeme dialogundaki yeni `Restoran Ucretlendirmeleri` panelinin acilir/kapanir olmasi istendi.
+
+### Duzeltme
+- Panel icin ayri state eklendi: `odemeRestoranUcretPanelExpanded`.
+- Baslik alanina `Goster/Gizle` butonu eklendi.
+- Liste alani sadece panel acik oldugunda render edilir hale getirildi.
+- Dialog acilis/kapanisinda panel state'i resetlenir.
+
+### Degisen Dosyalar
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.ts
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.html
+- changes.md
+

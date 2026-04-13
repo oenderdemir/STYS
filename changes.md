@@ -2335,3 +2335,57 @@ Kamp Yonetimi (top-level, fa-campground)
 - backend/RestoranYonetimi/RestoranMenuKategorileri/Controllers/RestoranMenuKategorileriController.cs
 - backend/Infrastructure/EntityFramework/Migrations/20260413170000_SplitRestaurantPermissionsForMicroAuthorization.cs
 - changes.md
+
+## Tur 73 - Garson Servis Menusu Parent Yetki Duzeltmesi
+
+### Sorun
+- Garson garson-servis route'una gidebiliyordu ancak sol menu'de goremiyordu.
+- Neden: Restoran parent menu item'i icin gerekli role bagi yoksa cocuk menu gizleniyor.
+
+### Duzeltme
+- Restoran ana menu item'ine GarsonServisYonetimi.Menu role bagi idempotent olarak eklendi.
+
+### Migration
+- yeni migration: 20260413173000_AddGarsonServisMenuRoleToRestoranRoot 
+- Not: Migration olusturuldu, veritabanina update calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413173000_AddGarsonServisMenuRoleToRestoranRoot.cs
+- changes.md
+
+## Tur 74 - Garson Grubuna Odeme Ozeti Gorme Yetkisi
+
+### Talep
+- `GarsonGrubu` kullanicilari odeme ozeti akisini goruntuleyebilsin.
+
+### Duzeltme
+- `GarsonGrubu`na `RestoranOdemeYonetimi.View` rolu idempotent migration ile eklendi.
+- Rol sistemde yoksa migration tarafinda olusturulup sonrasinda grup-role baglantisi kurulur.
+- Tum `GarsonGrubu` kayitlari (duplicate grup durumlari dahil) hedeflenir.
+
+### Migration
+- yeni migration: `20260413174500_GrantGarsonOdemeOzetiViewPermission`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413174500_GrantGarsonOdemeOzetiViewPermission.cs
+- changes.md
+
+## Tur 75 - RestoranYoneticiGrubu Marker Yetkisi Ekleme
+
+### Talep
+- `RestoranYoneticiGrubu` icin `KullaniciAtama.RestoranYoneticisiAtanabilir` marker rolunun eklenmesi istendi.
+
+### Duzeltme
+- Idempotent migration eklendi:
+  - Marker rolu yoksa olusturur.
+  - `RestoranYoneticiGrubu` adina sahip tum aktif grup kayitlarina rol baglar.
+
+### Migration
+- yeni migration: `20260413180000_AddRestoranYoneticisiAtanabilirToRestoranYoneticiGrubu`
+- Not: Migration olusturuldu, veritabanina `update` calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413180000_AddRestoranYoneticisiAtanabilirToRestoranYoneticiGrubu.cs
+- changes.md
+

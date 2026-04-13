@@ -2497,3 +2497,25 @@ Kamp Yonetimi (top-level, fa-campground)
 - frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.html
 - changes.md
 
+## Tur 82 - Erisim Teshis Modullerine Kamp + Restoran Kapsami Eklendi
+
+### Talep
+- Kamp ve restoran isleri icin erisim teshislerinde modul secilebilir olmasi istendi.
+
+### Duzeltme
+- `ErisimTeshisModulTanimlari` listesi genisletildi.
+- Kamp tarafina eklenen teshis modulleri:
+  - `kamp-tarife-yonetimi` (`/kamp-tarifeleri`)
+  - `kamp-basvuru-yonetimi` (`/kamp-basvurularim`)
+- Restoran tarafina eklenen teshis modulleri:
+  - `restoran-yonetimi`
+  - `restoran-kategori-havuzu-yonetimi`
+  - `restoran-masa-yonetimi`
+  - `restoran-menu-yonetimi`
+  - `restoran-siparis-yonetimi`
+  - `garson-servis-yonetimi`
+
+### Degisen Dosyalar
+- backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs
+- changes.md
+

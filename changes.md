@@ -1936,3 +1936,268 @@ Kamp Yonetimi (top-level, fa-campground)
 ### Build Sonuclari (Tur 58)
 - Backend: BASARILI (`dotnet build backend/STYS.csproj`)
 - Frontend: BASARILI (`npm run build`)
+
+## Tur 59 - Restoran Yonetici/Garson Gruplari ve Yetki Atamalari
+
+### Yapilanlar
+- Veritabani icin iki yeni kullanici grubu seed edildi:
+  - `RestoranYoneticiGrubu`
+  - `GarsonGrubu`
+- Gruplara restoran modulu icin gerekli roller otomatik atandi.
+
+### Yetki Setleri
+- `RestoranYoneticiGrubu`:
+  - `RestoranYonetimi`: `Menu`, `View`, `Manage`
+  - `RestoranMasaYonetimi`: `Menu`, `View`, `Manage`
+  - `RestoranMenuYonetimi`: `Menu`, `View`, `Manage`
+  - `RestoranSiparisYonetimi`: `Menu`, `View`, `Manage`
+  - `RestoranOdemeYonetimi`: `Menu`, `View`, `Manage`
+  - `KullaniciAtama`: `RestoranYoneticisiAtanabilir`, `RestoranGarsonuAtayabilir`
+- `GarsonGrubu`:
+  - `RestoranYonetimi`: `Menu`, `View`
+  - `RestoranSiparisYonetimi`: `Menu`, `View`, `Manage`
+  - `RestoranMenuYonetimi`: `View`
+  - `KullaniciAtama`: `RestoranGarsonuAtanabilir`
+
+### Migration
+- yeni migration: `20260413102000_AddRestaurantManagerAndWaiterUserGroups`
+  - grup olusturma + role seed/atama SQL'i eklendi
+  - idempotent (mevcut kayitlari tekrar eklemez) olacak sekilde yazildi
+
+### DB Uygulama
+- Migration veritabanina uygulandi:
+  - `dotnet ef database update --context StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj`
+  - Sonuc: `Done.`
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413102000_AddRestaurantManagerAndWaiterUserGroups.cs
+- changes.md
+
+## Tur 60 - Restoran Erisim Kapsami Sertlestirme (Tesis Yoneticisi + Restoran Yoneticisi + Garson)
+
+### Yapilanlar
+- `RestoranErisimService` kapsam kurali guncellendi.
+- Admin disinda su roller icin scope zorunlu hale getirildi:
+  - `KullaniciAtama.TesisYoneticisiAtanabilir/Atayabilir`
+  - `KullaniciAtama.RestoranYoneticisiAtanabilir/Atayabilir`
+  - `KullaniciAtama.RestoranGarsonuAtanabilir/Atayabilir`
+- Tesis yoneticisi icin erisebilir restoranlar:
+  - yonettigi tesislerdeki restoranlar
+  - + varsa dogrudan restoran yoneticisi/garson atandigi restoranlar
+- Restoran yoneticisi ve garson icin erisebilir restoranlar:
+  - yalnizca atandigi restoranlar
+- Bu rollerde scope bos ise artik genis gorunum acilmiyor (liste bos doner).
+
+### Degisen Dosyalar
+- backend/RestoranYonetimi/Services/RestoranErisimService.cs
+- changes.md
+
+### Build Sonuclari (Tur 60)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 61 - Tesis Yoneticisi ile Restoran Yoneticisi/Garson Kullanici Olusturma
+
+### Yapilanlar
+- Tesis bazli kullanici olusturma akisina iki yeni endpoint eklendi:
+  - `POST /ui/tesis/{tesisId}/restoran-yonetici-kullanici`
+  - `POST /ui/tesis/{tesisId}/garson-kullanici`
+- Servis tarafinda yeni olusturma metodlari eklendi:
+  - `CreateRestoranYoneticisiUserAsync`
+  - `CreateRestoranGarsonuUserAsync`
+- Bu akislarda:
+  - tesis erisim yetkisi kontrolu yapiliyor
+  - gerekli atama yetkisi kontrolu yapiliyor (`RestoranYoneticisiAtayabilir`, `RestoranGarsonuAtayabilir`)
+  - uygun marker grubu otomatik atanarak kullanici olusturuluyor
+  - olusan kullanicinin `KullaniciTesisSahiplikleri` kaydi secilen tesis ile esleniyor
+
+### Kullanici Yonetimi UI
+- Scoped tesis yoneticisi hizli olusturma butonlari genisletildi:
+  - `Restoran Yoneticisi Olustur`
+  - `Garson Olustur`
+- `kullanici-yonetimi` akisina yeni scoped create tipleri eklendi.
+- Frontend servisine yeni cagrilar eklendi:
+  - `createRestoranYoneticisiUserForTesis`
+  - `createGarsonUserForTesis`
+
+### Ek Backend API (Restoran Bazli)
+- Restoran bazli olusturma endpointleri de eklendi:
+  - `POST /api/restoranlar/{restoranId}/yonetici-kullanici`
+  - `POST /api/restoranlar/{restoranId}/garson-kullanici`
+- Bu endpointler olusturulan kullaniciyi ilgili restorana otomatik atar.
+
+### Degisen Dosyalar
+- backend/Tesisler/Services/ITesisService.cs
+- backend/Tesisler/Services/TesisService.cs
+- backend/Tesisler/Controllers/TesisController.cs
+- backend/RestoranYonetimi/Restoranlar/Services/IRestoranService.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- backend/RestoranYonetimi/Restoranlar/Controllers/RestoranlarController.cs
+- frontend/src/app/pages/kullanici-yonetimi/kullanici-yonetimi.service.ts
+- frontend/src/app/pages/kullanici-yonetimi/kullanici-yonetimi.ts
+- frontend/src/app/pages/kullanici-yonetimi/kullanici-yonetimi.html
+- changes.md
+
+### Build Sonuclari (Tur 61)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 62 - Restoran/Garson Olusturma Butonlarinda Grup Atamasi Duzeltmesi
+
+### Duzeltme
+- Yeni hizli olusturma akislarinda grup secimi marker-role'a gore yapildigi icin yanlislikla `TesisYoneticiGrubu` gibi gruplara dusme riski vardi.
+- Restoran yoneticisi ve garson olusturma akislari artik **grup adi bazli kesin atama** yapiyor:
+  - `RestoranYoneticiGrubu`
+  - `GarsonGrubu`
+
+### Guncellenen Noktalar
+- `TesisService`:
+  - `CreateRestoranYoneticisiUserAsync` -> `RestoranYoneticiGrubu`
+  - `CreateRestoranGarsonuUserAsync` -> `GarsonGrubu`
+- `RestoranService`:
+  - `CreateRestoranYoneticisiUserAsync` -> `RestoranYoneticiGrubu`
+  - `CreateRestoranGarsonuUserAsync` -> `GarsonGrubu`
+- Bu amacla her iki servise de `GetGroupIdByNameAsync` eklendi.
+
+### Degisen Dosyalar
+- backend/Tesisler/Services/TesisService.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- changes.md
+
+### Build Sonuclari (Tur 62)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 63 - Garson Olusturda Fazla Rol Sorunu Duzeltmesi
+
+### Sorun
+- `Garson Olustur` (ve benzer marker bazli akislar) birden fazla grupta ayni marker oldugu icin yanlis grubu secebiliyordu.
+- Bu da olusturma dialogunda beklenenden fazla rol gorunmesine neden oluyordu.
+
+### Duzeltme
+- `GetGroupIdByMarkerAsync` kullanimi korunarak secim daraltildi.
+- Backend'de marker'a gore grup secerken hedef grup onceliklendirildi:
+  - `RestoranYoneticisiAtanabilir` -> `RestoranYoneticiGrubu`
+  - `RestoranGarsonuAtanabilir` -> `GarsonGrubu`
+- Frontend `kullanici-yonetimi` scoped hizli olusturma akisi da ayni sekilde hedef grup adini once ariyor, bulamazsa marker fallback yapiyor.
+
+### Degisen Dosyalar
+- backend/Tesisler/Services/TesisService.cs
+- backend/RestoranYonetimi/Restoranlar/Services/RestoranService.cs
+- frontend/src/app/pages/kullanici-yonetimi/kullanici-yonetimi.ts
+- changes.md
+
+### Build Sonuclari (Tur 63)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 64 - Scoped Yonetici Grup Validasyonu (Restoran Yonetici/Garson)
+
+### Sorun
+- `StysScopedUserService` scoped grup validasyonunda sadece tesis/bina/resepsiyonist markerlarini yonetim grubu olarak kabul ediyordu.
+- Bu nedenle restoran yoneticisi/garson olusturma akisinda:
+  - `Scoped yonetici yalnizca yonetim grubu tipindeki kullanici gruplarina atama yapabilir.`
+  hatasi alinabiliyordu.
+
+### Duzeltme
+- Scoped validasyon whitelist'i genisletildi:
+  - `KullaniciAtama.RestoranYoneticisiAtanabilir`
+  - `KullaniciAtama.RestoranGarsonuAtanabilir`
+- Marker -> atayabilir mapping'i genisletildi:
+  - `RestoranYoneticisiAtanabilir -> RestoranYoneticisiAtayabilir`
+  - `RestoranGarsonuAtanabilir -> RestoranGarsonuAtayabilir`
+- Scoped yoneticinin yonetebilecegi marker listesine restoran markerlari eklendi.
+
+### Degisen Dosyalar
+- backend/Kullanicilar/Services/StysScopedUserService.cs
+- changes.md
+
+### Build Sonuclari (Tur 64)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 65 - Kullanici Seed (Gruplara Gore)
+
+### Yapilanlar
+- Sistemi hizli kullanilabilir hale getirmek icin cesitli yonetim gruplari icin demo kullanicilar seed edildi.
+- Seed edilen kullanicilar (idempotent):
+  - `tesisyoneticisi.demo`
+  - `binayoneticisi.demo`
+  - `resepsiyonist.demo`
+  - `restoranyoneticisi.demo`
+  - `garson.demo`
+- Ortak parola hash'i migration ile eklendi (tum demo kullanicilar icin ayni).
+
+### Atamalar
+- `tesisyoneticisi.demo`
+  - `TesisYoneticiGrubu`
+  - aktif bir tesise `TesisYoneticileri` atamasi
+- `binayoneticisi.demo`
+  - `BinaYoneticiGrubu`
+  - aktif bir binaya `BinaYoneticileri` atamasi
+- `resepsiyonist.demo`
+  - `ResepsiyonistGrubu`
+  - aktif bir tesise `TesisResepsiyonistleri` atamasi
+- `restoranyoneticisi.demo`
+  - `RestoranYoneticiGrubu`
+  - aktif bir restorana `restoran.RestoranYoneticileri` atamasi
+- `garson.demo`
+  - `GarsonGrubu`
+  - aktif bir restorana `restoran.RestoranGarsonlari` atamasi
+- Tum kullanicilar icin uygun `KullaniciTesisSahiplikleri` kayitlari da seed edildi.
+
+### Migration
+- yeni migration: `20260413113000_SeedScopedUsersForManagementGroups`
+
+### DB Uygulama
+- `dotnet ef database update --context StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj`
+- Sonuc: `Done.`
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413113000_SeedScopedUsersForManagementGroups.cs
+- changes.md
+
+### Build Sonuclari (Tur 65)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+
+## Tur 66 - Seed Demo Kullanici Parolasi Guncelleme
+
+### Yapilanlar
+- Seed edilen demo kullanicilarin ortak parolasi `1` olacak sekilde guncellendi.
+- Etkilenen kullanicilar:
+  - `tesisyoneticisi.demo`
+  - `binayoneticisi.demo`
+  - `resepsiyonist.demo`
+  - `restoranyoneticisi.demo`
+  - `garson.demo`
+
+### Migration
+- yeni migration: `20260413121000_UpdateSeededDemoUsersPasswordToOne`
+  - Up: parola hash'i `1` icin gunceller
+  - Down: onceki demo hash'ine geri alir
+
+### DB Uygulama
+- `dotnet ef database update --context StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj`
+- Sonuc: `Done.`
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413121000_UpdateSeededDemoUsersPasswordToOne.cs
+- changes.md
+
+## Tur 67 - Garson Login 403 (UIPolicy/UIUser) Duzeltmesi
+
+### Sorun
+- Garson login oldugunda `restoranlar`, `bildirim`, `tree`, `negotiate` gibi tum `UIController`/hub cagrilarinda 403 aliyordu.
+- Kök neden: `UIPolicy` icin gereken `KullaniciTipi.UIUser` claim'i `GarsonGrubu` (ve restoran yonetici grubu) tarafinda yoktu.
+
+### Duzeltme
+- `RestoranYoneticiGrubu` ve `GarsonGrubu` gruplarina `KullaniciTipi.UIUser` rol baglantisi eklendi.
+- Rol yoksa once `TODBase.Roles` icinde idempotent sekilde olusturuluyor, sonra grup-role baglantisi yapiliyor.
+
+### Migration
+- yeni migration: `20260413124000_AddUiUserRoleToRestaurantGroups`
+
+### DB Uygulama
+- `dotnet ef database update --context StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj`
+- Sonuc: `Done.`
+
+### Degisen Dosyalar
+- backend/Infrastructure/EntityFramework/Migrations/20260413124000_AddUiUserRoleToRestaurantGroups.cs
+- changes.md

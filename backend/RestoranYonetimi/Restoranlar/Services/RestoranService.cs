@@ -6,7 +6,10 @@ using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranYonetimi.Services;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
+using TOD.Platform.Identity.UserGroups.DTO;
+using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Repositories;
+using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -15,9 +18,12 @@ namespace STYS.Restoranlar.Services;
 public class RestoranService : IRestoranService
 {
     private const string RestoranIsletmeAlaniSinifKodu = "RESTORAN";
+    private const string KullaniciTipiDomain = "KullaniciTipi";
+    private const string KullaniciTipiAdminRoleName = "Admin";
     private readonly StysAppDbContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IUserRepository _userRepository;
+    private readonly IUserService _userService;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IRestoranErisimService _restoranErisimService;
@@ -26,6 +32,7 @@ public class RestoranService : IRestoranService
         StysAppDbContext dbContext,
         IMapper mapper,
         IUserRepository userRepository,
+        IUserService userService,
         TodIdentityDbContext identityDbContext,
         ICurrentUserAccessor currentUserAccessor,
         IRestoranErisimService restoranErisimService)
@@ -33,9 +40,90 @@ public class RestoranService : IRestoranService
         _dbContext = dbContext;
         _mapper = mapper;
         _userRepository = userRepository;
+        _userService = userService;
         _identityDbContext = identityDbContext;
         _currentUserAccessor = currentUserAccessor;
         _restoranErisimService = restoranErisimService;
+    }
+
+    public async Task<UserDto> CreateRestoranYoneticisiUserAsync(int restoranId, UserDto dto, CancellationToken cancellationToken = default)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir, cancellationToken);
+
+        var restoran = await _dbContext.Restoranlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == restoranId, cancellationToken)
+            ?? throw new BaseException("Secilen restoran bulunamadi.", 404);
+
+        var groupId = await GetGroupIdByMarkerAsync(nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir), cancellationToken);
+        if (groupId == Guid.Empty)
+        {
+            throw new BaseException("Restoran yoneticisi grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = groupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Restoran yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, restoran.TesisId, cancellationToken);
+        await UpsertRestoranYoneticiAtamasiAsync(restoranId, created.Id.Value, cancellationToken);
+        return created;
+    }
+
+    public async Task<UserDto> CreateRestoranGarsonuUserAsync(int restoranId, UserDto dto, CancellationToken cancellationToken = default)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir, cancellationToken);
+
+        var restoran = await _dbContext.Restoranlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == restoranId, cancellationToken)
+            ?? throw new BaseException("Secilen restoran bulunamadi.", 404);
+
+        var groupId = await GetGroupIdByMarkerAsync(nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir), cancellationToken);
+        if (groupId == Guid.Empty)
+        {
+            throw new BaseException("Restoran garsonu grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = groupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Garson olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, restoran.TesisId, cancellationToken);
+        await UpsertRestoranGarsonAtamasiAsync(restoranId, created.Id.Value, cancellationToken);
+        return created;
     }
 
     public async Task<List<RestoranDto>> GetListAsync(int? tesisId, CancellationToken cancellationToken = default)
@@ -454,6 +542,95 @@ public class RestoranService : IRestoranService
         }
 
         throw new BaseException("Bu islem icin gerekli kullanici atama yetkiniz bulunmuyor.", 403);
+    }
+
+    private async Task<Guid> GetGroupIdByMarkerAsync(string markerRoleName, CancellationToken cancellationToken = default)
+    {
+        var query = _identityDbContext.UserGroups
+            .Where(x => x.UserGroupRoles.Any(ugr =>
+                ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
+                && ugr.Role.Name == markerRoleName))
+            .Where(x => !x.UserGroupRoles.Any(ugr =>
+                ugr.Role.Domain == KullaniciTipiDomain
+                && ugr.Role.Name == KullaniciTipiAdminRoleName));
+
+        if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "RestoranYoneticiGrubu");
+        }
+        else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "GarsonGrubu");
+        }
+
+        return await query
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+
+    private async Task SetOwnerTesisForCreatedUserAsync(Guid userId, int tesisId, CancellationToken cancellationToken)
+    {
+        var existingOwner = await _dbContext.KullaniciTesisSahiplikleri
+            .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+        if (existingOwner is null)
+        {
+            await _dbContext.KullaniciTesisSahiplikleri.AddAsync(new()
+            {
+                UserId = userId,
+                TesisId = tesisId
+            }, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (existingOwner.TesisId == tesisId)
+        {
+            return;
+        }
+
+        existingOwner.TesisId = tesisId;
+        _dbContext.KullaniciTesisSahiplikleri.Update(existingOwner);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task UpsertRestoranYoneticiAtamasiAsync(int restoranId, Guid userId, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.RestoranYoneticileri
+            .FirstOrDefaultAsync(x => x.RestoranId == restoranId && x.UserId == userId, cancellationToken);
+
+        if (existing is not null)
+        {
+            return;
+        }
+
+        await _dbContext.RestoranYoneticileri.AddAsync(new RestoranYonetici
+        {
+            RestoranId = restoranId,
+            UserId = userId
+        }, cancellationToken);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task UpsertRestoranGarsonAtamasiAsync(int restoranId, Guid userId, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.RestoranGarsonlari
+            .FirstOrDefaultAsync(x => x.RestoranId == restoranId && x.UserId == userId, cancellationToken);
+
+        if (existing is not null)
+        {
+            return;
+        }
+
+        await _dbContext.RestoranGarsonlari.AddAsync(new RestoranGarson
+        {
+            RestoranId = restoranId,
+            UserId = userId
+        }, cancellationToken);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<HashSet<string>> GetCurrentUserPermissionSetAsync(CancellationToken cancellationToken = default)

@@ -77,9 +77,12 @@ public class RestoranErisimService : IRestoranErisimService
         var userPermissions = GetCurrentUserPermissionSet();
         var isAdmin = userPermissions.Contains(TodPlatformAuthorizationConstants.AdminPermission)
             || userPermissions.Any(x => x.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
-        var canAssignRestaurantManagers = userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir);
-        var canAssignRestaurantWaiters = userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir);
-
+        var shouldBeScoped = userPermissions.Contains(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir)
+            || userPermissions.Contains(StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir)
+            || userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir)
+            || userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir)
+            || userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir)
+            || userPermissions.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir);
         var assignedRestoranIds = await _dbContext.RestoranYoneticileri
             .Where(x => x.UserId == userId.Value)
             .Select(x => x.RestoranId)
@@ -97,14 +100,43 @@ public class RestoranErisimService : IRestoranErisimService
             .Distinct()
             .ToList();
 
-        if (assignedRestoranIds.Count == 0 || isAdmin || canAssignRestaurantManagers || canAssignRestaurantWaiters)
+        if (isAdmin)
         {
             _unrestricted = true;
             return;
         }
 
+        var managedTesisIds = await _dbContext.TesisYoneticileri
+            .Where(x => x.UserId == userId.Value)
+            .Select(x => x.TesisId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var scopeRestoranIds = assignedRestoranIds;
+        if (managedTesisIds.Count > 0)
+        {
+            var tesisBazliRestoranIds = await _dbContext.Restoranlar
+                .Where(x => managedTesisIds.Contains(x.TesisId))
+                .Select(x => x.Id)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            scopeRestoranIds = scopeRestoranIds
+                .Concat(tesisBazliRestoranIds)
+                .Distinct()
+                .ToList();
+        }
+
+        if (scopeRestoranIds.Count == 0)
+        {
+            // Tesis yoneticisi/restoran yoneticisi/garson rolleri yalnizca kendi kapsamlarini gorebilir.
+            _unrestricted = !shouldBeScoped;
+            _yetkiliRestoranIdleri = [];
+            return;
+        }
+
         _unrestricted = false;
-        _yetkiliRestoranIdleri = assignedRestoranIds.ToHashSet();
+        _yetkiliRestoranIdleri = scopeRestoranIds.ToHashSet();
     }
 
     private HashSet<string> GetCurrentUserPermissionSet()

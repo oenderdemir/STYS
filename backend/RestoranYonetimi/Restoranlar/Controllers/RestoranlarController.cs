@@ -3,6 +3,8 @@ using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Identity;
+using TOD.Platform.Identity.Users.DTO;
 
 namespace STYS.Restoranlar.Controllers;
 
@@ -52,4 +54,20 @@ public class RestoranlarController : UIController
         await _service.DeleteAsync(id, cancellationToken);
         return Ok();
     }
+
+    [HttpPost("{restoranId:int}/yonetici-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateRestoranYoneticisiUser(
+        int restoranId,
+        [FromBody] UserDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _service.CreateRestoranYoneticisiUserAsync(restoranId, dto, cancellationToken));
+
+    [HttpPost("{restoranId:int}/garson-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateRestoranGarsonuUser(
+        int restoranId,
+        [FromBody] UserDto dto,
+        CancellationToken cancellationToken)
+        => Ok(await _service.CreateRestoranGarsonuUserAsync(restoranId, dto, cancellationToken));
 }

@@ -10,6 +10,12 @@
             @if (canAssignBinaYoneticisi) {
                 <p-button label="Bina Yoneticisi Olustur" icon="pi pi-building" class="mr-2" (onClick)="openNewBinaYoneticisi()" />
             }
+            @if (canAssignRestoranYoneticisi) {
+                <p-button label="Restoran Yoneticisi Olustur" icon="pi pi-briefcase" class="mr-2" (onClick)="openNewRestoranYoneticisi()" />
+            }
+            @if (canAssignGarson) {
+                <p-button label="Garson Olustur" icon="pi pi-user-plus" class="mr-2" (onClick)="openNewGarson()" />
+            }
         } @else if (canManage) {
             <p-button label="Yeni Kullanici" icon="pi pi-plus" class="mr-2" (onClick)="openNew()" />
         }

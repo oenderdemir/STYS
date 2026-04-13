@@ -120,6 +120,22 @@ public class TesisController : UIController
         return Ok(created);
     }
 
+    [HttpPost("{tesisId:int}/restoran-yonetici-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateRestoranYoneticisiUser(int tesisId, [FromBody] UserDto dto)
+    {
+        var created = await _tesisService.CreateRestoranYoneticisiUserAsync(tesisId, dto);
+        return Ok(created);
+    }
+
+    [HttpPost("{tesisId:int}/garson-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateRestoranGarsonuUser(int tesisId, [FromBody] UserDto dto)
+    {
+        var created = await _tesisService.CreateRestoranGarsonuUserAsync(tesisId, dto);
+        return Ok(created);
+    }
+
     private static Func<IQueryable<STYS.Tesisler.Entities.Tesis>, IOrderedQueryable<STYS.Tesisler.Entities.Tesis>>? BuildOrderBy(string? sortBy, string? sortDir)
     {
         if (string.IsNullOrWhiteSpace(sortBy))

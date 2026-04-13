@@ -147,6 +147,90 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         return created;
     }
 
+    public async Task<UserDto> CreateRestoranYoneticisiUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var groupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir));
+
+        if (groupId == Guid.Empty)
+        {
+            throw new BaseException("Restoran yoneticisi grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = groupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Restoran yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+        return created;
+    }
+
+    public async Task<UserDto> CreateRestoranGarsonuUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var groupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir));
+
+        if (groupId == Guid.Empty)
+        {
+            throw new BaseException("Restoran garsonu grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = groupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Restoran garsonu olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+        return created;
+    }
+
     public override async Task<TesisDto> AddAsync(TesisDto dto)
     {
         Normalize(dto);
@@ -639,16 +723,28 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
     private async Task<Guid> GetGroupIdByMarkerAsync(string markerRoleName)
     {
-        return await _identityDbContext.UserGroups
+        var query = _identityDbContext.UserGroups
             .Where(x => x.UserGroupRoles.Any(ugr =>
                 (ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
                  && ugr.Role.Name == markerRoleName)))
             .Where(x => !x.UserGroupRoles.Any(ugr =>
                 ugr.Role.Domain == KullaniciTipiDomain
-                && ugr.Role.Name == KullaniciTipiAdminRoleName))
+                && ugr.Role.Name == KullaniciTipiAdminRoleName));
+
+        if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "RestoranYoneticiGrubu");
+        }
+        else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "GarsonGrubu");
+        }
+
+        return await query
             .Select(x => x.Id)
             .FirstOrDefaultAsync();
     }
+
 
     private async Task SetOwnerTesisForCreatedUserAsync(Guid userId, int tesisId)
     {

@@ -84,6 +84,30 @@ export class KullaniciYonetimiService {
         );
     }
 
+    createRestoranYoneticisiUserForTesis(tesisId: number, payload: UserRequestDto): Observable<UserResponseDto> {
+        return this.http.post<ApiResponse<UserResponseDto>>(`${this.apiBaseUrl}/ui/tesis/${tesisId}/restoran-yonetici-kullanici`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Restoran yoneticisi kullanici olusturulamadi.');
+            })
+        );
+    }
+
+    createGarsonUserForTesis(tesisId: number, payload: UserRequestDto): Observable<UserResponseDto> {
+        return this.http.post<ApiResponse<UserResponseDto>>(`${this.apiBaseUrl}/ui/tesis/${tesisId}/garson-kullanici`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Garson kullanici olusturulamadi.');
+            })
+        );
+    }
+
     updateUser(id: string, payload: UserRequestDto): Observable<void> {
         return this.http.put<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/user/${id}`, payload).pipe(
             map((responseEnvelope) => {

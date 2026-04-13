@@ -19,12 +19,16 @@ public class StysScopedUserService : BaseUserService
     [
         StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir,
         StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
+        StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir,
+        StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir,
         StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir
     ];
     private static readonly string[] AssignableMarkerRoleNames =
     [
         nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir),
         nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir),
+        nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir),
+        nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir),
         nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
     ];
 
@@ -481,6 +485,16 @@ public class StysScopedUserService : BaseUserService
             return StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir;
         }
 
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir;
+        }
+
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir;
+        }
+
         if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir, StringComparison.OrdinalIgnoreCase))
         {
             return StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir;
@@ -501,6 +515,16 @@ public class StysScopedUserService : BaseUserService
         if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir))
         {
             manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir));
+        }
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir));
+        }
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir));
         }
 
         if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir))

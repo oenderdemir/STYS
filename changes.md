@@ -2389,3 +2389,18 @@ Kamp Yonetimi (top-level, fa-campground)
 - backend/Infrastructure/EntityFramework/Migrations/20260413180000_AddRestoranYoneticisiAtanabilirToRestoranYoneticiGrubu.cs
 - changes.md
 
+## Tur 76 - Restoran Yonetici Icin Rezervasyon Tesisler Endpoint 403 Duzeltmesi
+
+### Sorun
+- `restoranyonetici` kullanicisi `GET /api/ui/rezervasyon/tesisler` cagrısında 403 aliyordu.
+
+### Duzeltme
+- Endpoint permission'i OR seklinde genisletildi:
+  - Once: `RezervasyonYonetimi.View`
+  - Simdi: `RezervasyonYonetimi.View` veya `RestoranYonetimi.View`
+- Boylesiyle restoran yoneticisi gereksiz tam rezervasyon rolune sahip olmadan tesis listesini cekebiliyor.
+
+### Degisen Dosyalar
+- backend/Rezervasyonlar/Controllers/RezervasyonController.cs
+- changes.md
+

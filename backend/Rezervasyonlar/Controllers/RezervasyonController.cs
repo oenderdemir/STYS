@@ -17,7 +17,7 @@ public class RezervasyonController : UIController
     }
 
     [HttpGet("tesisler")]
-    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View, StructurePermissions.RestoranYonetimi.View)]
     public async Task<ActionResult<List<RezervasyonTesisDto>>> GetTesisler(CancellationToken cancellationToken)
     {
         var tesisler = await _rezervasyonService.GetErisilebilirTesislerAsync(cancellationToken);

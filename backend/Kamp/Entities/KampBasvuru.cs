@@ -64,4 +64,6 @@ public class KampBasvuru : BaseEntity<int>
     public Tesisler.Entities.Tesis? Tesis { get; set; }
 
     public ICollection<KampBasvuruKatilimci> Katilimcilar { get; set; } = [];
+
+    public ICollection<KampBasvuruTercih> Tercihler { get; set; } = [];
 }

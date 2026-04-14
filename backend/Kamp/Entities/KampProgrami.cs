@@ -18,6 +18,8 @@ public class KampProgrami : BaseEntity<int>
 
     public int Yil { get; set; }
 
+    public int MaksimumBasvuruSayisi { get; set; } = 1;
+
     public bool AktifMi { get; set; } = true;
 
     public ICollection<KampDonemi> KampDonemleri { get; set; } = [];

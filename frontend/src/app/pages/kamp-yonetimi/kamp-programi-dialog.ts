@@ -40,6 +40,10 @@ import { KampProgramiDto } from './kamp-yonetimi.dto';
                     <label for="yil" class="block font-medium mb-2">Yil</label>
                     <input id="yil" pInputText [(ngModel)]="workingModel.yil" class="w-full" [disabled]="isReadOnly || saving" type="number" />
                 </div>
+                <div class="col-span-12 md:col-span-4">
+                    <label for="maksimumBasvuruSayisi" class="block font-medium mb-2">Maks. Basvuru (Kisi Basi)</label>
+                    <input id="maksimumBasvuruSayisi" pInputText [(ngModel)]="workingModel.maksimumBasvuruSayisi" class="w-full" [disabled]="isReadOnly || saving" type="number" min="1" max="20" />
+                </div>
                 <div class="col-span-12">
                     <label for="aciklama" class="block font-medium mb-2">Aciklama</label>
                     <input id="aciklama" pInputText [(ngModel)]="workingModel.aciklama" class="w-full" [disabled]="isReadOnly || saving" maxlength="512" />
@@ -62,7 +66,7 @@ import { KampProgramiDto } from './kamp-yonetimi.dto';
 export class KampProgramiDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), aktifMi: true };
+    @Input() model: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), maksimumBasvuruSayisi: 1, aktifMi: true };
     @Input() saving = false;
     @Input() canManage = false;
 
@@ -70,7 +74,7 @@ export class KampProgramiDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<KampProgramiDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), aktifMi: true };
+    workingModel: KampProgramiDto = { kod: '', ad: '', aciklama: null, yil: new Date().getFullYear(), maksimumBasvuruSayisi: 1, aktifMi: true };
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -123,7 +127,10 @@ export class KampProgramiDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return (this.workingModel.kod?.trim().length ?? 0) > 0 && (this.workingModel.ad?.trim().length ?? 0) > 0;
+        return (this.workingModel.kod?.trim().length ?? 0) > 0
+            && (this.workingModel.ad?.trim().length ?? 0) > 0
+            && Number(this.workingModel.maksimumBasvuruSayisi) >= 1
+            && Number(this.workingModel.maksimumBasvuruSayisi) <= 20;
     }
 
     submit(): void {
@@ -137,6 +144,7 @@ export class KampProgramiDialog implements OnChanges {
             ad: this.workingModel.ad.trim(),
             aciklama: this.workingModel.aciklama?.trim() || null,
             yil: this.workingModel.yil,
+            maksimumBasvuruSayisi: Number(this.workingModel.maksimumBasvuruSayisi),
             aktifMi: this.workingModel.aktifMi
         });
     }

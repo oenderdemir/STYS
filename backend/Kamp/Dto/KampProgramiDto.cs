@@ -16,5 +16,8 @@ public class KampProgramiDto : BaseRdbmsDto<int>
     [Required]
     public int Yil { get; set; }
 
+    [Required]
+    public int MaksimumBasvuruSayisi { get; set; } = 1;
+
     public bool AktifMi { get; set; } = true;
 }

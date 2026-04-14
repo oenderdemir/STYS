@@ -280,6 +280,7 @@ export class KampProgramiTanimYonetimi implements OnInit, OnDestroy {
             ad: '',
             aciklama: null,
             yil: new Date().getFullYear(),
+            maksimumBasvuruSayisi: 1,
             aktifMi: true
         };
     }

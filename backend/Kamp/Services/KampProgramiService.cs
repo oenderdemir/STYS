@@ -58,6 +58,7 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         entity.Ad = dto.Ad;
         entity.Aciklama = dto.Aciklama;
         entity.Yil = dto.Yil;
+        entity.MaksimumBasvuruSayisi = dto.MaksimumBasvuruSayisi;
         entity.AktifMi = dto.AktifMi;
 
         _kampProgramiRepository.Update(entity);
@@ -134,6 +135,11 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         if (dto.Yil < 2000 || dto.Yil > 2100)
         {
             throw new BaseException("Kamp programi yili 2000-2100 araliginda olmalidir.", 400);
+        }
+
+        if (dto.MaksimumBasvuruSayisi <= 0 || dto.MaksimumBasvuruSayisi > 20)
+        {
+            throw new BaseException("Kamp programi maksimum basvuru sayisi 1-20 araliginda olmalidir.", 400);
         }
 
         dto.Kod = dto.Kod.Trim().ToUpperInvariant();

@@ -4,6 +4,7 @@ export interface KampProgramiDto {
     ad: string;
     aciklama?: string | null;
     yil: number;
+    maksimumBasvuruSayisi: number;
     aktifMi: boolean;
 }
 
@@ -205,6 +206,7 @@ export interface KampBasvuruKatilimciDto {
 export interface KampBasvuruRequestDto {
     kampDonemiId: number;
     tesisId: number;
+    tercihler: KampBasvuruTercihDto[];
     konaklamaBirimiTipi: string;
     basvuruSahibiTipi: string;
     hizmetYili: number;
@@ -214,6 +216,13 @@ export interface KampBasvuruRequestDto {
     televizyonTalepEdildiMi: boolean;
     klimaTalepEdildiMi: boolean;
     katilimcilar: KampBasvuruKatilimciDto[];
+}
+
+export interface KampBasvuruTercihDto {
+    tercihSirasi: number;
+    kampDonemiId: number;
+    tesisId: number;
+    konaklamaBirimiTipi: string;
 }
 
 export interface KampBasvuruOnizlemeDto {
@@ -262,6 +271,7 @@ export interface KampBasvuruDto {
     klimaTalepEdildiMi: boolean;
     createdAt?: string | null;
     katilimcilar: KampBasvuruKatilimciDto[];
+    tercihler: KampBasvuruTercihDto[];
 }
 
 export interface KampKatilimciIptalSonucDto {

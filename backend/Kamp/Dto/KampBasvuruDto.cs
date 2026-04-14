@@ -30,6 +30,7 @@ public class KampBasvuruDto
     public bool KlimaTalepEdildiMi { get; set; }
     public DateTime? CreatedAt { get; set; }
     public List<KampBasvuruKatilimciDto> Katilimcilar { get; set; } = [];
+    public List<KampBasvuruTercihDto> Tercihler { get; set; } = [];
 }
 
 public class KampKatilimciIptalSonucDto

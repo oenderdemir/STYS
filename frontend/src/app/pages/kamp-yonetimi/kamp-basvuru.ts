@@ -13,12 +13,21 @@ import {
     KampBasvuruDto,
     KampBasvuruOnizlemeDto,
     KampBasvuruRequestDto,
+    KampBasvuruTercihDto,
     KampBasvuruSahibiTipSecenekDto,
     KampBasvuruTesisSecenekDto,
     KampKonaklamaBirimiSecenekDto,
     KampSecenekDto
 } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
+
+interface KampTercihSatiri {
+    tesisId: number;
+    tesisAd: string;
+    kapasiteOzeti: string;
+    donemSecenekleri: KampBasvuruDonemSecenekDto[];
+    tercihler: number[];
+}
 
 @Component({
     selector: 'app-kamp-basvuru',
@@ -48,6 +57,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     sorgulaniyor = false;
     hataMesaji: string | null = null;
     sorguHataMesaji: string | null = null;
+    tercihSatirlari: KampTercihSatiri[] = [];
 
     readonly form = this.fb.group({
         kampDonemiId: [0, Validators.required],
@@ -117,6 +127,40 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
+    }
+
+    onTercihDegisti(tesisId: number, tercihIndex: number, value: number): void {
+        const row = this.tercihSatirlari.find((x) => x.tesisId === tesisId);
+        if (!row) {
+            return;
+        }
+
+        const parsed = Number(value) || 0;
+        if (parsed > 0) {
+            for (let i = 0; i < row.tercihler.length; i += 1) {
+                if (i !== tercihIndex && row.tercihler[i] === parsed) {
+                    row.tercihler[i] = 0;
+                }
+            }
+        }
+        row.tercihler[tercihIndex] = parsed;
+
+        this.syncPrimarySelectionFromTercihler();
+        this.triggerPreview();
+    }
+
+    getTercihDegeri(tesisId: number, tercihIndex: number): number {
+        const row = this.tercihSatirlari.find((x) => x.tesisId === tesisId);
+        return row?.tercihler[tercihIndex] ?? 0;
+    }
+
+    isDonemSecilebilir(row: KampTercihSatiri, tercihIndex: number, kampDonemiId: number): boolean {
+        const mevcutDeger = row.tercihler[tercihIndex];
+        if (mevcutDeger === kampDonemiId) {
+            return true;
+        }
+
+        return !row.tercihler.some((x, i) => i !== tercihIndex && x === kampDonemiId);
     }
 
     addKatilimci(): void {
@@ -202,6 +246,11 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             .subscribe({
                 next: (baglam) => {
                     this.baglam = baglam;
+                    this.tercihSatirlari = this.buildTercihSatirlari(baglam);
+                    const firstTercihRow = this.tercihSatirlari[0];
+                    if (firstTercihRow && firstTercihRow.donemSecenekleri.length > 0) {
+                        firstTercihRow.tercihler[0] = firstTercihRow.donemSecenekleri[0].id;
+                    }
                     const firstDonem = baglam.donemler[0];
                     const firstSahipTipi = baglam.basvuruSahibiTipleri[0];
 
@@ -209,6 +258,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
                         this.form.patchValue({ kampDonemiId: firstDonem.id }, { emitEvent: false });
                         this.updateDonemSelection(firstDonem.id);
                     }
+                    this.syncPrimarySelectionFromTercihler();
 
                     if (firstSahipTipi) {
                         this.form.patchValue({ basvuruSahibiTipi: firstSahipTipi.kod }, { emitEvent: false });
@@ -241,7 +291,9 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
     private updateDonemSelection(donemId: number): void {
         this.seciliDonem = this.baglam?.donemler.find((x) => x.id === donemId) ?? null;
-        const firstTesis = this.seciliDonem?.tesisler[0] ?? null;
+        const seciliTesisId = Number(this.form.get('tesisId')?.value) || 0;
+        const seciliDonemTesisi = this.seciliDonem?.tesisler.find((x) => x.tesisId === seciliTesisId) ?? null;
+        const firstTesis = seciliDonemTesisi ?? this.seciliDonem?.tesisler[0] ?? null;
         this.form.patchValue({ tesisId: firstTesis?.tesisId ?? 0 }, { emitEvent: false });
         this.updateTesisSelection(firstTesis?.tesisId ?? 0);
         this.syncGecmisKatilimYillari(Array.from(this.seciliGecmisKatilimYillari));
@@ -291,7 +343,10 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         }
 
         const raw = this.form.getRawValue();
-        if (!raw.kampDonemiId || !raw.tesisId || !raw.konaklamaBirimiTipi || !raw.basvuruSahibiTipi) {
+        const tercihler = this.collectTercihler(raw.konaklamaBirimiTipi ?? '');
+        const ilkTercih = tercihler[0];
+
+        if (!ilkTercih || !raw.konaklamaBirimiTipi || !raw.basvuruSahibiTipi) {
             return null;
         }
 
@@ -307,8 +362,9 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         }>;
 
         return {
-            kampDonemiId: raw.kampDonemiId ?? 0,
-            tesisId: raw.tesisId ?? 0,
+            kampDonemiId: ilkTercih.kampDonemiId,
+            tesisId: ilkTercih.tesisId,
+            tercihler,
             konaklamaBirimiTipi: raw.konaklamaBirimiTipi ?? '',
             basvuruSahibiTipi: raw.basvuruSahibiTipi ?? '',
             hizmetYili: raw.hizmetYili ?? 0,
@@ -363,5 +419,103 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     private getVarsayilanEkKatilimciAkrabalikKodu(): string {
         return this.akrabalikTipleri.find((x) => !x.basvuruSahibiAkrabaligiMi)?.kod
             ?? this.getBasvuruSahibiAkrabalikKodu();
+    }
+
+    getTesisKapasiteOzeti(tesis: KampBasvuruTesisSecenekDto): string {
+        const birimler = tesis.birimler ?? [];
+        if (birimler.length === 0) {
+            return '-';
+        }
+
+        return birimler
+            .map((x) => `${x.minimumKisi}-${x.maksimumKisi}`)
+            .filter((x, i, arr) => arr.indexOf(x) === i)
+            .sort((a, b) => a.localeCompare(b, 'tr'))
+            .join(', ');
+    }
+
+    getMusaitTesisler(): Array<{ tesisId: number; tesisAd: string; kapasiteOzeti: string; donemSayisi: number }> {
+        return this.tercihSatirlari.map((x) => ({
+            tesisId: x.tesisId,
+            tesisAd: x.tesisAd,
+            kapasiteOzeti: x.kapasiteOzeti,
+            donemSayisi: x.donemSecenekleri.length
+        }));
+    }
+
+    private buildTercihSatirlari(baglam: KampBasvuruBaglamDto): KampTercihSatiri[] {
+        const map = new Map<number, KampTercihSatiri>();
+        for (const donem of baglam.donemler ?? []) {
+            for (const tesis of donem.tesisler ?? []) {
+                const mevcut = map.get(tesis.tesisId) ?? {
+                    tesisId: tesis.tesisId,
+                    tesisAd: tesis.tesisAd,
+                    kapasiteOzeti: this.getTesisKapasiteOzeti(tesis),
+                    donemSecenekleri: [],
+                    tercihler: [0, 0, 0, 0, 0]
+                };
+
+                mevcut.donemSecenekleri.push(donem);
+                map.set(tesis.tesisId, mevcut);
+            }
+        }
+
+        return Array.from(map.values())
+            .map((x) => ({
+                ...x,
+                donemSecenekleri: x.donemSecenekleri
+                    .sort((a, b) => {
+                        const dateCmp = a.konaklamaBaslangicTarihi.localeCompare(b.konaklamaBaslangicTarihi);
+                        return dateCmp !== 0 ? dateCmp : a.ad.localeCompare(b.ad, 'tr');
+                    })
+            }))
+            .sort((a, b) => a.tesisAd.localeCompare(b.tesisAd, 'tr'));
+    }
+
+    private collectTercihler(defaultKonaklamaBirimi: string): KampBasvuruTercihDto[] {
+        const result: KampBasvuruTercihDto[] = [];
+        const used = new Set<string>();
+
+        for (let tercihIndex = 0; tercihIndex < 5; tercihIndex += 1) {
+            for (const row of this.tercihSatirlari) {
+                const kampDonemiId = Number(row.tercihler[tercihIndex]) || 0;
+                if (kampDonemiId <= 0) {
+                    continue;
+                }
+
+                const key = `${kampDonemiId}-${row.tesisId}`;
+                if (used.has(key)) {
+                    continue;
+                }
+
+                used.add(key);
+                result.push({
+                    tercihSirasi: result.length + 1,
+                    kampDonemiId,
+                    tesisId: row.tesisId,
+                    konaklamaBirimiTipi: defaultKonaklamaBirimi
+                });
+            }
+        }
+
+        return result;
+    }
+
+    private syncPrimarySelectionFromTercihler(): void {
+        const tercihler = this.collectTercihler(this.form.get('konaklamaBirimiTipi')?.value ?? '');
+        const ilk = tercihler[0];
+        if (!ilk) {
+            this.form.patchValue({ kampDonemiId: 0, tesisId: 0 }, { emitEvent: false });
+            this.seciliDonem = null;
+            this.seciliTesis = null;
+            this.seciliBirimler = [];
+            return;
+        }
+
+        this.form.patchValue(
+            { kampDonemiId: ilk.kampDonemiId, tesisId: ilk.tesisId },
+            { emitEvent: false });
+        this.updateDonemSelection(ilk.kampDonemiId);
+        this.updateTesisSelection(ilk.tesisId);
     }
 }

@@ -2519,3 +2519,87 @@ Kamp Yonetimi (top-level, fa-campground)
 - backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs
 - changes.md
 
+## Tur 83 - Kamp Programi Basvuru Limit Parametresi ve Basvuru Kurali
+
+### Talep
+- Kamp programi icine kisi basi en fazla basvuru adedi parametresi eklensin.
+- Kamp basvuru akisinda bu limite gore kontrol calissin.
+
+### Duzeltme
+- `KampProgrami` modeline `MaksimumBasvuruSayisi` alani eklendi (varsayilan: 1).
+- Kamp programi yonetim ekranina yeni alan eklendi:
+  - Dialog input: `Maks. Basvuru (Kisi Basi)`
+  - Liste kolonunda gosterim eklendi.
+- Servis validasyonu:
+  - Kamp programi kayit/guncellemede `MaksimumBasvuruSayisi` araligi `1-20`.
+- Basvuru kurali:
+  - Basvuru olusturmada, ayni `KampProgrami` icin ayni basvuru sahibi adina
+    `IptalEdildi/Reddedildi` disindaki basvuru sayisi limite ulasmissa islem engellenir.
+  - Onizleme asamasinda da ayni kontrol hata listesine yansitilir.
+- `LoadContextAsync` kamp donemini `KampProgrami` ile include edecek sekilde guncellendi.
+
+### Migration
+- yeni migration: `20260414083750_AddKampProgramiMaksimumBasvuruSayisi`
+- Not: Migration olusturuldu, veritabanina update calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampProgrami.cs
+- backend/Kamp/Dto/KampProgramiDto.cs
+- backend/Kamp/Services/KampProgramiService.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260414083750_AddKampProgramiMaksimumBasvuruSayisi.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260414083750_AddKampProgramiMaksimumBasvuruSayisi.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-dialog.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-programi-tanim-yonetimi.html
+- changes.md
+
+## Tur 84 - Kamp Basvurusunda Coklu Tesis + Donem Tercihleri
+
+### Talep
+- Tek basvuru icinde birden fazla tesis ve birden fazla kamp donemi tercihi girilebilsin.
+- Basvuru ekraninda tesisler alt alta listelensin; her tesis icin 5 tercih dropdownu bulunsun.
+- Kabul secimi ileride puanlama/kural motoruna birakilsin.
+
+### Duzeltme
+- Backend:
+  - `KampBasvuru` icine tercih koleksiyonu eklendi.
+  - Yeni entity: `KampBasvuruTercih` (`KampBasvuruId`, `TercihSirasi`, `KampDonemiId`, `TesisId`, `KonaklamaBirimiTipi`).
+  - `KampBasvuruRequestDto` ve `KampBasvuruDto` icine `Tercihler` alani eklendi.
+  - `KampBasvuruService`:
+    - istek icindeki tercihler normalize edilip tekilleştiriliyor,
+    - en az bir tercih zorunlu hale getirildi,
+    - tercihlerin donem/tesis atama ve basvuruya aciklik kontrolleri eklendi,
+    - basvuru kaydinda tum tercihler `KampBasvuruTercihleri` tablosuna yaziliyor,
+    - ilk tercih mevcut hesaplama/puanlama akisi icin birincil secim olarak kullaniliyor.
+  - `StysAppDbContext`:
+    - `DbSet<KampBasvuruTercih>` eklendi,
+    - tablo/index/iliski konfigurasyonlari eklendi.
+- Frontend:
+  - Kamp basvuru DTO’larina `tercihler` modeli eklendi.
+  - `kamp-basvuru` ekraninda tesis bazli satir + 5 tercih dropdown yapisi eklendi.
+  - Secilen tercihlerden request payload icin `tercihler[]` listesi uretiliyor.
+  - Ilk tercih otomatik olarak birincil donem/tesis secimi olarak senkronize ediliyor.
+
+### Migration
+- yeni migration: `20260414090803_AddKampBasvuruCokluTercih`
+- Not: Migration olusturuldu, veritabanina update calistirilmadi.
+
+### Degisen Dosyalar
+- backend/Kamp/Entities/KampBasvuru.cs
+- backend/Kamp/Entities/KampBasvuruTercih.cs
+- backend/Kamp/Dto/KampBasvuruRequestDto.cs
+- backend/Kamp/Dto/KampBasvuruDto.cs
+- backend/Kamp/Services/KampBasvuruService.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260414090803_AddKampBasvuruCokluTercih.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260414090803_AddKampBasvuruCokluTercih.Designer.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- frontend/src/app/pages/kamp-yonetimi/kamp-yonetimi.dto.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.ts
+- frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html
+- changes.md
+

@@ -1,49 +1,124 @@
 .kamp-basvuru-page {
     display: grid;
-    gap: 1.25rem;
+    gap: 1rem;
 }
 
+.hero-panel,
 .kamp-panel {
     background: var(--surface-card, #fff);
-    border: 1px solid var(--surface-border, #e5e7eb);
-    border-radius: 1rem;
-    padding: 1.25rem;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    border: 1px solid var(--surface-border, #d9e0ea);
+    border-radius: 12px;
 }
 
-.kamp-panel__header {
+.hero-panel {
+    padding: 1rem 1.1rem;
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 1rem;
-    align-items: flex-start;
-    margin-bottom: 1rem;
 }
 
-.kamp-panel__header-actions {
+.hero-panel__eyebrow {
+    margin: 0 0 0.15rem;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.hero-panel h1 {
+    margin: 0 0 0.3rem;
+    font-size: 1.55rem;
+}
+
+.hero-panel p {
+    margin: 0;
+    color: #475569;
+}
+
+.hero-panel__actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
 }
 
-.kamp-panel__header h1,
-.kamp-panel__header h2 {
-    margin: 0 0 0.35rem;
+.kamp-panel {
+    padding: 0.95rem 1rem;
 }
 
-.kamp-panel__header p {
+.kamp-panel__title h2 {
     margin: 0;
+    font-size: 1.2rem;
+}
+
+.kamp-panel__title p {
+    margin: 0.2rem 0 0;
     color: #64748b;
+}
+
+.kamp-panel--sorgu {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.kamp-sorgu-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.6rem;
+    align-items: end;
+}
+
+.kamp-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 1rem;
+    align-items: start;
+}
+
+.kamp-panel--sidebar {
+    position: static;
 }
 
 .kamp-form,
 .kamp-katilimcilar {
     display: grid;
-    gap: 1rem;
+    gap: 0.85rem;
+}
+
+.kamp-step {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.8rem;
+    background: #fbfdff;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.kamp-step h3 {
+    margin: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.kamp-step h3 span {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #0ea5e9;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
 }
 
 .kamp-grid {
     display: grid;
-    gap: 0.9rem;
+    gap: 0.75rem;
 }
 
 .kamp-grid--2 {
@@ -58,74 +133,101 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.kamp-sorgu-row {
-    align-items: end;
-}
-
-.kamp-sorgu-actions {
-    display: flex;
-    align-items: end;
-}
-
-.kamp-sorgu-sonuc {
-    margin-top: 1rem;
-}
-
 label {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.28rem;
     font-weight: 600;
     color: #334155;
+    font-size: 0.88rem;
 }
 
 input,
 select {
     width: 100%;
     border: 1px solid #cbd5e1;
-    border-radius: 0.75rem;
-    padding: 0.72rem 0.85rem;
+    border-radius: 8px;
+    padding: 0.58rem 0.72rem;
+    min-height: 40px;
     background: #fff;
-    color: #0f172a;
+}
+
+.kamp-tercih-wrap h4 {
+    margin: 0 0 0.45rem;
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+.kamp-table-wrap {
+    overflow-x: auto;
+}
+
+.kamp-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.kamp-table th,
+.kamp-table td {
+    padding: 0.6rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    vertical-align: top;
+}
+
+.kamp-table th {
+    background: #f8fafc;
+    font-weight: 700;
+    color: #334155;
+}
+
+.kamp-table--tercih {
+    min-width: 980px;
+}
+
+.kapasite-hucre {
+    white-space: nowrap;
 }
 
 .kamp-flags {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 0.75rem 1rem;
 }
 
 .kamp-flags label,
 .kamp-inline-checkbox {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
     font-weight: 500;
 }
 
 .kamp-flags input,
 .kamp-inline-checkbox input {
     width: auto;
+    min-height: auto;
 }
 
 .kamp-katilimci-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 0.9rem;
-    padding: 1rem;
-    background: #f8fafc;
+    border: 1px solid #dbe3ef;
+    border-radius: 9px;
+    padding: 0.7rem;
+    background: #fff;
 }
 
 .kamp-katilimci-card__header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.6rem;
 }
 
 .kamp-link-button {
+    border: 0;
     background: transparent;
-    border: none;
-    color: #b91c1c;
+    color: #dc2626;
     cursor: pointer;
+    padding: 0.2rem 0.25rem;
 }
 
 .kamp-actions {
@@ -133,28 +235,48 @@ select {
     justify-content: flex-end;
 }
 
-.kamp-metrics {
+.kamp-mini-cards {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.85rem;
+    gap: 0.55rem;
 }
 
-.kamp-metrics > div {
-    border: 1px solid #e2e8f0;
-    border-radius: 0.85rem;
-    padding: 0.9rem;
+.kamp-mini-cards--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kamp-mini-cards > div {
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+    padding: 0.55rem 0.6rem;
     display: grid;
-    gap: 0.35rem;
+    gap: 0.2rem;
 }
 
-.kamp-metrics span {
-    font-size: 0.82rem;
+.kamp-kontenjan {
+    margin-top: 0.6rem;
+    border: 1px dashed #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 8px;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.kamp-empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 0.85rem;
     color: #64748b;
+    font-size: 0.88rem;
 }
 
 .kamp-alert {
-    border-radius: 0.85rem;
-    padding: 0.9rem 1rem;
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.9rem;
 }
 
 .kamp-alert--error {
@@ -175,31 +297,31 @@ select {
     border: 1px solid #86efac;
 }
 
-.kamp-table-wrap {
-    overflow-x: auto;
-}
-
-.kamp-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.kamp-table th,
-.kamp-table td {
-    padding: 0.8rem;
-    border-bottom: 1px solid #e2e8f0;
-    text-align: left;
-}
-
-@media (max-width: 960px) {
-    .kamp-grid--2,
-    .kamp-grid--3,
-    .kamp-grid--4,
-    .kamp-metrics {
+@media (max-width: 1600px) {
+    .kamp-layout {
         grid-template-columns: 1fr;
     }
 
-    .kamp-panel__header {
+    .kamp-panel--sidebar {
+        position: static;
+    }
+}
+
+@media (max-width: 900px) {
+    .kamp-grid--2,
+    .kamp-grid--3,
+    .kamp-grid--4,
+    .kamp-mini-cards,
+    .kamp-mini-cards--2 {
+        grid-template-columns: 1fr;
+    }
+
+    .kamp-sorgu-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-panel {
         flex-direction: column;
+        align-items: flex-start;
     }
 }

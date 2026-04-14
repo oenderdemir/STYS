@@ -80,6 +80,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KampAkrabalikTipi> KampAkrabalikTipleri => Set<KampAkrabalikTipi>();
     public DbSet<KampBasvuru> KampBasvurulari => Set<KampBasvuru>();
     public DbSet<KampBasvuruKatilimci> KampBasvuruKatilimcilari => Set<KampBasvuruKatilimci>();
+    public DbSet<KampBasvuruTercih> KampBasvuruTercihleri => Set<KampBasvuruTercih>();
     public DbSet<KampRezervasyon> KampRezervasyonlari => Set<KampRezervasyon>();
     public DbSet<KampParametre> KampParametreleri => Set<KampParametre>();
     public DbSet<OdaFiyat> OdaFiyatlari => Set<OdaFiyat>();
@@ -487,6 +488,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(512);
             entity.Property(x => x.Yil).IsRequired();
+            entity.Property(x => x.MaksimumBasvuruSayisi).IsRequired().HasDefaultValue(1);
             entity.HasIndex(x => new { x.Yil, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
@@ -725,6 +727,33 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KampBasvuru)
                 .WithMany(x => x.Katilimcilar)
                 .HasForeignKey(x => x.KampBasvuruId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KampBasvuruTercih>(entity =>
+        {
+            entity.ToTable("KampBasvuruTercihleri", "dbo");
+            entity.Property(x => x.TercihSirasi).IsRequired();
+            entity.Property(x => x.KonaklamaBirimiTipi).HasMaxLength(32).IsRequired();
+            entity.HasIndex(x => new { x.KampBasvuruId, x.TercihSirasi })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KampBasvuru)
+                .WithMany(x => x.Tercihler)
+                .HasForeignKey(x => x.KampBasvuruId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KampDonemi)
+                .WithMany()
+                .HasForeignKey(x => x.KampDonemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

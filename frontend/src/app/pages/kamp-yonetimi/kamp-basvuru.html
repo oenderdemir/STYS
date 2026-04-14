@@ -1,192 +1,220 @@
 <div class="kamp-basvuru-page">
-    <section class="kamp-panel">
-        <div class="kamp-panel__header">
-            <div>
-                <h2>Basvuru Sorgula</h2>
-                <p>Basvuru numarasi ile kaydinin durumunu giris yapmadan kontrol et.</p>
-            </div>
+    <section class="hero-panel">
+        <div class="hero-panel__content">
+            <p class="hero-panel__eyebrow">Tarim ve Orman Bakanligi Kamp Basvuru Sistemi</p>
+            <h1>2026 Kamp Basvurusu</h1>
+            <p>Basvuru bilgilerini adim adim girerek kaydini tamamlayabilirsin.</p>
+        </div>
+        <div class="hero-panel__actions">
+            <a *ngIf="isAuthenticated" pButton routerLink="/kamp-basvurularim" label="Benim Basvurularim"></a>
+            <button pButton type="button" label="Katilimci Ekle" (click)="addKatilimci()"></button>
+        </div>
+    </section>
+
+    <section class="kamp-panel kamp-panel--sorgu">
+        <div class="kamp-panel__title">
+            <h2>Basvuru Sorgula</h2>
+            <p>Basvuru numarasi ile kaydinin son durumunu aninda gor.</p>
         </div>
 
-        <div class="kamp-grid kamp-grid--3 kamp-sorgu-row">
+        <div class="kamp-sorgu-grid">
             <label>
                 <span>Basvuru Numarasi</span>
-                <input type="text" [(ngModel)]="sorguBasvuruNo" [ngModelOptions]="{ standalone: true }" placeholder="KB2026XXXXXXXX" />
+                <input type="text" [(ngModel)]="sorguBasvuruNo" [ngModelOptions]="{ standalone: true }" placeholder="RZV-20260413163903-56CFBE" />
             </label>
-            <div class="kamp-sorgu-actions">
-                <button pButton type="button" label="Sorgula" (click)="sorgulaBasvuru()" [loading]="sorgulaniyor"></button>
-            </div>
+            <button pButton type="button" label="Sorgula" (click)="sorgulaBasvuru()" [loading]="sorgulaniyor"></button>
         </div>
 
         <div *ngIf="sorguHataMesaji" class="kamp-alert kamp-alert--error">{{ sorguHataMesaji }}</div>
 
-        <div *ngIf="sorgulananBasvuru as sorgu" class="kamp-sorgu-sonuc">
-            <div class="kamp-metrics">
-                <div><span>Basvuru No</span><strong>{{ sorgu.basvuruNo }}</strong></div>
-                <div><span>Durum</span><strong>{{ sorgu.durum }}</strong></div>
-                <div><span>Puan</span><strong>{{ sorgu.puan }}</strong></div>
-                <div><span>Donem</span><strong>{{ sorgu.kampDonemiAd }}</strong></div>
-            </div>
+        <div *ngIf="sorgulananBasvuru as sorgu" class="kamp-mini-cards">
+            <div><span>Basvuru No</span><strong>{{ sorgu.basvuruNo }}</strong></div>
+            <div><span>Durum</span><strong>{{ sorgu.durum }}</strong></div>
+            <div><span>Puan</span><strong>{{ sorgu.puan }}</strong></div>
+            <div><span>Donem</span><strong>{{ sorgu.kampDonemiAd }}</strong></div>
         </div>
     </section>
 
-    <section class="kamp-panel">
-        <div class="kamp-panel__header">
-            <div>
-                <h1>Kamp Basvurusu</h1>
-                <p>2026 yaz kampi basvurusu icin tesis, donem ve katilimci bilgilerini gir.</p>
-            </div>
-            <div class="kamp-panel__header-actions">
-                <a *ngIf="isAuthenticated" pButton routerLink="/kamp-basvurularim" label="Benim Basvurularim"></a>
-                <button pButton type="button" label="Katilimci Ekle" (click)="addKatilimci()"></button>
-            </div>
-        </div>
-
-        <div *ngIf="hataMesaji" class="kamp-alert kamp-alert--error">{{ hataMesaji }}</div>
-        <div *ngIf="sonBasvuru" class="kamp-alert kamp-alert--success">
-            Basvuru kaydedildi. Basvuru numaran: <strong>{{ sonBasvuru.basvuruNo }}</strong>
-        </div>
-
-        <form [formGroup]="form" class="kamp-form">
-            <div class="kamp-grid kamp-grid--3">
-                <label>
-                    <span>Donem</span>
-                    <select formControlName="kampDonemiId">
-                        <option [ngValue]="0">Seciniz</option>
-                        <option *ngFor="let donem of baglam?.donemler ?? []" [ngValue]="donem.id">{{ donem.kampProgramiAd ? (donem.kampProgramiAd + ' / ' + donem.ad) : donem.ad }}</option>
-                    </select>
-                </label>
-
-                <label>
-                    <span>Tesis</span>
-                    <select formControlName="tesisId">
-                        <option [ngValue]="0">Seciniz</option>
-                        <option *ngFor="let tesis of seciliDonem?.tesisler ?? []" [ngValue]="tesis.tesisId">{{ tesis.tesisAd }}</option>
-                    </select>
-                </label>
-
-                <label>
-                    <span>Konaklama Birimi</span>
-                    <select formControlName="konaklamaBirimiTipi">
-                        <option value="">Seciniz</option>
-                        <option *ngFor="let birim of seciliBirimler" [value]="birim.kod">{{ birim.ad }} ({{ birim.minimumKisi }}-{{ birim.maksimumKisi }})</option>
-                    </select>
-                </label>
+    <div class="kamp-layout">
+        <section class="kamp-panel kamp-panel--main">
+            <div *ngIf="hataMesaji" class="kamp-alert kamp-alert--error">{{ hataMesaji }}</div>
+            <div *ngIf="sonBasvuru" class="kamp-alert kamp-alert--success">
+                Basvuru kaydedildi. Basvuru numaran: <strong>{{ sonBasvuru.basvuruNo }}</strong>
             </div>
 
-            <div class="kamp-grid kamp-grid--2">
-                <label>
-                    <span>Basvuru Sahibi Tipi</span>
-                    <select formControlName="basvuruSahibiTipi">
-                        <option *ngFor="let tip of basvuruSahibiTipleri" [value]="tip.kod">{{ tip.ad }}</option>
-                    </select>
-                </label>
+            <form [formGroup]="form" class="kamp-form">
+                <div class="kamp-step">
+                    <h3><span>1</span> Basvuru Bilgileri</h3>
 
-                <label>
-                    <span>Hizmet Yili</span>
-                    <input type="number" min="0" formControlName="hizmetYili" />
-                </label>
-            </div>
-
-            <div class="kamp-flags" *ngIf="seciliGecmisYilSecenekleri.length > 0">
-                <label *ngFor="let yil of seciliGecmisYilSecenekleri">
-                    <input type="checkbox" [checked]="seciliGecmisKatilimYillari.has(yil)" (change)="toggleGecmisKatilimYili(yil, $any($event.target).checked)" />
-                    {{ yil }} kampina katildi
-                </label>
-            </div>
-
-            <div class="kamp-flags">
-                <label><input type="checkbox" formControlName="evcilHayvanGetirecekMi" /> Evcil hayvan getirecek</label>
-                <label><input type="checkbox" formControlName="buzdolabiTalepEdildiMi" /> Buzdolabi</label>
-                <label><input type="checkbox" formControlName="televizyonTalepEdildiMi" /> Televizyon</label>
-                <label><input type="checkbox" formControlName="klimaTalepEdildiMi" /> Klima</label>
-            </div>
-
-            <div formArrayName="katilimcilar" class="kamp-katilimcilar">
-                <div *ngFor="let katilimci of katilimcilar.controls; let i = index" [formGroupName]="i" class="kamp-katilimci-card">
-                    <div class="kamp-katilimci-card__header">
-                        <strong>{{ i + 1 }}. Katilimci</strong>
-                        <button *ngIf="!katilimci.get('basvuruSahibiMi')?.value" type="button" class="kamp-link-button" (click)="removeKatilimci(i)">Sil</button>
+                    <div class="kamp-tercih-wrap" *ngIf="tercihSatirlari.length > 0">
+                        <h4>Kamp Donem Tercihleri</h4>
+                        <div class="kamp-table-wrap">
+                            <table class="kamp-table kamp-table--tercih">
+                                <thead>
+                                    <tr>
+                                        <th>Kamp/Tesis</th>
+                                        <th>Kapasite</th>
+                                        <th>1.Tercih</th>
+                                        <th>2.Tercih</th>
+                                        <th>3.Tercih</th>
+                                        <th>4.Tercih</th>
+                                        <th>5.Tercih</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let row of tercihSatirlari">
+                                        <td>{{ row.tesisAd }}</td>
+                                        <td class="kapasite-hucre">{{ row.kapasiteOzeti }}</td>
+                                        <td *ngFor="let tercihNo of [0, 1, 2, 3, 4]">
+                                            <select [ngModel]="getTercihDegeri(row.tesisId, tercihNo)"
+                                                [ngModelOptions]="{ standalone: true }"
+                                                (ngModelChange)="onTercihDegisti(row.tesisId, tercihNo, $event)">
+                                                <option [ngValue]="0">Seciniz</option>
+                                                <option *ngFor="let donem of row.donemSecenekleri" [ngValue]="donem.id" [disabled]="!isDonemSecilebilir(row, tercihNo, donem.id)">
+                                                    {{ donem.ad }}
+                                                </option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <div class="kamp-grid kamp-grid--4">
+                    <div class="kamp-grid kamp-grid--2">
                         <label>
-                            <span>Ad Soyad</span>
-                            <input type="text" formControlName="adSoyad" />
-                        </label>
-                        <label>
-                            <span>TC Kimlik No</span>
-                            <input type="text" formControlName="tcKimlikNo" />
-                        </label>
-                        <label>
-                            <span>Dogum Tarihi</span>
-                            <input type="date" formControlName="dogumTarihi" />
-                        </label>
-                        <label>
-                            <span>Katilimci Tipi</span>
-                            <select formControlName="katilimciTipi">
-                                <option *ngFor="let tip of katilimciTipleri" [value]="tip.kod">{{ tip.ad }}</option>
+                            <span>Konaklama Birimi</span>
+                            <select formControlName="konaklamaBirimiTipi">
+                                <option value="">Seciniz</option>
+                                <option *ngFor="let birim of seciliBirimler" [value]="birim.kod">{{ birim.ad }} ({{ birim.minimumKisi }}-{{ birim.maksimumKisi }})</option>
                             </select>
                         </label>
-                    </div>
 
-                    <div class="kamp-grid kamp-grid--3">
                         <label>
-                            <span>Akrabalik</span>
-                            <select formControlName="akrabalikTipi">
-                                <option *ngFor="let tip of akrabalikTipleri" [value]="tip.kod">{{ tip.ad }}</option>
+                            <span>Basvuru Sahibi Tipi</span>
+                            <select formControlName="basvuruSahibiTipi">
+                                <option *ngFor="let tip of basvuruSahibiTipleri" [value]="tip.kod">{{ tip.ad }}</option>
                             </select>
                         </label>
-                        <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="kimlikBilgileriDogrulandiMi" /> Kimlik dogrulandi</label>
-                        <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="yemekTalepEdiyorMu" /> Yemek talep ediyor</label>
+
+                        <label>
+                            <span>Hizmet Yili</span>
+                            <input type="number" min="0" formControlName="hizmetYili" />
+                        </label>
                     </div>
                 </div>
-            </div>
 
-            <div class="kamp-actions">
-                <button pButton type="button" label="Basvuruyu Kaydet" (click)="submit()" [loading]="kaydediliyor"></button>
-            </div>
-        </form>
-    </section>
+                <div class="kamp-step">
+                    <h3><span>2</span> Katilim Bilgileri</h3>
 
-    <section class="kamp-panel" *ngIf="onizleme as o">
-        <div class="kamp-panel__header">
-            <div>
+                    <div class="kamp-flags" *ngIf="seciliGecmisYilSecenekleri.length > 0">
+                        <label *ngFor="let yil of seciliGecmisYilSecenekleri">
+                            <input type="checkbox" [checked]="seciliGecmisKatilimYillari.has(yil)" (change)="toggleGecmisKatilimYili(yil, $any($event.target).checked)" />
+                            {{ yil }} kampina katildi
+                        </label>
+                    </div>
+
+                    <div class="kamp-flags">
+                        <label><input type="checkbox" formControlName="evcilHayvanGetirecekMi" /> Evcil hayvan getirecek</label>
+                        <label><input type="checkbox" formControlName="buzdolabiTalepEdildiMi" /> Buzdolabi</label>
+                        <label><input type="checkbox" formControlName="televizyonTalepEdildiMi" /> Televizyon</label>
+                        <label><input type="checkbox" formControlName="klimaTalepEdildiMi" /> Klima</label>
+                    </div>
+                </div>
+
+                <div class="kamp-step">
+                    <h3><span>3</span> Katilimci Listesi</h3>
+
+                    <div formArrayName="katilimcilar" class="kamp-katilimcilar">
+                        <div *ngFor="let katilimci of katilimcilar.controls; let i = index" [formGroupName]="i" class="kamp-katilimci-card">
+                            <div class="kamp-katilimci-card__header">
+                                <strong>{{ i + 1 }}. Katilimci</strong>
+                                <button *ngIf="!katilimci.get('basvuruSahibiMi')?.value" type="button" class="kamp-link-button" (click)="removeKatilimci(i)">Sil</button>
+                            </div>
+
+                            <div class="kamp-grid kamp-grid--4">
+                                <label>
+                                    <span>Ad Soyad</span>
+                                    <input type="text" formControlName="adSoyad" />
+                                </label>
+                                <label>
+                                    <span>TC Kimlik No</span>
+                                    <input type="text" formControlName="tcKimlikNo" />
+                                </label>
+                                <label>
+                                    <span>Dogum Tarihi</span>
+                                    <input type="date" formControlName="dogumTarihi" />
+                                </label>
+                                <label>
+                                    <span>Katilimci Tipi</span>
+                                    <select formControlName="katilimciTipi">
+                                        <option *ngFor="let tip of katilimciTipleri" [value]="tip.kod">{{ tip.ad }}</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div class="kamp-grid kamp-grid--3">
+                                <label>
+                                    <span>Akrabalik</span>
+                                    <select formControlName="akrabalikTipi">
+                                        <option *ngFor="let tip of akrabalikTipleri" [value]="tip.kod">{{ tip.ad }}</option>
+                                    </select>
+                                </label>
+                                <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="kimlikBilgileriDogrulandiMi" /> Kimlik dogrulandi</label>
+                                <label class="kamp-inline-checkbox"><input type="checkbox" formControlName="yemekTalepEdiyorMu" /> Yemek talep ediyor</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kamp-actions">
+                    <button pButton type="button" label="Basvuruyu Kaydet" (click)="submit()" [loading]="kaydediliyor"></button>
+                </div>
+            </form>
+        </section>
+
+        <aside class="kamp-panel kamp-panel--sidebar">
+            <div class="kamp-panel__title">
                 <h2>Canli Onizleme</h2>
-                <p>Puan, kontenjan ve ucret ozeti.</p>
+                <p>Puan, kontenjan ve ucret bilgileri.</p>
             </div>
-        </div>
 
-        <div class="kamp-metrics">
-            <div><span>Puan</span><strong>{{ o.puan }}</strong></div>
-            <div><span>Oncelik</span><strong>{{ o.oncelikSirasi }}</strong></div>
-            <div><span>Gunluk</span><strong>{{ o.gunlukToplamTutar | number:'1.2-2' }} TL</strong></div>
-            <div><span>Donem Toplami</span><strong>{{ o.donemToplamTutar | number:'1.2-2' }} TL</strong></div>
-            <div><span>Avans</span><strong>{{ o.avansToplamTutar | number:'1.2-2' }} TL</strong></div>
-            <div><span>Kalan</span><strong>{{ o.kalanOdemeTutari | number:'1.2-2' }} TL</strong></div>
-            <div><span>Kontenjan</span><strong>{{ o.kontenjanMesaji }}</strong></div>
-        </div>
+            <ng-container *ngIf="onizleme as o; else onizlemeYok">
+                <div class="kamp-mini-cards kamp-mini-cards--2">
+                    <div><span>Puan</span><strong>{{ o.puan }}</strong></div>
+                    <div><span>Oncelik</span><strong>{{ o.oncelikSirasi }}</strong></div>
+                    <div><span>Gunluk</span><strong>{{ o.gunlukToplamTutar | number:'1.2-2' }} TL</strong></div>
+                    <div><span>Donem Toplami</span><strong>{{ o.donemToplamTutar | number:'1.2-2' }} TL</strong></div>
+                    <div><span>Avans</span><strong>{{ o.avansToplamTutar | number:'1.2-2' }} TL</strong></div>
+                    <div><span>Kalan</span><strong>{{ o.kalanOdemeTutari | number:'1.2-2' }} TL</strong></div>
+                </div>
+                <div class="kamp-kontenjan">{{ o.kontenjanMesaji }}</div>
 
-        <div *ngIf="o.hatalar.length > 0" class="kamp-alert kamp-alert--error">
-            <strong>Hatalar</strong>
-            <ul>
-                <li *ngFor="let hata of o.hatalar">{{ hata }}</li>
-            </ul>
-        </div>
+                <div *ngIf="o.hatalar.length > 0" class="kamp-alert kamp-alert--error">
+                    <strong>Hatalar</strong>
+                    <ul>
+                        <li *ngFor="let hata of o.hatalar">{{ hata }}</li>
+                    </ul>
+                </div>
 
-        <div *ngIf="o.uyarilar.length > 0" class="kamp-alert kamp-alert--warn">
-            <strong>Uyarilar</strong>
-            <ul>
-                <li *ngFor="let uyari of o.uyarilar">{{ uyari }}</li>
-            </ul>
-        </div>
-    </section>
+                <div *ngIf="o.uyarilar.length > 0" class="kamp-alert kamp-alert--warn">
+                    <strong>Uyarilar</strong>
+                    <ul>
+                        <li *ngFor="let uyari of o.uyarilar">{{ uyari }}</li>
+                    </ul>
+                </div>
+            </ng-container>
+
+            <ng-template #onizlemeYok>
+                <div class="kamp-empty">Donem, tesis ve katilimci bilgileri secildiginde onizleme burada gosterilir.</div>
+            </ng-template>
+        </aside>
+    </div>
 
     <section class="kamp-panel" *ngIf="isAuthenticated && benimBasvurularim.length > 0">
-        <div class="kamp-panel__header">
-            <div>
-                <h2>Benim Basvurularim</h2>
-                <p>Daha once olusturulan kamp basvurulari.</p>
-            </div>
+        <div class="kamp-panel__title">
+            <h2>Benim Basvurularim</h2>
+            <p>Daha once olusturdugun basvurular.</p>
         </div>
 
         <div class="kamp-table-wrap">

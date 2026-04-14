@@ -61,6 +61,7 @@
                     <th pSortableColumn="kod">Kod <p-sortIcon field="kod" /></th>
                     <th pSortableColumn="ad">Ad <p-sortIcon field="ad" /></th>
                     <th pSortableColumn="yil">Yil <p-sortIcon field="yil" /></th>
+                    <th pSortableColumn="maksimumBasvuruSayisi">Maks. Basvuru <p-sortIcon field="maksimumBasvuruSayisi" /></th>
                     <th>Aciklama</th>
                     <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
                     <th style="width: 18rem">Islem</th>
@@ -72,6 +73,7 @@
                     <td>{{ item.kod }}</td>
                     <td>{{ item.ad }}</td>
                     <td>{{ item.yil }}</td>
+                    <td>{{ item.maksimumBasvuruSayisi }}</td>
                     <td>{{ item.aciklama || '-' }}</td>
                     <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>
                     <td>

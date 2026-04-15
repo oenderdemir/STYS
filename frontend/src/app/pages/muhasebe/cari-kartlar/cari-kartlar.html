@@ -1,0 +1,94 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
+        <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+    <ng-template #caption><h5 class="m-0">Cari Kartlar</h5></ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Cari Kodu</th>
+            <th>Unvan/Ad Soyad</th>
+            <th>Cari Tipi</th>
+            <th>Telefon</th>
+            <th>Eposta</th>
+            <th>Durum</th>
+            <th style="width: 10rem">Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ item.cariKodu }}</td>
+            <td>{{ item.unvanAdSoyad }}</td>
+            <td>{{ item.cariTipi }}</td>
+            <td>{{ item.telefon || '-' }}</td>
+            <td>{{ item.eposta || '-' }}</td>
+            <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Cari Kart Duzenle' : 'Yeni Cari Kart'" [style]="{ width: '46rem', 'max-width': '95vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Cari Tipi</label>
+            <p-select class="w-full" [options]="cariTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.cariTipi" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Cari Kodu</label>
+            <input pInputText class="w-full" [(ngModel)]="model.cariKodu" maxlength="64" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Unvan/Ad Soyad</label>
+            <input pInputText class="w-full" [(ngModel)]="model.unvanAdSoyad" maxlength="256" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Telefon</label>
+            <input pInputText class="w-full" [(ngModel)]="model.telefon" maxlength="32" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Eposta</label>
+            <input pInputText class="w-full" [(ngModel)]="model.eposta" maxlength="256" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Vergi No/TCKN</label>
+            <input pInputText class="w-full" [(ngModel)]="model.vergiNoTckn" maxlength="32" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Vergi Dairesi</label>
+            <input pInputText class="w-full" [(ngModel)]="model.vergiDairesi" maxlength="128" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Adres</label>
+            <input pInputText class="w-full" [(ngModel)]="model.adres" maxlength="512" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Il</label>
+            <input pInputText class="w-full" [(ngModel)]="model.il" maxlength="128" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Ilce</label>
+            <input pInputText class="w-full" [(ngModel)]="model.ilce" maxlength="128" />
+        </div>
+        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="aktifMi" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifMi">Aktif</label></div>
+        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eFatura" type="checkbox" [(ngModel)]="model.eFaturaMukellefiMi" /><label for="eFatura">E-Fatura</label></div>
+        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eArsiv" type="checkbox" [(ngModel)]="model.eArsivKapsamindaMi" /><label for="eArsiv">E-Arsiv</label></div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>
+

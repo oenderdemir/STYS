@@ -2603,3 +2603,245 @@ Kamp Yonetimi (top-level, fa-campground)
 - frontend/src/app/pages/kamp-yonetimi/kamp-basvuru.html
 - changes.md
 
+
+---
+
+## Tur - Muhasebe Faz 1 (Cari/Kasa/Banka/TahsilatOdeme)
+
+### Yeni Backend Dosyalari
+- `backend/Muhasebe/CariKartlar/*` (Entities, Dtos, Repositories, Services, Controllers, Mapping)
+- `backend/Muhasebe/CariHareketler/*`
+- `backend/Muhasebe/KasaHareketleri/*`
+- `backend/Muhasebe/BankaHareketleri/*`
+- `backend/Muhasebe/TahsilatOdemeBelgeleri/*`
+- `backend/Infrastructure/EntityFramework/Migrations/20260414184421_AddAccountingPhase1Core.cs` (+ Designer)
+
+### Guncellenen Backend Dosyalari
+- `backend/Infrastructure/EntityFramework/StysAppDbContext.cs`
+  - Muhasebe DbSet'leri eklendi
+  - `muhasebe` schema tablo/iliski/index/precision config'leri eklendi
+- `backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs`
+- `backend/Program.cs`
+  - repository/service DI kayitlari eklendi
+- `backend/StructurePermissions.cs`
+  - Faz 1 muhasebe permission domainleri eklendi
+
+### Migration Icerigi
+- Muhasebe Faz 1 tablolari:
+  - `muhasebe.CariKartlar`
+  - `muhasebe.CariHareketler`
+  - `muhasebe.KasaHareketleri`
+  - `muhasebe.BankaHareketleri`
+  - `muhasebe.TahsilatOdemeBelgeleri`
+- FK/index/unique/precision
+- TODBase tarafinda Faz 1 role + menu + menuItemRole + admin/tesis manager rol atama seed SQL'i
+
+### Yeni Frontend Dosyalari
+- `frontend/src/app/pages/muhasebe/cari-kartlar/*`
+- `frontend/src/app/pages/muhasebe/cari-hareketler/*`
+- `frontend/src/app/pages/muhasebe/kasa-hareketleri/*`
+- `frontend/src/app/pages/muhasebe/banka-hareketleri/*`
+- `frontend/src/app/pages/muhasebe/tahsilat-odeme-belgeleri/*`
+
+### Guncellenen Frontend Dosyalari
+- `frontend/src/app.routes.ts`
+  - Faz 1 muhasebe route'lari eklendi:
+    - `/muhasebe/cari-kartlar`
+    - `/muhasebe/cari-hareketler`
+    - `/muhasebe/kasa-hareketleri`
+    - `/muhasebe/banka-hareketleri`
+    - `/muhasebe/tahsilat-odeme-belgeleri`
+
+### Build
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur - Muhasebe Faz 1 Seed Verisi
+
+### Yeni Dosya
+- `backend/Infrastructure/EntityFramework/Migrations/20260414190500_SeedAccountingPhase1Data.cs`
+
+### Icerik
+- `muhasebe` faz1 tablolari icin idempotent seed SQL eklendi:
+  - Cari kartlar
+  - Cari hareketler
+  - Kasa hareketleri
+  - Banka hareketleri
+  - Tahsilat/odeme belgeleri
+- `CreatedBy = migration_seed_accounting_phase1_v1` etiketi ile izlendi.
+- `Down` icinde sadece bu etiketli seed kayitlari geri alinir.
+
+### Build
+- Backend: BASARILI
+
+## Tur - Muhasebe Faz 2 (Tasinir/Depo/Stok)
+
+### Yeni Backend Dosyalari
+- `backend/Muhasebe/TasinirKodlari/*` (Entities, Dtos, Repositories, Services, Controllers, Mapping)
+- `backend/Muhasebe/TasinirKartlari/*`
+- `backend/Muhasebe/Depolar/*`
+- `backend/Muhasebe/StokHareketleri/*`
+- `backend/Infrastructure/EntityFramework/Migrations/20260415073101_AddAccountingPhase2Inventory.cs` (+ Designer)
+
+### Guncellenen Backend Dosyalari
+- `backend/Infrastructure/EntityFramework/StysAppDbContext.cs`
+  - Faz 2 DbSet'leri eklendi
+  - `muhasebe` schema Faz 2 tablo/iliski/index/precision config'leri eklendi
+- `backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs`
+- `backend/Program.cs`
+  - Faz 2 repository/service DI kayitlari eklendi
+- `backend/StructurePermissions.cs`
+  - Faz 2 permission domainleri eklendi:
+    - `TasinirKodYonetimi`
+    - `TasinirKartYonetimi`
+    - `DepoYonetimi`
+    - `StokHareketYonetimi`
+
+### Faz 2 Migration Icerigi
+- Muhasebe Faz 2 tablolari:
+  - `muhasebe.TasinirKodlar`
+  - `muhasebe.TasinirKartlar`
+  - `muhasebe.Depolar`
+  - `muhasebe.StokHareketleri`
+- FK/index/unique/precision tanimlari
+- TODBase tarafinda Faz 2 role + menu + menuItemRole + admin/tesis manager rol atama seed SQL'i
+
+### Import Yaklasimi (Excel Referans Zemini)
+- Tasinir kodlari icin backend import API eklendi:
+  - `POST /api/muhasebe/tasinir-kodlari/import`
+- Request modeli: `ImportTasinirKodlariRequest`
+  - satir bazli kod aktarimi
+  - mevcut kodlari guncelleme opsiyonu
+  - import disindakileri pasife cekme opsiyonu
+- Duplicate engeli: `TamKod` bazli benzersizlik ve idempotent guncelleme mantigi.
+
+### Yeni Frontend Dosyalari
+- `frontend/src/app/pages/muhasebe/tasinir-kodlari/*`
+- `frontend/src/app/pages/muhasebe/tasinir-kartlari/*`
+- `frontend/src/app/pages/muhasebe/depolar/*`
+- `frontend/src/app/pages/muhasebe/stok-hareketleri/*`
+
+### Guncellenen Frontend Dosyalari
+- `frontend/src/app.routes.ts`
+  - Faz 2 route'lari eklendi:
+    - `/muhasebe/tasinir-kodlari`
+    - `/muhasebe/tasinir-kartlari`
+    - `/muhasebe/depolar`
+    - `/muhasebe/stok-hareketleri`
+
+### Build
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur - Tasinir Kodlari Resmi XLS Referansi
+
+### Yapilanlar
+- `Guncel-Tasinir-Kod-Listesi-15.06.2023-.xls` dosyasi parse edilerek resmi liste dikkate alindi.
+- Filtreleme kurali:
+  - `Hesap Kodu` numerik olan satirlar
+  - Aciklama/Ad alani dolu olan satirlar
+- Sonuc:
+  - 3270 benzersiz `TamKod` uretildi.
+
+### Yeni Migration
+- `backend/Infrastructure/EntityFramework/Migrations/20260415095000_SeedOfficialTasinirKodlariFromXls.cs`
+
+### Migration Davranisi
+- Resmi XLS kaynakli 3270 kayit `muhasebe.TasinirKodlar` tablosuna upsert edilir.
+- `TamKod` bazli eslesme yapilir.
+- Duzey/ad alanlari guncellenir.
+- UstKod iliskisi `UstTamKod` uzerinden tekrar kurulur.
+- Seed etiketi: `migration_seed_accounting_phase2_xls_v1`.
+
+### Not
+- Excelde 6 segmentli kodlar bulundugu icin (`150.13.04.01.01.01` gibi),
+  entity'deki `Duzey1..Duzey5` alanlarina ilk 5 segment yazilir; tam hiyerarsi `TamKod` ve `UstTamKod` uzerinden korunur.
+
+## Tur - Muhasebe Listelerinde Paging
+
+### Backend
+- Muhasebe Faz 1 ve Faz 2 controller list endpointlerine `paged` endpointleri eklendi:
+  - `GET /api/muhasebe/cari-kartlar/paged`
+  - `GET /api/muhasebe/cari-hareketler/paged`
+  - `GET /api/muhasebe/kasa-hareketleri/paged`
+  - `GET /api/muhasebe/banka-hareketleri/paged`
+  - `GET /api/muhasebe/tahsilat-odeme-belgeleri/paged`
+  - `GET /api/muhasebe/tasinir-kodlari/paged`
+  - `GET /api/muhasebe/tasinir-kartlari/paged`
+  - `GET /api/muhasebe/depolar/paged`
+  - `GET /api/muhasebe/stok-hareketleri/paged`
+- Filtreli endpointlerde mevcut filtreler korundu:
+  - `cariKartId`
+  - `depoId`
+
+### Frontend
+- Muhasebe ekranlarinda servis katmanina `getPaged(pageNumber, pageSize, ...)` metotlari eklendi.
+- Asagidaki sayfalarda PrimeNG lazy paginator aktif edildi:
+  - `cari-kartlar`
+  - `cari-hareketler`
+  - `kasa-hareketleri`
+  - `banka-hareketleri`
+  - `tahsilat-odeme-belgeleri`
+  - `tasinir-kodlari`
+  - `tasinir-kartlari`
+  - `depolar`
+  - `stok-hareketleri`
+- Sayfalara `pageNumber`, `pageSize`, `totalRecords`, `onLazyLoad` eklendi.
+
+### Build
+- Backend: BASARILI (`dotnet build backend/STYS.csproj`)
+- Frontend: BASARILI (`npm run build`)
+
+## Tur - Tasinir Kodlari Full Cache
+
+### Yapilanlar
+- `TasinirKodService` icin full-cache lookup modeli eklendi.
+- Arama/sayfalama icin her sorguda DB'ye gitmek yerine tum tasinir kodlari bellekte tutulup memory uzerinden filtreleme yapiliyor.
+- Yeni servis metodu eklendi:
+  - `GetPagedForLookupAsync(PagedRequest request, string? query, CancellationToken cancellationToken)`
+- `TasinirKodlariController` `GET /api/muhasebe/tasinir-kodlari/paged` endpoint'i bu yeni cache'li metoda baglandi.
+- Cache invalidation eklendi:
+  - `AddAsync`
+  - `UpdateAsync`
+  - `DeleteAsync`
+  - `ImportAsync`
+- `Program.cs` icine `AddMemoryCache()` eklendi.
+
+### Teknik Not
+- Kod sorgusunda (`sadece rakam + nokta`) eslesme:
+  - Tam kod
+  - Alt kirilim prefix (`150.01.01.07.*`)
+- Metin sorgusunda `TamKod/Ad` case-insensitive contains devam ediyor.
+
+## Tur - Redis ve Distributed Cache Entegrasyonu
+
+### Altyapi
+- `docker-compose.yml` icine `redis` servisi eklendi (`redis:7-alpine`).
+- Redis kaliciligi icin `redis_data` volume eklendi.
+- Backend servisine Redis env degiskenleri eklendi:
+  - `Redis__Configuration`
+  - `Redis__InstanceName`
+- Backend `depends_on` listesine `redis` (healthcheck) eklendi.
+
+### Konfigurasyon
+- `backend/appsettings.json` ve `backend/appsettings.Development.json` dosyalarina `Redis` bolumu eklendi:
+  - `Configuration`
+  - `InstanceName`
+- `.env` ve `.env.example` dosyalarina eklendi:
+  - `STYS_REDIS_CONFIGURATION`
+  - `STYS_REDIS_INSTANCE_NAME`
+  - `STYS_REDIS_HOST_PORT`
+
+### Backend Cache Guncellemesi
+- `TasinirKodService` cache katmani `IMemoryCache` yerine `IDistributedCache` ile Redis tabanli hale getirildi.
+- Arama/paging icin tum tasinir kodlari Redis'te tek liste olarak cacheleniyor; filtreleme memory uzerinde yapiliyor.
+- Invalidasyonlar eklendi:
+  - `AddAsync`
+  - `UpdateAsync`
+  - `DeleteAsync`
+  - `ImportAsync`
+- `Program.cs` icinde `AddStackExchangeRedisCache` kaydi eklendi.
+- `backend/STYS.csproj` icine `Microsoft.Extensions.Caching.StackExchangeRedis` paketi eklendi.
+
+### Not
+- Build denemesinde kod hatasi degil, calisan `STYS` prosesi ve Visual Studio dosya kilidi nedeniyle kopyalama hatasi alindi.

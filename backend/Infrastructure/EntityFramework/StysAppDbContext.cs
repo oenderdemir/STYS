@@ -11,6 +11,15 @@ using STYS.Kamp.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
 using STYS.MisafirTipleri.Entities;
+using STYS.Muhasebe.BankaHareketleri.Entities;
+using STYS.Muhasebe.CariHareketler.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.KasaHareketleri.Entities;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Muhasebe.Depolar.Entities;
+using STYS.Muhasebe.StokHareketleri.Entities;
+using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -111,6 +120,15 @@ public class StysAppDbContext : DbContext
     public DbSet<RestoranSiparis> RestoranSiparisleri => Set<RestoranSiparis>();
     public DbSet<RestoranSiparisKalemi> RestoranSiparisKalemleri => Set<RestoranSiparisKalemi>();
     public DbSet<RestoranOdeme> RestoranOdemeleri => Set<RestoranOdeme>();
+    public DbSet<CariKart> CariKartlar => Set<CariKart>();
+    public DbSet<CariHareket> CariHareketler => Set<CariHareket>();
+    public DbSet<KasaHareket> KasaHareketleri => Set<KasaHareket>();
+    public DbSet<BankaHareket> BankaHareketleri => Set<BankaHareket>();
+    public DbSet<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri => Set<TahsilatOdemeBelgesi>();
+    public DbSet<TasinirKod> TasinirKodlar => Set<TasinirKod>();
+    public DbSet<TasinirKart> TasinirKartlar => Set<TasinirKart>();
+    public DbSet<Depo> Depolar => Set<Depo>();
+    public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -131,6 +149,7 @@ public class StysAppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("dbo");
         const string restoranSchema = "restoran";
+        const string muhasebeSchema = "muhasebe";
 
         modelBuilder.Entity<Country>(entity =>
         {
@@ -1404,6 +1423,217 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.RezervasyonOdeme)
                 .WithMany()
                 .HasForeignKey(x => x.RezervasyonOdemeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CariKart>(entity =>
+        {
+            entity.ToTable("CariKartlar", muhasebeSchema);
+            entity.Property(x => x.CariTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.CariKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.UnvanAdSoyad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.VergiNoTckn).HasMaxLength(32);
+            entity.Property(x => x.VergiDairesi).HasMaxLength(128);
+            entity.Property(x => x.Telefon).HasMaxLength(32);
+            entity.Property(x => x.Eposta).HasMaxLength(256);
+            entity.Property(x => x.Adres).HasMaxLength(512);
+            entity.Property(x => x.Il).HasMaxLength(128);
+            entity.Property(x => x.Ilce).HasMaxLength(128);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.CariKodu)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.CariTipi, x.UnvanAdSoyad })
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<CariHareket>(entity =>
+        {
+            entity.ToTable("CariHareketler", muhasebeSchema);
+            entity.Property(x => x.BelgeTuru).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.BelgeNo).HasMaxLength(64);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.BorcTutari).HasPrecision(18, 2);
+            entity.Property(x => x.AlacakTutari).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.HasIndex(x => new { x.CariKartId, x.HareketTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.BelgeNo)
+                .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.CariHareketler)
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KasaHareket>(entity =>
+        {
+            entity.ToTable("KasaHareketleri", muhasebeSchema);
+            entity.Property(x => x.KasaKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.HareketTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.BelgeNo).HasMaxLength(64);
+            entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.KasaKodu, x.HareketTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.BelgeNo)
+                .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.KasaHareketler)
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BankaHareket>(entity =>
+        {
+            entity.ToTable("BankaHareketleri", muhasebeSchema);
+            entity.Property(x => x.BankaAdi).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.HesapKoduIban).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.HareketTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.BelgeNo).HasMaxLength(64);
+            entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.BankaAdi, x.HesapKoduIban, x.HareketTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.BelgeNo)
+                .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.BankaHareketler)
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TahsilatOdemeBelgesi>(entity =>
+        {
+            entity.ToTable("TahsilatOdemeBelgeleri", muhasebeSchema);
+            entity.Property(x => x.BelgeNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.BelgeTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.OdemeYontemi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => x.BelgeNo)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.BelgeTarihi, x.BelgeTipi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.CariKartId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.TahsilatOdemeBelgeleri)
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TasinirKod>(entity =>
+        {
+            entity.ToTable("TasinirKodlar", muhasebeSchema);
+            entity.Property(x => x.TamKod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Duzey1Kod).HasMaxLength(16);
+            entity.Property(x => x.Duzey2Kod).HasMaxLength(16);
+            entity.Property(x => x.Duzey3Kod).HasMaxLength(16);
+            entity.Property(x => x.Duzey4Kod).HasMaxLength(16);
+            entity.Property(x => x.Duzey5Kod).HasMaxLength(16);
+            entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.TamKod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.DuzeyNo, x.Ad })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UstKodId)
+                .HasFilter("[IsDeleted] = 0 AND [UstKodId] IS NOT NULL");
+
+            entity.HasOne(x => x.UstKod)
+                .WithMany(x => x.AltKodlar)
+                .HasForeignKey(x => x.UstKodId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TasinirKart>(entity =>
+        {
+            entity.ToTable("TasinirKartlar", muhasebeSchema);
+            entity.Property(x => x.StokKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.MalzemeTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KdvOrani).HasPrecision(5, 2);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.StokKodu)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TasinirKodId, x.Ad })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.TasinirKod)
+                .WithMany(x => x.TasinirKartlari)
+                .HasForeignKey(x => x.TasinirKodId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Depo>(entity =>
+        {
+            entity.ToTable("Depolar", muhasebeSchema);
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.Ad })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokHareket>(entity =>
+        {
+            entity.ToTable("StokHareketleri", muhasebeSchema);
+            entity.Property(x => x.HareketTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Miktar).HasPrecision(18, 3);
+            entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.BelgeNo).HasMaxLength(64);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => new { x.DepoId, x.TasinirKartId, x.HareketTarihi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.BelgeNo)
+                .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+            entity.HasIndex(x => x.CariKartId)
+                .HasFilter("[IsDeleted] = 0 AND [CariKartId] IS NOT NULL");
+
+            entity.HasOne(x => x.Depo)
+                .WithMany(x => x.StokHareketleri)
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany(x => x.StokHareketleri)
+                .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany()
+                .HasForeignKey(x => x.CariKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

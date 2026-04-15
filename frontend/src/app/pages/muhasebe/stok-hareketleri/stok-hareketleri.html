@@ -1,0 +1,153 @@
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
+        <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load(); loadSummary()" />
+    </ng-template>
+    <ng-template #end>
+        <p-select styleClass="min-w-18rem" [options]="depoOptions" optionLabel="label" optionValue="value" placeholder="Depo filtrele" [showClear]="true" [(ngModel)]="selectedDepoId" (onChange)="onDepoFilterChange()" appendTo="body" />
+    </ng-template>
+</p-toolbar>
+
+<p-tabs value="0">
+    <p-tablist>
+        <p-tab value="0">Stok Hareketleri</p-tab>
+        <p-tab value="1">Depo Bakiye Ozeti</p-tab>
+        <p-tab value="2">Stok Kart Ozeti</p-tab>
+    </p-tablist>
+    <p-tabpanels>
+        <p-tabpanel value="0">
+            <p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '80rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+                <ng-template #header>
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Depo</th>
+                        <th>Tasinir Kart</th>
+                        <th>Tip</th>
+                        <th>Miktar</th>
+                        <th>Birim Fiyat</th>
+                        <th>Tutar</th>
+                        <th>Durum</th>
+                        <th style="width: 10rem">Islem</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                        <td>{{ item.depoId }}</td>
+                        <td>{{ item.tasinirKartId }}</td>
+                        <td>{{ item.hareketTipi }}</td>
+                        <td>{{ item.miktar }}</td>
+                        <td>{{ item.birimFiyat | number: '1.2-2' }}</td>
+                        <td>{{ item.tutar | number: '1.2-2' }}</td>
+                        <td>{{ item.durum }}</td>
+                        <td>
+                            <div class="flex gap-2">
+                                <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                                <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+        <p-tabpanel value="1">
+            <p-table [value]="stokBakiye" [tableStyle]="{ 'min-width': '72rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Depo</th>
+                        <th>Stok Kodu</th>
+                        <th>Kart</th>
+                        <th>Birim</th>
+                        <th>Giris</th>
+                        <th>Cikis</th>
+                        <th>Bakiye</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.depoKod }} - {{ item.depoAd }}</td>
+                        <td>{{ item.stokKodu }}</td>
+                        <td>{{ item.tasinirKartAd }}</td>
+                        <td>{{ item.birim }}</td>
+                        <td>{{ item.girisMiktari }}</td>
+                        <td>{{ item.cikisMiktari }}</td>
+                        <td>{{ item.bakiyeMiktari }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+        <p-tabpanel value="2">
+            <p-table [value]="stokKartOzet" [tableStyle]="{ 'min-width': '64rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Stok Kodu</th>
+                        <th>Kart</th>
+                        <th>Birim</th>
+                        <th>Giris</th>
+                        <th>Cikis</th>
+                        <th>Bakiye</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.stokKodu }}</td>
+                        <td>{{ item.ad }}</td>
+                        <td>{{ item.birim }}</td>
+                        <td>{{ item.girisMiktari }}</td>
+                        <td>{{ item.cikisMiktari }}</td>
+                        <td>{{ item.bakiyeMiktari }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+    </p-tabpanels>
+</p-tabs>
+
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Stok Hareket Duzenle' : 'Yeni Stok Hareket'" [style]="{ width: '56rem', 'max-width': '95vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Depo</label>
+            <p-select class="w-full" [options]="depoOptions" optionLabel="label" optionValue="value" [(ngModel)]="model.depoId" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Tasinir Kart</label>
+            <p-select class="w-full" [options]="tasinirKartOptions" optionLabel="label" optionValue="value" [(ngModel)]="model.tasinirKartId" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Tip</label>
+            <p-select class="w-full" [options]="hareketTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.hareketTipi" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Durum</label>
+            <p-select class="w-full" [options]="durumlar" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Cari (opsiyonel)</label>
+            <p-select class="w-full" [options]="cariKartOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.cariKartId" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Miktar</label>
+            <p-inputnumber [(ngModel)]="model.miktar" [min]="0.001" [maxFractionDigits]="3" class="w-full" inputStyleClass="w-full" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Birim Fiyat</label>
+            <p-inputnumber [(ngModel)]="model.birimFiyat" [min]="0" [maxFractionDigits]="2" class="w-full" inputStyleClass="w-full" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Belge No</label>
+            <input pInputText class="w-full" [(ngModel)]="model.belgeNo" maxlength="64" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Hareket Tarihi</label>
+            <input pInputText class="w-full" type="datetime-local" [(ngModel)]="model.hareketTarihi" />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>

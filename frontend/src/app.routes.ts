@@ -47,6 +47,15 @@ import { RestoranKategoriHavuzuYonetimi } from './app/pages/restoran-yonetimi/re
 import { RestoranSiparisYonetimi } from './app/pages/restoran-yonetimi/restoran-siparis-yonetimi';
 import { GarsonServisPage } from './app/pages/restoran-yonetimi/garson-servis';
 import { MusteriMenuPage } from './app/pages/musteri-menu/musteri-menu';
+import { CariKartlarPage } from './app/pages/muhasebe/cari-kartlar/cari-kartlar';
+import { CariHareketlerPage } from './app/pages/muhasebe/cari-hareketler/cari-hareketler';
+import { KasaHareketleriPage } from './app/pages/muhasebe/kasa-hareketleri/kasa-hareketleri';
+import { BankaHareketleriPage } from './app/pages/muhasebe/banka-hareketleri/banka-hareketleri';
+import { TahsilatOdemeBelgeleriPage } from './app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri';
+import { TasinirKodlariPage } from './app/pages/muhasebe/tasinir-kodlari/tasinir-kodlari';
+import { TasinirKartlariPage } from './app/pages/muhasebe/tasinir-kartlari/tasinir-kartlari';
+import { DepolarPage } from './app/pages/muhasebe/depolar/depolar';
+import { StokHareketleriPage } from './app/pages/muhasebe/stok-hareketleri/stok-hareketleri';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
@@ -117,6 +126,15 @@ export const appRoutes: Routes = [
             { path: 'restoran-menu-yonetimi', component: RestoranMenuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Menu Yonetimi'] } },
             { path: 'restoran-siparis-yonetimi', component: RestoranSiparisYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Siparis Yonetimi'] } },
             { path: 'garson-servis', component: GarsonServisPage, data: { breadcrumb: ['Isletme', 'Restoran', 'Garson Servis'] } },
+            { path: 'muhasebe/cari-kartlar', component: CariKartlarPage, data: { breadcrumb: ['Muhasebe', 'Cari Kartlar'] } },
+            { path: 'muhasebe/cari-hareketler', component: CariHareketlerPage, data: { breadcrumb: ['Muhasebe', 'Cari Hareketler'] } },
+            { path: 'muhasebe/kasa-hareketleri', component: KasaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Kasa Hareketleri'] } },
+            { path: 'muhasebe/banka-hareketleri', component: BankaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Banka Hareketleri'] } },
+            { path: 'muhasebe/tahsilat-odeme-belgeleri', component: TahsilatOdemeBelgeleriPage, data: { breadcrumb: ['Muhasebe', 'Tahsilat/Odeme Belgeleri'] } },
+            { path: 'muhasebe/tasinir-kodlari', component: TasinirKodlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kodlari'] } },
+            { path: 'muhasebe/tasinir-kartlari', component: TasinirKartlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kartlari'] } },
+            { path: 'muhasebe/depolar', component: DepolarPage, data: { breadcrumb: ['Muhasebe', 'Depolar'] } },
+            { path: 'muhasebe/stok-hareketleri', component: StokHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Stok Hareketleri'] } },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes'), data: { breadcrumb: ['Ana Menu', 'UI Kit'] } },
             { path: 'documentation', component: Documentation, data: { breadcrumb: ['Sistem', 'Dokumantasyon'] } },
             { path: 'pages', loadChildren: () => import('./app/pages/pages.routes'), data: { breadcrumb: ['Ana Menu', 'Sayfalar'] } }

@@ -290,6 +290,69 @@ public static class StructurePermissions
         public const string Manage = "RestoranOdemeYonetimi.Manage";
     }
 
+    public static class CariKartYonetimi
+    {
+        public const string Menu = "CariKartYonetimi.Menu";
+        public const string View = "CariKartYonetimi.View";
+        public const string Manage = "CariKartYonetimi.Manage";
+    }
+
+    public static class CariHareketYonetimi
+    {
+        public const string Menu = "CariHareketYonetimi.Menu";
+        public const string View = "CariHareketYonetimi.View";
+        public const string Manage = "CariHareketYonetimi.Manage";
+    }
+
+    public static class KasaHareketYonetimi
+    {
+        public const string Menu = "KasaHareketYonetimi.Menu";
+        public const string View = "KasaHareketYonetimi.View";
+        public const string Manage = "KasaHareketYonetimi.Manage";
+    }
+
+    public static class BankaHareketYonetimi
+    {
+        public const string Menu = "BankaHareketYonetimi.Menu";
+        public const string View = "BankaHareketYonetimi.View";
+        public const string Manage = "BankaHareketYonetimi.Manage";
+    }
+
+    public static class TahsilatOdemeBelgesiYonetimi
+    {
+        public const string Menu = "TahsilatOdemeBelgesiYonetimi.Menu";
+        public const string View = "TahsilatOdemeBelgesiYonetimi.View";
+        public const string Manage = "TahsilatOdemeBelgesiYonetimi.Manage";
+    }
+
+    public static class TasinirKodYonetimi
+    {
+        public const string Menu = "TasinirKodYonetimi.Menu";
+        public const string View = "TasinirKodYonetimi.View";
+        public const string Manage = "TasinirKodYonetimi.Manage";
+    }
+
+    public static class TasinirKartYonetimi
+    {
+        public const string Menu = "TasinirKartYonetimi.Menu";
+        public const string View = "TasinirKartYonetimi.View";
+        public const string Manage = "TasinirKartYonetimi.Manage";
+    }
+
+    public static class DepoYonetimi
+    {
+        public const string Menu = "DepoYonetimi.Menu";
+        public const string View = "DepoYonetimi.View";
+        public const string Manage = "DepoYonetimi.Manage";
+    }
+
+    public static class StokHareketYonetimi
+    {
+        public const string Menu = "StokHareketYonetimi.Menu";
+        public const string View = "StokHareketYonetimi.View";
+        public const string Manage = "StokHareketYonetimi.Manage";
+    }
+
     public static class IndirimKuraliYonetimi
     {
         public const string Menu = "IndirimKuraliYonetimi.Menu";

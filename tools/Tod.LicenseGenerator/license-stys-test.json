@@ -1,0 +1,14 @@
+{
+  "licenseId": "af341700-5b07-4554-a51a-4d59a0f673b4",
+  "productCode": "STYS",
+  "customerCode": "TEST",
+  "customerName": "TEST",
+  "environmentName": "Production",
+  "instanceId": "instance-01",
+  "issuedAtUtc": "2026-04-17T18:38:45.0602605+00:00",
+  "expiresAtUtc": "2026-04-18T18:39:42.9919708+00:00",
+  "fingerprintHash": "HOiahnoVMbKvPXJuU\u002BNxF2jY/thqFKwHwivlDtnQxAY=",
+  "enabledModules": [],
+  "licenseVersion": 1,
+  "signature": "Rg4o7cY0OsPdG712JBVGFLPSgaaSHdxv3EdLMuHeYbm\u002B\u002BRjgEY\u002BsoD7tP/A8l8wpZGgaIApWxAOw7u57591YBg=="
+}

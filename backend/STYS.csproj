@@ -40,6 +40,7 @@
     <ProjectReference Include="..\platform\TOD.Platform.Persistence.Rdbms\TOD.Platform.Persistence.Rdbms.csproj" />
     <ProjectReference Include="..\platform\TOD.Platform.Security\TOD.Platform.Security.csproj" />
     <ProjectReference Include="..\platform\TOD.Platform.Identity\TOD.Platform.Identity.csproj" />
+    <ProjectReference Include="..\platform\TOD.Platform.Licensing.AspNetCore\TOD.Platform.Licensing.AspNetCore.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,134 @@
+<p-toast />
+
+<div class="card">
+    <p-toolbar>
+        <ng-template #start>
+            <span class="text-xl font-semibold">Lisans Yonetimi</span>
+        </ng-template>
+        <ng-template #end>
+            <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [loading]="loading" (onClick)="loadStatus()" class="mr-2" />
+        </ng-template>
+    </p-toolbar>
+
+    <!-- Yukleme Alani -->
+    <div class="mt-4 p-4 border-1 surface-border border-round">
+        <h3 class="text-lg font-semibold mb-3">Lisans Dosyasi Yukle</h3>
+        <p class="text-color-secondary mb-3">
+            Lisans generator araci ile uretilen <code>.json</code> dosyasini secin.
+        </p>
+        <p-fileUpload
+            mode="basic"
+            accept=".json"
+            [maxFileSize]="65536"
+            chooseLabel="Lisans Dosyasi Sec"
+            chooseIcon="pi pi-upload"
+            [auto]="true"
+            [customUpload]="true"
+            (uploadHandler)="onFileSelect($event)"
+        />
+        @if (uploading) {
+            <div class="mt-2 text-color-secondary">
+                <i class="pi pi-spin pi-spinner mr-2"></i>Lisans dogrulaniyor...
+            </div>
+        }
+    </div>
+
+    <!-- Lisans Durumu -->
+    @if (status) {
+        <div class="mt-4 p-4 border-1 surface-border border-round">
+            <div class="flex align-items-center gap-3 mb-4">
+                <h3 class="text-lg font-semibold m-0">Lisans Durumu</h3>
+                <p-tag [value]="statusLabel" [severity]="statusSeverity" />
+            </div>
+
+            @if (!status.isValid && status.errors.length > 0) {
+                <div class="mb-4 p-3 border-round" style="background-color: var(--red-50); border: 1px solid var(--red-200);">
+                    <div class="font-semibold mb-2" style="color: var(--red-700);">
+                        <i class="pi pi-exclamation-triangle mr-2"></i>Dogrulama Hatalari
+                    </div>
+                    @for (error of status.errors; track error) {
+                        <div class="ml-4 mb-1" style="color: var(--red-600);">- {{ error }}</div>
+                    }
+                </div>
+            }
+
+            @if (status.licenseId) {
+                <div class="grid">
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Lisans ID</div>
+                            <div class="font-medium text-sm">{{ status.licenseId }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Urun</div>
+                            <div class="font-medium">{{ status.productCode }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Musteri</div>
+                            <div class="font-medium">{{ status.customerName }} ({{ status.customerCode }})</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Ortam</div>
+                            <div class="font-medium">{{ status.environmentName }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Instance</div>
+                            <div class="font-medium">{{ status.instanceId }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Kalan Gun</div>
+                            <div class="font-medium flex align-items-center gap-2">
+                                <p-tag [value]="(daysRemaining ?? 0) + ' gun'" [severity]="expirySeverity" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Baslangic</div>
+                            <div class="font-medium">{{ status.issuedAtUtc | date:'dd.MM.yyyy' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Bitis</div>
+                            <div class="font-medium">{{ status.expiresAtUtc | date:'dd.MM.yyyy HH:mm' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 md:col-6 lg:col-4">
+                        <div class="p-3 border-1 surface-border border-round">
+                            <div class="text-color-secondary text-sm mb-1">Aktif Moduller</div>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                @if (status.enabledModules.length === 0) {
+                                    <p-tag value="Tumu Acik" severity="success" />
+                                } @else {
+                                    @for (m of status.enabledModules; track m) {
+                                        <p-tag [value]="m" severity="info" />
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Bos durum -->
+    @if (!status && !loading) {
+        <div class="mt-4 p-6 text-center text-color-secondary">
+            <i class="pi pi-shield text-4xl mb-3" style="display: block;"></i>
+            <div class="text-lg mb-2">Lisans bilgisi bulunamadi</div>
+            <div>Lisans dosyasi yukleyerek baslayin.</div>
+        </div>
+    }
+</div>

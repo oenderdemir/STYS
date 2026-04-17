@@ -1,0 +1,14 @@
+{
+  "licenseId": "3234194a-9987-4432-acdc-0df23b5b9fe3",
+  "productCode": "A",
+  "customerCode": "TOD-01",
+  "customerName": "TOD",
+  "environmentName": "Development",
+  "instanceId": "dev-01",
+  "issuedAtUtc": "2026-04-17T19:11:26.142974+00:00",
+  "expiresAtUtc": "2027-04-17T19:12:00+00:00",
+  "fingerprintHash": "F/g7eIrcBKGV\u002BnN\u002BrGWIADau9m9TqsNgNaZScs93hes=",
+  "enabledModules": [],
+  "licenseVersion": 1,
+  "signature": "NoKrYjJHU0lpIxWSaTTKqv4S\u002B7reVRMZ3FlprbUM37XOXh97H2TXlN8OKGGh1PCcBOnTRGOPhmLuYqSjyqUCDw=="
+}

@@ -56,6 +56,7 @@ import { TasinirKodlariPage } from './app/pages/muhasebe/tasinir-kodlari/tasinir
 import { TasinirKartlariPage } from './app/pages/muhasebe/tasinir-kartlari/tasinir-kartlari';
 import { DepolarPage } from './app/pages/muhasebe/depolar/depolar';
 import { StokHareketleriPage } from './app/pages/muhasebe/stok-hareketleri/stok-hareketleri';
+import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
@@ -135,6 +136,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/tasinir-kartlari', component: TasinirKartlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kartlari'] } },
             { path: 'muhasebe/depolar', component: DepolarPage, data: { breadcrumb: ['Muhasebe', 'Depolar'] } },
             { path: 'muhasebe/stok-hareketleri', component: StokHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Stok Hareketleri'] } },
+            { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes'), data: { breadcrumb: ['Ana Menu', 'UI Kit'] } },
             { path: 'documentation', component: Documentation, data: { breadcrumb: ['Sistem', 'Dokumantasyon'] } },
             { path: 'pages', loadChildren: () => import('./app/pages/pages.routes'), data: { breadcrumb: ['Ana Menu', 'Sayfalar'] } }

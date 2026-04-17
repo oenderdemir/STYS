@@ -56,6 +56,7 @@ using TOD.Platform.AspNetCore.RateLimiting;
 using TOD.Platform.Identity;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Users.Services;
+using TOD.Platform.Licensing.AspNetCore;
 using TOD.Platform.Persistence.Rdbms.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -147,6 +148,7 @@ builder.Services.AddScoped<IStokHareketService, StokHareketService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddSignalR();
 
+builder.Services.AddTodLicensing(builder.Configuration);
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddTodPlatformAuthorization();
 builder.Services.AddTodPlatformRateLimiting(builder.Configuration);
@@ -227,6 +229,8 @@ app.UseCors(frontendCorsPolicy);
 app.UseTodPlatformRateLimiting();
 app.UseAuthentication();
 app.UseAuthorization();
+await app.ValidateLicenseOnStartupAsync();
+app.UseTodLicenseGuard();
 app.MapTodPlatformHealthChecks();
 app.MapControllers();
 app.MapHub<BildirimHub>(BildirimHub.HubRoute)

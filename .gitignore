@@ -3,6 +3,11 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 **/.dotnet/
+
+# License keys - NEVER commit private keys
+license-private.key
+license-public.key
+
 # User-specific files
 *.rsuser
 *.suo

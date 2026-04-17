@@ -361,6 +361,13 @@ public static class StructurePermissions
         public const string SistemIndirimKuraliOlusturabilme = "IndirimKuraliYonetimi.SistemIndirimKuraliOlusturabilir";
     }
 
+    public static class LisansYonetimi
+    {
+        public const string Menu = "LisansYonetimi.Menu";
+        public const string View = "LisansYonetimi.View";
+        public const string Manage = "LisansYonetimi.Manage";
+    }
+
     public static class KullaniciAtama
     {
         public const string TesisYoneticisiAtanabilir = "KullaniciAtama.TesisYoneticisiAtanabilir";

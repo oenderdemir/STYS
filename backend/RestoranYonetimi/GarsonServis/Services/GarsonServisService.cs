@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.GarsonServis.Dtos;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Licensing;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuUrunleri.Entities;
 using STYS.RestoranOdemeleri.Entities;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranYonetimi.Services;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.GarsonServis.Services;
@@ -14,15 +16,21 @@ public class GarsonServisService : IGarsonServisService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IRestoranErisimService _restoranErisimService;
+    private readonly ILicenseService _licenseService;
 
-    public GarsonServisService(StysAppDbContext dbContext, IRestoranErisimService restoranErisimService)
+    public GarsonServisService(
+        StysAppDbContext dbContext,
+        IRestoranErisimService restoranErisimService,
+        ILicenseService licenseService)
     {
         _dbContext = dbContext;
         _restoranErisimService = restoranErisimService;
+        _licenseService = licenseService;
     }
 
     public async Task<List<GarsonMasaDto>> GetMasalarAsync(int restoranId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
         await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
 
         var masalar = await _dbContext.RestoranMasalari
@@ -60,6 +68,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto?> GetMasaOturumuByMasaAsync(int masaId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         var masaRestoranId = await _dbContext.RestoranMasalari
             .Where(x => x.Id == masaId)
             .Select(x => x.RestoranId)
@@ -83,6 +93,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> StartOrGetMasaOturumuAsync(int masaId, CreateMasaOturumuRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         var masa = await _dbContext.RestoranMasalari
             .Include(x => x.Restoran)
             .FirstOrDefaultAsync(x => x.Id == masaId, cancellationToken)
@@ -143,6 +155,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> AddKalemAsync(int oturumId, AddMasaOturumuKalemiRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (request.UrunId <= 0)
         {
             throw new BaseException("Urun secimi zorunludur.", 400);
@@ -199,6 +213,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> UpdateKalemAsync(int oturumId, int kalemId, UpdateMasaOturumuKalemiRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         var oturum = await GetMutableOturumAsync(oturumId, cancellationToken);
         var kalem = oturum.Kalemler.FirstOrDefault(x => x.Id == kalemId)
             ?? throw new BaseException("Kalem bulunamadi.", 404);
@@ -223,6 +239,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> DeleteKalemAsync(int oturumId, int kalemId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         var oturum = await GetMutableOturumAsync(oturumId, cancellationToken);
         var kalem = oturum.Kalemler.FirstOrDefault(x => x.Id == kalemId)
             ?? throw new BaseException("Kalem bulunamadi.", 404);
@@ -236,6 +254,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> UpdateNotAsync(int oturumId, UpdateMasaOturumuNotRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         var oturum = await GetMutableOturumAsync(oturumId, cancellationToken);
         oturum.Notlar = NormalizeOptional(request.Notlar, 1024);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -244,6 +264,8 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<MasaOturumuDto> UpdateDurumAsync(int oturumId, UpdateMasaOturumuDurumRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (string.IsNullOrWhiteSpace(request.Durum))
         {
             throw new BaseException("Durum zorunludur.", 400);
@@ -277,6 +299,7 @@ public class GarsonServisService : IGarsonServisService
 
     public async Task<GarsonMenuDto> GetMenuAsync(int restoranId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
         await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
 
         var restoranAktifMi = await _dbContext.Restoranlar

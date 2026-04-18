@@ -2905,3 +2905,69 @@ Kamp Yonetimi (top-level, fa-campground)
 - Tod.LicenseGenerator.csproj WinForms icin guncellendi (
 et10.0-windows, UseWindowsForms=true).
 - Build dogrulamasi: BASARILI (dotnet build tools/Tod.LicenseGenerator/Tod.LicenseGenerator.csproj).
+
+## Tur - Lisanslama Sertlestirme (Kontrollu Kilit + Production Hardening)
+
+### Startup / Middleware
+- `platform/TOD.Platform.Licensing.AspNetCore/LicenseApplicationBuilderExtensions.cs`
+  - Startup validasyonu ortam+config bazli hale getirildi.
+  - `Licensing:FailFastOnStartupInProduction=false` varsayilaninda Production'da uygulama ayakta kalir (kontrollu kilit).
+  - Gecersiz lisans durumda business endpoint'leri middleware kapatir, lisans yenileme endpoint'leri acik kalir.
+- `platform/TOD.Platform.Licensing.AspNetCore/LicenseGuardMiddleware.cs`
+  - ExcludedPaths eslesmesi daraltildi:
+    - Varsayilan: exact match
+    - Prefix: sadece `/*` ile biten tanimlarda segment-aware
+
+### Lisans Yenileme Endpointleri
+- `backend/Licensing/Controllers/ApiLicenseController.cs` eklendi.
+  - `GET /api/license/status`
+  - `POST /api/license/upload`
+- Mevcut `ui/license` akisi bozulmadan korundu.
+
+### Config Sertlestirme
+- `backend/appsettings.json` ve `backend/appsettings.Development.json` guncellendi:
+  - `ExcludedPaths` daraltildi:
+    - `/health/*`
+    - `/auth/*`
+    - `/ui/license/*`
+    - `/api/license/status`
+    - `/api/license/upload`
+  - `FailFastOnStartupInProduction` eklendi (default `false`).
+  - `RequireIntegrityHashesInProduction` ve `IntegrityHashes` eklendi.
+
+### Service-Layer Enforcement (Ensure...)
+- `backend/Licensing/StysLicensedModules.cs` eklendi (Kamp/Rezervasyon/Restoran/OdaTemizlik/Bildirim).
+- Asagidaki servislerde bool kontrol yerine `EnsureModuleLicensedAsync(...)` ile zorlayici kontrol eklendi:
+  - `RezervasyonService` (kaydet, odeme kaydet, odeme raporu)
+  - `RestoranSiparisService` (add/update/durum)
+  - `RestoranOdemeService` (odeme olusturma, aktif rezervasyon arama)
+  - `GarsonServisService` (tum operasyonel metotlar)
+  - `OdaTemizlikService` (baslat/tamamla)
+  - `BildirimService` (okuma/yazma/publish akislari)
+
+### Controller-Level Modul Lisanslama
+- `RequiresLicensedModule` uygulamasi STYS modullerine yayildi:
+  - `KampBasvuruController` -> Kamp
+  - `KampTarifeYonetimController` -> Kamp (const'a cekildi)
+  - `RezervasyonController` -> Rezervasyon
+  - `RestoranlarController` -> Restoran
+  - `OdaTemizlikController` -> OdaTemizlik
+  - `BildirimController` -> Bildirim
+
+### Middleware Disi Akislar
+- `backend/Bildirimler/Hubs/BildirimHub.cs`
+  - `OnConnectedAsync` icinde lisans + modul zorlamasi eklendi.
+  - Method-level ornek icin `PingAsync()` eklendi.
+- `backend/Licensing/Services/LicenseAwareMaintenanceHostedService.cs` eklendi.
+  - Periyodik worker akisinda lisans/modul kontrolu zorunlu.
+
+### Public Key / Integrity Hardening
+- `platform/TOD.Platform.Licensing/EcdsaLicenseSignatureVerifier.cs`
+  - Production ortaminda public key override runtime'da da bloklandi (defense-in-depth).
+- `platform/TOD.Platform.Licensing/AssemblyIntegrityChecker.cs`
+  - `IntegrityHashes` config'inden hash alabilen efektif kontrol eklendi.
+  - Production'da `RequireIntegrityHashesInProduction=true` iken hash listesi bos ise integrity fail olur.
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj -o backend/.tmp-build` BASARILI.
+- Not: normal output path'e build denemesinde calisan `STYS` prosesi nedeniyle file lock alinabiliyor.

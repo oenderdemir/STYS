@@ -2,11 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Services;
+using STYS.Licensing;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Licensing.AspNetCore;
 
 namespace STYS.Kamp.Controllers;
 
+[RequiresLicensedModule(StysLicensedModules.Kamp)]
 public class KampBasvuruController : UIController
 {
     private readonly IKampBasvuruService _kampBasvuruService;

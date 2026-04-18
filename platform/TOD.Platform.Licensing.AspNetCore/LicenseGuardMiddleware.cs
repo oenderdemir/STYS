@@ -10,10 +10,12 @@ namespace TOD.Platform.Licensing.AspNetCore;
 /// Her HTTP isteginde lisans durumunu kontrol eden middleware.
 /// Lisans gecersizse veya suresi dolmussa 403 Forbidden doner.
 ///
-/// ExcludedPaths eslemesi SEGMENT-AWARE'dir:
-///  - "/auth" tanimi; "/auth" ve "/auth/..." yollarini esler
-///  - "/auth" tanimi; "/authx" gibi ayni segmentin genisletilmis halini ESLEMEZ
-/// Bu sayede genis 'prefix' kacaklarinin onune gecilir.
+    /// ExcludedPaths eslesmesi guvenlik icin daraltilmistir:
+    ///  - Varsayilan davranis exact-match'tir.
+    ///  - Prefix esleme yalnizca "/*" ile biterse aktif olur (segment-aware).
+    /// Ornek:
+    ///  - "/api/license/status" -> sadece exact
+    ///  - "/auth/*" -> "/auth" ve "/auth/..." eslenir
 /// </summary>
 public sealed class LicenseGuardMiddleware
 {
@@ -77,7 +79,7 @@ public sealed class LicenseGuardMiddleware
             if (string.IsNullOrWhiteSpace(excluded))
                 continue;
 
-            if (IsSegmentPrefixMatch(path, excluded))
+            if (IsExcludedPathMatch(path, excluded))
                 return true;
         }
 
@@ -85,19 +87,32 @@ public sealed class LicenseGuardMiddleware
     }
 
     /// <summary>
-    /// Segment-aware prefix matching.
-    /// "/auth" -> "/auth" ve "/auth/anything" eslenir; "/authx" ESLENMEZ.
+    /// Excluded path match:
+    /// - exact (varsayilan)
+    /// - "/*" ile segment-aware prefix
     /// </summary>
+    private static bool IsExcludedPathMatch(string path, string configured)
+    {
+        var normalizedPath = path.TrimEnd('/');
+        var normalizedConfigured = configured.TrimEnd('/');
+
+        if (normalizedConfigured.EndsWith("/*", StringComparison.Ordinal))
+        {
+            var prefix = normalizedConfigured[..^2].TrimEnd('/');
+            return IsSegmentPrefixMatch(normalizedPath, prefix);
+        }
+
+        return string.Equals(normalizedPath, normalizedConfigured, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsSegmentPrefixMatch(string path, string prefix)
     {
+        if (string.Equals(path, prefix, StringComparison.OrdinalIgnoreCase))
+            return true;
+
         if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        // Tam eslesme
-        if (path.Length == prefix.Length)
-            return true;
-
-        // Bir sonraki karakter '/' ise segment siniri; aksi halde "/authx" gibi bir kacak
-        return path[prefix.Length] == '/';
+        return path.Length > prefix.Length && path[prefix.Length] == '/';
     }
 }

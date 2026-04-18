@@ -67,10 +67,18 @@ public sealed class LicensingOptions
 
     /// <summary>
     /// Lisans kontrolunden muaf tutulacak path prefix'leri.
-    /// Daraltilmis set kullanin; ornegin: ["/health", "/auth", "/ui/license"].
-    /// Eslesme segment-aware yapilir: "/auth" -> "/auth" ve "/auth/..." eslenir, "/authx" eslenmez.
+    /// Guvenlik icin varsayilan eslesme exact'tir.
+    /// Prefix eslesme icin "/*" kullanin (ornek: "/auth/*", "/health/*", "/ui/license/*").
     /// </summary>
     public List<string> ExcludedPaths { get; set; } = [];
+
+    /// <summary>
+    /// Startup validasyonunda fail-fast davranisi.
+    /// false (onerilen): kontrollu kilit. Uygulama ayaga kalkar, business endpoint'leri middleware kapatir,
+    /// lisans yenileme endpoint'leri erisilebilir kalir.
+    /// true: Production'da gecersiz lisansta uygulama baslatilmaz.
+    /// </summary>
+    public bool FailFastOnStartupInProduction { get; set; } = false;
 
     /// <summary>
     /// PRODUCTION GUVENLIGI: Public key yalnizca uygulamaya gomulmus halde (EcdsaLicenseSignatureVerifier.PublicKeyParts)
@@ -82,4 +90,16 @@ public sealed class LicensingOptions
 
     /// <summary>Yalnizca AllowPublicKeyOverride=true iken dikkate alinir (Base64-SPKI).</summary>
     public string PublicKeyOverride { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Production'da integrity hash listesi bos ise lisans validasyonu hata versin mi.
+    /// Onerilen: true.
+    /// </summary>
+    public bool RequireIntegrityHashesInProduction { get; set; } = true;
+
+    /// <summary>
+    /// Assembly hash tablosu. Key: dosya adi (or: "TOD.Platform.Licensing.dll"), Value: SHA256(Base64).
+    /// CI/CD asamasinda doldurulmasi onerilir.
+    /// </summary>
+    public Dictionary<string, string> IntegrityHashes { get; set; } = [];
 }

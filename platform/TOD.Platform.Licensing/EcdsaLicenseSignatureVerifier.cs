@@ -73,6 +73,12 @@ public sealed class EcdsaLicenseSignatureVerifier : ILicenseSignatureVerifier
 
         if (options.AllowPublicKeyOverride && !string.IsNullOrWhiteSpace(options.PublicKeyOverride))
         {
+            if (IsProductionEnvironment())
+            {
+                throw new InvalidOperationException(
+                    "Production ortaminda public key override kullanilamaz.");
+            }
+
             logger.LogWarning(
                 "LICENSING: Public key override aktif. Bu mod yalnizca Development icindir. " +
                 "Production'da bu ayarin aktif olmasi beklenmez.");
@@ -88,5 +94,13 @@ public sealed class EcdsaLicenseSignatureVerifier : ILicenseSignatureVerifier
         var ecdsa = ECDsa.Create();
         ecdsa.ImportSubjectPublicKeyInfo(keyBytes, out _);
         return ecdsa;
+    }
+
+    private static bool IsProductionEnvironment()
+    {
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                          ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+                          ?? string.Empty;
+        return environment.Equals("Production", StringComparison.OrdinalIgnoreCase);
     }
 }

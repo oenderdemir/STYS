@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -28,8 +29,12 @@ public static class LicenseApplicationBuilderExtensions
     /// Uygulama baslatilirken lisansi dogrular.
     ///
     /// Davranis:
-    /// - Production ortaminda (veya <paramref name="throwOnFailure"/> acik ise): gecersiz lisansta uygulama baslatmaz.
-    /// - Development/Staging'de: uyari loglar, devam eder (upload/ilk kurulum akisi).
+    /// - throwOnFailure verilirse birebir o davranis uygulanir.
+    /// - verilmezse ortam+config bazli karar verilir:
+    ///   Production: Licensing:FailFastOnStartupInProduction (default=false)
+    ///   Diger ortamlar: false
+    /// Boylece Production'da "kontrollu kilit" modunda sistem ayakta kalir;
+    /// lisans yenileme endpoint'leri acik kalirken business endpoint'leri middleware tarafinda kapanir.
     ///
     /// Kullanim:
     ///   await app.ValidateLicenseOnStartupAsync();                      // env-aware (Production'da fail-fast)
@@ -44,8 +49,9 @@ public static class LicenseApplicationBuilderExtensions
         var licenseService = app.Services.GetRequiredService<ILicenseService>();
         var env = app.Services.GetRequiredService<IWebHostEnvironment>();
 
-        // Caller throwOnFailure belirtmediyse ortamdan karar ver: Production -> true, diger -> false
-        var effectiveThrow = throwOnFailure ?? env.IsProduction();
+        // Caller throwOnFailure belirtmediyse ortam+config bazli karar ver.
+        var failFastInProduction = app.Configuration.GetValue<bool>("Licensing:FailFastOnStartupInProduction");
+        var effectiveThrow = throwOnFailure ?? (env.IsProduction() && failFastInProduction);
 
         logger.LogInformation(
             "Startup lisans dogrulamasi baslatiliyor... Environment={Env}, FailFast={Fail}",
@@ -68,8 +74,8 @@ public static class LicenseApplicationBuilderExtensions
             }
 
             logger.LogWarning(
-                "Lisans dogrulamasi basarisiz. Development/Staging modunda uygulama baslatiliyor; " +
-                "API istekleri lisans yuklenene kadar engellenecek.{NL}{Errors}",
+                "Lisans dogrulamasi basarisiz. Uygulama kontrollu kilit modunda aciliyor; " +
+                "business endpoint'leri lisans yuklenene kadar engellenecek, lisans yenileme endpoint'leri acik kalacak.{NL}{Errors}",
                 Environment.NewLine, errors);
             return;
         }

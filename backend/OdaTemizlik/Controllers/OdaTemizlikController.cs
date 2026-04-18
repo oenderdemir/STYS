@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
+using STYS.Licensing;
 using STYS.OdaTemizlik.Dto;
 using STYS.OdaTemizlik.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Licensing.AspNetCore;
 using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.OdaTemizlik.Controllers;
 
+[RequiresLicensedModule(StysLicensedModules.OdaTemizlik)]
 public class OdaTemizlikController : UIController
 {
     private readonly IOdaTemizlikService _odaTemizlikService;

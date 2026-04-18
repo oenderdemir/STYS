@@ -4,8 +4,10 @@ using STYS.Bildirimler;
 using STYS.Bildirimler.Dto;
 using STYS.Bildirimler.Services;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Licensing;
 using STYS.Odalar;
 using STYS.OdaTemizlik.Dto;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -16,15 +18,18 @@ public class OdaTemizlikService : IOdaTemizlikService
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IBildirimService _bildirimService;
+    private readonly ILicenseService _licenseService;
 
     public OdaTemizlikService(
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
-        IBildirimService bildirimService)
+        IBildirimService bildirimService,
+        ILicenseService licenseService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
         _bildirimService = bildirimService;
+        _licenseService = licenseService;
     }
 
     public async Task<List<OdaTemizlikTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -153,6 +158,8 @@ public class OdaTemizlikService : IOdaTemizlikService
 
     public async Task<OdaTemizlikKayitDto> BaslatTemizlikAsync(int odaId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.OdaTemizlik, cancellationToken);
+
         var room = await GetRoomForStatusChangeAsync(odaId, cancellationToken);
 
         if (room.Oda.TemizlikDurumu != OdaTemizlikDurumlari.Kirli)
@@ -180,6 +187,8 @@ public class OdaTemizlikService : IOdaTemizlikService
 
     public async Task<OdaTemizlikKayitDto> TamamlaTemizlikAsync(int odaId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.OdaTemizlik, cancellationToken);
+
         var room = await GetRoomForStatusChangeAsync(odaId, cancellationToken);
 
         if (room.Oda.TemizlikDurumu != OdaTemizlikDurumlari.Temizleniyor)

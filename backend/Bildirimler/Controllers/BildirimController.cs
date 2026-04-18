@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Bildirimler.Dto;
 using STYS.Bildirimler.Services;
+using STYS.Licensing;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Licensing.AspNetCore;
 
 namespace STYS.Bildirimler.Controllers;
 
+[RequiresLicensedModule(StysLicensedModules.Bildirim)]
 public class BildirimController : UIController
 {
     private readonly IBildirimService _bildirimService;

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using STYS.Licensing;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.Licensing.Abstractions;
 
@@ -24,6 +25,7 @@ public class BildirimHub : Hub
         // SignalR baglantilari HTTP middleware'in disinda kalir; lisansi burada da zorla.
         // Lisans gecersizse LicenseException firlatir ve baglanti reddedilir.
         await _licenseService.EnsureLicensedAsync(Context.ConnectionAborted);
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, Context.ConnectionAborted);
 
         var userIdRaw = Context.User?.FindFirstValue("userId")
             ?? Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -34,6 +36,13 @@ public class BildirimHub : Hub
         }
 
         await base.OnConnectedAsync();
+    }
+
+    public async Task<string> PingAsync()
+    {
+        // Hub method seviyesinde de modul lisansini zorla.
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, Context.ConnectionAborted);
+        return DateTime.UtcNow.ToString("O");
     }
 
     public static string GetUserGroupName(Guid userId)

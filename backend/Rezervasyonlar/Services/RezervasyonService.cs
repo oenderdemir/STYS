@@ -13,12 +13,14 @@ using STYS.Fiyatlandirma;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Licensing;
 using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
 using STYS.Tesisler;
 using TOD.Platform.AspNetCore.Authorization;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
@@ -29,17 +31,20 @@ public class RezervasyonService : IRezervasyonService
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IBildirimService _bildirimService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ILicenseService _licenseService;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
         IBildirimService bildirimService,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        ILicenseService licenseService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
         _bildirimService = bildirimService;
         _httpContextAccessor = httpContextAccessor;
+        _licenseService = licenseService;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -1973,6 +1978,7 @@ public class RezervasyonService : IRezervasyonService
 
     public async Task<RezervasyonKayitSonucDto> KaydetAsync(RezervasyonKaydetRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Rezervasyon, cancellationToken);
         ValidateSaveRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
         await EnsureTesisHasMisafirTipiAsync(request.TesisId, request.MisafirTipiId, cancellationToken);
@@ -3034,6 +3040,8 @@ public class RezervasyonService : IRezervasyonService
 
     public async Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Rezervasyon, cancellationToken);
+
         if (request.OdemeTutari <= 0)
         {
             throw new BaseException("Odeme tutari sifirdan buyuk olmalidir.", 400);
@@ -3381,6 +3389,8 @@ public class RezervasyonService : IRezervasyonService
         DateTime bitisTarihi,
         CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Rezervasyon, cancellationToken);
+
         var normalizedTesisIds = tesisIds
             .Where(x => x > 0)
             .Distinct()

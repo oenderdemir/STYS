@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
+using TOD.Platform.Licensing.Abstractions;
 
 namespace TOD.Platform.Licensing;
 
@@ -25,12 +27,27 @@ public sealed class AssemblyIntegrityChecker : Abstractions.IAssemblyIntegrityCh
         // Bu değerler CI/CD pipeline'da build sonrası inject edilmelidir.
     };
 
+    private readonly LicensingOptions _options;
+
+    public AssemblyIntegrityChecker(IOptions<LicensingOptions> options)
+    {
+        _options = options.Value;
+    }
+
     public bool IsIntact()
     {
-        if (ExpectedHashes.Count == 0)
-            return true; // Hash'ler henüz konfigüre edilmemişse bypass et
+        var effectiveHashes = BuildEffectiveHashSet();
 
-        foreach (var (assemblyName, expectedHash) in ExpectedHashes)
+        if (effectiveHashes.Count == 0)
+        {
+            // Production'da hash gereksinimi aktifse boş listeyi hata kabul et.
+            if (_options.RequireIntegrityHashesInProduction && IsProductionEnvironment())
+                return false;
+
+            return true;
+        }
+
+        foreach (var (assemblyName, expectedHash) in effectiveHashes)
         {
             var assemblyPath = Path.Combine(AppContext.BaseDirectory, assemblyName);
 
@@ -52,5 +69,27 @@ public sealed class AssemblyIntegrityChecker : Abstractions.IAssemblyIntegrityCh
         }
 
         return true;
+    }
+
+    private Dictionary<string, string> BuildEffectiveHashSet()
+    {
+        var effective = new Dictionary<string, string>(ExpectedHashes, StringComparer.OrdinalIgnoreCase);
+        foreach (var (assemblyName, expectedHash) in _options.IntegrityHashes)
+        {
+            if (string.IsNullOrWhiteSpace(assemblyName) || string.IsNullOrWhiteSpace(expectedHash))
+                continue;
+
+            effective[assemblyName.Trim()] = expectedHash.Trim();
+        }
+
+        return effective;
+    }
+
+    private static bool IsProductionEnvironment()
+    {
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                          ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+                          ?? string.Empty;
+        return environment.Equals("Production", StringComparison.OrdinalIgnoreCase);
     }
 }

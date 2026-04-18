@@ -5,6 +5,8 @@ using STYS.Bildirimler.Dto;
 using STYS.Bildirimler.Entities;
 using STYS.Bildirimler.Hubs;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Licensing;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -15,19 +17,23 @@ public class BildirimService : IBildirimService
     private readonly StysAppDbContext _stysDbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IHubContext<BildirimHub> _hubContext;
+    private readonly ILicenseService _licenseService;
 
     public BildirimService(
         StysAppDbContext stysDbContext,
         ICurrentUserAccessor currentUserAccessor,
-        IHubContext<BildirimHub> hubContext)
+        IHubContext<BildirimHub> hubContext,
+        ILicenseService licenseService)
     {
         _stysDbContext = stysDbContext;
         _currentUserAccessor = currentUserAccessor;
         _hubContext = hubContext;
+        _licenseService = licenseService;
     }
 
     public async Task<List<BildirimDto>> GetCurrentUserBildirimlerAsync(int take = 20, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         var normalizedTake = Math.Clamp(take, 1, 100);
 
@@ -54,6 +60,7 @@ public class BildirimService : IBildirimService
 
     public async Task<int> GetCurrentUserUnreadCountAsync(CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         return await _stysDbContext.Bildirimler
             .CountAsync(x => x.UserId == currentUserId && !x.IsRead, cancellationToken);
@@ -61,6 +68,7 @@ public class BildirimService : IBildirimService
 
     public async Task<BildirimTercihDto> GetCurrentUserTercihAsync(CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         var tercih = await _stysDbContext.BildirimTercihleri
             .FirstOrDefaultAsync(x => x.UserId == currentUserId, cancellationToken);
@@ -92,6 +100,7 @@ public class BildirimService : IBildirimService
 
     public async Task<BildirimTercihDto> UpdateCurrentUserTercihAsync(BildirimTercihGuncelleRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         var tercih = await _stysDbContext.BildirimTercihleri
             .FirstOrDefaultAsync(x => x.UserId == currentUserId, cancellationToken);
@@ -117,6 +126,7 @@ public class BildirimService : IBildirimService
 
     public async Task MarkAsReadAsync(int bildirimId, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         var entity = await _stysDbContext.Bildirimler
             .FirstOrDefaultAsync(x => x.Id == bildirimId && x.UserId == currentUserId, cancellationToken);
@@ -138,6 +148,7 @@ public class BildirimService : IBildirimService
 
     public async Task MarkAllAsReadAsync(CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
         var currentUserId = GetCurrentUserIdOrThrow();
         var unread = await _stysDbContext.Bildirimler
             .Where(x => x.UserId == currentUserId && !x.IsRead)
@@ -160,6 +171,8 @@ public class BildirimService : IBildirimService
 
     public async Task PublishToTesisUsersAsync(int tesisId, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
+
         if (tesisId <= 0)
         {
             return;
@@ -206,6 +219,8 @@ public class BildirimService : IBildirimService
 
     public async Task PublishToUsersAsync(IEnumerable<Guid> userIds, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Bildirim, cancellationToken);
+
         var normalizedUserIds = userIds
             .Where(x => x != Guid.Empty)
             .Distinct()

@@ -11,6 +11,8 @@ using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranSiparisleri.Repositories;
 using STYS.RestoranYonetimi.Services;
+using STYS.Licensing;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -25,6 +27,7 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
     private readonly IRestoranMenuUrunRepository _menuUrunRepository;
     private readonly IMapper _mapper;
     private readonly IRestoranErisimService _restoranErisimService;
+    private readonly ILicenseService _licenseService;
 
     public RestoranSiparisService(
         StysAppDbContext dbContext,
@@ -33,7 +36,8 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
         IRestoranMasaRepository masaRepository,
         IRestoranMenuUrunRepository menuUrunRepository,
         IMapper mapper,
-        IRestoranErisimService restoranErisimService)
+        IRestoranErisimService restoranErisimService,
+        ILicenseService licenseService)
         : base(siparisRepository, mapper)
     {
         _dbContext = dbContext;
@@ -43,6 +47,7 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
         _menuUrunRepository = menuUrunRepository;
         _mapper = mapper;
         _restoranErisimService = restoranErisimService;
+        _licenseService = licenseService;
     }
 
     public override async Task<IEnumerable<RestoranSiparisDto>> GetAllAsync(Func<IQueryable<RestoranSiparis>, IQueryable<RestoranSiparis>>? include = null)
@@ -131,6 +136,7 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
 
     public override async Task<RestoranSiparisDto> AddAsync(RestoranSiparisDto request)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran);
         ValidateCreateRequest(request.RestoranId, request.ParaBirimi, request.Kalemler);
 
         var restoran = await _restoranRepository.GetByIdAsync(request.RestoranId)
@@ -186,6 +192,8 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
 
     public override async Task<RestoranSiparisDto> UpdateAsync(RestoranSiparisDto request)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran);
+
         if (!request.Id.HasValue)
         {
             throw new BaseException("Siparis id zorunludur.", 400);
@@ -227,6 +235,8 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
 
     public async Task<RestoranSiparisDto> UpdateDurumAsync(int id, UpdateRestoranSiparisDurumRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (string.IsNullOrWhiteSpace(request.SiparisDurumu))
         {
             throw new BaseException("Siparis durumu zorunludur.", 400);

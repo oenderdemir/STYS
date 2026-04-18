@@ -12,6 +12,7 @@ using STYS.GarsonServis.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
 using STYS.Kullanicilar.Services;
+using STYS.Licensing.Services;
 using STYS.MusteriMenu.Services;
 using STYS.OdaTemizlik.Services;
 using STYS.Rezervasyonlar.Services;
@@ -97,6 +98,7 @@ builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
 builder.Services.AddScoped<IRestoranErisimService, RestoranErisimService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddSignalR();
+builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 
 builder.Services.AddTodLicensing(builder.Configuration, builder.Environment);
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());

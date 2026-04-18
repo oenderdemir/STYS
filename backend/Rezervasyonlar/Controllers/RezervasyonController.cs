@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Rezervasyonlar.Dto;
+using STYS.Licensing;
 using STYS.Rezervasyonlar.Reporting;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Licensing.AspNetCore;
 
 namespace STYS.Rezervasyonlar.Controllers;
 
+[RequiresLicensedModule(StysLicensedModules.Rezervasyon)]
 public class RezervasyonController : UIController
 {
     private readonly IRezervasyonService _rezervasyonService;

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using STYS.Licensing;
 using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Services;
 using System.Linq;
@@ -6,11 +7,13 @@ using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
 using TOD.Platform.Identity;
 using TOD.Platform.Identity.Users.DTO;
+using TOD.Platform.Licensing.AspNetCore;
 
 namespace STYS.Restoranlar.Controllers;
 
 [Route("api/restoranlar")]
 [ApiController]
+[RequiresLicensedModule(StysLicensedModules.Restoran)]
 public class RestoranlarController : UIController
 {
     private readonly IRestoranService _service;

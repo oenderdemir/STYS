@@ -12,6 +12,8 @@ using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranSiparisleri.Repositories;
 using STYS.RestoranYonetimi.Services;
+using STYS.Licensing;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -26,6 +28,7 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
     private readonly IRestoranMasaRepository _masaRepository;
     private readonly IMapper _mapper;
     private readonly IRestoranErisimService _restoranErisimService;
+    private readonly ILicenseService _licenseService;
 
     public RestoranOdemeService(
         StysAppDbContext dbContext,
@@ -34,7 +37,8 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
         IRestoranRepository restoranRepository,
         IRestoranMasaRepository masaRepository,
         IMapper mapper,
-        IRestoranErisimService restoranErisimService)
+        IRestoranErisimService restoranErisimService,
+        ILicenseService licenseService)
         : base(odemeRepository, mapper)
     {
         _dbContext = dbContext;
@@ -44,6 +48,7 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
         _masaRepository = masaRepository;
         _mapper = mapper;
         _restoranErisimService = restoranErisimService;
+        _licenseService = licenseService;
     }
 
     public async Task<List<RestoranOdemeDto>> GetBySiparisIdAsync(int siparisId, CancellationToken cancellationToken = default)
@@ -74,6 +79,8 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
 
     public async Task<List<AktifRezervasyonAramaDto>> SearchAktifRezervasyonlarAsync(int tesisId, string? query, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (tesisId <= 0)
         {
             throw new BaseException("Gecerli bir tesis secimi zorunludur.", 400);
@@ -101,6 +108,8 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
 
     public async Task<RestoranOdemeDto> CreateOdayaEkleOdemeAsync(int siparisId, CreateOdayaEkleOdemeRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (request.Tutar <= 0)
         {
             throw new BaseException("Odeme tutari sifirdan buyuk olmalidir.", 400);
@@ -193,6 +202,8 @@ public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranO
 
     private async Task<RestoranOdemeDto> CreateRegularPaymentAsync(int siparisId, decimal tutar, string? aciklama, string odemeTipi, CancellationToken cancellationToken)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Restoran, cancellationToken);
+
         if (tutar <= 0)
         {
             throw new BaseException("Odeme tutari sifirdan buyuk olmalidir.", 400);

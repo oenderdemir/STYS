@@ -6,31 +6,25 @@ using TOD.Platform.Licensing.Abstractions;
 
 namespace Tod.LicenseGenerator;
 
-/// <summary>
-/// Offline lisans ureten komut satiri araci.
-/// Tek komutla key yoksa olusturur, bilgileri sorar, lisans dosyasi uretir.
-/// </summary>
 public static class Program
 {
-    private const string PrivateKeyFile = "license-private.key";
-    private const string PublicKeyFile = "license-public.key";
-
     private static readonly JsonSerializerOptions PrettyJson = new()
     {
         WriteIndented = true
     };
 
+    [STAThread]
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-
-        var command = args.Length > 0 ? args[0] : "";
+        var command = args.Length > 0 ? args[0] : string.Empty;
 
         return command switch
         {
-            "generate" => await GenerateLicense(),
+            "generate" => await GenerateLicenseAsync(),
             "fingerprint" => ShowFingerprint(),
             "show-public-key" => ShowPublicKey(),
+            "gui" => LaunchGui(),
             _ => ShowUsage()
         };
     }
@@ -42,18 +36,24 @@ public static class Program
             =====================
             Kullanim:
               dotnet run -- generate         Lisans dosyasi uretir (key yoksa otomatik olusturur)
-              dotnet run -- fingerprint      Bu makinenin fingerprint bilgilerini gosterir
-              dotnet run -- show-public-key  Public key parcalarini gosterir (uygulamaya gomme icin)
+              dotnet run -- fingerprint      Bu makinenin fingerprint hash degerini gosterir
+              dotnet run -- show-public-key  Public key parcalarini gosterir
+              dotnet run -- gui              Kucuk masaustu arayuzunu acar
             """);
         return 0;
     }
 
-    /// <summary>
-    /// Ana komut: key yoksa uretir, bilgileri sorar, lisans dosyasi olusturur.
-    /// </summary>
-    private static async Task<int> GenerateLicense()
+    private static int LaunchGui()
     {
-        var ecdsa = await EnsureKeysExist();
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.Run(new LicenseGeneratorForm());
+        return 0;
+    }
+
+    private static async Task<int> GenerateLicenseAsync()
+    {
+        using var ecdsa = await LicenseGeneratorCore.EnsureKeysExistAsync();
 
         Console.WriteLine("=== TOD Lisans Uretici ===\n");
 
@@ -73,13 +73,15 @@ public static class Program
         var defaultExpiry = DateTimeOffset.UtcNow.AddDays(365).ToString("yyyy-MM-dd HH:mm");
         var expiryStr = Ask("Bitis tarihi (yyyy-MM-dd HH:mm)", defaultExpiry);
         license.ExpiresAtUtc = DateTimeOffset.TryParseExact(
-                expiryStr, "yyyy-MM-dd HH:mm",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+            expiryStr,
+            "yyyy-MM-dd HH:mm",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed)
             ? parsed
             : DateTimeOffset.UtcNow.AddDays(365);
 
-        var modulesInput = Ask("Aktif moduller (virgul ile, bos=tumunu ac)", "");
+        var modulesInput = Ask("Aktif moduller (virgul ile, bos=tumunu ac)", string.Empty);
         if (!string.IsNullOrEmpty(modulesInput))
         {
             license.EnabledModules = modulesInput
@@ -88,14 +90,12 @@ public static class Program
         }
 
         var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
-        var profile = Enum.TryParse<FingerprintProfile>(profileInput, ignoreCase: true, out var parsedProfile)
+        var profile = Enum.TryParse<FingerprintProfile>(profileInput, true, out var parsedProfile)
             ? parsedProfile
             : FingerprintProfile.PhysicalServer;
+        var deploymentMarker = Ask("Deployment marker (opsiyonel)", string.Empty);
 
-        var deploymentMarker = Ask("Deployment marker (opsiyonel)", "");
-
-        // Fingerprint
-        license.FingerprintHash = ComputeFingerprintHash(
+        license.FingerprintHash = LicenseGeneratorCore.ComputeFingerprintHash(
             profile,
             license.EnvironmentName,
             license.InstanceId,
@@ -106,59 +106,21 @@ public static class Program
         Console.WriteLine($"  OS:             {RuntimeInformation.OSDescription}");
         Console.WriteLine($"  Fingerprint:    {license.FingerprintHash}");
 
-        // Imzala
-        var payload = BuildCanonicalPayload(license);
+        var payload = LicenseGeneratorCore.BuildCanonicalPayload(license);
         var signatureBytes = ecdsa.SignData(payload, HashAlgorithmName.SHA256);
         license.Signature = Convert.ToBase64String(signatureBytes);
-        ecdsa.Dispose();
 
-        // Dosyaya yaz
         var outputPath = $"license-{license.ProductCode}-{license.CustomerCode}.json".ToLowerInvariant();
-        var json = JsonSerializer.Serialize(license, PrettyJson);
-        await File.WriteAllTextAsync(outputPath, json);
+        await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(license, PrettyJson));
 
         Console.WriteLine($"\n--- Lisans uretildi: {outputPath} ---");
         Console.WriteLine($"  License ID:  {license.LicenseId}");
         Console.WriteLine($"  Gecerlilik:  {license.IssuedAtUtc:yyyy-MM-dd HH:mm} -> {license.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC");
         Console.WriteLine($"  Moduller:    {(license.EnabledModules.Count == 0 ? "Tumunu ac" : string.Join(", ", license.EnabledModules))}");
-        Console.WriteLine($"\nBu dosyayi uygulamanin arayuzunden yukleyin.");
 
         return 0;
     }
 
-    /// <summary>
-    /// Key dosyalari yoksa otomatik olusturur, varsa yukler.
-    /// </summary>
-    private static async Task<ECDsa> EnsureKeysExist()
-    {
-        if (File.Exists(PrivateKeyFile))
-        {
-            Console.WriteLine($"Mevcut key kullaniliyor: {PrivateKeyFile}");
-            var existing = await File.ReadAllTextAsync(PrivateKeyFile);
-            var ecdsa = ECDsa.Create();
-            ecdsa.ImportPkcs8PrivateKey(Convert.FromBase64String(existing.Trim()), out _);
-            return ecdsa;
-        }
-
-        Console.WriteLine("Key bulunamadi, yeni ECDSA P-256 anahtar cifti uretiliyor...");
-        var newEcdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-
-        var privateKeyBase64 = Convert.ToBase64String(newEcdsa.ExportPkcs8PrivateKey());
-        var publicKeyBase64 = Convert.ToBase64String(newEcdsa.ExportSubjectPublicKeyInfo());
-
-        await File.WriteAllTextAsync(PrivateKeyFile, privateKeyBase64);
-        await File.WriteAllTextAsync(PublicKeyFile, publicKeyBase64);
-
-        Console.WriteLine($"  Private key: {PrivateKeyFile}  (Git'e eklEMEYIN!)");
-        Console.WriteLine($"  Public key:  {PublicKeyFile}");
-        Console.WriteLine();
-        PrintPublicKeyParts(publicKeyBase64);
-        Console.WriteLine();
-
-        return newEcdsa;
-    }
-
-    /// <summary>Bu makinenin fingerprint bilgilerini gosterir.</summary>
     private static int ShowFingerprint()
     {
         Console.WriteLine("=== Fingerprint Bilgileri ===\n");
@@ -166,113 +128,46 @@ public static class Program
         Console.WriteLine($"  OS Description:   {RuntimeInformation.OSDescription}");
 
         var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
-        var profile = Enum.TryParse<FingerprintProfile>(profileInput, ignoreCase: true, out var parsedProfile)
+        var profile = Enum.TryParse<FingerprintProfile>(profileInput, true, out var parsedProfile)
             ? parsedProfile
             : FingerprintProfile.PhysicalServer;
-
         var env = Ask("Ortam adi", "Production");
         var instanceId = Ask("Instance ID", "instance-01");
         var customerCode = Ask("Musteri kodu");
-        var marker = Ask("Deployment marker (opsiyonel)", "");
+        var marker = Ask("Deployment marker (opsiyonel)", string.Empty);
 
-        var fp = ComputeFingerprintHash(profile, env, instanceId, customerCode, marker);
+        var fp = LicenseGeneratorCore.ComputeFingerprintHash(profile, env, instanceId, customerCode, marker);
         Console.WriteLine($"\n  Fingerprint Hash: {fp}");
         return 0;
     }
 
-    /// <summary>Mevcut public key'i parcalanmis olarak gosterir.</summary>
     private static int ShowPublicKey()
     {
-        if (!File.Exists(PublicKeyFile))
+        if (!File.Exists(LicenseGeneratorCore.PublicKeyFile))
         {
             Console.WriteLine("Public key bulunamadi. Once 'generate' calistirin.");
             return 1;
         }
 
-        var publicKeyBase64 = File.ReadAllText(PublicKeyFile).Trim();
+        var publicKeyBase64 = File.ReadAllText(LicenseGeneratorCore.PublicKeyFile).Trim();
         Console.WriteLine("EcdsaLicenseSignatureVerifier.PublicKeyParts dizisine kopyalayin:\n");
-        PrintPublicKeyParts(publicKeyBase64);
+        Console.WriteLine(LicenseGeneratorCore.BuildPublicKeyPartsText(publicKeyBase64));
         return 0;
-    }
-
-    private static void PrintPublicKeyParts(string publicKeyBase64)
-    {
-        const int chunkSize = 30;
-        Console.WriteLine("private static readonly string[] PublicKeyParts =");
-        Console.WriteLine("[");
-        for (var i = 0; i < publicKeyBase64.Length; i += chunkSize)
-        {
-            var part = publicKeyBase64[i..Math.Min(i + chunkSize, publicKeyBase64.Length)];
-            var comma = i + chunkSize < publicKeyBase64.Length ? "," : "";
-            Console.WriteLine($"    \"{part}\"{comma}");
-        }
-        Console.WriteLine("];");
     }
 
     private static string Ask(string prompt, string? defaultValue = null)
     {
         if (!string.IsNullOrEmpty(defaultValue))
-            Console.Write($"  {prompt} [{defaultValue}]: ");
-        else
-            Console.Write($"  {prompt}: ");
-
-        var input = Console.ReadLine()?.Trim();
-        return string.IsNullOrEmpty(input) ? (defaultValue ?? "") : input;
-    }
-
-    private static string ComputeFingerprintHash(
-        FingerprintProfile profile,
-        string environmentName,
-        string instanceId,
-        string customerCode,
-        string deploymentMarker)
-    {
-        var sb = new StringBuilder();
-        sb.Append("PROFILE:");
-        sb.Append(profile.ToString().ToUpperInvariant());
-        sb.Append('|');
-        sb.Append(environmentName.ToUpperInvariant());
-        sb.Append('|');
-        sb.Append(instanceId.ToUpperInvariant());
-        sb.Append('|');
-        sb.Append(customerCode.ToUpperInvariant());
-        sb.Append('|');
-        sb.Append(deploymentMarker.ToUpperInvariant());
-
-        if (profile == FingerprintProfile.PhysicalServer)
         {
-            sb.Append('|');
-            sb.Append(Environment.MachineName.ToUpperInvariant());
-            sb.Append('|');
-            sb.Append(RuntimeInformation.OSDescription.ToUpperInvariant());
+            Console.Write($"  {prompt} [{defaultValue}]: ");
+        }
+        else
+        {
+            Console.Write($"  {prompt}: ");
         }
 
-        return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())));
-    }
-
-    private static byte[] BuildCanonicalPayload(LicenseDocument license)
-    {
-        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["customerCode"] = license.CustomerCode,
-            ["customerName"] = license.CustomerName,
-            ["enabledModules"] = license.EnabledModules.OrderBy(m => m, StringComparer.Ordinal).ToList(),
-            ["environmentName"] = license.EnvironmentName,
-            ["expiresAtUtc"] = license.ExpiresAtUtc.ToUniversalTime().ToString("O"),
-            ["fingerprintHash"] = license.FingerprintHash,
-            ["instanceId"] = license.InstanceId,
-            ["issuedAtUtc"] = license.IssuedAtUtc.ToUniversalTime().ToString("O"),
-            ["licenseId"] = license.LicenseId,
-            ["licenseVersion"] = license.LicenseVersion,
-            ["productCode"] = license.ProductCode
-        };
-
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
-
-        return Encoding.UTF8.GetBytes(json);
+        var input = Console.ReadLine()?.Trim();
+        return string.IsNullOrEmpty(input) ? (defaultValue ?? string.Empty) : input;
     }
 }
+

@@ -2892,3 +2892,16 @@ Kamp Yonetimi (top-level, fa-campground)
 - Generator'a fingerprint profili secimi eklendi (PhysicalServer/Container).
 - Tool build dogrulamasi: BASARILI (dotnet build tools/Tod.LicenseGenerator/Tod.LicenseGenerator.csproj).
 
+
+## Tur - Tod.LicenseGenerator Mini Arayuz
+
+- 	ools/Tod.LicenseGenerator icine gui komutu ile acilan kucuk WinForms arayuz eklendi.
+- Arayuzde su islemler var:
+  - Lisans alanlarini girme (ProductCode, CustomerCode, Environment, Instance, profil, marker, moduller, bitis tarihi)
+  - Fingerprint Hesapla`r
+  - Lisans Uret (JSON dosyasina kaydet)
+  - Public Key Goster`r
+- Fingerprint ve imzalama mantigi CLI ile ortak LicenseGeneratorCore sinifina tasindi.
+- Tod.LicenseGenerator.csproj WinForms icin guncellendi (
+et10.0-windows, UseWindowsForms=true).
+- Build dogrulamasi: BASARILI (dotnet build tools/Tod.LicenseGenerator/Tod.LicenseGenerator.csproj).

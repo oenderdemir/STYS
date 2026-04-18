@@ -353,6 +353,13 @@ public static class StructurePermissions
         public const string Manage = "StokHareketYonetimi.Manage";
     }
 
+    public static class MuhasebeHesapPlaniYonetimi
+    {
+        public const string Menu = "MuhasebeHesapPlaniYonetimi.Menu";
+        public const string View = "MuhasebeHesapPlaniYonetimi.View";
+        public const string Manage = "MuhasebeHesapPlaniYonetimi.Manage";
+    }
+
     public static class IndirimKuraliYonetimi
     {
         public const string Menu = "IndirimKuraliYonetimi.Menu";

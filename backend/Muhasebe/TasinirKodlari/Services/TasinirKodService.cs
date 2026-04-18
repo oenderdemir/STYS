@@ -85,11 +85,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
             .Select(x => new
             {
                 TamKod = x.TamKod.Trim(),
-                Duzey1Kod = NormalizeOptional(x.Duzey1Kod),
-                Duzey2Kod = NormalizeOptional(x.Duzey2Kod),
-                Duzey3Kod = NormalizeOptional(x.Duzey3Kod),
-                Duzey4Kod = NormalizeOptional(x.Duzey4Kod),
-                Duzey5Kod = NormalizeOptional(x.Duzey5Kod),
+                Kod = ResolveKodFromInput(x.TamKod, x.Kod),
                 Ad = x.Ad.Trim(),
                 x.DuzeyNo,
                 UstTamKod = NormalizeOptional(x.UstTamKod),
@@ -118,11 +114,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
                     continue;
                 }
 
-                current.Duzey1Kod = row.Duzey1Kod;
-                current.Duzey2Kod = row.Duzey2Kod;
-                current.Duzey3Kod = row.Duzey3Kod;
-                current.Duzey4Kod = row.Duzey4Kod;
-                current.Duzey5Kod = row.Duzey5Kod;
+                current.Kod = row.Kod;
                 current.Ad = row.Ad;
                 current.DuzeyNo = row.DuzeyNo;
                 current.AktifMi = row.AktifMi;
@@ -138,11 +130,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
                 var dto = new TasinirKodDto
                 {
                     TamKod = row.TamKod,
-                    Duzey1Kod = row.Duzey1Kod,
-                    Duzey2Kod = row.Duzey2Kod,
-                    Duzey3Kod = row.Duzey3Kod,
-                    Duzey4Kod = row.Duzey4Kod,
-                    Duzey5Kod = row.Duzey5Kod,
+                    Kod = row.Kod,
                     Ad = row.Ad,
                     DuzeyNo = row.DuzeyNo,
                     AktifMi = row.AktifMi,
@@ -262,6 +250,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
 
         return source
             .Where(x => x.TamKod.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
+                || x.Kod.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)
                 || x.Ad.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
             .ToList();
     }
@@ -303,12 +292,10 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
     private static void NormalizeAndValidate(TasinirKodDto dto)
     {
         dto.TamKod = dto.TamKod?.Trim() ?? string.Empty;
+        dto.Kod = string.IsNullOrWhiteSpace(dto.Kod)
+            ? ExtractKodFromTamKod(dto.TamKod)
+            : dto.Kod.Trim();
         dto.Ad = dto.Ad?.Trim() ?? string.Empty;
-        dto.Duzey1Kod = NormalizeOptional(dto.Duzey1Kod);
-        dto.Duzey2Kod = NormalizeOptional(dto.Duzey2Kod);
-        dto.Duzey3Kod = NormalizeOptional(dto.Duzey3Kod);
-        dto.Duzey4Kod = NormalizeOptional(dto.Duzey4Kod);
-        dto.Duzey5Kod = NormalizeOptional(dto.Duzey5Kod);
         dto.Aciklama = NormalizeOptional(dto.Aciklama);
 
         if (string.IsNullOrWhiteSpace(dto.TamKod))
@@ -321,10 +308,40 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
             throw new BaseException("Ad zorunludur.", 400);
         }
 
+        if (string.IsNullOrWhiteSpace(dto.Kod))
+        {
+            throw new BaseException("Kod zorunludur.", 400);
+        }
+
         if (dto.DuzeyNo <= 0)
         {
             throw new BaseException("Duzey no 0'dan buyuk olmalidir.", 400);
         }
+    }
+
+    private static string ResolveKodFromInput(string tamKod, string? explicitKod)
+    {
+        var parsed = ExtractKodFromTamKod(tamKod);
+        var normalizedExplicit = NormalizeOptional(explicitKod);
+
+        if (string.IsNullOrWhiteSpace(normalizedExplicit))
+        {
+            return parsed;
+        }
+
+        return normalizedExplicit;
+    }
+
+    private static string ExtractKodFromTamKod(string tamKod)
+    {
+        var normalized = tamKod?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        var parts = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? normalized : parts[^1];
     }
 
     private static string? NormalizeOptional(string? value)

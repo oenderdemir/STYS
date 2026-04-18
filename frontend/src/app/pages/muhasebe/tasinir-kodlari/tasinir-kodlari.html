@@ -14,6 +14,7 @@
     <ng-template #header>
         <tr>
             <th>Tam Kod</th>
+            <th>Kod</th>
             <th>Ad</th>
             <th>Duzey</th>
             <th>Durum</th>
@@ -23,6 +24,7 @@
     <ng-template #body let-item>
         <tr>
             <td>{{ item.tamKod }}</td>
+            <td>{{ item.kod }}</td>
             <td>{{ item.ad }}</td>
             <td>{{ item.duzeyNo }}</td>
             <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
@@ -43,24 +45,16 @@
             <input pInputText class="w-full" [(ngModel)]="model.tamKod" maxlength="64" />
         </div>
         <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Kod</label>
+            <input pInputText class="w-full" [(ngModel)]="model.kod" maxlength="16" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Duzey No</label>
             <p-inputnumber [(ngModel)]="model.duzeyNo" [useGrouping]="false" [min]="1" class="w-full" inputStyleClass="w-full" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="256" />
-        </div>
-        <div class="col-span-12 md:col-span-4">
-            <label class="block font-medium mb-2">Duzey 1</label>
-            <input pInputText class="w-full" [(ngModel)]="model.duzey1Kod" maxlength="16" />
-        </div>
-        <div class="col-span-12 md:col-span-4">
-            <label class="block font-medium mb-2">Duzey 2</label>
-            <input pInputText class="w-full" [(ngModel)]="model.duzey2Kod" maxlength="16" />
-        </div>
-        <div class="col-span-12 md:col-span-4">
-            <label class="block font-medium mb-2">Duzey 3</label>
-            <input pInputText class="w-full" [(ngModel)]="model.duzey3Kod" maxlength="16" />
         </div>
         <div class="col-span-12 flex align-items-center gap-2"><input id="aktifKod" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifKod">Aktif</label></div>
     </div>

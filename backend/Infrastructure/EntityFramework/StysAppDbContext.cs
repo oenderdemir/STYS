@@ -17,6 +17,7 @@ using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.Depolar.Entities;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
@@ -125,6 +126,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KasaHareket> KasaHareketleri => Set<KasaHareket>();
     public DbSet<BankaHareket> BankaHareketleri => Set<BankaHareket>();
     public DbSet<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri => Set<TahsilatOdemeBelgesi>();
+    public DbSet<MuhasebeHesapPlani> MuhasebeHesapPlanlari => Set<MuhasebeHesapPlani>();
     public DbSet<TasinirKod> TasinirKodlar => Set<TasinirKod>();
     public DbSet<TasinirKart> TasinirKartlar => Set<TasinirKart>();
     public DbSet<Depo> Depolar => Set<Depo>();
@@ -1543,14 +1545,13 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("TasinirKodlar", muhasebeSchema);
             entity.Property(x => x.TamKod).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.Duzey1Kod).HasMaxLength(16);
-            entity.Property(x => x.Duzey2Kod).HasMaxLength(16);
-            entity.Property(x => x.Duzey3Kod).HasMaxLength(16);
-            entity.Property(x => x.Duzey4Kod).HasMaxLength(16);
-            entity.Property(x => x.Duzey5Kod).HasMaxLength(16);
+            entity.Property(x => x.Kod).HasMaxLength(16).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.HasIndex(x => x.TamKod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.UstKodId, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.DuzeyNo, x.Ad })
@@ -1561,6 +1562,28 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.UstKod)
                 .WithMany(x => x.AltKodlar)
                 .HasForeignKey(x => x.UstKodId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MuhasebeHesapPlani>(entity =>
+        {
+            entity.ToTable("MuhasebeHesapPlanlari", muhasebeSchema);
+            entity.Property(x => x.Kod).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.TamKod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.TamKod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.UstHesapId, x.Kod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UstHesapId)
+                .HasFilter("[IsDeleted] = 0 AND [UstHesapId] IS NOT NULL");
+
+            entity.HasOne(x => x.UstHesap)
+                .WithMany(x => x.AltHesaplar)
+                .HasForeignKey(x => x.UstHesapId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -2971,3 +2971,58 @@ et10.0-windows, UseWindowsForms=true).
 ### Dogrulama
 - `dotnet build backend/STYS.csproj -o backend/.tmp-build` BASARILI.
 - Not: normal output path'e build denemesinde calisan `STYS` prosesi nedeniyle file lock alinabiliyor.
+
+## Tur - Muhasebe Hesap Plani + Tasinir Kod Refactor (Kod + Parent)
+
+### Yapilanlar
+- `TasinirKod` modeli `Duzey1Kod..Duzey5Kod` alanlarindan cikarilip `Kod` + `UstKodId` hiyerarsisine alindi.
+- `TasinirKod` backend DTO/request/import modelleri yeni yapıya uyarlandi.
+- `TasinirKodService` normalize/validasyon/import ve lookup filtreleri `Kod` alanini baz alacak sekilde guncellendi.
+- Muhasebe icin yeni modül eklendi:
+  - `MuhasebeHesapPlanlari` (entity/dto/repository/service/controller/mapping)
+  - API: `/api/muhasebe/hesap-plani` (list/tree/paged/getById/create/update/delete)
+- Yeni permission alani eklendi:
+  - `StructurePermissions.MuhasebeHesapPlaniYonetimi` (Menu/View/Manage)
+- Erisim teshis modul listesine muhasebe hesap plani modulu eklendi.
+
+### Frontend
+- `tasinir-kodlari` sayfasi `Kod` alanina gore guncellendi:
+  - tablo kolonu
+  - dialog form alani
+  - create/update payload
+  - ornek import payload
+- Yeni sayfa eklendi: `muhasebe-hesap-plani`
+  - dosyalar:
+    - `frontend/src/app/pages/muhasebe/muhasebe-hesap-plani/muhasebe-hesap-plani.dto.ts`
+    - `.../muhasebe-hesap-plani.service.ts`
+    - `.../muhasebe-hesap-plani.ts`
+    - `.../muhasebe-hesap-plani.html`
+  - route eklendi: `/muhasebe/hesap-plani`
+
+### Migration
+- Yeni migration:
+  - `20260418173002_AddMuhasebeHesapPlaniAndRefactorTasinirKod`
+- Icerik:
+  - `muhasebe.TasinirKodlar` tablosuna `Kod` kolon gecisi ve eski `Duzey1..5` kolonlarinin kaldirilmasi
+  - `IX_TasinirKodlar_UstKodId_Kod` unique index
+  - yeni tablo: `muhasebe.MuhasebeHesapPlanlari` + self FK + unique/indexler
+  - TODBase role/menu/menu-item-role seed:
+    - domain: `MuhasebeHesapPlaniYonetimi`
+    - menu route: `muhasebe/hesap-plani`
+
+### Build
+- Backend: BASARILI (`dotnet build backend/STYS.csproj -o backend/.tmp-build`)
+- Frontend: BASARILI (`npm run build`)
+- Not: Migration DB'ye uygulanmadi (istek uzerine).
+
+## Tur - PendingModelChangesWarning Duzeltmesi (2026-04-18)
+
+- Sorun: `StysAppDbContext` icin `PendingModelChangesWarning` aliyordu.
+- Kök neden: `TasinirKod` refactor ve `MuhasebeHesapPlani` model degisikligi snapshot/migration zincirine tam yansimamis durumdaydi.
+- Yapilanlar:
+  - Eski hatali migration dosyalari temizlendi.
+  - Migration yeniden scaffold edildi: `20260418182444_AddMuhasebeHesapPlaniAndRefactorTasinirKod`.
+  - Migration icinde `TasinirKod.Kod` kolonu icin veri backfill SQL eklendi (`TamKod` son segmentinden doldurma), sonra `NOT NULL`'a cekildi.
+- Dogrulama:
+  - `dotnet ef migrations has-pending-model-changes` sonucu: **No changes have been made to the model since the last migration.**
+

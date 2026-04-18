@@ -1,11 +1,7 @@
 export interface TasinirKodModel {
     id?: number;
     tamKod: string;
-    duzey1Kod?: string | null;
-    duzey2Kod?: string | null;
-    duzey3Kod?: string | null;
-    duzey4Kod?: string | null;
-    duzey5Kod?: string | null;
+    kod: string;
     ad: string;
     duzeyNo: number;
     ustKodId?: number | null;
@@ -18,11 +14,7 @@ export interface UpdateTasinirKodRequest extends Omit<TasinirKodModel, 'id'> {}
 
 export interface ImportTasinirKodSatiriModel {
     tamKod: string;
-    duzey1Kod?: string | null;
-    duzey2Kod?: string | null;
-    duzey3Kod?: string | null;
-    duzey4Kod?: string | null;
-    duzey5Kod?: string | null;
+    kod?: string | null;
     ad: string;
     duzeyNo: number;
     ustTamKod?: string | null;

@@ -9,40 +9,43 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { ImportTasinirKodlariRequest, TasinirKodModel } from './tasinir-kodlari.dto';
-import { TasinirKodlariService } from './tasinir-kodlari.service';
+import { CreateMuhasebeHesapPlaniRequest, MuhasebeHesapPlaniModel, UpdateMuhasebeHesapPlaniRequest } from './muhasebe-hesap-plani.dto';
+import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
 
 @Component({
-    selector: 'app-tasinir-kodlari-page',
+    selector: 'app-muhasebe-hesap-plani-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule],
-    templateUrl: './tasinir-kodlari.html',
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    templateUrl: './muhasebe-hesap-plani.html',
     providers: [MessageService, ConfirmationService]
 })
-export class TasinirKodlariPage implements OnInit {
-    private readonly service = inject(TasinirKodlariService);
+export class MuhasebeHesapPlaniPage implements OnInit {
+    private readonly service = inject(MuhasebeHesapPlaniService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
+
     loading = false;
     saving = false;
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
 
-    records: TasinirKodModel[] = [];
-    model: TasinirKodModel = this.createEmpty();
+    records: MuhasebeHesapPlaniModel[] = [];
+    model: MuhasebeHesapPlaniModel = this.createEmpty();
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
+    ustHesapSecenekleri: Array<{ label: string; value: number }> = [];
 
     ngOnInit(): void {
-        setTimeout(() => this.load(1, this.pageSize));
+        this.load(1, this.pageSize);
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -75,35 +78,37 @@ export class TasinirKodlariPage implements OnInit {
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.prepareUstHesapSecenekleri();
         this.dialogVisible = true;
     }
 
-    openEdit(item: TasinirKodModel): void {
+    openEdit(item: MuhasebeHesapPlaniModel): void {
         this.dialogMode = 'edit';
         this.model = { ...item };
+        this.prepareUstHesapSecenekleri(item.id ?? null);
         this.dialogVisible = true;
     }
 
     save(): void {
-        if (!this.model.tamKod?.trim() || !this.model.kod?.trim() || !this.model.ad?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tam kod, kod ve ad zorunludur.' });
+        if (!this.model.kod?.trim() || !this.model.tamKod?.trim() || !this.model.ad?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kod, tam kod ve ad zorunludur.' });
             return;
         }
 
-        this.saving = true;
-        const payload = {
-            tamKod: this.model.tamKod.trim(),
+        const payload: CreateMuhasebeHesapPlaniRequest | UpdateMuhasebeHesapPlaniRequest = {
             kod: this.model.kod.trim(),
+            tamKod: this.model.tamKod.trim(),
             ad: this.model.ad.trim(),
-            duzeyNo: this.model.duzeyNo,
-            ustKodId: this.model.ustKodId ?? null,
+            seviyeNo: this.model.seviyeNo,
+            ustHesapId: this.model.ustHesapId ?? null,
             aktifMi: this.model.aktifMi,
             aciklama: this.model.aciklama?.trim() || null
         };
 
+        this.saving = true;
         const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+            ? this.service.update(this.model.id, payload as UpdateMuhasebeHesapPlaniRequest)
+            : this.service.create(payload as CreateMuhasebeHesapPlaniRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -115,7 +120,7 @@ export class TasinirKodlariPage implements OnInit {
         });
     }
 
-    delete(item: TasinirKodModel): void {
+    delete(item: MuhasebeHesapPlaniModel): void {
         if (!item.id) {
             return;
         }
@@ -138,34 +143,21 @@ export class TasinirKodlariPage implements OnInit {
         });
     }
 
-    importOrnekVeri(): void {
-        const payload: ImportTasinirKodlariRequest = {
-            mevcutlariGuncelle: true,
-            pasiflestirilmeyenleriPasifYap: false,
-            satirlar: [
-                { tamKod: '150.01', kod: '01', ad: 'Tuketim Malzemeleri', duzeyNo: 2, aktifMi: true },
-                { tamKod: '150.01.01', kod: '01', ad: 'Temizlik Malzemeleri', duzeyNo: 3, ustTamKod: '150.01', aktifMi: true },
-                { tamKod: '253.01', kod: '01', ad: 'Makine ve Cihazlar', duzeyNo: 2, aktifMi: true }
-            ]
-        };
-
-        this.service.import(payload).subscribe({
-            next: (sonuc) => {
-                this.load();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Import Tamamlandi', detail: `Eklenen: ${sonuc.eklenen}, Guncellenen: ${sonuc.guncellenen}` });
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+    private prepareUstHesapSecenekleri(excludeId: number | null = null): void {
+        this.ustHesapSecenekleri = this.records
+            .filter((x) => x.id && x.id !== excludeId)
+            .sort((a, b) => a.tamKod.localeCompare(b.tamKod))
+            .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
     }
 
-    private createEmpty(): TasinirKodModel {
+    private createEmpty(): MuhasebeHesapPlaniModel {
         return {
-            tamKod: '',
             kod: '',
+            tamKod: '',
             ad: '',
-            duzeyNo: 1,
+            seviyeNo: 1,
+            ustHesapId: null,
             aktifMi: true,
-            ustKodId: null,
             aciklama: null
         };
     }

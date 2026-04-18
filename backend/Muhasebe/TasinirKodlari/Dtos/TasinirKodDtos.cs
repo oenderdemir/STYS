@@ -5,11 +5,7 @@ namespace STYS.Muhasebe.TasinirKodlari.Dtos;
 public class TasinirKodDto : BaseRdbmsDto<int>
 {
     public string TamKod { get; set; } = string.Empty;
-    public string? Duzey1Kod { get; set; }
-    public string? Duzey2Kod { get; set; }
-    public string? Duzey3Kod { get; set; }
-    public string? Duzey4Kod { get; set; }
-    public string? Duzey5Kod { get; set; }
+    public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
     public int DuzeyNo { get; set; }
     public int? UstKodId { get; set; }
@@ -20,11 +16,7 @@ public class TasinirKodDto : BaseRdbmsDto<int>
 public class CreateTasinirKodRequest
 {
     public string TamKod { get; set; } = string.Empty;
-    public string? Duzey1Kod { get; set; }
-    public string? Duzey2Kod { get; set; }
-    public string? Duzey3Kod { get; set; }
-    public string? Duzey4Kod { get; set; }
-    public string? Duzey5Kod { get; set; }
+    public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
     public int DuzeyNo { get; set; }
     public int? UstKodId { get; set; }
@@ -37,11 +29,7 @@ public class UpdateTasinirKodRequest : CreateTasinirKodRequest;
 public class ImportTasinirKodSatiriRequest
 {
     public string TamKod { get; set; } = string.Empty;
-    public string? Duzey1Kod { get; set; }
-    public string? Duzey2Kod { get; set; }
-    public string? Duzey3Kod { get; set; }
-    public string? Duzey4Kod { get; set; }
-    public string? Duzey5Kod { get; set; }
+    public string? Kod { get; set; }
     public string Ad { get; set; } = string.Empty;
     public int DuzeyNo { get; set; }
     public string? UstTamKod { get; set; }

@@ -10,20 +10,9 @@ public class TasinirKod : BaseEntity<int>
     [MaxLength(64)]
     public string TamKod { get; set; } = string.Empty;
 
+    [Required]
     [MaxLength(16)]
-    public string? Duzey1Kod { get; set; }
-
-    [MaxLength(16)]
-    public string? Duzey2Kod { get; set; }
-
-    [MaxLength(16)]
-    public string? Duzey3Kod { get; set; }
-
-    [MaxLength(16)]
-    public string? Duzey4Kod { get; set; }
-
-    [MaxLength(16)]
-    public string? Duzey5Kod { get; set; }
+    public string Kod { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(256)]

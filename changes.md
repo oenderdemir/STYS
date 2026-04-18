@@ -3026,3 +3026,36 @@ et10.0-windows, UseWindowsForms=true).
 - Dogrulama:
   - `dotnet ef migrations has-pending-model-changes` sonucu: **No changes have been made to the model since the last migration.**
 
+
+## Tur - Tasinir Kodlari FE Agac Gorunumu + Parent Secimi
+
+- `muhasebe/tasinir-kodlari` ekrani liste yerine `p-treeTable` ile agac yapida gosterilecek sekilde guncellendi.
+- Dialog formuna `Parent Tasinir Kod` secimi eklendi (`p-select`, filtrelenebilir).
+- Duzenleme modunda mevcut parent otomatik secili geliyor, create modunda temiz basliyor.
+- Parent secimi sonrasinda secili parent bilgisi ekranda ozet olarak gosteriliyor.
+- Kendi kendini parent secmeyi engellemek icin edit modunda aktif kayit parent seceneklerinden cikarildi.
+- Build dogrulama: `npm run build` BASARILI.
+
+## Tur - TasinirKod Unique Index Cakisma Duzeltmesi
+
+- Hata: `IX_TasinirKodlar_UstKodId_Kod` index olusurken duplicate `(UstKodId, Kod)` degeri nedeniyle migration fail oluyordu.
+- Duzeltme: `20260418182444_AddMuhasebeHesapPlaniAndRefactorTasinirKod` migration'ina index oncesi veri duzeltme SQL'i eklendi.
+  - `UstKodId` alanlari `TamKod` hiyerarsisinden yeniden hesaplanir (parent = son noktadan onceki segment).
+  - Ayni parent altinda kalan duplicate `Kod` degerleri `-2`, `-3` ... suffix ile benzersizlestirilir.
+- Sonuc: migration index olusturma adiminda duplicate key hatasina dusmez.
+
+## Tur - Tasinir Kod Agacinda Yetim Gorunum Duzeltmesi
+
+- Sorun: Parent'i olmayan (veya UstKodId'si bos/yanlis olan) kodlar agacta basi bos/yetim gorunuyordu.
+- Duzeltme: FE tree builder'a fallback parent cozumu eklendi.
+  - Once `UstKodId` ile parent aranir.
+  - Parent bulunamazsa `TamKod` kirilimindan en yakin mevcut ust kod bulunup parent atanir.
+- Sonuc: `150.12.9.1.02` gibi kayitlar parent hiyerarsisine dogru yerlestirilir; basi bos gorunum azalir.
+- Dogrulama: `npm run build` BASARILI.
+
+## Tur - Tasinir Kod Agacinda Ara Kirilim Sanal Dugumleri
+
+- `muhasebe/tasinir-kodlari` agac kurulumunda `UstKodId` olmayan kayitlar icin `TamKod` kirilimlari kullanilarak ara seviyeler sanal dugum olarak uretilir hale getirildi.
+- Boylece `150.12.9.1.02` gibi kayitlar dogrudan ust kok dugume yigilmak yerine `150 -> 150.12 -> 150.12.9 -> ...` zinciriyle gosteriliyor.
+- Sanal dugumler sadece gorunum amacli: duzenle/sil aksiyonlari disable edildi.
+- Frontend dogrulama: `npm run build` BASARILI (mevcut bundle budget uyarilari haric).

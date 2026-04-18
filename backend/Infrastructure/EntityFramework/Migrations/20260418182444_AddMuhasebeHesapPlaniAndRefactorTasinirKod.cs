@@ -67,6 +67,42 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 oldMaxLength: 16,
                 oldNullable: true);
 
+            migrationBuilder.Sql(
+                """
+                ;WITH Parents AS
+                (
+                    SELECT
+                        c.Id,
+                        ParentTamKod = CASE
+                            WHEN CHARINDEX('.', c.TamKod) > 0 THEN LEFT(c.TamKod, LEN(c.TamKod) - CHARINDEX('.', REVERSE(c.TamKod)))
+                            ELSE NULL
+                        END
+                    FROM [muhasebe].[TasinirKodlar] c
+                    WHERE c.IsDeleted = 0
+                )
+                UPDATE c
+                SET c.UstKodId = p.Id
+                FROM [muhasebe].[TasinirKodlar] c
+                INNER JOIN Parents x ON x.Id = c.Id
+                LEFT JOIN [muhasebe].[TasinirKodlar] p ON p.TamKod = x.ParentTamKod AND p.IsDeleted = 0
+                WHERE c.IsDeleted = 0;
+
+                ;WITH Dups AS
+                (
+                    SELECT
+                        t.Id,
+                        t.Kod,
+                        RN = ROW_NUMBER() OVER (PARTITION BY t.UstKodId, t.Kod ORDER BY t.TamKod, t.Id)
+                    FROM [muhasebe].[TasinirKodlar] t
+                    WHERE t.IsDeleted = 0
+                )
+                UPDATE t
+                SET t.Kod = LEFT(t.Kod, CASE WHEN LEN(t.Kod) > 13 THEN 13 ELSE LEN(t.Kod) END) + N'-' + CAST(d.RN AS nvarchar(2))
+                FROM [muhasebe].[TasinirKodlar] t
+                INNER JOIN Dups d ON d.Id = t.Id
+                WHERE d.RN > 1;
+                """);
+
             migrationBuilder.CreateTable(
                 name: "MuhasebeHesapPlanlari",
                 schema: "muhasebe",

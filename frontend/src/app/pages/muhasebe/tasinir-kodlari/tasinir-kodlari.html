@@ -9,8 +9,8 @@
     </ng-template>
 </p-toolbar>
 
-<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
-    <ng-template #caption><h5 class="m-0">Tasinir Kodlari</h5></ng-template>
+<p-treeTable [value]="treeRecords" [loading]="loading" [tableStyle]="{ 'min-width': '72rem' }">
+    <ng-template #caption><h5 class="m-0">Tasinir Kodlari (Agac)</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Tam Kod</th>
@@ -21,22 +21,25 @@
             <th style="width: 10rem">Islem</th>
         </tr>
     </ng-template>
-    <ng-template #body let-item>
+    <ng-template #body let-rowNode let-rowData="rowData">
         <tr>
-            <td>{{ item.tamKod }}</td>
-            <td>{{ item.kod }}</td>
-            <td>{{ item.ad }}</td>
-            <td>{{ item.duzeyNo }}</td>
-            <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+            <td>
+                <p-treeTableToggler [rowNode]="rowNode" />
+                {{ rowData.tamKod }}
+            </td>
+            <td>{{ rowData.kod }}</td>
+            <td>{{ rowData.ad }}</td>
+            <td>{{ rowData.duzeyNo }}</td>
+            <td><p-tag [value]="rowData.aktifMi ? 'Aktif' : 'Pasif'" [severity]="rowData.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
             <td>
                 <div class="flex gap-2">
-                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
-                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" [disabled]="!rowData.id || rowData.isVirtual" (onClick)="openEdit(rowData)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="!rowData.id || rowData.isVirtual" (onClick)="delete(rowData)" />
                 </div>
             </td>
         </tr>
     </ng-template>
-</p-table>
+</p-treeTable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Tasinir Kod Duzenle' : 'Yeni Tasinir Kod'" [style]="{ width: '42rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
@@ -52,9 +55,27 @@
             <label class="block font-medium mb-2">Duzey No</label>
             <p-inputnumber [(ngModel)]="model.duzeyNo" [useGrouping]="false" [min]="1" class="w-full" inputStyleClass="w-full" />
         </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Parent Tasinir Kod</label>
+            <p-select
+                [options]="parentOptions"
+                optionLabel="label"
+                optionValue="value"
+                [showClear]="true"
+                [filter]="true"
+                filterBy="label"
+                placeholder="Seciniz"
+                appendTo="body"
+                [ngModel]="model.ustKodId"
+                (ngModelChange)="onParentChange($event)"
+                class="w-full" />
+        </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="256" />
+        </div>
+        <div class="col-span-12 text-sm text-color-secondary">
+            Secili Parent: {{ currentParentLabel }}
         </div>
         <div class="col-span-12 flex align-items-center gap-2"><input id="aktifKod" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifKod">Aktif</label></div>
     </div>

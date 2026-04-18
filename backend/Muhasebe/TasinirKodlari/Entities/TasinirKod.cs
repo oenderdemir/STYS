@@ -24,7 +24,7 @@ public class TasinirKod : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
-    [MaxLength(1024)]
+    [MaxLength(1024)]   
     public string? Aciklama { get; set; }
 
     public TasinirKod? UstKod { get; set; }

@@ -6,76 +6,129 @@ using TOD.Platform.Licensing.Abstractions;
 namespace TOD.Platform.Licensing;
 
 /// <summary>
-/// Sistem saatinin geri alınmasını tespit eder.
+/// Sistem saatinin geri alinmasini tespit eder.
 ///
-/// Çalışma mantığı:
-/// 1. Her başarılı doğrulamada mevcut UTC zaman bir state dosyasına şifreli olarak yazılır.
-/// 2. Sonraki doğrulamada mevcut zaman, kayıtlı zamandan eski ise "rollback" tespit edilir.
-/// 3. State dosyası AES ile şifrelenir. Anahtar, machine-specific veriden türetilir.
-///    Bu sayede dosya başka bir makineye kopyalansa bile çözülemez.
+/// Calisma mantigi (cift state dogrulamasi):
+/// 1. Her basarili dogrulamada mevcut UTC zaman IKI ayri state dosyasina sifreli olarak yazilir:
+///    - Birincil: <see cref="LicensingOptions.TimeGuardStatePath"/>
+///    - Mirror: <see cref="LicensingOptions.TimeGuardMirrorPath"/>
+///      (bos birakilirsa birincilin yanina gizli bir ".license-state.mirror" yerlestirilir)
+/// 2. Sonraki dogrulamada her iki state okunur; herhangi biri rollback gosteriyorsa rollback kabul edilir.
+///    Saldirgan tek dosyayi silse/degistirse bile digeri rollback'i yakalar.
+/// 3. State dosyalari AES ile sifrelenir. Anahtar machine-specific veriden turetilir;
+///    dosyanin baska makineye kopyalanmasi isine yaramaz.
 ///
-/// Platform farkları:
-/// - Windows: Machine name + OS description + user domain → key derivation
-/// - Linux/Container: Machine name + OS description + /etc/machine-id (varsa) → key derivation
-///   Container'larda /etc/machine-id olmayabilir, bu durumda hostname kullanılır.
-///   Persistent volume kullanılmıyorsa state her restart'ta sıfırlanır — bu kabul edilebilir
-///   çünkü container restart'ı yeni bir "başlangıç" sayılır.
+/// Platform notlari:
+/// - Windows: MachineName + OS + UserDomain
+/// - Linux/Container: MachineName + OS + /etc/machine-id (varsa)
+/// - Container'larda persistent volume yoksa state restart'ta sifirlanir; bu kabul edilebilir.
 /// </summary>
 public sealed class TimeRollbackGuard : ITimeRollbackGuard
 {
-    private readonly string _statePath;
+    private readonly string _primaryPath;
+    private readonly string _mirrorPath;
     private readonly byte[] _encryptionKey;
 
-    // Tolerans: Küçük saat kaymaları (NTP sync vb.) için 2 dakika tolerans
+    // Tolerans: Kucuk saat kaymalari (NTP sync vb.) icin 2 dakika
     private static readonly TimeSpan Tolerance = TimeSpan.FromMinutes(2);
 
     public TimeRollbackGuard(IOptions<LicensingOptions> options)
     {
-        _statePath = options.Value.TimeGuardStatePath;
+        var opt = options.Value;
+        _primaryPath = opt.TimeGuardStatePath;
+        _mirrorPath = ResolveMirrorPath(opt.TimeGuardStatePath, opt.TimeGuardMirrorPath);
         _encryptionKey = DeriveEncryptionKey();
     }
 
     public bool IsTimeRolledBack()
     {
-        var lastRecordedTime = ReadLastRecordedTime();
-        if (lastRecordedTime is null)
-            return false; // İlk çalıştırma, state yok
-
         var now = DateTimeOffset.UtcNow;
-        // Mevcut zaman, kayıtlı zamandan tolerans kadar eski ise rollback var
-        return now < lastRecordedTime.Value - Tolerance;
+
+        var primary = ReadRecordedTime(_primaryPath);
+        var mirror = ReadRecordedTime(_mirrorPath);
+
+        // Her iki state yoksa ilk calistirma
+        if (primary is null && mirror is null)
+            return false;
+
+        // Herhangi bir state rollback gosteriyorsa rollback kabul edilir.
+        // Ek olarak: Iki state birbirinden asiri sapiyorsa (tampering suphesi) yine rollback say.
+        if (IsRolledBack(primary, now) || IsRolledBack(mirror, now))
+            return true;
+
+        if (primary is not null && mirror is not null)
+        {
+            var divergence = (primary.Value - mirror.Value).Duration();
+            if (divergence > Tolerance * 2)
+            {
+                // Iki dosya birbirinden asiri ayriliyorsa bir tarafi degismis demektir.
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void RecordCurrentTime()
     {
-        try
-        {
-            var now = DateTimeOffset.UtcNow;
-            var plaintext = Encoding.UTF8.GetBytes(now.ToString("O"));
-            var encrypted = Encrypt(plaintext);
-            File.WriteAllBytes(_statePath, encrypted);
-        }
-        catch
-        {
-            // State yazılamazsa sessizce devam et — bir sonraki check'te tekrar dener
-        }
+        var now = DateTimeOffset.UtcNow;
+        var plaintext = Encoding.UTF8.GetBytes(now.ToString("O"));
+        var encrypted = Encrypt(plaintext);
+
+        TryWrite(_primaryPath, encrypted);
+        TryWrite(_mirrorPath, encrypted);
     }
 
-    private DateTimeOffset? ReadLastRecordedTime()
+    private static bool IsRolledBack(DateTimeOffset? recorded, DateTimeOffset now)
+    {
+        if (recorded is null)
+            return false;
+        return now < recorded.Value - Tolerance;
+    }
+
+    private static string ResolveMirrorPath(string primaryPath, string configuredMirror)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredMirror))
+            return configuredMirror;
+
+        // Varsayilan: birincilin yanina gizli bir mirror dosyasi
+        var dir = Path.GetDirectoryName(primaryPath);
+        if (string.IsNullOrWhiteSpace(dir))
+            dir = ".";
+        return Path.Combine(dir, ".license-state.mirror");
+    }
+
+    private static void TryWrite(string path, byte[] data)
     {
         try
         {
-            if (!File.Exists(_statePath))
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllBytes(path, data);
+        }
+        catch
+        {
+            // State yazilamazsa sessizce devam et; sonraki check'te tekrar denenir.
+        }
+    }
+
+    private DateTimeOffset? ReadRecordedTime(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
                 return null;
 
-            var encrypted = File.ReadAllBytes(_statePath);
+            var encrypted = File.ReadAllBytes(path);
             var plaintext = Decrypt(encrypted);
             var text = Encoding.UTF8.GetString(plaintext);
             return DateTimeOffset.Parse(text);
         }
         catch
         {
-            return null; // Dosya bozuksa veya decrypt edilemezse → ilk çalıştırma gibi davran
+            return null;
         }
     }
 
@@ -88,7 +141,6 @@ public sealed class TimeRollbackGuard : ITimeRollbackGuard
         using var encryptor = aes.CreateEncryptor();
         var ciphertext = encryptor.TransformFinalBlock(plaintext, 0, plaintext.Length);
 
-        // IV + Ciphertext birleştirilir
         var result = new byte[aes.IV.Length + ciphertext.Length];
         aes.IV.CopyTo(result, 0);
         ciphertext.CopyTo(result, aes.IV.Length);
@@ -119,7 +171,6 @@ public sealed class TimeRollbackGuard : ITimeRollbackGuard
         material.Append(System.Runtime.InteropServices.RuntimeInformation.OSDescription);
         material.Append('|');
 
-        // Linux'ta /etc/machine-id varsa ekle
         if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
         {
             try
@@ -137,7 +188,6 @@ public sealed class TimeRollbackGuard : ITimeRollbackGuard
             material.Append(Environment.UserDomainName);
         }
 
-        // SHA256 ile 32-byte (256-bit) anahtar türet
         return SHA256.HashData(Encoding.UTF8.GetBytes(material.ToString()));
     }
 }

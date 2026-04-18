@@ -4,11 +4,13 @@ using STYS.Kamp.Dto;
 using STYS.Kamp.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
+using TOD.Platform.Licensing.AspNetCore;
 
 namespace STYS.Kamp.Controllers;
 
 [Route("ui/kamptarife")]
 [ApiController]
+[RequiresLicensedModule("Kamp")]
 public class KampTarifeYonetimController : UIController
 {
     private readonly IKampTarifeYonetimService _service;

@@ -2,17 +2,22 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
 
 public class KampTarifeYonetimService : IKampTarifeYonetimService
 {
-    private readonly StysAppDbContext _dbContext;
+    private const string ModuleCode = "Kamp";
 
-    public KampTarifeYonetimService(StysAppDbContext dbContext)
+    private readonly StysAppDbContext _dbContext;
+    private readonly ILicenseService _licenseService;
+
+    public KampTarifeYonetimService(StysAppDbContext dbContext, ILicenseService licenseService)
     {
         _dbContext = dbContext;
+        _licenseService = licenseService;
     }
 
     public async Task<KampTarifeYonetimBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -64,6 +69,9 @@ public class KampTarifeYonetimService : IKampTarifeYonetimService
 
     public async Task<List<KampKonaklamaTarifeYonetimDto>> KaydetAsync(int kampProgramiId, KampTarifeKaydetRequestDto request, CancellationToken cancellationToken = default)
     {
+        // Write operasyonu: modul lisansi zorunlu (middleware exclude edilmis olsa bile servis katmaninda yakalanir).
+        await _licenseService.EnsureModuleLicensedAsync(ModuleCode, cancellationToken);
+
         // Program var mı kontrol et
         var program = await _dbContext.KampProgramlari
             .FirstOrDefaultAsync(x => x.Id == kampProgramiId && !x.IsDeleted, cancellationToken)

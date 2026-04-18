@@ -1,14 +1,14 @@
 {
-  "licenseId": "8a1e5554-239f-463c-aa39-7ccdcafe011d",
+  "licenseId": "3ce939da-ce11-4193-ad8c-292ffa4241b5",
   "productCode": "STYS",
   "customerCode": "TOD-01",
-  "customerName": "\u00D6nder DEMIR",
+  "customerName": "test",
   "environmentName": "Development",
   "instanceId": "dev-01",
-  "issuedAtUtc": "2026-04-17T18:52:30.8358556+00:00",
-  "expiresAtUtc": "2026-04-17T18:56:00+00:00",
-  "fingerprintHash": "F/g7eIrcBKGV\u002BnN\u002BrGWIADau9m9TqsNgNaZScs93hes=",
+  "issuedAtUtc": "2026-04-18T11:01:01.0407425+00:00",
+  "expiresAtUtc": "2027-04-18T11:01:00+00:00",
+  "fingerprintHash": "2FlBHEOicVZfU4U4zeKAGfjYZGPB1hXDLNGwYSQBPvE=",
   "enabledModules": [],
   "licenseVersion": 1,
-  "signature": "ia7EEYE6mXDEtEHClOUW7QFtN85QNYUrdVBQfbVwpFBXl5eMonK77a4S0p1QAaViB/qolM9s8/8ZO1\u002B4okgCwA=="
+  "signature": "mjYaEL3fpTtJtHWSPcVt8fZ1o8JEznFuXlsS9PYs1IJXDOqgakkMyobcNv9v1NAZO9JtGizCO3UGtPOou8xFdA=="
 }

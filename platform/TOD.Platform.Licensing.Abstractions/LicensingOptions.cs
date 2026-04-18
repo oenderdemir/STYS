@@ -1,43 +1,85 @@
 namespace TOD.Platform.Licensing.Abstractions;
 
 /// <summary>
-/// Lisanslama altyapısının yapılandırma seçenekleri.
-/// appsettings.json üzerinden bind edilir.
+/// Fingerprint hesaplama profili. Ortamin dogasi gereken stabilite icin belirler.
+/// </summary>
+public enum FingerprintProfile
+{
+    /// <summary>
+    /// Fiziksel sunucu / VM. MachineName ve OS bilgisi stabildir, tam fingerprint kullanilir.
+    /// </summary>
+    PhysicalServer = 0,
+
+    /// <summary>
+    /// Container / K8s. MachineName (pod adi) ve OS her restart'ta degisebilir.
+    /// Bu profilde MachineName ve OS fingerprint'e dahil edilmez; DeploymentMarker gereklidir.
+    /// </summary>
+    Container = 1
+}
+
+/// <summary>
+/// Lisanslama altyapisinin yapilandirma secenekleri.
+/// appsettings.json uzerinden bind edilir.
 /// </summary>
 public sealed class LicensingOptions
 {
     public const string SectionName = "Licensing";
 
-    /// <summary>Lisans dosyasının yolu. Varsayılan: "license.json"</summary>
+    /// <summary>Lisans dosyasinin yolu. Varsayilan: "license.json"</summary>
     public string LicenseFilePath { get; set; } = "license.json";
 
-    /// <summary>Ortam adı. Lisanstaki EnvironmentName ile eşleşmelidir.</summary>
+    /// <summary>Ortam adi. Lisanstaki EnvironmentName ile eslesmelidir.</summary>
     public string EnvironmentName { get; set; } = string.Empty;
 
-    /// <summary>Instance ID. Her deployment instance'ı için benzersiz olmalıdır.</summary>
+    /// <summary>Instance ID. Her deployment instance'i icin benzersiz olmalidir.</summary>
     public string InstanceId { get; set; } = string.Empty;
 
-    /// <summary>Müşteri kodu. Fingerprint hesaplamasında kullanılır.</summary>
+    /// <summary>Musteri kodu. Fingerprint hesaplamasinda kullanilir.</summary>
     public string CustomerCode { get; set; } = string.Empty;
 
-    /// <summary>Deployment marker. Container/K8s ortamlarında ek bağlama sağlar.</summary>
+    /// <summary>Deployment marker. Container/K8s ortamlarinda ek baglama saglar.</summary>
     public string DeploymentMarker { get; set; } = string.Empty;
 
     /// <summary>
-    /// Cache süresi (saniye). Bu süre boyunca lisans tekrar doğrulanmaz.
-    /// Varsayılan: 300 (5 dakika).
+    /// Fingerprint profili. PhysicalServer (default) tam fingerprint uretir;
+    /// Container profilinde MachineName/OS dahil edilmez, DeploymentMarker zorunlu olur.
+    /// </summary>
+    public FingerprintProfile FingerprintProfile { get; set; } = FingerprintProfile.PhysicalServer;
+
+    /// <summary>
+    /// Cache suresi (saniye). Bu sure boyunca lisans tekrar dogrulanmaz.
+    /// Varsayilan: 300 (5 dakika).
     /// </summary>
     public int CacheDurationSeconds { get; set; } = 300;
 
     /// <summary>
-    /// Zaman geri alma koruması için state dosyasının yolu.
-    /// Varsayılan: ".license-state"
+    /// Zaman geri alma korumasi icin birincil state dosyasinin yolu.
+    /// Varsayilan: ".license-state"
     /// </summary>
     public string TimeGuardStatePath { get; set; } = ".license-state";
 
     /// <summary>
-    /// Lisans kontrolünden muaf tutulacak path prefix'leri.
-    /// Örneğin: ["/health", "/license-status"]
+    /// Opsiyonel ikinci state konumu (directory). Bos birakilirsa otomatik olarak
+    /// TimeGuardStatePath ile ayni dizinde gizli bir ".license-state.mirror" kullanilir.
+    /// Saat geri alma tespitinde iki kaynak birbirini dogrular.
+    /// </summary>
+    public string TimeGuardMirrorPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Lisans kontrolunden muaf tutulacak path prefix'leri.
+    /// Daraltilmis set kullanin; ornegin: ["/health", "/auth", "/ui/license"].
+    /// Eslesme segment-aware yapilir: "/auth" -> "/auth" ve "/auth/..." eslenir, "/authx" eslenmez.
     /// </summary>
     public List<string> ExcludedPaths { get; set; } = [];
+
+    /// <summary>
+    /// PRODUCTION GUVENLIGI: Public key yalnizca uygulamaya gomulmus halde (EcdsaLicenseSignatureVerifier.PublicKeyParts)
+    /// kullanilir. Development senaryolari icin farkli bir key test edilmek istenirse
+    /// AllowPublicKeyOverride=true olmali ve PublicKeyOverride doldurulmalidir.
+    /// Production'da bu alanin etkisi AddTodLicensing extension'inda EnsureProductionSafe ile engellenir.
+    /// </summary>
+    public bool AllowPublicKeyOverride { get; set; } = false;
+
+    /// <summary>Yalnizca AllowPublicKeyOverride=true iken dikkate alinir (Base64-SPKI).</summary>
+    public string PublicKeyOverride { get; set; } = string.Empty;
 }

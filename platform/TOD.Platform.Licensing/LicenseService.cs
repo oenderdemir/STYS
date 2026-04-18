@@ -77,4 +77,36 @@ public sealed class LicenseService : ILicenseService
         _cacheExpiresAt = DateTimeOffset.MinValue;
         _logger.LogInformation("Lisans cache temizlendi.");
     }
+
+    public async Task EnsureLicensedAsync(CancellationToken cancellationToken = default)
+    {
+        var status = await GetCurrentStatusAsync(cancellationToken);
+        if (status.IsValid)
+            return;
+
+        _logger.LogWarning("EnsureLicensedAsync: lisans gecersiz. Hatalar: {Errors}",
+            string.Join("; ", status.Errors));
+
+        throw new LicenseException(
+            "Gecerli bir lisans bulunamadi.",
+            status.Errors);
+    }
+
+    public async Task EnsureModuleLicensedAsync(string moduleCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(moduleCode))
+            throw new ArgumentException("Modul kodu bos olamaz.", nameof(moduleCode));
+
+        // Once temel lisans gecerli olmali
+        await EnsureLicensedAsync(cancellationToken);
+
+        if (await IsModuleLicensedAsync(moduleCode, cancellationToken))
+            return;
+
+        _logger.LogWarning("EnsureModuleLicensedAsync: '{Module}' modulu lisansli degil.", moduleCode);
+
+        throw new LicenseException(
+            $"'{moduleCode}' modulu icin lisansiniz bulunmuyor.",
+            [$"Module not licensed: {moduleCode}"]);
+    }
 }

@@ -2845,3 +2845,50 @@ Kamp Yonetimi (top-level, fa-campground)
 
 ### Not
 - Build denemesinde kod hatasi degil, calisan `STYS` prosesi ve Visual Studio dosya kilidi nedeniyle kopyalama hatasi alindi.
+
+## Tur - Restoran Servislerinde BaseService ve Repository Uyumlamasi
+
+### Yapilanlar
+- Restoran modulu servis interface'leri IBaseRdbmsService<Dto, Entity, int> cizgisine alindi:
+  - IRestoranService`r
+  - IRestoranMasaService`r
+  - IRestoranMenuKategoriService`r
+  - IRestoranMenuUrunService`r
+  - IRestoranSiparisService`r
+  - IRestoranOdemeService`r
+- Servis implementasyonlari BaseRdbmsService<Dto, Entity, int> uzerinden turetildi.
+- Restoran VSA servislerinde ana entity CRUD akislari kendi repository'leri uzerinden calisacak sekilde guncellendi.
+- RestoranService, RestoranMasaService, RestoranMenuKategoriService, RestoranMenuUrunService, RestoranSiparisService, RestoranOdemeService icinde dogrudan entity DbSet kullanimi azaltildi; ilgili repository'ler aktif kullanildi.
+
+### Dogrulama
+- Backend derleme: BASARILI (dotnet build backend/STYS.csproj).
+
+## Tur - Restoran Servislerinde Redundant CRUD Temizligi
+
+- RestoranMasaService, RestoranMenuKategoriService, RestoranMenuUrunService icinde GetList/GetById/Create/Update/Delete tekrar eden metotlar BaseService akisina tasindi.
+- Bu servislerde CRUD artik GetAllAsync/WhereAsync/GetByIdAsync/AddAsync/UpdateAsync/DeleteAsync override'lari ile yuruyor.
+- Controllerlar request modellerini DTO'ya mapleyip BaseService metotlarini cagiracak sekilde guncellendi.
+- Gereksiz servis arayuzu metotlari kaldirildi (IBaseRdbmsService ile cakisanlar).
+- Build dogrulamasi: BASARILI (dotnet build backend/STYS.csproj).
+
+## Tur - BaseService Redundant Imza Temizligi (Proje Geneli)
+
+- IBaseRdbmsService'ten tureyen interface'lerde base CRUD ile cakisan redundant imzalar temizlendi.
+- Temizlenen alanlar:
+  - ackend/RestoranYonetimi/Restoranlar/Services/IRestoranService.cs`r
+  - ackend/RestoranYonetimi/RestoranSiparisleri/Services/IRestoranSiparisService.cs`r
+  - ackend/RestoranYonetimi/RestoranMenuUrunleri/Services/IRestoranMenuUrunService.cs`r
+  - ackend/Kamp/Services/IKampDonemiService.cs`r
+- Restoran tarafinda controllerlar ve servisler base metot akisini kullanacak sekilde duzenlendi (GetAll/Where/GetById/Add/Update/Delete).
+- Kamp donemi controller cagrilari base imzalarla uyumlu hale getirildi (GetByIdAsync, GetPagedAsync).
+- Dogrulama: dotnet build backend/STYS.csproj BASARILI.
+
+
+## Tur - License Fingerprint Mismatch Duzeltmesi
+
+- 	ools/Tod.LicenseGenerator/Program.cs icindeki fingerprint hesaplama algoritmasi backend runtime ile birebir uyumlu hale getirildi.
+- Onceki generator sirasi (ENV|INSTANCE|MACHINE|OS|CUSTOMER|MARKER) backend ile farkliydi; yeni algoritma backend ile ayni:
+  - PROFILE:<PROFILE>|ENV|INSTANCE|CUSTOMER|MARKER (+ PhysicalServer ise |MACHINE|OS).
+- Generator'a fingerprint profili secimi eklendi (PhysicalServer/Container).
+- Tool build dogrulamasi: BASARILI (dotnet build tools/Tod.LicenseGenerator/Tod.LicenseGenerator.csproj).
+

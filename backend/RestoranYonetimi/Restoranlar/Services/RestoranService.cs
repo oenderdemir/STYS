@@ -1,26 +1,30 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using STYS.Infrastructure.EntityFramework;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Entities;
+using STYS.Restoranlar.Repositories;
 using STYS.RestoranYonetimi.Services;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Identity.Users.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Restoranlar.Services;
 
-public class RestoranService : IRestoranService
+public class RestoranService : BaseRdbmsService<RestoranDto, Restoran, int>, IRestoranService
 {
     private const string RestoranIsletmeAlaniSinifKodu = "RESTORAN";
     private const string KullaniciTipiDomain = "KullaniciTipi";
     private const string KullaniciTipiAdminRoleName = "Admin";
     private readonly StysAppDbContext _dbContext;
+    private readonly IRestoranRepository _restoranRepository;
     private readonly IMapper _mapper;
     private readonly IUserRepository _userRepository;
     private readonly IUserService _userService;
@@ -30,14 +34,17 @@ public class RestoranService : IRestoranService
 
     public RestoranService(
         StysAppDbContext dbContext,
+        IRestoranRepository restoranRepository,
         IMapper mapper,
         IUserRepository userRepository,
         IUserService userService,
         TodIdentityDbContext identityDbContext,
         ICurrentUserAccessor currentUserAccessor,
         IRestoranErisimService restoranErisimService)
+        : base(restoranRepository, mapper)
     {
         _dbContext = dbContext;
+        _restoranRepository = restoranRepository;
         _mapper = mapper;
         _userRepository = userRepository;
         _userService = userService;
@@ -56,9 +63,7 @@ public class RestoranService : IRestoranService
         await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
         await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir, cancellationToken);
 
-        var restoran = await _dbContext.Restoranlar
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == restoranId, cancellationToken)
+        var restoran = await _restoranRepository.GetByIdAsync(restoranId)
             ?? throw new BaseException("Secilen restoran bulunamadi.", 404);
 
         var groupId = await GetGroupIdByMarkerAsync(nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir), cancellationToken);
@@ -96,9 +101,7 @@ public class RestoranService : IRestoranService
         await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
         await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir, cancellationToken);
 
-        var restoran = await _dbContext.Restoranlar
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == restoranId, cancellationToken)
+        var restoran = await _restoranRepository.GetByIdAsync(restoranId)
             ?? throw new BaseException("Secilen restoran bulunamadi.", 404);
 
         var groupId = await GetGroupIdByMarkerAsync(nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir), cancellationToken);
@@ -126,46 +129,30 @@ public class RestoranService : IRestoranService
         return created;
     }
 
-    public async Task<List<RestoranDto>> GetListAsync(int? tesisId, CancellationToken cancellationToken = default)
+    public override async Task<IEnumerable<RestoranDto>> GetAllAsync(Func<IQueryable<Restoran>, IQueryable<Restoran>>? include = null)
     {
-        var query = await _restoranErisimService.ApplyRestoranScopeAsync(_dbContext.Restoranlar.AsQueryable(), cancellationToken);
-        if (tesisId.HasValue && tesisId.Value > 0)
-        {
-            query = query.Where(x => x.TesisId == tesisId.Value);
-        }
-
+        var query = await _restoranErisimService.ApplyRestoranScopeAsync(_restoranRepository.Where(x => true));
+        query = BuildIncludeQuery(query, include);
         var entities = await query
-            .Include(x => x.IsletmeAlani)
-            .ThenInclude(x => x!.Bina)
-            .Include(x => x.IsletmeAlani)
-            .ThenInclude(x => x!.IsletmeAlaniSinifi)
-            .Include(x => x.Yoneticiler)
-            .Include(x => x.Garsonlar)
             .OrderBy(x => x.Ad)
             .ThenBy(x => x.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-        var dtos = _mapper.Map<List<RestoranDto>>(entities);
-        var dtoMap = dtos
-            .Where(x => x.Id.HasValue)
-            .ToDictionary(x => x.Id!.Value);
-        foreach (var entity in entities)
-        {
-            if (dtoMap.TryGetValue(entity.Id, out var dto))
-            {
-                dto.IsletmeAlaniAdi = BuildIsletmeAlaniAdi(entity.IsletmeAlani);
-                dto.YoneticiUserIds = entity.Yoneticiler
-                    .Select(x => x.UserId)
-                    .Distinct()
-                    .ToList();
-                dto.GarsonUserIds = entity.Garsonlar
-                    .Select(x => x.UserId)
-                    .Distinct()
-                    .ToList();
-            }
-        }
+        return MapRestoranDtos(entities);
+    }
 
-        return dtos;
+    public override async Task<IEnumerable<RestoranDto>> WhereAsync(
+        Expression<Func<Restoran, bool>> predicate,
+        Func<IQueryable<Restoran>, IQueryable<Restoran>>? include = null)
+    {
+        var query = await _restoranErisimService.ApplyRestoranScopeAsync(_restoranRepository.Where(predicate));
+        query = BuildIncludeQuery(query, include);
+        var entities = await query
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+        return MapRestoranDtos(entities);
     }
 
     public async Task<List<RestoranIsletmeAlaniSecenekDto>> GetIsletmeAlaniSecenekleriAsync(int tesisId, CancellationToken cancellationToken = default)
@@ -206,18 +193,11 @@ public class RestoranService : IRestoranService
             .ToList();
     }
 
-    public async Task<RestoranDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public override async Task<RestoranDto?> GetByIdAsync(int id, Func<IQueryable<Restoran>, IQueryable<Restoran>>? include = null)
     {
-        await _restoranErisimService.EnsureRestoranErisimiAsync(id, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(id);
 
-        var entity = await _dbContext.Restoranlar
-            .Include(x => x.IsletmeAlani)
-            .ThenInclude(x => x!.Bina)
-            .Include(x => x.IsletmeAlani)
-            .ThenInclude(x => x!.IsletmeAlaniSinifi)
-            .Include(x => x.Yoneticiler)
-            .Include(x => x.Garsonlar)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var entity = await _restoranRepository.GetByIdAsync(id, query => BuildIncludeQuery(query, include));
 
         if (entity is null)
         {
@@ -237,91 +217,81 @@ public class RestoranService : IRestoranService
         return dto;
     }
 
-    public async Task<RestoranDto> CreateAsync(CreateRestoranRequest request, CancellationToken cancellationToken = default)
+    public override async Task<RestoranDto> AddAsync(RestoranDto request)
     {
-        Validate(request.TesisId, request.Ad);
+        Validate(request.TesisId, request.Ad!);
 
-        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi, cancellationToken);
+        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi);
         if (!tesisExists)
         {
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
-        await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
-        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: false, cancellationToken);
-        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: false, cancellationToken);
+        await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, CancellationToken.None);
+        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: false, CancellationToken.None);
+        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: false, CancellationToken.None);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _dbContext.Restoranlar.AnyAsync(x => x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
+        var exists = await _restoranRepository.AnyAsync(x => x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni tesis altinda ayni adla aktif restoran zaten var.", 400);
         }
 
-        var entity = new Restoran
-        {
-            TesisId = request.TesisId,
-            IsletmeAlaniId = request.IsletmeAlaniId,
-            Ad = request.Ad.Trim(),
-            Aciklama = NormalizeOptional(request.Aciklama, 512),
-            AktifMi = request.AktifMi,
-            Yoneticiler = (yoneticiUserIds ?? [])
-                .Select(x => new RestoranYonetici
-                {
-                    UserId = x
-                })
-                .ToList(),
-            Garsonlar = (garsonUserIds ?? [])
-                .Select(x => new RestoranGarson
-                {
-                    UserId = x
-                })
-                .ToList()
-        };
+        request.Ad = request.Ad.Trim();
+        request.Aciklama = NormalizeOptional(request.Aciklama, 512);
 
-        _dbContext.Restoranlar.Add(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var created = await base.AddAsync(request);
+        var entity = await _restoranRepository.GetByIdAsync(created.Id!.Value, q => q.Include(x => x.Yoneticiler).Include(x => x.Garsonlar))
+            ?? throw new BaseException("Olusturulan restoran bulunamadi.", 500);
 
-        var dto = _mapper.Map<RestoranDto>(entity);
-        dto.YoneticiUserIds = entity.Yoneticiler.Select(x => x.UserId).Distinct().ToList();
-        dto.GarsonUserIds = entity.Garsonlar.Select(x => x.UserId).Distinct().ToList();
-        return dto;
+        SyncYoneticiler(entity, yoneticiUserIds ?? []);
+        SyncGarsonlar(entity, garsonUserIds ?? []);
+        _restoranRepository.Update(entity);
+        await _restoranRepository.SaveChangesAsync();
+
+        return (await GetByIdAsync(entity.Id))!;
     }
 
-    public async Task<RestoranDto> UpdateAsync(int id, UpdateRestoranRequest request, CancellationToken cancellationToken = default)
+    public override async Task<RestoranDto> UpdateAsync(RestoranDto request)
     {
-        Validate(request.TesisId, request.Ad);
-        await _restoranErisimService.EnsureRestoranErisimiAsync(id, cancellationToken);
+        if (!request.Id.HasValue)
+        {
+            throw new BaseException("Restoran id zorunludur.", 400);
+        }
 
-        var entity = await _dbContext.Restoranlar.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+        Validate(request.TesisId, request.Ad!);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.Id.Value);
+
+        var entity = await _restoranRepository.GetByIdAsync(request.Id.Value, query => query
+            .Include(x => x.Yoneticiler)
+            .Include(x => x.Garsonlar))
             ?? throw new BaseException("Restoran bulunamadi.", 404);
-        await _dbContext.Entry(entity)
-            .Collection(x => x.Yoneticiler)
-            .LoadAsync(cancellationToken);
-        await _dbContext.Entry(entity)
-            .Collection(x => x.Garsonlar)
-            .LoadAsync(cancellationToken);
 
-        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi, cancellationToken);
+        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi);
         if (!tesisExists)
         {
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
-        await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, cancellationToken);
-        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: true, cancellationToken);
-        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: true, cancellationToken);
+        await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, CancellationToken.None);
+        var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: true, CancellationToken.None);
+        var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: true, CancellationToken.None);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _dbContext.Restoranlar.AnyAsync(x => x.Id != id && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
+        var exists = await _restoranRepository.AnyAsync(x => x.Id != request.Id.Value && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni tesis altinda ayni adla aktif restoran zaten var.", 400);
         }
 
-        entity.TesisId = request.TesisId;
-        entity.IsletmeAlaniId = request.IsletmeAlaniId;
-        entity.Ad = request.Ad.Trim();
-        entity.Aciklama = NormalizeOptional(request.Aciklama, 512);
-        entity.AktifMi = request.AktifMi;
+        request.Ad = request.Ad.Trim();
+        request.Aciklama = NormalizeOptional(request.Aciklama, 512);
+
+        var updated = await base.UpdateAsync(request);
+        entity = await _restoranRepository.GetByIdAsync(updated.Id!.Value, query => query
+            .Include(x => x.Yoneticiler)
+            .Include(x => x.Garsonlar))
+            ?? throw new BaseException("Guncellenen restoran bulunamadi.", 500);
+
         if (yoneticiUserIds is not null)
         {
             SyncYoneticiler(entity, yoneticiUserIds);
@@ -331,19 +301,52 @@ public class RestoranService : IRestoranService
             SyncGarsonlar(entity, garsonUserIds);
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return await GetByIdAsync(entity.Id, cancellationToken) ?? _mapper.Map<RestoranDto>(entity);
+        _restoranRepository.Update(entity);
+        await _restoranRepository.SaveChangesAsync();
+        return await GetByIdAsync(entity.Id) ?? _mapper.Map<RestoranDto>(entity);
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public override async Task DeleteAsync(int id)
     {
-        await _restoranErisimService.EnsureRestoranErisimiAsync(id, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(id);
+        await base.DeleteAsync(id);
+    }
 
-        var entity = await _dbContext.Restoranlar.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new BaseException("Restoran bulunamadi.", 404);
+    private IQueryable<Restoran> BuildIncludeQuery(
+        IQueryable<Restoran> query,
+        Func<IQueryable<Restoran>, IQueryable<Restoran>>? include = null)
+    {
+        var included = query
+            .Include(x => x.IsletmeAlani)
+            .ThenInclude(x => x!.Bina)
+            .Include(x => x.IsletmeAlani)
+            .ThenInclude(x => x!.IsletmeAlaniSinifi)
+            .Include(x => x.Yoneticiler)
+            .Include(x => x.Garsonlar);
 
-        _dbContext.Restoranlar.Remove(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        return include is null ? included : include(included);
+    }
+
+    private List<RestoranDto> MapRestoranDtos(List<Restoran> entities)
+    {
+        var dtos = _mapper.Map<List<RestoranDto>>(entities);
+        var dtoMap = dtos
+            .Where(x => x.Id.HasValue)
+            .ToDictionary(x => x.Id!.Value);
+
+        foreach (var entity in entities)
+        {
+            if (!dtoMap.TryGetValue(entity.Id, out var dto))
+            {
+                continue;
+            }
+
+            dto.IsletmeAlaniAdi = BuildIsletmeAlaniAdi(entity.IsletmeAlani);
+            dto.YoneticiUserIds = entity.Yoneticiler.Select(x => x.UserId).Distinct().ToList();
+            dto.GarsonUserIds = entity.Garsonlar.Select(x => x.UserId).Distinct().ToList();
+        }
+
+        return dtos;
     }
 
     private static void Validate(int tesisId, string ad)

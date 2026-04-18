@@ -1,126 +1,143 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using STYS.Infrastructure.EntityFramework;
 using STYS.RestoranMenuKategorileri.Dtos;
 using STYS.RestoranMenuKategorileri.Entities;
 using STYS.RestoranMenuKategorileri.Repositories;
+using STYS.Restoranlar.Repositories;
 using STYS.RestoranYonetimi.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranMenuKategorileri.Services;
 
-public class RestoranMenuKategoriService : IRestoranMenuKategoriService
+public class RestoranMenuKategoriService : BaseRdbmsService<RestoranMenuKategoriDto, RestoranMenuKategori, int>, IRestoranMenuKategoriService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IRestoranMenuKategoriRepository _kategoriRepository;
+    private readonly IRestoranRepository _restoranRepository;
     private readonly IMapper _mapper;
     private readonly IRestoranErisimService _restoranErisimService;
 
-    public RestoranMenuKategoriService(StysAppDbContext dbContext, IRestoranMenuKategoriRepository kategoriRepository, IMapper mapper, IRestoranErisimService restoranErisimService)
+    public RestoranMenuKategoriService(
+        StysAppDbContext dbContext,
+        IRestoranMenuKategoriRepository kategoriRepository,
+        IRestoranRepository restoranRepository,
+        IMapper mapper,
+        IRestoranErisimService restoranErisimService)
+        : base(kategoriRepository, mapper)
     {
         _dbContext = dbContext;
         _kategoriRepository = kategoriRepository;
+        _restoranRepository = restoranRepository;
         _mapper = mapper;
         _restoranErisimService = restoranErisimService;
     }
 
-    public async Task<List<RestoranMenuKategoriDto>> GetListAsync(int? restoranId, CancellationToken cancellationToken = default)
+    public override async Task<IEnumerable<RestoranMenuKategoriDto>> GetAllAsync(Func<IQueryable<RestoranMenuKategori>, IQueryable<RestoranMenuKategori>>? include = null)
     {
-        var query = _dbContext.RestoranMenuKategorileri.AsQueryable();
-        if (restoranId.HasValue && restoranId.Value > 0)
+        var query = _kategoriRepository.Where(x => true);
+        var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync();
+        if (yetkiliRestoranlar is not null)
         {
-            await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId.Value, cancellationToken);
-            query = query.Where(x => x.RestoranId == restoranId.Value);
-        }
-        else
-        {
-            var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
-            if (yetkiliRestoranlar is not null)
-            {
-                query = query.Where(x => yetkiliRestoranlar.Contains(x.RestoranId));
-            }
+            query = query.Where(x => yetkiliRestoranlar.Contains(x.RestoranId));
         }
 
-        var items = await query.OrderBy(x => x.SiraNo).ThenBy(x => x.Ad).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+        if (include is not null)
+        {
+            query = include(query);
+        }
+
+        var items = await query.OrderBy(x => x.SiraNo).ThenBy(x => x.Ad).ThenBy(x => x.Id).ToListAsync();
         return _mapper.Map<List<RestoranMenuKategoriDto>>(items);
     }
 
-    public async Task<RestoranMenuKategoriDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public override async Task<IEnumerable<RestoranMenuKategoriDto>> WhereAsync(
+        Expression<Func<RestoranMenuKategori, bool>> predicate,
+        Func<IQueryable<RestoranMenuKategori>, IQueryable<RestoranMenuKategori>>? include = null)
     {
-        var entity = await _dbContext.RestoranMenuKategorileri.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var query = _kategoriRepository.Where(predicate);
+        var yetkiliRestoranlar = await _restoranErisimService.GetYetkiliRestoranIdleriAsync();
+        if (yetkiliRestoranlar is not null)
+        {
+            query = query.Where(x => yetkiliRestoranlar.Contains(x.RestoranId));
+        }
+
+        if (include is not null)
+        {
+            query = include(query);
+        }
+
+        var items = await query.OrderBy(x => x.SiraNo).ThenBy(x => x.Ad).ThenBy(x => x.Id).ToListAsync();
+        return _mapper.Map<List<RestoranMenuKategoriDto>>(items);
+    }
+
+    public override async Task<RestoranMenuKategoriDto?> GetByIdAsync(int id, Func<IQueryable<RestoranMenuKategori>, IQueryable<RestoranMenuKategori>>? include = null)
+    {
+        var entity = await _kategoriRepository.GetByIdAsync(id, include);
         if (entity is not null)
         {
-            await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
+            await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId);
         }
 
         return entity is null ? null : _mapper.Map<RestoranMenuKategoriDto>(entity);
     }
 
-    public async Task<RestoranMenuKategoriDto> CreateAsync(CreateRestoranMenuKategoriRequest request, CancellationToken cancellationToken = default)
+    public override async Task<RestoranMenuKategoriDto> AddAsync(RestoranMenuKategoriDto request)
     {
-        Validate(request.RestoranId, request.Ad);
-        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
+        Validate(request.RestoranId, request.Ad!);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId);
 
-        var restoranExists = await _dbContext.Restoranlar.AnyAsync(x => x.Id == request.RestoranId, cancellationToken);
+        var restoranExists = await _restoranRepository.AnyAsync(x => x.Id == request.RestoranId);
         if (!restoranExists)
         {
             throw new BaseException("Restoran bulunamadi.", 400);
         }
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _dbContext.RestoranMenuKategorileri.AnyAsync(x => x.RestoranId == request.RestoranId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
+        var exists = await _kategoriRepository.AnyAsync(x => x.RestoranId == request.RestoranId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni restoran altinda ayni adla aktif kategori zaten var.", 400);
         }
 
-        var entity = new RestoranMenuKategori
-        {
-            RestoranId = request.RestoranId,
-            Ad = request.Ad.Trim(),
-            SiraNo = request.SiraNo,
-            AktifMi = request.AktifMi
-        };
-
-        _dbContext.RestoranMenuKategorileri.Add(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return _mapper.Map<RestoranMenuKategoriDto>(entity);
+        request.Ad = request.Ad.Trim();
+        return await base.AddAsync(request);
     }
 
-    public async Task<RestoranMenuKategoriDto> UpdateAsync(int id, UpdateRestoranMenuKategoriRequest request, CancellationToken cancellationToken = default)
+    public override async Task<RestoranMenuKategoriDto> UpdateAsync(RestoranMenuKategoriDto request)
     {
-        Validate(request.RestoranId, request.Ad);
-        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
+        if (!request.Id.HasValue)
+        {
+            throw new BaseException("Menu kategorisi id zorunludur.", 400);
+        }
 
-        var entity = await _dbContext.RestoranMenuKategorileri.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+        Validate(request.RestoranId, request.Ad!);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId);
+
+        var entity = await _kategoriRepository.GetByIdAsync(request.Id.Value)
             ?? throw new BaseException("Menu kategorisi bulunamadi.", 404);
-        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _dbContext.RestoranMenuKategorileri.AnyAsync(x => x.Id != id && x.RestoranId == request.RestoranId && x.Ad.ToUpper() == normalizedAd && x.AktifMi, cancellationToken);
+        var exists = await _kategoriRepository.AnyAsync(x => x.Id != request.Id.Value && x.RestoranId == request.RestoranId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni restoran altinda ayni adla aktif kategori zaten var.", 400);
         }
 
-        entity.RestoranId = request.RestoranId;
-        entity.Ad = request.Ad.Trim();
-        entity.SiraNo = request.SiraNo;
-        entity.AktifMi = request.AktifMi;
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return _mapper.Map<RestoranMenuKategoriDto>(entity);
+        request.Ad = request.Ad.Trim();
+        return await base.UpdateAsync(request);
     }
 
-    public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public override async Task DeleteAsync(int id)
     {
-        var entity = await _dbContext.RestoranMenuKategorileri.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+        var entity = await _kategoriRepository.GetByIdAsync(id)
             ?? throw new BaseException("Menu kategorisi bulunamadi.", 404);
 
-        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId, cancellationToken);
-
-        _dbContext.RestoranMenuKategorileri.Remove(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _restoranErisimService.EnsureRestoranErisimiAsync(entity.RestoranId);
+        await base.DeleteAsync(id);
     }
 
     public async Task<RestoranMenuDto> GetMenuByRestoranIdAsync(int restoranId, CancellationToken cancellationToken = default)
@@ -275,7 +292,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
     {
         await _restoranErisimService.EnsureRestoranErisimiAsync(restoranId, cancellationToken);
 
-        var restoranExists = await _dbContext.Restoranlar.AnyAsync(x => x.Id == restoranId && x.AktifMi, cancellationToken);
+        var restoranExists = await _restoranRepository.AnyAsync(x => x.Id == restoranId && x.AktifMi);
         if (!restoranExists)
         {
             throw new BaseException("Restoran bulunamadi.", 404);
@@ -284,8 +301,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
         await EnsureGlobalTableBackfillAsync(cancellationToken);
         var globalCategories = await LoadGlobalCategoriesAsync(cancellationToken);
 
-        var selectedNames = await _dbContext.RestoranMenuKategorileri
-            .Where(x => x.RestoranId == restoranId && x.AktifMi)
+        var selectedNames = await _kategoriRepository.Where(x => x.RestoranId == restoranId && x.AktifMi)
             .Select(x => x.Ad)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -314,7 +330,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
 
         await _restoranErisimService.EnsureRestoranErisimiAsync(request.RestoranId, cancellationToken);
 
-        var restoranExists = await _dbContext.Restoranlar.AnyAsync(x => x.Id == request.RestoranId && x.AktifMi, cancellationToken);
+        var restoranExists = await _restoranRepository.AnyAsync(x => x.Id == request.RestoranId && x.AktifMi);
         if (!restoranExists)
         {
             throw new BaseException("Restoran bulunamadi.", 404);
@@ -324,8 +340,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
         var globalCategories = await LoadGlobalCategoriesAsync(cancellationToken);
         var selectedGlobals = globalCategories.Where(x => request.SeciliGlobalKategoriIdleri.Contains(x.Id)).ToList();
 
-        var restaurantCategories = await _dbContext.RestoranMenuKategorileri
-            .Where(x => x.RestoranId == request.RestoranId)
+        var restaurantCategories = await _kategoriRepository.Where(x => x.RestoranId == request.RestoranId)
             .ToListAsync(cancellationToken);
 
         foreach (var global in selectedGlobals)
@@ -340,7 +355,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
                     SiraNo = global.SiraNo,
                     AktifMi = global.AktifMi
                 };
-                _dbContext.RestoranMenuKategorileri.Add(existing);
+                await _kategoriRepository.AddAsync(existing);
                 restaurantCategories.Add(existing);
             }
             else
@@ -360,21 +375,21 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _kategoriRepository.SaveChangesAsync();
         return await GetAtamaBaglamAsync(request.RestoranId, cancellationToken);
     }
 
     private async Task SyncGlobalCategoryToRestaurantsAsync(string ad, int siraNo, bool aktifMi, CancellationToken cancellationToken)
     {
-        var activeRestoranlar = await _dbContext.Restoranlar.Where(x => x.AktifMi).ToListAsync(cancellationToken);
+        var activeRestoranlar = await _restoranRepository.Where(x => x.AktifMi).ToListAsync(cancellationToken);
         foreach (var restoran in activeRestoranlar)
         {
-            var existing = await _dbContext.RestoranMenuKategorileri
-                .FirstOrDefaultAsync(x => x.RestoranId == restoran.Id && x.Ad.ToUpper() == ad.ToUpper(), cancellationToken);
+            var existing = await _kategoriRepository.Where(x => x.RestoranId == restoran.Id && x.Ad.ToUpper() == ad.ToUpper())
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (existing is null)
             {
-                _dbContext.RestoranMenuKategorileri.Add(new RestoranMenuKategori
+                await _kategoriRepository.AddAsync(new RestoranMenuKategori
                 {
                     RestoranId = restoran.Id,
                     Ad = ad,
@@ -389,7 +404,7 @@ public class RestoranMenuKategoriService : IRestoranMenuKategoriService
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _kategoriRepository.SaveChangesAsync();
     }
 
     private async Task EnsureGlobalTableBackfillAsync(CancellationToken cancellationToken)

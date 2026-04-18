@@ -83,8 +83,7 @@ public class KampDonemiController : UIController
                 : x => x.Ad.Contains(normalizedQuery)
                     || x.Kod.Contains(normalizedQuery)
                     || (x.KampProgrami != null && x.KampProgrami.Ad.Contains(normalizedQuery)),
-            orderBy: orderBy ?? (q => q.OrderByDescending(x => x.KampProgrami!.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad)),
-            cancellationToken: cancellationToken);
+            orderBy: orderBy ?? (q => q.OrderByDescending(x => x.KampProgrami!.Yil).ThenBy(x => x.KampProgrami!.Ad).ThenBy(x => x.Ad)));
         return Ok(result);
     }
 
@@ -94,7 +93,7 @@ public class KampDonemiController : UIController
         StructurePermissions.KampDonemiTanimYonetimi.View)]
     public async Task<ActionResult<KampDonemiDto>> GetById(int id, CancellationToken cancellationToken)
     {
-        var item = await _kampDonemiService.GetByIdAsync(id, cancellationToken: cancellationToken);
+        var item = await _kampDonemiService.GetByIdAsync(id);
         if (item is null)
         {
             return NotFound();

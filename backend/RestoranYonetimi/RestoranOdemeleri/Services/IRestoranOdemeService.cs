@@ -1,9 +1,11 @@
 using STYS.RestoranOdemeleri.Dtos;
 using STYS.RestoranSiparisleri.Dtos;
+using STYS.RestoranOdemeleri.Entities;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.RestoranOdemeleri.Services;
 
-public interface IRestoranOdemeService
+public interface IRestoranOdemeService : IBaseRdbmsService<RestoranOdemeDto, RestoranOdeme, int>
 {
     Task<List<RestoranOdemeDto>> GetBySiparisIdAsync(int siparisId, CancellationToken cancellationToken = default);
     Task<RestoranSiparisOdemeOzetiDto> GetOdemeOzetiAsync(int siparisId, CancellationToken cancellationToken = default);

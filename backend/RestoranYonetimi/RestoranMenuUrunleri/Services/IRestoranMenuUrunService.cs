@@ -1,12 +1,9 @@
 using STYS.RestoranMenuUrunleri.Dtos;
+using STYS.RestoranMenuUrunleri.Entities;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.RestoranMenuUrunleri.Services;
 
-public interface IRestoranMenuUrunService
+public interface IRestoranMenuUrunService : IBaseRdbmsService<RestoranMenuUrunDto, RestoranMenuUrun, int>
 {
-    Task<List<RestoranMenuUrunDto>> GetListAsync(int? kategoriId, CancellationToken cancellationToken = default);
-    Task<RestoranMenuUrunDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<RestoranMenuUrunDto> CreateAsync(CreateRestoranMenuUrunRequest request, CancellationToken cancellationToken = default);
-    Task<RestoranMenuUrunDto> UpdateAsync(int id, UpdateRestoranMenuUrunRequest request, CancellationToken cancellationToken = default);
-    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
 }

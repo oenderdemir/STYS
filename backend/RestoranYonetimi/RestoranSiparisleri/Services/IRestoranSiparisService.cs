@@ -1,14 +1,12 @@
 using STYS.RestoranSiparisleri.Dtos;
+using STYS.RestoranSiparisleri.Entities;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.RestoranSiparisleri.Services;
 
-public interface IRestoranSiparisService
+public interface IRestoranSiparisService : IBaseRdbmsService<RestoranSiparisDto, RestoranSiparis, int>
 {
-    Task<List<RestoranSiparisDto>> GetListAsync(int? restoranId, CancellationToken cancellationToken = default);
     Task<List<RestoranSiparisDto>> GetByRestoranIdAsync(int restoranId, CancellationToken cancellationToken = default);
     Task<List<RestoranSiparisDto>> GetAcikSiparislerAsync(int? masaId, CancellationToken cancellationToken = default);
-    Task<RestoranSiparisDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<RestoranSiparisDto> CreateAsync(CreateRestoranSiparisRequest request, CancellationToken cancellationToken = default);
-    Task<RestoranSiparisDto> UpdateAsync(int id, UpdateRestoranSiparisRequest request, CancellationToken cancellationToken = default);
     Task<RestoranSiparisDto> UpdateDurumAsync(int id, UpdateRestoranSiparisDurumRequest request, CancellationToken cancellationToken = default);
 }

@@ -87,10 +87,16 @@ public static class Program
                 .ToList();
         }
 
+        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
+        var profile = Enum.TryParse<FingerprintProfile>(profileInput, ignoreCase: true, out var parsedProfile)
+            ? parsedProfile
+            : FingerprintProfile.PhysicalServer;
+
         var deploymentMarker = Ask("Deployment marker (opsiyonel)", "");
 
         // Fingerprint
         license.FingerprintHash = ComputeFingerprintHash(
+            profile,
             license.EnvironmentName,
             license.InstanceId,
             license.CustomerCode,
@@ -159,12 +165,17 @@ public static class Program
         Console.WriteLine($"  Machine Name:     {Environment.MachineName}");
         Console.WriteLine($"  OS Description:   {RuntimeInformation.OSDescription}");
 
+        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
+        var profile = Enum.TryParse<FingerprintProfile>(profileInput, ignoreCase: true, out var parsedProfile)
+            ? parsedProfile
+            : FingerprintProfile.PhysicalServer;
+
         var env = Ask("Ortam adi", "Production");
         var instanceId = Ask("Instance ID", "instance-01");
         var customerCode = Ask("Musteri kodu");
         var marker = Ask("Deployment marker (opsiyonel)", "");
 
-        var fp = ComputeFingerprintHash(env, instanceId, customerCode, marker);
+        var fp = ComputeFingerprintHash(profile, env, instanceId, customerCode, marker);
         Console.WriteLine($"\n  Fingerprint Hash: {fp}");
         return 0;
     }
@@ -210,20 +221,31 @@ public static class Program
     }
 
     private static string ComputeFingerprintHash(
-        string environmentName, string instanceId, string customerCode, string deploymentMarker)
+        FingerprintProfile profile,
+        string environmentName,
+        string instanceId,
+        string customerCode,
+        string deploymentMarker)
     {
         var sb = new StringBuilder();
+        sb.Append("PROFILE:");
+        sb.Append(profile.ToString().ToUpperInvariant());
+        sb.Append('|');
         sb.Append(environmentName.ToUpperInvariant());
         sb.Append('|');
         sb.Append(instanceId.ToUpperInvariant());
         sb.Append('|');
-        sb.Append(Environment.MachineName.ToUpperInvariant());
-        sb.Append('|');
-        sb.Append(RuntimeInformation.OSDescription.ToUpperInvariant());
-        sb.Append('|');
         sb.Append(customerCode.ToUpperInvariant());
         sb.Append('|');
         sb.Append(deploymentMarker.ToUpperInvariant());
+
+        if (profile == FingerprintProfile.PhysicalServer)
+        {
+            sb.Append('|');
+            sb.Append(Environment.MachineName.ToUpperInvariant());
+            sb.Append('|');
+            sb.Append(RuntimeInformation.OSDescription.ToUpperInvariant());
+        }
 
         return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())));
     }

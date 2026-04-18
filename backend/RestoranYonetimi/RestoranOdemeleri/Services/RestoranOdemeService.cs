@@ -6,19 +6,24 @@ using STYS.Rezervasyonlar.Entities;
 using STYS.RestoranOdemeleri.Dtos;
 using STYS.RestoranOdemeleri.Entities;
 using STYS.RestoranOdemeleri.Repositories;
+using STYS.RestoranMasalari.Repositories;
+using STYS.Restoranlar.Repositories;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
 using STYS.RestoranSiparisleri.Repositories;
 using STYS.RestoranYonetimi.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranOdemeleri.Services;
 
-public class RestoranOdemeService : IRestoranOdemeService
+public class RestoranOdemeService : BaseRdbmsService<RestoranOdemeDto, RestoranOdeme, int>, IRestoranOdemeService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IRestoranSiparisRepository _siparisRepository;
     private readonly IRestoranOdemeRepository _odemeRepository;
+    private readonly IRestoranRepository _restoranRepository;
+    private readonly IRestoranMasaRepository _masaRepository;
     private readonly IMapper _mapper;
     private readonly IRestoranErisimService _restoranErisimService;
 
@@ -26,12 +31,17 @@ public class RestoranOdemeService : IRestoranOdemeService
         StysAppDbContext dbContext,
         IRestoranSiparisRepository siparisRepository,
         IRestoranOdemeRepository odemeRepository,
+        IRestoranRepository restoranRepository,
+        IRestoranMasaRepository masaRepository,
         IMapper mapper,
         IRestoranErisimService restoranErisimService)
+        : base(odemeRepository, mapper)
     {
         _dbContext = dbContext;
         _siparisRepository = siparisRepository;
         _odemeRepository = odemeRepository;
+        _restoranRepository = restoranRepository;
+        _masaRepository = masaRepository;
         _mapper = mapper;
         _restoranErisimService = restoranErisimService;
     }
@@ -50,7 +60,7 @@ public class RestoranOdemeService : IRestoranOdemeService
         var siparis = await GetSiparisForPaymentAsync(siparisId, cancellationToken);
         await _restoranErisimService.EnsureRestoranErisimiAsync(siparis.RestoranId, cancellationToken);
         RecalculateSiparisTotals(siparis);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _odemeRepository.SaveChangesAsync();
 
         return new RestoranSiparisOdemeOzetiDto
         {
@@ -72,8 +82,7 @@ public class RestoranOdemeService : IRestoranOdemeService
         var yetkiliRestoranIdleri = await _restoranErisimService.GetYetkiliRestoranIdleriAsync(cancellationToken);
         if (yetkiliRestoranIdleri is not null)
         {
-            var tesisErisimiVar = await _dbContext.Restoranlar
-                .AnyAsync(x => x.TesisId == tesisId && yetkiliRestoranIdleri.Contains(x.Id), cancellationToken);
+            var tesisErisimiVar = await _restoranRepository.AnyAsync(x => x.TesisId == tesisId && yetkiliRestoranIdleri.Contains(x.Id));
 
             if (!tesisErisimiVar)
             {
@@ -114,8 +123,7 @@ public class RestoranOdemeService : IRestoranOdemeService
         var rezervasyon = await _dbContext.Rezervasyonlar.FirstOrDefaultAsync(x => x.Id == request.RezervasyonId, cancellationToken)
             ?? throw new BaseException("Rezervasyon bulunamadi.", 404);
 
-        var restoranTesisId = await _dbContext.Restoranlar
-            .Where(x => x.Id == siparis.RestoranId)
+        var restoranTesisId = await _restoranRepository.Where(x => x.Id == siparis.RestoranId)
             .Select(x => x.TesisId)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -134,18 +142,15 @@ public class RestoranOdemeService : IRestoranOdemeService
             throw new BaseException("Odaya ekleme icin rezervasyonun check-in asamasinda olmasi gerekir.", 400);
         }
 
-        var restoranAd = await _dbContext.Restoranlar
-            .Where(x => x.Id == siparis.RestoranId)
+        var restoranAd = await _restoranRepository.Where(x => x.Id == siparis.RestoranId)
             .Select(x => x.Ad)
             .FirstOrDefaultAsync(cancellationToken) ?? "Restoran";
 
         var masaNo = string.Empty;
         if (siparis.RestoranMasaId.HasValue)
         {
-            masaNo = await _dbContext.RestoranMasalari
-                .Where(x => x.Id == siparis.RestoranMasaId.Value)
-                .Select(x => x.MasaNo)
-                .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+            var masa = await _masaRepository.GetByIdAsync(siparis.RestoranMasaId.Value);
+            masaNo = masa?.MasaNo ?? string.Empty;
         }
 
         var refNo = $"ROOMCHG-{siparis.SiparisNo}-{request.RezervasyonId}";
@@ -177,11 +182,11 @@ public class RestoranOdemeService : IRestoranOdemeService
             IslemReferansNo = refNo
         };
 
-        _dbContext.RestoranOdemeleri.Add(odeme);
+        await _odemeRepository.AddAsync(odeme);
         siparis.Odemeler.Add(odeme);
 
         RecalculateSiparisTotals(siparis);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _odemeRepository.SaveChangesAsync();
 
         return _mapper.Map<RestoranOdemeDto>(odeme);
     }
@@ -214,11 +219,11 @@ public class RestoranOdemeService : IRestoranOdemeService
             IslemReferansNo = Truncate($"RSPPAY-{siparis.SiparisNo}-{Guid.NewGuid():N}", 64)
         };
 
-        _dbContext.RestoranOdemeleri.Add(odeme);
+        await _odemeRepository.AddAsync(odeme);
         siparis.Odemeler.Add(odeme);
 
         RecalculateSiparisTotals(siparis);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _odemeRepository.SaveChangesAsync();
 
         return _mapper.Map<RestoranOdemeDto>(odeme);
     }

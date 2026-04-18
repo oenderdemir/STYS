@@ -7,9 +7,13 @@ using TOD.Platform.Licensing.Abstractions;
 namespace TOD.Platform.Licensing.AspNetCore;
 
 /// <summary>
-/// Her HTTP isteğinde lisans durumunu kontrol eden middleware.
-/// Lisans geçersizse veya süresi dolmuşsa 403 Forbidden döner.
-/// ExcludedPaths ile belirli endpoint'ler (health, license-status) muaf tutulabilir.
+/// Her HTTP isteginde lisans durumunu kontrol eden middleware.
+/// Lisans gecersizse veya suresi dolmussa 403 Forbidden doner.
+///
+/// ExcludedPaths eslemesi SEGMENT-AWARE'dir:
+///  - "/auth" tanimi; "/auth" ve "/auth/..." yollarini esler
+///  - "/auth" tanimi; "/authx" gibi ayni segmentin genisletilmis halini ESLEMEZ
+/// Bu sayede genis 'prefix' kacaklarinin onune gecilir.
 /// </summary>
 public sealed class LicenseGuardMiddleware
 {
@@ -29,11 +33,9 @@ public sealed class LicenseGuardMiddleware
 
     public async Task InvokeAsync(HttpContext context, ILicenseService licenseService)
     {
-        var path = context.Request.Path.Value ?? "";
+        var path = context.Request.Path.Value ?? string.Empty;
 
-        // Muaf path kontrolü
-        if (_options.ExcludedPaths.Any(excluded =>
-                path.StartsWith(excluded, StringComparison.OrdinalIgnoreCase)))
+        if (IsExcluded(path))
         {
             await _next(context);
             return;
@@ -43,7 +45,7 @@ public sealed class LicenseGuardMiddleware
 
         if (!status.IsValid)
         {
-            _logger.LogWarning("Lisanssız istek engellendi: {Path}. Hatalar: {Errors}",
+            _logger.LogWarning("Lisanssiz istek engellendi: {Path}. Hatalar: {Errors}",
                 path, string.Join("; ", status.Errors));
 
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -52,7 +54,7 @@ public sealed class LicenseGuardMiddleware
             var response = new
             {
                 error = "LICENSE_INVALID",
-                message = "Geçerli bir lisans bulunamadı. Lütfen sistem yöneticinizle iletişime geçin.",
+                message = "Gecerli bir lisans bulunamadi. Lutfen sistem yoneticinizle iletisime geciniz.",
                 details = status.Errors
             };
 
@@ -63,5 +65,39 @@ public sealed class LicenseGuardMiddleware
         }
 
         await _next(context);
+    }
+
+    private bool IsExcluded(string path)
+    {
+        if (_options.ExcludedPaths.Count == 0)
+            return false;
+
+        foreach (var excluded in _options.ExcludedPaths)
+        {
+            if (string.IsNullOrWhiteSpace(excluded))
+                continue;
+
+            if (IsSegmentPrefixMatch(path, excluded))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Segment-aware prefix matching.
+    /// "/auth" -> "/auth" ve "/auth/anything" eslenir; "/authx" ESLENMEZ.
+    /// </summary>
+    private static bool IsSegmentPrefixMatch(string path, string prefix)
+    {
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Tam eslesme
+        if (path.Length == prefix.Length)
+            return true;
+
+        // Bir sonraki karakter '/' ise segment siniri; aksi halde "/authx" gibi bir kacak
+        return path[prefix.Length] == '/';
     }
 }

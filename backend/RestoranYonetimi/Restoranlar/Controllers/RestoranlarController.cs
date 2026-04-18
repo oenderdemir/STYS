@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Restoranlar.Dtos;
 using STYS.Restoranlar.Services;
+using System.Linq;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
 using TOD.Platform.Identity;
@@ -22,7 +23,12 @@ public class RestoranlarController : UIController
     [HttpGet]
     [Permission(StructurePermissions.RestoranYonetimi.View)]
     public async Task<ActionResult<List<RestoranDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
-        => Ok(await _service.GetListAsync(tesisId, cancellationToken));
+    {
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+        return Ok(items.ToList());
+    }
 
     [HttpGet("isletme-alanlari")]
     [Permission(StructurePermissions.RestoranYonetimi.View)]
@@ -33,25 +39,52 @@ public class RestoranlarController : UIController
     [Permission(StructurePermissions.RestoranYonetimi.View)]
     public async Task<ActionResult<RestoranDto>> GetById(int id, CancellationToken cancellationToken)
     {
-        var item = await _service.GetByIdAsync(id, cancellationToken);
+        var item = await _service.GetByIdAsync(id);
         return item is null ? NotFound() : Ok(item);
     }
 
     [HttpPost]
     [Permission(StructurePermissions.RestoranYonetimi.Manage)]
     public async Task<ActionResult<RestoranDto>> Create([FromBody] CreateRestoranRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.CreateAsync(request, cancellationToken));
+    {
+        var dto = new RestoranDto
+        {
+            TesisId = request.TesisId,
+            IsletmeAlaniId = request.IsletmeAlaniId,
+            YoneticiUserIds = request.YoneticiUserIds,
+            GarsonUserIds = request.GarsonUserIds,
+            Ad = request.Ad,
+            Aciklama = request.Aciklama,
+            AktifMi = request.AktifMi
+        };
+
+        return Ok(await _service.AddAsync(dto));
+    }
 
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.RestoranYonetimi.Manage)]
     public async Task<ActionResult<RestoranDto>> Update(int id, [FromBody] UpdateRestoranRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.UpdateAsync(id, request, cancellationToken));
+    {
+        var dto = new RestoranDto
+        {
+            Id = id,
+            TesisId = request.TesisId,
+            IsletmeAlaniId = request.IsletmeAlaniId,
+            YoneticiUserIds = request.YoneticiUserIds,
+            GarsonUserIds = request.GarsonUserIds,
+            Ad = request.Ad,
+            Aciklama = request.Aciklama,
+            AktifMi = request.AktifMi
+        };
+
+        return Ok(await _service.UpdateAsync(dto));
+    }
 
     [HttpDelete("{id:int}")]
     [Permission(StructurePermissions.RestoranYonetimi.Manage)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
-        await _service.DeleteAsync(id, cancellationToken);
+        await _service.DeleteAsync(id);
         return Ok();
     }
 

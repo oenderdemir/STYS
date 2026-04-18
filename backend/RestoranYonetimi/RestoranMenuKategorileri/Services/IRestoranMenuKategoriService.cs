@@ -1,14 +1,11 @@
 using STYS.RestoranMenuKategorileri.Dtos;
+using STYS.RestoranMenuKategorileri.Entities;
+using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.RestoranMenuKategorileri.Services;
 
-public interface IRestoranMenuKategoriService
+public interface IRestoranMenuKategoriService : IBaseRdbmsService<RestoranMenuKategoriDto, RestoranMenuKategori, int>
 {
-    Task<List<RestoranMenuKategoriDto>> GetListAsync(int? restoranId, CancellationToken cancellationToken = default);
-    Task<RestoranMenuKategoriDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<RestoranMenuKategoriDto> CreateAsync(CreateRestoranMenuKategoriRequest request, CancellationToken cancellationToken = default);
-    Task<RestoranMenuKategoriDto> UpdateAsync(int id, UpdateRestoranMenuKategoriRequest request, CancellationToken cancellationToken = default);
-    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task<RestoranMenuDto> GetMenuByRestoranIdAsync(int restoranId, CancellationToken cancellationToken = default);
     Task<List<RestoranGlobalMenuKategoriDto>> GetGlobalListAsync(CancellationToken cancellationToken = default);
     Task<RestoranGlobalMenuKategoriDto> CreateGlobalAsync(CreateRestoranGlobalMenuKategoriRequest request, CancellationToken cancellationToken = default);

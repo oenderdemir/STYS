@@ -57,6 +57,8 @@ import { TasinirKartlariPage } from './app/pages/muhasebe/tasinir-kartlari/tasin
 import { DepolarPage } from './app/pages/muhasebe/depolar/depolar';
 import { StokHareketleriPage } from './app/pages/muhasebe/stok-hareketleri/stok-hareketleri';
 import { MuhasebeHesapPlaniPage } from './app/pages/muhasebe/muhasebe-hesap-plani/muhasebe-hesap-plani';
+import { KasaBankaHesaplariPage } from './app/pages/muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari';
+import { HesaplarPage } from './app/pages/muhasebe/hesaplar/hesaplar';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -132,6 +134,8 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/cari-hareketler', component: CariHareketlerPage, data: { breadcrumb: ['Muhasebe', 'Cari Hareketler'] } },
             { path: 'muhasebe/kasa-hareketleri', component: KasaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Kasa Hareketleri'] } },
             { path: 'muhasebe/banka-hareketleri', component: BankaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Banka Hareketleri'] } },
+            { path: 'muhasebe/kasa-banka-hesaplari', component: KasaBankaHesaplariPage, data: { breadcrumb: ['Muhasebe', 'Kasa/Banka Hesaplari'] } },
+            { path: 'muhasebe/hesaplar', component: HesaplarPage, data: { breadcrumb: ['Muhasebe', 'Hesaplar'] } },
             { path: 'muhasebe/tahsilat-odeme-belgeleri', component: TahsilatOdemeBelgeleriPage, data: { breadcrumb: ['Muhasebe', 'Tahsilat/Odeme Belgeleri'] } },
             { path: 'muhasebe/tasinir-kodlari', component: TasinirKodlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kodlari'] } },
             { path: 'muhasebe/tasinir-kartlari', component: TasinirKartlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kartlari'] } },

@@ -46,4 +46,11 @@ public class MuhasebeHesapPlaniRepository : BaseRdbmsRepository<MuhasebeHesapPla
         var childLevel = parentLevel + 1;
         return await _dbContext.MuhasebeHesapPlanlari.AnyAsync(x => x.SeviyeNo == childLevel && x.TamKod.StartsWith(prefix), cancellationToken);
     }
+
+    public async Task<List<MuhasebeHesapPlani>> GetByTamKodPrefixAsync(string tamKodPrefix, CancellationToken cancellationToken = default)
+        => await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => x.AktifMi && x.TamKod.StartsWith(tamKodPrefix))
+            .OrderBy(x => x.TamKod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
 }

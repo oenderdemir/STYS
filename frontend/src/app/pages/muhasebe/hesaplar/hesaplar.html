@@ -1,0 +1,82 @@
+<p-toast />
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
+        <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '70rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+    <ng-template #caption><h5 class="m-0">Hesaplar</h5></ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Hesap Adi</th>
+            <th>Muhasebe Kodu</th>
+            <th>Genel</th>
+            <th>Kasa/Banka/Depo Baglari</th>
+            <th>Durum</th>
+            <th>Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ item.ad }}</td>
+            <td>{{ item.muhasebeTamKod || '-' }}</td>
+            <td>{{ item.genelHesapMi ? 'Evet' : 'Hayir' }}</td>
+            <td>{{ (item.kasaHesapIds?.length || 0) + (item.bankaHesapIds?.length || 0) }} hesap / {{ item.depoIds?.length || 0 }} depo</td>
+            <td>{{ item.aktifMi ? 'Aktif' : 'Pasif' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '56rem', 'max-width': '96vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6">
+            <label class="block mb-2">Hesap Adi</label>
+            <input pInputText class="w-full" [(ngModel)]="model.ad" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block mb-2">Muhasebe Kodu</label>
+            <p-select class="w-full" [options]="muhasebeKodlari" optionLabel="label" optionValue="value" [filter]="true" filterBy="label" appendTo="body" [(ngModel)]="model.muhasebeHesapPlaniId" />
+        </div>
+
+        <div class="col-span-12 md:col-span-4">
+            <label class="block mb-2">Muhasebe Formu</label>
+            <input pInputText class="w-full" [(ngModel)]="model.muhasebeFormu" />
+        </div>
+        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2 pt-6">
+            <p-checkbox inputId="genelHesap" [(ngModel)]="model.genelHesapMi" [binary]="true" />
+            <label for="genelHesap">Genel Hesap</label>
+        </div>
+        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2 pt-6">
+            <p-checkbox inputId="aktifHesap" [(ngModel)]="model.aktifMi" [binary]="true" />
+            <label for="aktifHesap">Aktif</label>
+        </div>
+
+        <div class="col-span-12 md:col-span-6">
+            <label class="block mb-2">Bagli Kasa Hesaplari</label>
+            <p-multiSelect class="w-full" [options]="kasaHesaplari" optionLabel="label" optionValue="value" [filter]="true" filterBy="label" appendTo="body" defaultLabel="Seciniz" [(ngModel)]="model.kasaHesapIds" />
+        </div>
+
+        <div class="col-span-12 md:col-span-6">
+            <label class="block mb-2">Bagli Banka Hesaplari</label>
+            <p-multiSelect class="w-full" [options]="bankaHesaplari" optionLabel="label" optionValue="value" [filter]="true" filterBy="label" appendTo="body" defaultLabel="Seciniz" [(ngModel)]="model.bankaHesapIds" />
+        </div>
+
+        <div class="col-span-12">
+            <label class="block mb-2">Bagli Depolar</label>
+            <p-multiSelect class="w-full" [options]="depolar" optionLabel="label" optionValue="value" [filter]="true" filterBy="label" appendTo="body" defaultLabel="Seciniz" [(ngModel)]="model.depoIds" />
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>

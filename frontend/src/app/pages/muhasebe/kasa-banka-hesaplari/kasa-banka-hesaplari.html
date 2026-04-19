@@ -1,0 +1,98 @@
+<p-toast />
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yeni Nakit Kasa" icon="pi pi-plus" (onClick)="openCreate('NakitKasa')" />
+        <p-button label="Yeni Banka Hesabi" icon="pi pi-plus" class="ml-2" severity="secondary" [outlined]="true" (onClick)="openCreate('Banka')" />
+        <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
+    </ng-template>
+</p-toolbar>
+
+<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+    <ng-template #caption><h5 class="m-0">Kasa / Banka Hesaplari</h5></ng-template>
+    <ng-template #header>
+        <tr>
+            <th>Tip</th>
+            <th>Kod</th>
+            <th>Ad</th>
+            <th>Muhasebe Kodu</th>
+            <th>Banka / Hesap</th>
+            <th>Durum</th>
+            <th>Islem</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-item>
+        <tr>
+            <td>{{ getTipLabel(item.tip) }}</td>
+            <td>{{ item.kod }}</td>
+            <td>{{ item.ad }}</td>
+            <td>{{ item.muhasebeTamKod || '-' }}</td>
+            <td>{{ item.tip === 'Banka' ? ((item.bankaAdi || '-') + ' / ' + (item.iban || item.hesapNo || '-')) : '-' }}</td>
+            <td>{{ item.aktifMi ? 'Aktif' : 'Pasif' }}</td>
+            <td>
+                <div class="flex gap-2">
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '48rem', 'max-width': '96vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-4">
+            <label class="block mb-2">Tip</label>
+            <p-select class="w-full" [options]="hesapTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tip" (ngModelChange)="onTipChange()" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block mb-2">Kod</label>
+            <input pInputText class="w-full" [(ngModel)]="model.kod" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block mb-2">Muhasebe Kodu</label>
+            <p-select class="w-full" [options]="muhasebeHesapSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.muhasebeHesapPlaniId" appendTo="body" [filter]="true" filterBy="label" />
+        </div>
+
+        <div class="col-span-12 md:col-span-6">
+            <label class="block mb-2">Ad</label>
+            <input pInputText class="w-full" [(ngModel)]="model.ad" />
+        </div>
+
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 pt-6">
+            <p-checkbox inputId="hesapAktif" [(ngModel)]="model.aktifMi" [binary]="true" />
+            <label for="hesapAktif">Aktif</label>
+        </div>
+
+        <ng-container *ngIf="model.tip === 'Banka'">
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Banka Adi</label>
+                <input pInputText class="w-full" [(ngModel)]="model.bankaAdi" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Sube Adi</label>
+                <input pInputText class="w-full" [(ngModel)]="model.subeAdi" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Hesap No</label>
+                <input pInputText class="w-full" [(ngModel)]="model.hesapNo" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">IBAN</label>
+                <input pInputText class="w-full" [(ngModel)]="model.iban" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Musteri No</label>
+                <input pInputText class="w-full" [(ngModel)]="model.musteriNo" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Hesap Turu</label>
+                <input pInputText class="w-full" [(ngModel)]="model.hesapTuru" />
+            </div>
+        </ng-container>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>

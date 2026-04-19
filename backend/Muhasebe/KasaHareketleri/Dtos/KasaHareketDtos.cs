@@ -5,6 +5,7 @@ namespace STYS.Muhasebe.KasaHareketleri.Dtos;
 public class KasaHareketDto : BaseRdbmsDto<int>
 {
     public string KasaKodu { get; set; } = string.Empty;
+    public int? KasaBankaHesapId { get; set; }
     public DateTime HareketTarihi { get; set; }
     public string HareketTipi { get; set; } = string.Empty;
     public decimal Tutar { get; set; }
@@ -20,6 +21,7 @@ public class KasaHareketDto : BaseRdbmsDto<int>
 public class CreateKasaHareketRequest
 {
     public string KasaKodu { get; set; } = string.Empty;
+    public int? KasaBankaHesapId { get; set; }
     public DateTime HareketTarihi { get; set; }
     public string HareketTipi { get; set; } = string.Empty;
     public decimal Tutar { get; set; }

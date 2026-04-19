@@ -1,6 +1,7 @@
 export interface KasaHareketModel {
     id?: number;
     kasaKodu: string;
+    kasaBankaHesapId?: number | null;
     hareketTarihi: string;
     hareketTipi: string;
     tutar: number;

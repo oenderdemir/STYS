@@ -14,6 +14,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { KasaBankaHesaplariService } from '../kasa-banka-hesaplari/kasa-banka-hesaplari.service';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { CreateKasaHareketRequest, KasaHareketModel, KASA_HAREKET_TIPLERI, UpdateKasaHareketRequest } from './kasa-hareketleri.dto';
 import { KasaHareketleriService } from './kasa-hareketleri.service';
@@ -28,6 +29,7 @@ import { KasaHareketleriService } from './kasa-hareketleri.service';
 export class KasaHareketleriPage implements OnInit {
     private readonly service = inject(KasaHareketleriService);
     private readonly cariKartService = inject(CariKartlarService);
+    private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
@@ -41,12 +43,19 @@ export class KasaHareketleriPage implements OnInit {
     pageSize = 10;
     totalRecords = 0;
     cariKartlar: Array<{ label: string; value: number }> = [];
+    kasaHesaplar: Array<{ label: string; value: number }> = [];
     readonly hareketTipleri = KASA_HAREKET_TIPLERI;
 
     ngOnInit(): void {
         this.cariKartService.getAll().subscribe({
             next: (items) => {
                 this.cariKartlar = items.map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
+                this.cdr.detectChanges();
+            }
+        });
+        this.kasaBankaHesapService.getByTip('NakitKasa', true).subscribe({
+            next: (items) => {
+                this.kasaHesaplar = items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
                 this.cdr.detectChanges();
             }
         });
@@ -93,13 +102,14 @@ export class KasaHareketleriPage implements OnInit {
     }
 
     save(): void {
-        if (!this.model.kasaKodu?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kasa kodu zorunludur.' });
+        if (!this.model.kasaBankaHesapId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kasa hesabi secimi zorunludur.' });
             return;
         }
 
         const payload: CreateKasaHareketRequest | UpdateKasaHareketRequest = {
             kasaKodu: this.model.kasaKodu,
+            kasaBankaHesapId: this.model.kasaBankaHesapId ?? null,
             hareketTarihi: this.model.hareketTarihi,
             hareketTipi: this.model.hareketTipi,
             tutar: this.model.tutar,
@@ -137,9 +147,20 @@ export class KasaHareketleriPage implements OnInit {
         });
     }
 
+    onKasaHesapChange(): void {
+        if (!this.model.kasaBankaHesapId) {
+            this.model.kasaKodu = '';
+            return;
+        }
+
+        const selected = this.kasaHesaplar.find((x) => x.value === this.model.kasaBankaHesapId);
+        this.model.kasaKodu = selected?.label?.split(' - ')[0] ?? '';
+    }
+
     private createEmpty(): KasaHareketModel {
         return {
-            kasaKodu: 'MERKEZ',
+            kasaKodu: '',
+            kasaBankaHesapId: null,
             hareketTarihi: new Date().toISOString(),
             hareketTipi: 'Tahsilat',
             tutar: 0,

@@ -2,6 +2,7 @@ export interface BankaHareketModel {
     id?: number;
     bankaAdi: string;
     hesapKoduIban: string;
+    kasaBankaHesapId?: number | null;
     hareketTarihi: string;
     hareketTipi: string;
     tutar: number;

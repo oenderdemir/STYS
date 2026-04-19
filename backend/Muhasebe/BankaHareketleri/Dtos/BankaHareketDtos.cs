@@ -6,6 +6,7 @@ public class BankaHareketDto : BaseRdbmsDto<int>
 {
     public string BankaAdi { get; set; } = string.Empty;
     public string HesapKoduIban { get; set; } = string.Empty;
+    public int? KasaBankaHesapId { get; set; }
     public DateTime HareketTarihi { get; set; }
     public string HareketTipi { get; set; } = string.Empty;
     public decimal Tutar { get; set; }
@@ -22,6 +23,7 @@ public class CreateBankaHareketRequest
 {
     public string BankaAdi { get; set; } = string.Empty;
     public string HesapKoduIban { get; set; } = string.Empty;
+    public int? KasaBankaHesapId { get; set; }
     public DateTime HareketTarihi { get; set; }
     public string HareketTipi { get; set; } = string.Empty;
     public decimal Tutar { get; set; }

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -15,6 +16,8 @@ public class BankaHareket : BaseEntity<int>
     [Required]
     [MaxLength(64)]
     public string HesapKoduIban { get; set; } = string.Empty;
+
+    public int? KasaBankaHesapId { get; set; }
 
     public DateTime HareketTarihi { get; set; }
 
@@ -45,6 +48,7 @@ public class BankaHareket : BaseEntity<int>
     [MaxLength(16)]
     public string Durum { get; set; } = CariHareketDurumlari.Aktif;
 
+    public KasaBankaHesap? KasaBankaHesap { get; set; }
     public CariKart? CariKart { get; set; }
 }
 

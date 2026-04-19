@@ -15,8 +15,9 @@
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" header="Banka Hareket" [style]="{ width: '36rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Banka</label><input pInputText class="w-full" [(ngModel)]="model.bankaAdi" /></div>
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Hesap/IBAN</label><input pInputText class="w-full" [(ngModel)]="model.hesapKoduIban" /></div>
+        <div class="col-span-12"><label class="block mb-2">Banka Hesabi</label><p-select class="w-full" [options]="bankaHesaplar" optionLabel="label" optionValue="value" [(ngModel)]="model.kasaBankaHesapId" (ngModelChange)="onBankaHesapChange()" appendTo="body" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Banka</label><input pInputText class="w-full" [(ngModel)]="model.bankaAdi" [readonly]="true" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Hesap/IBAN</label><input pInputText class="w-full" [(ngModel)]="model.hesapKoduIban" [readonly]="true" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tip</label><input pInputText class="w-full" [(ngModel)]="model.hareketTipi" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tutar</label><p-inputNumber class="w-full" [(ngModel)]="model.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
     </div>

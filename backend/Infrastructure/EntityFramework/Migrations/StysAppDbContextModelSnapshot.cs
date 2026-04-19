@@ -2712,6 +2712,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("KasaBankaHesapId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("KaynakId")
                         .HasColumnType("int");
 
@@ -2740,6 +2743,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
 
                     b.HasIndex("CariKartId");
+
+                    b.HasIndex("KasaBankaHesapId")
+                        .HasFilter("[IsDeleted] = 0 AND [KasaBankaHesapId] IS NOT NULL");
 
                     b.HasIndex("BankaAdi", "HesapKoduIban", "HareketTarihi")
                         .HasFilter("[IsDeleted] = 0");
@@ -2992,6 +2998,256 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("Depolar", "muhasebe");
                 });
 
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.Hesap", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("GenelHesapMi")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MuhasebeFormu")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("MuhasebeHesapPlaniId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("MuhasebeHesapPlaniId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("Hesaplar", "muhasebe");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.HesapDepoBaglanti", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("DepoId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HesapId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepoId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("HesapId", "DepoId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("HesapDepoBaglantilari", "muhasebe");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.HesapKasaBankaBaglanti", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("HesapId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("KasaBankaHesapId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KasaBankaHesapId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("HesapId", "KasaBankaHesapId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("HesapKasaBankaBaglantilari", "muhasebe");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("BankaAdi")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("HesapNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("HesapTuru")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Iban")
+                        .HasMaxLength(34)
+                        .HasColumnType("nvarchar(34)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Kod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("MuhasebeHesapPlaniId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MusteriNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("SubeAdi")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("Tip")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kod")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("MuhasebeHesapPlaniId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("Tip", "AktifMi")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("KasaBankaHesaplari", "muhasebe");
+                });
+
             modelBuilder.Entity("STYS.Muhasebe.KasaHareketleri.Entities.KasaHareket", b =>
                 {
                     b.Property<int>("Id")
@@ -3039,6 +3295,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("KasaBankaHesapId")
+                        .HasColumnType("int");
+
                     b.Property<string>("KasaKodu")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3072,6 +3331,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
 
                     b.HasIndex("CariKartId");
+
+                    b.HasIndex("KasaBankaHesapId")
+                        .HasFilter("[IsDeleted] = 0 AND [KasaBankaHesapId] IS NOT NULL");
 
                     b.HasIndex("KasaKodu", "HareketTarihi")
                         .HasFilter("[IsDeleted] = 0");
@@ -5883,7 +6145,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasForeignKey("CariKartId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", "KasaBankaHesap")
+                        .WithMany("BankaHareketler")
+                        .HasForeignKey("KasaBankaHesapId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CariKart");
+
+                    b.Navigation("KasaBankaHesap");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.CariHareketler.Entities.CariHareket", b =>
@@ -5907,6 +6176,66 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Tesis");
                 });
 
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.Hesap", b =>
+                {
+                    b.HasOne("STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani", "MuhasebeHesapPlani")
+                        .WithMany()
+                        .HasForeignKey("MuhasebeHesapPlaniId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MuhasebeHesapPlani");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.HesapDepoBaglanti", b =>
+                {
+                    b.HasOne("STYS.Muhasebe.Depolar.Entities.Depo", "Depo")
+                        .WithMany()
+                        .HasForeignKey("DepoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Muhasebe.Hesaplar.Entities.Hesap", "Hesap")
+                        .WithMany("DepoBaglantilari")
+                        .HasForeignKey("HesapId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Depo");
+
+                    b.Navigation("Hesap");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.HesapKasaBankaBaglanti", b =>
+                {
+                    b.HasOne("STYS.Muhasebe.Hesaplar.Entities.Hesap", "Hesap")
+                        .WithMany("KasaBankaBaglantilari")
+                        .HasForeignKey("HesapId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", "KasaBankaHesap")
+                        .WithMany()
+                        .HasForeignKey("KasaBankaHesapId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Hesap");
+
+                    b.Navigation("KasaBankaHesap");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", b =>
+                {
+                    b.HasOne("STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani", "MuhasebeHesapPlani")
+                        .WithMany()
+                        .HasForeignKey("MuhasebeHesapPlaniId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MuhasebeHesapPlani");
+                });
+
             modelBuilder.Entity("STYS.Muhasebe.KasaHareketleri.Entities.KasaHareket", b =>
                 {
                     b.HasOne("STYS.Muhasebe.CariKartlar.Entities.CariKart", "CariKart")
@@ -5914,7 +6243,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasForeignKey("CariKartId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", "KasaBankaHesap")
+                        .WithMany("KasaHareketler")
+                        .HasForeignKey("KasaBankaHesapId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CariKart");
+
+                    b.Navigation("KasaBankaHesap");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani", b =>
@@ -6512,6 +6848,20 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("STYS.Muhasebe.Depolar.Entities.Depo", b =>
                 {
                     b.Navigation("StokHareketleri");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.Hesap", b =>
+                {
+                    b.Navigation("DepoBaglantilari");
+
+                    b.Navigation("KasaBankaBaglantilari");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap", b =>
+                {
+                    b.Navigation("BankaHareketler");
+
+                    b.Navigation("KasaHareketler");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani", b =>

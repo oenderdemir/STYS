@@ -8,23 +8,26 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { KasaBankaHesaplariService } from '../kasa-banka-hesaplari/kasa-banka-hesaplari.service';
 import { BankaHareketModel, CreateBankaHareketRequest, UpdateBankaHareketRequest } from './banka-hareketleri.dto';
 import { BankaHareketleriService } from './banka-hareketleri.service';
 
 @Component({
     selector: 'app-banka-hareketleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './banka-hareketleri.html',
     providers: [MessageService]
 })
 export class BankaHareketleriPage implements OnInit {
     private readonly service = inject(BankaHareketleriService);
+    private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
@@ -37,8 +40,20 @@ export class BankaHareketleriPage implements OnInit {
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
+    bankaHesaplar: Array<{ label: string; value: number; bankaAdi: string; ibanHesap: string }> = [];
 
     ngOnInit(): void {
+        this.kasaBankaHesapService.getByTip('Banka', true).subscribe({
+            next: (items) => {
+                this.bankaHesaplar = items.map((x) => ({
+                    label: `${x.kod} - ${x.ad}`,
+                    value: x.id!,
+                    bankaAdi: x.bankaAdi ?? x.ad,
+                    ibanHesap: x.iban ?? x.hesapNo ?? x.kod
+                }));
+                this.cdr.detectChanges();
+            }
+        });
         this.load(1, this.pageSize);
     }
 
@@ -82,14 +97,15 @@ export class BankaHareketleriPage implements OnInit {
     }
 
     save(): void {
-        if (!this.model.bankaAdi?.trim() || !this.model.hesapKoduIban?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Banka adi ve hesap/iban zorunludur.' });
+        if (!this.model.kasaBankaHesapId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Banka hesabi secimi zorunludur.' });
             return;
         }
 
         const payload: CreateBankaHareketRequest | UpdateBankaHareketRequest = {
             bankaAdi: this.model.bankaAdi,
             hesapKoduIban: this.model.hesapKoduIban,
+            kasaBankaHesapId: this.model.kasaBankaHesapId ?? null,
             hareketTarihi: this.model.hareketTarihi,
             hareketTipi: this.model.hareketTipi,
             tutar: this.model.tutar,
@@ -127,10 +143,27 @@ export class BankaHareketleriPage implements OnInit {
         });
     }
 
+    onBankaHesapChange(): void {
+        if (!this.model.kasaBankaHesapId) {
+            this.model.bankaAdi = '';
+            this.model.hesapKoduIban = '';
+            return;
+        }
+
+        const selected = this.bankaHesaplar.find((x) => x.value === this.model.kasaBankaHesapId);
+        if (!selected) {
+            return;
+        }
+
+        this.model.bankaAdi = selected.bankaAdi;
+        this.model.hesapKoduIban = selected.ibanHesap;
+    }
+
     private createEmpty(): BankaHareketModel {
         return {
             bankaAdi: '',
             hesapKoduIban: '',
+            kasaBankaHesapId: null,
             hareketTarihi: new Date().toISOString(),
             hareketTipi: 'Tahsilat',
             tutar: 0,

@@ -14,6 +14,8 @@ using STYS.MisafirTipleri.Entities;
 using STYS.Muhasebe.BankaHareketleri.Entities;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.Hesaplar.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.Depolar.Entities;
@@ -123,6 +125,10 @@ public class StysAppDbContext : DbContext
     public DbSet<RestoranOdeme> RestoranOdemeleri => Set<RestoranOdeme>();
     public DbSet<CariKart> CariKartlar => Set<CariKart>();
     public DbSet<CariHareket> CariHareketler => Set<CariHareket>();
+    public DbSet<KasaBankaHesap> KasaBankaHesaplari => Set<KasaBankaHesap>();
+    public DbSet<Hesap> Hesaplar => Set<Hesap>();
+    public DbSet<HesapKasaBankaBaglanti> HesapKasaBankaBaglantilari => Set<HesapKasaBankaBaglanti>();
+    public DbSet<HesapDepoBaglanti> HesapDepoBaglantilari => Set<HesapDepoBaglanti>();
     public DbSet<KasaHareket> KasaHareketleri => Set<KasaHareket>();
     public DbSet<BankaHareket> BankaHareketleri => Set<BankaHareket>();
     public DbSet<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri => Set<TahsilatOdemeBelgesi>();
@@ -1471,6 +1477,91 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<KasaBankaHesap>(entity =>
+        {
+            entity.ToTable("KasaBankaHesaplari", muhasebeSchema);
+            entity.Property(x => x.Tip).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.BankaAdi).HasMaxLength(128);
+            entity.Property(x => x.SubeAdi).HasMaxLength(128);
+            entity.Property(x => x.HesapNo).HasMaxLength(64);
+            entity.Property(x => x.Iban).HasMaxLength(34);
+            entity.Property(x => x.MusteriNo).HasMaxLength(64);
+            entity.Property(x => x.HesapTuru).HasMaxLength(32);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.Tip, x.AktifMi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Hesap>(entity =>
+        {
+            entity.ToTable("Hesaplar", muhasebeSchema);
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.MuhasebeFormu).HasMaxLength(64);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.Ad)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<HesapKasaBankaBaglanti>(entity =>
+        {
+            entity.ToTable("HesapKasaBankaBaglantilari", muhasebeSchema);
+            entity.HasIndex(x => new { x.HesapId, x.KasaBankaHesapId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.KasaBankaHesapId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Hesap)
+                .WithMany(x => x.KasaBankaBaglantilari)
+                .HasForeignKey(x => x.HesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KasaBankaHesap)
+                .WithMany()
+                .HasForeignKey(x => x.KasaBankaHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<HesapDepoBaglanti>(entity =>
+        {
+            entity.ToTable("HesapDepoBaglantilari", muhasebeSchema);
+            entity.HasIndex(x => new { x.HesapId, x.DepoId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.DepoId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Hesap)
+                .WithMany(x => x.DepoBaglantilari)
+                .HasForeignKey(x => x.HesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Depo)
+                .WithMany()
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<KasaHareket>(entity =>
         {
             entity.ToTable("KasaHareketleri", muhasebeSchema);
@@ -1484,8 +1575,15 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.HasIndex(x => new { x.KasaKodu, x.HareketTarihi })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.KasaBankaHesapId)
+                .HasFilter("[IsDeleted] = 0 AND [KasaBankaHesapId] IS NOT NULL");
             entity.HasIndex(x => x.BelgeNo)
                 .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+
+            entity.HasOne(x => x.KasaBankaHesap)
+                .WithMany(x => x.KasaHareketler)
+                .HasForeignKey(x => x.KasaBankaHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.KasaHareketler)
@@ -1507,8 +1605,15 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.HasIndex(x => new { x.BankaAdi, x.HesapKoduIban, x.HareketTarihi })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.KasaBankaHesapId)
+                .HasFilter("[IsDeleted] = 0 AND [KasaBankaHesapId] IS NOT NULL");
             entity.HasIndex(x => x.BelgeNo)
                 .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+
+            entity.HasOne(x => x.KasaBankaHesap)
+                .WithMany(x => x.BankaHareketler)
+                .HasForeignKey(x => x.KasaBankaHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.BankaHareketler)

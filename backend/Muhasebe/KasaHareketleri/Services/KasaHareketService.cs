@@ -1,5 +1,7 @@
 using AutoMapper;
 using STYS.Muhasebe.CariHareketler.Entities;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.KasaBankaHesaplari.Repositories;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.KasaHareketleri.Dtos;
 using STYS.Muhasebe.KasaHareketleri.Entities;
@@ -12,16 +14,18 @@ namespace STYS.Muhasebe.KasaHareketleri.Services;
 public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, int>, IKasaHareketService
 {
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly IKasaBankaHesapRepository _kasaBankaHesapRepository;
 
-    public KasaHareketService(IKasaHareketRepository repository, ICariKartRepository cariKartRepository, IMapper mapper)
+    public KasaHareketService(IKasaHareketRepository repository, ICariKartRepository cariKartRepository, IKasaBankaHesapRepository kasaBankaHesapRepository, IMapper mapper)
         : base(repository, mapper)
     {
         _cariKartRepository = cariKartRepository;
+        _kasaBankaHesapRepository = kasaBankaHesapRepository;
     }
 
     public override async Task<KasaHareketDto> AddAsync(KasaHareketDto dto)
     {
-        await ValidateAsync(dto.CariKartId, dto.HareketTipi, dto.Durum);
+        await ValidateAsync(dto);
         return await base.AddAsync(dto);
     }
 
@@ -32,29 +36,49 @@ public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, 
             throw new BaseException("Kasa hareketi id zorunludur.", 400);
         }
 
-        await ValidateAsync(dto.CariKartId, dto.HareketTipi, dto.Durum);
+        await ValidateAsync(dto);
         return await base.UpdateAsync(dto);
     }
 
-    private async Task ValidateAsync(int? cariKartId, string hareketTipi, string durum)
+    private async Task ValidateAsync(KasaHareketDto dto)
     {
-        if (string.IsNullOrWhiteSpace(hareketTipi) || !new[] { KasaHareketTipleri.Tahsilat, KasaHareketTipleri.Odeme, KasaHareketTipleri.Devir, KasaHareketTipleri.Duzeltme }.Contains(hareketTipi))
+        if (string.IsNullOrWhiteSpace(dto.HareketTipi) || !new[] { KasaHareketTipleri.Tahsilat, KasaHareketTipleri.Odeme, KasaHareketTipleri.Devir, KasaHareketTipleri.Duzeltme }.Contains(dto.HareketTipi))
         {
             throw new BaseException("Hareket tipi gecersiz.", 400);
         }
 
-        if (durum != CariHareketDurumlari.Aktif && durum != CariHareketDurumlari.Iptal)
+        if (dto.Durum != CariHareketDurumlari.Aktif && dto.Durum != CariHareketDurumlari.Iptal)
         {
             throw new BaseException("Durum gecersiz.", 400);
         }
 
-        if (cariKartId.HasValue && cariKartId.Value > 0)
+        if (dto.CariKartId.HasValue && dto.CariKartId.Value > 0)
         {
-            var exists = await _cariKartRepository.AnyAsync(x => x.Id == cariKartId.Value);
+            var exists = await _cariKartRepository.AnyAsync(x => x.Id == dto.CariKartId.Value);
             if (!exists)
             {
                 throw new BaseException("Cari kart bulunamadi.", 400);
             }
+        }
+
+        if (dto.KasaBankaHesapId.HasValue && dto.KasaBankaHesapId.Value > 0)
+        {
+            var hesap = await _kasaBankaHesapRepository.GetByIdAsync(dto.KasaBankaHesapId.Value);
+            if (hesap is null || !hesap.AktifMi)
+            {
+                throw new BaseException("Secilen kasa hesabi bulunamadi veya pasif.", 400);
+            }
+
+            if (hesap.Tip != KasaBankaHesapTipleri.NakitKasa)
+            {
+                throw new BaseException("Secilen hesap kasa tipinde degil.", 400);
+            }
+
+            dto.KasaKodu = hesap.Kod;
+        }
+        else if (string.IsNullOrWhiteSpace(dto.KasaKodu))
+        {
+            throw new BaseException("Kasa kodu veya hesap secimi zorunludur.", 400);
         }
     }
 }

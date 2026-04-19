@@ -3130,3 +3130,26 @@ et10.0-windows, UseWindowsForms=true).
 - [2026-04-19] Yeni migration eklendi: `20260419174000_BackfillTasinirKodParentIds` (mevcut kayitlar icin `UstKodId` nearest-ancestor mantigiyla backfill).
 - [2026-04-19] Tasinir Kodlari agac ekraninda satira tiklayarak expand/collapse destegi eklendi; expand aninda alt dugumler lazy yukleniyor.
 - [2026-04-19] Tasinir Kodlari agac satirina `ttRow` baglandi; PrimeNG tree state'i dogru takip edilerek expand/collapse davranisi duzeltildi.
+- [2026-04-19] Muhasebe icin yeni master tanim modulu eklendi: `KasaBankaHesaplari` (NakitKasa/Banka hesap tanimlari, muhasebe hesap plani baglantili).
+- [2026-04-19] Backend eklendi: `backend/Muhasebe/KasaBankaHesaplari` altinda Entity/Dto/Repository/Service/Controller/Mapping dosyalari olusturuldu.
+- [2026-04-19] Is kurali eklendi: Nakit kasa hesaplari yalnizca `1.10.100*`, banka hesaplari yalnizca `1.10.102*` muhasebe kodlarina baglanabilir.
+- [2026-04-19] `KasaHareket` ve `BankaHareket` tablolari master hesaba baglandi: yeni `KasaBankaHesapId` alanlari ve FK iliskileri eklendi.
+- [2026-04-19] Kasa/Banka hareket servislerinde dogrulama guncellendi: secilen master hesap aktif olma + tip uyumu zorunlu, harekette kod/banka/hesap bilgileri master hesaptan normalize edilir.
+- [2026-04-19] Yeni API endpointleri eklendi: `api/muhasebe/kasa-banka-hesaplari` CRUD + `tip/{tip}` + `muhasebe-hesap-secimleri/{tip}`.
+- [2026-04-19] Frontend eklendi: `src/app/pages/muhasebe/kasa-banka-hesaplari` (liste/form, tip bazli muhasebe kod secimi, banka alanlari).
+- [2026-04-19] Frontend entegrasyonu: `kasa-hareketleri` ve `banka-hareketleri` formlarinda serbest text yerine master hesap secimi kullanildi.
+- [2026-04-19] Route eklendi: `/muhasebe/kasa-banka-hesaplari`.
+- [2026-04-19] Permission/erisim tanimi eklendi: `StructurePermissions.KasaBankaHesapYonetimi` ve `ErisimTeshisModulTanimlari` kaydi.
+- [2026-04-19] Migration eklendi: `20260419193034_AddKasaBankaHesapTanimiVeHareketBaglantisi`.
+  - `muhasebe.KasaBankaHesaplari` tablosu
+  - Kasa/Banka hareketlerine `KasaBankaHesapId` kolon + index + FK
+  - Menu/role seed: `KasaBankaHesapYonetimi` ve `muhasebe/kasa-banka-hesaplari`
+  - Varsayilan seed hesaplar: `KASA-MERKEZ` (1.10.100), `BNK-VARSAYILAN` (1.10.102)
+- [2026-04-19] Muhasebe'de yeni `Hesaplar` modulu eklendi: bir hesap kaydina coklu `Kasa Hesabi`, `Banka Hesabi` ve `Depo` baglanabilir hale getirildi.
+- [2026-04-19] Backend eklendi: `backend/Muhasebe/Hesaplar` altinda Entity/Dto/Repository/Service/Controller/Mapping dosyalari olusturuldu.
+- [2026-04-19] Yeni tablolar: `muhasebe.Hesaplar`, `muhasebe.HesapKasaBankaBaglantilari`, `muhasebe.HesapDepoBaglantilari`.
+- [2026-04-19] Yeni API: `api/muhasebe/hesaplar` CRUD + lookup endpointleri (`kasa-hesaplari`, `banka-hesaplari`, `depolar`, `muhasebe-kodlari`).
+- [2026-04-19] Permission eklendi: `HesapYonetimi.Menu/View/Manage`; erisim teshis modul tanimina `muhasebe/hesaplar` eklendi.
+- [2026-04-19] Frontend eklendi: `src/app/pages/muhasebe/hesaplar` sayfasi (liste + dialog, coklu baglama secimleri).
+- [2026-04-19] Route eklendi: `/muhasebe/hesaplar`.
+- [2026-04-19] Migration eklendi: `20260419202646_AddMuhasebeHesaplarAndBindings` (tablo + index + FK + menu/role seed).

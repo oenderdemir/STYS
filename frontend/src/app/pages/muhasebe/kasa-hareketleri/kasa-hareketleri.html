@@ -20,7 +20,7 @@
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" header="Kasa Hareket" [style]="{ width: '36rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Kasa</label><input pInputText class="w-full" [(ngModel)]="model.kasaKodu" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Kasa Hesabi</label><p-select class="w-full" [options]="kasaHesaplar" optionLabel="label" optionValue="value" [(ngModel)]="model.kasaBankaHesapId" (ngModelChange)="onKasaHesapChange()" appendTo="body" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tip</label><p-select class="w-full" [options]="hareketTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.hareketTipi" appendTo="body" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tutar</label><p-inputNumber class="w-full" [(ngModel)]="model.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Cari</label><p-select class="w-full" [options]="cariKartlar" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.cariKartId" appendTo="body" /></div>

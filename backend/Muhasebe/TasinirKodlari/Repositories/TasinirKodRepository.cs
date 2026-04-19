@@ -33,4 +33,23 @@ public class TasinirKodRepository : BaseRdbmsRepository<TasinirKod, int>, ITasin
             .Where(x => kodlar.Contains(x.TamKod))
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<List<TasinirKod>> GetRootNodesAsync(CancellationToken cancellationToken = default)
+        => await _dbContext.TasinirKodlar
+            .Where(x => x.UstKodId == null)
+            .OrderBy(x => x.TamKod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task<List<TasinirKod>> GetChildrenByParentIdAsync(int parentId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.TasinirKodlar
+            .Where(x => x.UstKodId == parentId)
+            .OrderBy(x => x.TamKod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasChildrenAsync(int parentId, CancellationToken cancellationToken = default)
+        => await _dbContext.TasinirKodlar.AnyAsync(x => x.UstKodId == parentId, cancellationToken);
 }

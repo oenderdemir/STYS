@@ -3059,3 +3059,74 @@ et10.0-windows, UseWindowsForms=true).
 - Boylece `150.12.9.1.02` gibi kayitlar dogrudan ust kok dugume yigilmak yerine `150 -> 150.12 -> 150.12.9 -> ...` zinciriyle gosteriliyor.
 - Sanal dugumler sadece gorunum amacli: duzenle/sil aksiyonlari disable edildi.
 - Frontend dogrulama: `npm run build` BASARILI (mevcut bundle budget uyarilari haric).
+## Tur - Muhasebe Hesap Plani UI + Excel Seed + Redis Cache
+
+### Backend
+- `MuhasebeHesapPlaniService` Redis/distributed cache ile guncellendi.
+  - Tree verisi cache key versiyonlama ile tutuluyor.
+  - Add/Update/Delete sonrasi cache invalidation yapiliyor.
+- `MuhasebeHesapPlaniController` list endpointi cacheli tree akisini kullanacak sekilde guncellendi.
+- Yeni migration eklendi:
+  - `20260419113000_SeedMuhasebeHesapPlaniFromExcel.cs`
+  - Kaynak dosya: `C:\Users\cuce\Desktop\stys\TEK DÜZEN HESAP PLANI Muhasebe kodları.xlsx`
+  - 319 satir hesap plani `muhasebe.MuhasebeHesapPlanlari` tablosuna upsert edilir.
+  - `TamKod` kirilimina gore `UstHesapId` iliskisi migration icinde yeniden kurulur.
+
+### Frontend
+- `muhasebe-hesap-plani` ekrani agac odakli hale getirildi (`p-treeTable`).
+- Ustte hizli arama eklendi (kod/tam kod/ad).
+- Dialog icinde parent hesap secimi filtreli dropdown ile tum kayitlardan yapilir hale getirildi.
+
+### Dogrulama
+- Backend build: `dotnet build backend/STYS.csproj -o backend/.tmp-build` BASARILI.
+- Frontend build: `npm run build` BASARILI.
+## Tur - Muhasebe Hesap Plani Menu ve Yetkilendirme
+
+- `Muhasebe Hesap Plani` ekraninin menude gorunmesi icin yeni migration eklendi:
+  - `20260419124500_AddMuhasebeHesapPlaniMenuAndPermissions.cs`
+- Migration ile:
+  - `TODBase.Roles` icinde `MuhasebeHesapPlaniYonetimi` icin `Menu/View/Manage` rolleri idempotent olarak olusturulur.
+  - Admin ve TesisYonetici gruplarina bu roller atanir (`TODBase.UserGroupRoles`).
+  - `TODBase.MenuItems` icinde `muhasebe/hesap-plani` menusu `Muhasebe` koku altina eklenir/guncellenir.
+  - `TODBase.MenuItemRoles` ile menu gorunurlugu `MuhasebeHesapPlaniYonetimi.Menu` rolune baglanir.
+- Backend build dogrulamasi: `dotnet build backend/STYS.csproj -o backend/.tmp-build` BASARILI.
+## Tur - Muhasebe Hesap Plani Menu Gorunurlugu Duzeltmesi
+
+- Sorun analizi: menu runtime'da parent item yetkisi yoksa child yetkili olsa bile tum dal gizleniyordu.
+- Duzeltme: `frontend/src/app/core/menu/menu-runtime.service.ts` icindeki `filterMenuItems` mantigi guncellendi.
+  - Parent item kendi rolune sahip degilse ama yetkili child varsa parent konteyner olarak tutulur.
+  - Yetkisiz parent icin dogrudan aksiyon (routerLink/url/command) temizlenir, sadece childlar gosterilir.
+- Bu sayede `Muhasebe Hesap Plani` gibi yeni eklenen child menuler, parent role zincirindeki gecici eksikliklerden etkilenmeden gorunur.
+- Frontend build dogrulamasi: `npm run build` BASARILI.
+## Tur - Muhasebe Hesap Plani Menu Gorunmeme Garantili Duzeltme
+
+- Yeni migration eklendi: `20260419133000_EnsureMuhasebeHesapPlaniMenuVisible.cs`
+- Migration, `muhasebe/hesap-plani` menu item gorunurlugunu garanti altina alir:
+  - `MuhasebeHesapPlaniYonetimi` Menu/View/Manage rollerini bulur veya olusturur.
+  - Soft-delete olmus role/menu kayitlarini tekrar aktif eder.
+  - `Muhasebe` root menusu ve `muhasebe/hesap-plani` child menusu yoksa olusturur, varsa parent/order/route degerlerini normalize eder.
+  - Admin (`YoneticiGrubu`) ve `TesisYoneticiGrubu` icin role atamalarini garanti eder.
+  - `MenuItemRoles` baglarini root ve child icin tekrar garanti eder.
+- Backend build: BASARILI (`dotnet build backend/STYS.csproj -o backend/.tmp-build`).
+## Tur - Muhasebe Hesap Plani Migration Kesfi Duzeltmesi
+
+- Sorun: Otomatik migration calismasina ragmen son eklenen 3 migration uygulanmiyordu.
+- Kök neden: Elle eklenen migration dosyalarinda EF migration attribute yoktu; EF migration assembly kesfinde atlanma riski olusuyordu.
+- Duzeltme:
+  - `20260419113000_SeedMuhasebeHesapPlaniFromExcel.cs` dosyasina `[Migration("20260419113000_SeedMuhasebeHesapPlaniFromExcel")]` eklendi.
+  - `20260419124500_AddMuhasebeHesapPlaniMenuAndPermissions.cs` dosyasina `[Migration("20260419124500_AddMuhasebeHesapPlaniMenuAndPermissions")]` eklendi.
+  - `20260419133000_EnsureMuhasebeHesapPlaniMenuVisible.cs` dosyasina `[Migration("20260419133000_EnsureMuhasebeHesapPlaniMenuVisible")]` eklendi.
+- Build dogrulama: `dotnet build backend/STYS.csproj -o backend/.tmp-build` BASARILI.
+
+- [2026-04-19] Migration uygulanmama kök sebebi düzeltildi: 20260419113000, 20260419124500, 20260419133000 migration dosyalarına [DbContext(typeof(StysAppDbContext))] eklendi (EF migration assembly keşfi için).
+- [2026-04-19] `SeedMuhasebeHesapPlaniFromExcel` migration SQL literal hatasi duzeltildi: `@"""` yerine `"""` kullanildi (SQL'e bastaki cift tirnak gitmesi engellendi).
+- [2026-04-19] `SeedMuhasebeHesapPlaniFromExcel` migrationinda duplicate key (2601) icin seed normalize edildi: `TamKod` tekillestirme, kardes `Kod` cakisma suffixleme ve `MERGE` update adiminda `Kod` ezme kaldirildi.
+- [2026-04-19] Muhasebe agac ekranlari lazy-load yapildi: Tasinir Kodlari ve Muhasebe Hesap Plani icin `tree/roots` + `tree/children` endpointleri eklendi; frontend `p-treeTable` `onNodeExpand` ile cocuklari acildikca cekiyor.
+- [2026-04-19] Muhasebe/Tasinir agac lazy-load mantigi parentId kolonuna bagliliktan cikarildi; `TamKod + DuzeyNo` ile kok/alt seviye hesaplama yapilarak ilk acilista tum verinin gelmesi engellendi.
+- [2026-04-19] Tasinir Kodlari lazy tree davranisi kullanici talebine gore netlestirildi: ilk acilista sadece `UstKodId = NULL` kokleri, expand'da sadece `UstKodId = secilenId` cocuklari getiriliyor.
+- [2026-04-19] Tree load sirasinda DbContext concurrency hatasi duzeltildi: `Task.WhenAll` ile paralel `HasChildren` sorgulari kaldirildi, ardışık await akışına çevrildi (TasinirKodService, MuhasebeHesapPlaniService).
+- [2026-04-19] DB incelemesi: `muhasebe.TasinirKodlar` icinde bazi alt kodlarin `UstKodId` degeri NULL oldugu dogrulandi (ornek: `150.12.9.1.02`, `150.12.9.1.3`, `150.12.9.99`).
+- [2026-04-19] Duzenleme: import akisinda `UstTamKod` bos gelirse `TamKod`dan parent otomatik turetiliyor; parent bagi bundan sonra null kalmayacak.
+- [2026-04-19] Yeni migration eklendi: `20260419174000_BackfillTasinirKodParentIds` (mevcut kayitlar icin `UstKodId` nearest-ancestor mantigiyla backfill).
+- [2026-04-19] Tasinir Kodlari agac ekraninda satira tiklayarak expand/collapse destegi eklendi; expand aninda alt dugumler lazy yukleniyor.
+- [2026-04-19] Tasinir Kodlari agac satirina `ttRow` baglandi; PrimeNG tree state'i dogru takip edilerek expand/collapse davranisi duzeltildi.

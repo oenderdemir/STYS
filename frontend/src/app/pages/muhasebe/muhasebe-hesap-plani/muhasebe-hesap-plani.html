@@ -3,52 +3,42 @@
 
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
-        <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
+        <p-button label="Yeni Hesap" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
 </p-toolbar>
 
-<p-table
-    [value]="records"
-    [loading]="loading"
-    dataKey="id"
-    [tableStyle]="{ 'min-width': '72rem' }"
-    [lazy]="true"
-    (onLazyLoad)="onLazyLoad($event)"
-    [paginator]="true"
-    [rows]="pageSize"
-    [first]="(pageNumber - 1) * pageSize"
-    [totalRecords]="totalRecords"
-    [rowsPerPageOptions]="[10,20,50]">
-    <ng-template #caption><h5 class="m-0">Muhasebe Hesap Plani</h5></ng-template>
+<p-treeTable [value]="treeRecords" [loading]="loading" [lazy]="true" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
+    <ng-template #caption><h5 class="m-0">Muhasebe Hesap Plani (Agac)</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Tam Kod</th>
             <th>Kod</th>
             <th>Ad</th>
             <th>Seviye</th>
-            <th>Ust Hesap Id</th>
             <th>Durum</th>
             <th style="width: 10rem">Islem</th>
         </tr>
     </ng-template>
-    <ng-template #body let-item>
+    <ng-template #body let-rowNode let-rowData="rowData">
         <tr>
-            <td>{{ item.tamKod }}</td>
-            <td>{{ item.kod }}</td>
-            <td>{{ item.ad }}</td>
-            <td>{{ item.seviyeNo }}</td>
-            <td>{{ item.ustHesapId ?? '-' }}</td>
-            <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+            <td>
+                <p-treeTableToggler [rowNode]="rowNode" />
+                {{ rowData.tamKod }}
+            </td>
+            <td>{{ rowData.kod }}</td>
+            <td>{{ rowData.ad }}</td>
+            <td>{{ rowData.seviyeNo }}</td>
+            <td><p-tag [value]="rowData.aktifMi ? 'Aktif' : 'Pasif'" [severity]="rowData.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
             <td>
                 <div class="flex gap-2">
-                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
-                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(rowData)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(rowData)" />
                 </div>
             </td>
         </tr>
     </ng-template>
-</p-table>
+</p-treeTable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '44rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
@@ -70,7 +60,7 @@
         </div>
         <div class="col-span-12 md:col-span-8">
             <label class="block font-medium mb-2">Ust Hesap</label>
-            <p-select [options]="ustHesapSecenekleri" optionLabel="label" optionValue="value" [showClear]="true" placeholder="Seciniz" appendTo="body" [(ngModel)]="model.ustHesapId" class="w-full" />
+            <p-select [options]="ustHesapSecenekleri" optionLabel="label" optionValue="value" [showClear]="true" [filter]="true" filterBy="label" placeholder="Seciniz" appendTo="body" [(ngModel)]="model.ustHesapId" class="w-full" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Aciklama</label>

@@ -24,12 +24,22 @@ public class MuhasebeHesapPlaniController : UIController
     [HttpGet]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
     public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderBy(x => x.TamKod).ThenBy(x => x.Id).ToList());
+        => Ok(await _service.GetTreeAsync(cancellationToken));
 
     [HttpGet("tree")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
     public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTree(CancellationToken cancellationToken)
         => Ok(await _service.GetTreeAsync(cancellationToken));
+
+    [HttpGet("tree/roots")]
+    [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeRoots(CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeRootsAsync(cancellationToken));
+
+    [HttpGet("tree/children")]
+    [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeChildren([FromQuery] int? parentId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeChildrenAsync(parentId, cancellationToken));
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]

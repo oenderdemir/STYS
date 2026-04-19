@@ -5,6 +5,7 @@ export interface TasinirKodModel {
     ad: string;
     duzeyNo: number;
     ustKodId?: number | null;
+    hasChildren?: boolean;
     aktifMi: boolean;
     aciklama?: string | null;
 }

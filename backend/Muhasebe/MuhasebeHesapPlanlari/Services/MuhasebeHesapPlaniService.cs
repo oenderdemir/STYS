@@ -1,7 +1,9 @@
 using AutoMapper;
+using Microsoft.Extensions.Caching.Distributed;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Dtos;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Repositories;
+using System.Text.Json;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -9,18 +11,25 @@ namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Services;
 
 public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto, MuhasebeHesapPlani, int>, IMuhasebeHesapPlaniService
 {
-    private readonly IMuhasebeHesapPlaniRepository _repository;
+    private const string CacheVersionKey = "Muhasebe:HesapPlani:CacheVersion";
+    private const string TreeCacheKeyPrefix = "Muhasebe:HesapPlani:Tree";
 
-    public MuhasebeHesapPlaniService(IMuhasebeHesapPlaniRepository repository, IMapper mapper)
+    private readonly IMuhasebeHesapPlaniRepository _repository;
+    private readonly IDistributedCache _distributedCache;
+
+    public MuhasebeHesapPlaniService(IMuhasebeHesapPlaniRepository repository, IMapper mapper, IDistributedCache distributedCache)
         : base(repository, mapper)
     {
         _repository = repository;
+        _distributedCache = distributedCache;
     }
 
     public override async Task<MuhasebeHesapPlaniDto> AddAsync(MuhasebeHesapPlaniDto dto)
     {
         await NormalizeAndValidateAsync(dto, null);
-        return await base.AddAsync(dto);
+        var created = await base.AddAsync(dto);
+        await InvalidateCacheAsync();
+        return created;
     }
 
     public override async Task<MuhasebeHesapPlaniDto> UpdateAsync(MuhasebeHesapPlaniDto dto)
@@ -31,17 +40,77 @@ public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto,
         }
 
         await NormalizeAndValidateAsync(dto, dto.Id.Value);
-        return await base.UpdateAsync(dto);
+        var updated = await base.UpdateAsync(dto);
+        await InvalidateCacheAsync();
+        return updated;
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        await base.DeleteAsync(id);
+        await InvalidateCacheAsync();
     }
 
     public async Task<List<MuhasebeHesapPlaniDto>> GetTreeAsync(CancellationToken cancellationToken = default)
+        => await GetTreeCachedAsync(cancellationToken);
+
+    public async Task<List<MuhasebeHesapPlaniDto>> GetTreeRootsAsync(CancellationToken cancellationToken = default)
     {
-        var items = await _repository.GetAllAsync();
-        return items
+        var nodes = await _repository.GetRootNodesAsync(cancellationToken);
+        return await MapTreeLevelAsync(nodes, cancellationToken);
+    }
+
+    public async Task<List<MuhasebeHesapPlaniDto>> GetTreeChildrenAsync(int? parentId, CancellationToken cancellationToken = default)
+    {
+        if (!parentId.HasValue)
+        {
+            return await GetTreeRootsAsync(cancellationToken);
+        }
+
+        var nodes = await _repository.GetChildrenByParentIdAsync(parentId.Value, cancellationToken);
+        return await MapTreeLevelAsync(nodes, cancellationToken);
+    }
+
+    private async Task<List<MuhasebeHesapPlaniDto>> MapTreeLevelAsync(List<MuhasebeHesapPlani> nodes, CancellationToken cancellationToken)
+    {
+        var result = new List<MuhasebeHesapPlaniDto>(nodes.Count);
+        foreach (var node in nodes)
+        {
+            var dto = Mapper.Map<MuhasebeHesapPlaniDto>(node);
+            dto.HasChildren = await _repository.HasChildrenAsync(node.TamKod, node.SeviyeNo, cancellationToken);
+            result.Add(dto);
+        }
+
+        return result;
+    }
+
+    private async Task<List<MuhasebeHesapPlaniDto>> GetTreeCachedAsync(CancellationToken cancellationToken)
+    {
+        var version = await GetCacheVersionAsync(cancellationToken);
+        var cacheKey = $"{TreeCacheKeyPrefix}:v{version}";
+        var payload = await _distributedCache.GetStringAsync(cacheKey, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(payload))
+        {
+            var cached = JsonSerializer.Deserialize<List<MuhasebeHesapPlaniDto>>(payload);
+            if (cached is not null)
+            {
+                return cached;
+            }
+        }
+
+        var items = (await _repository.GetAllAsync())
             .OrderBy(x => x.TamKod)
             .ThenBy(x => x.Id)
             .Select(x => Mapper.Map<MuhasebeHesapPlaniDto>(x))
             .ToList();
+
+        var serialized = JsonSerializer.Serialize(items);
+        await _distributedCache.SetStringAsync(cacheKey, serialized, new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+        }, cancellationToken);
+
+        return items;
     }
 
     private async Task NormalizeAndValidateAsync(MuhasebeHesapPlaniDto dto, int? currentId)
@@ -100,5 +169,29 @@ public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto,
         {
             throw new BaseException("Ayni ust hesap altinda kod benzersiz olmalidir.", 400);
         }
+    }
+
+    private async Task<string> GetCacheVersionAsync(CancellationToken cancellationToken)
+    {
+        var version = await _distributedCache.GetStringAsync(CacheVersionKey, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            return version;
+        }
+
+        const string initialVersion = "1";
+        await _distributedCache.SetStringAsync(CacheVersionKey, initialVersion, new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(30)
+        }, cancellationToken);
+        return initialVersion;
+    }
+
+    private async Task InvalidateCacheAsync()
+    {
+        await _distributedCache.SetStringAsync(CacheVersionKey, Guid.NewGuid().ToString("N"), new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(30)
+        });
     }
 }

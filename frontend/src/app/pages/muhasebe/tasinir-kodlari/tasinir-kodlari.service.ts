@@ -11,7 +11,20 @@ export class TasinirKodlariService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<TasinirKodModel[]> {
-        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari`).pipe(map(this.unwrapList('Tasinir kodlar alinamadi.')));
+        return this.getTreeRoots();
+    }
+
+    getTreeRoots(): Observable<TasinirKodModel[]> {
+        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/tree/roots`).pipe(map(this.unwrapList('Tasinir kod kokleri alinamadi.')));
+    }
+
+    getTreeChildren(parentId: number | null): Observable<TasinirKodModel[]> {
+        let params = new HttpParams();
+        if (parentId !== null && Number.isFinite(parentId)) {
+            params = params.set('parentId', parentId);
+        }
+
+        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/tree/children`, { params }).pipe(map(this.unwrapList('Tasinir kod alt kayitlari alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<TasinirKodModel>> {

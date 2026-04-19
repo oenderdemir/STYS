@@ -4,27 +4,29 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
+import { AutoCompleteModule } from 'primeng/autocomplete';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { TreeTableModule } from 'primeng/treetable';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { ImportTasinirKodlariRequest, TasinirKodModel } from './tasinir-kodlari.dto';
+import { TasinirKodModel } from './tasinir-kodlari.dto';
 import { TasinirKodlariService } from './tasinir-kodlari.service';
 
-type TasinirKodTreeRow = TasinirKodModel & { isVirtual?: boolean };
+type TasinirKodTreeNode = TreeNode<TasinirKodModel> & { loadingChildren?: boolean };
+type ParentOption = { label: string; value: number };
 
 @Component({
     selector: 'app-tasinir-kodlari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
+    imports: [CommonModule, FormsModule, AutoCompleteModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './tasinir-kodlari.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -33,46 +35,65 @@ export class TasinirKodlariPage implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
-    loading = false;
+
+    loading = true;
     saving = false;
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
 
-    records: TasinirKodModel[] = [];
-    treeRecords: TreeNode<TasinirKodTreeRow>[] = [];
-    parentOptions: Array<{ label: string; value: number }> = [];
-    currentParentLabel = '-';
+    treeRecords: TasinirKodTreeNode[] = [];
     model: TasinirKodModel = this.createEmpty();
 
+    parentSearchResults: ParentOption[] = [];
+    selectedParentOption: ParentOption | null = null;
+    private parentSearchSeq = 0;
+
     ngOnInit(): void {
-        setTimeout(() => this.load());
+        this.load();
     }
 
     load(): void {
         this.loading = true;
-        this.service.getAll().pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
+        this.service.getTreeRoots().subscribe({
             next: (items) => {
-                this.records = [...items].sort((a, b) => a.tamKod.localeCompare(b.tamKod));
-                this.treeRecords = this.buildTree(this.records);
-                this.parentOptions = this.buildParentOptions();
+                this.treeRecords = items.map((item) => this.mapToNode(item));
+                this.loading = false;
                 this.cdr.detectChanges();
             },
-            error: (error: unknown) => {
-                this.showError(error);
+            error: (error: unknown) => 
+                {
+                    this.loading = false;
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+        });
+    }
+
+    onNodeExpand(event: { node: TreeNode<TasinirKodModel> }): void {
+        const node = event.node as TasinirKodTreeNode;
+        const nodeId = node.data?.id ?? null;
+        if (!nodeId || (node.children && node.children.length > 0)) {
+            return;
+        }
+
+        this.service.getTreeChildren(nodeId).subscribe({
+            next: (items) => {
+                node.children = items.map((item) => this.mapToNode(item));
+                node.leaf = node.children.length === 0;
+                this.treeRecords = [...this.treeRecords];
                 this.cdr.detectChanges();
-            }
+            },
+            error: (error: unknown) => this.showError(error)
         });
     }
 
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
-        this.parentOptions = this.buildParentOptions();
-        this.currentParentLabel = '-';
+        this.selectedParentOption = null;
+        this.parentSearchResults = [];
         this.dialogVisible = true;
+        this.cdr.markForCheck();
     }
 
     openEdit(item: TasinirKodModel): void {
@@ -82,9 +103,82 @@ export class TasinirKodlariPage implements OnInit {
 
         this.dialogMode = 'edit';
         this.model = { ...item };
-        this.parentOptions = this.buildParentOptions(item.id ?? null);
-        this.currentParentLabel = item.ustKodId ? this.parentOptions.find((x) => x.value === item.ustKodId)?.label ?? '-' : '-';
+        this.selectedParentOption = null;
+        this.parentSearchResults = [];
+
+        if (this.model.ustKodId) {
+            this.service.getById(this.model.ustKodId).subscribe({
+                next: (parent) => {
+                    const option: ParentOption = { label: `${parent.tamKod} - ${parent.ad}`, value: parent.id! };
+                    this.selectedParentOption = option;
+                    this.parentSearchResults = [option];
+                  this.cdr.detectChanges();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
+        }
+
         this.dialogVisible = true;
+         this.cdr.detectChanges();
+    }
+
+    searchParent(event: { query: string }): void {
+        const query = event.query ?? '';
+        const requestSeq = ++this.parentSearchSeq;
+
+        if (query.trim().length < 2) {
+            this.parentSearchResults = [];
+             this.cdr.detectChanges();
+            return;
+        }
+
+        this.service.searchPaged(1, 30, query).subscribe({
+            next: (paged) => {
+                if (requestSeq !== this.parentSearchSeq) {
+                    return;
+                }
+
+                this.parentSearchResults = paged.items
+                    .filter((x) => x.aktifMi && x.id !== this.model.id)
+                    .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
+                this.cdr.markForCheck();
+            },
+            error: (error: unknown) => {
+                if (requestSeq !== this.parentSearchSeq) {
+                    return;
+                }
+                this.showError(error);
+            }
+        });
+    }
+
+    onParentSelect(): void {
+        this.model.ustKodId = this.selectedParentOption?.value ?? null;
+        this.cdr.markForCheck();
+    }
+
+    onParentModelChange(value: unknown): void {
+        if (typeof value === 'string') {
+            this.model.ustKodId = null;
+        } else if (value === null || value === undefined) {
+            this.model.ustKodId = null;
+            this.selectedParentOption = null;
+        }
+        this.cdr.markForCheck();
+    }
+
+    onTamKodChange(value: string): void {
+        const normalized = value?.trim() ?? '';
+        if (!normalized) {
+            return;
+        }
+
+        const parts = normalized.split('.').filter((p) => p.length > 0);
+        if (parts.length > 0) {
+            this.model.duzeyNo = parts.length;
+            this.model.kod = parts[parts.length - 1];
+        }
+        this.cdr.markForCheck();
     }
 
     save(): void {
@@ -94,6 +188,8 @@ export class TasinirKodlariPage implements OnInit {
         }
 
         this.saving = true;
+        this.cdr.markForCheck();
+        
         const payload = {
             tamKod: this.model.tamKod.trim(),
             kod: this.model.kod.trim(),
@@ -108,13 +204,20 @@ export class TasinirKodlariPage implements OnInit {
             ? this.service.update(this.model.id, payload)
             : this.service.create(payload);
 
-        request$.pipe(finalize(() => (this.saving = false))).subscribe({
+        request$.pipe(finalize(() => {
+            this.saving = false;
+            this.cdr.markForCheck();
+        })).subscribe({
             next: () => {
                 this.dialogVisible = false;
                 this.load();
                 this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
+                this.cdr.markForCheck();
             },
-            error: (error: unknown) => this.showError(error)
+            error: (error: unknown) => {
+                this.showError(error);
+                this.cdr.markForCheck();
+            }
         });
     }
 
@@ -134,31 +237,24 @@ export class TasinirKodlariPage implements OnInit {
                     next: () => {
                         this.load();
                         this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit silindi.' });
+                        this.cdr.markForCheck();
                     },
-                    error: (error: unknown) => this.showError(error)
+                    error: (error: unknown) => {
+                        this.showError(error);
+                        this.cdr.markForCheck();
+                    }
                 });
             }
         });
     }
 
-    importOrnekVeri(): void {
-        const payload: ImportTasinirKodlariRequest = {
-            mevcutlariGuncelle: true,
-            pasiflestirilmeyenleriPasifYap: false,
-            satirlar: [
-                { tamKod: '150.01', kod: '01', ad: 'Tuketim Malzemeleri', duzeyNo: 2, aktifMi: true },
-                { tamKod: '150.01.01', kod: '01', ad: 'Temizlik Malzemeleri', duzeyNo: 3, ustTamKod: '150.01', aktifMi: true },
-                { tamKod: '253.01', kod: '01', ad: 'Makine ve Cihazlar', duzeyNo: 2, aktifMi: true }
-            ]
+    private mapToNode(item: TasinirKodModel): TasinirKodTreeNode {
+        return {
+            key: item.id?.toString() ?? item.tamKod,
+            data: item,
+            leaf: !item.hasChildren,
+            children: []
         };
-
-        this.service.import(payload).subscribe({
-            next: (sonuc) => {
-                this.load();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Import Tamamlandi', detail: `Eklenen: ${sonuc.eklenen}, Guncellenen: ${sonuc.guncellenen}` });
-            },
-            error: (error: unknown) => this.showError(error)
-        });
     }
 
     private createEmpty(): TasinirKodModel {
@@ -169,131 +265,13 @@ export class TasinirKodlariPage implements OnInit {
             duzeyNo: 1,
             aktifMi: true,
             ustKodId: null,
-            aciklama: null
+            aciklama: null,
+            hasChildren: false
         };
     }
 
     private showError(error: unknown): void {
         const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'Islem basarisiz.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
-    }
-
-    onParentChange(value: number | null): void {
-        this.model.ustKodId = value;
-        this.currentParentLabel = value ? this.parentOptions.find((x) => x.value === value)?.label ?? '-' : '-';
-    }
-
-    private buildTree(items: TasinirKodModel[]): TreeNode<TasinirKodTreeRow>[] {
-        const map = new Map<number, TreeNode<TasinirKodTreeRow>>();
-        const byTamKod = new Map<string, TreeNode<TasinirKodTreeRow>>();
-        const roots: TreeNode<TasinirKodTreeRow>[] = [];
-        let virtualSeed = -1;
-
-        for (const item of items) {
-            if (!item.id) {
-                continue;
-            }
-
-            const node: TreeNode<TasinirKodTreeRow> = {
-                key: item.id.toString(),
-                data: item,
-                children: []
-            };
-
-            map.set(item.id, node);
-            byTamKod.set(item.tamKod, node);
-        }
-
-        for (const item of items) {
-            if (!item.id) {
-                continue;
-            }
-
-            const node = map.get(item.id);
-            if (!node) {
-                continue;
-            }
-
-            let parentNode: TreeNode<TasinirKodTreeRow> | null = null;
-
-            if (item.ustKodId && map.has(item.ustKodId)) {
-                parentNode = map.get(item.ustKodId)!;
-            } else {
-                // UstKodId eksikse ara kirilimlari olusturup hiyerarsiyi tamamla.
-                const segments = item.tamKod.split('.').filter((x) => x.length > 0);
-                if (segments.length > 1) {
-                    let currentParent: TreeNode<TasinirKodTreeRow> | null = null;
-                    const chain: string[] = [];
-
-                    for (let i = 0; i < segments.length - 1; i += 1) {
-                        chain.push(segments[i]);
-                        const partialTamKod = chain.join('.');
-                        let chainNode = byTamKod.get(partialTamKod);
-
-                        if (!chainNode) {
-                            const partialKod = segments[i];
-                            chainNode = {
-                                key: `virtual-${Math.abs(virtualSeed)}`,
-                                data: {
-                                    id: virtualSeed--,
-                                    tamKod: partialTamKod,
-                                    kod: partialKod,
-                                    ad: '(Ara Kirilim)',
-                                    duzeyNo: i + 1,
-                                    aktifMi: true,
-                                    ustKodId: this.tryGetNodeId(currentParent),
-                                    isVirtual: true
-                                },
-                                children: []
-                            };
-
-                            byTamKod.set(partialTamKod, chainNode);
-                            if (currentParent) {
-                                currentParent.children!.push(chainNode);
-                            } else {
-                                roots.push(chainNode);
-                            }
-                        }
-
-                        currentParent = chainNode;
-                    }
-
-                    parentNode = currentParent;
-                }
-            }
-
-            if (parentNode) {
-                parentNode.children!.push(node);
-                continue;
-            }
-
-            roots.push(node);
-        }
-
-        const sortNodes = (nodes: TreeNode<TasinirKodTreeRow>[]): void => {
-            nodes.sort((a, b) => (a.data?.tamKod ?? '').localeCompare(b.data?.tamKod ?? ''));
-            for (const node of nodes) {
-                if (node.children?.length) {
-                    sortNodes(node.children);
-                }
-            }
-        };
-
-        sortNodes(roots);
-        return roots;
-    }
-
-    private buildParentOptions(excludeId: number | null = null): Array<{ label: string; value: number }> {
-        return this.records
-            .filter((x) => x.id && x.id !== excludeId)
-            .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
-    }
-
-    private tryGetNodeId(node: TreeNode<TasinirKodTreeRow> | null): number | null {
-        if (!node || !node.data || typeof node.data.id !== 'number') {
-            return null;
-        }
-
-        return node.data.id;
     }
 }

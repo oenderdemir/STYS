@@ -9,6 +9,7 @@ public class TasinirKodDto : BaseRdbmsDto<int>
     public string Ad { get; set; } = string.Empty;
     public int DuzeyNo { get; set; }
     public int? UstKodId { get; set; }
+    public bool HasChildren { get; set; }
     public bool AktifMi { get; set; } = true;
     public string? Aciklama { get; set; }
 }

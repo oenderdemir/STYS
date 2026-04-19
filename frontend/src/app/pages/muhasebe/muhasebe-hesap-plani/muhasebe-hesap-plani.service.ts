@@ -25,6 +25,33 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
+    getTreeRoots(): Observable<MuhasebeHesapPlaniModel[]> {
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/tree/roots`).pipe(
+            map((envelope) => {
+                if (envelope.success && envelope.data) {
+                    return envelope.data;
+                }
+                throw new Error(tryReadApiMessage(envelope) ?? 'Muhasebe hesap plani kokleri alinamadi.');
+            })
+        );
+    }
+
+    getTreeChildren(parentId: number | null): Observable<MuhasebeHesapPlaniModel[]> {
+        let params = new HttpParams();
+        if (parentId !== null && Number.isFinite(parentId)) {
+            params = params.set('parentId', parentId);
+        }
+
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/tree/children`, { params }).pipe(
+            map((envelope) => {
+                if (envelope.success && envelope.data) {
+                    return envelope.data;
+                }
+                throw new Error(tryReadApiMessage(envelope) ?? 'Muhasebe hesap plani alt kayitlari alinamadi.');
+            })
+        );
+    }
+
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<MuhasebeHesapPlaniModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
         return this.http.get<ApiResponse<PagedResponseDto<MuhasebeHesapPlaniModel>>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/paged`, { params }).pipe(

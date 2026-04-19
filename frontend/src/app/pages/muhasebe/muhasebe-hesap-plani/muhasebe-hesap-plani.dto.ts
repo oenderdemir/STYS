@@ -5,6 +5,7 @@ export interface MuhasebeHesapPlaniModel {
     ad: string;
     seviyeNo: number;
     ustHesapId?: number | null;
+    hasChildren?: boolean;
     aktifMi: boolean;
     aciklama?: string | null;
 }

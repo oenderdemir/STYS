@@ -24,7 +24,17 @@ public class TasinirKodlariController : UIController
     [HttpGet]
     [Permission(StructurePermissions.TasinirKodYonetimi.View)]
     public async Task<ActionResult<List<TasinirKodDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderBy(x => x.TamKod).ThenBy(x => x.Id).ToList());
+        => Ok(await _service.GetTreeRootsAsync(cancellationToken));
+
+    [HttpGet("tree/roots")]
+    [Permission(StructurePermissions.TasinirKodYonetimi.View)]
+    public async Task<ActionResult<List<TasinirKodDto>>> GetTreeRoots(CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeRootsAsync(cancellationToken));
+
+    [HttpGet("tree/children")]
+    [Permission(StructurePermissions.TasinirKodYonetimi.View)]
+    public async Task<ActionResult<List<TasinirKodDto>>> GetTreeChildren([FromQuery] int? parentId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeChildrenAsync(parentId, cancellationToken));
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.TasinirKodYonetimi.View)]

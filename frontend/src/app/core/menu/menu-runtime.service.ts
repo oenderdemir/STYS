@@ -124,20 +124,25 @@ export class MenuRuntimeService {
 
     private filterMenuItems(menuItems: AppMenuItem[], permissionSet: Set<string>): AppMenuItem[] {
         return menuItems.reduce<AppMenuItem[]>((accumulator, menuItem) => {
-            if (!this.hasPermission(menuItem.roles, permissionSet)) {
-                return accumulator;
-            }
-
             const filteredChildren = menuItem.items ? this.filterMenuItems(menuItem.items, permissionSet) : undefined;
+            const hasOwnPermission = this.hasPermission(menuItem.roles, permissionSet);
             const hasChildren = !!filteredChildren && filteredChildren.length > 0;
             const hasAction = !!menuItem.routerLink || !!menuItem.url || !!menuItem.command;
 
-            if (!hasChildren && !hasAction) {
+            if (!hasOwnPermission && !hasChildren) {
+                return accumulator;
+            }
+
+            if (hasOwnPermission && !hasChildren && !hasAction) {
                 return accumulator;
             }
 
             accumulator.push({
                 ...menuItem,
+                routerLink: hasOwnPermission ? menuItem.routerLink : undefined,
+                url: hasOwnPermission ? menuItem.url : undefined,
+                command: hasOwnPermission ? menuItem.command : undefined,
+                queryParams: hasOwnPermission ? menuItem.queryParams : undefined,
                 items: hasChildren ? filteredChildren : undefined
             });
 

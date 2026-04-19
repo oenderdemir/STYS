@@ -1,9 +1,11 @@
 using AutoMapper;
 using Microsoft.Extensions.Caching.Distributed;
+using STYS.Licensing;
 using STYS.Muhasebe.TasinirKodlari.Dtos;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Repositories;
 using System.Text.Json;
+using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -18,17 +20,24 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
     private readonly ITasinirKodRepository _repository;
     private readonly IMapper _mapper;
     private readonly IDistributedCache _distributedCache;
+    private readonly ILicenseService _licenseService;
 
-    public TasinirKodService(ITasinirKodRepository repository, IMapper mapper, IDistributedCache distributedCache)
+    public TasinirKodService(
+        ITasinirKodRepository repository,
+        IMapper mapper,
+        IDistributedCache distributedCache,
+        ILicenseService licenseService)
         : base(repository, mapper)
     {
         _repository = repository;
         _mapper = mapper;
         _distributedCache = distributedCache;
+        _licenseService = licenseService;
     }
 
     public override async Task<TasinirKodDto> AddAsync(TasinirKodDto dto)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Muhasebe);
         NormalizeAndValidate(dto);
         await ValidateUniqueAsync(dto.TamKod, null);
         var created = await base.AddAsync(dto);
@@ -43,6 +52,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
             throw new BaseException("Tasinir kod id zorunludur.", 400);
         }
 
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Muhasebe);
         NormalizeAndValidate(dto);
         await ValidateUniqueAsync(dto.TamKod, dto.Id.Value);
         var updated = await base.UpdateAsync(dto);
@@ -52,8 +62,39 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
 
     public override async Task DeleteAsync(int id)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Muhasebe);
         await base.DeleteAsync(id);
         await InvalidateLookupCacheAsync();
+    }
+
+    public async Task<List<TasinirKodDto>> GetTreeRootsAsync(CancellationToken cancellationToken = default)
+    {
+        var nodes = await _repository.GetRootNodesAsync(cancellationToken);
+        return await MapTreeLevelAsync(nodes, cancellationToken);
+    }
+
+    public async Task<List<TasinirKodDto>> GetTreeChildrenAsync(int? parentId, CancellationToken cancellationToken = default)
+    {
+        if (!parentId.HasValue)
+        {
+            return await GetTreeRootsAsync(cancellationToken);
+        }
+
+        var nodes = await _repository.GetChildrenByParentIdAsync(parentId.Value, cancellationToken);
+        return await MapTreeLevelAsync(nodes, cancellationToken);
+    }
+
+    private async Task<List<TasinirKodDto>> MapTreeLevelAsync(List<TasinirKod> nodes, CancellationToken cancellationToken)
+    {
+        var result = new List<TasinirKodDto>(nodes.Count);
+        foreach (var node in nodes)
+        {
+            var dto = _mapper.Map<TasinirKodDto>(node);
+            dto.HasChildren = await _repository.HasChildrenAsync(node.Id, cancellationToken);
+            result.Add(dto);
+        }
+
+        return result;
     }
 
     public async Task<PagedResult<TasinirKodDto>> GetPagedForLookupAsync(PagedRequest request, string? query, CancellationToken cancellationToken = default)
@@ -75,6 +116,8 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
 
     public async Task<TasinirKodImportSonucDto> ImportAsync(ImportTasinirKodlariRequest request, CancellationToken cancellationToken = default)
     {
+        await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Muhasebe, cancellationToken);
+
         if (request.Satirlar.Count == 0)
         {
             throw new BaseException("Import satirlari bos olamaz.", 400);
@@ -119,7 +162,8 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
                 current.DuzeyNo = row.DuzeyNo;
                 current.AktifMi = row.AktifMi;
                 current.Aciklama = row.Aciklama;
-                current.UstKodId = null;
+                // NOT: UstKodId ilk pass'te sifirlanmaz; ikinci pass parent FK'lerini resolve edip set eder.
+                // Ilk pass'te null'layarak parent'i kopartmak, ikinci pass hata verirse hiyerarsiyi bozuk birakirdi.
 
                 var dto = _mapper.Map<TasinirKodDto>(current);
                 await base.UpdateAsync(dto);
@@ -147,14 +191,18 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
         var refreshed = await _repository.GetByTamKodlarAsync(normalizedRows.Select(x => x.TamKod), cancellationToken);
         var refreshedByTamKod = refreshed.ToDictionary(x => x.TamKod, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var row in normalizedRows.Where(x => !string.IsNullOrWhiteSpace(x.UstTamKod)))
+        foreach (var row in normalizedRows)
         {
-            if (!refreshedByTamKod.TryGetValue(row.TamKod, out var current) || string.IsNullOrWhiteSpace(row.UstTamKod))
+            if (!refreshedByTamKod.TryGetValue(row.TamKod, out var current))
             {
                 continue;
             }
 
-            if (!refreshedByTamKod.TryGetValue(row.UstTamKod, out var parent))
+            var ustTamKod = string.IsNullOrWhiteSpace(row.UstTamKod)
+                ? InferParentTamKod(row.TamKod)
+                : row.UstTamKod;
+
+            if (string.IsNullOrWhiteSpace(ustTamKod) || !refreshedByTamKod.TryGetValue(ustTamKod, out var parent))
             {
                 continue;
             }
@@ -183,8 +231,20 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
             }
         }
 
-        await InvalidateLookupCacheAsync();
+        await InvalidateLookupCacheAsync(cancellationToken);
         return sonuc;
+    }
+
+    private static string? InferParentTamKod(string tamKod)
+    {
+        var normalized = tamKod?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        var lastDotIndex = normalized.LastIndexOf('.');
+        return lastDotIndex <= 0 ? null : normalized[..lastDotIndex];
     }
 
     private async Task<List<TasinirKodDto>> GetAllForLookupCachedAsync(CancellationToken cancellationToken)
@@ -271,12 +331,12 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
         return initialVersion;
     }
 
-    private async Task InvalidateLookupCacheAsync()
+    private async Task InvalidateLookupCacheAsync(CancellationToken cancellationToken = default)
     {
         await _distributedCache.SetStringAsync(CacheVersionKey, Guid.NewGuid().ToString("N"), new DistributedCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(30)
-        });
+        }, cancellationToken);
     }
 
     private async Task ValidateUniqueAsync(string tamKod, int? currentId)

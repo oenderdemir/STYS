@@ -3,18 +3,18 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
-import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
+import { TreeTableModule } from 'primeng/treetable';
+import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { CreateMuhasebeHesapPlaniRequest, MuhasebeHesapPlaniModel, UpdateMuhasebeHesapPlaniRequest } from './muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
@@ -22,7 +22,7 @@ import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
 @Component({
     selector: 'app-muhasebe-hesap-plani-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './muhasebe-hesap-plani.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -37,35 +37,22 @@ export class MuhasebeHesapPlaniPage implements OnInit {
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
 
-    records: MuhasebeHesapPlaniModel[] = [];
+    treeRecords: TreeNode<MuhasebeHesapPlaniModel>[] = [];
     model: MuhasebeHesapPlaniModel = this.createEmpty();
-    pageNumber = 1;
-    pageSize = 10;
-    totalRecords = 0;
     ustHesapSecenekleri: Array<{ label: string; value: number }> = [];
 
     ngOnInit(): void {
-        this.load(1, this.pageSize);
+        setTimeout(() => this.load());
     }
 
-    onLazyLoad(event: LazyLoadPayload): void {
-        const nextPageSize = event.rows && event.rows > 0 ? event.rows : this.pageSize;
-        const nextFirst = event.first && event.first >= 0 ? event.first : 0;
-        const nextPageNumber = Math.floor(nextFirst / nextPageSize) + 1;
-        this.load(nextPageNumber, nextPageSize);
-    }
-
-    load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+    load(): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getTreeRoots().pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
+            next: (items) => {
+                this.treeRecords = items.map((item) => this.mapToNode(item));
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
@@ -75,18 +62,40 @@ export class MuhasebeHesapPlaniPage implements OnInit {
         });
     }
 
+    onNodeExpand(event: { node: TreeNode<MuhasebeHesapPlaniModel> }): void {
+        const node = event.node;
+        const nodeId = node.data?.id ?? null;
+        if (!nodeId || (node.children && node.children.length > 0)) {
+            return;
+        }
+
+        this.service.getTreeChildren(nodeId).subscribe({
+            next: (items) => {
+                node.children = items.map((item) => this.mapToNode(item));
+                node.leaf = node.children.length === 0;
+                this.treeRecords = [...this.treeRecords];
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
-        this.prepareUstHesapSecenekleri();
         this.dialogVisible = true;
+        this.loadParentOptions();
     }
 
     openEdit(item: MuhasebeHesapPlaniModel): void {
+        if (!item.id) {
+            return;
+        }
+
         this.dialogMode = 'edit';
         this.model = { ...item };
-        this.prepareUstHesapSecenekleri(item.id ?? null);
         this.dialogVisible = true;
+        this.loadParentOptions(item.id);
     }
 
     save(): void {
@@ -143,11 +152,26 @@ export class MuhasebeHesapPlaniPage implements OnInit {
         });
     }
 
-    private prepareUstHesapSecenekleri(excludeId: number | null = null): void {
-        this.ustHesapSecenekleri = this.records
-            .filter((x) => x.id && x.id !== excludeId)
-            .sort((a, b) => a.tamKod.localeCompare(b.tamKod))
-            .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
+    private loadParentOptions(excludeId: number | null = null): void {
+        this.service.getPaged(1, 1000).subscribe({
+            next: (paged) => {
+                this.ustHesapSecenekleri = (paged.items ?? [])
+                    .filter((x) => x.id && x.id !== excludeId)
+                    .sort((a, b) => a.tamKod.localeCompare(b.tamKod))
+                    .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    private mapToNode(item: MuhasebeHesapPlaniModel): TreeNode<MuhasebeHesapPlaniModel> {
+        return {
+            key: item.id?.toString() ?? item.tamKod,
+            data: item,
+            leaf: !item.hasChildren,
+            children: []
+        };
     }
 
     private createEmpty(): MuhasebeHesapPlaniModel {

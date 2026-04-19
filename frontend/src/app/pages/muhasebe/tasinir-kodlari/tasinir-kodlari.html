@@ -5,24 +5,28 @@
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
-        <p-button label="Ornek Import" icon="pi pi-upload" class="ml-2" severity="contrast" [outlined]="true" (onClick)="importOrnekVeri()" />
     </ng-template>
-</p-toolbar>
+</p-toolbar> 
 
-<p-treeTable [value]="treeRecords" [loading]="loading" [tableStyle]="{ 'min-width': '72rem' }">
-    <ng-template #caption><h5 class="m-0">Tasinir Kodlari (Agac)</h5></ng-template>
+<p-treeTable [value]="treeRecords" [loading]="loading" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
+    
+    <ng-template #caption>
+        <h5 class="m-0">Tasinir Kodlari (Agac)</h5>
+    </ng-template>
+    
     <ng-template #header>
         <tr>
-            <th>Tam Kod</th>
-            <th>Kod</th>
-            <th>Ad</th>
-            <th>Duzey</th>
-            <th>Durum</th>
-            <th style="width: 10rem">Islem</th>
+            <th style="width: 30%">Tam Kod</th>
+            <th style="width: 15%">Kod</th>
+            <th style="width: 35%">Ad</th>
+            <th style="width: 10%">Duzey</th>
+            <th style="width: 10%">Durum</th>
+            <th style="width: 10%">Islem</th>
         </tr>
     </ng-template>
+    
     <ng-template #body let-rowNode let-rowData="rowData">
-        <tr>
+        <tr [ttRow]="rowNode">
             <td>
                 <p-treeTableToggler [rowNode]="rowNode" />
                 {{ rowData.tamKod }}
@@ -30,11 +34,13 @@
             <td>{{ rowData.kod }}</td>
             <td>{{ rowData.ad }}</td>
             <td>{{ rowData.duzeyNo }}</td>
-            <td><p-tag [value]="rowData.aktifMi ? 'Aktif' : 'Pasif'" [severity]="rowData.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+            <td>
+                <p-tag [value]="rowData.aktifMi ? 'Aktif' : 'Pasif'" [severity]="rowData.aktifMi ? 'success' : 'secondary'" [rounded]="true" />
+            </td>
             <td>
                 <div class="flex gap-2">
-                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" [disabled]="!rowData.id || rowData.isVirtual" (onClick)="openEdit(rowData)" />
-                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="!rowData.id || rowData.isVirtual" (onClick)="delete(rowData)" />
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(rowData)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(rowData)" />
                 </div>
             </td>
         </tr>
@@ -42,10 +48,11 @@
 </p-treeTable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Tasinir Kod Duzenle' : 'Yeni Tasinir Kod'" [style]="{ width: '42rem', 'max-width': '95vw' }">
-    <div class="grid grid-cols-12 gap-3">
+    <div class="grid grid-cols-12 gap-3 mt-1">
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Tam Kod</label>
-            <input pInputText class="w-full" [(ngModel)]="model.tamKod" maxlength="64" />
+            <input pInputText class="w-full" [(ngModel)]="model.tamKod" (ngModelChange)="onTamKodChange($event)" maxlength="64" />
+            <small class="text-color-secondary">Ornek: 150.01.03 (duzey ve kod otomatik hesaplanir)</small>
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Kod</label>
@@ -57,27 +64,32 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Parent Tasinir Kod</label>
-            <p-select
-                [options]="parentOptions"
+            <p-autocomplete
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                panelStyleClass="min-w-full"
+                [(ngModel)]="selectedParentOption"
+                (ngModelChange)="onParentModelChange($event)"
+                [suggestions]="parentSearchResults"
+                (completeMethod)="searchParent($event)"
+                (onSelect)="onParentSelect()"
+                [dropdown]="true"
+                [delay]="0"
+                [minLength]="2"
+                [forceSelection]="false"
                 optionLabel="label"
-                optionValue="value"
-                [showClear]="true"
-                [filter]="true"
-                filterBy="label"
-                placeholder="Seciniz"
-                appendTo="body"
-                [ngModel]="model.ustKodId"
-                (ngModelChange)="onParentChange($event)"
-                class="w-full" />
+                placeholder="Kod veya ad ile ara"
+                appendTo="body" />
+            <small class="text-color-secondary">En az 2 karakter girin; bos birakilirsa kok seviyeye eklenir.</small>
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="256" />
         </div>
-        <div class="col-span-12 text-sm text-color-secondary">
-            Secili Parent: {{ currentParentLabel }}
+        <div class="col-span-12 flex align-items-center gap-2">
+            <p-checkbox inputId="aktifKod" [(ngModel)]="model.aktifMi" [binary]="true" />
+            <label for="aktifKod">Aktif</label>
         </div>
-        <div class="col-span-12 flex align-items-center gap-2"><input id="aktifKod" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifKod">Aktif</label></div>
     </div>
 
     <ng-template #footer>

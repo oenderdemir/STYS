@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateDepoRequest, DepoModel, UpdateDepoRequest } from './depolar.dto';
+import { CreateDepoRequest, DepoModel, MuhasebeTesisModel, UpdateDepoRequest } from './depolar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class DepolarService {
@@ -14,8 +14,11 @@ export class DepolarService {
         return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar`).pipe(map(this.unwrap<DepoModel[]>('Depolar alinamadi.')));
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<DepoModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<DepoModel>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         return this.http.get<ApiResponse<PagedResponseDto<DepoModel>>>(`${this.apiBaseUrl}/api/muhasebe/depolar/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<DepoModel>>('Depolar alinamadi.')));
     }
 
@@ -34,6 +37,10 @@ export class DepolarService {
             }
             throw new Error(tryReadApiMessage(envelope) ?? 'Depo silinemedi.');
         }));
+    }
+
+    getTesisler(): Observable<MuhasebeTesisModel[]> {
+        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrap<MuhasebeTesisModel[]>('Tesis listesi alinamadi.')));
     }
 
     private unwrap<T>(fallback: string) {

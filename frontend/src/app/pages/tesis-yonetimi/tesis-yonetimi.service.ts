@@ -78,6 +78,18 @@ export class TesisYonetimiService {
         );
     }
 
+    getMuhasebeciAdaylari(): Observable<ManagerCandidateDto[]> {
+        return this.http.get<ApiResponse<ManagerCandidateDto[]>>(`${this.apiBaseUrl}/ui/yoneticiaday/muhasebeciler`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Muhasebeci aday listesi alinamadi.');
+            })
+        );
+    }
+
     createTesis(payload: TesisDto): Observable<TesisDto> {
         return this.http.post<ApiResponse<TesisDto>>(`${this.apiBaseUrl}/ui/tesis`, payload).pipe(
             map((responseEnvelope) => {

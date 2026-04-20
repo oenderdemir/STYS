@@ -374,6 +374,13 @@ public static class StructurePermissions
         public const string Manage = "HesapYonetimi.Manage";
     }
 
+    public static class PaketTuruYonetimi
+    {
+        public const string Menu = "PaketTuruYonetimi.Menu";
+        public const string View = "PaketTuruYonetimi.View";
+        public const string Manage = "PaketTuruYonetimi.Manage";
+    }
+
     public static class IndirimKuraliYonetimi
     {
         public const string Menu = "IndirimKuraliYonetimi.Menu";
@@ -401,6 +408,8 @@ public static class StructurePermissions
         public const string RestoranGarsonuAtayabilir = "KullaniciAtama.RestoranGarsonuAtayabilir";
         public const string ResepsiyonistAtanabilir = "KullaniciAtama.ResepsiyonistAtanabilir";
         public const string ResepsiyonistAtayabilir = "KullaniciAtama.ResepsiyonistAtayabilir";
+        public const string MuhasebeciAtanabilir = "KullaniciAtama.MuhasebeciAtanabilir";
+        public const string MuhasebeciAtayabilir = "KullaniciAtama.MuhasebeciAtayabilir";
     }
 
 }

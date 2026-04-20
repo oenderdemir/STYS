@@ -3,15 +3,18 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, MuhasebeTesisModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KasaBankaHesaplariService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<KasaBankaHesapModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<KasaBankaHesapModel>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         return this.http.get<ApiResponse<PagedResponseDto<KasaBankaHesapModel>>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/paged`, { params }).pipe(map(this.unwrapOne));
     }
 
@@ -40,6 +43,10 @@ export class KasaBankaHesaplariService {
 
             throw new Error(tryReadApiMessage(envelope) ?? 'Kayit silinemedi.');
         }));
+    }
+
+    getTesisler(): Observable<MuhasebeTesisModel[]> {
+        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrapOne));
     }
 
     private unwrapList(envelope: ApiResponse<KasaBankaHesapModel[]>): KasaBankaHesapModel[] {

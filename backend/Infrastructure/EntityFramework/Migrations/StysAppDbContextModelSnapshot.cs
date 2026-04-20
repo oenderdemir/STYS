@@ -2906,6 +2906,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<int?>("TesisId")
+                        .HasColumnType("int");
+
                     b.Property<string>("UnvanAdSoyad")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2927,11 +2930,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CariKodu")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
+                    b.HasIndex("TesisId")
+                        .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
 
                     b.HasIndex("CariTipi", "UnvanAdSoyad")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("TesisId", "CariKodu")
+                        .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("CariKartlar", "muhasebe");
@@ -3043,6 +3049,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int>("MuhasebeHesapPlaniId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TesisId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -3051,11 +3060,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Ad")
-                        .IsUnique()
+                    b.HasIndex("MuhasebeHesapPlaniId")
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.HasIndex("MuhasebeHesapPlaniId")
+                    b.HasIndex("TesisId")
+                        .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
+
+                    b.HasIndex("TesisId", "Ad")
+                        .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("Hesaplar", "muhasebe");
@@ -3222,6 +3234,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<int?>("TesisId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Tip")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -3235,11 +3250,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Kod")
-                        .IsUnique()
+                    b.HasIndex("MuhasebeHesapPlaniId")
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.HasIndex("MuhasebeHesapPlaniId")
+                    b.HasIndex("TesisId")
+                        .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
+
+                    b.HasIndex("TesisId", "Kod")
+                        .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("Tip", "AktifMi")
@@ -3412,6 +3430,64 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("MuhasebeHesapPlanlari", "muhasebe");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.PaketTurleri.Entities.PaketTuru", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("AktifMi")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("KisaAd")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ad")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("AktifMi")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("KisaAd")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("PaketTurleri", "muhasebe");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.StokHareketleri.Entities.StokHareket", b =>
@@ -3667,6 +3743,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int>("TasinirKodId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TesisId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -3675,11 +3754,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StokKodu")
-                        .IsUnique()
-                        .HasFilter("[IsDeleted] = 0");
+                    b.HasIndex("TesisId")
+                        .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
 
                     b.HasIndex("TasinirKodId", "Ad")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("TesisId", "StokKodu")
+                        .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("TasinirKartlar", "muhasebe");
@@ -5576,6 +5658,50 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.ToTable("Tesisler", "dbo");
                 });
 
+            modelBuilder.Entity("STYS.Tesisler.Entities.TesisMuhasebeci", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("TesisId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TesisId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("TesisMuhasebecileri", "dbo");
+                });
+
             modelBuilder.Entity("STYS.Tesisler.Entities.TesisResepsiyonist", b =>
                 {
                     b.Property<int>("Id")
@@ -6166,6 +6292,16 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("CariKart");
                 });
 
+            modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKart", b =>
+                {
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Tesis");
+                });
+
             modelBuilder.Entity("STYS.Muhasebe.Depolar.Entities.Depo", b =>
                 {
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
@@ -6184,7 +6320,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("MuhasebeHesapPlani");
+
+                    b.Navigation("Tesis");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.Hesaplar.Entities.HesapDepoBaglanti", b =>
@@ -6233,7 +6376,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("MuhasebeHesapPlani");
+
+                    b.Navigation("Tesis");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.KasaHareketleri.Entities.KasaHareket", b =>
@@ -6308,7 +6458,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany()
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("TasinirKod");
+
+                    b.Navigation("Tesis");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.TasinirKodlari.Entities.TasinirKod", b =>
@@ -6718,6 +6875,17 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Il");
                 });
 
+            modelBuilder.Entity("STYS.Tesisler.Entities.TesisMuhasebeci", b =>
+                {
+                    b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
+                        .WithMany("Muhasebeciler")
+                        .HasForeignKey("TesisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tesis");
+                });
+
             modelBuilder.Entity("STYS.Tesisler.Entities.TesisResepsiyonist", b =>
                 {
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
@@ -6985,6 +7153,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("KonaklamaTipleri");
 
                     b.Navigation("MisafirTipleri");
+
+                    b.Navigation("Muhasebeciler");
 
                     b.Navigation("OdaTipleri");
 

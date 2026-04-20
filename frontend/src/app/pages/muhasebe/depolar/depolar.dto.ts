@@ -9,3 +9,8 @@ export interface DepoModel {
 
 export interface CreateDepoRequest extends Omit<DepoModel, 'id'> {}
 export interface UpdateDepoRequest extends Omit<DepoModel, 'id'> {}
+
+export interface MuhasebeTesisModel {
+    id: number;
+    ad: string;
+}

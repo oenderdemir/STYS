@@ -28,6 +28,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     private readonly ITesisRepository _tesisRepository;
     private readonly ITesisYoneticiRepository _tesisYoneticiRepository;
     private readonly ITesisResepsiyonistRepository _tesisResepsiyonistRepository;
+    private readonly ITesisMuhasebeciRepository _tesisMuhasebeciRepository;
     private readonly IIlRepository _ilRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUserService _userService;
@@ -40,6 +41,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         ITesisRepository tesisRepository,
         ITesisYoneticiRepository tesisYoneticiRepository,
         ITesisResepsiyonistRepository tesisResepsiyonistRepository,
+        ITesisMuhasebeciRepository tesisMuhasebeciRepository,
         IIlRepository ilRepository,
         IUserRepository userRepository,
         IUserService userService,
@@ -53,6 +55,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         _tesisRepository = tesisRepository;
         _tesisYoneticiRepository = tesisYoneticiRepository;
         _tesisResepsiyonistRepository = tesisResepsiyonistRepository;
+        _tesisMuhasebeciRepository = tesisMuhasebeciRepository;
         _ilRepository = ilRepository;
         _userRepository = userRepository;
         _userService = userService;
@@ -102,6 +105,49 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         await SyncUserToSingleTesisAsync(created.Id.Value, tesisId);
+        return created;
+    }
+
+    public async Task<UserDto> CreateMuhasebeciUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var muhasebeciGroupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir));
+
+        if (muhasebeciGroupId == Guid.Empty)
+        {
+            throw new BaseException("Muhasebeci grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = muhasebeciGroupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Muhasebeci olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+        await SyncMuhasebeciToSingleTesisAsync(created.Id.Value, tesisId);
         return created;
     }
 
@@ -238,6 +284,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await EnsureUniqueActiveNameAsync(dto, null);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: false);
         var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: false);
+        var muhasebeciIds = await NormalizeAndValidateMuhasebeciIdsAsync(dto.MuhasebeciUserIds, preserveWhenNull: false);
 
         var entity = Mapper.Map<Tesis>(dto);
         entity.Yoneticiler = managerIds!
@@ -248,6 +295,12 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             .ToList();
         entity.Resepsiyonistler = receptionistIds!
             .Select(x => new TesisResepsiyonist
+            {
+                UserId = x
+            })
+            .ToList();
+        entity.Muhasebeciler = muhasebeciIds!
+            .Select(x => new TesisMuhasebeci
             {
                 UserId = x
             })
@@ -268,7 +321,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
         var existingEntity = await _tesisRepository.GetByIdAsync(dto.Id.Value, query => query
             .Include(x => x.Yoneticiler)
-            .Include(x => x.Resepsiyonistler));
+            .Include(x => x.Resepsiyonistler)
+            .Include(x => x.Muhasebeciler));
         if (existingEntity is null)
         {
             throw new BaseException("Guncellenecek tesis bulunamadi.", 404);
@@ -280,6 +334,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: true);
         var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: true);
+        var muhasebeciIds = await NormalizeAndValidateMuhasebeciIdsAsync(dto.MuhasebeciUserIds, preserveWhenNull: true);
 
         existingEntity.IsDeleted = false;
         existingEntity.Ad = dto.Ad;
@@ -300,9 +355,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         if (receptionistIds is not null)
         {
             SyncResepsiyonistler(existingEntity, receptionistIds);
-            _tesisRepository.Update(existingEntity);
-            await _tesisRepository.SaveChangesAsync();
-            return Mapper.Map<TesisDto>(existingEntity);
+        }
+
+        if (muhasebeciIds is not null)
+        {
+            SyncMuhasebeciler(existingEntity, muhasebeciIds);
         }
 
         _tesisRepository.Update(existingEntity);
@@ -464,7 +521,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             var result = include is null ? query : include(query);
             result = result
                 .Include(x => x.Yoneticiler)
-                .Include(x => x.Resepsiyonistler);
+                .Include(x => x.Resepsiyonistler)
+                .Include(x => x.Muhasebeciler);
 
             if (scope.IsScoped)
             {
@@ -563,6 +621,51 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
 
         return normalizedReceptionistIds;
+    }
+
+    private async Task<List<Guid>?> NormalizeAndValidateMuhasebeciIdsAsync(
+        ICollection<Guid>? muhasebeciUserIds,
+        bool preserveWhenNull)
+    {
+        await EnsureCanAssignForPayloadAsync(muhasebeciUserIds, StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir, preserveWhenNull);
+
+        if (muhasebeciUserIds is null)
+        {
+            return preserveWhenNull ? null : [];
+        }
+
+        var normalizedMuhasebeciIds = muhasebeciUserIds
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (normalizedMuhasebeciIds.Count == 0)
+        {
+            return [];
+        }
+
+        var existingUserIds = await _userRepository
+            .Where(x => normalizedMuhasebeciIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        var missingUserIds = normalizedMuhasebeciIds.Except(existingUserIds).ToList();
+        if (missingUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen muhasebecilerden en az biri bulunamadi.", 400);
+        }
+
+        var muhasebeciMembershipUserIds = await GetUsersMatchingMarkerAsync(
+            normalizedMuhasebeciIds,
+            nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir));
+
+        var invalidGroupUserIds = normalizedMuhasebeciIds.Except(muhasebeciMembershipUserIds).ToList();
+        if (invalidGroupUserIds.Count > 0)
+        {
+            throw new BaseException("Secilen kullanicilar muhasebeci grubunda olmalidir.", 400);
+        }
+
+        return normalizedMuhasebeciIds;
     }
 
     private async Task EnsureCanAssignForPayloadAsync(
@@ -693,6 +796,36 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         }
     }
 
+    private void SyncMuhasebeciler(Tesis entity, IReadOnlyCollection<Guid> muhasebeciUserIds)
+    {
+        entity.Muhasebeciler ??= [];
+
+        var byUserId = entity.Muhasebeciler.ToDictionary(x => x.UserId);
+        var desiredUserIds = muhasebeciUserIds.ToHashSet();
+
+        var toDelete = entity.Muhasebeciler
+            .Where(x => !desiredUserIds.Contains(x.UserId))
+            .ToList();
+
+        if (toDelete.Count > 0)
+        {
+            _tesisMuhasebeciRepository.DeleteRange(toDelete);
+        }
+
+        foreach (var desiredUserId in desiredUserIds)
+        {
+            if (byUserId.ContainsKey(desiredUserId))
+            {
+                continue;
+            }
+
+            entity.Muhasebeciler.Add(new TesisMuhasebeci
+            {
+                UserId = desiredUserId
+            });
+        }
+    }
+
     private async Task SyncUserToSingleTesisAsync(Guid userId, int tesisId)
     {
         var existingAssignments = await _tesisResepsiyonistRepository
@@ -721,6 +854,34 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await _tesisResepsiyonistRepository.SaveChangesAsync();
     }
 
+    private async Task SyncMuhasebeciToSingleTesisAsync(Guid userId, int tesisId)
+    {
+        var existingAssignments = await _tesisMuhasebeciRepository
+            .Where(x => x.UserId == userId)
+            .ToListAsync();
+
+        var assignmentsToDelete = existingAssignments
+            .Where(x => x.TesisId != tesisId)
+            .ToList();
+
+        if (assignmentsToDelete.Count > 0)
+        {
+            _tesisMuhasebeciRepository.DeleteRange(assignmentsToDelete);
+        }
+
+        var hasSelectedTesisAssignment = existingAssignments.Any(x => x.TesisId == tesisId);
+        if (!hasSelectedTesisAssignment)
+        {
+            await _tesisMuhasebeciRepository.AddAsync(new TesisMuhasebeci
+            {
+                TesisId = tesisId,
+                UserId = userId
+            });
+        }
+
+        await _tesisMuhasebeciRepository.SaveChangesAsync();
+    }
+
     private async Task<Guid> GetGroupIdByMarkerAsync(string markerRoleName)
     {
         var query = _identityDbContext.UserGroups
@@ -738,6 +899,10 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir))
         {
             query = query.OrderByDescending(x => x.Name == "GarsonGrubu");
+        }
+        else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "MuhasebeciGrubu");
         }
 
         return await query

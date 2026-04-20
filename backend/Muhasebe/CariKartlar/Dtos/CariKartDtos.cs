@@ -4,6 +4,7 @@ namespace STYS.Muhasebe.CariKartlar.Dtos;
 
 public class CariKartDto : BaseRdbmsDto<int>
 {
+    public int? TesisId { get; set; }
     public string CariTipi { get; set; } = string.Empty;
     public string CariKodu { get; set; } = string.Empty;
     public string UnvanAdSoyad { get; set; } = string.Empty;
@@ -22,6 +23,7 @@ public class CariKartDto : BaseRdbmsDto<int>
 
 public class CreateCariKartRequest
 {
+    public int? TesisId { get; set; }
     public string CariTipi { get; set; } = string.Empty;
     public string CariKodu { get; set; } = string.Empty;
     public string UnvanAdSoyad { get; set; } = string.Empty;

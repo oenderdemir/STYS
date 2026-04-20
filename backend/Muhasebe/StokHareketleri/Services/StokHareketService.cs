@@ -1,4 +1,6 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Depolar.Repositories;
 using STYS.Muhasebe.StokHareketleri.Dtos;
@@ -16,12 +18,14 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private readonly IDepoRepository _depoRepository;
     private readonly ITasinirKartRepository _tasinirKartRepository;
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public StokHareketService(
         IStokHareketRepository repository,
         IDepoRepository depoRepository,
         ITasinirKartRepository tasinirKartRepository,
         ICariKartRepository cariKartRepository,
+        IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -29,6 +33,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         _depoRepository = depoRepository;
         _tasinirKartRepository = tasinirKartRepository;
         _cariKartRepository = cariKartRepository;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public override async Task<StokHareketDto> AddAsync(StokHareketDto dto)
@@ -51,10 +56,80 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     }
 
     public async Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? depoId, CancellationToken cancellationToken = default)
-        => await _repository.GetDepoStokBakiyeleriAsync(depoId, cancellationToken);
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (!scope.IsScoped)
+        {
+            return await _repository.GetDepoStokBakiyeleriAsync(depoId, cancellationToken);
+        }
+
+        var scopedDepoIds = await _depoRepository
+            .Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        var scopedDepoIdSet = scopedDepoIds.ToHashSet();
+
+        var result = await _repository.GetDepoStokBakiyeleriAsync(depoId, cancellationToken);
+        return result.Where(x => scopedDepoIdSet.Contains(x.DepoId)).ToList();
+    }
 
     public async Task<List<StokKartOzetDto>> GetStokKartOzetAsync(int? depoId, CancellationToken cancellationToken = default)
-        => await _repository.GetStokKartOzetleriAsync(depoId, cancellationToken);
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (!scope.IsScoped)
+        {
+            return await _repository.GetStokKartOzetleriAsync(depoId, cancellationToken);
+        }
+
+        if (!depoId.HasValue || depoId.Value <= 0)
+        {
+            throw new BaseException("Scoped kullanicilar icin depo secimi zorunludur.", 400);
+        }
+
+        var scopedDepoIds = await _depoRepository
+            .Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        if (scopedDepoIds.Contains(depoId.Value))
+        {
+            return await _repository.GetStokKartOzetleriAsync(depoId, cancellationToken);
+        }
+
+        return [];
+    }
+
+    public override async Task<StokHareketDto?> GetByIdAsync(int id, Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetByIdAsync(id, includeQuery);
+    }
+
+    public override async Task<IEnumerable<StokHareketDto>> GetAllAsync(Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetAllAsync(includeQuery);
+    }
+
+    public override async Task<IEnumerable<StokHareketDto>> WhereAsync(System.Linq.Expressions.Expression<Func<StokHareket, bool>> predicate, Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.WhereAsync(predicate, includeQuery);
+    }
+
+    public override async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<StokHareketDto>> GetPagedAsync(
+        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+        System.Linq.Expressions.Expression<Func<StokHareket, bool>>? predicate = null,
+        Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include = null,
+        Func<IQueryable<StokHareket>, IOrderedQueryable<StokHareket>>? orderBy = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
 
     private async Task NormalizeAndValidateAsync(StokHareketDto dto, int? currentId)
     {
@@ -67,6 +142,16 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         if (dto.DepoId <= 0 || !await _depoRepository.AnyAsync(x => x.Id == dto.DepoId))
         {
             throw new BaseException("Gecerli bir depo secilmelidir.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (scope.IsScoped)
+        {
+            var depoTesisId = await _depoRepository.Where(x => x.Id == dto.DepoId).Select(x => x.TesisId).FirstOrDefaultAsync();
+            if (!depoTesisId.HasValue || !scope.TesisIds.Contains(depoTesisId.Value))
+            {
+                throw new BaseException("Secilen depo icin yetkiniz bulunmuyor.", 403);
+            }
         }
 
         if (dto.TasinirKartId <= 0 || !await _tasinirKartRepository.AnyAsync(x => x.Id == dto.TasinirKartId))
@@ -114,4 +199,23 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static Func<IQueryable<StokHareket>, IQueryable<StokHareket>> BuildScopedIncludeQuery(
+        DomainAccessScope scope,
+        Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include)
+    {
+        return query =>
+        {
+            var result = include is null ? query : include(query);
+            if (scope.IsScoped)
+            {
+                result = result.Where(x =>
+                    x.Depo != null
+                    && x.Depo.TesisId.HasValue
+                    && scope.TesisIds.Contains(x.Depo.TesisId.Value));
+            }
+
+            return result;
+        };
+    }
 }

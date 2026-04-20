@@ -1,11 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.Hesaplar.Entities;
 
 public class Hesap : BaseEntity<int>
 {
+    public int? TesisId { get; set; }
+
     [Required]
     [MaxLength(128)]
     public string Ad { get; set; } = string.Empty;
@@ -22,6 +25,7 @@ public class Hesap : BaseEntity<int>
     [MaxLength(1024)]
     public string? Aciklama { get; set; }
 
+    public Tesis? Tesis { get; set; }
     public MuhasebeHesapPlani? MuhasebeHesapPlani { get; set; }
     public ICollection<HesapKasaBankaBaglanti> KasaBankaBaglantilari { get; set; } = [];
     public ICollection<HesapDepoBaglanti> DepoBaglantilari { get; set; } = [];

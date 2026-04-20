@@ -43,6 +43,7 @@ public class Tesis : BaseEntity<int>
     public ICollection<TesisYonetici> Yoneticiler { get; set; } = [];
 
     public ICollection<TesisResepsiyonist> Resepsiyonistler { get; set; } = [];
+    public ICollection<TesisMuhasebeci> Muhasebeciler { get; set; } = [];
 
     public ICollection<Bina> Binalar { get; set; } = [];
 

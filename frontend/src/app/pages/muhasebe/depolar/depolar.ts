@@ -8,20 +8,20 @@ import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
-import { InputNumberModule } from 'primeng/inputnumber';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { DepoModel } from './depolar.dto';
+import { DepoModel, MuhasebeTesisModel } from './depolar.dto';
 import { DepolarService } from './depolar.service';
 
 @Component({
     selector: 'app-depolar-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, InputNumberModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './depolar.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -37,13 +37,17 @@ export class DepolarPage implements OnInit {
     dialogMode: 'create' | 'edit' = 'create';
 
     records: DepoModel[] = [];
+    filteredRecords: DepoModel[] = [];
     model: DepoModel = this.createEmpty();
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
+    tesisler: MuhasebeTesisModel[] = [];
+    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
+    selectedTesisId: number | null = null;
 
     ngOnInit(): void {
-        this.load(1, this.pageSize);
+        this.loadTesisler();
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -55,12 +59,13 @@ export class DepolarPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (paged) => {
                 this.records = paged.items;
+                this.applyClientFilter();
                 this.pageNumber = paged.pageNumber;
                 this.pageSize = paged.pageSize;
                 this.totalRecords = paged.totalCount;
@@ -76,6 +81,7 @@ export class DepolarPage implements OnInit {
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.model.tesisId = this.selectedTesisId;
         this.dialogVisible = true;
     }
 
@@ -137,6 +143,18 @@ export class DepolarPage implements OnInit {
         });
     }
 
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    getTesisAdi(tesisId?: number | null): string {
+        if (!tesisId) {
+            return '-';
+        }
+        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+    }
+
     private createEmpty(): DepoModel {
         return {
             tesisId: null,
@@ -145,6 +163,32 @@ export class DepolarPage implements OnInit {
             aktifMi: true,
             aciklama: null
         };
+    }
+
+    private applyClientFilter(): void {
+        if (!this.selectedTesisId) {
+            this.filteredRecords = [...this.records];
+            return;
+        }
+
+        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+    }
+
+    private loadTesisler(): void {
+        this.service.getTesisler().subscribe({
+            next: (items) => {
+                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
+                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
+                if (!this.selectedTesisId && this.tesisler.length > 0) {
+                    this.selectedTesisId = this.tesisler[0].id;
+                }
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.load(1, this.pageSize);
+            }
+        });
     }
 
     private showError(error: unknown): void {

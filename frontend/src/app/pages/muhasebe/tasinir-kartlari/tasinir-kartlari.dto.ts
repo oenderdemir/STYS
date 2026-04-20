@@ -1,5 +1,6 @@
 export interface TasinirKartModel {
     id?: number;
+    tesisId?: number | null;
     tasinirKodId: number;
     stokKodu: string;
     ad: string;
@@ -23,3 +24,15 @@ export const MALZEME_TIPLERI: Array<{ label: string; value: string }> = [
     { label: 'Ticari Mal', value: 'TicariMal' },
     { label: 'Diger', value: 'Diger' }
 ];
+
+export interface MuhasebeTesisModel {
+    id: number;
+    ad: string;
+}
+
+export interface PaketTuruOptionModel {
+    id: number;
+    ad: string;
+    kisaAd: string;
+    aktifMi: boolean;
+}

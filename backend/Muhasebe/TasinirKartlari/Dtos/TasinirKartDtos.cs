@@ -4,6 +4,7 @@ namespace STYS.Muhasebe.TasinirKartlari.Dtos;
 
 public class TasinirKartDto : BaseRdbmsDto<int>
 {
+    public int? TesisId { get; set; }
     public int TasinirKodId { get; set; }
     public string StokKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
@@ -19,6 +20,7 @@ public class TasinirKartDto : BaseRdbmsDto<int>
 
 public class CreateTasinirKartRequest
 {
+    public int? TesisId { get; set; }
     public int TasinirKodId { get; set; }
     public string StokKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;

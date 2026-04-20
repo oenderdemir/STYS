@@ -14,7 +14,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, MuhasebeTesisModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from './kasa-banka-hesaplari.service';
 
 @Component({
@@ -34,6 +34,7 @@ export class KasaBankaHesaplariPage implements OnInit {
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
     records: KasaBankaHesapModel[] = [];
+    filteredRecords: KasaBankaHesapModel[] = [];
     model: KasaBankaHesapModel = this.createEmpty();
     pageNumber = 1;
     pageSize = 10;
@@ -41,9 +42,12 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     readonly hesapTipleri = KASA_BANKA_HESAP_TIPLERI;
     muhasebeHesapSecenekleri: Array<{ label: string; value: number }> = [];
+    tesisler: MuhasebeTesisModel[] = [];
+    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
+    selectedTesisId: number | null = null;
 
     ngOnInit(): void {
-        this.load(1, this.pageSize);
+        this.loadTesisler();
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -55,12 +59,13 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (paged) => {
                 this.records = paged.items;
+                this.applyClientFilter();
                 this.pageNumber = paged.pageNumber;
                 this.pageSize = paged.pageSize;
                 this.totalRecords = paged.totalCount;
@@ -76,6 +81,7 @@ export class KasaBankaHesaplariPage implements OnInit {
     openCreate(tip: KasaBankaHesapTipi): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty(tip);
+        this.model.tesisId = this.selectedTesisId;
         this.dialogVisible = true;
         this.loadMuhasebeHesapSecimleri(tip);
     }
@@ -113,6 +119,7 @@ export class KasaBankaHesaplariPage implements OnInit {
         }
 
         const payload: CreateKasaBankaHesapRequest | UpdateKasaBankaHesapRequest = {
+            tesisId: this.model.tesisId ?? null,
             tip: this.model.tip,
             kod: this.model.kod.trim(),
             ad: this.model.ad.trim(),
@@ -160,6 +167,18 @@ export class KasaBankaHesaplariPage implements OnInit {
         return this.hesapTipleri.find((x) => x.value === tip)?.label ?? tip;
     }
 
+    getTesisAdi(tesisId?: number | null): string {
+        if (!tesisId) {
+            return '-';
+        }
+        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+    }
+
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
     private loadMuhasebeHesapSecimleri(tip: KasaBankaHesapTipi): void {
         this.service.getMuhasebeHesapSecimleri(tip).subscribe({
             next: (items) => {
@@ -176,6 +195,7 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     private createEmpty(tip: KasaBankaHesapTipi = 'NakitKasa'): KasaBankaHesapModel {
         return {
+            tesisId: null,
             tip,
             kod: '',
             ad: '',
@@ -189,6 +209,31 @@ export class KasaBankaHesaplariPage implements OnInit {
             aktifMi: true,
             aciklama: null
         };
+    }
+
+    private applyClientFilter(): void {
+        if (!this.selectedTesisId) {
+            this.filteredRecords = [...this.records];
+            return;
+        }
+        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+    }
+
+    private loadTesisler(): void {
+        this.service.getTesisler().subscribe({
+            next: (items) => {
+                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
+                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
+                if (!this.selectedTesisId && this.tesisler.length > 0) {
+                    this.selectedTesisId = this.tesisler[0].id;
+                }
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.load(1, this.pageSize);
+            }
+        });
     }
 
     private showError(error: unknown): void {

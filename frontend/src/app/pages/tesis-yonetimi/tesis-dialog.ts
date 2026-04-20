@@ -125,6 +125,24 @@ import { TesisDto } from './tesis-yonetimi.dto';
                         />
                     </div>
                 }
+                @if (canManage && canAssignMuhasebeci) {
+                    <div class="col-span-12">
+                        <label for="muhasebeciUserIds" class="block font-medium mb-2">Muhasebeciler</label>
+                        <p-multiselect
+                            inputId="muhasebeciUserIds"
+                            [options]="muhasebeciSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="workingModel.muhasebeciUserIds"
+                            [showClear]="true"
+                            [filter]="true"
+                            appendTo="body"
+                            placeholder="Muhasebecileri secin"
+                            class="w-full"
+                            [disabled]="isReadOnly || saving"
+                        />
+                    </div>
+                }
             </div>
 
             <ng-template #footer>
@@ -139,20 +157,22 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null, muhasebeciUserIds: null };
     @Input() iller: IlDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
+    @Input() muhasebeciAdaylari: ManagerCandidateDto[] = [];
     @Input() saving = false;
     @Input() canManage = false;
     @Input() canAssignTesisYoneticisi = false;
     @Input() canAssignResepsiyonist = false;
+    @Input() canAssignMuhasebeci = false;
 
     @Output() readonly visibleChange = new EventEmitter<boolean>();
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null };
+    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null, muhasebeciUserIds: null };
     readonly ekHizmetPaketCakismaPolitikasiSecenekleri = EkHizmetPaketCakismaPolitikasiSecenekleri;
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
@@ -166,6 +186,15 @@ export class TesisDialog implements OnChanges {
 
     get resepsiyonistSecenekleri(): Array<{ label: string; value: string }> {
         return this.resepsiyonistAdaylari.map((item) => ({
+            value: item.id,
+            label: item.adSoyad && item.adSoyad.trim().length > 0
+                ? `${item.userName} - ${item.adSoyad}`
+                : item.userName
+        }));
+    }
+
+    get muhasebeciSecenekleri(): Array<{ label: string; value: string }> {
+        return this.muhasebeciAdaylari.map((item) => ({
             value: item.id,
             label: item.adSoyad && item.adSoyad.trim().length > 0
                 ? `${item.userName} - ${item.adSoyad}`
@@ -249,7 +278,8 @@ export class TesisDialog implements OnChanges {
             ekHizmetPaketCakismaPolitikasi: this.workingModel.ekHizmetPaketCakismaPolitikasi || EkHizmetPaketCakismaPolitikalari.OnayIste,
             aktifMi: this.workingModel.aktifMi,
             yoneticiUserIds: this.canAssignTesisYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
-            resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null
+            resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null,
+            muhasebeciUserIds: this.canAssignMuhasebeci ? this.workingModel.muhasebeciUserIds ?? [] : null
         });
     }
 
@@ -278,7 +308,8 @@ export class TesisDialog implements OnChanges {
             cikisSaati: this.normalizeSaat(model.cikisSaati, '10:00'),
             ekHizmetPaketCakismaPolitikasi: model.ekHizmetPaketCakismaPolitikasi || EkHizmetPaketCakismaPolitikalari.OnayIste,
             yoneticiUserIds: [...(model.yoneticiUserIds ?? [])],
-            resepsiyonistUserIds: [...(model.resepsiyonistUserIds ?? [])]
+            resepsiyonistUserIds: [...(model.resepsiyonistUserIds ?? [])],
+            muhasebeciUserIds: [...(model.muhasebeciUserIds ?? [])]
         };
     }
 

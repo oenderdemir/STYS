@@ -521,7 +521,9 @@ public class ErisimTeshisService : IErisimTeshisService
             || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir)
             || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir)
             || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
-            || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir);
+            || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir)
+            || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir)
+            || HasPermission(permissionSet, StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir);
 
         var managedTesisIds = await _stysDbContext.TesisYoneticileri
             .Where(x => x.UserId == userId)
@@ -530,6 +532,12 @@ public class ErisimTeshisService : IErisimTeshisService
             .ToListAsync(cancellationToken);
 
         var receptionistTesisIds = await _stysDbContext.TesisResepsiyonistleri
+            .Where(x => x.UserId == userId)
+            .Select(x => x.TesisId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var muhasebeciTesisIds = await _stysDbContext.TesisMuhasebecileri
             .Where(x => x.UserId == userId)
             .Select(x => x.TesisId)
             .Distinct()
@@ -551,6 +559,7 @@ public class ErisimTeshisService : IErisimTeshisService
 
         var directTesisIds = managedTesisIds
             .Concat(receptionistTesisIds)
+            .Concat(muhasebeciTesisIds)
             .Concat(ownedTesisIdsForTemizlik)
             .Distinct()
             .ToHashSet();

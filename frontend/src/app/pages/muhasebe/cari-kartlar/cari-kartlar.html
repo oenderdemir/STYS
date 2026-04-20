@@ -6,14 +6,28 @@
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
+    <ng-template #end>
+        <div class="w-18rem">
+            <p-select
+                [options]="tesisSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedTesisId"
+                placeholder="Tesis seciniz"
+                appendTo="body"
+                class="w-full"
+                (ngModelChange)="onTesisFilterChange()" />
+        </div>
+    </ng-template>
 </p-toolbar>
 
-<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
     <ng-template #caption><h5 class="m-0">Cari Kartlar</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Cari Kodu</th>
             <th>Unvan/Ad Soyad</th>
+            <th>Tesis</th>
             <th>Cari Tipi</th>
             <th>Telefon</th>
             <th>Eposta</th>
@@ -25,6 +39,7 @@
         <tr>
             <td>{{ item.cariKodu }}</td>
             <td>{{ item.unvanAdSoyad }}</td>
+            <td>{{ getTesisAdi(item.tesisId) }}</td>
             <td>{{ item.cariTipi }}</td>
             <td>{{ item.telefon || '-' }}</td>
             <td>{{ item.eposta || '-' }}</td>
@@ -41,6 +56,10 @@
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Cari Kart Duzenle' : 'Yeni Cari Kart'" [style]="{ width: '46rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Tesis</label>
+            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" />
+        </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Cari Tipi</label>
             <p-select class="w-full" [options]="cariTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.cariTipi" appendTo="body" />

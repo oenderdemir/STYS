@@ -39,6 +39,7 @@ export class TesisYonetimi implements OnDestroy {
     iller: IlDto[] = [];
     yoneticiAdaylari: ManagerCandidateDto[] = [];
     resepsiyonistAdaylari: ManagerCandidateDto[] = [];
+    muhasebeciAdaylari: ManagerCandidateDto[] = [];
     selectedTesis: TesisDto = this.getEmptyTesis();
     loading = false;
     saving = false;
@@ -63,6 +64,10 @@ export class TesisYonetimi implements OnDestroy {
 
     get canAssignResepsiyonist(): boolean {
         return this.authService.hasPermission('KullaniciAtama.ResepsiyonistAtayabilir');
+    }
+
+    get canAssignMuhasebeci(): boolean {
+        return this.authService.hasPermission('KullaniciAtama.MuhasebeciAtayabilir');
     }
 
     ngOnDestroy(): void {
@@ -201,7 +206,8 @@ export class TesisYonetimi implements OnDestroy {
             tesisler: this.service.getTesislerPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir),
             iller: this.service.getIller(),
             yoneticiAdaylari: this.canManage && this.canAssignTesisYoneticisi ? this.service.getYoneticiAdaylari() : of([]),
-            resepsiyonistAdaylari: this.canManage && this.canAssignResepsiyonist ? this.service.getResepsiyonistAdaylari() : of([])
+            resepsiyonistAdaylari: this.canManage && this.canAssignResepsiyonist ? this.service.getResepsiyonistAdaylari() : of([]),
+            muhasebeciAdaylari: this.canManage && this.canAssignMuhasebeci ? this.service.getMuhasebeciAdaylari() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -210,7 +216,7 @@ export class TesisYonetimi implements OnDestroy {
                 })
             )
             .subscribe({
-                next: ({ tesisler, iller, yoneticiAdaylari, resepsiyonistAdaylari }) => {
+                next: ({ tesisler, iller, yoneticiAdaylari, resepsiyonistAdaylari, muhasebeciAdaylari }) => {
                     if (tesisler.totalCount > 0 && tesisler.totalPages > 0 && pageNumber > tesisler.totalPages) {
                         this.pageNumber = tesisler.totalPages;
                         this.loadData(this.pageNumber, this.pageSize);
@@ -224,6 +230,7 @@ export class TesisYonetimi implements OnDestroy {
                     this.iller = [...iller].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.yoneticiAdaylari = [...yoneticiAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
                     this.resepsiyonistAdaylari = [...resepsiyonistAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
+                    this.muhasebeciAdaylari = [...muhasebeciAdaylari].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? ''));
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -260,7 +267,8 @@ export class TesisYonetimi implements OnDestroy {
             ekHizmetPaketCakismaPolitikasi: 'OnayIste',
             aktifMi: true,
             yoneticiUserIds: null,
-            resepsiyonistUserIds: null
+            resepsiyonistUserIds: null,
+            muhasebeciUserIds: null
         };
     }
 
@@ -271,7 +279,8 @@ export class TesisYonetimi implements OnDestroy {
             cikisSaati: source.cikisSaati ?? '10:00',
             ekHizmetPaketCakismaPolitikasi: source.ekHizmetPaketCakismaPolitikasi ?? 'OnayIste',
             yoneticiUserIds: [...(source.yoneticiUserIds ?? [])],
-            resepsiyonistUserIds: [...(source.resepsiyonistUserIds ?? [])]
+            resepsiyonistUserIds: [...(source.resepsiyonistUserIds ?? [])],
+            muhasebeciUserIds: [...(source.muhasebeciUserIds ?? [])]
         };
     }
 }

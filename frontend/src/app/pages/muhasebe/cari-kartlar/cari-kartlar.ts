@@ -15,7 +15,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { CARI_TIPLERI, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CARI_TIPLERI, CariKartModel, CreateCariKartRequest, MuhasebeTesisModel, UpdateCariKartRequest } from './cari-kartlar.dto';
 import { CariKartlarService } from './cari-kartlar.service';
 
 @Component({
@@ -37,15 +37,19 @@ export class CariKartlarPage implements OnInit {
     dialogMode: 'create' | 'edit' = 'create';
 
     records: CariKartModel[] = [];
+    filteredRecords: CariKartModel[] = [];
     model: CariKartModel = this.createEmpty();
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
 
     readonly cariTipleri = CARI_TIPLERI;
+    tesisler: MuhasebeTesisModel[] = [];
+    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
+    selectedTesisId: number | null = null;
 
     ngOnInit(): void {
-        this.load(1, this.pageSize);
+        this.loadTesisler();
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -57,12 +61,13 @@ export class CariKartlarPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (paged) => {
                 this.records = paged.items;
+                this.applyClientFilter();
                 this.pageNumber = paged.pageNumber;
                 this.pageSize = paged.pageSize;
                 this.totalRecords = paged.totalCount;
@@ -78,6 +83,7 @@ export class CariKartlarPage implements OnInit {
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.model.tesisId = this.selectedTesisId;
         this.dialogVisible = true;
     }
 
@@ -94,6 +100,7 @@ export class CariKartlarPage implements OnInit {
         }
 
         const payload: CreateCariKartRequest | UpdateCariKartRequest = {
+            tesisId: this.model.tesisId ?? null,
             cariTipi: this.model.cariTipi,
             cariKodu: this.model.cariKodu.trim(),
             unvanAdSoyad: this.model.unvanAdSoyad.trim(),
@@ -150,6 +157,7 @@ export class CariKartlarPage implements OnInit {
 
     private createEmpty(): CariKartModel {
         return {
+            tesisId: null,
             cariTipi: 'Musteri',
             cariKodu: '',
             unvanAdSoyad: '',
@@ -165,6 +173,44 @@ export class CariKartlarPage implements OnInit {
             eArsivKapsamindaMi: false,
             aciklama: null
         };
+    }
+
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    getTesisAdi(tesisId?: number | null): string {
+        if (!tesisId) {
+            return '-';
+        }
+        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+    }
+
+    private applyClientFilter(): void {
+        if (!this.selectedTesisId) {
+            this.filteredRecords = [...this.records];
+            return;
+        }
+
+        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+    }
+
+    private loadTesisler(): void {
+        this.service.getTesisler().subscribe({
+            next: (items) => {
+                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
+                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
+                if (!this.selectedTesisId && this.tesisler.length > 0) {
+                    this.selectedTesisId = this.tesisler[0].id;
+                }
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.load(1, this.pageSize);
+            }
+        });
     }
 
     private showError(error: unknown): void {

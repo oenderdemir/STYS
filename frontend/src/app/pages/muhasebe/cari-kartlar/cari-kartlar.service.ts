@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CariBakiyeModel, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CariBakiyeModel, CariKartModel, CreateCariKartRequest, MuhasebeTesisModel, UpdateCariKartRequest } from './cari-kartlar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class CariKartlarService {
@@ -21,8 +21,11 @@ export class CariKartlarService {
         );
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<CariKartModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<CariKartModel>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         return this.http.get<ApiResponse<PagedResponseDto<CariKartModel>>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/paged`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
@@ -84,6 +87,17 @@ export class CariKartlarService {
                     return envelope.data;
                 }
                 throw new Error(tryReadApiMessage(envelope) ?? 'Cari bakiye alinamadi.');
+            })
+        );
+    }
+
+    getTesisler(): Observable<MuhasebeTesisModel[]> {
+        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(
+            map((envelope) => {
+                if (envelope.success && envelope.data) {
+                    return envelope.data;
+                }
+                throw new Error(tryReadApiMessage(envelope) ?? 'Tesis listesi alinamadi.');
             })
         );
     }

@@ -13,4 +13,5 @@ public interface IYoneticiAdayService
     Task<List<YoneticiAdayDto>> GetRestoranGarsonAdaylariAsync(CancellationToken cancellationToken = default);
 
     Task<List<YoneticiAdayDto>> GetResepsiyonistAdaylariAsync(CancellationToken cancellationToken = default);
+    Task<List<YoneticiAdayDto>> GetMuhasebeciAdaylariAsync(CancellationToken cancellationToken = default);
 }

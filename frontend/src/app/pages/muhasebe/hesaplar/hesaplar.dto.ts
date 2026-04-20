@@ -1,5 +1,6 @@
 export interface HesapModel {
     id?: number;
+    tesisId?: number | null;
     ad: string;
     muhasebeHesapPlaniId: number;
     muhasebeTamKod?: string | null;
@@ -21,3 +22,8 @@ export interface HesapLookupModel {
 
 export interface CreateHesapRequest extends Omit<HesapModel, 'id' | 'muhasebeTamKod' | 'muhasebeHesapAdi'> {}
 export interface UpdateHesapRequest extends Omit<HesapModel, 'id' | 'muhasebeTamKod' | 'muhasebeHesapAdi'> {}
+
+export interface MuhasebeTesisModel {
+    id: number;
+    ad: string;
+}

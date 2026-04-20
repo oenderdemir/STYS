@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Depolar.Repositories;
 using STYS.Muhasebe.Hesaplar.Dtos;
@@ -20,6 +21,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
     private readonly IKasaBankaHesapRepository _kasaBankaHesapRepository;
     private readonly IDepoRepository _depoRepository;
     private readonly StysAppDbContext _dbContext;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public HesapService(
         IHesapRepository hesapRepository,
@@ -27,6 +29,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         IKasaBankaHesapRepository kasaBankaHesapRepository,
         IDepoRepository depoRepository,
         StysAppDbContext dbContext,
+        IUserAccessScopeService userAccessScopeService,
         IMapper mapper) : base(hesapRepository, mapper)
     {
         _hesapRepository = hesapRepository;
@@ -34,35 +37,61 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         _kasaBankaHesapRepository = kasaBankaHesapRepository;
         _depoRepository = depoRepository;
         _dbContext = dbContext;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<List<HesapDto>> GetDetailedListAsync(CancellationToken cancellationToken = default)
     {
         var items = await _hesapRepository.GetAllWithDetailsAsync(cancellationToken);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
+        }
         return items.Select(MapDetailDto).ToList();
     }
 
     public async Task<HesapDto?> GetDetailByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         var item = await _hesapRepository.GetDetailByIdAsync(id, cancellationToken);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (item is not null && scope.IsScoped && (!item.TesisId.HasValue || !scope.TesisIds.Contains(item.TesisId.Value)))
+        {
+            return null;
+        }
         return item is null ? null : MapDetailDto(item);
     }
 
     public async Task<List<HesapLookupDto>> GetKasaHesapLookupsAsync(CancellationToken cancellationToken = default)
     {
         var items = await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.NakitKasa, true, cancellationToken);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
+        }
         return items.Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
     }
 
     public async Task<List<HesapLookupDto>> GetBankaHesapLookupsAsync(CancellationToken cancellationToken = default)
     {
         var items = await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.Banka, true, cancellationToken);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
+        }
         return items.Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
     }
 
     public async Task<List<HesapLookupDto>> GetDepoLookupsAsync(CancellationToken cancellationToken = default)
     {
         var items = await _depoRepository.GetAllAsync();
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped)
+        {
+            items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
+        }
         return items.Where(x => x.AktifMi).OrderBy(x => x.Kod).ThenBy(x => x.Ad)
             .Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
     }
@@ -84,6 +113,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
 
     public override async Task<HesapDto> AddAsync(HesapDto dto)
     {
+        dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         await ValidateAndNormalizeAsync(dto, null);
         var created = await base.AddAsync(dto);
         await SyncLinksAsync(created.Id!.Value, dto.KasaHesapIds, dto.BankaHesapIds, dto.DepoIds);
@@ -97,6 +127,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
             throw new BaseException("Hesap id zorunludur.", 400);
         }
 
+        dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
         await ValidateAndNormalizeAsync(dto, dto.Id.Value);
         var updated = await base.UpdateAsync(dto);
         await SyncLinksAsync(updated.Id!.Value, dto.KasaHesapIds, dto.BankaHesapIds, dto.DepoIds);
@@ -105,6 +136,12 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
 
     public override async Task DeleteAsync(int id)
     {
+        var detail = await GetDetailByIdAsync(id);
+        if (detail is null)
+        {
+            throw new BaseException("Kayit bulunamadi.", 404);
+        }
+
         var kasaBankaLinks = await _dbContext.Set<HesapKasaBankaBaglanti>().Where(x => x.HesapId == id).ToListAsync();
         var depoLinks = await _dbContext.Set<HesapDepoBaglanti>().Where(x => x.HesapId == id).ToListAsync();
 
@@ -140,7 +177,11 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         var duplicate = await _hesapRepository.ExistsByAdAsync(dto.Ad, currentId);
         if (duplicate)
         {
-            throw new BaseException("Hesap adi benzersiz olmalidir.", 400);
+            var duplicateByScope = await _hesapRepository.AnyAsync(x => x.Ad == dto.Ad && x.TesisId == dto.TesisId && (!currentId.HasValue || x.Id != currentId.Value));
+            if (duplicateByScope)
+            {
+                throw new BaseException("Hesap adi ayni tesis altinda benzersiz olmalidir.", 400);
+            }
         }
 
         var muhasebe = await _muhasebeHesapPlaniRepository.GetByIdAsync(dto.MuhasebeHesapPlaniId);
@@ -151,7 +192,10 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
 
         if (dto.KasaHesapIds.Count > 0)
         {
-            var kasaSet = (await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.NakitKasa, true)).Select(x => x.Id).ToHashSet();
+            var kasaSet = (await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.NakitKasa, true))
+                .Where(x => x.TesisId == dto.TesisId)
+                .Select(x => x.Id)
+                .ToHashSet();
             if (dto.KasaHesapIds.Any(x => !kasaSet.Contains(x)))
             {
                 throw new BaseException("Secilen kasa hesaplarindan bazilari gecersiz.", 400);
@@ -160,7 +204,10 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
 
         if (dto.BankaHesapIds.Count > 0)
         {
-            var bankaSet = (await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.Banka, true)).Select(x => x.Id).ToHashSet();
+            var bankaSet = (await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.Banka, true))
+                .Where(x => x.TesisId == dto.TesisId)
+                .Select(x => x.Id)
+                .ToHashSet();
             if (dto.BankaHesapIds.Any(x => !bankaSet.Contains(x)))
             {
                 throw new BaseException("Secilen banka hesaplarindan bazilari gecersiz.", 400);
@@ -169,7 +216,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
 
         if (dto.DepoIds.Count > 0)
         {
-            var depoSet = (await _depoRepository.GetAllAsync()).Where(x => x.AktifMi).Select(x => x.Id).ToHashSet();
+            var depoSet = (await _depoRepository.GetAllAsync()).Where(x => x.AktifMi && x.TesisId == dto.TesisId).Select(x => x.Id).ToHashSet();
             if (dto.DepoIds.Any(x => !depoSet.Contains(x)))
             {
                 throw new BaseException("Secilen depolardan bazilari gecersiz.", 400);
@@ -239,6 +286,7 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         var dto = new HesapDto
         {
             Id = entity.Id,
+            TesisId = entity.TesisId,
             Ad = entity.Ad,
             MuhasebeHesapPlaniId = entity.MuhasebeHesapPlaniId,
             MuhasebeTamKod = entity.MuhasebeHesapPlani?.TamKod,
@@ -271,5 +319,47 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         dto.BankaHesapIds = dto.BankaHesapIds.Distinct().ToList();
 
         return dto;
+    }
+
+    private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var candidateTesisId = tesisId;
+
+        if (!candidateTesisId.HasValue && existingId.HasValue)
+        {
+            candidateTesisId = await _hesapRepository.Where(x => x.Id == existingId.Value).Select(x => x.TesisId).FirstOrDefaultAsync();
+        }
+
+        if (scope.IsScoped)
+        {
+            if (!candidateTesisId.HasValue)
+            {
+                if (scope.TesisIds.Count == 1)
+                {
+                    candidateTesisId = scope.TesisIds.First();
+                }
+                else
+                {
+                    throw new BaseException("Tesis secimi zorunludur.", 400);
+                }
+            }
+
+            if (!scope.TesisIds.Contains(candidateTesisId.Value))
+            {
+                throw new BaseException("Secilen tesis icin yetkiniz bulunmuyor.", 403);
+            }
+        }
+
+        if (candidateTesisId.HasValue && candidateTesisId.Value > 0)
+        {
+            var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == candidateTesisId.Value && x.AktifMi);
+            if (!tesisExists)
+            {
+                throw new BaseException("Secilen tesis bulunamadi.", 400);
+            }
+        }
+
+        return candidateTesisId is > 0 ? candidateTesisId : null;
     }
 }

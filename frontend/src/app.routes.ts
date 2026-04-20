@@ -59,6 +59,7 @@ import { StokHareketleriPage } from './app/pages/muhasebe/stok-hareketleri/stok-
 import { MuhasebeHesapPlaniPage } from './app/pages/muhasebe/muhasebe-hesap-plani/muhasebe-hesap-plani';
 import { KasaBankaHesaplariPage } from './app/pages/muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari';
 import { HesaplarPage } from './app/pages/muhasebe/hesaplar/hesaplar';
+import { PaketTurleriPage } from './app/pages/muhasebe/paket-turleri/paket-turleri';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -142,6 +143,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/depolar', component: DepolarPage, data: { breadcrumb: ['Muhasebe', 'Depolar'] } },
             { path: 'muhasebe/stok-hareketleri', component: StokHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Stok Hareketleri'] } },
             { path: 'muhasebe/hesap-plani', component: MuhasebeHesapPlaniPage, data: { breadcrumb: ['Muhasebe', 'Hesap Plani'] } },
+            { path: 'muhasebe/paket-turleri', component: PaketTurleriPage, data: { breadcrumb: ['Muhasebe', 'Paket Turleri'] } },
             { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes'), data: { breadcrumb: ['Ana Menu', 'UI Kit'] } },
             { path: 'documentation', component: Documentation, data: { breadcrumb: ['Sistem', 'Dokumantasyon'] } },

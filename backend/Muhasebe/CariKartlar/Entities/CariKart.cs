@@ -3,12 +3,15 @@ using STYS.Muhasebe.BankaHareketleri.Entities;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.CariKartlar.Entities;
 
 public class CariKart : BaseEntity<int>
 {
+    public int? TesisId { get; set; }
+
     [Required]
     [MaxLength(32)]
     public string CariTipi { get; set; } = CariKartTipleri.Musteri;
@@ -55,5 +58,6 @@ public class CariKart : BaseEntity<int>
     public ICollection<KasaHareket> KasaHareketler { get; set; } = [];
     public ICollection<BankaHareket> BankaHareketler { get; set; } = [];
     public ICollection<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri { get; set; } = [];
+    public Tesis? Tesis { get; set; }
 }
 

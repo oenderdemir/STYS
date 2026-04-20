@@ -136,6 +136,14 @@ public class TesisController : UIController
         return Ok(created);
     }
 
+    [HttpPost("{tesisId:int}/muhasebeci-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateMuhasebeciUser(int tesisId, [FromBody] UserDto dto)
+    {
+        var created = await _tesisService.CreateMuhasebeciUserAsync(tesisId, dto);
+        return Ok(created);
+    }
+
     private static Func<IQueryable<STYS.Tesisler.Entities.Tesis>, IOrderedQueryable<STYS.Tesisler.Entities.Tesis>>? BuildOrderBy(string? sortBy, string? sortDir)
     {
         if (string.IsNullOrWhiteSpace(sortBy))

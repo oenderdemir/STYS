@@ -21,7 +21,8 @@ public class StysScopedUserService : BaseUserService
         StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir,
         StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir,
         StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir,
-        StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir
+        StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
+        StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir
     ];
     private static readonly string[] AssignableMarkerRoleNames =
     [
@@ -29,7 +30,8 @@ public class StysScopedUserService : BaseUserService
         nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir),
         nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir),
         nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
+        nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir),
+        nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir)
     ];
 
     private readonly StysAppDbContext _stysDbContext;
@@ -500,6 +502,11 @@ public class StysScopedUserService : BaseUserService
             return StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir;
         }
 
+        if (string.Equals(markerPermission, StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir, StringComparison.OrdinalIgnoreCase))
+        {
+            return StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir;
+        }
+
         throw new InvalidOperationException("Desteklenmeyen atanabilir grup marker izni.");
     }
 
@@ -530,6 +537,11 @@ public class StysScopedUserService : BaseUserService
         if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir))
         {
             manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir));
+        }
+
+        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir))
+        {
+            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir));
         }
 
         return manageableMarkerRoleNames;

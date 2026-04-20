@@ -1,5 +1,6 @@
 export interface CariKartModel {
     id?: number;
+    tesisId?: number | null;
     cariTipi: string;
     cariKodu: string;
     unvanAdSoyad: string;
@@ -27,6 +28,11 @@ export interface CariBakiyeModel {
     toplamAlacak: number;
     bakiye: number;
     paraBirimi: string;
+}
+
+export interface MuhasebeTesisModel {
+    id: number;
+    ad: string;
 }
 
 export const CARI_TIPLERI: Array<{ label: string; value: string }> = [

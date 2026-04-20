@@ -13,13 +13,15 @@ public class TesisProfile : Profile
             .ForMember(dest => dest.GirisSaati, opt => opt.MapFrom(src => FormatSaat(src.GirisSaati)))
             .ForMember(dest => dest.CikisSaati, opt => opt.MapFrom(src => FormatSaat(src.CikisSaati)))
             .ForMember(dest => dest.YoneticiUserIds, opt => opt.MapFrom(src => src.Yoneticiler.Select(x => x.UserId)))
-            .ForMember(dest => dest.ResepsiyonistUserIds, opt => opt.MapFrom(src => src.Resepsiyonistler.Select(x => x.UserId)));
+            .ForMember(dest => dest.ResepsiyonistUserIds, opt => opt.MapFrom(src => src.Resepsiyonistler.Select(x => x.UserId)))
+            .ForMember(dest => dest.MuhasebeciUserIds, opt => opt.MapFrom(src => src.Muhasebeciler.Select(x => x.UserId)));
 
         CreateMap<TesisDto, Tesis>()
             .ForMember(dest => dest.GirisSaati, opt => opt.MapFrom(src => ParseSaat(src.GirisSaati, new TimeSpan(14, 0, 0))))
             .ForMember(dest => dest.CikisSaati, opt => opt.MapFrom(src => ParseSaat(src.CikisSaati, new TimeSpan(10, 0, 0))))
             .ForMember(dest => dest.Yoneticiler, opt => opt.Ignore())
-            .ForMember(dest => dest.Resepsiyonistler, opt => opt.Ignore());
+            .ForMember(dest => dest.Resepsiyonistler, opt => opt.Ignore())
+            .ForMember(dest => dest.Muhasebeciler, opt => opt.Ignore());
     }
 
     private static string FormatSaat(TimeSpan time)

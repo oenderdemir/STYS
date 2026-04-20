@@ -85,7 +85,9 @@ public class AccessScopeProvider : IAccessScopeProvider
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir)
                             || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
-                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir)))
+                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir)
+                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir)
+                            || ugr.Role.Name == nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir)))
                     || (ugr.Role.Domain == nameof(StructurePermissions.OdaTemizlikYonetimi)
                         && (ugr.Role.Name == nameof(StructurePermissions.OdaTemizlikYonetimi.View)
                             || ugr.Role.Name == nameof(StructurePermissions.OdaTemizlikYonetimi.Manage))))
@@ -107,7 +109,9 @@ public class AccessScopeProvider : IAccessScopeProvider
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir)
             || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir)
-            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir);
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir)
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir)
+            || groupMarkerSet.Contains(StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir);
 
         var managedTesisIds = await _stysDbContext.TesisYoneticileri
             .Where(x => x.UserId == currentUserId)
@@ -116,6 +120,12 @@ public class AccessScopeProvider : IAccessScopeProvider
             .ToListAsync(cancellationToken);
 
         var receptionistTesisIds = await _stysDbContext.TesisResepsiyonistleri
+            .Where(x => x.UserId == currentUserId)
+            .Select(x => x.TesisId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var accountantTesisIds = await _stysDbContext.TesisMuhasebecileri
             .Where(x => x.UserId == currentUserId)
             .Select(x => x.TesisId)
             .Distinct()
@@ -137,6 +147,7 @@ public class AccessScopeProvider : IAccessScopeProvider
 
         var directTesisIds = managedTesisIds
             .Concat(receptionistTesisIds)
+            .Concat(accountantTesisIds)
             .Concat(ownedTesisIdsForTemizlik)
             .Distinct()
             .ToHashSet();
@@ -250,6 +261,12 @@ public class AccessScopeProvider : IAccessScopeProvider
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        var accountantUserIds = await _stysDbContext.TesisMuhasebecileri
+            .Where(x => managedTesisIdSet.Contains(x.TesisId))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         var ownerVisibleUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
             .Where(x => x.TesisId.HasValue && managedTesisIdSet.Contains(x.TesisId.Value))
             .Select(x => x.UserId)
@@ -259,6 +276,7 @@ public class AccessScopeProvider : IAccessScopeProvider
         return tesisManagerUserIds
             .Concat(binaManagerUserIds)
             .Concat(receptionistUserIds)
+            .Concat(accountantUserIds)
             .Concat(ownerVisibleUserIds)
             .ToHashSet();
     }

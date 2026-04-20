@@ -1,4 +1,6 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
 using STYS.Muhasebe.CariHareketler.Dtos;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
@@ -12,17 +14,24 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
 {
     private readonly ICariHareketRepository _repository;
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public CariHareketService(ICariHareketRepository repository, ICariKartRepository cariKartRepository, IMapper mapper)
+    public CariHareketService(ICariHareketRepository repository, ICariKartRepository cariKartRepository, IUserAccessScopeService userAccessScopeService, IMapper mapper)
         : base(repository, mapper)
     {
         _repository = repository;
         _cariKartRepository = cariKartRepository;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<CariEkstreDto> GetEkstreAsync(int cariKartId, DateTime? baslangic, DateTime? bitis, CancellationToken cancellationToken = default)
     {
         var cari = await _cariKartRepository.GetByIdAsync(cariKartId) ?? throw new BaseException("Cari kart bulunamadi.", 404);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && (!cari.TesisId.HasValue || !scope.TesisIds.Contains(cari.TesisId.Value)))
+        {
+            throw new BaseException("Bu kayit icin yetkiniz bulunmuyor.", 403);
+        }
         var hareketler = await _repository.GetCariEkstresiAsync(cariKartId, baslangic, bitis, cancellationToken);
         var dtoHareketler = Mapper.Map<List<CariHareketDto>>(hareketler);
         return new CariEkstreDto
@@ -54,6 +63,38 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         return await base.UpdateAsync(dto);
     }
 
+    public override async Task<CariHareketDto?> GetByIdAsync(int id, Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetByIdAsync(id, includeQuery);
+    }
+
+    public override async Task<IEnumerable<CariHareketDto>> GetAllAsync(Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetAllAsync(includeQuery);
+    }
+
+    public override async Task<IEnumerable<CariHareketDto>> WhereAsync(System.Linq.Expressions.Expression<Func<CariHareket, bool>> predicate, Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.WhereAsync(predicate, includeQuery);
+    }
+
+    public override async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<CariHareketDto>> GetPagedAsync(
+        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+        System.Linq.Expressions.Expression<Func<CariHareket, bool>>? predicate = null,
+        Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include = null,
+        Func<IQueryable<CariHareket>, IOrderedQueryable<CariHareket>>? orderBy = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
     private async Task ValidateAsync(int cariKartId, string durum)
     {
         if (cariKartId <= 0)
@@ -67,9 +108,38 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
             throw new BaseException("Cari kart bulunamadi.", 400);
         }
 
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (scope.IsScoped)
+        {
+            var tesisId = await _cariKartRepository.Where(x => x.Id == cariKartId).Select(x => x.TesisId).FirstOrDefaultAsync();
+            if (!tesisId.HasValue || !scope.TesisIds.Contains(tesisId.Value))
+            {
+                throw new BaseException("Secilen cari kart icin yetkiniz bulunmuyor.", 403);
+            }
+        }
+
         if (durum != CariHareketDurumlari.Aktif && durum != CariHareketDurumlari.Iptal)
         {
             throw new BaseException("Durum gecersiz.", 400);
         }
+    }
+
+    private static Func<IQueryable<CariHareket>, IQueryable<CariHareket>> BuildScopedIncludeQuery(
+        DomainAccessScope scope,
+        Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include)
+    {
+        return query =>
+        {
+            var result = include is null ? query : include(query);
+            if (scope.IsScoped)
+            {
+                result = result.Where(x =>
+                    x.CariKart != null
+                    && x.CariKart.TesisId.HasValue
+                    && scope.TesisIds.Contains(x.CariKart.TesisId.Value));
+            }
+
+            return result;
+        };
     }
 }

@@ -19,7 +19,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { TasinirKodlariService } from '../tasinir-kodlari/tasinir-kodlari.service';
-import { MALZEME_TIPLERI, TasinirKartModel } from './tasinir-kartlari.dto';
+import { MALZEME_TIPLERI, MuhasebeTesisModel, PaketTuruOptionModel, TasinirKartModel } from './tasinir-kartlari.dto';
 import { TasinirKartlariService } from './tasinir-kartlari.service';
 
 @Component({
@@ -42,6 +42,7 @@ export class TasinirKartlariPage implements OnInit {
     dialogMode: 'create' | 'edit' = 'create';
 
     records: TasinirKartModel[] = [];
+    filteredRecords: TasinirKartModel[] = [];
     model: TasinirKartModel = this.createEmpty();
     pageNumber = 1;
     pageSize = 10;
@@ -50,11 +51,15 @@ export class TasinirKartlariPage implements OnInit {
     selectedTasinirKodOption: { label: string; value: number } | null = null;
     private tasinirKodSearchSeq = 0;
     readonly malzemeTipleri = MALZEME_TIPLERI;
+    paketTurleri: PaketTuruOptionModel[] = [];
+    paketTuruSecenekleri: Array<{ label: string; value: string }> = [];
+    tesisler: MuhasebeTesisModel[] = [];
+    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
+    selectedTesisId: number | null = null;
 
     ngOnInit(): void {
-        setTimeout(() => {
-            this.load(1, this.pageSize);
-        });
+        this.loadTesisler();
+        this.loadPaketTurleri();
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -66,12 +71,13 @@ export class TasinirKartlariPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (paged) => {
                 this.records = paged.items;
+                this.applyClientFilter();
                 this.pageNumber = paged.pageNumber;
                 this.pageSize = paged.pageSize;
                 this.totalRecords = paged.totalCount;
@@ -87,6 +93,7 @@ export class TasinirKartlariPage implements OnInit {
     openCreate(): void {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.model.tesisId = this.selectedTesisId;
         this.selectedTasinirKodOption = null;
         this.tasinirKodSearchResults = [];
         this.dialogVisible = true;
@@ -168,6 +175,7 @@ export class TasinirKartlariPage implements OnInit {
 
         this.saving = true;
         const payload = {
+            tesisId: this.model.tesisId ?? null,
             tasinirKodId: this.model.tasinirKodId,
             stokKodu: this.model.stokKodu.trim(),
             ad: this.model.ad.trim(),
@@ -226,8 +234,21 @@ export class TasinirKartlariPage implements OnInit {
         });
     }
 
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    getTesisAdi(tesisId?: number | null): string {
+        if (!tesisId) {
+            return '-';
+        }
+        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+    }
+
     private createEmpty(): TasinirKartModel {
         return {
+            tesisId: null,
             tasinirKodId: 0,
             stokKodu: '',
             ad: '',
@@ -240,6 +261,47 @@ export class TasinirKartlariPage implements OnInit {
             aktifMi: true,
             aciklama: null
         };
+    }
+
+    private applyClientFilter(): void {
+        if (!this.selectedTesisId) {
+            this.filteredRecords = [...this.records];
+            return;
+        }
+        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+    }
+
+    private loadTesisler(): void {
+        this.service.getTesisler().subscribe({
+            next: (items) => {
+                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
+                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
+                if (!this.selectedTesisId && this.tesisler.length > 0) {
+                    this.selectedTesisId = this.tesisler[0].id;
+                }
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.load(1, this.pageSize);
+            }
+        });
+    }
+
+    private loadPaketTurleri(): void {
+        this.service.getPaketTurleri().subscribe({
+            next: (items) => {
+                this.paketTurleri = items.filter((x) => x.aktifMi);
+                this.paketTuruSecenekleri = this.paketTurleri
+                    .map((x) => ({ label: `${x.ad} (${x.kisaAd})`, value: x.ad }))
+                    .sort((a, b) => a.label.localeCompare(b.label));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private showError(error: unknown): void {

@@ -4,6 +4,7 @@ namespace STYS.Muhasebe.KasaBankaHesaplari.Dtos;
 
 public class KasaBankaHesapDto : BaseRdbmsDto<int>
 {
+    public int? TesisId { get; set; }
     public string Tip { get; set; } = string.Empty;
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
@@ -22,6 +23,7 @@ public class KasaBankaHesapDto : BaseRdbmsDto<int>
 
 public class CreateKasaBankaHesapRequest
 {
+    public int? TesisId { get; set; }
     public string Tip { get; set; } = string.Empty;
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;

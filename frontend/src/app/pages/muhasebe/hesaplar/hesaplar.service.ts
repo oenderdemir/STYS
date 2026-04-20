@@ -3,15 +3,18 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateHesapRequest, HesapLookupModel, HesapModel, UpdateHesapRequest } from './hesaplar.dto';
+import { CreateHesapRequest, HesapLookupModel, HesapModel, MuhasebeTesisModel, UpdateHesapRequest } from './hesaplar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class HesaplarService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<HesapModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<HesapModel>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         return this.http.get<ApiResponse<PagedResponseDto<HesapModel>>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/paged`, { params }).pipe(map(this.unwrapOne));
     }
 
@@ -52,6 +55,10 @@ export class HesaplarService {
     getMuhasebeKodlari(startsWith = ''): Observable<HesapLookupModel[]> {
         const params = startsWith ? new HttpParams().set('startsWith', startsWith) : undefined;
         return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params }).pipe(map(this.unwrapOne));
+    }
+
+    getTesisler(): Observable<MuhasebeTesisModel[]> {
+        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrapOne));
     }
 
     private unwrapOne<T>(envelope: ApiResponse<T>): T {

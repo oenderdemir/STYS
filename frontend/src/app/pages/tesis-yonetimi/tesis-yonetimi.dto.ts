@@ -11,4 +11,5 @@ export interface TesisDto {
     aktifMi: boolean;
     yoneticiUserIds?: string[] | null;
     resepsiyonistUserIds?: string[] | null;
+    muhasebeciUserIds?: string[] | null;
 }

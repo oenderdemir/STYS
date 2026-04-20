@@ -6,14 +6,28 @@
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
+    <ng-template #end>
+        <div class="w-18rem">
+            <p-select
+                [options]="tesisSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedTesisId"
+                placeholder="Tesis seciniz"
+                appendTo="body"
+                class="w-full"
+                (ngModelChange)="onTesisFilterChange()" />
+        </div>
+    </ng-template>
 </p-toolbar>
 
-<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
     <ng-template #caption><h5 class="m-0">Tasinir Kartlari</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Stok Kodu</th>
             <th>Ad</th>
+            <th>Tesis</th>
             <th>Malzeme Tipi</th>
             <th>Birim</th>
             <th>KDV</th>
@@ -25,6 +39,7 @@
         <tr>
             <td>{{ item.stokKodu }}</td>
             <td>{{ item.ad }}</td>
+            <td>{{ getTesisAdi(item.tesisId) }}</td>
             <td>{{ item.malzemeTipi }}</td>
             <td>{{ item.birim }}</td>
             <td>{{ item.kdvOrani }}%</td>
@@ -41,6 +56,10 @@
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Tasinir Kart Duzenle' : 'Yeni Tasinir Kart'" [style]="{ width: '52rem', 'max-width': '96vw' }">
     <div class="grid grid-cols-12 gap-3 mt-1">
+        <div class="col-span-12 md:col-span-5">
+            <label class="block font-medium mb-2">Tesis</label>
+            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="model.tesisId" />
+        </div>
         <div class="col-span-12 md:col-span-7">
             <label class="block font-medium mb-2">Tasinir Kodu</label>
             <p-autocomplete
@@ -71,7 +90,7 @@
         </div>
         <div class="col-span-12 md:col-span-3">
             <label class="block font-medium mb-2">Birim</label>
-            <input pInputText class="w-full" [(ngModel)]="model.birim" maxlength="32" />
+            <p-select class="w-full" [options]="paketTuruSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.birim" appendTo="body" [filter]="true" filterBy="label" />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Malzeme Tipi</label>

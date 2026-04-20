@@ -2,6 +2,7 @@ export type KasaBankaHesapTipi = 'NakitKasa' | 'Banka';
 
 export interface KasaBankaHesapModel {
     id?: number;
+    tesisId?: number | null;
     tip: KasaBankaHesapTipi;
     kod: string;
     ad: string;
@@ -25,3 +26,8 @@ export const KASA_BANKA_HESAP_TIPLERI: Array<{ label: string; value: KasaBankaHe
     { label: 'Nakit Kasa', value: 'NakitKasa' },
     { label: 'Banka', value: 'Banka' }
 ];
+
+export interface MuhasebeTesisModel {
+    id: number;
+    ad: string;
+}

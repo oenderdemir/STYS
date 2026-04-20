@@ -4,6 +4,7 @@ namespace STYS.Muhasebe.Hesaplar.Dtos;
 
 public class HesapDto : BaseRdbmsDto<int>
 {
+    public int? TesisId { get; set; }
     public string Ad { get; set; } = string.Empty;
     public int MuhasebeHesapPlaniId { get; set; }
     public string? MuhasebeTamKod { get; set; }
@@ -19,6 +20,7 @@ public class HesapDto : BaseRdbmsDto<int>
 
 public class CreateHesapRequest
 {
+    public int? TesisId { get; set; }
     public string Ad { get; set; } = string.Empty;
     public int MuhasebeHesapPlaniId { get; set; }
     public bool GenelHesapMi { get; set; }

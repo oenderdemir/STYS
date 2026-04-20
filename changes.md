@@ -3153,3 +3153,113 @@ et10.0-windows, UseWindowsForms=true).
 - [2026-04-19] Frontend eklendi: `src/app/pages/muhasebe/hesaplar` sayfasi (liste + dialog, coklu baglama secimleri).
 - [2026-04-19] Route eklendi: `/muhasebe/hesaplar`.
 - [2026-04-19] Migration eklendi: `20260419202646_AddMuhasebeHesaplarAndBindings` (tablo + index + FK + menu/role seed).
+- [2026-04-19] Muhasebe tesis-scope genisletildi: `CariKart`, `KasaBankaHesap`, `Hesap`, `TasinirKart` varliklarina `TesisId` alani eklendi; servislerde read/write scope kontrolu zorunlu hale getirildi (scoped kullanici sadece atanmis tesis verilerini gorebilir/yazabilir).
+- [2026-04-19] Tesis-muhasebeci iliskisi eklendi: yeni `dbo.TesisMuhasebecileri` modeli/repository/service akisi ile tesise muhasebeci atama desteklendi (resepsiyonist mantigi ile).
+- [2026-04-19] Kullanici atama markerlari eklendi: `KullaniciAtama.MuhasebeciAtanabilir` ve `KullaniciAtama.MuhasebeciAtayabilir`.
+- [2026-04-19] Scope altyapisi guncellendi: AccessScope, YoneticiAday ve scoped user servisleri `TesisMuhasebecileri` uzerinden muhasebeci kapsamlarini hesaplayacak sekilde genisletildi.
+- [2026-04-19] Tesis Yonetimi UI guncellendi: tesis dialoguna `Muhasebeciler` coklu secimi eklendi; aday listesi `/ui/yoneticiaday/muhasebeciler` endpointinden cekiliyor.
+- [2026-04-19] Yeni migration eklendi: `20260419223000_AddMuhasebeTesisScopeAndMuhasebeciAssignments`.
+  - `dbo.TesisMuhasebecileri` tablo/FK/index
+  - Muhasebe tablolarina `TesisId` kolon + FK/index/benzersizlik normalizasyonu
+  - `MuhasebeciGrubu` ve `MuhasebeciAtanabilir/Atayabilir` rol-grup seed/atama
+
+## Tur 126 - Muhasebe FE Tesis Secimi / Listeleme Iyilestirmesi
+
+### Guncellenen Ekranlar
+- frontend/src/app/pages/muhasebe/cari-kartlar
+- frontend/src/app/pages/muhasebe/kasa-banka-hesaplari
+- frontend/src/app/pages/muhasebe/hesaplar
+- frontend/src/app/pages/muhasebe/tasinir-kartlari
+- frontend/src/app/pages/muhasebe/depolar
+
+### Yapilanlar
+- CRUD dialoglarina `Tesis` secimi eklendi; create/update payload'larina `tesisId` dahil edildi.
+- Liste tablolarina `Tesis` kolonu eklendi.
+- Ust alana tesis filtre dropdown'u eklendi.
+- Servislere `getTesisler()` metodu eklendi (`/ui/rezervasyon/tesisler`).
+- `getPaged` cagrilarina opsiyonel `tesisId` query param destegi eklendi.
+- Depolar ekranindaki sayisal `Tesis Id` girisi dropdown secime cevrildi.
+
+### Build
+- Frontend: BASARILI (`npm run build`)
+
+## Tur 127 - StysAppDbContext Migration Invalid column name `TesisId` Duzeltmesi
+
+### Sorun
+- `20260419223000_AddMuhasebeTesisScopeAndMuhasebeciAssignments` migration'i tek SQL batch icinde hem `TesisId` kolonunu ekleyip hem de ayni kolona FK/index olusturuyordu.
+- SQL Server derleme asamasinda ayni batch icindeki yeni kolonu gormedigi icin `Invalid column name 'TesisId'` hatasi olusuyordu.
+
+### Duzeltme
+- `backend/Infrastructure/EntityFramework/Migrations/20260419223000_AddMuhasebeTesisScopeAndMuhasebeciAssignments.cs`
+  - `Up` icindeki SQL iki ayri `migrationBuilder.Sql(...)` cagrisi olacak sekilde bolundu:
+    1. tablo/kolon olusturma (`TesisId` add)
+    2. FK + index + rol/grup seed islemleri
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `dotnet ef database update --context StysAppDbContext --no-build` -> BASARILI (`Done.`)
+
+## Tur 128 - Global Paket Turleri Modulu (Tesis Bagimsiz)
+
+### Backend
+- Yeni muhasebe modulu eklendi: `backend/Muhasebe/PaketTurleri`
+  - `Entities/PaketTuru.cs`
+  - `Dtos/PaketTuruDtos.cs`
+  - `Repositories/IPaketTuruRepository.cs`, `PaketTuruRepository.cs`
+  - `Services/IPaketTuruService.cs`, `PaketTuruService.cs`
+  - `Controllers/PaketTurleriController.cs`
+  - `Mapping/PaketTuruProfile.cs`
+- API endpointi acildi: `api/muhasebe/paket-turleri` (list/paged/byId/create/update/delete)
+- `StructurePermissions` icine yeni domain eklendi:
+  - `PaketTuruYonetimi.Menu`
+  - `PaketTuruYonetimi.View`
+  - `PaketTuruYonetimi.Manage`
+- `StysAppDbContext` guncellendi:
+  - `DbSet<PaketTuru>`
+  - `muhasebe.PaketTurleri` tablo konfigurasyonu (unique `Ad`, unique `KisaAd`, index `AktifMi`)
+
+### Migration
+- Yeni migration eklendi: `20260420080427_AddMuhasebePaketTurleri`
+  - `muhasebe.PaketTurleri` tablosu olusturuldu.
+  - Varsayilan global paket turleri seed edildi:
+    - Adet, Kilogram, Cuval, Kasa, Koli, Teneke, Kova, Paket, Litre, Demet
+  - Menu/permission seed eklendi:
+    - `PaketTuruYonetimi` role'leri (`Menu/View/Manage`)
+    - `Muhasebe` ana menu alti `muhasebe/paket-turleri` menu item
+    - Admin, TesisYoneticiGrubu ve MuhasebeciGrubu role atamalari
+
+### Frontend
+- Yeni ekran eklendi: `frontend/src/app/pages/muhasebe/paket-turleri`
+  - `paket-turleri.dto.ts`
+  - `paket-turleri.service.ts`
+  - `paket-turleri.ts`
+  - `paket-turleri.html`
+- Route eklendi:
+  - `muhasebe/paket-turleri`
+
+### Entegrasyon
+- `tasinir-kartlari` formundaki `Birim` alani serbest text yerine paket turu secimi olacak sekilde baglandi.
+  - `TasinirKartlariService` icine `getPaketTurleri()` eklendi.
+  - Dialog acilisinda aktif paket turleri yuklenip dropdown'da listeleniyor.
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
+## Tur 129 - Paket Turleri Seed (Referans Gorsel)
+
+- Yeni migration eklendi: `20260420123000_SeedPaketTurleriFromReferenceImage`
+  - Gorseldeki paket turleri idempotent sekilde seed edildi:
+    - Adet (Ad.)
+    - Kilogram (Kg.)
+    - Cuval (Cuv.)
+    - Kasa (Kas.)
+    - Koli (Kol.)
+    - Teneke (Ten.)
+    - Kova (Kov.)
+    - Paket (Pk.)
+    - Lire (L.)
+    - Demet (Dm.)
+  - Onceki seedde bulunan `Litre` kaydi `Lire` olarak normalize edildi.
+- Build dogrulamasi:
+  - `dotnet build backend/STYS.csproj` -> BASARILI

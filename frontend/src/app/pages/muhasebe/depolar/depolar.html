@@ -6,15 +6,28 @@
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
+    <ng-template #end>
+        <div class="w-18rem">
+            <p-select
+                [options]="tesisSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="selectedTesisId"
+                placeholder="Tesis seciniz"
+                appendTo="body"
+                class="w-full"
+                (ngModelChange)="onTesisFilterChange()" />
+        </div>
+    </ng-template>
 </p-toolbar>
 
-<p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '64rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '64rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
     <ng-template #caption><h5 class="m-0">Depolar</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Kod</th>
             <th>Ad</th>
-            <th>Tesis Id</th>
+            <th>Tesis</th>
             <th>Durum</th>
             <th style="width: 10rem">Islem</th>
         </tr>
@@ -23,7 +36,7 @@
         <tr>
             <td>{{ item.kod }}</td>
             <td>{{ item.ad }}</td>
-            <td>{{ item.tesisId || '-' }}</td>
+            <td>{{ getTesisAdi(item.tesisId) }}</td>
             <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
             <td>
                 <div class="flex gap-2">
@@ -42,8 +55,8 @@
             <input pInputText class="w-full" [(ngModel)]="model.kod" maxlength="64" />
         </div>
         <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Tesis Id (opsiyonel)</label>
-            <p-inputnumber [(ngModel)]="model.tesisId" [useGrouping]="false" [min]="1" class="w-full" inputStyleClass="w-full" />
+            <label class="block font-medium mb-2">Tesis</label>
+            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>

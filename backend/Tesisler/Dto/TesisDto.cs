@@ -34,4 +34,6 @@ public class TesisDto : BaseRdbmsDto<int>
     public ICollection<Guid>? YoneticiUserIds { get; set; }
 
     public ICollection<Guid>? ResepsiyonistUserIds { get; set; }
+
+    public ICollection<Guid>? MuhasebeciUserIds { get; set; }
 }

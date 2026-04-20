@@ -171,6 +171,51 @@ public class YoneticiAdayService : IYoneticiAdayService
         return await QueryUsersAsCandidateDto(query, cancellationToken);
     }
 
+    public async Task<List<YoneticiAdayDto>> GetMuhasebeciAdaylariAsync(CancellationToken cancellationToken = default)
+    {
+        var muhasebeciCandidateUserIds = await GetUserIdsByTargetGroupMarkerAsync(
+            StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir,
+            cancellationToken);
+
+        if (muhasebeciCandidateUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var muhasebeciUserIds = muhasebeciCandidateUserIds;
+
+        if (scope.IsScoped)
+        {
+            var scopedMuhasebeciUserIds = await _stysDbContext.TesisMuhasebecileri
+                .Where(x => scope.TesisIds.Contains(x.TesisId))
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var ownerAllowedMuhasebeciUserIds = await GetOwnerAllowedUserIdsAsync(
+                muhasebeciCandidateUserIds,
+                scope,
+                cancellationToken);
+
+            muhasebeciUserIds = scopedMuhasebeciUserIds
+                .Concat(ownerAllowedMuhasebeciUserIds)
+                .Distinct()
+                .ToList();
+        }
+
+        if (muhasebeciUserIds.Count == 0)
+        {
+            return [];
+        }
+
+        var query = _userRepository
+            .Where(x => x.Status != UserStatus.Blocked)
+            .Where(x => muhasebeciUserIds.Contains(x.Id));
+
+        return await QueryUsersAsCandidateDto(query, cancellationToken);
+    }
+
     private async Task<HashSet<Guid>> GetScopedUserIdsAsync(DomainAccessScope scope, CancellationToken cancellationToken)
     {
         var allTesisManagerUserIds = await GetUserIdsByTargetGroupMarkerAsync(
@@ -185,6 +230,9 @@ public class YoneticiAdayService : IYoneticiAdayService
         var allReceptionistUserIds = await GetUserIdsByTargetGroupMarkerAsync(
             StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
             cancellationToken);
+        var allMuhasebeciUserIds = await GetUserIdsByTargetGroupMarkerAsync(
+            StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir,
+            cancellationToken);
 
         var tesisManagerUserIds = await _stysDbContext.TesisYoneticileri
             .Where(x => scope.TesisIds.Contains(x.TesisId))
@@ -193,6 +241,12 @@ public class YoneticiAdayService : IYoneticiAdayService
             .ToListAsync(cancellationToken);
 
         var receptionistUserIds = await _stysDbContext.TesisResepsiyonistleri
+            .Where(x => scope.TesisIds.Contains(x.TesisId))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var muhasebeciUserIds = await _stysDbContext.TesisMuhasebecileri
             .Where(x => scope.TesisIds.Contains(x.TesisId))
             .Select(x => x.UserId)
             .Distinct()
@@ -227,6 +281,10 @@ public class YoneticiAdayService : IYoneticiAdayService
             allReceptionistUserIds,
             scope,
             cancellationToken);
+        var ownerAllowedMuhasebeciUserIds = await GetOwnerAllowedUserIdsAsync(
+            allMuhasebeciUserIds,
+            scope,
+            cancellationToken);
 
         var ownerAllowedRestoranGarsonUserIds = await GetOwnerAllowedUserIdsAsync(
             allRestoranGarsonUserIds,
@@ -237,6 +295,8 @@ public class YoneticiAdayService : IYoneticiAdayService
             .Concat(ownerAllowedTesisManagerUserIds)
             .Concat(receptionistUserIds)
             .Concat(ownerAllowedReceptionistUserIds)
+            .Concat(muhasebeciUserIds)
+            .Concat(ownerAllowedMuhasebeciUserIds)
             .Concat(restoranGarsonUserIds)
             .Concat(ownerAllowedRestoranGarsonUserIds)
             .Concat(binaManagerUserIds)

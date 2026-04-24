@@ -21,48 +21,145 @@
     </ng-template>
 </p-toolbar>
 
-<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '64rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
-    <ng-template #caption><h5 class="m-0">Depolar</h5></ng-template>
+<p-treeTable [value]="treeRecords" [loading]="loading" [tableStyle]="{ 'min-width': '88rem' }">
+    <ng-template #caption>
+        <h5 class="m-0">Depolar (Agac)</h5>
+    </ng-template>
+
     <ng-template #header>
         <tr>
-            <th>Kod</th>
-            <th>Ad</th>
-            <th>Tesis</th>
-            <th>Durum</th>
-            <th style="width: 10rem">Islem</th>
+            <th style="width: 22%">Kod</th>
+            <th style="width: 24%">Depo Adi</th>
+            <th style="width: 16%">Tesis</th>
+            <th style="width: 18%">Ust Depo</th>
+            <th style="width: 12%">Muhasebe Kodu</th>
+            <th style="width: 8%">Durum</th>
+            <th style="width: 10%">Islem</th>
         </tr>
     </ng-template>
-    <ng-template #body let-item>
-        <tr>
-            <td>{{ item.kod }}</td>
-            <td>{{ item.ad }}</td>
-            <td>{{ getTesisAdi(item.tesisId) }}</td>
-            <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+
+    <ng-template #body let-rowNode let-rowData="rowData">
+        <tr [ttRow]="rowNode">
+            <td>
+                <p-treeTableToggler [rowNode]="rowNode" />
+                {{ rowData.kod }}
+            </td>
+            <td>{{ rowData.ad }}</td>
+            <td>{{ getTesisAdi(rowData.tesisId) }}</td>
+            <td>{{ getParentDepoAdi(rowData.ustDepoId) }}</td>
+            <td>{{ getMuhasebeKodLabel(rowData.muhasebeHesapPlaniId) }}</td>
+            <td>
+                <p-tag [value]="rowData.aktifMi ? 'Aktif' : 'Pasif'" [severity]="rowData.aktifMi ? 'success' : 'secondary'" [rounded]="true" />
+            </td>
             <td>
                 <div class="flex gap-2">
-                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
-                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(rowData)" />
+                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(rowData)" />
                 </div>
             </td>
         </tr>
     </ng-template>
-</p-table>
+</p-treeTable>
 
-<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Depo Duzenle' : 'Yeni Depo'" [style]="{ width: '42rem', 'max-width': '95vw' }">
-    <div class="grid grid-cols-12 gap-3">
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Kod</label>
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Depo Duzenle' : 'Yeni Depo'" [style]="{ width: '78rem', 'max-width': '98vw' }">
+    <div class="grid grid-cols-12 gap-3 mt-1">
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Tesis</label>
+            <p-select
+                class="w-full"
+                [options]="formTesisSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                [(ngModel)]="model.tesisId"
+                appendTo="body"
+                (ngModelChange)="onFormTesisChange()" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Ust Depo</label>
+            <p-select class="w-full" [options]="parentDepoSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.ustDepoId" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Muhasebe Kodu</label>
+            <p-select class="w-full" [options]="muhasebeKodSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.muhasebeHesapPlaniId" appendTo="body" [filter]="true" filterBy="label" />
+        </div>
+
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Depo Kodu</label>
             <input pInputText class="w-full" [(ngModel)]="model.kod" maxlength="64" />
         </div>
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Tesis</label>
-            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" />
-        </div>
-        <div class="col-span-12">
-            <label class="block font-medium mb-2">Ad</label>
+        <div class="col-span-12 md:col-span-8">
+            <label class="block font-medium mb-2">Depo Adi</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="200" />
         </div>
-        <div class="col-span-12 flex align-items-center gap-2"><input id="depoAktif" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="depoAktif">Aktif</label></div>
+
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Malzeme Kayit Tipi</label>
+            <div class="flex flex-wrap gap-4">
+                <div class="flex align-items-center gap-2" *ngFor="let option of malzemeKayitTipiOptions; let i = index">
+                    <p-radioButton [inputId]="'malzemeTipi-' + i" name="malzemeKayitTipi" [value]="option.value" [(ngModel)]="model.malzemeKayitTipi"></p-radioButton>
+                    <label [for]="'malzemeTipi-' + i">{{ option.label }}</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-4">
+            <div class="flex align-items-center gap-2">
+                <p-checkbox inputId="satisFiyatlariniGoster" [(ngModel)]="model.satisFiyatlariniGoster" [binary]="true" />
+                <label for="satisFiyatlariniGoster">Satis Fiyatlarini Goster</label>
+            </div>
+            <div class="flex align-items-center gap-2">
+                <p-checkbox inputId="avansGenel" [(ngModel)]="model.avansGenel" [binary]="true" />
+                <label for="avansGenel">Avans Genel</label>
+            </div>
+        </div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2">
+            <p-checkbox inputId="depoAktif" [(ngModel)]="model.aktifMi" [binary]="true" />
+            <label for="depoAktif">Aktif</label>
+        </div>
+
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Aciklama</label>
+            <input pInputText class="w-full" [(ngModel)]="model.aciklama" maxlength="1024" />
+        </div>
+    </div>
+
+    <div class="mt-4 border-1 surface-border border-round p-3">
+        <div class="flex justify-content-between align-items-center mb-3">
+            <div class="font-semibold">Depo Cikis Gruplari</div>
+            <p-button icon="pi pi-plus" label="Satir Ekle" size="small" (onClick)="addCikisGrupRow()" />
+        </div>
+
+        <p-table [value]="model.cikisGruplari" dataKey="id" [tableStyle]="{ 'min-width': '48rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Cikis Grup Adi</th>
+                    <th>Kar %</th>
+                    <th>Lokasyon</th>
+                    <th style="width: 6rem">Islem</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-row let-rowIndex="rowIndex">
+                <tr>
+                    <td>
+                        <input pInputText class="w-full" [(ngModel)]="row.cikisGrupAdi" />
+                    </td>
+                    <td>
+                        <p-inputnumber [(ngModel)]="row.karOrani" [min]="0" [max]="999.99" [minFractionDigits]="0" [maxFractionDigits]="2" class="w-full" inputStyleClass="w-full" />
+                    </td>
+                    <td>
+                        <p-inputnumber [(ngModel)]="row.lokasyonId" [min]="1" [useGrouping]="false" class="w-full" inputStyleClass="w-full" />
+                    </td>
+                    <td>
+                        <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="removeCikisGrupRow(rowIndex)" />
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+                <tr>
+                    <td colspan="4" class="text-center text-color-secondary">Henuz cikis grubu eklenmedi.</td>
+                </tr>
+            </ng-template>
+        </p-table>
     </div>
 
     <ng-template #footer>

@@ -3,15 +3,29 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateDepoRequest, DepoModel, MuhasebeTesisModel, UpdateDepoRequest } from './depolar.dto';
+import { CreateDepoRequest, DepoModel, MuhasebeHesapLookupModel, MuhasebeTesisModel, UpdateDepoRequest } from './depolar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class DepolarService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(): Observable<DepoModel[]> {
-        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar`).pipe(map(this.unwrap<DepoModel[]>('Depolar alinamadi.')));
+    getAll(tesisId?: number | null): Observable<DepoModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depolar alinamadi.')));
+    }
+
+    getTree(tesisId?: number | null): Observable<DepoModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar/tree`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depo agaci alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<DepoModel>> {
@@ -41,6 +55,17 @@ export class DepolarService {
 
     getTesisler(): Observable<MuhasebeTesisModel[]> {
         return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrap<MuhasebeTesisModel[]>('Tesis listesi alinamadi.')));
+    }
+
+    getMuhasebeKodlari(startsWith?: string): Observable<MuhasebeHesapLookupModel[]> {
+        let params = new HttpParams();
+        if (startsWith && startsWith.trim().length > 0) {
+            params = params.set('startsWith', startsWith.trim());
+        }
+
+        return this.http
+            .get<ApiResponse<MuhasebeHesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params })
+            .pipe(map(this.unwrap<MuhasebeHesapLookupModel[]>('Muhasebe kodlari alinamadi.')));
     }
 
     private unwrap<T>(fallback: string) {

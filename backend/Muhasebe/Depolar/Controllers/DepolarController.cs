@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Muhasebe.Depolar.Dtos;
+using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Depolar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -23,13 +24,42 @@ public class DepolarController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.DepoYonetimi.View)]
-    public async Task<ActionResult<List<DepoDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderBy(x => x.Kod).ThenBy(x => x.Id).ToList());
+    public async Task<ActionResult<List<DepoDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var items = await _service.GetAllAsync();
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value);
+        }
+
+        return Ok(items.OrderBy(x => x.Kod).ThenBy(x => x.Id).ToList());
+    }
+
+    [HttpGet("tree")]
+    [Permission(StructurePermissions.DepoYonetimi.View)]
+    public async Task<ActionResult<List<DepoDto>>> GetTree([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var items = await _service.GetAllAsync();
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value);
+        }
+
+        return Ok(items.OrderBy(x => x.Kod).ThenBy(x => x.Id).ToList());
+    }
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.DepoYonetimi.View)]
-    public async Task<ActionResult<PagedResult<DepoDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.Kod).ThenBy(x => x.Id)));
+    public async Task<ActionResult<PagedResult<DepoDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        System.Linq.Expressions.Expression<Func<Depo, bool>>? predicate = null;
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            predicate = x => x.TesisId == tesisId.Value;
+        }
+
+        return Ok(await _service.GetPagedAsync(request, predicate, orderBy: q => q.OrderBy(x => x.Kod).ThenBy(x => x.Id)));
+    }
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.DepoYonetimi.View)]

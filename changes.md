@@ -3263,3 +3263,55 @@ et10.0-windows, UseWindowsForms=true).
   - Onceki seedde bulunan `Litre` kaydi `Lire` olarak normalize edildi.
 - Build dogrulamasi:
   - `dotnet build backend/STYS.csproj` -> BASARILI
+
+## Tur 130 - Depo Hiyerarsisi ve Depo Cikis Gruplari Gelistirmesi
+
+### Backend
+- `Depo` modeli genisletildi:
+  - `UstDepoId`, `UstDepo`, `AltDepolar`
+  - `MuhasebeHesapPlaniId`
+  - `MalzemeKayitTipi` (enum: `MalzemeleriAyriKayittaTut`, `FiyatFarkliMalzemeleriAyriKayittaTut`, `MalzemeleriAyniKayittaTut`)
+  - `SatisFiyatlariniGoster`, `AvansGenel`
+  - `DepoCikisGruplari`
+- Yeni entity eklendi: `DepoCikisGrup`
+  - `DepoId`, `CikisGrupAdi`, `KarOrani`, `LokasyonId`
+- DTO/request genisletildi:
+  - `DepoDto`, `CreateDepoRequest`, `UpdateDepoRequest`
+  - `DepoCikisGrupDto`, `CreateDepoCikisGrupRequest`
+- `DepoService` guncellendi:
+  - Ust depo validasyonlari (aynı tesis, kendisini parent secememe, dongu engeli)
+  - Muhasebe kodu validasyonu
+  - Cikis grup satirlarini create/update akışında senkronize eden logic
+  - Alt depo varsa silmeyi engelleyen kontrol
+- `DepolarController` guncellendi:
+  - `GET /api/muhasebe/depolar` icin opsiyonel `tesisId` filtre
+  - `GET /api/muhasebe/depolar/tree` eklendi
+  - `GET /api/muhasebe/depolar/paged` icin `tesisId` filtre destegi
+- `StysAppDbContext` guncellendi:
+  - `DbSet<DepoCikisGrup>`
+  - `Depo` iliski/index/alan konfigleri
+  - `DepoCikisGruplari` tablo konfigi
+
+### Migration
+- Yeni migration eklendi: `20260424083818_AddDepoHierarchyAndDepotOutputGroups`
+  - `muhasebe.Depolar` tablosuna yeni kolonlar
+  - self-reference FK (`UstDepoId`)
+  - muhasebe hesap plani FK (`MuhasebeHesapPlaniId`)
+  - `muhasebe.DepoCikisGruplari` tablosu
+  - ilgili indexler
+
+### Frontend (Angular)
+- `muhasebe/depolar` modulu guncellendi:
+  - yeni model alanlari eklendi
+  - `malzeme kayit tipi` radio group
+  - `satis fiyatlarini goster`, `avans genel`, `aktif` checkbox alanlari
+  - `ust depo` ve `muhasebe kodu` secimleri
+  - cikis gruplari icin alt grid (satir ekle/sil)
+- Listeleme `p-treeTable` formatina gecirildi (depo/agac gorunumu)
+- Ust depo seciminde:
+  - secilen tesisin depolari listelenir
+  - kendisi ve alt depolari parent seciminden dislanir
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)

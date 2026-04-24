@@ -139,6 +139,7 @@ public class StysAppDbContext : DbContext
     public DbSet<TasinirKod> TasinirKodlar => Set<TasinirKod>();
     public DbSet<TasinirKart> TasinirKartlar => Set<TasinirKart>();
     public DbSet<Depo> Depolar => Set<Depo>();
+    public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -1775,6 +1776,10 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<Depo>(entity =>
         {
             entity.ToTable("Depolar", muhasebeSchema);
+            entity.Property(x => x.MalzemeKayitTipi)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
             entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
@@ -1783,10 +1788,40 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.TesisId, x.Ad })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UstDepoId)
+                .HasFilter("[IsDeleted] = 0 AND [UstDepoId] IS NOT NULL");
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId)
+                .HasFilter("[IsDeleted] = 0 AND [MuhasebeHesapPlaniId] IS NOT NULL");
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.UstDepo)
+                .WithMany(x => x.AltDepolar)
+                .HasForeignKey(x => x.UstDepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DepoCikisGrup>(entity =>
+        {
+            entity.ToTable("DepoCikisGruplari", muhasebeSchema);
+            entity.Property(x => x.CikisGrupAdi).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.KarOrani).HasPrecision(5, 2);
+            entity.HasIndex(x => x.DepoId)
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.DepoId, x.CikisGrupAdi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Depo)
+                .WithMany(x => x.DepoCikisGruplari)
+                .HasForeignKey(x => x.DepoId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

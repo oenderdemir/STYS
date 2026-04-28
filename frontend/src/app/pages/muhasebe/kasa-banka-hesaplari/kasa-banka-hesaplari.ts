@@ -7,6 +7,7 @@ import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
@@ -20,7 +21,7 @@ import { KasaBankaHesaplariService } from './kasa-banka-hesaplari.service';
 @Component({
     selector: 'app-kasa-banka-hesaplari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kasa-banka-hesaplari.html',
     providers: [MessageService]
 })
@@ -32,6 +33,7 @@ export class KasaBankaHesaplariPage implements OnInit {
     loading = false;
     saving = false;
     dialogVisible = false;
+    tipDialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
     records: KasaBankaHesapModel[] = [];
     filteredRecords: KasaBankaHesapModel[] = [];
@@ -41,10 +43,12 @@ export class KasaBankaHesaplariPage implements OnInit {
     totalRecords = 0;
 
     readonly hesapTipleri = KASA_BANKA_HESAP_TIPLERI;
-    muhasebeHesapSecenekleri: Array<{ label: string; value: number }> = [];
     tesisler: MuhasebeTesisModel[] = [];
     tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
     selectedTesisId: number | null = null;
+    tipFilter: KasaBankaHesapTipi | null = null;
+    secilenYeniTip: KasaBankaHesapTipi = 'NakitKasa';
+    bagliBankaSecenekleri: Array<{ label: string; value: number }> = [];
 
     ngOnInit(): void {
         this.loadTesisler();
@@ -78,58 +82,95 @@ export class KasaBankaHesaplariPage implements OnInit {
         });
     }
 
-    openCreate(tip: KasaBankaHesapTipi): void {
+    openCreate(): void {
+        this.secilenYeniTip = 'NakitKasa';
+        this.tipDialogVisible = true;
+    }
+
+    continueCreate(): void {
+        this.tipDialogVisible = false;
         this.dialogMode = 'create';
-        this.model = this.createEmpty(tip);
+        this.model = this.createEmpty(this.secilenYeniTip);
         this.model.tesisId = this.selectedTesisId;
         this.dialogVisible = true;
-        this.loadMuhasebeHesapSecimleri(tip);
+        this.refreshBagliBankaSecenekleri();
     }
 
     openEdit(item: KasaBankaHesapModel): void {
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.dialogVisible = true;
-        this.loadMuhasebeHesapSecimleri(this.model.tip);
+        this.refreshBagliBankaSecenekleri();
     }
 
     onTipChange(): void {
-        this.model.muhasebeHesapPlaniId = 0;
-        if (this.model.tip === 'NakitKasa') {
-            this.model.bankaAdi = null;
-            this.model.subeAdi = null;
-            this.model.hesapNo = null;
-            this.model.iban = null;
-            this.model.musteriNo = null;
-            this.model.hesapTuru = null;
-        }
-
-        this.loadMuhasebeHesapSecimleri(this.model.tip);
+        const next = this.model.tip;
+        const defaults = this.createEmpty(next);
+        this.model = {
+            ...this.model,
+            paraBirimi: defaults.paraBirimi,
+            valorGunSayisi: defaults.valorGunSayisi,
+            bankaAdi: next === 'NakitKasa' ? null : this.model.bankaAdi,
+            subeAdi: next === 'NakitKasa' ? null : this.model.subeAdi,
+            hesapNo: next === 'NakitKasa' ? null : this.model.hesapNo,
+            iban: next === 'NakitKasa' ? null : this.model.iban,
+            musteriNo: next === 'NakitKasa' ? null : this.model.musteriNo,
+            hesapTuru: next === 'NakitKasa' ? null : this.model.hesapTuru,
+            kartAdi: next === 'KrediKarti' ? this.model.kartAdi : null,
+            kartNoMaskeli: next === 'KrediKarti' ? this.model.kartNoMaskeli : null,
+            kartLimiti: next === 'KrediKarti' ? this.model.kartLimiti : null,
+            hesapKesimGunu: next === 'KrediKarti' ? this.model.hesapKesimGunu : null,
+            sonOdemeGunu: next === 'KrediKarti' ? this.model.sonOdemeGunu : null,
+            bagliBankaHesapId: next === 'KrediKarti' ? this.model.bagliBankaHesapId : null,
+            sorumluKisi: next === 'NakitKasa' ? this.model.sorumluKisi : null,
+            lokasyon: next === 'NakitKasa' ? this.model.lokasyon : null
+        };
+        this.refreshBagliBankaSecenekleri();
     }
 
     save(): void {
-        if (!this.model.kod?.trim() || !this.model.ad?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kod ve ad zorunludur.' });
+        if (!this.model.ad?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad zorunludur.' });
             return;
         }
 
-        if (!this.model.muhasebeHesapPlaniId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Muhasebe kodu secimi zorunludur.' });
+        if (!this.model.tesisId || this.model.tesisId <= 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis secimi zorunludur.' });
+            return;
+        }
+
+        if (this.model.valorGunSayisi < 0 || this.model.valorGunSayisi > 365) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Deger', detail: 'Valör süresi 0-365 araliginda olmalidir.' });
+            return;
+        }
+
+        if (this.model.tip === 'DovizHesabi' && !this.model.paraBirimi?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Doviz hesabi icin para birimi zorunludur.' });
             return;
         }
 
         const payload: CreateKasaBankaHesapRequest | UpdateKasaBankaHesapRequest = {
             tesisId: this.model.tesisId ?? null,
             tip: this.model.tip,
-            kod: this.model.kod.trim(),
+            kod: null,
             ad: this.model.ad.trim(),
-            muhasebeHesapPlaniId: this.model.muhasebeHesapPlaniId,
+            muhasebeHesapPlaniId: null,
+            paraBirimi: this.model.paraBirimi?.trim() || null,
+            valorGunSayisi: this.model.valorGunSayisi,
+            kartAdi: this.model.kartAdi?.trim() || null,
+            kartNoMaskeli: this.model.kartNoMaskeli?.trim() || null,
+            kartLimiti: this.model.kartLimiti ?? null,
+            hesapKesimGunu: this.model.hesapKesimGunu ?? null,
+            sonOdemeGunu: this.model.sonOdemeGunu ?? null,
+            bagliBankaHesapId: this.model.bagliBankaHesapId ?? null,
             bankaAdi: this.model.bankaAdi?.trim() || null,
             subeAdi: this.model.subeAdi?.trim() || null,
             hesapNo: this.model.hesapNo?.trim() || null,
             iban: this.model.iban?.trim() || null,
             musteriNo: this.model.musteriNo?.trim() || null,
             hesapTuru: this.model.hesapTuru?.trim() || null,
+            sorumluKisi: this.model.sorumluKisi?.trim() || null,
+            lokasyon: this.model.lokasyon?.trim() || null,
             aktifMi: this.model.aktifMi,
             aciklama: this.model.aciklama?.trim() || null
         };
@@ -167,6 +208,11 @@ export class KasaBankaHesaplariPage implements OnInit {
         return this.hesapTipleri.find((x) => x.value === tip)?.label ?? tip;
     }
 
+    onTesisFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
     getTesisAdi(tesisId?: number | null): string {
         if (!tesisId) {
             return '-';
@@ -174,49 +220,60 @@ export class KasaBankaHesaplariPage implements OnInit {
         return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
     }
 
-    onTesisFilterChange(): void {
-        this.pageNumber = 1;
-        this.load(1, this.pageSize);
+    isTipOrTesisLocked(): boolean {
+        return this.dialogMode === 'edit' && !!this.model.muhasebeHesapPlaniId;
     }
 
-    private loadMuhasebeHesapSecimleri(tip: KasaBankaHesapTipi): void {
-        this.service.getMuhasebeHesapSecimleri(tip).subscribe({
-            next: (items) => {
-                this.muhasebeHesapSecenekleri = items.map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id }));
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.muhasebeHesapSecenekleri = [];
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+    private refreshBagliBankaSecenekleri(): void {
+        const candidates = this.records
+            .filter((x) => x.id !== this.model.id && (x.tip === 'Banka' || x.tip === 'DovizHesabi') && x.aktifMi)
+            .filter((x) => !this.model.tesisId || x.tesisId === this.model.tesisId)
+            .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+        this.bagliBankaSecenekleri = candidates;
     }
 
     private createEmpty(tip: KasaBankaHesapTipi = 'NakitKasa'): KasaBankaHesapModel {
+        const isKredi = tip === 'KrediKarti';
         return {
             tesisId: null,
             tip,
             kod: '',
             ad: '',
-            muhasebeHesapPlaniId: 0,
+            muhasebeHesapPlaniId: null,
+            anaMuhasebeHesapKodu: null,
+            muhasebeHesapSiraNo: null,
+            paraBirimi: tip === 'DovizHesabi' ? '' : 'TRY',
+            valorGunSayisi: isKredi ? 1 : 0,
+            kartAdi: null,
+            kartNoMaskeli: null,
+            kartLimiti: null,
+            hesapKesimGunu: null,
+            sonOdemeGunu: null,
+            bagliBankaHesapId: null,
+            muhasebeTamKod: null,
+            muhasebeHesapAdi: null,
             bankaAdi: null,
             subeAdi: null,
             hesapNo: null,
             iban: null,
             musteriNo: null,
             hesapTuru: null,
+            sorumluKisi: null,
+            lokasyon: null,
             aktifMi: true,
             aciklama: null
         };
     }
 
-    private applyClientFilter(): void {
-        if (!this.selectedTesisId) {
-            this.filteredRecords = [...this.records];
-            return;
+    applyClientFilter(): void {
+        let list = [...this.records];
+        if (this.selectedTesisId) {
+            list = list.filter((x) => x.tesisId === this.selectedTesisId);
         }
-        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+        if (this.tipFilter) {
+            list = list.filter((x) => x.tip === this.tipFilter);
+        }
+        this.filteredRecords = list;
     }
 
     private loadTesisler(): void {

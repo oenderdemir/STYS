@@ -168,7 +168,6 @@ export class CariKartlarPage implements OnInit {
             muhasebeHesapPlaniId: null,
             anaMuhasebeHesapKodu: null,
             muhasebeHesapSiraNo: null,
-            tesisSegmenti: null,
             unvanAdSoyad: '',
             vergiNoTckn: null,
             vergiDairesi: null,

@@ -1,12 +1,14 @@
 using AutoMapper;
-using System;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Dtos;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Repositories;
-using STYS.Muhasebe.MuhasebeHesapPlanlari.Repositories;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -15,24 +17,101 @@ namespace STYS.Muhasebe.KasaBankaHesaplari.Services;
 public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBankaHesap, int>, IKasaBankaHesapService
 {
     private readonly IKasaBankaHesapRepository _repository;
-    private readonly IMuhasebeHesapPlaniRepository _muhasebeHesapPlaniRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _dbContext;
 
-    public KasaBankaHesapService(IKasaBankaHesapRepository repository, IMuhasebeHesapPlaniRepository muhasebeHesapPlaniRepository, IUserAccessScopeService userAccessScopeService, StysAppDbContext dbContext, IMapper mapper)
+    public KasaBankaHesapService(IKasaBankaHesapRepository repository, IUserAccessScopeService userAccessScopeService, StysAppDbContext dbContext, IMapper mapper)
         : base(repository, mapper)
     {
         _repository = repository;
-        _muhasebeHesapPlaniRepository = muhasebeHesapPlaniRepository;
         _userAccessScopeService = userAccessScopeService;
         _dbContext = dbContext;
     }
 
     public override async Task<KasaBankaHesapDto> AddAsync(KasaBankaHesapDto dto)
     {
+        var cancellationToken = CancellationToken.None;
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
-        await NormalizeAndValidateAsync(dto, null);
-        return await base.AddAsync(dto);
+        NormalizeBasicFields(dto);
+
+        if (!dto.TesisId.HasValue || dto.TesisId.Value <= 0)
+        {
+            throw new BaseException("Tesis secimi zorunludur.", 400);
+        }
+
+        var anaHesapKodu = ResolveAnaHesapKodu(dto.Tip);
+
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var anaHesap = await GetAnaHesapAsync(anaHesapKodu, dto.Tip, cancellationToken);
+                var siraNo = await NextSiraNoAsync(dto.TesisId.Value, anaHesapKodu, cancellationToken);
+                var kod = $"{anaHesapKodu}.{siraNo}";
+
+                var duplicate = await _dbContext.KasaBankaHesaplari.AnyAsync(
+                    x => !x.IsDeleted && x.TesisId == dto.TesisId && x.Kod == kod,
+                    cancellationToken);
+                if (duplicate)
+                {
+                    throw new BaseException("Uretilen finansal hesap kodu zaten mevcut. Islem tekrar deneyiniz.", 409);
+                }
+
+                ApplyTipDefaultsAndValidate(dto);
+
+                var muhasebeDetay = await ResolveOrCreateMuhasebeDetayHesabiAsync(
+                    dto.TesisId.Value,
+                    kod,
+                    dto.Ad,
+                    anaHesap,
+                    cancellationToken);
+
+                var entity = new KasaBankaHesap
+                {
+                    TesisId = dto.TesisId,
+                    Tip = dto.Tip,
+                    Kod = kod,
+                    Ad = dto.Ad,
+                    MuhasebeHesapPlaniId = muhasebeDetay.Id,
+                    AnaMuhasebeHesapKodu = anaHesapKodu,
+                    MuhasebeHesapSiraNo = siraNo,
+                    ParaBirimi = dto.ParaBirimi,
+                    ValorGunSayisi = dto.ValorGunSayisi,
+                    KartAdi = dto.KartAdi,
+                    KartNoMaskeli = dto.KartNoMaskeli,
+                    KartLimiti = dto.KartLimiti,
+                    HesapKesimGunu = dto.HesapKesimGunu,
+                    SonOdemeGunu = dto.SonOdemeGunu,
+                    BagliBankaHesapId = dto.BagliBankaHesapId,
+                    BankaAdi = dto.BankaAdi,
+                    SubeAdi = dto.SubeAdi,
+                    HesapNo = dto.HesapNo,
+                    Iban = dto.Iban,
+                    MusteriNo = dto.MusteriNo,
+                    HesapTuru = dto.HesapTuru,
+                    SorumluKisi = dto.SorumluKisi,
+                    Lokasyon = dto.Lokasyon,
+                    AktifMi = dto.AktifMi,
+                    Aciklama = dto.Aciklama
+                };
+
+                await _dbContext.KasaBankaHesaplari.AddAsync(entity, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+                return Mapper.Map<KasaBankaHesapDto>(entity);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 5)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (attempt < 5 && IsRetryableSqlConflict(ex))
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+        }
+
+        throw new BaseException("Finansal hesap kodu uretilirken eszamanli islem catismasi olustu. Tekrar deneyiniz.", 409);
     }
 
     public override async Task<KasaBankaHesapDto> UpdateAsync(KasaBankaHesapDto dto)
@@ -42,9 +121,86 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
             throw new BaseException("Hesap id zorunludur.", 400);
         }
 
-        dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
-        await NormalizeAndValidateAsync(dto, dto.Id.Value);
-        return await base.UpdateAsync(dto);
+        NormalizeBasicFields(dto);
+        var entity = await _dbContext.KasaBankaHesaplari.FirstOrDefaultAsync(x => x.Id == dto.Id.Value)
+            ?? throw new BaseException("Finansal hesap bulunamadi.", 404);
+
+        await EnsureCanAccessTesisAsync(entity.TesisId, CancellationToken.None);
+        var nextTesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
+        var hasMuhasebeLink = entity.MuhasebeHesapPlaniId.HasValue;
+
+        if (hasMuhasebeLink && !string.Equals(entity.Tip, dto.Tip, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Muhasebe hesabı oluşturulmuş finansal hesaplarda tip değiştirilemez.", 400);
+        }
+
+        if (hasMuhasebeLink && entity.TesisId != nextTesisId)
+        {
+            throw new BaseException("Muhasebe hesabı oluşturulmuş finansal hesaplarda tesis değiştirilemez.", 400);
+        }
+
+        ApplyTipDefaultsAndValidate(dto);
+
+        entity.TesisId = nextTesisId;
+        entity.Tip = entity.Tip;
+        entity.Ad = dto.Ad;
+        entity.ParaBirimi = dto.ParaBirimi;
+        entity.ValorGunSayisi = dto.ValorGunSayisi;
+        entity.KartAdi = dto.KartAdi;
+        entity.KartNoMaskeli = dto.KartNoMaskeli;
+        entity.KartLimiti = dto.KartLimiti;
+        entity.HesapKesimGunu = dto.HesapKesimGunu;
+        entity.SonOdemeGunu = dto.SonOdemeGunu;
+        entity.BagliBankaHesapId = dto.BagliBankaHesapId;
+        entity.BankaAdi = dto.BankaAdi;
+        entity.SubeAdi = dto.SubeAdi;
+        entity.HesapNo = dto.HesapNo;
+        entity.Iban = dto.Iban;
+        entity.MusteriNo = dto.MusteriNo;
+        entity.HesapTuru = dto.HesapTuru;
+        entity.SorumluKisi = dto.SorumluKisi;
+        entity.Lokasyon = dto.Lokasyon;
+        entity.AktifMi = dto.AktifMi;
+        entity.Aciklama = dto.Aciklama;
+
+        if (entity.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.Ad = entity.Ad;
+                hesap.TesisId = entity.TesisId;
+                if (!entity.AktifMi)
+                {
+                    hesap.AktifMi = false;
+                }
+            }
+        }
+
+        await _dbContext.SaveChangesAsync();
+        return Mapper.Map<KasaBankaHesapDto>(entity);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var entity = await _dbContext.KasaBankaHesaplari.FirstOrDefaultAsync(x => x.Id == id);
+        if (entity is null)
+        {
+            throw new BaseException("Finansal hesap bulunamadi.", 404);
+        }
+
+        await EnsureCanAccessTesisAsync(entity.TesisId, CancellationToken.None);
+        await base.DeleteAsync(id);
+
+        if (entity.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.AktifMi = false;
+                await _dbContext.SaveChangesAsync();
+            }
+        }
     }
 
     public async Task<List<KasaBankaHesapDto>> GetByTipAsync(string tip, bool onlyActive, CancellationToken cancellationToken = default)
@@ -60,7 +216,30 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         {
             items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
         }
+
         return items.Select(Mapper.Map<KasaBankaHesapDto>).ToList();
+    }
+
+    public async Task<List<MuhasebeHesapSecimDto>> GetMuhasebeHesapSecimleriAsync(string tip, CancellationToken cancellationToken = default)
+    {
+        if (!KasaBankaHesapTipleri.TumTipler.Contains(tip))
+        {
+            throw new BaseException("Hesap tipi gecersiz.", 400);
+        }
+
+        var prefix = ResolveAnaHesapKodu(tip);
+        var matches = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi && x.TesisId == null && (x.Kod == prefix || x.TamKod.StartsWith(prefix)))
+            .OrderBy(x => x.TamKod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return matches.Select(x => new MuhasebeHesapSecimDto
+        {
+            Id = x.Id,
+            TamKod = x.TamKod,
+            Ad = x.Ad
+        }).ToList();
     }
 
     public override async Task<KasaBankaHesapDto?> GetByIdAsync(int id, Func<IQueryable<KasaBankaHesap>, IQueryable<KasaBankaHesap>>? include = null)
@@ -84,8 +263,8 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         return await base.WhereAsync(predicate, includeQuery);
     }
 
-    public override async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<KasaBankaHesapDto>> GetPagedAsync(
-        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+    public override async Task<PagedResult<KasaBankaHesapDto>> GetPagedAsync(
+        PagedRequest request,
         System.Linq.Expressions.Expression<Func<KasaBankaHesap, bool>>? predicate = null,
         Func<IQueryable<KasaBankaHesap>, IQueryable<KasaBankaHesap>>? include = null,
         Func<IQueryable<KasaBankaHesap>, IOrderedQueryable<KasaBankaHesap>>? orderBy = null)
@@ -95,45 +274,113 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
-    public async Task<List<MuhasebeHesapSecimDto>> GetMuhasebeHesapSecimleriAsync(string tip, CancellationToken cancellationToken = default)
+    private static string ResolveAnaHesapKodu(string tip)
     {
-        if (!KasaBankaHesapTipleri.TumTipler.Contains(tip))
+        return tip switch
         {
-            throw new BaseException("Hesap tipi gecersiz.", 400);
-        }
-
-        var prefix = tip == KasaBankaHesapTipleri.NakitKasa ? "1.10.100" : "1.10.102";
-        var matches = await _muhasebeHesapPlaniRepository.GetByTamKodPrefixAsync(prefix, cancellationToken);
-
-        return matches.Select(x => new MuhasebeHesapSecimDto
-        {
-            Id = x.Id,
-            TamKod = x.TamKod,
-            Ad = x.Ad
-        }).ToList();
+            KasaBankaHesapTipleri.NakitKasa => "1.10.100",
+            KasaBankaHesapTipleri.Banka => "1.10.102",
+            KasaBankaHesapTipleri.DovizHesabi => "1.10.102",
+            KasaBankaHesapTipleri.KrediKarti => "1.10.109",
+            _ => throw new BaseException("Hesap tipi gecersiz.", 400)
+        };
     }
 
-    private async Task NormalizeAndValidateAsync(KasaBankaHesapDto dto, int? currentId)
+    private static int ResolveDefaultValorGunSayisi(string tip)
     {
-        dto.Tip = (dto.Tip ?? string.Empty).Trim();
-        dto.Kod = (dto.Kod ?? string.Empty).Trim();
-        dto.Ad = (dto.Ad ?? string.Empty).Trim();
-        dto.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
-        dto.SubeAdi = NormalizeOptional(dto.SubeAdi, 128);
-        dto.HesapNo = NormalizeOptional(dto.HesapNo, 64);
-        dto.Iban = NormalizeOptional(dto.Iban?.Replace(" ", string.Empty).ToUpperInvariant(), 34);
-        dto.MusteriNo = NormalizeOptional(dto.MusteriNo, 64);
-        dto.HesapTuru = NormalizeOptional(dto.HesapTuru, 32);
-        dto.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+        return tip == KasaBankaHesapTipleri.KrediKarti ? 1 : 0;
+    }
 
+    private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, CancellationToken cancellationToken)
+    {
+        var sayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
+            .FirstOrDefaultAsync(x => x.TesisId == tesisId && x.AnaHesapKodu == anaHesapKodu, cancellationToken);
+
+        if (sayac is null)
+        {
+            sayac = new MuhasebeHesapKoduSayac
+            {
+                TesisId = tesisId,
+                AnaHesapKodu = anaHesapKodu,
+                SonSiraNo = 0,
+                Aciklama = "Finansal hesap otomatik kod sayaci"
+            };
+            await _dbContext.Set<MuhasebeHesapKoduSayac>().AddAsync(sayac, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        sayac.SonSiraNo += 1;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return sayac.SonSiraNo;
+    }
+
+    private async Task<MuhasebeHesapPlani> GetAnaHesapAsync(string anaHesapKodu, string tip, CancellationToken cancellationToken)
+    {
+        var ana = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi && x.TesisId == null)
+            .FirstOrDefaultAsync(x => x.Kod == anaHesapKodu || x.TamKod == anaHesapKodu, cancellationToken);
+
+        if (ana is not null)
+        {
+            return ana;
+        }
+
+        throw tip switch
+        {
+            KasaBankaHesapTipleri.NakitKasa => new BaseException("1.10.100 KASA ana hesabı bulunamadı.", 400),
+            KasaBankaHesapTipleri.Banka or KasaBankaHesapTipleri.DovizHesabi => new BaseException("1.10.102 BANKALAR ana hesabı bulunamadı.", 400),
+            KasaBankaHesapTipleri.KrediKarti => new BaseException("1.10.109 KREDİ KARTLARI ana hesabı bulunamadı.", 400),
+            _ => new BaseException("Hesap tipi gecersiz.", 400)
+        };
+    }
+
+    private async Task<MuhasebeHesapPlani> ResolveOrCreateMuhasebeDetayHesabiAsync(
+        int tesisId,
+        string kod,
+        string ad,
+        MuhasebeHesapPlani anaHesap,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.MuhasebeHesapPlanlari
+            .FirstOrDefaultAsync(x => !x.IsDeleted && x.TesisId == tesisId && (x.Kod == kod || x.TamKod == kod), cancellationToken);
+
+        if (existing is not null)
+        {
+            var linkedToAnother = await _dbContext.KasaBankaHesaplari.AnyAsync(
+                x => !x.IsDeleted && x.MuhasebeHesapPlaniId == existing.Id,
+                cancellationToken);
+            if (linkedToAnother)
+            {
+                throw new BaseException($"'{kod}' kodlu muhasebe hesap plani baska bir finansal kayda bagli.", 400);
+            }
+
+            existing.Ad = ad;
+            existing.AktifMi = true;
+            return existing;
+        }
+
+        var detay = new MuhasebeHesapPlani
+        {
+            TesisId = tesisId,
+            Kod = kod,
+            TamKod = kod,
+            Ad = ad,
+            SeviyeNo = anaHesap.SeviyeNo + 1,
+            UstHesapId = anaHesap.Id,
+            AktifMi = true,
+            Aciklama = "Finansal hesap otomatik detay hesabi"
+        };
+
+        await _dbContext.MuhasebeHesapPlanlari.AddAsync(detay, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return detay;
+    }
+
+    private void ApplyTipDefaultsAndValidate(KasaBankaHesapDto dto)
+    {
         if (!KasaBankaHesapTipleri.TumTipler.Contains(dto.Tip))
         {
             throw new BaseException("Hesap tipi gecersiz.", 400);
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.Kod))
-        {
-            throw new BaseException("Kod zorunludur.", 400);
         }
 
         if (string.IsNullOrWhiteSpace(dto.Ad))
@@ -141,45 +388,89 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
             throw new BaseException("Ad zorunludur.", 400);
         }
 
-        var duplicateKod = await _repository.AnyAsync(x => x.Kod == dto.Kod && x.TesisId == dto.TesisId && (!currentId.HasValue || x.Id != currentId.Value));
-        if (duplicateKod)
+        dto.ParaBirimi = NormalizeOptional(dto.ParaBirimi?.ToUpperInvariant(), 3) ?? "TRY";
+        dto.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
+        dto.SubeAdi = NormalizeOptional(dto.SubeAdi, 128);
+        dto.HesapNo = NormalizeOptional(dto.HesapNo, 64);
+        dto.Iban = NormalizeOptional(dto.Iban?.Replace(" ", string.Empty).ToUpperInvariant(), 34);
+        dto.MusteriNo = NormalizeOptional(dto.MusteriNo, 64);
+        dto.HesapTuru = NormalizeOptional(dto.HesapTuru, 32);
+        dto.KartAdi = NormalizeOptional(dto.KartAdi, 128);
+        dto.KartNoMaskeli = NormalizeOptional(dto.KartNoMaskeli, 32);
+        dto.SorumluKisi = NormalizeOptional(dto.SorumluKisi, 128);
+        dto.Lokasyon = NormalizeOptional(dto.Lokasyon, 128);
+        dto.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+
+        if (dto.ValorGunSayisi == 0 && dto.Id is null)
         {
-            throw new BaseException("Hesap kodu ayni tesis altinda benzersiz olmalidir.", 400);
+            dto.ValorGunSayisi = ResolveDefaultValorGunSayisi(dto.Tip);
+        }
+        if (dto.ValorGunSayisi < 0 || dto.ValorGunSayisi > 365)
+        {
+            throw new BaseException("Valör süresi 0 ile 365 arasında olmalıdır.", 400);
         }
 
-        var muhasebeHesap = await _muhasebeHesapPlaniRepository.GetByIdAsync(dto.MuhasebeHesapPlaniId);
-        if (muhasebeHesap is null)
+        if (dto.Tip == KasaBankaHesapTipleri.DovizHesabi && string.IsNullOrWhiteSpace(dto.ParaBirimi))
         {
-            throw new BaseException("Muhasebe hesap plani kaydi bulunamadi.", 400);
+            throw new BaseException("Doviz hesabi icin para birimi zorunludur.", 400);
         }
 
-        if (!muhasebeHesap.AktifMi)
-        {
-            throw new BaseException("Secilen muhasebe hesabi pasif.", 400);
-        }
-
-        if (dto.Tip == KasaBankaHesapTipleri.NakitKasa && !muhasebeHesap.TamKod.StartsWith("1.10.100", StringComparison.Ordinal))
-        {
-            throw new BaseException("Nakit kasa hesaplari sadece 1.10.100 ile baslayan muhasebe kodlarina baglanabilir.", 400);
-        }
-
-        if (dto.Tip == KasaBankaHesapTipleri.Banka && !muhasebeHesap.TamKod.StartsWith("1.10.102", StringComparison.Ordinal))
-        {
-            throw new BaseException("Banka hesaplari sadece 1.10.102 ile baslayan muhasebe kodlarina baglanabilir.", 400);
-        }
-
-        if (dto.Tip == KasaBankaHesapTipleri.Banka)
+        if (dto.Tip == KasaBankaHesapTipleri.Banka || dto.Tip == KasaBankaHesapTipleri.DovizHesabi)
         {
             if (string.IsNullOrWhiteSpace(dto.BankaAdi))
             {
-                throw new BaseException("Banka tipi hesap icin banka adi zorunludur.", 400);
+                throw new BaseException("Banka/Doviz tipi hesap icin banka adi zorunludur.", 400);
             }
 
             if (string.IsNullOrWhiteSpace(dto.HesapNo) && string.IsNullOrWhiteSpace(dto.Iban))
             {
-                throw new BaseException("Banka tipi hesap icin hesap no veya IBAN zorunludur.", 400);
+                throw new BaseException("Banka/Doviz tipi hesap icin hesap no veya IBAN zorunludur.", 400);
             }
         }
+
+        if (dto.Tip == KasaBankaHesapTipleri.KrediKarti)
+        {
+            if (string.IsNullOrWhiteSpace(dto.KartAdi) && string.IsNullOrWhiteSpace(dto.Ad))
+            {
+                throw new BaseException("Kredi karti icin kart adi veya ad zorunludur.", 400);
+            }
+
+            if (dto.KartLimiti.HasValue && dto.KartLimiti.Value < 0)
+            {
+                throw new BaseException("Kart limiti negatif olamaz.", 400);
+            }
+
+            if (dto.HesapKesimGunu.HasValue && (dto.HesapKesimGunu < 1 || dto.HesapKesimGunu > 31))
+            {
+                throw new BaseException("Hesap kesim gunu 1-31 araliginda olmalidir.", 400);
+            }
+
+            if (dto.SonOdemeGunu.HasValue && (dto.SonOdemeGunu < 1 || dto.SonOdemeGunu > 31))
+            {
+                throw new BaseException("Son odeme gunu 1-31 araliginda olmalidir.", 400);
+            }
+
+            if (dto.BagliBankaHesapId.HasValue)
+            {
+                var bagliBanka = _dbContext.KasaBankaHesaplari
+                    .FirstOrDefault(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
+                if (bagliBanka is null || (bagliBanka.Tip != KasaBankaHesapTipleri.Banka && bagliBanka.Tip != KasaBankaHesapTipleri.DovizHesabi))
+                {
+                    throw new BaseException("Bagli banka hesabi gecersiz.", 400);
+                }
+            }
+        }
+    }
+
+    private static bool IsRetryableSqlConflict(DbUpdateException ex)
+    {
+        var sqlEx = ex.InnerException as SqlException;
+        if (sqlEx is null)
+        {
+            return false;
+        }
+
+        return sqlEx.Number is 2601 or 2627;
     }
 
     private static string? NormalizeOptional(string? value, int maxLen)
@@ -191,6 +482,13 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
 
         var normalized = value.Trim();
         return normalized.Length <= maxLen ? normalized : normalized[..maxLen];
+    }
+
+    private void NormalizeBasicFields(KasaBankaHesapDto dto)
+    {
+        dto.Tip = (dto.Tip ?? string.Empty).Trim();
+        dto.Ad = (dto.Ad ?? string.Empty).Trim();
+        dto.Kod = (dto.Kod ?? string.Empty).Trim();
     }
 
     private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)
@@ -233,6 +531,20 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         }
 
         return candidateTesisId is > 0 ? candidateTesisId : null;
+    }
+
+    private async Task EnsureCanAccessTesisAsync(int? tesisId, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (!scope.IsScoped)
+        {
+            return;
+        }
+
+        if (!tesisId.HasValue || !scope.TesisIds.Contains(tesisId.Value))
+        {
+            throw new BaseException("Bu kayda erisim yetkiniz bulunmuyor.", 403);
+        }
     }
 
     private static Func<IQueryable<KasaBankaHesap>, IQueryable<KasaBankaHesap>> BuildScopedIncludeQuery(

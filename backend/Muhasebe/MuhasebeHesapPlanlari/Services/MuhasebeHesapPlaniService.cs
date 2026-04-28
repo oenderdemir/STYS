@@ -155,18 +155,21 @@ public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto,
         }
 
         var tamKodExists = await _repository.AnyAsync(x =>
-            x.TamKod == dto.TamKod && (!currentId.HasValue || x.Id != currentId.Value));
+            x.TamKod == dto.TamKod
+            && x.TesisId == dto.TesisId
+            && (!currentId.HasValue || x.Id != currentId.Value));
         if (tamKodExists)
         {
-            throw new BaseException("Tam kod benzersiz olmalidir.", 400);
+            throw new BaseException("Tam kod ayni tesis kapsami icinde benzersiz olmalidir.", 400);
         }
 
         var kodExists = await _repository.AnyAsync(x =>
             x.Kod == dto.Kod
+            && x.TesisId == dto.TesisId
             && (!currentId.HasValue || x.Id != currentId.Value));
         if (kodExists)
         {
-            throw new BaseException("Kod benzersiz olmalidir.", 400);
+            throw new BaseException("Kod ayni tesis kapsami icinde benzersiz olmalidir.", 400);
         }
     }
 

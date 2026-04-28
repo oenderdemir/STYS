@@ -1,35 +1,29 @@
 <p-toast />
+
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
-        <p-button label="Yeni Nakit Kasa" icon="pi pi-plus" (onClick)="openCreate('NakitKasa')" />
-        <p-button label="Yeni Banka Hesabi" icon="pi pi-plus" class="ml-2" severity="secondary" [outlined]="true" (onClick)="openCreate('Banka')" />
+        <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
     <ng-template #end>
-        <div class="w-18rem">
-            <p-select
-                [options]="tesisSecenekleri"
-                optionLabel="label"
-                optionValue="value"
-                [(ngModel)]="selectedTesisId"
-                placeholder="Tesis seciniz"
-                appendTo="body"
-                class="w-full"
-                (ngModelChange)="onTesisFilterChange()" />
+        <div class="flex gap-2">
+            <p-select [options]="hesapTipleri" optionLabel="label" optionValue="value" [(ngModel)]="tipFilter" placeholder="Tip filtre" appendTo="body" class="w-12rem" (ngModelChange)="applyClientFilter()" />
+            <p-select [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="selectedTesisId" placeholder="Tesis seciniz" appendTo="body" class="w-16rem" (ngModelChange)="onTesisFilterChange()" />
         </div>
     </ng-template>
 </p-toolbar>
 
-<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '72rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
-    <ng-template #caption><h5 class="m-0">Kasa / Banka Hesaplari</h5></ng-template>
+<p-table [value]="filteredRecords" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '90rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+    <ng-template #caption><h5 class="m-0">Finansal Hesaplar</h5></ng-template>
     <ng-template #header>
         <tr>
             <th>Tip</th>
             <th>Kod</th>
             <th>Ad</th>
             <th>Tesis</th>
-            <th>Muhasebe Kodu</th>
-            <th>Banka / Hesap</th>
+            <th>Para Birimi</th>
+            <th>Valör (Gun)</th>
+            <th>Banka</th>
             <th>Durum</th>
             <th>Islem</th>
         </tr>
@@ -40,8 +34,9 @@
             <td>{{ item.kod }}</td>
             <td>{{ item.ad }}</td>
             <td>{{ getTesisAdi(item.tesisId) }}</td>
-            <td>{{ item.muhasebeTamKod || '-' }}</td>
-            <td>{{ item.tip === 'Banka' ? ((item.bankaAdi || '-') + ' / ' + (item.iban || item.hesapNo || '-')) : '-' }}</td>
+            <td>{{ item.paraBirimi || '-' }}</td>
+            <td>{{ item.valorGunSayisi }}</td>
+            <td>{{ item.bankaAdi || '-' }}</td>
             <td>{{ item.aktifMi ? 'Aktif' : 'Pasif' }}</td>
             <td>
                 <div class="flex gap-2">
@@ -53,36 +48,61 @@
     </ng-template>
 </p-table>
 
-<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '48rem', 'max-width': '96vw' }">
+<p-dialog [(visible)]="tipDialogVisible" [modal]="true" [header]="'Hesap Tipi Sec'" [style]="{ width: '28rem', 'max-width': '95vw' }">
+    <div class="grid grid-cols-1 gap-3">
+        <p-select class="w-full" [options]="hesapTipleri" optionLabel="label" optionValue="value" [(ngModel)]="secilenYeniTip" appendTo="body" />
+    </div>
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="tipDialogVisible = false" />
+        <p-button label="Devam" icon="pi pi-arrow-right" (onClick)="continueCreate()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Finansal Hesap Duzenle' : 'Yeni Finansal Hesap'" [style]="{ width: '62rem', 'max-width': '98vw' }">
     <div class="grid grid-cols-12 gap-3">
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-3">
             <label class="block mb-2">Tesis</label>
-            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" />
+            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" [disabled]="isTipOrTesisLocked()" />
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-3">
             <label class="block mb-2">Tip</label>
-            <p-select class="w-full" [options]="hesapTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tip" (ngModelChange)="onTipChange()" appendTo="body" />
+            <p-select class="w-full" [options]="hesapTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tip" appendTo="body" [disabled]="isTipOrTesisLocked()" (ngModelChange)="onTipChange()" />
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-3">
             <label class="block mb-2">Kod</label>
-            <input pInputText class="w-full" [(ngModel)]="model.kod" />
+            <input pInputText class="w-full" [value]="model.kod || ''" readonly placeholder="Sistem tarafından oluşturulacak" />
         </div>
-        <div class="col-span-12 md:col-span-4">
-            <label class="block mb-2">Muhasebe Kodu</label>
-            <p-select class="w-full" [options]="muhasebeHesapSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.muhasebeHesapPlaniId" appendTo="body" [filter]="true" filterBy="label" />
+        <div class="col-span-12 md:col-span-3">
+            <label class="block mb-2">Valör Süresi (Gun)</label>
+            <p-inputNumber class="w-full" [(ngModel)]="model.valorGunSayisi" [min]="0" [max]="365" [useGrouping]="false" />
+            <small class="text-color-secondary">Islem tarihinden kac gun sonra gercek hesaba gececegini belirtir.</small>
         </div>
 
         <div class="col-span-12 md:col-span-6">
             <label class="block mb-2">Ad</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" />
         </div>
-
-        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 pt-6">
+        <div class="col-span-12 md:col-span-3">
+            <label class="block mb-2">Para Birimi</label>
+            <input pInputText class="w-full" [(ngModel)]="model.paraBirimi" maxlength="3" />
+        </div>
+        <div class="col-span-12 md:col-span-3 flex align-items-center gap-2 pt-6">
             <p-checkbox inputId="hesapAktif" [(ngModel)]="model.aktifMi" [binary]="true" />
             <label for="hesapAktif">Aktif</label>
         </div>
 
-        <ng-container *ngIf="model.tip === 'Banka'">
+        <ng-container *ngIf="model.tip === 'NakitKasa'">
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Sorumlu Kisi</label>
+                <input pInputText class="w-full" [(ngModel)]="model.sorumluKisi" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Lokasyon</label>
+                <input pInputText class="w-full" [(ngModel)]="model.lokasyon" />
+            </div>
+        </ng-container>
+
+        <ng-container *ngIf="model.tip === 'Banka' || model.tip === 'DovizHesabi' || model.tip === 'KrediKarti'">
             <div class="col-span-12 md:col-span-6">
                 <label class="block mb-2">Banka Adi</label>
                 <input pInputText class="w-full" [(ngModel)]="model.bankaAdi" />
@@ -108,6 +128,38 @@
                 <input pInputText class="w-full" [(ngModel)]="model.hesapTuru" />
             </div>
         </ng-container>
+
+        <ng-container *ngIf="model.tip === 'KrediKarti'">
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Kart Adi</label>
+                <input pInputText class="w-full" [(ngModel)]="model.kartAdi" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Kart No (Maskeli)</label>
+                <input pInputText class="w-full" [(ngModel)]="model.kartNoMaskeli" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label class="block mb-2">Kart Limiti</label>
+                <p-inputNumber class="w-full" [(ngModel)]="model.kartLimiti" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label class="block mb-2">Hesap Kesim Gunu</label>
+                <p-inputNumber class="w-full" [(ngModel)]="model.hesapKesimGunu" [min]="1" [max]="31" [useGrouping]="false" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label class="block mb-2">Son Odeme Gunu</label>
+                <p-inputNumber class="w-full" [(ngModel)]="model.sonOdemeGunu" [min]="1" [max]="31" [useGrouping]="false" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Bagli Banka Hesabi</label>
+                <p-select class="w-full" [options]="bagliBankaSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.bagliBankaHesapId" appendTo="body" />
+            </div>
+        </ng-container>
+
+        <div class="col-span-12">
+            <label class="block mb-2">Aciklama</label>
+            <input pInputText class="w-full" [(ngModel)]="model.aciklama" />
+        </div>
     </div>
 
     <ng-template #footer>
@@ -115,3 +167,4 @@
         <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
     </ng-template>
 </p-dialog>
+

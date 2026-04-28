@@ -28,9 +28,6 @@ public class CariKart : BaseEntity<int>
 
     public int? MuhasebeHesapSiraNo { get; set; }
 
-    [MaxLength(16)]
-    public string? TesisSegmenti { get; set; }
-
     [Required]
     [MaxLength(256)]
     public string UnvanAdSoyad { get; set; } = string.Empty;

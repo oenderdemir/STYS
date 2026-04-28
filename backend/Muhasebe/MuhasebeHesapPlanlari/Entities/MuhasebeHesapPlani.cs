@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
@@ -19,6 +20,8 @@ public class MuhasebeHesapPlani : BaseEntity<int>
 
     public int SeviyeNo { get; set; }
 
+    public int? TesisId { get; set; }
+
     public int? UstHesapId { get; set; }
 
     public bool AktifMi { get; set; } = true;
@@ -26,6 +29,7 @@ public class MuhasebeHesapPlani : BaseEntity<int>
     [MaxLength(1024)]
     public string? Aciklama { get; set; }
 
+    public Tesis? Tesis { get; set; }
     public MuhasebeHesapPlani? UstHesap { get; set; }
     public ICollection<MuhasebeHesapPlani> AltHesaplar { get; set; } = [];
 }

@@ -135,7 +135,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/cari-hareketler', component: CariHareketlerPage, data: { breadcrumb: ['Muhasebe', 'Cari Hareketler'] } },
             { path: 'muhasebe/kasa-hareketleri', component: KasaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Kasa Hareketleri'] } },
             { path: 'muhasebe/banka-hareketleri', component: BankaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Banka Hareketleri'] } },
-            { path: 'muhasebe/kasa-banka-hesaplari', component: KasaBankaHesaplariPage, data: { breadcrumb: ['Muhasebe', 'Kasa/Banka Hesaplari'] } },
+            { path: 'muhasebe/kasa-banka-hesaplari', component: KasaBankaHesaplariPage, data: { breadcrumb: ['Muhasebe', 'Finansal Hesaplar'] } },
             { path: 'muhasebe/hesaplar', component: HesaplarPage, data: { breadcrumb: ['Muhasebe', 'Hesaplar'] } },
             { path: 'muhasebe/tahsilat-odeme-belgeleri', component: TahsilatOdemeBelgeleriPage, data: { breadcrumb: ['Muhasebe', 'Tahsilat/Odeme Belgeleri'] } },
             { path: 'muhasebe/tasinir-kodlari', component: TasinirKodlariPage, data: { breadcrumb: ['Muhasebe', 'Tasinir Kodlari'] } },

@@ -88,19 +88,18 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             try
             {
                 var anaHesap = await GetAnaHesapAsync(anaHesapKodu, dto.CariTipi, cancellationToken);
-                var tesisSegmenti = BuildTesisSegmenti(dto.TesisId.Value);
                 var siraNo = await NextSiraNoAsync(dto.TesisId.Value, anaHesapKodu, cancellationToken);
-                var uretilenKod = $"{anaHesapKodu}.{tesisSegmenti}.{siraNo}";
+                var uretilenKod = $"{anaHesapKodu}.{siraNo}";
 
                 var existingWithSameCode = await _dbContext.CariKartlar
                     .IgnoreQueryFilters()
-                    .AnyAsync(x => x.CariKodu == uretilenKod && !x.IsDeleted, cancellationToken);
+                    .AnyAsync(x => x.TesisId == dto.TesisId && x.CariKodu == uretilenKod && !x.IsDeleted, cancellationToken);
                 if (existingWithSameCode)
                 {
                     throw new BaseException("Uretilen cari kodu zaten mevcut. Islem tekrar deneyiniz.", 409);
                 }
 
-                var detayHesap = await ResolveOrCreateDetayHesapAsync(uretilenKod, dto.UnvanAdSoyad, anaHesap, cancellationToken);
+                var detayHesap = await ResolveOrCreateDetayHesapAsync(uretilenKod, dto.UnvanAdSoyad, dto.TesisId.Value, anaHesap, cancellationToken);
 
                 var entity = new CariKart
                 {
@@ -121,7 +120,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
                     Aciklama = NormalizeOptional(dto.Aciklama, 1024),
                     AnaMuhasebeHesapKodu = anaHesapKodu,
                     MuhasebeHesapSiraNo = siraNo,
-                    TesisSegmenti = tesisSegmenti,
                     MuhasebeHesapPlaniId = detayHesap.Id
                 };
 
@@ -282,7 +280,7 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         var anaHesap = await _dbContext.MuhasebeHesapPlanlari
             .Where(x => !x.IsDeleted && x.AktifMi)
-            .FirstOrDefaultAsync(x => x.TamKod == anaHesapKodu || x.Kod == anaHesapKodu, cancellationToken);
+            .FirstOrDefaultAsync(x => x.TesisId == null && (x.TamKod == anaHesapKodu || x.Kod == anaHesapKodu), cancellationToken);
 
         if (anaHesap is not null)
         {
@@ -300,11 +298,12 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     private async Task<MuhasebeHesapPlani> ResolveOrCreateDetayHesapAsync(
         string cariKodu,
         string unvanAdSoyad,
+        int tesisId,
         MuhasebeHesapPlani anaHesap,
         CancellationToken cancellationToken)
     {
         var existing = await _dbContext.MuhasebeHesapPlanlari
-            .FirstOrDefaultAsync(x => !x.IsDeleted && (x.Kod == cariKodu || x.TamKod == cariKodu), cancellationToken);
+            .FirstOrDefaultAsync(x => !x.IsDeleted && x.TesisId == tesisId && (x.Kod == cariKodu || x.TamKod == cariKodu), cancellationToken);
 
         if (existing is not null)
         {
@@ -323,6 +322,7 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         var detay = new MuhasebeHesapPlani
         {
+            TesisId = tesisId,
             Kod = cariKodu,
             TamKod = cariKodu,
             Ad = unvanAdSoyad,
@@ -335,16 +335,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         await _dbContext.MuhasebeHesapPlanlari.AddAsync(detay, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return detay;
-    }
-
-    private static string BuildTesisSegmenti(int tesisId)
-    {
-        if (tesisId <= 0)
-        {
-            throw new BaseException("Tesis segmenti olusturulamadi.", 400);
-        }
-
-        return tesisId > 999 ? tesisId.ToString() : tesisId.ToString("000");
     }
 
     private static string? ResolveAnaHesapKodu(string cariTipi)

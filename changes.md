@@ -3246,6 +3246,48 @@ et10.0-windows, UseWindowsForms=true).
 - `dotnet build backend/STYS.csproj` -> BASARILI
 - `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 
+## Tur 133 - CariKart TesisSegmenti Kaldirma ve Kod Hizalama
+
+### Backend
+- `CariKart` modelinden `TesisSegmenti` kaldirildi:
+  - `backend/Muhasebe/CariKartlar/Entities/CariKart.cs`
+  - `backend/Muhasebe/CariKartlar/Dtos/CariKartDtos.cs`
+  - `backend/Infrastructure/EntityFramework/StysAppDbContext.cs` (EF mapping temizligi)
+- `CariKartService` kod uretimi sadeleştirildi:
+  - eski: `{AnaKod}.{TesisSegmenti}.{SiraNo}`
+  - yeni: `{AnaKod}.{SiraNo}`
+- Cari detay muhasebe hesabi cozumleme/olusturma tesise bagli hale getirildi (`MuhasebeHesapPlani.TesisId` ile).
+- Ana hesap aramasi yalnizca genel hesaplarda (`TesisId = null`) yapilacak sekilde guncellendi.
+
+### Migration
+- Yeni migration:
+  - `20260428205346_RemoveCariKartTesisSegmentiAndAlignCodes`
+- Icerik:
+  - `CariKartlar.TesisSegmenti` kolonu kaldirildi.
+  - Backfill SQL ile `Tedarikci/Musteri/KurumsalMusteri` kayitlari `{AnaKod}.{SiraNo}` formatina cevrildi.
+  - Bagli `MuhasebeHesapPlanlari` kayitlarinin `Kod/TamKod/Ad/TesisId` alanlari CariKart ile hizalandi.
+  - `MuhasebeHesapKoduSayaclari` verileri yeni formatla tekrar senkronlandi.
+
+### Frontend
+- `cari-kartlar` modelinden `tesisSegmenti` kaldirildi:
+  - `frontend/src/app/pages/muhasebe/cari-kartlar/cari-kartlar.dto.ts`
+  - `frontend/src/app/pages/muhasebe/cari-kartlar/cari-kartlar.ts`
+
+## Tur 134 - Finansal Hesaplar Menu/Breadcrumb Isim Hizalama
+
+### Frontend
+- Route breadcrumb guncellendi:
+  - `muhasebe/kasa-banka-hesaplari` -> `['Muhasebe', 'Finansal Hesaplar']`
+  - dosya: `frontend/src/app.routes.ts`
+
+### Backend
+- Erisim teshis modul etiketi guncellendi:
+  - `Kasa/Banka Hesaplari` -> `Finansal Hesaplar`
+  - dosya: `backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs`
+- Veritabani menu etiketi icin migration eklendi:
+  - `20260428210928_RenameKasaBankaMenuToFinansalHesaplar`
+  - route `muhasebe/kasa-banka-hesaplari` label degerini `Finansal Hesaplar` olarak gunceller
+
 ## Tur 129 - Paket Turleri Seed (Referans Gorsel)
 
 - Yeni migration eklendi: `20260420123000_SeedPaketTurleriFromReferenceImage`
@@ -3363,6 +3405,64 @@ et10.0-windows, UseWindowsForms=true).
     - `Sistem tarafından oluşturulacak`
   - Muhasebe hesabi olusmus kayitlarda `CariTipi` ve `Tesis` alanlari kilitlenir.
 - Listeye `Ana Hesap` kolonu eklendi.
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
+## Tur 132 - Kasa/Banka Modulu -> Finansal Hesaplar Genisletmesi
+
+### Backend
+- `KasaBankaHesap` tek tablo yapisi korunarak genisletildi:
+  - yeni tipler: `KrediKarti`, `DovizHesabi`
+  - yeni alanlar: `AnaMuhasebeHesapKodu`, `MuhasebeHesapSiraNo`, `ParaBirimi`, `ValorGunSayisi`,
+    `KartAdi`, `KartNoMaskeli`, `KartLimiti`, `HesapKesimGunu`, `SonOdemeGunu`,
+    `BagliBankaHesapId`, `SorumluKisi`, `Lokasyon`
+- `MuhasebeHesapPlani` genisletildi:
+  - `TesisId` (nullable) ve tesis bazli detay hesap mantigi
+- `KasaBankaHesapService` akisi finansal hesap mantigina cekildi:
+  - kod artik manuel degil, otomatik uretiliyor:
+    - `{AnaMuhasebeHesapKodu}.{TesisBazliSiraNo}`
+  - tip->ana hesap:
+    - `NakitKasa -> 1.10.100`
+    - `Banka -> 1.10.102`
+    - `DovizHesabi -> 1.10.102`
+    - `KrediKarti -> 1.10.109`
+  - ana hesaplar `TesisId = null` kapsaminda aranir
+  - valör defaultlari:
+    - kasa/banka/doviz: `0`
+    - kredi karti: `1`
+  - create/update/delete icin bagli `MuhasebeHesapPlani` detay kaydi senkronu eklendi
+  - tip/tesis degisikligi, muhasebe linki olusan kayitlarda engellendi
+  - access scope/tesis yetki kontrolleri korundu
+- `StysAppDbContext` mapping/indexleri guncellendi:
+  - `MuhasebeHesapPlani` icin filtered unique index modeli:
+    - genel: `Kod` ve `TamKod` unique (`TesisId IS NULL`)
+    - tesis ozel: `TesisId+Kod`, `TesisId+TamKod` unique (`TesisId IS NOT NULL`)
+  - `KasaBankaHesap` yeni alan mapping/index/FK (bagli banka self-reference dahil)
+
+### Migration
+- Yeni migration:
+  - `20260428201154_ExpandFinancialAccountsModel`
+- Icerik:
+  - `MuhasebeHesapPlanlari` tablosuna `TesisId` eklendi
+  - `KasaBankaHesaplari` tablosuna yeni finansal alanlar eklendi
+  - filtered unique indexler yeni modele gore guncellendi
+  - backfill SQL eklendi:
+    - mevcut finansal hesaplar tipine gore kodlar yeniden olusturulur
+    - ilgili tesiste detay muhasebe hesaplari olusturulur/iliskilendirilir
+    - sayaç tablosu (`MuhasebeHesapKoduSayaclari`) son degerlerle guncellenir
+    - `1.10.109` yoksa seed edilir (`KREDI KARTLARI`)
+
+### Frontend
+- `muhasebe/kasa-banka-hesaplari` ekrani finansal hesaplar formatina alindi:
+  - tek `Yeni` butonu
+  - once hesap tipi secim dialogu
+  - tip secimine gore dinamik alanlar
+  - kod readonly + `Sistem tarafından oluşturulacak` placeholder
+  - `Valör Süresi (Gun)` alani ve yardim metni eklendi
+  - liste kolonlari tip/kod/ad/tesis/para birimi/valör/banka/durum olacak sekilde guncellendi
+  - tip filtresi eklendi
 
 ### Dogrulama
 - `dotnet build backend/STYS.csproj` -> BASARILI

@@ -10,7 +10,6 @@ public class CariKartDto : BaseRdbmsDto<int>
     public int? MuhasebeHesapPlaniId { get; set; }
     public string? AnaMuhasebeHesapKodu { get; set; }
     public int? MuhasebeHesapSiraNo { get; set; }
-    public string? TesisSegmenti { get; set; }
     public string UnvanAdSoyad { get; set; } = string.Empty;
     public string? VergiNoTckn { get; set; }
     public string? VergiDairesi { get; set; }

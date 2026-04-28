@@ -6,7 +6,6 @@ export interface CariKartModel {
     muhasebeHesapPlaniId?: number | null;
     anaMuhasebeHesapKodu?: string | null;
     muhasebeHesapSiraNo?: number | null;
-    tesisSegmenti?: string | null;
     unvanAdSoyad: string;
     vergiNoTckn?: string | null;
     vergiDairesi?: string | null;

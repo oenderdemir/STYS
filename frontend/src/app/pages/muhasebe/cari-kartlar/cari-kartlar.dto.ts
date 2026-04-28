@@ -3,6 +3,10 @@ export interface CariKartModel {
     tesisId?: number | null;
     cariTipi: string;
     cariKodu: string;
+    muhasebeHesapPlaniId?: number | null;
+    anaMuhasebeHesapKodu?: string | null;
+    muhasebeHesapSiraNo?: number | null;
+    tesisSegmenti?: string | null;
     unvanAdSoyad: string;
     vergiNoTckn?: string | null;
     vergiDairesi?: string | null;
@@ -17,8 +21,25 @@ export interface CariKartModel {
     aciklama?: string | null;
 }
 
-export interface CreateCariKartRequest extends Omit<CariKartModel, 'id'> {}
-export interface UpdateCariKartRequest extends Omit<CariKartModel, 'id'> {}
+export interface CreateCariKartRequest {
+    tesisId?: number | null;
+    cariTipi: string;
+    cariKodu?: string | null;
+    unvanAdSoyad: string;
+    vergiNoTckn?: string | null;
+    vergiDairesi?: string | null;
+    telefon?: string | null;
+    eposta?: string | null;
+    adres?: string | null;
+    il?: string | null;
+    ilce?: string | null;
+    aktifMi: boolean;
+    eFaturaMukellefiMi: boolean;
+    eArsivKapsamindaMi: boolean;
+    aciklama?: string | null;
+}
+
+export interface UpdateCariKartRequest extends CreateCariKartRequest {}
 
 export interface CariBakiyeModel {
     cariKartId: number;

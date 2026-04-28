@@ -7,6 +7,10 @@ public class CariKartDto : BaseRdbmsDto<int>
     public int? TesisId { get; set; }
     public string CariTipi { get; set; } = string.Empty;
     public string CariKodu { get; set; } = string.Empty;
+    public int? MuhasebeHesapPlaniId { get; set; }
+    public string? AnaMuhasebeHesapKodu { get; set; }
+    public int? MuhasebeHesapSiraNo { get; set; }
+    public string? TesisSegmenti { get; set; }
     public string UnvanAdSoyad { get; set; } = string.Empty;
     public string? VergiNoTckn { get; set; }
     public string? VergiDairesi { get; set; }
@@ -25,7 +29,7 @@ public class CreateCariKartRequest
 {
     public int? TesisId { get; set; }
     public string CariTipi { get; set; } = string.Empty;
-    public string CariKodu { get; set; } = string.Empty;
+    public string? CariKodu { get; set; }
     public string UnvanAdSoyad { get; set; } = string.Empty;
     public string? VergiNoTckn { get; set; }
     public string? VergiDairesi { get; set; }

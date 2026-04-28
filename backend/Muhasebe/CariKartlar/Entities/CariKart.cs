@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.BankaHareketleri.Entities;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
@@ -19,6 +20,16 @@ public class CariKart : BaseEntity<int>
     [Required]
     [MaxLength(64)]
     public string CariKodu { get; set; } = string.Empty;
+
+    public int? MuhasebeHesapPlaniId { get; set; }
+
+    [MaxLength(64)]
+    public string? AnaMuhasebeHesapKodu { get; set; }
+
+    public int? MuhasebeHesapSiraNo { get; set; }
+
+    [MaxLength(16)]
+    public string? TesisSegmenti { get; set; }
 
     [Required]
     [MaxLength(256)]
@@ -59,5 +70,6 @@ public class CariKart : BaseEntity<int>
     public ICollection<BankaHareket> BankaHareketler { get; set; } = [];
     public ICollection<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri { get; set; } = [];
     public Tesis? Tesis { get; set; }
+    public MuhasebeHesapPlani? MuhasebeHesapPlani { get; set; }
 }
 

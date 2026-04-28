@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
@@ -6,6 +7,8 @@ using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariKartlar.Repositories;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -13,6 +16,9 @@ namespace STYS.Muhasebe.CariKartlar.Services;
 
 public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICariKartService
 {
+    private const string TedarikciAnaHesapKodu = "3.32.320";
+    private const string MusteriAnaHesapKodu = "1.12.120";
+
     private readonly ICariKartRepository _repository;
     private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
@@ -49,19 +55,92 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
     public override async Task<CariKartDto> AddAsync(CariKartDto dto)
     {
+        var cancellationToken = CancellationToken.None;
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
-        Normalize(dto);
-        var normalizedCode = dto.CariKodu.Trim().ToUpperInvariant();
-        var exists = await _repository.AnyAsync(x => x.CariKodu.ToUpper() == normalizedCode && x.TesisId == dto.TesisId);
-        if (exists)
+        NormalizeCommonFields(dto);
+
+        var anaHesapKodu = ResolveAnaHesapKodu(dto.CariTipi);
+        if (anaHesapKodu is null)
         {
-            throw new BaseException("Cari kodu ayni tesis altinda benzersiz olmalidir.", 400);
+            if (string.IsNullOrWhiteSpace(dto.CariKodu))
+            {
+                throw new BaseException("Cari kodu zorunludur.", 400);
+            }
+
+            dto.CariKodu = dto.CariKodu.Trim().ToUpperInvariant();
+            var exists = await _repository.AnyAsync(x => x.CariKodu.ToUpper() == dto.CariKodu.ToUpper() && x.TesisId == dto.TesisId);
+            if (exists)
+            {
+                throw new BaseException("Cari kodu ayni tesis altinda benzersiz olmalidir.", 400);
+            }
+
+            return await base.AddAsync(dto);
         }
 
-        dto.CariKodu = normalizedCode;
-        dto.UnvanAdSoyad = dto.UnvanAdSoyad.Trim();
-        dto.CariTipi = dto.CariTipi.Trim();
-        return await base.AddAsync(dto);
+        if (!dto.TesisId.HasValue || dto.TesisId.Value <= 0)
+        {
+            throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
+        }
+
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var anaHesap = await GetAnaHesapAsync(anaHesapKodu, dto.CariTipi, cancellationToken);
+                var tesisSegmenti = BuildTesisSegmenti(dto.TesisId.Value);
+                var siraNo = await NextSiraNoAsync(dto.TesisId.Value, anaHesapKodu, cancellationToken);
+                var uretilenKod = $"{anaHesapKodu}.{tesisSegmenti}.{siraNo}";
+
+                var existingWithSameCode = await _dbContext.CariKartlar
+                    .IgnoreQueryFilters()
+                    .AnyAsync(x => x.CariKodu == uretilenKod && !x.IsDeleted, cancellationToken);
+                if (existingWithSameCode)
+                {
+                    throw new BaseException("Uretilen cari kodu zaten mevcut. Islem tekrar deneyiniz.", 409);
+                }
+
+                var detayHesap = await ResolveOrCreateDetayHesapAsync(uretilenKod, dto.UnvanAdSoyad, anaHesap, cancellationToken);
+
+                var entity = new CariKart
+                {
+                    TesisId = dto.TesisId,
+                    CariTipi = dto.CariTipi,
+                    CariKodu = uretilenKod,
+                    UnvanAdSoyad = dto.UnvanAdSoyad,
+                    VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
+                    VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
+                    Telefon = NormalizeOptional(dto.Telefon, 32),
+                    Eposta = NormalizeOptional(dto.Eposta, 256),
+                    Adres = NormalizeOptional(dto.Adres, 512),
+                    Il = NormalizeOptional(dto.Il, 128),
+                    Ilce = NormalizeOptional(dto.Ilce, 128),
+                    AktifMi = dto.AktifMi,
+                    EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
+                    EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
+                    Aciklama = NormalizeOptional(dto.Aciklama, 1024),
+                    AnaMuhasebeHesapKodu = anaHesapKodu,
+                    MuhasebeHesapSiraNo = siraNo,
+                    TesisSegmenti = tesisSegmenti,
+                    MuhasebeHesapPlaniId = detayHesap.Id
+                };
+
+                await _dbContext.CariKartlar.AddAsync(entity, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+                return Mapper.Map<CariKartDto>(entity);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 5)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (attempt < 5 && IsRetryableSqlConflict(ex))
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+        }
+
+        throw new BaseException("Cari kodu uretilirken eszamanli islem catismasi olustu. Tekrar deneyiniz.", 409);
     }
 
     public override async Task<CariKartDto> UpdateAsync(CariKartDto dto)
@@ -71,19 +150,77 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             throw new BaseException("Cari kart id zorunludur.", 400);
         }
 
-        dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
-        Normalize(dto);
-        var normalizedCode = dto.CariKodu.Trim().ToUpperInvariant();
-        var exists = await _repository.AnyAsync(x => x.Id != dto.Id.Value && x.CariKodu.ToUpper() == normalizedCode && x.TesisId == dto.TesisId);
-        if (exists)
+        NormalizeCommonFields(dto);
+        var entity = await _dbContext.CariKartlar.FirstOrDefaultAsync(x => x.Id == dto.Id.Value)
+            ?? throw new BaseException("Cari kart bulunamadi.", 404);
+
+        await EnsureCanAccessTesisAsync(entity.TesisId, CancellationToken.None);
+
+        var nextTesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
+        var hasMuhasebeLink = entity.MuhasebeHesapPlaniId.HasValue;
+
+        if (hasMuhasebeLink && !string.Equals(entity.CariTipi, dto.CariTipi, StringComparison.OrdinalIgnoreCase))
         {
-            throw new BaseException("Cari kodu ayni tesis altinda benzersiz olmalidir.", 400);
+            throw new BaseException("Muhasebe hesabı oluşturulmuş cari kartlarda cari tipi değiştirilemez.", 400);
         }
 
-        dto.CariKodu = normalizedCode;
-        dto.UnvanAdSoyad = dto.UnvanAdSoyad.Trim();
-        dto.CariTipi = dto.CariTipi.Trim();
-        return await base.UpdateAsync(dto);
+        if (hasMuhasebeLink && entity.TesisId != nextTesisId)
+        {
+            throw new BaseException("Muhasebe hesabı oluşturulmuş cari kartlarda tesis değiştirilemez.", 400);
+        }
+
+        entity.TesisId = nextTesisId;
+        entity.CariTipi = dto.CariTipi;
+        entity.UnvanAdSoyad = dto.UnvanAdSoyad;
+        entity.VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32);
+        entity.VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128);
+        entity.Telefon = NormalizeOptional(dto.Telefon, 32);
+        entity.Eposta = NormalizeOptional(dto.Eposta, 256);
+        entity.Adres = NormalizeOptional(dto.Adres, 512);
+        entity.Il = NormalizeOptional(dto.Il, 128);
+        entity.Ilce = NormalizeOptional(dto.Ilce, 128);
+        entity.AktifMi = dto.AktifMi;
+        entity.EFaturaMukellefiMi = dto.EFaturaMukellefiMi;
+        entity.EArsivKapsamindaMi = dto.EArsivKapsamindaMi;
+        entity.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+
+        if (entity.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.Ad = entity.UnvanAdSoyad;
+                if (!entity.AktifMi)
+                {
+                    hesap.AktifMi = false;
+                }
+            }
+        }
+
+        await _dbContext.SaveChangesAsync();
+        return Mapper.Map<CariKartDto>(entity);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var entity = await _dbContext.CariKartlar.FirstOrDefaultAsync(x => x.Id == id);
+        if (entity is null)
+        {
+            throw new BaseException("Cari kart bulunamadi.", 404);
+        }
+
+        await EnsureCanAccessTesisAsync(entity.TesisId, CancellationToken.None);
+        await base.DeleteAsync(id);
+
+        if (entity.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.AktifMi = false;
+                await _dbContext.SaveChangesAsync();
+            }
+        }
     }
 
     public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
@@ -107,8 +244,8 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         return await base.WhereAsync(predicate, includeQuery);
     }
 
-    public override async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<CariKartDto>> GetPagedAsync(
-        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+    public override async Task<PagedResult<CariKartDto>> GetPagedAsync(
+        PagedRequest request,
         System.Linq.Expressions.Expression<Func<CariKart, bool>>? predicate = null,
         Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null,
         Func<IQueryable<CariKart>, IOrderedQueryable<CariKart>>? orderBy = null)
@@ -118,22 +255,159 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
-    private static void Normalize(CariKartDto dto)
+    private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, CancellationToken cancellationToken)
     {
+        var sayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
+            .FirstOrDefaultAsync(x => x.TesisId == tesisId && x.AnaHesapKodu == anaHesapKodu, cancellationToken);
+
+        if (sayac is null)
+        {
+            sayac = new MuhasebeHesapKoduSayac
+            {
+                TesisId = tesisId,
+                AnaHesapKodu = anaHesapKodu,
+                SonSiraNo = 0,
+                Aciklama = "Cari kart otomatik kod sayaci"
+            };
+            await _dbContext.Set<MuhasebeHesapKoduSayac>().AddAsync(sayac, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        sayac.SonSiraNo += 1;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return sayac.SonSiraNo;
+    }
+
+    private async Task<MuhasebeHesapPlani> GetAnaHesapAsync(string anaHesapKodu, string cariTipi, CancellationToken cancellationToken)
+    {
+        var anaHesap = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi)
+            .FirstOrDefaultAsync(x => x.TamKod == anaHesapKodu || x.Kod == anaHesapKodu, cancellationToken);
+
+        if (anaHesap is not null)
+        {
+            return anaHesap;
+        }
+
+        if (string.Equals(cariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("3.32.320 SATICILAR ana hesabı bulunamadı.", 400);
+        }
+
+        throw new BaseException("1.12.120 ALICILAR ana hesabı bulunamadı.", 400);
+    }
+
+    private async Task<MuhasebeHesapPlani> ResolveOrCreateDetayHesapAsync(
+        string cariKodu,
+        string unvanAdSoyad,
+        MuhasebeHesapPlani anaHesap,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.MuhasebeHesapPlanlari
+            .FirstOrDefaultAsync(x => !x.IsDeleted && (x.Kod == cariKodu || x.TamKod == cariKodu), cancellationToken);
+
+        if (existing is not null)
+        {
+            var linkedToAnotherCari = await _dbContext.CariKartlar.AnyAsync(
+                x => !x.IsDeleted && x.MuhasebeHesapPlaniId == existing.Id,
+                cancellationToken);
+            if (linkedToAnotherCari)
+            {
+                throw new BaseException($"'{cariKodu}' kodlu muhasebe hesap plani baska bir cari karta bagli.", 400);
+            }
+
+            existing.Ad = unvanAdSoyad;
+            existing.AktifMi = true;
+            return existing;
+        }
+
+        var detay = new MuhasebeHesapPlani
+        {
+            Kod = cariKodu,
+            TamKod = cariKodu,
+            Ad = unvanAdSoyad,
+            SeviyeNo = anaHesap.SeviyeNo + 1,
+            UstHesapId = anaHesap.Id,
+            AktifMi = true,
+            Aciklama = "Cari kart otomatik detay hesabi"
+        };
+
+        await _dbContext.MuhasebeHesapPlanlari.AddAsync(detay, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return detay;
+    }
+
+    private static string BuildTesisSegmenti(int tesisId)
+    {
+        if (tesisId <= 0)
+        {
+            throw new BaseException("Tesis segmenti olusturulamadi.", 400);
+        }
+
+        return tesisId > 999 ? tesisId.ToString() : tesisId.ToString("000");
+    }
+
+    private static string? ResolveAnaHesapKodu(string cariTipi)
+    {
+        if (string.Equals(cariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
+        {
+            return TedarikciAnaHesapKodu;
+        }
+
+        if (string.Equals(cariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.OrdinalIgnoreCase))
+        {
+            return MusteriAnaHesapKodu;
+        }
+
+        return null;
+    }
+
+    private static void NormalizeCommonFields(CariKartDto dto)
+    {
+        dto.CariTipi = (dto.CariTipi ?? string.Empty).Trim();
+        dto.UnvanAdSoyad = (dto.UnvanAdSoyad ?? string.Empty).Trim();
+        dto.CariKodu = (dto.CariKodu ?? string.Empty).Trim();
+        dto.VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32);
+        dto.VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128);
+        dto.Telefon = NormalizeOptional(dto.Telefon, 32);
+        dto.Eposta = NormalizeOptional(dto.Eposta, 256);
+        dto.Adres = NormalizeOptional(dto.Adres, 512);
+        dto.Il = NormalizeOptional(dto.Il, 128);
+        dto.Ilce = NormalizeOptional(dto.Ilce, 128);
+        dto.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+
         if (!CariKartTipleri.Hepsi.Contains(dto.CariTipi))
         {
             throw new BaseException("Cari tipi gecersiz.", 400);
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.CariKodu))
-        {
-            throw new BaseException("Cari kodu zorunludur.", 400);
         }
 
         if (string.IsNullOrWhiteSpace(dto.UnvanAdSoyad))
         {
             throw new BaseException("Unvan/Ad Soyad zorunludur.", 400);
         }
+    }
+
+    private static string? NormalizeOptional(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
+    }
+
+    private static bool IsRetryableSqlConflict(DbUpdateException ex)
+    {
+        var sqlEx = ex.InnerException as SqlException;
+        if (sqlEx is null)
+        {
+            return false;
+        }
+
+        return sqlEx.Number is 2601 or 2627;
     }
 
     private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)

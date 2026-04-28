@@ -6,7 +6,7 @@ namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 public class MuhasebeHesapPlani : BaseEntity<int>
 {
     [Required]
-    [MaxLength(16)]
+    [MaxLength(64)]
     public string Kod { get; set; } = string.Empty;
 
     [Required]

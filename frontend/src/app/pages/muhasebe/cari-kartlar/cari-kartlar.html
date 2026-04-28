@@ -26,6 +26,7 @@
     <ng-template #header>
         <tr>
             <th>Cari Kodu</th>
+            <th>Ana Hesap</th>
             <th>Unvan/Ad Soyad</th>
             <th>Tesis</th>
             <th>Cari Tipi</th>
@@ -38,6 +39,7 @@
     <ng-template #body let-item>
         <tr>
             <td>{{ item.cariKodu }}</td>
+            <td>{{ item.anaMuhasebeHesapKodu || '-' }}</td>
             <td>{{ item.unvanAdSoyad }}</td>
             <td>{{ getTesisAdi(item.tesisId) }}</td>
             <td>{{ item.cariTipi }}</td>
@@ -58,15 +60,15 @@
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Tesis</label>
-            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" />
+            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.tesisId" appendTo="body" [disabled]="isTesisLocked()" />
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Cari Tipi</label>
-            <p-select class="w-full" [options]="cariTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.cariTipi" appendTo="body" />
+            <p-select class="w-full" [options]="cariTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.cariTipi" appendTo="body" [disabled]="isCariTipiLocked()" />
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Cari Kodu</label>
-            <input pInputText class="w-full" [(ngModel)]="model.cariKodu" maxlength="64" />
+            <input pInputText class="w-full" [(ngModel)]="model.cariKodu" maxlength="64" [readonly]="isCariKoduReadOnly()" [placeholder]="isCariKoduReadOnly() ? 'Sistem tarafından oluşturulacak' : ''" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Unvan/Ad Soyad</label>

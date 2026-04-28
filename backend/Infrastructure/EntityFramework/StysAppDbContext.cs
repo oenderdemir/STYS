@@ -126,6 +126,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RestoranSiparisKalemi> RestoranSiparisKalemleri => Set<RestoranSiparisKalemi>();
     public DbSet<RestoranOdeme> RestoranOdemeleri => Set<RestoranOdeme>();
     public DbSet<CariKart> CariKartlar => Set<CariKart>();
+    public DbSet<MuhasebeHesapKoduSayac> MuhasebeHesapKoduSayaclari => Set<MuhasebeHesapKoduSayac>();
     public DbSet<CariHareket> CariHareketler => Set<CariHareket>();
     public DbSet<KasaBankaHesap> KasaBankaHesaplari => Set<KasaBankaHesap>();
     public DbSet<Hesap> Hesaplar => Set<Hesap>();
@@ -1456,6 +1457,8 @@ public class StysAppDbContext : DbContext
             entity.ToTable("CariKartlar", muhasebeSchema);
             entity.Property(x => x.CariTipi).HasMaxLength(32).IsRequired();
             entity.Property(x => x.CariKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.AnaMuhasebeHesapKodu).HasMaxLength(64);
+            entity.Property(x => x.TesisSegmenti).HasMaxLength(16);
             entity.Property(x => x.UnvanAdSoyad).HasMaxLength(256).IsRequired();
             entity.Property(x => x.VergiNoTckn).HasMaxLength(32);
             entity.Property(x => x.VergiDairesi).HasMaxLength(128);
@@ -1471,6 +1474,33 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.TesisId)
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
             entity.HasIndex(x => new { x.CariTipi, x.UnvanAdSoyad })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId)
+                .HasFilter("[IsDeleted] = 0 AND [MuhasebeHesapPlaniId] IS NOT NULL");
+            entity.HasIndex(x => new { x.TesisId, x.AnaMuhasebeHesapKodu })
+                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL AND [AnaMuhasebeHesapKodu] IS NOT NULL");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MuhasebeHesapKoduSayac>(entity =>
+        {
+            entity.ToTable("MuhasebeHesapKoduSayaclari", muhasebeSchema);
+            entity.Property(x => x.AnaHesapKodu).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+            entity.HasIndex(x => new { x.TesisId, x.AnaHesapKodu })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.TesisId)
                 .HasFilter("[IsDeleted] = 0");
 
             entity.HasOne(x => x.Tesis)
@@ -1711,14 +1741,14 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<MuhasebeHesapPlani>(entity =>
         {
             entity.ToTable("MuhasebeHesapPlanlari", muhasebeSchema);
-            entity.Property(x => x.Kod).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.TamKod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
-            entity.HasIndex(x => x.TamKod)
+            entity.HasIndex(x => x.Kod)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.UstHesapId, x.Kod })
+            entity.HasIndex(x => x.TamKod)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.UstHesapId)

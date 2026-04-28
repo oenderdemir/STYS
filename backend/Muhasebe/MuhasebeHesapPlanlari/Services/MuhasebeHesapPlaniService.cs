@@ -161,13 +161,12 @@ public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto,
             throw new BaseException("Tam kod benzersiz olmalidir.", 400);
         }
 
-        var siblingKodExists = await _repository.AnyAsync(x =>
+        var kodExists = await _repository.AnyAsync(x =>
             x.Kod == dto.Kod
-            && x.UstHesapId == dto.UstHesapId
             && (!currentId.HasValue || x.Id != currentId.Value));
-        if (siblingKodExists)
+        if (kodExists)
         {
-            throw new BaseException("Ayni ust hesap altinda kod benzersiz olmalidir.", 400);
+            throw new BaseException("Kod benzersiz olmalidir.", 400);
         }
     }
 

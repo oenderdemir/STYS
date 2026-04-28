@@ -3315,3 +3315,55 @@ et10.0-windows, UseWindowsForms=true).
 ### Dogrulama
 - `dotnet build backend/STYS.csproj` -> BASARILI
 - `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
+## Tur 131 - CariKart / Muhasebe Hesap Plani Entegrasyonu
+
+### Backend
+- `CariKart` otomatik muhasebe kodlama icin genisletildi:
+  - `MuhasebeHesapPlaniId`
+  - `AnaMuhasebeHesapKodu`
+  - `MuhasebeHesapSiraNo`
+  - `TesisSegmenti`
+- Yeni entity/repository eklendi:
+  - `MuhasebeHesapKoduSayac`
+  - `IMuhasebeHesapKoduSayacRepository`, `MuhasebeHesapKoduSayacRepository`
+- `CariKartService` akisi guncellendi:
+  - `Tedarikci/Musteri/KurumsalMusteri` icin `CariKodu` otomatik uretilir:
+    - `3.32.320.{TesisSegmenti}.{SiraNo}` (Tedarikci)
+    - `1.12.120.{TesisSegmenti}.{SiraNo}` (Musteri/KurumsalMusteri)
+  - Sayaç `TesisId + AnaHesapKodu` bazli tutulur.
+  - Ayni islemde ilgili `MuhasebeHesapPlani` detay hesabi olusturulur/iliskilendirilir.
+  - `CariKart.MuhasebeHesapPlaniId` set edilir.
+  - Eslik durumlarinda retry/konflikt korumasi eklendi.
+  - Update tarafinda `CariKodu` manuel degistirilemez.
+  - Muhasebe hesabi bagli kayitlarda `CariTipi/Tesis` degisikligi engellendi.
+  - Unvan degisince bagli muhasebe hesap adi guncellenir.
+  - Silme/pasifleme sonrasi bagli muhasebe hesap fiziksel silinmez, pasife cekilir.
+- `MuhasebeHesapPlani` tarafinda `Kod` global benzersizlige cekildi.
+
+### EF / Migration
+- Yeni migration eklendi:
+  - `20260427131218_AddCariKartMuhasebeHesapEntegrasyonu`
+- Icerik:
+  - `CariKartlar` tablosuna yeni kolonlar
+  - `muhasebe.MuhasebeHesapKoduSayaclari` tablosu (+ `RowVersion` concurrency token)
+  - `CariKart -> MuhasebeHesapPlani` FK
+  - `MuhasebeHesapPlani.Kod` uzunlugu `64` ve global unique index
+  - Backfill SQL:
+    - mevcut `Tedarikci/Musteri/KurumsalMusteri` cari kartlar icin kod, segment, sira no ve muhasebe detay hesap iliskisi olusturulur
+    - sayac tablosu son kullanilan degerlerle doldurulur
+    - duplicate/ana hesap eksik senaryolari icin guvenli hata uretimi eklenir
+
+### Frontend
+- `muhasebe/cari-kartlar` modelleri guncellendi:
+  - `muhasebeHesapPlaniId`, `anaMuhasebeHesapKodu`, `muhasebeHesapSiraNo`, `tesisSegmenti`
+  - create requestte `cariKodu` opsiyonel hale getirildi
+- Form davranisi guncellendi:
+  - `Tedarikci/Musteri/KurumsalMusteri` icin `CariKodu` readonly + placeholder:
+    - `Sistem tarafından oluşturulacak`
+  - Muhasebe hesabi olusmus kayitlarda `CariTipi` ve `Tesis` alanlari kilitlenir.
+- Listeye `Ana Hesap` kolonu eklendi.
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)

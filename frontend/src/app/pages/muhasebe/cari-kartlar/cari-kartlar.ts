@@ -94,15 +94,20 @@ export class CariKartlarPage implements OnInit {
     }
 
     save(): void {
-        if (!this.model.cariKodu?.trim() || !this.model.unvanAdSoyad?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Cari kodu ve unvan zorunludur.' });
+        if (!this.model.unvanAdSoyad?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Unvan zorunludur.' });
+            return;
+        }
+
+        if (!this.isCariKoduReadOnly() && !this.model.cariKodu?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Cari kodu zorunludur.' });
             return;
         }
 
         const payload: CreateCariKartRequest | UpdateCariKartRequest = {
             tesisId: this.model.tesisId ?? null,
             cariTipi: this.model.cariTipi,
-            cariKodu: this.model.cariKodu.trim(),
+            cariKodu: this.isCariKoduReadOnly() ? null : (this.model.cariKodu?.trim() || null),
             unvanAdSoyad: this.model.unvanAdSoyad.trim(),
             vergiNoTckn: this.model.vergiNoTckn?.trim() || null,
             vergiDairesi: this.model.vergiDairesi?.trim() || null,
@@ -160,6 +165,10 @@ export class CariKartlarPage implements OnInit {
             tesisId: null,
             cariTipi: 'Musteri',
             cariKodu: '',
+            muhasebeHesapPlaniId: null,
+            anaMuhasebeHesapKodu: null,
+            muhasebeHesapSiraNo: null,
+            tesisSegmenti: null,
             unvanAdSoyad: '',
             vergiNoTckn: null,
             vergiDairesi: null,
@@ -180,6 +189,18 @@ export class CariKartlarPage implements OnInit {
         this.load(1, this.pageSize);
     }
 
+    isCariKoduReadOnly(): boolean {
+        return this.isAutoCariTipi(this.model.cariTipi);
+    }
+
+    isCariTipiLocked(): boolean {
+        return this.dialogMode === 'edit' && !!this.model.muhasebeHesapPlaniId;
+    }
+
+    isTesisLocked(): boolean {
+        return this.dialogMode === 'edit' && !!this.model.muhasebeHesapPlaniId;
+    }
+
     getTesisAdi(tesisId?: number | null): string {
         if (!tesisId) {
             return '-';
@@ -194,6 +215,10 @@ export class CariKartlarPage implements OnInit {
         }
 
         this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+    }
+
+    private isAutoCariTipi(cariTipi: string | null | undefined): boolean {
+        return cariTipi === 'Tedarikci' || cariTipi === 'Musteri' || cariTipi === 'KurumsalMusteri';
     }
 
     private loadTesisler(): void {

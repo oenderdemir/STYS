@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Tesisler.Entities;
@@ -11,6 +12,9 @@ public class TasinirKart : BaseEntity<int>
     public int? TesisId { get; set; }
 
     public int TasinirKodId { get; set; }
+    public int? MuhasebeHesapPlaniId { get; set; }
+    public string? AnaMuhasebeHesapKodu { get; set; }
+    public int? MuhasebeHesapSiraNo { get; set; }
 
     [Required]
     [MaxLength(64)]
@@ -43,5 +47,6 @@ public class TasinirKart : BaseEntity<int>
 
     public Tesis? Tesis { get; set; }
     public TasinirKod? TasinirKod { get; set; }
+    public MuhasebeHesapPlani? MuhasebeHesapPlani { get; set; }
     public ICollection<StokHareket> StokHareketleri { get; set; } = [];
 }

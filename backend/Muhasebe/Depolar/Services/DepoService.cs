@@ -2,10 +2,11 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Depolar.Dtos;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Depolar.Repositories;
-using STYS.Muhasebe.MuhasebeHesapPlanlari.Repositories;
 using STYS.Tesisler.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -16,32 +17,46 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
 {
     private readonly IDepoRepository _repository;
     private readonly ITesisRepository _tesisRepository;
-    private readonly IMuhasebeHesapPlaniRepository _muhasebeHesapPlaniRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _dbContext;
     private readonly IMapper _mapper;
+    private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
 
     public DepoService(
         IDepoRepository repository,
         ITesisRepository tesisRepository,
-        IMuhasebeHesapPlaniRepository muhasebeHesapPlaniRepository,
         IUserAccessScopeService userAccessScopeService,
         StysAppDbContext dbContext,
-        IMapper mapper)
+        IMapper mapper,
+        IMuhasebeDetayHesapService muhasebeDetayHesapService)
         : base(repository, mapper)
     {
         _repository = repository;
         _tesisRepository = tesisRepository;
-        _muhasebeHesapPlaniRepository = muhasebeHesapPlaniRepository;
         _userAccessScopeService = userAccessScopeService;
         _dbContext = dbContext;
         _mapper = mapper;
+        _muhasebeDetayHesapService = muhasebeDetayHesapService;
     }
 
     public override async Task<DepoDto> AddAsync(DepoDto dto)
     {
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         await NormalizeAndValidateAsync(dto, null);
+        EnsureTesisRequired(dto.TesisId);
+
+        var anaHesapKodu = ResolveDepoAnaHesapKodu();
+        var detay = await _muhasebeDetayHesapService.CreateAsync(
+            dto.TesisId!.Value,
+            anaHesapKodu,
+            dto.Ad,
+            "Depo",
+            CancellationToken.None);
+
+        dto.MuhasebeHesapPlaniId = detay.HesapPlaniId;
+        dto.AnaMuhasebeHesapKodu = anaHesapKodu;
+        dto.MuhasebeHesapSiraNo = detay.SiraNo;
+        dto.Kod = detay.Kod;
 
         var entity = _mapper.Map<Depo>(dto);
         entity.DepoCikisGruplari = BuildCikisGruplari(dto.CikisGruplari, null);
@@ -60,6 +75,7 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
 
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
         await NormalizeAndValidateAsync(dto, dto.Id.Value);
+        EnsureTesisRequired(dto.TesisId);
 
         var entity = await _dbContext.Depolar
             .Include(x => x.DepoCikisGruplari)
@@ -70,10 +86,15 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
             throw new BaseException("Depo kaydi bulunamadi.", 404);
         }
 
+        var hasMuhasebeLink = entity.MuhasebeHesapPlaniId.HasValue;
+        if (hasMuhasebeLink && entity.TesisId != dto.TesisId)
+        {
+            throw new BaseException("Muhasebe hesabı oluşturulmuş depolarda tesis değiştirilemez.", 400);
+        }
+
+        dto.Kod = entity.Kod;
         entity.TesisId = dto.TesisId;
         entity.UstDepoId = dto.UstDepoId;
-        entity.MuhasebeHesapPlaniId = dto.MuhasebeHesapPlaniId;
-        entity.Kod = dto.Kod;
         entity.Ad = dto.Ad;
         entity.MalzemeKayitTipi = Enum.Parse<DepoMalzemeKayitTipleri>(dto.MalzemeKayitTipi);
         entity.SatisFiyatlariniGoster = dto.SatisFiyatlariniGoster;
@@ -82,6 +103,21 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         entity.Aciklama = dto.Aciklama;
 
         SyncCikisGruplari(entity, dto.CikisGruplari);
+
+        if (entity.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.Ad = entity.Ad;
+                hesap.TesisId = entity.TesisId;
+                if (!entity.AktifMi)
+                {
+                    hesap.AktifMi = false;
+                }
+            }
+        }
+
         await _dbContext.SaveChangesAsync();
 
         return await MapDetailDtoAsync(entity.Id);
@@ -145,6 +181,16 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         }
 
         await base.DeleteAsync(id);
+
+        if (depo.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == depo.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.AktifMi = false;
+                await _dbContext.SaveChangesAsync();
+            }
+        }
     }
 
     private async Task NormalizeAndValidateAsync(DepoDto dto, int? currentId)
@@ -154,11 +200,6 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         dto.Aciklama = string.IsNullOrWhiteSpace(dto.Aciklama) ? null : dto.Aciklama.Trim();
         dto.MalzemeKayitTipi = NormalizeMalzemeKayitTipi(dto.MalzemeKayitTipi);
         dto.CikisGruplari = dto.CikisGruplari ?? [];
-
-        if (string.IsNullOrWhiteSpace(dto.Kod))
-        {
-            throw new BaseException("Depo kodu zorunludur.", 400);
-        }
 
         if (string.IsNullOrWhiteSpace(dto.Ad))
         {
@@ -174,19 +215,13 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
             }
         }
 
-        if (dto.MuhasebeHesapPlaniId.HasValue)
+        if (!string.IsNullOrWhiteSpace(dto.Kod))
         {
-            var muhasebeHesap = await _muhasebeHesapPlaniRepository.GetByIdAsync(dto.MuhasebeHesapPlaniId.Value);
-            if (muhasebeHesap is null || !muhasebeHesap.AktifMi)
+            var duplicate = await _repository.AnyAsync(x => x.Kod == dto.Kod && x.TesisId == dto.TesisId && (!currentId.HasValue || x.Id != currentId.Value));
+            if (duplicate)
             {
-                throw new BaseException("Secilen muhasebe kodu bulunamadi veya pasif.", 400);
+                throw new BaseException("Depo kodu ayni tesis altinda benzersiz olmalidir.", 400);
             }
-        }
-
-        var duplicate = await _repository.AnyAsync(x => x.Kod == dto.Kod && (!currentId.HasValue || x.Id != currentId.Value));
-        if (duplicate)
-        {
-            throw new BaseException("Depo kodu benzersiz olmalidir.", 400);
         }
 
         await ValidateParentAsync(dto, currentId);
@@ -350,6 +385,19 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         }
 
         return candidateTesisId is > 0 ? candidateTesisId : null;
+    }
+
+    private static void EnsureTesisRequired(int? tesisId)
+    {
+        if (!tesisId.HasValue || tesisId.Value <= 0)
+        {
+            throw new BaseException("Depo icin tesis secimi zorunludur.", 400);
+        }
+    }
+
+    private string ResolveDepoAnaHesapKodu()
+    {
+        return MuhasebeAnaHesapKodlari.Depo;
     }
 
     private static Func<IQueryable<Depo>, IQueryable<Depo>> BuildScopedIncludeQuery(

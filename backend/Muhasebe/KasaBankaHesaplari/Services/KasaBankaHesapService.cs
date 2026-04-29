@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.KasaBankaHesaplari.Dtos;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Repositories;
@@ -278,10 +279,10 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
     {
         return tip switch
         {
-            KasaBankaHesapTipleri.NakitKasa => "1.10.100",
-            KasaBankaHesapTipleri.Banka => "1.10.102",
-            KasaBankaHesapTipleri.DovizHesabi => "1.10.102",
-            KasaBankaHesapTipleri.KrediKarti => "1.10.109",
+            KasaBankaHesapTipleri.NakitKasa => MuhasebeAnaHesapKodlari.FinansalKasa,
+            KasaBankaHesapTipleri.Banka => MuhasebeAnaHesapKodlari.FinansalBanka,
+            KasaBankaHesapTipleri.DovizHesabi => MuhasebeAnaHesapKodlari.FinansalBanka,
+            KasaBankaHesapTipleri.KrediKarti => MuhasebeAnaHesapKodlari.FinansalKrediKarti,
             _ => throw new BaseException("Hesap tipi gecersiz.", 400)
         };
     }

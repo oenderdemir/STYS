@@ -11,6 +11,8 @@ public class Depo : BaseEntity<int>
     public int? TesisId { get; set; }
     public int? UstDepoId { get; set; }
     public int? MuhasebeHesapPlaniId { get; set; }
+    public string? AnaMuhasebeHesapKodu { get; set; }
+    public int? MuhasebeHesapSiraNo { get; set; }
 
     [Required]
     [MaxLength(64)]

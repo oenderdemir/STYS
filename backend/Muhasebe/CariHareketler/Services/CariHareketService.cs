@@ -102,10 +102,14 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
             throw new BaseException("Cari secimi zorunludur.", 400);
         }
 
-        var cariExists = await _cariKartRepository.AnyAsync(x => x.Id == cariKartId);
-        if (!cariExists)
+        var cari = await _cariKartRepository.GetByIdAsync(cariKartId);
+        if (cari is null)
         {
             throw new BaseException("Cari kart bulunamadi.", 400);
+        }
+        if (!cari.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException("Seçilen cari kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
         }
 
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();

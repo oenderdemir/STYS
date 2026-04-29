@@ -168,8 +168,8 @@ export class TasinirKartlariPage implements OnInit {
     save(): void {
         this.model.tasinirKodId = this.selectedTasinirKodOption?.value ?? this.model.tasinirKodId;
 
-        if (!this.model.stokKodu?.trim() || !this.model.ad?.trim() || !this.model.tasinirKodId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Stok kodu, ad ve tasinir kod secimi zorunludur.' });
+        if (!this.model.ad?.trim() || !this.model.tasinirKodId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad ve tasinir kod secimi zorunludur.' });
             return;
         }
 
@@ -177,7 +177,7 @@ export class TasinirKartlariPage implements OnInit {
         const payload = {
             tesisId: this.model.tesisId ?? null,
             tasinirKodId: this.model.tasinirKodId,
-            stokKodu: this.model.stokKodu.trim(),
+            stokKodu: null,
             ad: this.model.ad.trim(),
             birim: this.model.birim?.trim() || 'Adet',
             malzemeTipi: this.model.malzemeTipi,
@@ -251,6 +251,9 @@ export class TasinirKartlariPage implements OnInit {
             tesisId: null,
             tasinirKodId: 0,
             stokKodu: '',
+            muhasebeHesapPlaniId: null,
+            anaMuhasebeHesapKodu: null,
+            muhasebeHesapSiraNo: null,
             ad: '',
             birim: 'Adet',
             malzemeTipi: 'Diger',

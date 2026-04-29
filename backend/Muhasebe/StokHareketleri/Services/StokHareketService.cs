@@ -143,6 +143,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             throw new BaseException("Gecerli bir depo secilmelidir.", 400);
         }
+        var depo = await _depoRepository.GetByIdAsync(dto.DepoId);
+        if (depo is null || !depo.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException("Seçilen deponun muhasebe hesap planı bağlantısı bulunmuyor.", 400);
+        }
 
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         if (scope.IsScoped)
@@ -158,13 +163,22 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             throw new BaseException("Gecerli bir tasinir kart secilmelidir.", 400);
         }
+        var tasinirKart = await _tasinirKartRepository.GetByIdAsync(dto.TasinirKartId);
+        if (tasinirKart is null || !tasinirKart.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException("Seçilen taşınır kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
+        }
 
         if (dto.CariKartId.HasValue && dto.CariKartId.Value > 0)
         {
-            var cariExists = await _cariKartRepository.AnyAsync(x => x.Id == dto.CariKartId.Value);
-            if (!cariExists)
+            var cari = await _cariKartRepository.GetByIdAsync(dto.CariKartId.Value);
+            if (cari is null)
             {
                 throw new BaseException("Secilen cari kart bulunamadi.", 400);
+            }
+            if (!cari.MuhasebeHesapPlaniId.HasValue)
+            {
+                throw new BaseException("Seçilen cari kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
             }
         }
 

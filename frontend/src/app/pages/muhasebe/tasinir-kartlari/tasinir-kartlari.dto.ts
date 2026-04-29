@@ -3,6 +3,9 @@ export interface TasinirKartModel {
     tesisId?: number | null;
     tasinirKodId: number;
     stokKodu: string;
+    muhasebeHesapPlaniId?: number | null;
+    anaMuhasebeHesapKodu?: string | null;
+    muhasebeHesapSiraNo?: number | null;
     ad: string;
     birim: string;
     malzemeTipi: string;
@@ -14,8 +17,12 @@ export interface TasinirKartModel {
     aciklama?: string | null;
 }
 
-export interface CreateTasinirKartRequest extends Omit<TasinirKartModel, 'id'> {}
-export interface UpdateTasinirKartRequest extends Omit<TasinirKartModel, 'id'> {}
+export interface CreateTasinirKartRequest extends Omit<TasinirKartModel, 'id' | 'stokKodu' | 'muhasebeHesapPlaniId' | 'anaMuhasebeHesapKodu' | 'muhasebeHesapSiraNo'> {
+    stokKodu?: string | null;
+}
+export interface UpdateTasinirKartRequest extends Omit<TasinirKartModel, 'id' | 'stokKodu' | 'muhasebeHesapPlaniId' | 'anaMuhasebeHesapKodu' | 'muhasebeHesapSiraNo'> {
+    stokKodu?: string | null;
+}
 
 export const MALZEME_TIPLERI: Array<{ label: string; value: string }> = [
     { label: 'Sarf', value: 'Sarf' },

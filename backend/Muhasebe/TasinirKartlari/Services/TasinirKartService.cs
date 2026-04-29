@@ -2,6 +2,8 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.TasinirKartlari.Dtos;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
@@ -17,20 +19,42 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
     private readonly ITasinirKodRepository _tasinirKodRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _dbContext;
+    private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
 
-    public TasinirKartService(ITasinirKartRepository repository, ITasinirKodRepository tasinirKodRepository, IUserAccessScopeService userAccessScopeService, StysAppDbContext dbContext, IMapper mapper)
+    public TasinirKartService(
+        ITasinirKartRepository repository,
+        ITasinirKodRepository tasinirKodRepository,
+        IUserAccessScopeService userAccessScopeService,
+        StysAppDbContext dbContext,
+        IMapper mapper,
+        IMuhasebeDetayHesapService muhasebeDetayHesapService)
         : base(repository, mapper)
     {
         _repository = repository;
         _tasinirKodRepository = tasinirKodRepository;
         _userAccessScopeService = userAccessScopeService;
         _dbContext = dbContext;
+        _muhasebeDetayHesapService = muhasebeDetayHesapService;
     }
 
     public override async Task<TasinirKartDto> AddAsync(TasinirKartDto dto)
     {
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         await NormalizeAndValidateAsync(dto, null);
+        EnsureTesisRequired(dto.TesisId);
+
+        var anaHesapKodu = ResolveTasinirKartAnaHesapKodu();
+        var detay = await _muhasebeDetayHesapService.CreateAsync(
+            dto.TesisId!.Value,
+            anaHesapKodu,
+            dto.Ad,
+            "TasinirKart",
+            CancellationToken.None);
+
+        dto.MuhasebeHesapPlaniId = detay.HesapPlaniId;
+        dto.AnaMuhasebeHesapKodu = anaHesapKodu;
+        dto.MuhasebeHesapSiraNo = detay.SiraNo;
+        dto.StokKodu = detay.Kod;
         return await base.AddAsync(dto);
     }
 
@@ -43,7 +67,37 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
 
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id);
         await NormalizeAndValidateAsync(dto, dto.Id);
-        return await base.UpdateAsync(dto);
+        EnsureTesisRequired(dto.TesisId);
+
+        var current = await _repository.GetByIdAsync(dto.Id.Value) ?? throw new BaseException("Tasinir kart bulunamadi.", 404);
+        if (current.MuhasebeHesapPlaniId.HasValue && current.TesisId != dto.TesisId)
+        {
+            throw new BaseException("Muhasebe hesabı oluşturulmuş taşınır kartlarda tesis değiştirilemez.", 400);
+        }
+
+        dto.MuhasebeHesapPlaniId = current.MuhasebeHesapPlaniId;
+        dto.AnaMuhasebeHesapKodu = current.AnaMuhasebeHesapKodu;
+        dto.MuhasebeHesapSiraNo = current.MuhasebeHesapSiraNo;
+        dto.StokKodu = current.StokKodu;
+
+        var result = await base.UpdateAsync(dto);
+        if (current.MuhasebeHesapPlaniId.HasValue)
+        {
+            var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == current.MuhasebeHesapPlaniId.Value);
+            if (hesap is not null)
+            {
+                hesap.Ad = dto.Ad;
+                hesap.TesisId = dto.TesisId;
+                if (!dto.AktifMi)
+                {
+                    hesap.AktifMi = false;
+                }
+
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+
+        return result;
     }
 
     public override async Task<TasinirKartDto?> GetByIdAsync(int id, Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include = null)
@@ -91,11 +145,6 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("Gecerli bir tasinir kod secilmelidir.", 400);
         }
 
-        if (string.IsNullOrWhiteSpace(dto.StokKodu))
-        {
-            throw new BaseException("Stok kodu zorunludur.", 400);
-        }
-
         if (string.IsNullOrWhiteSpace(dto.Ad))
         {
             throw new BaseException("Ad zorunludur.", 400);
@@ -111,10 +160,13 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("KDV orani 0 ile 100 arasinda olmalidir.", 400);
         }
 
-        var duplicate = await _repository.AnyAsync(x => x.StokKodu == dto.StokKodu && (!currentId.HasValue || x.Id != currentId.Value));
-        if (duplicate)
+        if (!string.IsNullOrWhiteSpace(dto.StokKodu))
         {
-            throw new BaseException("Stok kodu benzersiz olmalidir.", 400);
+            var duplicate = await _repository.AnyAsync(x => x.StokKodu == dto.StokKodu && x.TesisId == dto.TesisId && (!currentId.HasValue || x.Id != currentId.Value));
+            if (duplicate)
+            {
+                throw new BaseException("Stok kodu ayni tesis altinda benzersiz olmalidir.", 400);
+            }
         }
     }
 
@@ -174,5 +226,18 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
 
             return result;
         };
+    }
+
+    private static void EnsureTesisRequired(int? tesisId)
+    {
+        if (!tesisId.HasValue || tesisId.Value <= 0)
+        {
+            throw new BaseException("Tasinir kart icin tesis secimi zorunludur.", 400);
+        }
+    }
+
+    private string ResolveTasinirKartAnaHesapKodu()
+    {
+        return MuhasebeAnaHesapKodlari.TasinirKart;
     }
 }

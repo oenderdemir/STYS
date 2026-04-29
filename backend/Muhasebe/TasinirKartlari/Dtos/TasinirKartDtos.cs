@@ -6,6 +6,9 @@ public class TasinirKartDto : BaseRdbmsDto<int>
 {
     public int? TesisId { get; set; }
     public int TasinirKodId { get; set; }
+    public int? MuhasebeHesapPlaniId { get; set; }
+    public string? AnaMuhasebeHesapKodu { get; set; }
+    public int? MuhasebeHesapSiraNo { get; set; }
     public string StokKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
     public string Birim { get; set; } = "Adet";
@@ -22,7 +25,7 @@ public class CreateTasinirKartRequest
 {
     public int? TesisId { get; set; }
     public int TasinirKodId { get; set; }
-    public string StokKodu { get; set; } = string.Empty;
+    public string? StokKodu { get; set; }
     public string Ad { get; set; } = string.Empty;
     public string Birim { get; set; } = "Adet";
     public string MalzemeTipi { get; set; } = "Diger";

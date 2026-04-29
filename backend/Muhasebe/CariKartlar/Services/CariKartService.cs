@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
@@ -16,8 +17,6 @@ namespace STYS.Muhasebe.CariKartlar.Services;
 
 public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICariKartService
 {
-    private const string TedarikciAnaHesapKodu = "3.32.320";
-    private const string MusteriAnaHesapKodu = "1.12.120";
 
     private readonly ICariKartRepository _repository;
     private readonly StysAppDbContext _dbContext;
@@ -341,13 +340,13 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         if (string.Equals(cariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
         {
-            return TedarikciAnaHesapKodu;
+            return MuhasebeAnaHesapKodlari.CariTedarikci;
         }
 
         if (string.Equals(cariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase)
             || string.Equals(cariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.OrdinalIgnoreCase))
         {
-            return MusteriAnaHesapKodu;
+            return MuhasebeAnaHesapKodlari.CariMusteri;
         }
 
         return null;

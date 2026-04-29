@@ -82,7 +82,7 @@
         </div>
         <div class="col-span-12 md:col-span-5">
             <label class="block font-medium mb-2">Stok Kodu</label>
-            <input pInputText class="w-full" [(ngModel)]="model.stokKodu" maxlength="64" />
+            <input pInputText class="w-full" [value]="model.stokKodu || ''" readonly placeholder="Sistem tarafından oluşturulacak" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>

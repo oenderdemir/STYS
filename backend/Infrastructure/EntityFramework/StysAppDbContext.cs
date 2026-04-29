@@ -1808,6 +1808,7 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("TasinirKartlar", muhasebeSchema);
             entity.Property(x => x.StokKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.AnaMuhasebeHesapKodu).HasMaxLength(64);
             entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
             entity.Property(x => x.MalzemeTipi).HasMaxLength(32).IsRequired();
@@ -1820,6 +1821,10 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
             entity.HasIndex(x => new { x.TasinirKodId, x.Ad })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId)
+                .HasFilter("[IsDeleted] = 0 AND [MuhasebeHesapPlaniId] IS NOT NULL");
+            entity.HasIndex(x => new { x.TesisId, x.AnaMuhasebeHesapKodu })
+                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL AND [AnaMuhasebeHesapKodu] IS NOT NULL");
 
             entity.HasOne(x => x.TasinirKod)
                 .WithMany(x => x.TasinirKartlari)
@@ -1830,6 +1835,11 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Depo>(entity =>
@@ -1839,10 +1849,11 @@ public class StysAppDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(64)
                 .IsRequired();
+            entity.Property(x => x.AnaMuhasebeHesapKodu).HasMaxLength(64);
             entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
-            entity.HasIndex(x => x.Kod)
+            entity.HasIndex(x => new { x.TesisId, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.TesisId, x.Ad })
@@ -1851,6 +1862,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0 AND [UstDepoId] IS NOT NULL");
             entity.HasIndex(x => x.MuhasebeHesapPlaniId)
                 .HasFilter("[IsDeleted] = 0 AND [MuhasebeHesapPlaniId] IS NOT NULL");
+            entity.HasIndex(x => new { x.TesisId, x.AnaMuhasebeHesapKodu })
+                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL AND [AnaMuhasebeHesapKodu] IS NOT NULL");
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()

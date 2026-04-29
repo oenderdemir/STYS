@@ -80,12 +80,12 @@
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Muhasebe Kodu</label>
-            <p-select class="w-full" [options]="muhasebeKodSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.muhasebeHesapPlaniId" appendTo="body" [filter]="true" filterBy="label" />
+            <input pInputText class="w-full" [value]="model.kod || ''" readonly placeholder="Sistem tarafından oluşturulacak" />
         </div>
 
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Depo Kodu</label>
-            <input pInputText class="w-full" [(ngModel)]="model.kod" maxlength="64" />
+            <input pInputText class="w-full" [value]="model.kod || ''" readonly placeholder="Sistem tarafından oluşturulacak" />
         </div>
         <div class="col-span-12 md:col-span-8">
             <label class="block font-medium mb-2">Depo Adi</label>

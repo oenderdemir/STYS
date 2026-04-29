@@ -3246,6 +3246,59 @@ et10.0-windows, UseWindowsForms=true).
 - `dotnet build backend/STYS.csproj` -> BASARILI
 - `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 
+## Tur 133 - MuhasebeHesapPlani Zorunlu Baglanti Standardi
+
+### Kisa Degerlendirme
+- `MuhasebeHesapPlani` baglantisi zaten bulunan kartlar:
+  - `CariKart`, `KasaBankaHesap`, `Depo`, `Hesap`
+- Bu turda baglanti eklenen kart:
+  - `TasinirKart` (`MuhasebeHesapPlaniId`, `AnaMuhasebeHesapKodu`, `MuhasebeHesapSiraNo`)
+- Hareket tarafinda dogrudan hesap id saklamak yerine kart baglantisi zorunlu kontrolu uygulandi:
+  - `CariHareket`, `KasaHareket`, `BankaHareket`, `StokHareket`, `TahsilatOdemeBelgesi`
+
+### Backend
+- Yeni ortak servis eklendi:
+  - `IMuhasebeDetayHesapService`
+  - `MuhasebeDetayHesapService`
+- Servislerin kullanimi standartlandi:
+  - `DepoService` ve `TasinirKartService` create akisinda muhasebe detay hesabi otomatik olusturuyor.
+  - Kod/hesap alanlari manuel secim yerine sistem tarafindan uretiliyor (`{AnaHesapKodu}.{SiraNo}`).
+  - Muhasebe hesabi olusmus kayitlarda kritik alan degisimi engellendi (tesis/tip vb.).
+  - Ad degisimi bagli `MuhasebeHesapPlani.Ad` alanina yansitiliyor.
+  - Pasife alma/silme akisinda bagli hesap da pasifleniyor (hard delete yok).
+- Hareket servisleri validasyonlari guclendirildi:
+  - Secilen kartin muhasebe baglantisi yoksa islem engelleniyor ve acik hata veriliyor.
+- `StysAppDbContext` mapping/index guncellemesi:
+  - `TasinirKart -> MuhasebeHesapPlani` FK
+  - `Depo` kod unique kurali `TesisId + Kod` olarak duzenlendi
+  - Muhasebe otomasyon alanlari icin indexler eklendi
+
+### Migration
+- Yeni migration:
+  - `20260429183841_EnforceMuhasebeHesapPlaniLinks`
+- Icerik:
+  - `TasinirKartlar` tablosuna muhasebe baglantisi kolonlari
+  - `Depolar` tablosuna otomasyon kolonlari
+  - `Depolar` icin unique indexin `TesisId+Kod` modeline alinmasi
+  - `TasinirKartlar` icin FK/indexler
+
+### Frontend
+- `muhasebe/depolar`:
+  - Muhasebe kodu manuel secimi kaldirildi.
+  - Kod/muhasebe alanlari readonly + `Sistem tarafından oluşturulacak`.
+- `muhasebe/tasinir-kartlari`:
+  - Stok kodu manuel zorunlulugu kaldirildi.
+  - Kod readonly + `Sistem tarafından oluşturulacak`.
+
+### Konfigurasyon
+- `appsettings.json` ve `appsettings.Development.json` icine eklendi:
+  - `Muhasebe:AnaHesapKodlari:Depo = 1.15.150`
+  - `Muhasebe:AnaHesapKodlari:TasinirKart = 1.15.150`
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+- `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
 ## Tur 133 - CariKart TesisSegmenti Kaldirma ve Kod Hizalama
 
 ### Backend

@@ -90,10 +90,14 @@ public class BankaHareketService : BaseRdbmsService<BankaHareketDto, BankaHareke
 
         if (dto.CariKartId.HasValue && dto.CariKartId.Value > 0)
         {
-            var exists = await _cariKartRepository.AnyAsync(x => x.Id == dto.CariKartId.Value);
-            if (!exists)
+            var cari = await _cariKartRepository.GetByIdAsync(dto.CariKartId.Value);
+            if (cari is null)
             {
                 throw new BaseException("Cari kart bulunamadi.", 400);
+            }
+            if (!cari.MuhasebeHesapPlaniId.HasValue)
+            {
+                throw new BaseException("Seçilen cari kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
             }
         }
 
@@ -108,6 +112,10 @@ public class BankaHareketService : BaseRdbmsService<BankaHareketDto, BankaHareke
             if (hesap.Tip != KasaBankaHesapTipleri.Banka)
             {
                 throw new BaseException("Secilen hesap banka tipinde degil.", 400);
+            }
+            if (!hesap.MuhasebeHesapPlaniId.HasValue)
+            {
+                throw new BaseException("Seçilen finansal hesabın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
             }
 
             dto.BankaAdi = hesap.BankaAdi ?? hesap.Ad;

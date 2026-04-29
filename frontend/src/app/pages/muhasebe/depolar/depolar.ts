@@ -24,7 +24,6 @@ import {
     DepoModel,
     MALZEME_KAYIT_TIPI_OPTIONS,
     MalzemeKayitTipi,
-    MuhasebeHesapLookupModel,
     MuhasebeTesisModel
 } from './depolar.dto';
 import { DepolarService } from './depolar.service';
@@ -75,13 +74,10 @@ export class DepolarPage implements OnInit {
     selectedTesisId: number | null = null;
 
     parentDepoSecenekleri: Array<{ label: string; value: number | null }> = [{ label: 'Ana Depo', value: null }];
-    muhasebeKodSecenekleri: Array<{ label: string; value: number | null }> = [{ label: 'Seciniz', value: null }];
-
     readonly malzemeKayitTipiOptions = MALZEME_KAYIT_TIPI_OPTIONS;
 
     ngOnInit(): void {
         this.loadTesisler();
-        this.loadMuhasebeKodlari();
     }
 
     load(): void {
@@ -123,8 +119,8 @@ export class DepolarPage implements OnInit {
     }
 
     save(): void {
-        if (!this.model.kod?.trim() || !this.model.ad?.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Depo kodu ve depo adi zorunludur.' });
+        if (!this.model.ad?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Depo adi zorunludur.' });
             return;
         }
 
@@ -138,8 +134,8 @@ export class DepolarPage implements OnInit {
         const payload = {
             tesisId: this.model.tesisId ?? null,
             ustDepoId: this.model.ustDepoId ?? null,
-            muhasebeHesapPlaniId: this.model.muhasebeHesapPlaniId ?? null,
-            kod: this.model.kod.trim(),
+            muhasebeHesapPlaniId: null,
+            kod: null,
             ad: this.model.ad.trim(),
             malzemeKayitTipi: this.model.malzemeKayitTipi,
             satisFiyatlariniGoster: this.model.satisFiyatlariniGoster,
@@ -254,9 +250,8 @@ export class DepolarPage implements OnInit {
         if (!muhasebeHesapPlaniId) {
             return '-';
         }
-
-        const found = this.muhasebeKodSecenekleri.find((x) => x.value === muhasebeHesapPlaniId);
-        return found?.label ?? `#${muhasebeHesapPlaniId}`;
+        const found = this.records.find((x) => x.muhasebeHesapPlaniId === muhasebeHesapPlaniId);
+        return found?.kod ?? `#${muhasebeHesapPlaniId}`;
     }
 
     private buildTree(items: DepoModel[]): DepoTreeNode[] {
@@ -374,19 +369,6 @@ export class DepolarPage implements OnInit {
             error: (error: unknown) => {
                 this.showError(error);
                 this.load();
-                this.cdr.detectChanges();
-            }
-        });
-    }
-
-    private loadMuhasebeKodlari(): void {
-        this.service.getMuhasebeKodlari().subscribe({
-            next: (items: MuhasebeHesapLookupModel[]) => {
-                this.muhasebeKodSecenekleri = [{ label: 'Seciniz', value: null }, ...items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id }))];
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
                 this.cdr.detectChanges();
             }
         });

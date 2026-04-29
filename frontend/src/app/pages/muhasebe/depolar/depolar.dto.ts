@@ -26,8 +26,14 @@ export interface DepoModel {
     cikisGruplari: DepoCikisGrupModel[];
 }
 
-export interface CreateDepoRequest extends Omit<DepoModel, 'id'> {}
-export interface UpdateDepoRequest extends Omit<DepoModel, 'id'> {}
+export interface CreateDepoRequest extends Omit<DepoModel, 'id' | 'kod' | 'muhasebeHesapPlaniId'> {
+    kod?: string | null;
+    muhasebeHesapPlaniId?: number | null;
+}
+export interface UpdateDepoRequest extends Omit<DepoModel, 'id' | 'kod' | 'muhasebeHesapPlaniId'> {
+    kod?: string | null;
+    muhasebeHesapPlaniId?: number | null;
+}
 
 export interface MuhasebeTesisModel {
     id: number;

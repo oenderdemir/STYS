@@ -7,6 +7,8 @@ public class DepoDto : BaseRdbmsDto<int>
     public int? TesisId { get; set; }
     public int? UstDepoId { get; set; }
     public int? MuhasebeHesapPlaniId { get; set; }
+    public string? AnaMuhasebeHesapKodu { get; set; }
+    public int? MuhasebeHesapSiraNo { get; set; }
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
     public string MalzemeKayitTipi { get; set; } = "MalzemeleriAyriKayittaTut";
@@ -21,8 +23,7 @@ public class CreateDepoRequest
 {
     public int? TesisId { get; set; }
     public int? UstDepoId { get; set; }
-    public int? MuhasebeHesapPlaniId { get; set; }
-    public string Kod { get; set; } = string.Empty;
+    public string? Kod { get; set; }
     public string Ad { get; set; } = string.Empty;
     public string MalzemeKayitTipi { get; set; } = "MalzemeleriAyriKayittaTut";
     public bool SatisFiyatlariniGoster { get; set; }

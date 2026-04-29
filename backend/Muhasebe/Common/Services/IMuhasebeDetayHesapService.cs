@@ -15,5 +15,6 @@ public interface IMuhasebeDetayHesapService
         string anaMuhasebeHesapKodu,
         string kaynakTipi,
         string kaynakAd,
+        int? kaynakId = null,
         CancellationToken cancellationToken = default);
 }

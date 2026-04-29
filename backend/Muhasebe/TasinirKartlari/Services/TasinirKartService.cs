@@ -44,18 +44,30 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         EnsureTesisRequired(dto.TesisId);
 
         var anaHesapKodu = ResolveTasinirKartAnaHesapKodu();
-        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
-            dto.TesisId!.Value,
-            anaHesapKodu,
-            "TasinirKart",
-            dto.Ad,
-            CancellationToken.None);
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+        try
+        {
+            var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+                dto.TesisId!.Value,
+                anaHesapKodu,
+                "TasinirKart",
+                dto.Ad,
+                null,
+                CancellationToken.None);
 
-        dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
-        dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
-        dto.MuhasebeHesapSiraNo = detay.SiraNo;
-        dto.StokKodu = detay.Kod;
-        return await base.AddAsync(dto);
+            dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+            dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
+            dto.MuhasebeHesapSiraNo = detay.SiraNo;
+            dto.StokKodu = detay.Kod;
+            var result = await base.AddAsync(dto);
+            await tx.CommitAsync(CancellationToken.None);
+            return result;
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public override async Task<TasinirKartDto> UpdateAsync(TasinirKartDto dto)

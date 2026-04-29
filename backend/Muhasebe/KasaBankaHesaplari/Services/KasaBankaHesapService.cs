@@ -46,47 +46,58 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         }
 
         var anaHesapKodu = ResolveAnaHesapKodu(dto.Tip);
-
         ApplyTipDefaultsAndValidate(dto);
-        var muhasebeDetay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
-            dto.TesisId.Value,
-            anaHesapKodu,
-            "KasaBankaHesap",
-            dto.Ad,
-            CancellationToken.None);
 
-        var entity = new KasaBankaHesap
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+        try
         {
-            TesisId = dto.TesisId,
-            Tip = dto.Tip,
-            Kod = muhasebeDetay.Kod,
-            Ad = dto.Ad,
-            MuhasebeHesapPlaniId = muhasebeDetay.MuhasebeHesapPlaniId,
-            AnaMuhasebeHesapKodu = muhasebeDetay.AnaMuhasebeHesapKodu,
-            MuhasebeHesapSiraNo = muhasebeDetay.SiraNo,
-            ParaBirimi = dto.ParaBirimi,
-            ValorGunSayisi = dto.ValorGunSayisi,
-            KartAdi = dto.KartAdi,
-            KartNoMaskeli = dto.KartNoMaskeli,
-            KartLimiti = dto.KartLimiti,
-            HesapKesimGunu = dto.HesapKesimGunu,
-            SonOdemeGunu = dto.SonOdemeGunu,
-            BagliBankaHesapId = dto.BagliBankaHesapId,
-            BankaAdi = dto.BankaAdi,
-            SubeAdi = dto.SubeAdi,
-            HesapNo = dto.HesapNo,
-            Iban = dto.Iban,
-            MusteriNo = dto.MusteriNo,
-            HesapTuru = dto.HesapTuru,
-            SorumluKisi = dto.SorumluKisi,
-            Lokasyon = dto.Lokasyon,
-            AktifMi = dto.AktifMi,
-            Aciklama = dto.Aciklama
-        };
+            var muhasebeDetay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+                dto.TesisId.Value,
+                anaHesapKodu,
+                "FinansalHesap",
+                dto.Ad,
+                null,
+                CancellationToken.None);
 
-        await _dbContext.KasaBankaHesaplari.AddAsync(entity, CancellationToken.None);
-        await _dbContext.SaveChangesAsync(CancellationToken.None);
-        return Mapper.Map<KasaBankaHesapDto>(entity);
+            var entity = new KasaBankaHesap
+            {
+                TesisId = dto.TesisId,
+                Tip = dto.Tip,
+                Kod = muhasebeDetay.Kod,
+                Ad = dto.Ad,
+                MuhasebeHesapPlaniId = muhasebeDetay.MuhasebeHesapPlaniId,
+                AnaMuhasebeHesapKodu = muhasebeDetay.AnaMuhasebeHesapKodu,
+                MuhasebeHesapSiraNo = muhasebeDetay.SiraNo,
+                ParaBirimi = dto.ParaBirimi,
+                ValorGunSayisi = dto.ValorGunSayisi,
+                KartAdi = dto.KartAdi,
+                KartNoMaskeli = dto.KartNoMaskeli,
+                KartLimiti = dto.KartLimiti,
+                HesapKesimGunu = dto.HesapKesimGunu,
+                SonOdemeGunu = dto.SonOdemeGunu,
+                BagliBankaHesapId = dto.BagliBankaHesapId,
+                BankaAdi = dto.BankaAdi,
+                SubeAdi = dto.SubeAdi,
+                HesapNo = dto.HesapNo,
+                Iban = dto.Iban,
+                MusteriNo = dto.MusteriNo,
+                HesapTuru = dto.HesapTuru,
+                SorumluKisi = dto.SorumluKisi,
+                Lokasyon = dto.Lokasyon,
+                AktifMi = dto.AktifMi,
+                Aciklama = dto.Aciklama
+            };
+
+            await _dbContext.KasaBankaHesaplari.AddAsync(entity, CancellationToken.None);
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+            await tx.CommitAsync(CancellationToken.None);
+            return Mapper.Map<KasaBankaHesapDto>(entity);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public override async Task<KasaBankaHesapDto> UpdateAsync(KasaBankaHesapDto dto)

@@ -3197,6 +3197,41 @@ et10.0-windows, UseWindowsForms=true).
 
 ### Dogrulama
 - `dotnet build backend/STYS.csproj` -> BASARILI
+
+## Tur 135 - Muhasebe Detay Hesap Standardizasyonu Devam
+
+### Yapilanlar
+- `IMuhasebeDetayHesapService` guclendirildi:
+  - `CreateOrResolveDetayHesapAsync(...)` imzasina `kaynakId` eklendi.
+  - typed sonuc modeli (`MuhasebeDetayHesapSonuc`) korunarak kullanildi.
+- `MuhasebeDetayHesapService` transaction davranisi standartlandi:
+  - Aktif transaction varsa mevcut transaction’a katiliyor.
+  - Aktif transaction yoksa kendi transaction’ini acip commit/rollback yapiyor.
+  - Bu sayede cagirici servis transaction’i ile tek butunluk saglaniyor.
+- Ortak serviste "mevcut hesap baska kaynaga bagli mi?" kontrolu merkezilestirildi:
+  - `CariKart`, `FinansalHesap`, `Depo`, `TasinirKart` capraz kontrol ediliyor.
+  - Kaynak baska bir karta bagliysa acik hata donuluyor.
+- Ana hesap bulunamama hata mesajlari iyilestirildi:
+  - Depo icin `Depo için 1.15.150 ana hesabı bulunamadı.`
+  - Tasinir kart icin `Taşınır kart için 1.15.150 ana hesabı bulunamadı.`
+- `CariKartService` create akisinda ortak servis kullanimi transaction ile guvenli hale getirildi.
+- `KasaBankaHesapService` create akisinda ortak servis kullanimi transaction ile guvenli hale getirildi.
+- `DepoService` create akisinda detay hesap + ana kayit tek transaction’a alindi.
+- `TasinirKartService` create akisinda detay hesap + ana kayit tek transaction’a alindi.
+
+### Notlar
+- `Depo.Kod` su an muhasebe detay hesap kodu ile esitleniyor. Ileride operasyonel depo kodu ayrimi gerekirse `DepoOperasyonelKod` benzeri ayri alan degerlendirilebilir.
+- `TasinirKart.StokKodu` su an otomatik muhasebe detay hesap kodu ile esitleniyor. Is ihtiyacina gore operasyonel stok kodu ile muhasebe kodu ayrilabilir.
+- `Depo` ve `TasinirKart` gecici/standart olarak `1.15.150` ana hesabini kullaniyor. Ayrı muhasebe kirilimi istenirse `MuhasebeAnaHesapKodlari` guncellenmelidir.
+
+### Migration / Snapshot
+- Bu turda ek bir schema degisikligi yapilmadi.
+- Yeni migration yazilmadi.
+- `StysAppDbContextModelSnapshot` degisikligi gerekmiyor.
+
+### Build Sonuclari
+- Backend build: `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` -> BASARILI (mevcut warningler disinda)
+- Frontend build: `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 - `dotnet ef database update --context StysAppDbContext --no-build` -> BASARILI (`Done.`)
 
 ## Tur 128 - Global Paket Turleri Modulu (Tesis Bagimsiz)

@@ -46,24 +46,35 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         EnsureTesisRequired(dto.TesisId);
 
         var anaHesapKodu = ResolveDepoAnaHesapKodu();
-        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
-            dto.TesisId!.Value,
-            anaHesapKodu,
-            "Depo",
-            dto.Ad,
-            CancellationToken.None);
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+        try
+        {
+            var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+                dto.TesisId!.Value,
+                anaHesapKodu,
+                "Depo",
+                dto.Ad,
+                null,
+                CancellationToken.None);
 
-        dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
-        dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
-        dto.MuhasebeHesapSiraNo = detay.SiraNo;
-        dto.Kod = detay.Kod;
+            dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+            dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
+            dto.MuhasebeHesapSiraNo = detay.SiraNo;
+            dto.Kod = detay.Kod;
 
-        var entity = _mapper.Map<Depo>(dto);
-        entity.DepoCikisGruplari = BuildCikisGruplari(dto.CikisGruplari, null);
+            var entity = _mapper.Map<Depo>(dto);
+            entity.DepoCikisGruplari = BuildCikisGruplari(dto.CikisGruplari, null);
 
-        await _repository.AddAsync(entity);
-        await _repository.SaveChangesAsync();
-        return await MapDetailDtoAsync(entity.Id);
+            await _repository.AddAsync(entity);
+            await _repository.SaveChangesAsync();
+            await tx.CommitAsync(CancellationToken.None);
+            return await MapDetailDtoAsync(entity.Id);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public override async Task<DepoDto> UpdateAsync(DepoDto dto)

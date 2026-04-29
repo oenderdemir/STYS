@@ -86,38 +86,49 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
         }
 
-        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
-            dto.TesisId.Value,
-            anaHesapKodu,
-            "CariKart",
-            dto.UnvanAdSoyad,
-            CancellationToken.None);
-
-        var entity = new CariKart
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+        try
         {
-            TesisId = dto.TesisId,
-            CariTipi = dto.CariTipi,
-            CariKodu = detay.Kod,
-            UnvanAdSoyad = dto.UnvanAdSoyad,
-            VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
-            VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
-            Telefon = NormalizeOptional(dto.Telefon, 32),
-            Eposta = NormalizeOptional(dto.Eposta, 256),
-            Adres = NormalizeOptional(dto.Adres, 512),
-            Il = NormalizeOptional(dto.Il, 128),
-            Ilce = NormalizeOptional(dto.Ilce, 128),
-            AktifMi = dto.AktifMi,
-            EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
-            EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
-            Aciklama = NormalizeOptional(dto.Aciklama, 1024),
-            AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu,
-            MuhasebeHesapSiraNo = detay.SiraNo,
-            MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId
-        };
+            var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+                dto.TesisId.Value,
+                anaHesapKodu,
+                "CariKart",
+                dto.UnvanAdSoyad,
+                null,
+                CancellationToken.None);
 
-        await _dbContext.CariKartlar.AddAsync(entity, CancellationToken.None);
-        await _dbContext.SaveChangesAsync(CancellationToken.None);
-        return Mapper.Map<CariKartDto>(entity);
+            var entity = new CariKart
+            {
+                TesisId = dto.TesisId,
+                CariTipi = dto.CariTipi,
+                CariKodu = detay.Kod,
+                UnvanAdSoyad = dto.UnvanAdSoyad,
+                VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
+                VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
+                Telefon = NormalizeOptional(dto.Telefon, 32),
+                Eposta = NormalizeOptional(dto.Eposta, 256),
+                Adres = NormalizeOptional(dto.Adres, 512),
+                Il = NormalizeOptional(dto.Il, 128),
+                Ilce = NormalizeOptional(dto.Ilce, 128),
+                AktifMi = dto.AktifMi,
+                EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
+                EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
+                Aciklama = NormalizeOptional(dto.Aciklama, 1024),
+                AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu,
+                MuhasebeHesapSiraNo = detay.SiraNo,
+                MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId
+            };
+
+            await _dbContext.CariKartlar.AddAsync(entity, CancellationToken.None);
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+            await tx.CommitAsync(CancellationToken.None);
+            return Mapper.Map<CariKartDto>(entity);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public override async Task<CariKartDto> UpdateAsync(CariKartDto dto)

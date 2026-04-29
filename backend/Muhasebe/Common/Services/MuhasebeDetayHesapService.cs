@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Data.SqlClient;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
@@ -66,6 +67,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                     existing.Ad = kaynakAd;
                     existing.AktifMi = true;
                     await _dbContext.SaveChangesAsync(cancellationToken);
+                    var existingSiraNo = TryParseSiraNo(existing.Kod);
                     if (ownedTx is not null)
                     {
                         await ownedTx.CommitAsync(cancellationToken);
@@ -75,7 +77,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                         MuhasebeHesapPlaniId = existing.Id,
                         Kod = existing.Kod,
                         AnaMuhasebeHesapKodu = anaMuhasebeHesapKodu,
-                        SiraNo = siraNo
+                        SiraNo = existingSiraNo ?? siraNo
                     };
                 }
 
@@ -126,25 +128,62 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
 
     private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, string kaynakTipi, CancellationToken cancellationToken)
     {
-        var sayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
-            .FirstOrDefaultAsync(x => x.TesisId == tesisId && x.AnaHesapKodu == anaHesapKodu, cancellationToken);
-
-        if (sayac is null)
+        var dbTransaction = _dbContext.Database.CurrentTransaction;
+        if (dbTransaction is null)
         {
-            sayac = new MuhasebeHesapKoduSayac
-            {
-                TesisId = tesisId,
-                AnaHesapKodu = anaHesapKodu,
-                SonSiraNo = 0,
-                Aciklama = $"{kaynakTipi} otomatik kod sayaci"
-            };
-            await _dbContext.Set<MuhasebeHesapKoduSayac>().AddAsync(sayac, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            throw new BaseException("Muhasebe sayaç üretimi için aktif transaction bulunamadı.", 500);
         }
 
-        sayac.SonSiraNo += 1;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var sayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
+                .FromSqlInterpolated($@"
+SELECT *
+FROM [muhasebe].[MuhasebeHesapKoduSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [AnaHesapKodu] = {anaHesapKodu}")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (sayac is null)
+            {
+                var created = new MuhasebeHesapKoduSayac
+                {
+                    TesisId = tesisId,
+                    AnaHesapKodu = anaHesapKodu,
+                    SonSiraNo = 0,
+                    Aciklama = $"{kaynakTipi} otomatik kod sayaci"
+                };
+
+                await _dbContext.Set<MuhasebeHesapKoduSayac>().AddAsync(created, cancellationToken);
+                try
+                {
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException ex) when (IsUniqueConflict(ex) && attempt < 3)
+                {
+                    _dbContext.Entry(created).State = EntityState.Detached;
+                    continue;
+                }
+            }
+            else
+            {
+                sayac.SonSiraNo += 1;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return sayac.SonSiraNo;
+            }
+        }
+
+        // Tekrar deneme sonrası satır artık oluşmuş olmalı, lock ile yeniden alıp artır.
+        var finalSayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
+            .FromSqlInterpolated($@"
+SELECT *
+FROM [muhasebe].[MuhasebeHesapKoduSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [AnaHesapKodu] = {anaHesapKodu}")
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Muhasebe sayaç kaydı oluşturulamadı.", 409);
+
+        finalSayac.SonSiraNo += 1;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return sayac.SonSiraNo;
+        return finalSayac.SonSiraNo;
     }
 
     private async Task EnsureNotLinkedToAnotherSourceAsync(int hesapId, string kod, string kaynakTipi, int? kaynakId, CancellationToken cancellationToken)
@@ -207,5 +246,26 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
             "1.10.109" => "1.10.109 KREDİ KARTLARI ana hesabı bulunamadı.",
             _ => $"{anaMuhasebeHesapKodu} ana hesabı bulunamadı."
         };
+    }
+
+    private static bool IsUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+    }
+
+    private static int? TryParseSiraNo(string kod)
+    {
+        if (string.IsNullOrWhiteSpace(kod))
+        {
+            return null;
+        }
+
+        var idx = kod.LastIndexOf('.');
+        if (idx < 0 || idx == kod.Length - 1)
+        {
+            return null;
+        }
+
+        return int.TryParse(kod[(idx + 1)..], out var siraNo) ? siraNo : null;
     }
 }

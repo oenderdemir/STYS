@@ -46,7 +46,7 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         }
 
         var anaHesapKodu = ResolveAnaHesapKodu(dto.Tip);
-        ApplyTipDefaultsAndValidate(dto);
+        await ApplyTipDefaultsAndValidateAsync(dto);
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
         try
@@ -125,10 +125,9 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
             throw new BaseException("Muhasebe hesabı oluşturulmuş finansal hesaplarda tesis değiştirilemez.", 400);
         }
 
-        ApplyTipDefaultsAndValidate(dto);
+        await ApplyTipDefaultsAndValidateAsync(dto);
 
         entity.TesisId = nextTesisId;
-        entity.Tip = entity.Tip;
         entity.Ad = dto.Ad;
         entity.ParaBirimi = dto.ParaBirimi;
         entity.ValorGunSayisi = dto.ValorGunSayisi;
@@ -277,7 +276,7 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         return tip == KasaBankaHesapTipleri.KrediKarti ? 1 : 0;
     }
 
-    private void ApplyTipDefaultsAndValidate(KasaBankaHesapDto dto)
+    private async Task ApplyTipDefaultsAndValidateAsync(KasaBankaHesapDto dto)
     {
         if (!KasaBankaHesapTipleri.TumTipler.Contains(dto.Tip))
         {
@@ -353,8 +352,8 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
 
             if (dto.BagliBankaHesapId.HasValue)
             {
-                var bagliBanka = _dbContext.KasaBankaHesaplari
-                    .FirstOrDefault(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
+                var bagliBanka = await _dbContext.KasaBankaHesaplari
+                    .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
                 if (bagliBanka is null || (bagliBanka.Tip != KasaBankaHesapTipleri.Banka && bagliBanka.Tip != KasaBankaHesapTipleri.DovizHesabi))
                 {
                     throw new BaseException("Bagli banka hesabi gecersiz.", 400);

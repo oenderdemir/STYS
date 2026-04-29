@@ -3232,6 +3232,38 @@ et10.0-windows, UseWindowsForms=true).
 ### Build Sonuclari
 - Backend build: `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` -> BASARILI (mevcut warningler disinda)
 - Frontend build: `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
+## Tur 136 - Muhasebe Sayaç Concurrency Güçlendirmesi
+
+### Yapilanlar
+- `MuhasebeDetayHesapService` icindeki `MuhasebeHesapKoduSayac` artirim akisi SQL Server lock hintleri ile guclendirildi:
+  - `UPDLOCK, ROWLOCK, HOLDLOCK` ile sayaç satiri transaction icinde kilitlenerek okunuyor.
+  - Sayaç satiri yoksa insert denemesi yapiliyor; unique conflict olursa tekrar okuyup devam ediliyor.
+  - Sayaç artirimi aktif transaction icinde atomik olarak tamamlanıyor.
+- Transaction davranisi korundu:
+  - Dis transaction varsa ortak servis ona katiliyor.
+  - Dis transaction yoksa servis kendi transaction’ini aciyor.
+  - Rollback/commit sorumlulugu buna gore ayriliyor.
+- Existing detay hesap bulunmasi durumunda `SiraNo` davranisi iyilestirildi:
+  - Kodun son segmentinden parse edilip sonuc modeline yansitiliyor (parse edilemezse mevcut davranisa fallback).
+- Merkezi "baska kaynaga bagli hesap" kontrolleri korunup devam ettirildi.
+- `KasaBankaHesapService` teknik temizlik:
+  - Gereksiz `entity.Tip = entity.Tip;` satiri kaldirildi.
+  - Senkron `FirstOrDefault` kullanimı `FirstOrDefaultAsync`e cekildi.
+  - Tip/default/validasyon metodu async akisa alindi.
+
+### Migration / Snapshot
+- Bu turda schema degisikligi yapilmadi.
+- Yeni migration eklenmedi.
+- `StysAppDbContextModelSnapshot` degisikligi gerekmiyor.
+
+### Notlar
+- Sayaç geri alma davranisi transaction rollback ile birlikte calisir. Ana entity kaydi hata alirsa yetim detay hesap kalmaz; sayaç artisi da rollback olur.
+- Depo.Kod ve TasinirKart.StokKodu mevcut davranis geregi muhasebe detay hesap kodu ile eslenmeye devam ediyor.
+
+### Build Sonuclari
+- Backend build: `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` -> BASARILI (mevcut warningler disinda)
+- Frontend build: `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 - `dotnet ef database update --context StysAppDbContext --no-build` -> BASARILI (`Done.`)
 
 ## Tur 128 - Global Paket Turleri Modulu (Tesis Bagimsiz)

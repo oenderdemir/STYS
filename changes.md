@@ -3643,3 +3643,34 @@ et10.0-windows, UseWindowsForms=true).
 ### Dogrulama
 - `dotnet build backend/STYS.csproj` -> BASARILI
 - `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+## Tur 138 - Standart Depoların Tüm Tesislere Seed Edilmesi
+- Eski sistemden gelen 13 standart depo tüm aktif tesislere seed edildi.
+- Her tesis için depo muhasebe detay hesapları Depo ana hesabı altında üretildi.
+- Eski Muhasebe_kodu değerleri Aciklama alanında referans olarak saklandı.
+- Cikis_Muhasebe_Kodu değerleri NULL olduğu için DepoCikisGrup oluşturulmadı.
+- Migration: `20260429200000_SeedStandartDepolariTumTesislere`.
+- Not: Frontend tarafında değişiklik yapılmadı.
+- Backend build: Başarılı (`dotnet build backend/STYS.csproj /p:NoWarn=NU1903`).
+- Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.
+## Tur 139 - Muhasebe Hesap Planı TamKod Ana Hesap Arama Düzeltmesi
+- MuhasebeDetayHesapService ana hesap araması TamKod öncelikli hale getirildi.
+- Kod alanı geriye uyumluluk için fallback olarak desteklendi.
+- TamKod eşleşmesi yoksa Kod ile arama yapılıyor; birden fazla Kod eşleşmesinde açık hata üretiliyor.
+- Detay hesaplarda Kod ve TamKod değerlerinin tam detay kod olarak kalması korundu.
+- Kredi kartı için 1.10.109 kullanımının bilinçli kurum içi karar olduğu not edildi.
+- Tek Düzen Hesap Planı seed verileri bu turda değiştirilmedi; ayrı turda doğrulama/düzeltme migration’ı değerlendirilmeli.
+- Seed migration değiştirilmedi.
+- Schema değişikliği olmadığı için migration yazılmadı.
+- Kredi kartı / POS takipleri için `1.10.109` kullanımı bilinçli kurum içi karar olarak korunmuştur.
+- Tek Düzen Hesap Planı’nda 109 resmi adlandırılmış hesap olarak görünmese de STYS içinde kredi kartı/pos finansal hesap kırılımı için kullanılmaya devam edecektir.
+- Bu karar ileride muhasebe politikası değişirse `MuhasebeAnaHesapKodlari` üzerinden revize edilebilir.
+- Backend build: Başarılı (`dotnet build backend/STYS.csproj /p:NoWarn=NU1903`).
+- Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.
+## Tur 140 - Muhasebe Detay Kod Formatı D3 Standardı
+- Muhasebe detay kod üretimi tüm akışlarda `...001` formatına çekildi (`D3`).
+- Ortak `MuhasebeDetayHesapService` kod üretimi `AnaKod.SiraNo(D3)` olacak şekilde güncellendi.
+- Yeni migration eklendi: `20260430012000_NormalizeMuhasebeDetayKodFormatToD3`.
+- Migration; `CariKartlar`, `KasaBankaHesaplari`, `Depolar`, `TasinirKartlar` ve bağlı `MuhasebeHesapPlanlari` kayıtlarını `D3` formatına normalize eder.
+- Sayaç (`MuhasebeHesapKoduSayaclari`) integer mantığı korunur; sadece string kod formatı standartlaştırılır.
+- Backend build: Başarılı (`dotnet build backend/STYS.csproj /p:NoWarn=NU1903`).
+- Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.

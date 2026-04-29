@@ -48,9 +48,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
 
             try
             {
-                var anaHesap = await _dbContext.MuhasebeHesapPlanlari
-                    .Where(x => !x.IsDeleted && x.AktifMi && x.TesisId == null)
-                    .FirstOrDefaultAsync(x => x.Kod == anaMuhasebeHesapKodu, cancellationToken);
+                var anaHesap = await GetAnaHesapAsync(anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
 
                 if (anaHesap is null)
                 {
@@ -58,7 +56,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                 }
 
                 var siraNo = await NextSiraNoAsync(tesisId, anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
-                var kod = $"{anaMuhasebeHesapKodu}.{siraNo}";
+                var kod = BuildDetayKod(anaMuhasebeHesapKodu, siraNo);
 
                 var existing = await _dbContext.MuhasebeHesapPlanlari
                     .FirstOrDefaultAsync(x => !x.IsDeleted && x.TesisId == tesisId && (x.Kod == kod || x.TamKod == kod), cancellationToken);
@@ -135,6 +133,42 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
         }
 
         throw new BaseException("Muhasebe detay hesabi olusturulurken eszamanli islem catismasi olustu. Tekrar deneyiniz.", 409);
+    }
+
+    private async Task<MuhasebeHesapPlani> GetAnaHesapAsync(string anaMuhasebeHesapKodu, string kaynakTipi, CancellationToken cancellationToken)
+    {
+        var baseQuery = _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi && x.TesisId == null);
+
+        // Öncelik: TamKod (uygulama içi ana hesap referansı tam hiyerarşik kodla tutulur)
+        var tamKodMatch = await baseQuery
+            .Where(x => x.TamKod == anaMuhasebeHesapKodu)
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tamKodMatch is not null)
+        {
+            return tamKodMatch;
+        }
+
+        // Geriye uyumluluk fallback: Kod
+        var kodMatches = await baseQuery
+            .Where(x => x.Kod == anaMuhasebeHesapKodu)
+            .OrderBy(x => x.Id)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+
+        if (kodMatches.Count > 1)
+        {
+            throw new BaseException($"Ana muhasebe hesabı için birden fazla kayıt bulundu: {anaMuhasebeHesapKodu}", 400);
+        }
+
+        if (kodMatches.Count == 1)
+        {
+            return kodMatches[0];
+        }
+
+        throw new BaseException(BuildAnaHesapBulunamadiMesaji(anaMuhasebeHesapKodu, kaynakTipi), 400);
     }
 
     private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, string kaynakTipi, CancellationToken cancellationToken)
@@ -279,5 +313,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [AnaHesapKodu] = {anaHesapKo
         }
 
         return int.TryParse(kod[(idx + 1)..], out var siraNo) ? siraNo : null;
+    }
+
+    private static string BuildDetayKod(string anaMuhasebeHesapKodu, int siraNo)
+    {
+        return $"{anaMuhasebeHesapKodu}.{siraNo:D3}";
     }
 }

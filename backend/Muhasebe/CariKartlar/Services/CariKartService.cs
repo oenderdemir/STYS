@@ -1,14 +1,13 @@
 using AutoMapper;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariKartlar.Repositories;
-using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -21,13 +20,20 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     private readonly ICariKartRepository _repository;
     private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
 
-    public CariKartService(ICariKartRepository repository, StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService, IMapper mapper)
+    public CariKartService(
+        ICariKartRepository repository,
+        StysAppDbContext dbContext,
+        IUserAccessScopeService userAccessScopeService,
+        IMuhasebeDetayHesapService muhasebeDetayHesapService,
+        IMapper mapper)
         : base(repository, mapper)
     {
         _repository = repository;
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
+        _muhasebeDetayHesapService = muhasebeDetayHesapService;
     }
 
     public async Task<CariBakiyeDto> GetBakiyeAsync(int cariKartId, CancellationToken cancellationToken = default)
@@ -54,7 +60,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
     public override async Task<CariKartDto> AddAsync(CariKartDto dto)
     {
-        var cancellationToken = CancellationToken.None;
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         NormalizeCommonFields(dto);
 
@@ -81,63 +86,38 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
         }
 
-        for (var attempt = 1; attempt <= 5; attempt++)
+        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+            dto.TesisId.Value,
+            anaHesapKodu,
+            "CariKart",
+            dto.UnvanAdSoyad,
+            CancellationToken.None);
+
+        var entity = new CariKart
         {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-            try
-            {
-                var anaHesap = await GetAnaHesapAsync(anaHesapKodu, dto.CariTipi, cancellationToken);
-                var siraNo = await NextSiraNoAsync(dto.TesisId.Value, anaHesapKodu, cancellationToken);
-                var uretilenKod = $"{anaHesapKodu}.{siraNo}";
+            TesisId = dto.TesisId,
+            CariTipi = dto.CariTipi,
+            CariKodu = detay.Kod,
+            UnvanAdSoyad = dto.UnvanAdSoyad,
+            VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
+            VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
+            Telefon = NormalizeOptional(dto.Telefon, 32),
+            Eposta = NormalizeOptional(dto.Eposta, 256),
+            Adres = NormalizeOptional(dto.Adres, 512),
+            Il = NormalizeOptional(dto.Il, 128),
+            Ilce = NormalizeOptional(dto.Ilce, 128),
+            AktifMi = dto.AktifMi,
+            EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
+            EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
+            Aciklama = NormalizeOptional(dto.Aciklama, 1024),
+            AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu,
+            MuhasebeHesapSiraNo = detay.SiraNo,
+            MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId
+        };
 
-                var existingWithSameCode = await _dbContext.CariKartlar
-                    .IgnoreQueryFilters()
-                    .AnyAsync(x => x.TesisId == dto.TesisId && x.CariKodu == uretilenKod && !x.IsDeleted, cancellationToken);
-                if (existingWithSameCode)
-                {
-                    throw new BaseException("Uretilen cari kodu zaten mevcut. Islem tekrar deneyiniz.", 409);
-                }
-
-                var detayHesap = await ResolveOrCreateDetayHesapAsync(uretilenKod, dto.UnvanAdSoyad, dto.TesisId.Value, anaHesap, cancellationToken);
-
-                var entity = new CariKart
-                {
-                    TesisId = dto.TesisId,
-                    CariTipi = dto.CariTipi,
-                    CariKodu = uretilenKod,
-                    UnvanAdSoyad = dto.UnvanAdSoyad,
-                    VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
-                    VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
-                    Telefon = NormalizeOptional(dto.Telefon, 32),
-                    Eposta = NormalizeOptional(dto.Eposta, 256),
-                    Adres = NormalizeOptional(dto.Adres, 512),
-                    Il = NormalizeOptional(dto.Il, 128),
-                    Ilce = NormalizeOptional(dto.Ilce, 128),
-                    AktifMi = dto.AktifMi,
-                    EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
-                    EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
-                    Aciklama = NormalizeOptional(dto.Aciklama, 1024),
-                    AnaMuhasebeHesapKodu = anaHesapKodu,
-                    MuhasebeHesapSiraNo = siraNo,
-                    MuhasebeHesapPlaniId = detayHesap.Id
-                };
-
-                await _dbContext.CariKartlar.AddAsync(entity, cancellationToken);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                await tx.CommitAsync(cancellationToken);
-                return Mapper.Map<CariKartDto>(entity);
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < 5)
-            {
-                await tx.RollbackAsync(cancellationToken);
-            }
-            catch (DbUpdateException ex) when (attempt < 5 && IsRetryableSqlConflict(ex))
-            {
-                await tx.RollbackAsync(cancellationToken);
-            }
-        }
-
-        throw new BaseException("Cari kodu uretilirken eszamanli islem catismasi olustu. Tekrar deneyiniz.", 409);
+        await _dbContext.CariKartlar.AddAsync(entity, CancellationToken.None);
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+        return Mapper.Map<CariKartDto>(entity);
     }
 
     public override async Task<CariKartDto> UpdateAsync(CariKartDto dto)
@@ -252,90 +232,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
-    private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, CancellationToken cancellationToken)
-    {
-        var sayac = await _dbContext.Set<MuhasebeHesapKoduSayac>()
-            .FirstOrDefaultAsync(x => x.TesisId == tesisId && x.AnaHesapKodu == anaHesapKodu, cancellationToken);
-
-        if (sayac is null)
-        {
-            sayac = new MuhasebeHesapKoduSayac
-            {
-                TesisId = tesisId,
-                AnaHesapKodu = anaHesapKodu,
-                SonSiraNo = 0,
-                Aciklama = "Cari kart otomatik kod sayaci"
-            };
-            await _dbContext.Set<MuhasebeHesapKoduSayac>().AddAsync(sayac, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        sayac.SonSiraNo += 1;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return sayac.SonSiraNo;
-    }
-
-    private async Task<MuhasebeHesapPlani> GetAnaHesapAsync(string anaHesapKodu, string cariTipi, CancellationToken cancellationToken)
-    {
-        var anaHesap = await _dbContext.MuhasebeHesapPlanlari
-            .Where(x => !x.IsDeleted && x.AktifMi)
-            .FirstOrDefaultAsync(x => x.TesisId == null && (x.TamKod == anaHesapKodu || x.Kod == anaHesapKodu), cancellationToken);
-
-        if (anaHesap is not null)
-        {
-            return anaHesap;
-        }
-
-        if (string.Equals(cariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new BaseException("3.32.320 SATICILAR ana hesabı bulunamadı.", 400);
-        }
-
-        throw new BaseException("1.12.120 ALICILAR ana hesabı bulunamadı.", 400);
-    }
-
-    private async Task<MuhasebeHesapPlani> ResolveOrCreateDetayHesapAsync(
-        string cariKodu,
-        string unvanAdSoyad,
-        int tesisId,
-        MuhasebeHesapPlani anaHesap,
-        CancellationToken cancellationToken)
-    {
-        var existing = await _dbContext.MuhasebeHesapPlanlari
-            .FirstOrDefaultAsync(x => !x.IsDeleted && x.TesisId == tesisId && (x.Kod == cariKodu || x.TamKod == cariKodu), cancellationToken);
-
-        if (existing is not null)
-        {
-            var linkedToAnotherCari = await _dbContext.CariKartlar.AnyAsync(
-                x => !x.IsDeleted && x.MuhasebeHesapPlaniId == existing.Id,
-                cancellationToken);
-            if (linkedToAnotherCari)
-            {
-                throw new BaseException($"'{cariKodu}' kodlu muhasebe hesap plani baska bir cari karta bagli.", 400);
-            }
-
-            existing.Ad = unvanAdSoyad;
-            existing.AktifMi = true;
-            return existing;
-        }
-
-        var detay = new MuhasebeHesapPlani
-        {
-            TesisId = tesisId,
-            Kod = cariKodu,
-            TamKod = cariKodu,
-            Ad = unvanAdSoyad,
-            SeviyeNo = anaHesap.SeviyeNo + 1,
-            UstHesapId = anaHesap.Id,
-            AktifMi = true,
-            Aciklama = "Cari kart otomatik detay hesabi"
-        };
-
-        await _dbContext.MuhasebeHesapPlanlari.AddAsync(detay, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return detay;
-    }
-
     private static string? ResolveAnaHesapKodu(string cariTipi)
     {
         if (string.Equals(cariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
@@ -386,17 +282,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         var trimmed = value.Trim();
         return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
-    }
-
-    private static bool IsRetryableSqlConflict(DbUpdateException ex)
-    {
-        var sqlEx = ex.InnerException as SqlException;
-        if (sqlEx is null)
-        {
-            return false;
-        }
-
-        return sqlEx.Number is 2601 or 2627;
     }
 
     private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)

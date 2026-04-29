@@ -1,4 +1,3 @@
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
@@ -16,11 +15,11 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
         _dbContext = dbContext;
     }
 
-    public async Task<(int HesapPlaniId, string Kod, int SiraNo)> CreateAsync(
+    public async Task<MuhasebeDetayHesapSonuc> CreateOrResolveDetayHesapAsync(
         int tesisId,
-        string anaHesapKodu,
-        string kaynakAd,
+        string anaMuhasebeHesapKodu,
         string kaynakTipi,
+        string kaynakAd,
         CancellationToken cancellationToken = default)
     {
         if (tesisId <= 0)
@@ -28,7 +27,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
             throw new BaseException("Tesis secimi zorunludur.", 400);
         }
 
-        if (string.IsNullOrWhiteSpace(anaHesapKodu))
+        if (string.IsNullOrWhiteSpace(anaMuhasebeHesapKodu))
         {
             throw new BaseException($"{kaynakTipi} icin ana muhasebe hesap kodu tanimli degil.", 400);
         }
@@ -40,26 +39,32 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
             {
                 var anaHesap = await _dbContext.MuhasebeHesapPlanlari
                     .Where(x => !x.IsDeleted && x.AktifMi && x.TesisId == null)
-                    .FirstOrDefaultAsync(x => x.Kod == anaHesapKodu || x.TamKod == anaHesapKodu, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.Kod == anaMuhasebeHesapKodu, cancellationToken);
 
                 if (anaHesap is null)
                 {
-                    throw new BaseException($"{anaHesapKodu} ana hesabı bulunamadı.", 400);
+                    throw new BaseException(BuildAnaHesapBulunamadiMesaji(anaMuhasebeHesapKodu), 400);
                 }
 
-                var siraNo = await NextSiraNoAsync(tesisId, anaHesapKodu, kaynakTipi, cancellationToken);
-                var kod = $"{anaHesapKodu}.{siraNo}";
+                var siraNo = await NextSiraNoAsync(tesisId, anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
+                var kod = $"{anaMuhasebeHesapKodu}.{siraNo}";
 
                 var existing = await _dbContext.MuhasebeHesapPlanlari
                     .FirstOrDefaultAsync(x => !x.IsDeleted && x.TesisId == tesisId && (x.Kod == kod || x.TamKod == kod), cancellationToken);
 
                 if (existing is not null)
                 {
+                    EnsureNotLinkedToAnotherSource(existing.Id, kaynakTipi);
                     existing.Ad = kaynakAd;
                     existing.AktifMi = true;
-                    await _dbContext.SaveChangesAsync(cancellationToken);
                     await tx.CommitAsync(cancellationToken);
-                    return (existing.Id, existing.Kod, siraNo);
+                    return new MuhasebeDetayHesapSonuc
+                    {
+                        MuhasebeHesapPlaniId = existing.Id,
+                        Kod = existing.Kod,
+                        AnaMuhasebeHesapKodu = anaMuhasebeHesapKodu,
+                        SiraNo = siraNo
+                    };
                 }
 
                 var detay = new MuhasebeHesapPlani
@@ -77,13 +82,19 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                 await _dbContext.MuhasebeHesapPlanlari.AddAsync(detay, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
-                return (detay.Id, detay.Kod, siraNo);
+                return new MuhasebeDetayHesapSonuc
+                {
+                    MuhasebeHesapPlaniId = detay.Id,
+                    Kod = detay.Kod,
+                    AnaMuhasebeHesapKodu = anaMuhasebeHesapKodu,
+                    SiraNo = siraNo
+                };
             }
             catch (DbUpdateConcurrencyException) when (attempt < 5)
             {
                 await tx.RollbackAsync(cancellationToken);
             }
-            catch (DbUpdateException ex) when (attempt < 5 && IsRetryableSqlConflict(ex))
+            catch (DbUpdateException) when (attempt < 5)
             {
                 await tx.RollbackAsync(cancellationToken);
             }
@@ -115,15 +126,33 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
         return sayac.SonSiraNo;
     }
 
-    private static bool IsRetryableSqlConflict(DbUpdateException ex)
+    private void EnsureNotLinkedToAnotherSource(int hesapId, string kaynakTipi)
     {
-        var sqlEx = ex.InnerException as SqlException;
-        if (sqlEx is null)
+        var hasLink = kaynakTipi switch
         {
-            return false;
-        }
+            "CariKart" => _dbContext.CariKartlar.Any(x => !x.IsDeleted && x.MuhasebeHesapPlaniId == hesapId),
+            "KasaBankaHesap" => _dbContext.KasaBankaHesaplari.Any(x => !x.IsDeleted && x.MuhasebeHesapPlaniId == hesapId),
+            "Depo" => _dbContext.Depolar.Any(x => !x.IsDeleted && x.MuhasebeHesapPlaniId == hesapId),
+            "TasinirKart" => _dbContext.TasinirKartlar.Any(x => !x.IsDeleted && x.MuhasebeHesapPlaniId == hesapId),
+            _ => false
+        };
 
-        return sqlEx.Number is 2601 or 2627;
+        if (hasLink)
+        {
+            throw new BaseException("Ayni kodlu muhasebe hesabi baska bir kaynaga bagli.", 400);
+        }
+    }
+
+    private static string BuildAnaHesapBulunamadiMesaji(string anaMuhasebeHesapKodu)
+    {
+        return anaMuhasebeHesapKodu switch
+        {
+            "3.32.320" => "3.32.320 SATICILAR ana hesabı bulunamadı.",
+            "1.12.120" => "1.12.120 ALICILAR ana hesabı bulunamadı.",
+            "1.10.100" => "1.10.100 KASA ana hesabı bulunamadı.",
+            "1.10.102" => "1.10.102 BANKALAR ana hesabı bulunamadı.",
+            "1.10.109" => "1.10.109 KREDİ KARTLARI ana hesabı bulunamadı.",
+            _ => $"{anaMuhasebeHesapKodu} ana hesabı bulunamadı."
+        };
     }
 }
-

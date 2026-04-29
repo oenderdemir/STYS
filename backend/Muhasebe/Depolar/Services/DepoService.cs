@@ -46,15 +46,15 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
         EnsureTesisRequired(dto.TesisId);
 
         var anaHesapKodu = ResolveDepoAnaHesapKodu();
-        var detay = await _muhasebeDetayHesapService.CreateAsync(
+        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
             dto.TesisId!.Value,
             anaHesapKodu,
-            dto.Ad,
             "Depo",
+            dto.Ad,
             CancellationToken.None);
 
-        dto.MuhasebeHesapPlaniId = detay.HesapPlaniId;
-        dto.AnaMuhasebeHesapKodu = anaHesapKodu;
+        dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+        dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
         dto.MuhasebeHesapSiraNo = detay.SiraNo;
         dto.Kod = detay.Kod;
 

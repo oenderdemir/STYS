@@ -1,12 +1,19 @@
 namespace STYS.Muhasebe.Common.Services;
 
-public interface IMuhasebeDetayHesapService
+public sealed class MuhasebeDetayHesapSonuc
 {
-    Task<(int HesapPlaniId, string Kod, int SiraNo)> CreateAsync(
-        int tesisId,
-        string anaHesapKodu,
-        string kaynakAd,
-        string kaynakTipi,
-        CancellationToken cancellationToken = default);
+    public int MuhasebeHesapPlaniId { get; set; }
+    public string Kod { get; set; } = string.Empty;
+    public string AnaMuhasebeHesapKodu { get; set; } = string.Empty;
+    public int SiraNo { get; set; }
 }
 
+public interface IMuhasebeDetayHesapService
+{
+    Task<MuhasebeDetayHesapSonuc> CreateOrResolveDetayHesapAsync(
+        int tesisId,
+        string anaMuhasebeHesapKodu,
+        string kaynakTipi,
+        string kaynakAd,
+        CancellationToken cancellationToken = default);
+}

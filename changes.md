@@ -3246,6 +3246,32 @@ et10.0-windows, UseWindowsForms=true).
 - `dotnet build backend/STYS.csproj` -> BASARILI
 - `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 
+## Tur 134 - Muhasebe Detay Hesap Ortak Servis Standardizasyonu
+
+### Yapilanlar
+- `IMuhasebeDetayHesapService` standarda alinip metod imzasi guncellendi:
+  - `CreateOrResolveDetayHesapAsync(int tesisId, string anaMuhasebeHesapKodu, string kaynakTipi, string kaynakAd, ...)`
+- Sonuc modeli eklendi:
+  - `MuhasebeDetayHesapSonuc` (`MuhasebeHesapPlaniId`, `Kod`, `AnaMuhasebeHesapKodu`, `SiraNo`)
+- Ortak servis:
+  - ana hesap arama (`TesisId = null` + `Kod`)
+  - sayac tablosu uzerinden sira uretimi
+  - `{AnaKod}.{SiraNo}` formatinda detay hesap uretimi
+  - duplicate kodda kaynaga baglilik kontrolu
+  - aciklayici ana hesap hata mesajlari
+- Tekrarlayan kodlar kaldirildi ve servisler ortak servise baglandi:
+  - `CariKartService`
+  - `KasaBankaHesapService`
+  - `DepoService`
+  - `TasinirKartService`
+
+### Notlar
+- `CariKart` tarafinda `TesisSegmenti` runtime kullanimi yok (eski format kaldirilmis durumda).
+- `MuhasebeHesapPlani` icin `TesisId nullable + filtered unique index` modeli korunuyor.
+
+### Dogrulama
+- `dotnet build backend/STYS.csproj` -> BASARILI
+
 ## Tur 133 - MuhasebeHesapPlani Zorunlu Baglanti Standardi
 
 ### Kisa Degerlendirme

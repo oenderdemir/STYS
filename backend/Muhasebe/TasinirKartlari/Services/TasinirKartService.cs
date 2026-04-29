@@ -44,15 +44,15 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         EnsureTesisRequired(dto.TesisId);
 
         var anaHesapKodu = ResolveTasinirKartAnaHesapKodu();
-        var detay = await _muhasebeDetayHesapService.CreateAsync(
+        var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
             dto.TesisId!.Value,
             anaHesapKodu,
-            dto.Ad,
             "TasinirKart",
+            dto.Ad,
             CancellationToken.None);
 
-        dto.MuhasebeHesapPlaniId = detay.HesapPlaniId;
-        dto.AnaMuhasebeHesapKodu = anaHesapKodu;
+        dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+        dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
         dto.MuhasebeHesapSiraNo = detay.SiraNo;
         dto.StokKodu = detay.Kod;
         return await base.AddAsync(dto);

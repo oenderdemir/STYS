@@ -3233,6 +3233,36 @@ et10.0-windows, UseWindowsForms=true).
 - Backend build: `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` -> BASARILI (mevcut warningler disinda)
 - Frontend build: `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
 
+## Tur 137 - Muhasebe Sayaç Retry/Transaction Düzeltmesi
+
+### Yapilanlar
+- `MuhasebeDetayHesapService` icinde ilk sayaç satiri olusturma akisi sadeleştirildi:
+  - Sayaç yoksa ayni attempt icinde `SonSiraNo = 1` set edilip kaydediliyor.
+  - Ilk kayitta dogrudan `... .1` kodu uretimi saglandi.
+- Retry/transaction davranisi guclendirildi:
+  - Dis transaction varsa retry kapatildi (`maxAttempt = 1`), hata dogrudan yukari firlatiliyor.
+  - Sadece servis-owned transaction senaryosunda retry devam ediyor.
+  - Owned transaction’da exception durumunda rollback kesinlestirildi.
+- Unique conflict (2601/2627) akisi korundu:
+  - Sayaç insert conflictinde olusan `created` entity detach edilip tekrar deneme yapiliyor.
+- Sayaç okuma SQL lock davranisi korundu:
+  - `[muhasebe].[MuhasebeHesapKoduSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)`
+- Existing detay hesapta `SiraNo` donusu korundu:
+  - Kod son segmentinden parse edilmeye devam ediyor; parse edilemezse fallback korunuyor.
+- `KasaBankaHesapService` temizlikleri dogrulandi ve korundu:
+  - `entity.Tip = entity.Tip;` yok.
+  - `ApplyTipDefaultsAndValidateAsync` async.
+  - Bagli banka hesabi kontrolu `FirstOrDefaultAsync`.
+
+### Migration / Snapshot
+- Bu turda schema degisikligi yok.
+- Yeni migration yazilmadi.
+- `StysAppDbContextModelSnapshot` degisikligi gerekmiyor.
+
+### Build Sonuclari
+- Backend build: `dotnet build backend/STYS.csproj /p:NoWarn=NU1903` -> BASARILI (mevcut warningler disinda)
+- Frontend build: `npm run build` -> BASARILI (mevcut bundle budget warningleri disinda)
+
 ## Tur 136 - Muhasebe Sayaç Concurrency Güçlendirmesi
 
 ### Yapilanlar

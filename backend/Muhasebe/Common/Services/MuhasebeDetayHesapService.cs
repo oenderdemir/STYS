@@ -35,9 +35,11 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
             throw new BaseException($"{kaynakTipi} icin ana muhasebe hesap kodu tanimli degil.", 400);
         }
 
-        for (var attempt = 1; attempt <= 5; attempt++)
+        var hasOuterTransaction = _dbContext.Database.CurrentTransaction is not null;
+        var maxAttempt = hasOuterTransaction ? 1 : 5;
+
+        for (var attempt = 1; attempt <= maxAttempt; attempt++)
         {
-            var hasOuterTransaction = _dbContext.Database.CurrentTransaction is not null;
             IDbContextTransaction? ownedTx = null;
             if (!hasOuterTransaction)
             {
@@ -107,19 +109,28 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                     SiraNo = siraNo
                 };
             }
-            catch (DbUpdateConcurrencyException) when (attempt < 5)
+            catch (DbUpdateConcurrencyException) when (!hasOuterTransaction && attempt < maxAttempt)
             {
                 if (ownedTx is not null)
                 {
                     await ownedTx.RollbackAsync(cancellationToken);
                 }
             }
-            catch (DbUpdateException) when (attempt < 5)
+            catch (DbUpdateException) when (!hasOuterTransaction && attempt < maxAttempt)
             {
                 if (ownedTx is not null)
                 {
                     await ownedTx.RollbackAsync(cancellationToken);
                 }
+            }
+            catch
+            {
+                if (ownedTx is not null)
+                {
+                    await ownedTx.RollbackAsync(cancellationToken);
+                }
+
+                throw;
             }
         }
 
@@ -149,7 +160,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [AnaHesapKodu] = {anaHesapKo
                 {
                     TesisId = tesisId,
                     AnaHesapKodu = anaHesapKodu,
-                    SonSiraNo = 0,
+                    SonSiraNo = 1,
                     Aciklama = $"{kaynakTipi} otomatik kod sayaci"
                 };
 
@@ -157,6 +168,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [AnaHesapKodu] = {anaHesapKo
                 try
                 {
                     await _dbContext.SaveChangesAsync(cancellationToken);
+                    return created.SonSiraNo;
                 }
                 catch (DbUpdateException ex) when (IsUniqueConflict(ex) && attempt < 3)
                 {

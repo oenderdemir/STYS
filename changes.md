@@ -3799,3 +3799,55 @@ Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eş
 ### Build Sonuçları (Tur 142)
 - Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
 - Frontend: Çalıştırılmadı (değişiklik yok)
+
+## Tur 143 - MuhasebeHesapPlani Detay/Hareket Görebilir Hesap Mantığının Sağlamlaştırılması
+
+### Yapılan Değişiklikler
+
+#### 1. Entity, DTO, Migration (Değişiklik Yok)
+- `MuhasebeHesapPlani` entity'sinde (`DetayHesapMi`, `HareketGorebilirMi`) alanları zaten mevcut.
+- DTO'lar (`CreateMuhasebeHesapPlaniRequest`, `UpdateMuhasebeHesapPlaniRequest`, `MuhasebeHesapPlaniDto`) bu alanları zaten taşıyor.
+- Database tablosunda `DetayHesapMi` ve `HareketGorebilirMi` sütunları (`bit`) halihazırda snapshot'ta mevcut — yeni migration yazılmadı.
+- `StysAppDbContext` Fluent API konfigürasyonuna `.IsRequired()` eklendi.
+
+#### 2. MuhasebeDetayHesapService — Otomatik Detay Hesap Oluşturma
+- `CreateOrResolveDetayHesapAsync` içinde yeni detay hesap oluşturulurken `DetayHesapMi = true` ve `HareketGorebilirMi = true` ayarlandı (yeni entity `new MuhasebeHesapPlani`).
+- Mevcut detay hesap güncellenirken (`existing.Ad`, `existing.AktifMi` yanında) `existing.DetayHesapMi = true` ve `existing.HareketGorebilirMi = true` eklendi.
+
+#### 3. MuhasebeHesapPlaniService — NormalizeAndValidateAsync
+- `HareketGorebilirMi = true && DetayHesapMi = false` durumu için validasyon hatası eklendi: `"Hareket gorebilir hesap ayni zamanda detay hesap olmalidir."` (400).
+
+#### 4. TasinirKodMuhasebeHesapEslemeService — ValidateAsync
+- `StysAppDbContext` enjeksiyonu eklendi (constructor + private field).
+- `ValidateAsync` içinde `MuhasebeHesapPlaniId` ile hesap sorgulanır:
+  - Hesap bulunamazsa → `"Seçilen muhasebe hesabı bulunamadı."` (400)
+  - `IsDeleted` → `"Seçilen muhasebe hesabı silinmiştir."` (400)
+  - `!AktifMi` → `"Seçilen muhasebe hesabı aktif değildir."` (400)
+  - `!DetayHesapMi` → `"Seçilen muhasebe hesabı detay hesap değildir."` (400)
+  - `!HareketGorebilirMi` → `"Seçilen muhasebe hesabı hareket görebilir değildir."` (400)
+
+#### 5. TasinirKartService — ResolveTasinirKartAnaHesapKoduAsync
+- Mevcut `!IsDeleted` ve `!AktifMi` kontrollerinin ardından:
+  - `!DetayHesapMi` → `"Eşlenen muhasebe hesabı detay hesap değildir."` (400)
+  - `!HareketGorebilirMi` → `"Eşlenen muhasebe hesabı hareket görebilir değildir."` (400)
+  - kontrolleri eklendi.
+
+### Değişen Dosyalar
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Muhasebe/Common/Services/MuhasebeDetayHesapService.cs
+- backend/Muhasebe/MuhasebeHesapPlanlari/Services/MuhasebeHesapPlaniService.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/TasinirKodMuhasebeHesapEslemeService.cs
+- backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs
+
+### Manuel Test Senaryoları
+1. **Detay Olmayan Hesaba Eşleme Yapılamaz**: `DetayHesapMi=false` olan bir hesap `TasinirKodMuhasebeHesapEsleme`'ye bağlanmaya çalışıldığında 400 hatası alınmalı.
+2. **Hareket Göremeyen Hesaba Eşleme Yapılamaz**: `HareketGorebilirMi=false` olan bir hesaba eşleme denendiğinde 400 hatası alınmalı.
+3. **Silinmiş Hesaba Eşleme Yapılamaz**: `IsDeleted=true` hesaba eşleme denendiğinde 400 hatası alınmalı.
+4. **Pasif Hesaba Eşleme Yapılamaz**: `AktifMi=false` hesaba eşleme denendiğinde 400 hatası alınmalı.
+5. **Hareket Görebilir Ama Detay Olmayan Hesap Oluşturulamaz**: API üzerinden `HareketGorebilirMi=true, DetayHesapMi=false` gönderildiğinde 400 hatası alınmalı.
+6. **Otomatik Detay Hesap Doğru Bayraklarla Oluşur**: `TasinirKartService.AddAsync` → `MuhasebeDetayHesapService` akışında oluşan yeni detay hesap `DetayHesapMi=true, HareketGorebilirMi=true` olmalı.
+7. **Taşınır Kart Oluşturmada Eşlenen Hesap Kontrolü**: Eşlemedeki hesap `DetayHesapMi=false` veya `HareketGorebilirMi=false` ise `TasinirKartService.AddAsync` 400 hatası vermeli.
+
+### Build Sonuçları (Tur 143)
+- Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
+- Frontend: Çalıştırılmadı (değişiklik yok)

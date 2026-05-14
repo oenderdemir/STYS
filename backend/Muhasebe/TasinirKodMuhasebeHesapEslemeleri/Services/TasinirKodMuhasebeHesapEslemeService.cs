@@ -1,4 +1,6 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Dtos;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Repositories;
@@ -12,13 +14,16 @@ public class TasinirKodMuhasebeHesapEslemeService
       ITasinirKodMuhasebeHesapEslemeService
 {
     private readonly ITasinirKodMuhasebeHesapEslemeRepository _repository;
+    private readonly StysAppDbContext _dbContext;
 
     public TasinirKodMuhasebeHesapEslemeService(
         ITasinirKodMuhasebeHesapEslemeRepository repository,
-        IMapper mapper)
+        IMapper mapper,
+        StysAppDbContext dbContext)
         : base(repository, mapper)
     {
         _repository = repository;
+        _dbContext = dbContext;
     }
 
     public async Task<List<TasinirKodMuhasebeHesapEslemeDto>> GetByTasinirKodIdAsync(int tasinirKodId, CancellationToken cancellationToken = default)
@@ -71,6 +76,24 @@ public class TasinirKodMuhasebeHesapEslemeService
 
         if (dto.MuhasebeHesapPlaniId <= 0)
             throw new BaseException("Muhasebe hesap planı id 0'dan büyük olmalıdır.", 400);
+
+        var hesap = await _dbContext.MuhasebeHesapPlanlari
+            .FirstOrDefaultAsync(x => x.Id == dto.MuhasebeHesapPlaniId, cancellationToken);
+
+        if (hesap is null)
+            throw new BaseException("Seçilen muhasebe hesabı bulunamadı.", 400);
+
+        if (hesap.IsDeleted)
+            throw new BaseException("Seçilen muhasebe hesabı silinmiştir.", 400);
+
+        if (!hesap.AktifMi)
+            throw new BaseException("Seçilen muhasebe hesabı aktif değildir.", 400);
+
+        if (!hesap.DetayHesapMi)
+            throw new BaseException("Seçilen muhasebe hesabı detay hesap değildir.", 400);
+
+        if (!hesap.HareketGorebilirMi)
+            throw new BaseException("Seçilen muhasebe hesabı hareket görebilir değildir.", 400);
 
         if (string.IsNullOrWhiteSpace(dto.MalzemeTipi))
             throw new BaseException("Malzeme tipi boş olamaz.", 400);

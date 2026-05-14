@@ -284,6 +284,16 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("Eşlenen muhasebe hesabı aktif değildir.", 400);
         }
 
+        if (!anaHesap.DetayHesapMi)
+        {
+            throw new BaseException("Eşlenen muhasebe hesabı detay hesap değildir.", 400);
+        }
+
+        if (!anaHesap.HareketGorebilirMi)
+        {
+            throw new BaseException("Eşlenen muhasebe hesabı hareket görebilir değildir.", 400);
+        }
+
         return anaHesap.TamKod;
     }
 }

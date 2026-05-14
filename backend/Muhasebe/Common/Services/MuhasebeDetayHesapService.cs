@@ -66,6 +66,8 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                     await EnsureNotLinkedToAnotherSourceAsync(existing.Id, existing.Kod, kaynakTipi, kaynakId, cancellationToken);
                     existing.Ad = kaynakAd;
                     existing.AktifMi = true;
+                    existing.DetayHesapMi = true;
+                    existing.HareketGorebilirMi = true;
                     await _dbContext.SaveChangesAsync(cancellationToken);
                     var existingSiraNo = TryParseSiraNo(existing.Kod);
                     if (ownedTx is not null)
@@ -90,6 +92,8 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                     UstHesapId = anaHesap.Id,
                     SeviyeNo = anaHesap.SeviyeNo + 1,
                     AktifMi = true,
+                    DetayHesapMi = true,
+                    HareketGorebilirMi = true,
                     Aciklama = $"{kaynakTipi} otomatik detay hesabi"
                 };
 

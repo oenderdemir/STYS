@@ -140,6 +140,11 @@ public class MuhasebeHesapPlaniService : BaseRdbmsService<MuhasebeHesapPlaniDto,
             throw new BaseException("Seviye no 0'dan buyuk olmalidir.", 400);
         }
 
+        if (dto.HareketGorebilirMi && !dto.DetayHesapMi)
+        {
+            throw new BaseException("Hareket gorebilir hesap ayni zamanda detay hesap olmalidir.", 400);
+        }
+
         if (dto.UstHesapId.HasValue)
         {
             if (currentId.HasValue && dto.UstHesapId.Value == currentId.Value)

@@ -1763,6 +1763,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.TamKod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.DetayHesapMi).IsRequired();
+            entity.Property(x => x.HareketGorebilirMi).IsRequired();
             entity.HasIndex(x => x.Kod)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NULL");

@@ -3823,14 +3823,18 @@ Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eş
   - Hesap bulunamazsa → `"Seçilen muhasebe hesabı bulunamadı."` (400)
   - `IsDeleted` → `"Seçilen muhasebe hesabı silinmiştir."` (400)
   - `!AktifMi` → `"Seçilen muhasebe hesabı aktif değildir."` (400)
-  - `!DetayHesapMi` → `"Seçilen muhasebe hesabı detay hesap değildir."` (400)
-  - `!HareketGorebilirMi` → `"Seçilen muhasebe hesabı hareket görebilir değildir."` (400)
+  - `TesisId.HasValue` → `"Taşınır kod muhasebe eşlemesi için tesis bağımsız ana hesap seçilmelidir."` (400)
+  - `DetayHesapMi` → `"Taşınır kod muhasebe eşlemesi için detay hesap değil, ana hesap seçilmelidir."` (400)
+  - `HareketGorebilirMi` → `"Taşınır kod muhasebe eşlemesi için hareket görebilir detay hesap seçilemez."` (400)
 
 #### 5. TasinirKartService — ResolveTasinirKartAnaHesapKoduAsync
 - Mevcut `!IsDeleted` ve `!AktifMi` kontrollerinin ardından:
-  - `!DetayHesapMi` → `"Eşlenen muhasebe hesabı detay hesap değildir."` (400)
-  - `!HareketGorebilirMi` → `"Eşlenen muhasebe hesabı hareket görebilir değildir."` (400)
+  - `TesisId.HasValue` → `"Eşlenen muhasebe hesabı tesis bağımsız ana hesap olmalıdır."` (400)
+  - `DetayHesapMi` → `"Eşlenen muhasebe hesabı detay hesap olmamalıdır."` (400)
+  - `HareketGorebilirMi` → `"Eşlenen muhasebe hesabı hareket görebilir detay hesap olmamalıdır."` (400)
   - kontrolleri eklendi.
+  -
+  - **Not (Tur 144):** Bu kontrollerin yönü Tur 144'te düzeltilmiştir — eşleme ana hesaba (`DetayHesapMi=false`, `HareketGorebilirMi=false`, `TesisId=null`) yapılmalıdır; otomatik detay hesap `MuhasebeDetayHesapService` tarafından ayrıca oluşturulur.
 
 ### Değişen Dosyalar
 - backend/Infrastructure/EntityFramework/StysAppDbContext.cs
@@ -3840,14 +3844,64 @@ Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eş
 - backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs
 
 ### Manuel Test Senaryoları
-1. **Detay Olmayan Hesaba Eşleme Yapılamaz**: `DetayHesapMi=false` olan bir hesap `TasinirKodMuhasebeHesapEsleme`'ye bağlanmaya çalışıldığında 400 hatası alınmalı.
-2. **Hareket Göremeyen Hesaba Eşleme Yapılamaz**: `HareketGorebilirMi=false` olan bir hesaba eşleme denendiğinde 400 hatası alınmalı.
-3. **Silinmiş Hesaba Eşleme Yapılamaz**: `IsDeleted=true` hesaba eşleme denendiğinde 400 hatası alınmalı.
-4. **Pasif Hesaba Eşleme Yapılamaz**: `AktifMi=false` hesaba eşleme denendiğinde 400 hatası alınmalı.
-5. **Hareket Görebilir Ama Detay Olmayan Hesap Oluşturulamaz**: API üzerinden `HareketGorebilirMi=true, DetayHesapMi=false` gönderildiğinde 400 hatası alınmalı.
-6. **Otomatik Detay Hesap Doğru Bayraklarla Oluşur**: `TasinirKartService.AddAsync` → `MuhasebeDetayHesapService` akışında oluşan yeni detay hesap `DetayHesapMi=true, HareketGorebilirMi=true` olmalı.
-7. **Taşınır Kart Oluşturmada Eşlenen Hesap Kontrolü**: Eşlemedeki hesap `DetayHesapMi=false` veya `HareketGorebilirMi=false` ise `TasinirKartService.AddAsync` 400 hatası vermeli.
+1. **Tesis Bazlı Hesaba Eşleme Yapılamaz**: `TesisId` dolu olan bir hesap eşlemeye bağlanmaya çalışıldığında 400 hatası alınmalı.
+2. **Detay Hesaba Eşleme Yapılamaz**: `DetayHesapMi=true` olan bir hesap eşlemeye bağlanmaya çalışıldığında 400 hatası alınmalı.
+3. **Hareket Görebilir Hesaba Eşleme Yapılamaz**: `HareketGorebilirMi=true` olan bir hesap eşlemeye bağlanmaya çalışıldığında 400 hatası alınmalı.
+4. **Silinmiş Hesaba Eşleme Yapılamaz**: `IsDeleted=true` hesaba eşleme denendiğinde 400 hatası alınmalı.
+5. **Pasif Hesaba Eşleme Yapılamaz**: `AktifMi=false` hesaba eşleme denendiğinde 400 hatası alınmalı.
+6. **Hareket Görebilir Ama Detay Olmayan Hesap Oluşturulamaz**: API üzerinden `HareketGorebilirMi=true, DetayHesapMi=false` gönderildiğinde 400 hatası alınmalı.
+7. **Otomatik Detay Hesap Doğru Bayraklarla Oluşur**: `TasinirKartService.AddAsync` → `MuhasebeDetayHesapService` akışında oluşan yeni detay hesap `DetayHesapMi=true, HareketGorebilirMi=true` olmalı.
 
 ### Build Sonuçları (Tur 143)
+- Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
+- Frontend: Çalıştırılmadı (değişiklik yok)
+
+## Tur 144 - Faz 3 Düzeltmesi: Eşleme Ana Hesap Mantığı
+
+### Problem
+Tur 143'te `TasinirKodMuhasebeHesapEsleme` için seçilecek `MuhasebeHesapPlani` kaydının `DetayHesapMi=true` ve `HareketGorebilirMi=true` olması zorunlu kılınmıştı. Ancak mimari gereği eşleme tablosu **ana hesabı** göstermelidir — detay hesap `MuhasebeDetayHesapService` tarafından otomatik oluşturulur.
+
+### Yapılan Değişiklikler
+
+#### TasinirKodMuhasebeHesapEslemeService.ValidateAsync
+- `!DetayHesapMi` → hata kontrolleri KALDIRILDI
+- `!HareketGorebilirMi` → hata kontrolleri KALDIRILDI
+- Yerine eklendi:
+  - `TesisId.HasValue` → `"Taşınır kod muhasebe eşlemesi için tesis bağımsız ana hesap seçilmelidir."` (400)
+  - `DetayHesapMi` → `"Taşınır kod muhasebe eşlemesi için detay hesap değil, ana hesap seçilmelidir."` (400)
+  - `HareketGorebilirMi` → `"Taşınır kod muhasebe eşlemesi için hareket görebilir detay hesap seçilemez."` (400)
+
+#### TasinirKartService.ResolveTasinirKartAnaHesapKoduAsync
+- `!DetayHesapMi` → hata kontrolü KALDIRILDI
+- `!HareketGorebilirMi` → hata kontrolü KALDIRILDI
+- Yerine eklendi:
+  - `TesisId.HasValue` → `"Eşlenen muhasebe hesabı tesis bağımsız ana hesap olmalıdır."` (400)
+  - `DetayHesapMi` → `"Eşlenen muhasebe hesabı detay hesap olmamalıdır."` (400)
+  - `HareketGorebilirMi` → `"Eşlenen muhasebe hesabı hareket görebilir detay hesap olmamalıdır."` (400)
+
+### Doğru Mimari
+```
+TasinirKodMuhasebeHesapEsleme → Ana Hesap (ör: 1.15.150, TesisId=null, DetayHesapMi=false, HareketGorebilirMi=false)
+         ↓ TamKod
+MuhasebeDetayHesapService → Otomatik Detay Hesap (ör: 1.15.150.001, TesisId=dolu, DetayHesapMi=true, HareketGorebilirMi=true)
+```
+
+### Değişmeyenler
+- `MuhasebeDetayHesapService`: Detay hesaplarda `DetayHesapMi=true`, `HareketGorebilirMi=true` kalır.
+- `MuhasebeHesapPlaniService`: `HareketGorebilirMi=true && DetayHesapMi=false` validasyonu kalır.
+- `StysAppDbContext`: `.IsRequired()` konfigürasyonu kalır.
+- Migration yazılmadı.
+
+### Değişen Dosyalar (Tur 144)
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/TasinirKodMuhasebeHesapEslemeService.cs
+- backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs
+
+### Manuel Test Senaryoları (Tur 144)
+1. **Ana hesap eşlemeye bağlanabilmeli**: `1.15.150` (TesisId=null, DetayHesapMi=false, HareketGorebilirMi=false) hesabı eşlemeye bağlanabilmeli.
+2. **Tesis bazlı detay hesap eşlemeye bağlanamamalı**: `TesisId` dolu detay hesap seçilirse 400 hatası alınmalı.
+3. **Taşınır kart oluşturmada ana hesap altında detay hesap oluşmalı**: `TasinirKartService.AddAsync` → `1.15.150` altında yeni detay hesap (örn. `1.15.150.001`) oluşmalı.
+4. **Oluşan detay hesap doğru bayraklı olmalı**: Yeni detay hesap `DetayHesapMi=true, HareketGorebilirMi=true`.
+
+### Build Sonuçları (Tur 144)
 - Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
 - Frontend: Çalıştırılmadı (değişiklik yok)

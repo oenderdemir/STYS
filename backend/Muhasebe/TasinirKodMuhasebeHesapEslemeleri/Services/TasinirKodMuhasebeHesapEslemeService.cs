@@ -89,11 +89,14 @@ public class TasinirKodMuhasebeHesapEslemeService
         if (!hesap.AktifMi)
             throw new BaseException("Seçilen muhasebe hesabı aktif değildir.", 400);
 
-        if (!hesap.DetayHesapMi)
-            throw new BaseException("Seçilen muhasebe hesabı detay hesap değildir.", 400);
+        if (hesap.TesisId.HasValue)
+            throw new BaseException("Taşınır kod muhasebe eşlemesi için tesis bağımsız ana hesap seçilmelidir.", 400);
 
-        if (!hesap.HareketGorebilirMi)
-            throw new BaseException("Seçilen muhasebe hesabı hareket görebilir değildir.", 400);
+        if (hesap.DetayHesapMi)
+            throw new BaseException("Taşınır kod muhasebe eşlemesi için detay hesap değil, ana hesap seçilmelidir.", 400);
+
+        if (hesap.HareketGorebilirMi)
+            throw new BaseException("Taşınır kod muhasebe eşlemesi için hareket görebilir detay hesap seçilemez.", 400);
 
         if (string.IsNullOrWhiteSpace(dto.MalzemeTipi))
             throw new BaseException("Malzeme tipi boş olamaz.", 400);

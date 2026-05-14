@@ -367,6 +367,13 @@ public static class StructurePermissions
         public const string Manage = "TasinirKodMuhasebeHesapEslemeYonetimi.Manage";
     }
 
+    public static class MuhasebeVergiHesapEslemeYonetimi
+    {
+        public const string Menu = "MuhasebeVergiHesapEslemeYonetimi.Menu";
+        public const string View = "MuhasebeVergiHesapEslemeYonetimi.View";
+        public const string Manage = "MuhasebeVergiHesapEslemeYonetimi.Manage";
+    }
+
     public static class KasaBankaHesapYonetimi
     {
         public const string Menu = "KasaBankaHesapYonetimi.Menu";

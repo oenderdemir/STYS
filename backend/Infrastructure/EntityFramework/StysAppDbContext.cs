@@ -25,6 +25,7 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
+using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -144,6 +145,7 @@ public class StysAppDbContext : DbContext
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
+    public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1867,6 +1869,32 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.MuhasebeHesapPlani)
                 .WithMany()
                 .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MuhasebeVergiHesapEsleme>(entity =>
+        {
+            entity.ToTable("MuhasebeVergiHesapEslemeleri", muhasebeSchema);
+            entity.Property(x => x.VergiTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Oran).HasPrecision(5, 2);
+            entity.Property(x => x.AktifMi).IsRequired();
+            entity.HasIndex(x => x.AlisKdvHesapId);
+            entity.HasIndex(x => x.SatisKdvHesapId);
+            entity.HasIndex(x => new { x.VergiTipi, x.Oran })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [TesisId] IS NULL");
+            entity.HasIndex(x => new { x.TesisId, x.VergiTipi, x.Oran })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [TesisId] IS NOT NULL");
+
+            entity.HasOne(x => x.AlisKdvHesap)
+                .WithMany()
+                .HasForeignKey(x => x.AlisKdvHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SatisKdvHesap)
+                .WithMany()
+                .HasForeignKey(x => x.SatisKdvHesapId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

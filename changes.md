@@ -3905,3 +3905,111 @@ MuhasebeDetayHesapService → Otomatik Detay Hesap (ör: 1.15.150.001, TesisId=d
 ### Build Sonuçları (Tur 144)
 - Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
 - Frontend: Çalıştırılmadı (değişiklik yok)
+
+## Tur 145 - Faz 4: KDV Vergi Hesap Eşleme Altyapısı
+
+### Amaç
+Stok hareketlerindeki KDV hesaplarının doğru belirlenebilmesi için vergi tipi ve oranına göre alış/satış KDV hesap eşleme altyapısı oluşturuldu. Tesis bazlı veya genel tanım yapılabilir.
+
+### Yeni Dosyalar
+
+#### 1. Constants
+- **`backend/Muhasebe/Common/Constants/VergiTipleri.cs`**
+  - Desteklenen vergi tipleri: `"KDV"` (başlangıçta sadece KDV)
+  - `Hepsi` dizisi ile genişletilebilir yapı
+
+#### 2. Entity
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Entities/MuhasebeVergiHesapEsleme.cs`**
+  - `BaseEntity<int>` tabanlı
+  - Alanlar: `TesisId` (int?, nullable), `VergiTipi` (string), `Oran` (decimal), `AlisKdvHesapId` (int), `SatisKdvHesapId` (int), `AktifMi` (bool)
+  - Navigation: `AlisKdvHesap`, `SatisKdvHesap` → `MuhasebeHesapPlani`
+
+#### 3. DTOs
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Dtos/MuhasebeVergiHesapEslemeDtos.cs`**
+  - `MuhasebeVergiHesapEslemeDto`: Navigation display alanları (`AlisKdvHesapKodu`, `AlisKdvHesapAdi`, `SatisKdvHesapKodu`, `SatisKdvHesapAdi`)
+  - `CreateMuhasebeVergiHesapEslemeRequest`
+  - `UpdateMuhasebeVergiHesapEslemeRequest`
+
+#### 4. AutoMapper Profile
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Mapping/MuhasebeVergiHesapEslemeProfile.cs`**
+  - Entity → Dto: navigation display alanları `ForMember` ile eşlenir
+  - Dto → Entity, Request → Dto
+
+#### 5. Repository
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Repositories/IMuhasebeVergiHesapEslemeRepository.cs`**
+  - `GetAktifEslemeAsync(vergiTipi, oran, tesisId)` metodu
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Repositories/MuhasebeVergiHesapEslemeRepository.cs`**
+  - Önce tesis özel (`TesisId` dolu) kayıt arar
+  - Bulunamazsa genel (`TesisId` null) kayda düşer
+  - `AlisKdvHesap` ve `SatisKdvHesap` navigation property'lerini `Include` eder
+
+#### 6. Service
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Services/IMuhasebeVergiHesapEslemeService.cs`**
+  - `IBaseRdbmsService<...>` + `GetAktifEslemeAsync`
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Services/MuhasebeVergiHesapEslemeService.cs`**
+  - `BaseRdbmsService` tabanlı
+  - `ValidateAsync` kontrolleri:
+    - `VergiTipi` boş olamaz, desteklenen tiplerden olmalı
+    - `Oran` 0-100 arası olmalı
+    - `AlisKdvHesapId` ve `SatisKdvHesapId` > 0
+    - Alış ve satış KDV hesapları: mevcut, silinmemiş, aktif, tesis bağımsız (`TesisId=null`), `DetayHesapMi=false`, `HareketGorebilirMi=false`
+  - `ValidateKdvHesapAsync` helper: ana hesap zorunluluğu kontrolleri
+
+#### 7. Controller
+- **`backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Controllers/MuhasebeVergiHesapEslemeController.cs`**
+  - Route: `api/muhasebe/vergi-hesap-esleme`
+  - Endpoint'ler:
+    - `GET /aktif?vergiTipi=&oran=&tesisId=` → aktif eşleme sorgulama
+    - `GET /` → tümünü listele
+    - `GET /{id}` → tekil getir
+    - `POST /` → yeni oluştur
+    - `PUT /{id}` → güncelle
+    - `DELETE /{id}` → sil
+  - Yetkilendirme: `MuhasebeVergiHesapEslemeYonetimi.View` / `.Manage`
+
+### Değişen Dosyalar
+
+#### 8. StysAppDbContext
+- **`backend/Infrastructure/EntityFramework/StysAppDbContext.cs`**
+  - `DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri` eklendi
+  - Fluent API konfigürasyonu:
+    - Tablo: `MuhasebeVergiHesapEslemeleri`, schema: `muhasebe`
+    - `VergiTipi`: nvarchar(32), required
+    - `Oran`: decimal(5,2)
+    - `AktifMi`: required
+    - İki filtrelenmiş unique index:
+      1. `[VergiTipi, Oran]` WHERE `IsDeleted=0 AND AktifMi=1 AND TesisId IS NULL` (genel kayıt)
+      2. `[TesisId, VergiTipi, Oran]` WHERE `IsDeleted=0 AND AktifMi=1 AND TesisId IS NOT NULL` (tesis özel)
+    - Navigation: `AlisKdvHesap`, `SatisKdvHesap` → `Restrict` delete behavior
+
+#### 9. StructurePermissions
+- **`backend/StructurePermissions.cs`**
+  - `MuhasebeVergiHesapEslemeYonetimi` sınıfı eklendi: `Menu = 1216`, `View = 1217`, `Manage = 1218`
+
+#### 10. Program.cs
+- **`backend/Program.cs`**
+  - DI kaydı: `builder.Services.AddScoped<IMuhasebeVergiHesapEslemeService, MuhasebeVergiHesapEslemeService>()`
+  - Using: `STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Services`
+
+### Migration
+- Adı: `AddMuhasebeVergiHesapEsleme`
+- Tablo: `MuhasebeVergiHesapEslemeleri` (schema: `muhasebe`)
+- Sütunlar: `Id`, `TesisId` (nullable), `VergiTipi` (nvarchar 32), `Oran` (decimal 5,2), `AlisKdvHesapId`, `SatisKdvHesapId`, `AktifMi` + BaseEntity alanları
+- FK: `AlisKdvHesapId` → `MuhasebeHesapPlanlari(Id)` Restrict
+- FK: `SatisKdvHesapId` → `MuhasebeHesapPlanlari(Id)` Restrict
+- Unique index 1: `[TesisId, VergiTipi, Oran]` (tesis özel, filtered)
+- Unique index 2: `[VergiTipi, Oran]` (genel, filtered)
+
+### Manuel Test Senaryoları
+1. **Genel KDV eşlemesi oluşturulabilmeli**: `TesisId=null`, `VergiTipi=KDV`, `Oran=20`, geçerli ana hesaplarla POST → 200
+2. **Aynı vergi tipi+orana ikinci genel kayıt eklenememeli**: Duplicate unique index → veritabanı hatası
+3. **Tesis özel KDV eşlemesi genel kaydı override etmeli**: `GET /aktif?vergiTipi=KDV&oran=20&tesisId=1` → tesis özel kayıt dönmeli, yoksa genel kayıt dönmeli
+4. **KDV hesapları ana hesap olmalı**: `TesisId` dolu veya `DetayHesapMi=true` hesap seçilirse 400 hatası
+5. **Silinmiş/Pasif hesap seçilememeli**: `IsDeleted=true` veya `AktifMi=false` hesap → 400
+6. **Geçersiz vergi tipi reddedilmeli**: `VergiTipi=OTV` → 400 "Desteklenmeyen vergi tipi"
+7. **Oran 0-100 dışı reddedilmeli**: `Oran=150` → 400
+
+### Build Sonuçları (Tur 145)
+- Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 5 pre-existing warning
+- Migration: `dotnet ef migrations add AddMuhasebeVergiHesapEsleme` — BAŞARILI
+- Frontend: Çalıştırılmadı (değişiklik yok)

@@ -13,6 +13,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
 using STYS.Kullanicilar.Services;
 using STYS.Licensing.Services;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.MusteriMenu.Services;
 using STYS.OdaTemizlik.Services;
 using STYS.Rezervasyonlar.Services;
@@ -98,6 +99,7 @@ builder.Services.AddScoped<IMusteriMenuService, MusteriMenuService>();
 builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
 builder.Services.AddScoped<IRestoranErisimService, RestoranErisimService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
+builder.Services.AddScoped<ITasinirKodMuhasebeHesapEslemeService, TasinirKodMuhasebeHesapEslemeService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

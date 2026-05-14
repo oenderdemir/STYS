@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.TasinirKodlari.Entities;
@@ -30,4 +31,5 @@ public class TasinirKod : BaseEntity<int>
     public TasinirKod? UstKod { get; set; }
     public ICollection<TasinirKod> AltKodlar { get; set; } = [];
     public ICollection<TasinirKart> TasinirKartlari { get; set; } = [];
+    public ICollection<TasinirKodMuhasebeHesapEsleme> MuhasebeHesapEslemeleri { get; set; } = [];
 }

@@ -3652,6 +3652,56 @@ et10.0-windows, UseWindowsForms=true).
 - Not: Frontend tarafında değişiklik yapılmadı.
 - Backend build: Başarılı (`dotnet build backend/STYS.csproj /p:NoWarn=NU1903`).
 - Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.
+
+---
+
+## Tur 142 - Taşınır Kod ↔ Muhasebe Hesap Eşleme Altyapısı
+
+### Özet
+Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eşleme yapılmasını sağlayan `TasinirKodMuhasebeHesapEsleme` entity'si ve bağlı CRUD yapıları (DTO, Repository, Service, Controller, Mapping, Permission) oluşturuldu. Her taşınır kod için bir stok hesabı, bir maliyet/gider hesabı, bir gelir hesabı tanımlanabilir. Tesis bazlı override desteği mevcut.
+
+### Yeni Dosyalar
+- backend/Muhasebe/MuhasebeHesapPlanlari/Entities/HesapTipleri.cs — enum (AnaHesap, AltHesap, YardimciHesap)
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Entities/TasinirKodMuhasebeHesapEsleme.cs — entity
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Dtos/TasinirKodMuhasebeHesapEslemeDtos.cs — DTO + Request/Filter sınıfları
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Repositories/ITasinirKodMuhasebeHesapEslemeRepository.cs — repository interface
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Repositories/TasinirKodMuhasebeHesapEslemeRepository.cs — repository implementation
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/ITasinirKodMuhasebeHesapEslemeService.cs — service interface
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/TasinirKodMuhasebeHesapEslemeService.cs — service implementation
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Controllers/TasinirKodMuhasebeHesapEslemeController.cs — CRUD controller
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Mapping/TasinirKodMuhasebeHesapEslemeProfile.cs — AutoMapper profile
+
+### Değiştirilen Dosyalar
+- backend/Muhasebe/Common/Constants/MuhasebeAnaHesapKodlari.cs — 7 yeni ana hesap kodu eklendi (150, 151, 152, 153, 157, 600, 602)
+- backend/Muhasebe/MuhasebeHesapPlanlari/Dtos/MuhasebeHesapPlaniDtos.cs — HesapTipi, Aciklama, AnaHesapKodu alanları eklendi
+- backend/Muhasebe/MuhasebeHesapPlanlari/Entities/MuhasebeHesapPlani.cs — AnaHesapKodu alanı eklendi
+- backend/Data/StysAppDbContext.cs — DbSet + Fluent API konfigürasyonu eklendi
+- backend/Muhasebe/TasinirKodlari/Entities/TasinirKod.cs — TasinirKodMuhasebeHesapEslemeleri navigation property eklendi
+- backend/StructurePermissions.cs — TasinirKodMuhasebeHesapEslemeYonetimi izin sınıfı eklendi
+- backend/Program.cs — ITasinirKodMuhasebeHesapEslemeService DI kaydı eklendi
+- changes.md — bu dosya
+
+### Build Sonuclari (Tur 142)
+- Backend: BASARILI (`dotnet build backend/STYS.csproj` — 5 warning, 0 error)
+- Frontend: CALISTIRILMADI (frontend değişikliği yok)
+
+---
+
+## Tur 141 - .clinerules/changelog-updates.md Kural Dosyasi Olusturma
+
+### Yapilanlar
+- Her tur/islem sonrasi `changes.md` dosyasinin guncellenmesini zorunlu kilan Cline kural dosyasi olusturuldu.
+- Kural dosyasi STYS projesine ozgu olup, degisiklik turu sonunda build sonuclari dahil tum bilgilerin kaydedilmesini sart kosar.
+
+### Yeni Dosyalar
+- .clinerules/changelog-updates.md
+
+### Degisen Dosyalar
+- changes.md
+
+### Build Sonuclari (Tur 141)
+- Backend: CALISTIRILMADI (islem sadece dosya olusturma)
+- Frontend: CALISTIRILMADI (islem sadece dosya olusturma)
 ## Tur 139 - Muhasebe Hesap Planı TamKod Ana Hesap Arama Düzeltmesi
 - MuhasebeDetayHesapService ana hesap araması TamKod öncelikli hale getirildi.
 - Kod alanı geriye uyumluluk için fallback olarak desteklendi.

@@ -24,6 +24,7 @@ using STYS.Muhasebe.PaketTurleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -142,6 +143,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Depo> Depolar => Set<Depo>();
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
+    public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1834,6 +1836,26 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TasinirKodMuhasebeHesapEsleme>(entity =>
+        {
+            entity.ToTable("TasinirKodMuhasebeHesapEslemeleri", muhasebeSchema);
+            entity.Property(x => x.IslemTuru).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.VarsayilanMi).IsRequired();
+            entity.HasIndex(x => new { x.TasinirKodId, x.MuhasebeHesapPlaniId, x.IslemTuru })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.TasinirKod)
+                .WithMany(x => x.MuhasebeHesapEslemeleri)
+                .HasForeignKey(x => x.TasinirKodId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.MuhasebeHesapPlani)

@@ -360,6 +360,13 @@ public static class StructurePermissions
         public const string Manage = "MuhasebeHesapPlaniYonetimi.Manage";
     }
 
+    public static class TasinirKodMuhasebeHesapEslemeYonetimi
+    {
+        public const string Menu = "TasinirKodMuhasebeHesapEslemeYonetimi.Menu";
+        public const string View = "TasinirKodMuhasebeHesapEslemeYonetimi.View";
+        public const string Manage = "TasinirKodMuhasebeHesapEslemeYonetimi.Manage";
+    }
+
     public static class KasaBankaHesapYonetimi
     {
         public const string Menu = "KasaBankaHesapYonetimi.Menu";

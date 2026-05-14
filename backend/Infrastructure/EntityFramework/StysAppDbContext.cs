@@ -1848,6 +1848,8 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("TasinirKodMuhasebeHesapEslemeleri", muhasebeSchema);
             entity.Property(x => x.IslemTuru).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.MalzemeTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.HareketTipi).HasMaxLength(32).IsRequired();
             entity.Property(x => x.VarsayilanMi).IsRequired();
             entity.HasIndex(x => new { x.TasinirKodId, x.MuhasebeHesapPlaniId, x.IslemTuru })
                 .IsUnique()

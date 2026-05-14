@@ -23,8 +23,21 @@ public class TasinirKodMuhasebeHesapEsleme : BaseEntity<int>
     /// <summary>
     /// Bu eşlemenin hangi işlem türü için kullanılacağını belirtir:
     /// "Alis", "Satis", "Iade", "Transfer", "Dusum" vb.
+    /// (Geriye dönük uyumluluk için korunur; yeni akışta HareketTipi önceliklidir.)
     /// </summary>
     public string IslemTuru { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Bu eşlemenin hangi malzeme tipi için geçerli olduğunu belirtir:
+    /// "Sarf", "Demirbas", "Hammadde", "YariMamul", "Mamul", "TicariMal" vb.
+    /// </summary>
+    public string MalzemeTipi { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Bu eşlemenin hangi hareket tipi için geçerli olduğunu belirtir:
+    /// "Giris", "Cikis", "Transfer", "Iade", "Dusum" vb.
+    /// </summary>
+    public string HareketTipi { get; set; } = string.Empty;
 
     /// <summary>
     /// Bu eşleme aktif olarak kullanılıyor mu?

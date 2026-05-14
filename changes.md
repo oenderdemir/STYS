@@ -3687,6 +3687,38 @@ Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eş
 
 ---
 
+## Tur 143 - TasinirKodMuhasebeHesapEsleme: MalzemeTipi + HareketTipi ve Varsayılan Getirme
+- `TasinirKodMuhasebeHesapEsleme` entity'sine `MalzemeTipi` (max 32) ve `HareketTipi` (max 32) alanları eklendi.
+- `VarsayilanMi` alanı zorunlu (non-nullable) hale getirildi.
+- DTO ve request modellerine yeni alanlar eklendi (`CreateTasinirKodMuhasebeHesapEslemeRequest`, `UpdateTasinirKodMuhasebeHesapEslemeRequest`, `TasinirKodMuhasebeHesapEslemeDto`).
+- Repository interface ve implementation'a `GetVarsayilanAsync(tasinirKodId, islemTuru, malzemeTipi, hareketTipi)` eklendi.
+- Service interface ve implementation'a aynı metod + validasyon eklendi (varsayılan bulunamazsa 404, birden fazla varsa hata).
+- Controller'a `GET /{tasinirKodId}/varsayilan` endpoint'i eklendi.
+- DbContext Fluent API'de `MalzemeTipi`, `HareketTipi` ve `VarsayilanMi` alan konfigürasyonu güncellendi.
+- Index unique constraint `(TasinirKodId, MuhasebeHesapPlaniId, IslemTuru)` olarak düzeltildi.
+- Migration eklendi: `AddMalzemeTipiHareketTipiToTasinirKodMuhasebeHesapEsleme`.
+
+### Olusturulan Dosyalar (Tur 143)
+- backend/Infrastructure/EntityFramework/Migrations/20260514090931_AddMalzemeTipiHareketTipiToTasinirKodMuhasebeHesapEsleme.cs
+- backend/Infrastructure/EntityFramework/Migrations/20260514090931_AddMalzemeTipiHareketTipiToTasinirKodMuhasebeHesapEsleme.Designer.cs
+
+### Degisen Dosyalar (Tur 143)
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Entities/TasinirKodMuhasebeHesapEsleme.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Dtos/TasinirKodMuhasebeHesapEslemeDtos.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Repositories/ITasinirKodMuhasebeHesapEslemeRepository.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Repositories/TasinirKodMuhasebeHesapEslemeRepository.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/ITasinirKodMuhasebeHesapEslemeService.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Services/TasinirKodMuhasebeHesapEslemeService.cs
+- backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri/Controllers/TasinirKodMuhasebeHesapEslemeController.cs
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- changes.md
+
+### Build Sonuclari (Tur 143)
+- Backend: BASARILI
+- Frontend: CALISTIRILMADI (frontend degisikligi yok)
+---
+
 ## Tur 141 - .clinerules/changelog-updates.md Kural Dosyasi Olusturma
 
 ### Yapilanlar

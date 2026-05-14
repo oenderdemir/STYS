@@ -27,6 +27,14 @@ public class TasinirKodMuhasebeHesapEslemeController : UIController
     public async Task<ActionResult<List<TasinirKodMuhasebeHesapEslemeDto>>> GetByTasinirKodId(int tasinirKodId, CancellationToken cancellationToken)
         => Ok(await _service.GetByTasinirKodIdAsync(tasinirKodId, cancellationToken));
 
+    [HttpGet("varsayilan")]
+    [Permission(StructurePermissions.TasinirKodMuhasebeHesapEslemeYonetimi.View)]
+    public async Task<ActionResult<TasinirKodMuhasebeHesapEslemeDto>> GetVarsayilan([FromQuery] int tasinirKodId, [FromQuery] string malzemeTipi, [FromQuery] string hareketTipi, CancellationToken cancellationToken)
+    {
+        var item = await _service.GetVarsayilanAsync(tasinirKodId, malzemeTipi, hareketTipi, cancellationToken);
+        return item is null ? NotFound() : Ok(item);
+    }
+
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.TasinirKodMuhasebeHesapEslemeYonetimi.View)]
     public async Task<ActionResult<TasinirKodMuhasebeHesapEslemeDto>> GetById(int id, CancellationToken cancellationToken)

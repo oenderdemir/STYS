@@ -7,4 +7,5 @@ public interface ITasinirKodMuhasebeHesapEslemeRepository : IBaseRdbmsRepository
 {
     Task<List<TasinirKodMuhasebeHesapEsleme>> GetByTasinirKodIdAsync(int tasinirKodId, CancellationToken cancellationToken = default);
     Task<TasinirKodMuhasebeHesapEsleme?> GetVarsayilanByIslemTuruAsync(int tasinirKodId, string islemTuru, CancellationToken cancellationToken = default);
+    Task<TasinirKodMuhasebeHesapEsleme?> GetVarsayilanAsync(int tasinirKodId, string malzemeTipi, string hareketTipi, CancellationToken cancellationToken = default);
 }

@@ -33,4 +33,13 @@ public class TasinirKodMuhasebeHesapEslemeRepository
                                    && x.IslemTuru == islemTuru
                                    && x.VarsayilanMi
                                    && x.AktifMi, cancellationToken);
+
+    public async Task<TasinirKodMuhasebeHesapEsleme?> GetVarsayilanAsync(int tasinirKodId, string malzemeTipi, string hareketTipi, CancellationToken cancellationToken = default)
+        => await _dbContext.TasinirKodMuhasebeHesapEslemeleri
+            .Include(x => x.MuhasebeHesapPlani)
+            .FirstOrDefaultAsync(x => x.TasinirKodId == tasinirKodId
+                                   && x.MalzemeTipi == malzemeTipi
+                                   && x.HareketTipi == hareketTipi
+                                   && x.VarsayilanMi
+                                   && x.AktifMi, cancellationToken);
 }

@@ -3772,3 +3772,30 @@ Taşınır kod (malzeme türü/kategorisi) ile muhasebe hesapları arasında eş
 - Sayaç (`MuhasebeHesapKoduSayaclari`) integer mantığı korunur; sadece string kod formatı standartlaştırılır.
 - Backend build: Başarılı (`dotnet build backend/STYS.csproj /p:NoWarn=NU1903`).
 - Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.
+
+## Tur 142 - TasinirKartService AddAsync: Sabit Hesap Kodundan Dinamik Eşlemeye Geçiş
+
+### Yapılan Değişiklikler
+- `TasinirKartService.AddAsync` içindeki `ResolveTasinirKartAnaHesapKodu()` çağrısı kaldırıldı.
+- Yerine `ResolveTasinirKartAnaHesapKoduAsync(dto, CancellationToken.None)` eklendi.
+- Yeni metot `ResolveTasinirKartAnaHesapKoduAsync`:
+  - `ITasinirKodMuhasebeHesapEslemeService.GetVarsayilanAsync(dto.TasinirKodId, dto.MalzemeTipi, "Giris", cancellationToken)` ile varsayılan eşlemeyi sorgular.
+  - Eşleme bulunamazsa → `"Seçilen taşınır kodu ve malzeme tipi için giriş hareketine ait varsayılan muhasebe hesap eşlemesi bulunamadı."` hatası (400).
+  - Eşlemedeki `MuhasebeHesapPlaniId` ile `_dbContext.MuhasebeHesapPlanlari`'ndan hesap aranır (`!x.IsDeleted`).
+  - Hesap bulunamazsa → `"Eşlenen muhasebe hesabı bulunamadı."` hatası (400).
+  - Hesap pasifse (`!anaHesap.AktifMi`) → `"Eşlenen muhasebe hesabı aktif değildir."` hatası (400).
+  - Başarılı → `anaHesap.TamKod` döndürülür.
+- Eski `ResolveTasinirKartAnaHesapKodu()` metodu kaldırıldı (artık `MuhasebeAnaHesapKodlari.TasinirKart` sabiti kullanılmıyor).
+- Mevcut transaction ve `MuhasebeDetayHesapService.CreateOrResolveDetayHesapAsync` akışı korundu.
+
+### Beklenen Davranış
+- Taşınır kart oluştururken sabit `MuhasebeAnaHesapKodlari.TasinirKart` kullanılmayacak.
+- `TasinirKodId + MalzemeTipi + HareketTipi=Giris` için varsayılan eşleme bulunacak.
+- Bulunan eşlemenin `MuhasebeHesapPlani.TamKod` değeri ana hesap kodu olarak `MuhasebeDetayHesapService`'e gönderilecek.
+
+### Değişen Dosyalar
+- backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs
+
+### Build Sonuçları (Tur 142)
+- Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 6 pre-existing warning
+- Frontend: Çalıştırılmadı (değişiklik yok)

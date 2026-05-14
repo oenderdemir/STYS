@@ -46,7 +46,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         await NormalizeAndValidateAsync(dto, null);
         EnsureTesisRequired(dto.TesisId);
 
-        var anaHesapKodu = ResolveTasinirKartAnaHesapKodu();
+        var anaHesapKodu = await ResolveTasinirKartAnaHesapKoduAsync(dto, CancellationToken.None);
         await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
         try
         {
@@ -251,8 +251,39 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         }
     }
 
-    private string ResolveTasinirKartAnaHesapKodu()
+    private async Task<string> ResolveTasinirKartAnaHesapKoduAsync(
+        TasinirKartDto dto,
+        CancellationToken cancellationToken = default)
     {
-        return MuhasebeAnaHesapKodlari.TasinirKart;
+        var esleme = await _tasinirKodMuhasebeHesapEslemeService.GetVarsayilanAsync(
+            dto.TasinirKodId,
+            dto.MalzemeTipi,
+            "Giris",
+            cancellationToken);
+
+        if (esleme is null)
+        {
+            throw new BaseException(
+                "Seçilen taşınır kodu ve malzeme tipi için giriş hareketine ait varsayılan muhasebe hesap eşlemesi bulunamadı.",
+                400);
+        }
+
+        var anaHesap = await _dbContext.MuhasebeHesapPlanlari
+            .FirstOrDefaultAsync(x =>
+                x.Id == esleme.MuhasebeHesapPlaniId &&
+                !x.IsDeleted,
+                cancellationToken);
+
+        if (anaHesap is null)
+        {
+            throw new BaseException("Eşlenen muhasebe hesabı bulunamadı.", 400);
+        }
+
+        if (!anaHesap.AktifMi)
+        {
+            throw new BaseException("Eşlenen muhasebe hesabı aktif değildir.", 400);
+        }
+
+        return anaHesap.TamKod;
     }
 }

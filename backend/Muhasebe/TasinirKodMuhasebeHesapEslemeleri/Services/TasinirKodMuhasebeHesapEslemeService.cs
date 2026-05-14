@@ -3,6 +3,7 @@ using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Dtos;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 
@@ -37,7 +38,7 @@ public class TasinirKodMuhasebeHesapEslemeService
         // Geriye donuk uyumluluk: IslemTuru <-> HareketTipi disinda kalan alani doldur
         NormalizeIslemHareketTipleri(dto);
 
-        await ValidateAsync(dto);
+        await ValidateAsync(dto, CancellationToken.None);
 
         return await base.AddAsync(dto);
     }
@@ -46,7 +47,7 @@ public class TasinirKodMuhasebeHesapEslemeService
     {
         NormalizeIslemHareketTipleri(dto);
 
-        await ValidateAsync(dto);
+        await ValidateAsync(dto, CancellationToken.None);
 
         return await base.UpdateAsync(dto);
     }
@@ -63,27 +64,31 @@ public class TasinirKodMuhasebeHesapEslemeService
         }
     }
 
-    private async Task ValidateAsync(TasinirKodMuhasebeHesapEslemeDto dto)
+    private async Task ValidateAsync(TasinirKodMuhasebeHesapEslemeDto dto, CancellationToken cancellationToken = default)
     {
         if (dto.TasinirKodId <= 0)
-            throw new InvalidOperationException("TasinirKodId 0'dan buyuk olmalidir.");
+            throw new BaseException("Taşınır kod id 0'dan büyük olmalıdır.", 400);
 
         if (dto.MuhasebeHesapPlaniId <= 0)
-            throw new InvalidOperationException("MuhasebeHesapPlaniId 0'dan buyuk olmalidir.");
+            throw new BaseException("Muhasebe hesap planı id 0'dan büyük olmalıdır.", 400);
 
         if (string.IsNullOrWhiteSpace(dto.MalzemeTipi))
-            throw new InvalidOperationException("MalzemeTipi bos olamaz.");
+            throw new BaseException("Malzeme tipi boş olamaz.", 400);
 
         if (string.IsNullOrWhiteSpace(dto.HareketTipi))
-            throw new InvalidOperationException("HareketTipi bos olamaz.");
+            throw new BaseException("Hareket tipi boş olamaz.", 400);
+
+        // Pasif bir eşleme varsayılan olarak işaretlenemez
+        if (dto.VarsayilanMi && !dto.AktifMi)
+            throw new BaseException("Pasif bir eşleme varsayılan olarak işaretlenemez.", 400);
 
         // VarsayilanMi = true ise ayni TasinirKodId + MalzemeTipi + HareketTipi icin baska aktif varsayilan kayit olmamali
         if (dto.VarsayilanMi)
         {
-            var existing = await _repository.GetVarsayilanAsync(dto.TasinirKodId, dto.MalzemeTipi, dto.HareketTipi);
+            var existing = await _repository.GetVarsayilanAsync(dto.TasinirKodId, dto.MalzemeTipi, dto.HareketTipi, cancellationToken);
             if (existing != null && existing.Id != dto.Id)
-                throw new InvalidOperationException(
-                    $"Bu TasinirKod ({dto.TasinirKodId}), MalzemeTipi ({dto.MalzemeTipi}) ve HareketTipi ({dto.HareketTipi}) icin zaten aktif bir varsayilan esleme mevcut.");
+                throw new BaseException(
+                    $"Bu taşınır kod ({dto.TasinirKodId}), malzeme tipi ({dto.MalzemeTipi}) ve hareket tipi ({dto.HareketTipi}) için zaten aktif bir varsayılan eşleme mevcut.", 400);
         }
     }
 }

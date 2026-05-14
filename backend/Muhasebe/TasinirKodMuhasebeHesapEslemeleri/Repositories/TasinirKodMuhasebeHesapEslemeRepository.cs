@@ -22,7 +22,7 @@ public class TasinirKodMuhasebeHesapEslemeRepository
         => await _dbContext.TasinirKodMuhasebeHesapEslemeleri
             .Include(x => x.TasinirKod)
             .Include(x => x.MuhasebeHesapPlani)
-            .Where(x => x.TasinirKodId == tasinirKodId)
+            .Where(x => x.TasinirKodId == tasinirKodId && !x.IsDeleted)
             .OrderBy(x => x.IslemTuru)
             .ToListAsync(cancellationToken);
 
@@ -32,7 +32,8 @@ public class TasinirKodMuhasebeHesapEslemeRepository
             .FirstOrDefaultAsync(x => x.TasinirKodId == tasinirKodId
                                    && x.IslemTuru == islemTuru
                                    && x.VarsayilanMi
-                                   && x.AktifMi, cancellationToken);
+                                   && x.AktifMi
+                                   && !x.IsDeleted, cancellationToken);
 
     public async Task<TasinirKodMuhasebeHesapEsleme?> GetVarsayilanAsync(int tasinirKodId, string malzemeTipi, string hareketTipi, CancellationToken cancellationToken = default)
         => await _dbContext.TasinirKodMuhasebeHesapEslemeleri
@@ -41,5 +42,6 @@ public class TasinirKodMuhasebeHesapEslemeRepository
                                    && x.MalzemeTipi == malzemeTipi
                                    && x.HareketTipi == hareketTipi
                                    && x.VarsayilanMi
-                                   && x.AktifMi, cancellationToken);
+                                   && x.AktifMi
+                                   && !x.IsDeleted, cancellationToken);
 }

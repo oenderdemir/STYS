@@ -1847,13 +1847,15 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<TasinirKodMuhasebeHesapEsleme>(entity =>
         {
             entity.ToTable("TasinirKodMuhasebeHesapEslemeleri", muhasebeSchema);
-            entity.Property(x => x.IslemTuru).HasMaxLength(32).IsRequired();
-            entity.Property(x => x.MalzemeTipi).HasMaxLength(32).IsRequired();
-            entity.Property(x => x.HareketTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.IslemTuru).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.MalzemeTipi).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.HareketTipi).HasMaxLength(64).IsRequired();
             entity.Property(x => x.VarsayilanMi).IsRequired();
-            entity.HasIndex(x => new { x.TasinirKodId, x.MuhasebeHesapPlaniId, x.IslemTuru })
+            entity.HasIndex(x => x.TasinirKodId);
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId);
+            entity.HasIndex(x => new { x.TasinirKodId, x.MalzemeTipi, x.HareketTipi })
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0");
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [VarsayilanMi] = 1");
 
             entity.HasOne(x => x.TasinirKod)
                 .WithMany(x => x.MuhasebeHesapEslemeleri)

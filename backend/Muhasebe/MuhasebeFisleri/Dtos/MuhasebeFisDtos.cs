@@ -1,0 +1,78 @@
+using TOD.Platform.Persistence.Rdbms.Dto;
+
+namespace STYS.Muhasebe.MuhasebeFisleri.Dtos;
+
+public class MuhasebeFisDto : BaseRdbmsDto<int>
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+    public int Donem { get; set; }
+    public string FisNo { get; set; } = string.Empty;
+    public int? YevmiyeNo { get; set; }
+    public DateTime FisTarihi { get; set; }
+    public string FisTipi { get; set; } = string.Empty;
+    public string KaynakModul { get; set; } = string.Empty;
+    public int? KaynakId { get; set; }
+    public string Durum { get; set; } = string.Empty;
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+    public string? Aciklama { get; set; }
+    public List<MuhasebeFisSatirDto> Satirlar { get; set; } = [];
+}
+
+public class MuhasebeFisSatirDto : BaseRdbmsDto<int>
+{
+    public int MuhasebeFisId { get; set; }
+    public int MuhasebeHesapPlaniId { get; set; }
+    public string? MuhasebeHesapKodu { get; set; }
+    public string? MuhasebeHesapAdi { get; set; }
+    public int SiraNo { get; set; }
+    public decimal Borc { get; set; }
+    public decimal Alacak { get; set; }
+    public string ParaBirimi { get; set; } = "TRY";
+    public decimal Kur { get; set; } = 1;
+    public int? CariKartId { get; set; }
+    public int? TasinirKartId { get; set; }
+    public int? DepoId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
+    public string? Aciklama { get; set; }
+}
+
+public class CreateMuhasebeFisRequest
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+    public int Donem { get; set; }
+    public DateTime FisTarihi { get; set; }
+    public string FisTipi { get; set; } = string.Empty;
+    public string? KaynakModul { get; set; }
+    public int? KaynakId { get; set; }
+    public string? Aciklama { get; set; }
+    public List<CreateMuhasebeFisSatirRequest> Satirlar { get; set; } = [];
+}
+
+public class CreateMuhasebeFisSatirRequest
+{
+    public int MuhasebeHesapPlaniId { get; set; }
+    public int SiraNo { get; set; }
+    public decimal Borc { get; set; }
+    public decimal Alacak { get; set; }
+    public string? ParaBirimi { get; set; }
+    public decimal Kur { get; set; } = 1;
+    public int? CariKartId { get; set; }
+    public int? TasinirKartId { get; set; }
+    public int? DepoId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
+    public string? Aciklama { get; set; }
+}
+
+public class UpdateMuhasebeFisRequest
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+    public int Donem { get; set; }
+    public DateTime FisTarihi { get; set; }
+    public string FisTipi { get; set; } = string.Empty;
+    public string? Aciklama { get; set; }
+    public List<CreateMuhasebeFisSatirRequest> Satirlar { get; set; } = [];
+}

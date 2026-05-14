@@ -4013,3 +4013,133 @@ Stok hareketlerindeki KDV hesaplarının doğru belirlenebilmesi için vergi tip
 - Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 5 pre-existing warning
 - Migration: `dotnet ef migrations add AddMuhasebeVergiHesapEsleme` — BAŞARILI
 - Frontend: Çalıştırılmadı (değişiklik yok)
+
+## Tur 146 - Faz 5: Muhasebe Fişi Temel Altyapısı
+
+### Amaç
+Manuel/taslak muhasebe fişi oluşturma altyapısı kuruldu. Bu fazda sadece manuel fiş girişi yapılabilir; stok hareketinden otomatik fiş üretme, cari/kasa/banka hareketlerine dokunma, dönemler, yevmiye no sayacı, raporlama ve KDV eşleme bağlantısı yapılmadı.
+
+### Yeni Dosyalar
+
+#### 1. Constants (3 adet)
+- **`backend/Muhasebe/Common/Constants/MuhasebeFisTipleri.cs`**
+  - Tip listesi: Mahsup, Tahsil, Tediye, Acilis, Kapanis, Stok, Duzeltme
+- **`backend/Muhasebe/Common/Constants/MuhasebeFisDurumlari.cs`**
+  - Durum listesi: Taslak, Onayli, Iptal, TersKayit
+- **`backend/Muhasebe/Common/Constants/MuhasebeKaynakModulleri.cs`**
+  - Kaynak modülleri: Manuel, StokHareket, CariHareket, KasaHareket, BankaHareket, TahsilatOdemeBelgesi
+
+#### 2. Entities (2 adet)
+- **`backend/Muhasebe/MuhasebeFisleri/Entities/MuhasebeFis.cs`**
+  - `BaseEntity<int>` tabanlı
+  - Alanlar: TesisId, MaliYil, Donem, FisNo, YevmiyeNo, FisTarihi, FisTipi, KaynakModul, KaynakId, Durum, ToplamBorc, ToplamAlacak, Aciklama
+  - Navigation: `Satirlar` → `ICollection<MuhasebeFisSatir>`
+- **`backend/Muhasebe/MuhasebeFisleri/Entities/MuhasebeFisSatir.cs`**
+  - `BaseEntity<int>` tabanlı
+  - Alanlar: MuhasebeFisId, MuhasebeHesapPlaniId, SiraNo, Borc, Alacak, ParaBirimi, Kur, CariKartId, TasinirKartId, DepoId, KasaBankaHesapId, Aciklama
+  - Navigation: `MuhasebeFis`, `MuhasebeHesapPlani`
+
+#### 3. DTOs
+- **`backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs`**
+  - `MuhasebeFisDto`: Satirlar listesi + BaseRdbmsDto alanları
+  - `MuhasebeFisSatirDto`: MuhasebeHesapKodu, MuhasebeHesapAdi display alanları
+  - `CreateMuhasebeFisRequest`: TesisId, MaliYil, Donem, FisTarihi, FisTipi, KaynakModul, KaynakId, Aciklama, Satirlar
+  - `CreateMuhasebeFisSatirRequest`: MuhasebeHesapPlaniId, SiraNo, Borc, Alacak, ParaBirimi, Kur + nullable referans alanları
+  - `UpdateMuhasebeFisRequest`: TesisId, MaliYil, Donem, FisTarihi, FisTipi, Aciklama, Satirlar
+
+#### 4. AutoMapper Profile
+- **`backend/Muhasebe/MuhasebeFisleri/Mapping/MuhasebeFisProfile.cs`**
+  - Entity↔Dto, Request→Dto, Request→Entity eşlemeleri
+  - Satır display alanları `ForMember` ile navigation'dan çözülür
+
+#### 5. Repository
+- **`backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs`**
+  - `GetByIdWithSatirlarAsync(int id)` — fişi satırları ve hesap planı bilgileriyle getirir
+  - `GetByKaynakAsync(string kaynakModul, int kaynakId)` — kaynağa göre fişleri listeler
+- **`backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs`**
+  - `BaseRdbmsRepository` tabanlı
+
+#### 6. Service
+- **`backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs`**
+  - `IBaseRdbmsService<MuhasebeFisDto, MuhasebeFis, int>` + `GetByIdWithSatirlarAsync`, `GetByKaynakAsync`
+- **`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`**
+  - `AddAsync`: normalize + validate → entity oluştur → `_dbContext` üzerinden kaydet → reload
+  - `UpdateAsync`: sadece Taslak fiş güncellenebilir; eski satırlar soft-delete, yeniler eklenir
+  - `DeleteAsync`: sadece Taslak fiş silinebilir; satırlar ve fiş soft-delete
+  - `NormalizeAndValidateCreateAsync`: 20 validasyon kuralı
+    - TesisId > 0, MaliYil 2000-2100, Donem 1-12
+    - FisTarihi zorunlu, FisTipi desteklenenlerden
+    - KaynakModul boşsa "Manuel", desteklenenlerden olmalı
+    - En az 2 satır, her satırda hesap mevcut/silinmemiş/aktif/DetayHesapMi=true/HareketGorebilirMi=true
+    - Borc ve Alacak aynı anda >0 olamaz, ikisi de 0 olamaz, negatif olamaz
+    - ToplamBorc = ToplamAlacak
+    - ParaBirimi boşsa "TRY", Kur ≤ 0 ise 1, SiraNo boş/0 ise otomatik
+
+#### 7. Controller
+- **`backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs`**
+  - Route: `api/muhasebe/fisler`
+  - Endpoint'ler:
+    - `GET /` → tüm fişleri listele (View)
+    - `GET /{id}` → fişi satırlarıyla getir (View)
+    - `GET /by-kaynak?kaynakModul=&kaynakId=` → kaynağa göre fişler (View)
+    - `POST /` → yeni fiş oluştur (Manage)
+    - `PUT /{id}` → fiş güncelle (Manage)
+    - `DELETE /{id}` → fiş sil (Manage)
+  - Yetkilendirme: `MuhasebeFisYonetimi.View` / `.Manage`
+
+### Değişen Dosyalar
+
+#### 8. StysAppDbContext
+- **`backend/Infrastructure/EntityFramework/StysAppDbContext.cs`**
+  - Using: `STYS.Muhasebe.MuhasebeFisleri.Entities`
+  - DbSet'ler: `MuhasebeFisler`, `MuhasebeFisSatirlari`
+  - Fluent API (`MuhasebeFis`):
+    - Table: `MuhasebeFisler`, schema: `muhasebe`
+    - FisNo: nvarchar(64), required
+    - FisTipi: nvarchar(32), required
+    - KaynakModul: nvarchar(64), required
+    - Durum: nvarchar(32), required
+    - ToplamBorc/ToplamAlacak: decimal(18,2)
+    - Aciklama: nvarchar(1024)
+    - Index: `[TesisId, FisTarihi]`, `[KaynakModul, KaynakId]` (filtered), `[Durum]`
+    - HasMany Satirlar → Cascade delete
+  - Fluent API (`MuhasebeFisSatir`):
+    - Table: `MuhasebeFisSatirlari`, schema: `muhasebe`
+    - Borc/Alacak: decimal(18,2), Kur: decimal(18,6)
+    - ParaBirimi: nvarchar(3), required
+    - Aciklama: nvarchar(512)
+    - Index: `[MuhasebeFisId]`, `[MuhasebeHesapPlaniId]`
+    - FK MuhasebeHesapPlani → Restrict
+
+#### 9. StructurePermissions
+- **`backend/StructurePermissions.cs`**
+  - `MuhasebeFisYonetimi` sınıfı eklendi: Menu, View, Manage
+
+#### 10. Program.cs
+- **`backend/Program.cs`**
+  - Using: `STYS.Muhasebe.MuhasebeFisleri.Services`
+  - DI: `builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>()`
+
+### Migration
+- Adı: `AddMuhasebeFisleri` (`20260514221833_AddMuhasebeFisleri`)
+- Tablolar:
+  - `MuhasebeFisler` (schema: `muhasebe`): TesisId, MaliYil, Donem, FisNo, YevmiyeNo, FisTarihi, FisTipi, KaynakModul, KaynakId, Durum, ToplamBorc, ToplamAlacak, Aciklama + BaseEntity
+  - `MuhasebeFisSatirlari` (schema: `muhasebe`): MuhasebeFisId, MuhasebeHesapPlaniId, SiraNo, Borc, Alacak, ParaBirimi, Kur, CariKartId, TasinirKartId, DepoId, KasaBankaHesapId, Aciklama + BaseEntity
+- FK: `MuhasebeFisId` → `MuhasebeFisler(Id)` Cascade
+- FK: `MuhasebeHesapPlaniId` → `MuhasebeHesapPlanlari(Id)` Restrict
+
+### Manuel Test Senaryoları
+1. **İki satırlı taslak mahsup fişi oluştur**: Borç 1000, Alacak 1000 → 200 OK, Durum=Taslak, FisNo TASLAK-... formatında
+2. **Toplam borç/alacak eşit değilse hata**: Borç 1000, Alacak 500 → 400 "eşit olmalıdır"
+3. **Aynı satırda hem borç hem alacak**: 400 "hem borç hem alacak girilemez"
+4. **Borç/alacak ikisi de 0**: 400 "borç veya alacak girilmelidir"
+5. **Ana hesap seçilirse**: DetayHesapMi=false hesap → 400 "ana hesap seçilemez"
+6. **Detay+HareketGorebilir hesap**: 200 başarılı
+7. **Taslak fiş güncellenebilmeli**: PUT → eski satırlar silinir, yeniler eklenir
+8. **Taslak fiş silinebilmeli**: DELETE → 200, fiş ve satırları soft-delete
+9. **Onaylı fiş güncellenemez/silinemez**: Onaylı faturası simüle → 400 "taslak durumundaki"
+
+### Build Sonuçları (Tur 146)
+- Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 5 pre-existing warning
+- Migration: `dotnet ef migrations add AddMuhasebeFisleri` — BAŞARILI
+- Frontend: Çalıştırılmadı (değişiklik yok)

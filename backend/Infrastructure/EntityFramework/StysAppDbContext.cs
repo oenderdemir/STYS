@@ -26,6 +26,7 @@ using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -146,6 +147,8 @@ public class StysAppDbContext : DbContext
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
+    public DbSet<MuhasebeFis> MuhasebeFisler => Set<MuhasebeFis>();
+    public DbSet<MuhasebeFisSatir> MuhasebeFisSatirlari => Set<MuhasebeFisSatir>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1895,6 +1898,42 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.SatisKdvHesap)
                 .WithMany()
                 .HasForeignKey(x => x.SatisKdvHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MuhasebeFis>(entity =>
+        {
+            entity.ToTable("MuhasebeFisler", muhasebeSchema);
+            entity.Property(x => x.FisNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.FisTipi).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.KaynakModul).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ToplamBorc).HasPrecision(18, 2);
+            entity.Property(x => x.ToplamAlacak).HasPrecision(18, 2);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.TesisId, x.FisTarihi });
+            entity.HasIndex(x => new { x.KaynakModul, x.KaynakId })
+                .HasFilter("[KaynakId] IS NOT NULL AND [IsDeleted] = 0");
+            entity.HasIndex(x => x.Durum);
+            entity.HasMany(x => x.Satirlar)
+                .WithOne(x => x.MuhasebeFis)
+                .HasForeignKey(x => x.MuhasebeFisId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MuhasebeFisSatir>(entity =>
+        {
+            entity.ToTable("MuhasebeFisSatirlari", muhasebeSchema);
+            entity.Property(x => x.Borc).HasPrecision(18, 2);
+            entity.Property(x => x.Alacak).HasPrecision(18, 2);
+            entity.Property(x => x.Kur).HasPrecision(18, 6);
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => x.MuhasebeFisId);
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId);
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

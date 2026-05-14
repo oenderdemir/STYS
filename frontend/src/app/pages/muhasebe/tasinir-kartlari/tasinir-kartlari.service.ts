@@ -11,7 +11,7 @@ export class TasinirKartlariService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<TasinirKartModel[]> {
-        return this.http.get<ApiResponse<TasinirKartModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kartlari`).pipe(map(this.unwrap<TasinirKartModel[]>('Tasinir kartlar alinamadi.')));
+        return this.http.get<ApiResponse<TasinirKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari`).pipe(map(this.unwrap<TasinirKartModel[]>('Tasinir kartlar alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<TasinirKartModel>> {
@@ -19,19 +19,19 @@ export class TasinirKartlariService {
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
-        return this.http.get<ApiResponse<PagedResponseDto<TasinirKartModel>>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kartlari/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<TasinirKartModel>>('Tasinir kartlar alinamadi.')));
+        return this.http.get<ApiResponse<PagedResponseDto<TasinirKartModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<TasinirKartModel>>('Tasinir kartlar alinamadi.')));
     }
 
     create(payload: CreateTasinirKartRequest): Observable<TasinirKartModel> {
-        return this.http.post<ApiResponse<TasinirKartModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kartlari`, payload).pipe(map(this.unwrap<TasinirKartModel>('Tasinir kart olusturulamadi.')));
+        return this.http.post<ApiResponse<TasinirKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari`, payload).pipe(map(this.unwrap<TasinirKartModel>('Tasinir kart olusturulamadi.')));
     }
 
     update(id: number, payload: UpdateTasinirKartRequest): Observable<TasinirKartModel> {
-        return this.http.put<ApiResponse<TasinirKartModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kartlari/${id}`, payload).pipe(map(this.unwrap<TasinirKartModel>('Tasinir kart guncellenemedi.')));
+        return this.http.put<ApiResponse<TasinirKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari/${id}`, payload).pipe(map(this.unwrap<TasinirKartModel>('Tasinir kart guncellenemedi.')));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kartlari/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -44,7 +44,7 @@ export class TasinirKartlariService {
     }
 
     getPaketTurleri(): Observable<PaketTuruOptionModel[]> {
-        return this.http.get<ApiResponse<PaketTuruOptionModel[]>>(`${this.apiBaseUrl}/api/muhasebe/paket-turleri`).pipe(map(this.unwrap<PaketTuruOptionModel[]>('Paket turleri alinamadi.')));
+        return this.http.get<ApiResponse<PaketTuruOptionModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/paket-turleri`).pipe(map(this.unwrap<PaketTuruOptionModel[]>('Paket turleri alinamadi.')));
     }
 
     private unwrap<T>(fallback: string) {

@@ -16,7 +16,7 @@ export class CariHareketlerService {
             params = params.set('cariKartId', cariKartId);
         }
 
-        return this.http.get<ApiResponse<CariHareketModel[]>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler`, { params }).pipe(map(this.unwrapList));
+        return this.http.get<ApiResponse<CariHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler`, { params }).pipe(map(this.unwrapList));
     }
 
     getPaged(pageNumber: number, pageSize: number, cariKartId?: number | null): Observable<PagedResponseDto<CariHareketModel>> {
@@ -25,19 +25,19 @@ export class CariHareketlerService {
             params = params.set('cariKartId', cariKartId);
         }
 
-        return this.http.get<ApiResponse<PagedResponseDto<CariHareketModel>>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler/paged`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<PagedResponseDto<CariHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 
     create(payload: CreateCariHareketRequest): Observable<CariHareketModel> {
-        return this.http.post<ApiResponse<CariHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler`, payload).pipe(map(this.unwrapSingle));
+        return this.http.post<ApiResponse<CariHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler`, payload).pipe(map(this.unwrapSingle));
     }
 
     update(id: number, payload: UpdateCariHareketRequest): Observable<CariHareketModel> {
-        return this.http.put<ApiResponse<CariHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler/${id}`, payload).pipe(map(this.unwrapSingle));
+        return this.http.put<ApiResponse<CariHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/${id}`, payload).pipe(map(this.unwrapSingle));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler/${id}`).pipe(
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/${id}`).pipe(
             map((envelope) => {
                 if (envelope.success) {
                     return;
@@ -56,7 +56,7 @@ export class CariHareketlerService {
             params = params.set('bitis', bitis);
         }
 
-        return this.http.get<ApiResponse<CariEkstreModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-hareketler/cari/${cariKartId}/ekstre`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<CariEkstreModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/cari/${cariKartId}/ekstre`, { params }).pipe(map(this.unwrapSingle));
     }
 
     private unwrapList(envelope: ApiResponse<CariHareketModel[]>): CariHareketModel[] {

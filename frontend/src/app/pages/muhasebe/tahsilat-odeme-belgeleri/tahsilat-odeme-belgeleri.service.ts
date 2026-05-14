@@ -11,24 +11,24 @@ export class TahsilatOdemeBelgeleriService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<TahsilatOdemeBelgesiModel[]> {
-        return this.http.get<ApiResponse<TahsilatOdemeBelgesiModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri`).pipe(map(this.unwrapList));
+        return this.http.get<ApiResponse<TahsilatOdemeBelgesiModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri`).pipe(map(this.unwrapList));
     }
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<TahsilatOdemeBelgesiModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
-        return this.http.get<ApiResponse<PagedResponseDto<TahsilatOdemeBelgesiModel>>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri/paged`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<PagedResponseDto<TahsilatOdemeBelgesiModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 
     create(payload: CreateTahsilatOdemeBelgesiRequest): Observable<TahsilatOdemeBelgesiModel> {
-        return this.http.post<ApiResponse<TahsilatOdemeBelgesiModel>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri`, payload).pipe(map(this.unwrapSingle));
+        return this.http.post<ApiResponse<TahsilatOdemeBelgesiModel>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri`, payload).pipe(map(this.unwrapSingle));
     }
 
     update(id: number, payload: UpdateTahsilatOdemeBelgesiRequest): Observable<TahsilatOdemeBelgesiModel> {
-        return this.http.put<ApiResponse<TahsilatOdemeBelgesiModel>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri/${id}`, payload).pipe(map(this.unwrapSingle));
+        return this.http.put<ApiResponse<TahsilatOdemeBelgesiModel>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}`, payload).pipe(map(this.unwrapSingle));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -42,7 +42,7 @@ export class TahsilatOdemeBelgeleriService {
             params = params.set('gun', gun);
         }
 
-        return this.http.get<ApiResponse<TahsilatOdemeOzetModel>>(`${this.apiBaseUrl}/api/muhasebe/tahsilat-odeme-belgeleri/gunluk-ozet`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<TahsilatOdemeOzetModel>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/gunluk-ozet`, { params }).pipe(map(this.unwrapSingle));
     }
 
     private unwrapList(envelope: ApiResponse<TahsilatOdemeBelgesiModel[]>): TahsilatOdemeBelgesiModel[] {

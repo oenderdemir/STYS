@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.PaketTurleri.Controllers;
 
-[Route("api/muhasebe/paket-turleri")]
-[ApiController]
+[Route("ui/muhasebe/paket-turleri")]
 public class PaketTurleriController : UIController
 {
     private readonly IPaketTuruService _service;

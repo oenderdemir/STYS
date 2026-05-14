@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.KasaBankaHesaplari.Controllers;
 
-[Route("api/muhasebe/kasa-banka-hesaplari")]
-[ApiController]
+[Route("ui/muhasebe/kasa-banka-hesaplari")]
 public class KasaBankaHesaplariController : UIController
 {
     private readonly IKasaBankaHesapService _service;

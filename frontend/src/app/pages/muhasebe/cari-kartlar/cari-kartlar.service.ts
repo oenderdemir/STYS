@@ -11,7 +11,7 @@ export class CariKartlarService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<CariKartModel[]> {
-        return this.http.get<ApiResponse<CariKartModel[]>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar`).pipe(
+        return this.http.get<ApiResponse<CariKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar`).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -26,7 +26,7 @@ export class CariKartlarService {
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
-        return this.http.get<ApiResponse<PagedResponseDto<CariKartModel>>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/paged`, { params }).pipe(
+        return this.http.get<ApiResponse<PagedResponseDto<CariKartModel>>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/paged`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -37,7 +37,7 @@ export class CariKartlarService {
     }
 
     getById(id: number): Observable<CariKartModel> {
-        return this.http.get<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/${id}`).pipe(
+        return this.http.get<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/${id}`).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -48,7 +48,7 @@ export class CariKartlarService {
     }
 
     create(payload: CreateCariKartRequest): Observable<CariKartModel> {
-        return this.http.post<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar`, payload).pipe(
+        return this.http.post<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar`, payload).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -59,7 +59,7 @@ export class CariKartlarService {
     }
 
     update(id: number, payload: UpdateCariKartRequest): Observable<CariKartModel> {
-        return this.http.put<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/${id}`, payload).pipe(
+        return this.http.put<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/${id}`, payload).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -70,7 +70,7 @@ export class CariKartlarService {
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/${id}`).pipe(
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/${id}`).pipe(
             map((envelope) => {
                 if (envelope.success) {
                     return;
@@ -81,7 +81,7 @@ export class CariKartlarService {
     }
 
     getBakiye(id: number): Observable<CariBakiyeModel> {
-        return this.http.get<ApiResponse<CariBakiyeModel>>(`${this.apiBaseUrl}/api/muhasebe/cari-kartlar/${id}/bakiye`).pipe(
+        return this.http.get<ApiResponse<CariBakiyeModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/${id}/bakiye`).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;

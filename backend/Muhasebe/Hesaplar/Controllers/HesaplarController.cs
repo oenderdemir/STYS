@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.Hesaplar.Controllers;
 
-[Route("api/muhasebe/hesaplar")]
-[ApiController]
+[Route("ui/muhasebe/hesaplar")]
 public class HesaplarController : UIController
 {
     private readonly IHesapService _service;

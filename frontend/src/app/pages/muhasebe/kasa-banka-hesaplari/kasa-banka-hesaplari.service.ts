@@ -15,28 +15,28 @@ export class KasaBankaHesaplariService {
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
-        return this.http.get<ApiResponse<PagedResponseDto<KasaBankaHesapModel>>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/paged`, { params }).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<PagedResponseDto<KasaBankaHesapModel>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/paged`, { params }).pipe(map(this.unwrapOne));
     }
 
     getByTip(tip: KasaBankaHesapTipi, sadeceAktif = true): Observable<KasaBankaHesapModel[]> {
         const params = new HttpParams().set('sadeceAktif', sadeceAktif);
-        return this.http.get<ApiResponse<KasaBankaHesapModel[]>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/tip/${tip}`, { params }).pipe(map(this.unwrapList));
+        return this.http.get<ApiResponse<KasaBankaHesapModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/tip/${tip}`, { params }).pipe(map(this.unwrapList));
     }
 
     getMuhasebeHesapSecimleri(tip: KasaBankaHesapTipi): Observable<Array<{ id: number; tamKod: string; ad: string }>> {
-        return this.http.get<ApiResponse<Array<{ id: number; tamKod: string; ad: string }>>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/muhasebe-hesap-secimleri/${tip}`).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<Array<{ id: number; tamKod: string; ad: string }>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/muhasebe-hesap-secimleri/${tip}`).pipe(map(this.unwrapOne));
     }
 
     create(payload: CreateKasaBankaHesapRequest): Observable<KasaBankaHesapModel> {
-        return this.http.post<ApiResponse<KasaBankaHesapModel>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari`, payload).pipe(map(this.unwrapOne));
+        return this.http.post<ApiResponse<KasaBankaHesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari`, payload).pipe(map(this.unwrapOne));
     }
 
     update(id: number, payload: UpdateKasaBankaHesapRequest): Observable<KasaBankaHesapModel> {
-        return this.http.put<ApiResponse<KasaBankaHesapModel>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/${id}`, payload).pipe(map(this.unwrapOne));
+        return this.http.put<ApiResponse<KasaBankaHesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/${id}`, payload).pipe(map(this.unwrapOne));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/kasa-banka-hesaplari/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }

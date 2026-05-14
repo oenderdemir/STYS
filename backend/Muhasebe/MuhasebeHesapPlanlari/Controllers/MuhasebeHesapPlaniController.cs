@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Controllers;
 
-[Route("api/muhasebe/hesap-plani")]
-[ApiController]
+[Route("ui/muhasebe/hesap-plani")]
 public class MuhasebeHesapPlaniController : UIController
 {
     private readonly IMuhasebeHesapPlaniService _service;

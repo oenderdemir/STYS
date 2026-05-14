@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.CariHareketler.Controllers;
 
-[Route("api/muhasebe/cari-hareketler")]
-[ApiController]
+[Route("ui/muhasebe/cari-hareketler")]
 public class CariHareketlerController : UIController
 {
     private readonly ICariHareketService _service;

@@ -15,23 +15,23 @@ export class HesaplarService {
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
-        return this.http.get<ApiResponse<PagedResponseDto<HesapModel>>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/paged`, { params }).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<PagedResponseDto<HesapModel>>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/paged`, { params }).pipe(map(this.unwrapOne));
     }
 
     getById(id: number): Observable<HesapModel> {
-        return this.http.get<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/${id}`).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/${id}`).pipe(map(this.unwrapOne));
     }
 
     create(payload: CreateHesapRequest): Observable<HesapModel> {
-        return this.http.post<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar`, payload).pipe(map(this.unwrapOne));
+        return this.http.post<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar`, payload).pipe(map(this.unwrapOne));
     }
 
     update(id: number, payload: UpdateHesapRequest): Observable<HesapModel> {
-        return this.http.put<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/${id}`, payload).pipe(map(this.unwrapOne));
+        return this.http.put<ApiResponse<HesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/${id}`, payload).pipe(map(this.unwrapOne));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -41,20 +41,20 @@ export class HesaplarService {
     }
 
     getKasaHesaplari(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/kasa-hesaplari`).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/kasa-hesaplari`).pipe(map(this.unwrapOne));
     }
 
     getBankaHesaplari(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/banka-hesaplari`).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/banka-hesaplari`).pipe(map(this.unwrapOne));
     }
 
     getDepolar(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/depolar`).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/depolar`).pipe(map(this.unwrapOne));
     }
 
     getMuhasebeKodlari(startsWith = ''): Observable<HesapLookupModel[]> {
         const params = startsWith ? new HttpParams().set('startsWith', startsWith) : undefined;
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params }).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params }).pipe(map(this.unwrapOne));
     }
 
     getTesisler(): Observable<MuhasebeTesisModel[]> {

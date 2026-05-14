@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.StokHareketleri.Controllers;
 
-[Route("api/muhasebe/stok-hareketleri")]
-[ApiController]
+[Route("ui/muhasebe/stok-hareketleri")]
 public class StokHareketleriController : UIController
 {
     private readonly IStokHareketService _service;

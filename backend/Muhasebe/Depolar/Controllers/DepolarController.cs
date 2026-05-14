@@ -9,8 +9,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.Depolar.Controllers;
 
-[Route("api/muhasebe/depolar")]
-[ApiController]
+[Route("ui/muhasebe/depolar")]
 public class DepolarController : UIController
 {
     private readonly IDepoService _service;

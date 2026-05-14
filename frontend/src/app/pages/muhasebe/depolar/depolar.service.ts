@@ -16,7 +16,7 @@ export class DepolarService {
             params = params.set('tesisId', tesisId);
         }
 
-        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depolar alinamadi.')));
+        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/depolar`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depolar alinamadi.')));
     }
 
     getTree(tesisId?: number | null): Observable<DepoModel[]> {
@@ -25,7 +25,7 @@ export class DepolarService {
             params = params.set('tesisId', tesisId);
         }
 
-        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/api/muhasebe/depolar/tree`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depo agaci alinamadi.')));
+        return this.http.get<ApiResponse<DepoModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/depolar/tree`, { params }).pipe(map(this.unwrap<DepoModel[]>('Depo agaci alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<DepoModel>> {
@@ -33,19 +33,19 @@ export class DepolarService {
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
-        return this.http.get<ApiResponse<PagedResponseDto<DepoModel>>>(`${this.apiBaseUrl}/api/muhasebe/depolar/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<DepoModel>>('Depolar alinamadi.')));
+        return this.http.get<ApiResponse<PagedResponseDto<DepoModel>>>(`${this.apiBaseUrl}/ui/muhasebe/depolar/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<DepoModel>>('Depolar alinamadi.')));
     }
 
     create(payload: CreateDepoRequest): Observable<DepoModel> {
-        return this.http.post<ApiResponse<DepoModel>>(`${this.apiBaseUrl}/api/muhasebe/depolar`, payload).pipe(map(this.unwrap<DepoModel>('Depo olusturulamadi.')));
+        return this.http.post<ApiResponse<DepoModel>>(`${this.apiBaseUrl}/ui/muhasebe/depolar`, payload).pipe(map(this.unwrap<DepoModel>('Depo olusturulamadi.')));
     }
 
     update(id: number, payload: UpdateDepoRequest): Observable<DepoModel> {
-        return this.http.put<ApiResponse<DepoModel>>(`${this.apiBaseUrl}/api/muhasebe/depolar/${id}`, payload).pipe(map(this.unwrap<DepoModel>('Depo guncellenemedi.')));
+        return this.http.put<ApiResponse<DepoModel>>(`${this.apiBaseUrl}/ui/muhasebe/depolar/${id}`, payload).pipe(map(this.unwrap<DepoModel>('Depo guncellenemedi.')));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/depolar/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/depolar/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -64,7 +64,7 @@ export class DepolarService {
         }
 
         return this.http
-            .get<ApiResponse<MuhasebeHesapLookupModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params })
+            .get<ApiResponse<MuhasebeHesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params })
             .pipe(map(this.unwrap<MuhasebeHesapLookupModel[]>('Muhasebe kodlari alinamadi.')));
     }
 

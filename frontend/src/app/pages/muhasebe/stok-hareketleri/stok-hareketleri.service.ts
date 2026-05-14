@@ -16,7 +16,7 @@ export class StokHareketleriService {
             params = params.set('depoId', depoId);
         }
 
-        return this.http.get<ApiResponse<StokHareketModel[]>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri`, { params }).pipe(map(this.unwrap<StokHareketModel[]>('Stok hareketleri alinamadi.')));
+        return this.http.get<ApiResponse<StokHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri`, { params }).pipe(map(this.unwrap<StokHareketModel[]>('Stok hareketleri alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number, depoId?: number): Observable<PagedResponseDto<StokHareketModel>> {
@@ -25,19 +25,19 @@ export class StokHareketleriService {
             params = params.set('depoId', depoId);
         }
 
-        return this.http.get<ApiResponse<PagedResponseDto<StokHareketModel>>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<StokHareketModel>>('Stok hareketleri alinamadi.')));
+        return this.http.get<ApiResponse<PagedResponseDto<StokHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/paged`, { params }).pipe(map(this.unwrap<PagedResponseDto<StokHareketModel>>('Stok hareketleri alinamadi.')));
     }
 
     create(payload: CreateStokHareketRequest): Observable<StokHareketModel> {
-        return this.http.post<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket olusturulamadi.')));
+        return this.http.post<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket olusturulamadi.')));
     }
 
     update(id: number, payload: UpdateStokHareketRequest): Observable<StokHareketModel> {
-        return this.http.put<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri/${id}`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket guncellenemedi.')));
+        return this.http.put<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/${id}`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket guncellenemedi.')));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -51,7 +51,7 @@ export class StokHareketleriService {
             params = params.set('depoId', depoId);
         }
 
-        return this.http.get<ApiResponse<StokBakiyeModel[]>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri/stok-bakiye`, { params }).pipe(map(this.unwrap<StokBakiyeModel[]>('Stok bakiye alinamadi.')));
+        return this.http.get<ApiResponse<StokBakiyeModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/stok-bakiye`, { params }).pipe(map(this.unwrap<StokBakiyeModel[]>('Stok bakiye alinamadi.')));
     }
 
     getStokKartOzet(depoId?: number): Observable<StokKartOzetModel[]> {
@@ -60,7 +60,7 @@ export class StokHareketleriService {
             params = params.set('depoId', depoId);
         }
 
-        return this.http.get<ApiResponse<StokKartOzetModel[]>>(`${this.apiBaseUrl}/api/muhasebe/stok-hareketleri/stok-kart-ozet`, { params }).pipe(map(this.unwrap<StokKartOzetModel[]>('Stok kart ozeti alinamadi.')));
+        return this.http.get<ApiResponse<StokKartOzetModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/stok-kart-ozet`, { params }).pipe(map(this.unwrap<StokKartOzetModel[]>('Stok kart ozeti alinamadi.')));
     }
 
     private unwrap<T>(fallback: string) {

@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.TasinirKodlari.Controllers;
 
-[Route("api/muhasebe/tasinir-kodlari")]
-[ApiController]
+[Route("ui/muhasebe/tasinir-kodlari")]
 public class TasinirKodlariController : UIController
 {
     private readonly ITasinirKodService _service;

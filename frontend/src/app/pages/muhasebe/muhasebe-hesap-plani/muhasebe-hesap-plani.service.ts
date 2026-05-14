@@ -15,7 +15,7 @@ export class MuhasebeHesapPlaniService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getTree(): Observable<MuhasebeHesapPlaniModel[]> {
-        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/tree`).pipe(
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree`).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -26,7 +26,7 @@ export class MuhasebeHesapPlaniService {
     }
 
     getTreeRoots(): Observable<MuhasebeHesapPlaniModel[]> {
-        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/tree/roots`).pipe(
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree/roots`).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -42,7 +42,7 @@ export class MuhasebeHesapPlaniService {
             params = params.set('parentId', parentId);
         }
 
-        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/tree/children`, { params }).pipe(
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree/children`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -54,7 +54,7 @@ export class MuhasebeHesapPlaniService {
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<MuhasebeHesapPlaniModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
-        return this.http.get<ApiResponse<PagedResponseDto<MuhasebeHesapPlaniModel>>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/paged`, { params }).pipe(
+        return this.http.get<ApiResponse<PagedResponseDto<MuhasebeHesapPlaniModel>>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/paged`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -65,7 +65,7 @@ export class MuhasebeHesapPlaniService {
     }
 
     create(payload: CreateMuhasebeHesapPlaniRequest): Observable<MuhasebeHesapPlaniModel> {
-        return this.http.post<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani`, payload).pipe(
+        return this.http.post<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani`, payload).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -76,7 +76,7 @@ export class MuhasebeHesapPlaniService {
     }
 
     update(id: number, payload: UpdateMuhasebeHesapPlaniRequest): Observable<MuhasebeHesapPlaniModel> {
-        return this.http.put<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/${id}`, payload).pipe(
+        return this.http.put<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`, payload).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -87,7 +87,7 @@ export class MuhasebeHesapPlaniService {
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/hesap-plani/${id}`).pipe(
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`).pipe(
             map((envelope) => {
                 if (envelope.success) {
                     return;

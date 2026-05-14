@@ -7,8 +7,7 @@ using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Muhasebe.MuhasebeFisleri.Controllers;
 
-[Route("api/muhasebe/fisler")]
-[ApiController]
+[Route("ui/muhasebe/fisler")]
 public class MuhasebeFisController : UIController
 {
     private readonly IMuhasebeFisService _service;

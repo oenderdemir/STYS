@@ -7,8 +7,7 @@ using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Controllers;
 
-[Route("api/muhasebe/vergi-hesap-esleme")]
-[ApiController]
+[Route("ui/muhasebe/vergi-hesap-esleme")]
 public class MuhasebeVergiHesapEslemeController : UIController
 {
     private readonly IMuhasebeVergiHesapEslemeService _service;

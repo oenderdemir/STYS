@@ -7,8 +7,7 @@ using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Controllers;
 
-[Route("api/muhasebe/tasinir-kod-muhasebe-hesap-esleme")]
-[ApiController]
+[Route("ui/muhasebe/tasinir-kod-muhasebe-hesap-esleme")]
 public class TasinirKodMuhasebeHesapEslemeController : UIController
 {
     private readonly ITasinirKodMuhasebeHesapEslemeService _service;

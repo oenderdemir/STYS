@@ -11,24 +11,24 @@ export class BankaHareketleriService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<BankaHareketModel[]> {
-        return this.http.get<ApiResponse<BankaHareketModel[]>>(`${this.apiBaseUrl}/api/muhasebe/banka-hareketleri`).pipe(map(this.unwrapList));
+        return this.http.get<ApiResponse<BankaHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri`).pipe(map(this.unwrapList));
     }
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<BankaHareketModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
-        return this.http.get<ApiResponse<PagedResponseDto<BankaHareketModel>>>(`${this.apiBaseUrl}/api/muhasebe/banka-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<PagedResponseDto<BankaHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 
     create(payload: CreateBankaHareketRequest): Observable<BankaHareketModel> {
-        return this.http.post<ApiResponse<BankaHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/banka-hareketleri`, payload).pipe(map(this.unwrapSingle));
+        return this.http.post<ApiResponse<BankaHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri`, payload).pipe(map(this.unwrapSingle));
     }
 
     update(id: number, payload: UpdateBankaHareketRequest): Observable<BankaHareketModel> {
-        return this.http.put<ApiResponse<BankaHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/banka-hareketleri/${id}`, payload).pipe(map(this.unwrapSingle));
+        return this.http.put<ApiResponse<BankaHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri/${id}`, payload).pipe(map(this.unwrapSingle));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/banka-hareketleri/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }

@@ -11,24 +11,24 @@ export class KasaHareketleriService {
     private readonly apiBaseUrl = getApiBaseUrl();
 
     getAll(): Observable<KasaHareketModel[]> {
-        return this.http.get<ApiResponse<KasaHareketModel[]>>(`${this.apiBaseUrl}/api/muhasebe/kasa-hareketleri`).pipe(map(this.unwrapList));
+        return this.http.get<ApiResponse<KasaHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri`).pipe(map(this.unwrapList));
     }
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<KasaHareketModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
-        return this.http.get<ApiResponse<PagedResponseDto<KasaHareketModel>>>(`${this.apiBaseUrl}/api/muhasebe/kasa-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
+        return this.http.get<ApiResponse<PagedResponseDto<KasaHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 
     create(payload: CreateKasaHareketRequest): Observable<KasaHareketModel> {
-        return this.http.post<ApiResponse<KasaHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/kasa-hareketleri`, payload).pipe(map(this.unwrapSingle));
+        return this.http.post<ApiResponse<KasaHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri`, payload).pipe(map(this.unwrapSingle));
     }
 
     update(id: number, payload: UpdateKasaHareketRequest): Observable<KasaHareketModel> {
-        return this.http.put<ApiResponse<KasaHareketModel>>(`${this.apiBaseUrl}/api/muhasebe/kasa-hareketleri/${id}`, payload).pipe(map(this.unwrapSingle));
+        return this.http.put<ApiResponse<KasaHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri/${id}`, payload).pipe(map(this.unwrapSingle));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/kasa-hareketleri/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }

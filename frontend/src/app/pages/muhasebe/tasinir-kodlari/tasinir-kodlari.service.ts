@@ -15,7 +15,7 @@ export class TasinirKodlariService {
     }
 
     getTreeRoots(): Observable<TasinirKodModel[]> {
-        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/tree/roots`).pipe(map(this.unwrapList('Tasinir kod kokleri alinamadi.')));
+        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/tree/roots`).pipe(map(this.unwrapList('Tasinir kod kokleri alinamadi.')));
     }
 
     getTreeChildren(parentId: number | null): Observable<TasinirKodModel[]> {
@@ -24,12 +24,12 @@ export class TasinirKodlariService {
             params = params.set('parentId', parentId);
         }
 
-        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/tree/children`, { params }).pipe(map(this.unwrapList('Tasinir kod alt kayitlari alinamadi.')));
+        return this.http.get<ApiResponse<TasinirKodModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/tree/children`, { params }).pipe(map(this.unwrapList('Tasinir kod alt kayitlari alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<TasinirKodModel>> {
         const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
-        return this.http.get<ApiResponse<PagedResponseDto<TasinirKodModel>>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/paged`, { params }).pipe(map(this.unwrapOne('Tasinir kodlar alinamadi.')));
+        return this.http.get<ApiResponse<PagedResponseDto<TasinirKodModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/paged`, { params }).pipe(map(this.unwrapOne('Tasinir kodlar alinamadi.')));
     }
 
     searchPaged(pageNumber: number, pageSize: number, query: string): Observable<PagedResponseDto<TasinirKodModel>> {
@@ -39,23 +39,23 @@ export class TasinirKodlariService {
             params = params.set('q', normalizedQuery);
         }
 
-        return this.http.get<ApiResponse<PagedResponseDto<TasinirKodModel>>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/paged`, { params }).pipe(map(this.unwrapOne('Tasinir kodlar alinamadi.')));
+        return this.http.get<ApiResponse<PagedResponseDto<TasinirKodModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/paged`, { params }).pipe(map(this.unwrapOne('Tasinir kodlar alinamadi.')));
     }
 
     getById(id: number): Observable<TasinirKodModel> {
-        return this.http.get<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/${id}`).pipe(map(this.unwrapOne('Tasinir kod detayi alinamadi.')));
+        return this.http.get<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/${id}`).pipe(map(this.unwrapOne('Tasinir kod detayi alinamadi.')));
     }
 
     create(payload: CreateTasinirKodRequest): Observable<TasinirKodModel> {
-        return this.http.post<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari`, payload).pipe(map(this.unwrapOne('Tasinir kod olusturulamadi.')));
+        return this.http.post<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari`, payload).pipe(map(this.unwrapOne('Tasinir kod olusturulamadi.')));
     }
 
     update(id: number, payload: UpdateTasinirKodRequest): Observable<TasinirKodModel> {
-        return this.http.put<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/${id}`, payload).pipe(map(this.unwrapOne('Tasinir kod guncellenemedi.')));
+        return this.http.put<ApiResponse<TasinirKodModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/${id}`, payload).pipe(map(this.unwrapOne('Tasinir kod guncellenemedi.')));
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/${id}`).pipe(map((envelope) => {
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/${id}`).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
@@ -64,7 +64,7 @@ export class TasinirKodlariService {
     }
 
     import(payload: ImportTasinirKodlariRequest): Observable<TasinirKodImportSonucModel> {
-        return this.http.post<ApiResponse<TasinirKodImportSonucModel>>(`${this.apiBaseUrl}/api/muhasebe/tasinir-kodlari/import`, payload).pipe(map(this.unwrapOne('Import islemi basarisiz.')));
+        return this.http.post<ApiResponse<TasinirKodImportSonucModel>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kodlari/import`, payload).pipe(map(this.unwrapOne('Import islemi basarisiz.')));
     }
 
     private unwrapList<T>(fallback: string) {

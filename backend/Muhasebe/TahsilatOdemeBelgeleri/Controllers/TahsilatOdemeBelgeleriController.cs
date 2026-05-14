@@ -8,8 +8,7 @@ using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.TahsilatOdemeBelgeleri.Controllers;
 
-[Route("api/muhasebe/tahsilat-odeme-belgeleri")]
-[ApiController]
+[Route("ui/muhasebe/tahsilat-odeme-belgeleri")]
 public class TahsilatOdemeBelgeleriController : UIController
 {
     private readonly ITahsilatOdemeBelgesiService _service;

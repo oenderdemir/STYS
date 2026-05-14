@@ -2,7 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
-using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.TasinirKartlari.Dtos;
 using STYS.Muhasebe.TasinirKartlari.Entities;
@@ -20,6 +20,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
+    private readonly ITasinirKodMuhasebeHesapEslemeService _tasinirKodMuhasebeHesapEslemeService;
 
     public TasinirKartService(
         ITasinirKartRepository repository,
@@ -27,7 +28,8 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         IUserAccessScopeService userAccessScopeService,
         StysAppDbContext dbContext,
         IMapper mapper,
-        IMuhasebeDetayHesapService muhasebeDetayHesapService)
+        IMuhasebeDetayHesapService muhasebeDetayHesapService,
+        ITasinirKodMuhasebeHesapEslemeService tasinirKodMuhasebeHesapEslemeService)
         : base(repository, mapper)
     {
         _repository = repository;
@@ -35,6 +37,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         _userAccessScopeService = userAccessScopeService;
         _dbContext = dbContext;
         _muhasebeDetayHesapService = muhasebeDetayHesapService;
+        _tasinirKodMuhasebeHesapEslemeService = tasinirKodMuhasebeHesapEslemeService;
     }
 
     public override async Task<TasinirKartDto> AddAsync(TasinirKartDto dto)

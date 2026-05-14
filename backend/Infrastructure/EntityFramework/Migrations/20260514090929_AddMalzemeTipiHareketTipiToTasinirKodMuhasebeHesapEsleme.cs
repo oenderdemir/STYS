@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -68,9 +68,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     TasinirKodId = table.Column<int>(type: "int", nullable: false),
                     MuhasebeHesapPlaniId = table.Column<int>(type: "int", nullable: false),
-                    IslemTuru = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    MalzemeTipi = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    HareketTipi = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    IslemTuru = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    MalzemeTipi = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    HareketTipi = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     AktifMi = table.Column<bool>(type: "bit", nullable: false),
                     VarsayilanMi = table.Column<bool>(type: "bit", nullable: false),
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
@@ -107,12 +107,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 column: "MuhasebeHesapPlaniId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MuhasebeHesapPlaniId_IslemTuru",
+                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi",
                 schema: "muhasebe",
                 table: "TasinirKodMuhasebeHesapEslemeleri",
-                columns: new[] { "TasinirKodId", "MuhasebeHesapPlaniId", "IslemTuru" },
+                columns: new[] { "TasinirKodId", "MalzemeTipi", "HareketTipi" },
                 unique: true,
-                filter: "[IsDeleted] = 0");
+                filter: "[IsDeleted] = 0 AND [AktifMi] = 1 AND [VarsayilanMi] = 1");
         }
 
         /// <inheritdoc />

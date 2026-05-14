@@ -3654,6 +3654,22 @@ et10.0-windows, UseWindowsForms=true).
 - Frontend build: Bu turda frontend değişikliği olmadığı için çalıştırılmadı.
 
 ---
+## Tur 141 - TasinirKodMuhasebeHesapEsleme Unique Index Düzeltmesi
+- `TasinirKodMuhasebeHesapEsleme` entity'sindeki unique index `(TasinirKodId, MuhasebeHesapPlaniId, IslemTuru)` → `(TasinirKodId, MalzemeTipi, HareketTipi)` olarak değiştirildi.
+- Migration `20260514090929_AddMalzemeTipiHareketTipiToTasinirKodMuhasebeHesapEsleme`:
+  - Sütun uzunlukları `nvarchar(32)` → `nvarchar(64)` (DbContext ile uyumlu hale getirildi).
+  - Unique index `TasinirKodId_MalzemeTipi_HareketTipi` olarak değiştirildi, filtre `[IsDeleted] = 0 AND [AktifMi] = 1 AND [VarsayilanMi] = 1`.
+- ModelSnapshot (`StysAppDbContextModelSnapshot.cs`) zaten yeni index ile uyumluydu.
+
+### Değiştirilen dosyalar
+- `backend/Infrastructure/EntityFramework/Migrations/20260514090929_AddMalzemeTipiHareketTipiToTasinirKodMuhasebeHesapEsleme.cs`
+- `changes.md`
+
+### Build sonuçları
+- Backend: Başarılı (`dotnet build backend/STYS.csproj`)
+- Frontend: Bu turda frontend değişikliği yok.
+
+---
 
 ## Tur 142 - Taşınır Kod ↔ Muhasebe Hesap Eşleme Altyapısı
 

@@ -4143,3 +4143,68 @@ Manuel/taslak muhasebe fişi oluşturma altyapısı kuruldu. Bu fazda sadece man
 - Backend: BAŞARILI (`dotnet build backend/STYS.csproj`) — 0 Error, 5 pre-existing warning
 - Migration: `dotnet ef migrations add AddMuhasebeFisleri` — BAŞARILI
 - Frontend: Çalıştırılmadı (değişiklik yok)
+
+---
+
+## Tur 146-Düzeltme: MuhasebeFis Modülü Soft Delete Güvenlik Düzeltmesi
+
+**Tarih:** 2026-05-15
+**Commit:** devam ediyor
+
+### Amaç
+
+MuhasebeFis modülünde repository ve service katmanlarında soft-delete (IsDeleted) filtrelerinin eksik olduğu tespit edildi.
+Silinmiş fiş ve satırların sorgu sonuçlarında dönmeye devam etmesi, güncellenebilmesi ve tekrar silinebilmesi sorunları giderildi.
+
+### 1. Değiştirilen Dosyalar
+
+| Dosya | Açıklama |
+|---|---|
+| `backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs` | 2 metoda IsDeleted filtresi eklendi |
+| `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs` | 2 metoda IsDeleted filtresi + yorum düzeltmesi |
+
+### 2. Repository Soft Delete Filtreleri
+
+**GetByIdWithSatirlarAsync:**
+```csharp
+.Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+    .ThenInclude(s => s.MuhasebeHesapPlani)
+.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+```
+- Fiş: `!x.IsDeleted`
+- Satırlar: `s => !s.IsDeleted` (EF Core 10 filtered Include)
+
+**GetByKaynakAsync:**
+```csharp
+.Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+    .ThenInclude(s => s.MuhasebeHesapPlani)
+.Where(x => x.KaynakModul == kaynakModul && x.KaynakId == kaynakId && !x.IsDeleted)
+```
+- Fiş: `!x.IsDeleted`
+- Satırlar: `s => !s.IsDeleted`
+
+### 3. Service update/delete Güvenliği
+
+**UpdateAsync:**
+- Fiş arama: `x.Id == dto.Id && !x.IsDeleted`
+- Include: `Satirlar.Where(s => !s.IsDeleted)`
+- Eski satır silme: `existing.Satirlar.Where(s => !s.IsDeleted)` (zaten silinmiş satırları tekrar silmez)
+
+**DeleteAsync:**
+- Fiş arama: `x.Id == id && !x.IsDeleted`
+- Include: `Satirlar.Where(s => !s.IsDeleted)`
+- Satır silme: `existing.Satirlar.Where(s => !s.IsDeleted)`
+- Yorum: "soft-delete" → "Platform BaseEntity silme davranışı üzerinden"
+
+### 4. Build Sonucu
+- Backend: BAŞARILI — 0 Error, 2 warning (Snappier NU1903 — pre-existing)
+
+### 5. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | Silinmiş fiş GetByIdWithSatirlarAsync | 404 NotFound |
+| 2 | Silinmiş fiş by-kaynak endpoint | Listede görünmemeli |
+| 3 | Silinmiş fiş update | 404 "Fiş bulunamadı" |
+| 4 | Silinmiş fiş delete | 404 "Fiş bulunamadı" |
+| 5 | Silinmiş satırlar fiş detayı | Satirlar[]'da sadece IsDeleted=false olanlar |

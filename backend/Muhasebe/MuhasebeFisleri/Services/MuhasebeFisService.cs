@@ -61,8 +61,8 @@ public class MuhasebeFisService
     public override async Task<MuhasebeFisDto> UpdateAsync(MuhasebeFisDto dto)
     {
         var existing = await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar)
-            .FirstOrDefaultAsync(x => x.Id == dto.Id);
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .FirstOrDefaultAsync(x => x.Id == dto.Id && !x.IsDeleted);
 
         if (existing is null)
             throw new BaseException("Fiş bulunamadı.", 404);
@@ -83,8 +83,8 @@ public class MuhasebeFisService
         existing.ToplamBorc = dto.ToplamBorc;
         existing.ToplamAlacak = dto.ToplamAlacak;
 
-        // Eski satırları soft-delete et ve yeni satırları ekle
-        foreach (var oldSatir in existing.Satirlar)
+        // Eski satırları sil (sadece silinmemiş olanları)
+        foreach (var oldSatir in existing.Satirlar.Where(s => !s.IsDeleted))
         {
             _dbContext.Entry(oldSatir).State = EntityState.Deleted;
         }
@@ -108,8 +108,8 @@ public class MuhasebeFisService
     public override async Task DeleteAsync(int id)
     {
         var existing = await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
 
         if (existing is null)
             throw new BaseException("Fiş bulunamadı.", 404);
@@ -117,13 +117,13 @@ public class MuhasebeFisService
         if (existing.Durum != MuhasebeFisDurumlari.Taslak)
             throw new BaseException("Yalnızca taslak durumundaki fişler silinebilir.", 400);
 
-        // Önce satırları soft-delete et
-        foreach (var satir in existing.Satirlar)
+        // Platform BaseEntity silme davranışı üzerinden fiş ve satırları sil
+        foreach (var satir in existing.Satirlar.Where(s => !s.IsDeleted))
         {
             _dbContext.Entry(satir).State = EntityState.Deleted;
         }
 
-        // Fişi soft-delete et
+        // Platform BaseEntity silme davranışı üzerinden fişi sil
         _dbContext.Entry(existing).State = EntityState.Deleted;
         await _dbContext.SaveChangesAsync();
     }

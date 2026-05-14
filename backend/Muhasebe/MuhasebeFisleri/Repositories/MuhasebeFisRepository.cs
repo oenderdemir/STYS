@@ -21,17 +21,17 @@ public class MuhasebeFisRepository
     public async Task<MuhasebeFis?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default)
     {
         return await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar)
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
                 .ThenInclude(s => s.MuhasebeHesapPlani)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
     }
 
     public async Task<List<MuhasebeFis>> GetByKaynakAsync(string kaynakModul, int kaynakId, CancellationToken cancellationToken = default)
     {
         return await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar)
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
                 .ThenInclude(s => s.MuhasebeHesapPlani)
-            .Where(x => x.KaynakModul == kaynakModul && x.KaynakId == kaynakId)
+            .Where(x => x.KaynakModul == kaynakModul && x.KaynakId == kaynakId && !x.IsDeleted)
             .OrderByDescending(x => x.FisTarihi)
             .ToListAsync(cancellationToken);
     }

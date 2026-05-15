@@ -4307,3 +4307,45 @@ NormalizeAndValidateCreateAsync sonunda:
 | 7 | Dönem kapatıldıktan sonra aynı tarihe fiş | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı" |
 | 8 | Kapalı dönem silinememeli | 400 "Kapalı dönem silinemez" |
 | 9 | Kapalı dönem tekrar açılabilmeli | 200, KapaliMi=false, KapanisTarihi=null |
+
+---
+
+## Tur 147 — Faz 6 Düzeltme (2026-05-15)
+
+**Amaç:** Faz 6'da oluşturulan MuhasebeDonemleri modülünde 3 düzeltme: açık dönem kontrolü pozisyonu, TesisAdi include, ve route doğrulaması.
+
+### 1. Route Doğrulaması
+- [`MuhasebeDonemController`](backend/Muhasebe/MuhasebeDonemleri/Controllers/MuhasebeDonemController.cs:10) route'u `[Route("ui/muhasebe/donemler")]` — zaten doğru, değişiklik yapılmadı.
+
+### 2. MuhasebeFisService Açık Dönem Kontrolü Düzeltmesi
+- [`NormalizeAndValidateCreateAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:153) içinde açık dönem kontrolü (adım 4b), **"4. FisTarihi zorunlu"** kontrolünden hemen sonraki doğru konuma taşındı.
+- Daha önce metodun sonunda (satır validasyonları loop'undan sonra) yer alıyordu — bu, mali yıl/dönem uyumsuzluğunun gereksiz satır validasyonları yapıldıktan sonra yakalanmasına neden oluyordu.
+- Kontrol artık FisTipi/KaynakModul/Satirlar validasyonlarından önce çalışıyor.
+
+### 3. TesisAdi Include Düzeltmesi
+- [`GetByIdAsync`](backend/Muhasebe/MuhasebeDonemleri/Services/MuhasebeDonemService.cs:29) ve [`GetAllAsync`](backend/Muhasebe/MuhasebeDonemleri/Services/MuhasebeDonemService.cs:35) metodları `Tesis` navigation property include edilerek override edildi.
+- Base metodlar include yapmadığı için AutoMapper `TesisAdi` (mapping: `s.Tesis.Ad`) her zaman null dönüyordu.
+- Override imzaları base sınıfla uyumlu: `Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null`.
+- `AddAsync` zaten reload ile Tesis include ediyordu.
+
+### 4. Build Sonucu
+- Backend: BAŞARILI — 0 Error, 6 warning (tümü pre-existing)
+
+### 5. Değiştirilen Dosyalar
+Dosya | Değişiklik |
+|---|---|
+[`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:153) | Açık dönem kontrolü "FisTarihi zorunlu" sonrasına taşındı |
+[`MuhasebeDonemService.cs`](backend/Muhasebe/MuhasebeDonemleri/Services/MuhasebeDonemService.cs:29) | GetByIdAsync/GetAllAsync override — Tesis include eklendi |
+`MuhasebeDonemController.cs` | Değişiklik YOK (route zaten `ui/muhasebe/donemler`) |
+
+### 6. Manuel Test Senaryosu
+# | Test | Beklenen |
+|---|---|---|
+1 | GET `ui/muhasebe/donemler` — dönem listesi | TesisAdi dolu gelmeli |
+2 | GET `ui/muhasebe/donemler/{id}` — tek dönem | TesisAdi dolu gelmeli |
+3 | Açık dönem yokken fiş oluştur | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı" |
+4 | Açık dönem varken MaliYil/Donem uyumsuz fiş | 400 "Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir" |
+5 | Açık dönem varken uyumlu fiş | 200 |
+6 | Route değişmedi mi? | `ui/muhasebe/donemler` — evet, aynı |
+
+#

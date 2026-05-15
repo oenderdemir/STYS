@@ -150,6 +150,18 @@ public class MuhasebeFisService
         if (dto.FisTarihi == default)
             throw new BaseException("Fiş tarihi zorunludur.", 400);
 
+        // 4b. Açık muhasebe dönemi kontrolü
+        var donem = await _muhasebeDonemService.GetAktifDonemAsync(
+            dto.TesisId,
+            dto.FisTarihi,
+            cancellationToken);
+
+        if (donem is null)
+            throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+
+        if (dto.MaliYil != donem.MaliYil || dto.Donem != donem.DonemNo)
+            throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
+
         // 5. FisTipi desteklenen
         if (string.IsNullOrWhiteSpace(dto.FisTipi))
             throw new BaseException("Fiş tipi boş olamaz.", 400);
@@ -231,16 +243,5 @@ public class MuhasebeFisService
         dto.ToplamBorc = toplamBorc;
         dto.ToplamAlacak = toplamAlacak;
 
-        // 19. Açık muhasebe dönemi kontrolü
-        var donem = await _muhasebeDonemService.GetAktifDonemAsync(
-            dto.TesisId,
-            dto.FisTarihi,
-            cancellationToken);
-
-        if (donem is null)
-            throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
-
-        if (dto.MaliYil != donem.MaliYil || dto.Donem != donem.DonemNo)
-            throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
     }
 }

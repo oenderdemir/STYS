@@ -26,6 +26,18 @@ public class MuhasebeDonemService
         _dbContext = dbContext;
     }
 
+    public override async Task<MuhasebeDonemDto?> GetByIdAsync(int id, System.Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+    {
+        var entity = await _repository.GetByIdAsync(id, q => q.Include(x => x.Tesis));
+        return Mapper.Map<MuhasebeDonemDto?>(entity);
+    }
+
+    public override async Task<IEnumerable<MuhasebeDonemDto>> GetAllAsync(System.Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+    {
+        var entities = await _repository.GetAllAsync(q => q.Include(x => x.Tesis));
+        return Mapper.Map<IEnumerable<MuhasebeDonemDto>>(entities);
+    }
+
     public async Task<MuhasebeDonemDto?> GetAktifDonemAsync(
         int tesisId,
         DateTime tarih,

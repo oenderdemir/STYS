@@ -119,27 +119,46 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (fis.YevmiyeNo.HasValue)
                 throw new BaseException("Fiş zaten onaylanmış.", 400);
 
-            // 3. En az iki satır
+            // 3. Aktif satırları al ve en az iki satır kontrolü
             var aktifSatirlar = fis.Satirlar.Where(s => !s.IsDeleted).ToList();
             if (aktifSatirlar.Count < 2)
                 throw new BaseException("Onaylanacak fiş en az iki satır içermelidir.", 400);
 
-            // 4. ToplamBorc = ToplamAlacak
-            if (fis.ToplamBorc != fis.ToplamAlacak)
-                throw new BaseException($"Toplam borç ({fis.ToplamBorc:N2}) ile toplam alacak ({fis.ToplamAlacak:N2}) eşit olmalıdır.", 400);
+            // 4. Satır bazlı borç/alacak kontrolleri
+            foreach (var satir in aktifSatirlar)
+            {
+                if (satir.Borc < 0 || satir.Alacak < 0)
+                    throw new BaseException($"Satır {satir.SiraNo}: borç veya alacak negatif olamaz.", 400);
+                if (satir.Borc > 0 && satir.Alacak > 0)
+                    throw new BaseException($"Satır {satir.SiraNo}: hem borç hem alacak girilemez.", 400);
+                if (satir.Borc == 0 && satir.Alacak == 0)
+                    throw new BaseException($"Satır {satir.SiraNo}: borç veya alacak girilmelidir.", 400);
+            }
 
-            // 5. ToplamBorc > 0
-            if (fis.ToplamBorc <= 0)
+            // 5. Satır toplamlarını hesapla
+            var satirToplamBorc = aktifSatirlar.Sum(x => x.Borc);
+            var satirToplamAlacak = aktifSatirlar.Sum(x => x.Alacak);
+
+            // 6. Satır toplamları denge kontrolü
+            if (satirToplamBorc != satirToplamAlacak)
+                throw new BaseException($"Satır toplam borç ({satirToplamBorc:N2}) ile satır toplam alacak ({satirToplamAlacak:N2}) eşit olmalıdır.", 400);
+
+            // 7. Satır toplam borç > 0
+            if (satirToplamBorc <= 0)
                 throw new BaseException("Toplam borç tutarı sıfırdan büyük olmalıdır.", 400);
 
-            // 6. Açık dönem kontrolü
+            // 8. Fiş başlığı toplamları satır toplamlarıyla uyumlu olmalı
+            if (fis.ToplamBorc != satirToplamBorc || fis.ToplamAlacak != satirToplamAlacak)
+                throw new BaseException("Fiş toplamları satır toplamları ile uyumlu değildir.", 400);
+
+            // 9. Açık dönem kontrolü
             var donem = await _muhasebeDonemService.GetAktifDonemAsync(fis.TesisId, fis.FisTarihi, cancellationToken);
             if (donem is null)
                 throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
             if (fis.MaliYil != donem.MaliYil || fis.Donem != donem.DonemNo)
                 throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
 
-            // 7. Satır hesaplarını doğrula
+            // 10. Satır hesaplarını doğrula
             foreach (var satir in aktifSatirlar)
             {
                 var hesap = await _dbContext.MuhasebeHesapPlanlari
@@ -157,10 +176,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     throw new BaseException($"Satır {satir.SiraNo}: hareket görebilir detay hesap seçilmelidir.", 400);
             }
 
-            // 8. Yevmiye no üret
+            // 11. Yevmiye no üret
             var yevmiyeNo = await YevmiyeNoUretAsync(fis.TesisId, fis.MaliYil, cancellationToken);
 
-            // 9. Fişi onayla
+            // 12. Fişi onayla
             fis.YevmiyeNo = yevmiyeNo;
             fis.Durum = MuhasebeFisDurumlari.Onayli;
 

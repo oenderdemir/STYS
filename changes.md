@@ -4423,3 +4423,43 @@ Dosya | Değişiklik |
 6 | Açık dönem yokken fiş onayla | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı" |
 7 | Borç/alacak dengesi bozuk fiş onayla | 400 "Toplam borç (...) ile toplam alacak (...) eşit olmalıdır" |
 8 | Farklı tesis, aynı mali yıl — sayaç bağımsız | YevmiyeNo 1'den başlar |
+
+## Tur 149: Faz 7 Düzeltme — Onay Validasyonlarını Güçlendirme (2026-05-15)
+
+### 1. Uygulanan Çözümün Özeti
+
+[`OnaylaAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:101) metodunda daha önce sadece fiş başlığındaki `ToplamBorc`/`ToplamAlacak` karşılaştırılıyordu. Satır toplamları yeniden hesaplanmıyor, satır bazlı borç/alacak kontrolleri (negatif, çift giriş, sıfır) yapılmıyordu. Bu düzeltme ile onay validasyonları güçlendirildi.
+
+### 2. Değiştirilen Dosya
+
+| Dosya | Değişiklik |
+|---|---|
+| [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:127) | `OnaylaAsync` içinde satır bazlı validasyonlar, satır toplam hesaplama, başlık-satır uyum kontrolü eklendi |
+
+### 3. Eklenen Onay Validasyonları
+
+| # | Kontrol | Hata Mesajı |
+|---|---|---|
+| 4 | Satır borç/alacak negatif olamaz | "Satır {SiraNo}: borç veya alacak negatif olamaz." |
+| 4 | Aynı satırda hem borç hem alacak girilemez | "Satır {SiraNo}: hem borç hem alacak girilemez." |
+| 4 | Satırda borç veya alacak girilmelidir | "Satır {SiraNo}: borç veya alacak girilmelidir." |
+| 6 | Satır toplam borç = satır toplam alacak | "Satır toplam borç (X) ile satır toplam alacak (Y) eşit olmalıdır." |
+| 7 | Satır toplam borç > 0 | "Toplam borç tutarı sıfırdan büyük olmalıdır." |
+| 8 | Fiş başlığı toplamları satır toplamlarıyla uyumlu olmalı | "Fiş toplamları satır toplamları ile uyumlu değildir." |
+
+### 4. Backend Build Sonucu
+
+```
+0 hata, 6 uyarı (önceden var olan)
+```
+
+### 5. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | Satır toplamları eşit olmayan fiş onayla | 400 "Satır toplam borç (...) ile satır toplam alacak (...) eşit olmalıdır." |
+| 2 | Başlık toplamları satır toplamlarından farklı fiş onayla | 400 "Fiş toplamları satır toplamları ile uyumlu değildir." |
+| 3 | Aynı satırda hem borç hem alacak varsa onayla | 400 "Satır X: hem borç hem alacak girilemez." |
+| 4 | Borç ve alacak ikisi de sıfır olan satır varsa onayla | 400 "Satır X: borç veya alacak girilmelidir." |
+| 5 | Negatif borç/alacak olan satır varsa onayla | 400 "Satır X: borç veya alacak negatif olamaz." |
+| 6 | Geçerli taslak fiş onayla | 200, Durum=Onayli, YevmiyeNo > 0 |

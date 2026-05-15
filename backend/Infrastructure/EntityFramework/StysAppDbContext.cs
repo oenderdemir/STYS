@@ -151,6 +151,7 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeFis> MuhasebeFisler => Set<MuhasebeFis>();
     public DbSet<MuhasebeFisSatir> MuhasebeFisSatirlari => Set<MuhasebeFisSatir>();
     public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
+    public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari => Set<MuhasebeYevmiyeNoSayac>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2047,6 +2048,15 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.BaslangicTarihi, x.BitisTarihi });
 
             entity.HasIndex(x => x.KapaliMi);
+        });
+
+        modelBuilder.Entity<MuhasebeYevmiyeNoSayac>(entity =>
+        {
+            entity.ToTable("MuhasebeYevmiyeNoSayaclari", muhasebeSchema);
+
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<Bildirim>(entity =>

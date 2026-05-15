@@ -4348,4 +4348,78 @@ Dosya | Değişiklik |
 5 | Açık dönem varken uyumlu fiş | 200 |
 6 | Route değişmedi mi? | `ui/muhasebe/donemler` — evet, aynı |
 
-#
+---
+
+## Tur 148 — Faz 7: Fiş Onaylama ve Yevmiye No Sayacı (2026-05-15)
+
+**Amaç:** Taslak fiş onaylama ve tesis+mali yıl bazlı yevmiye no sayaç altyapısı.
+
+### 1. Yeni Entity: MuhasebeYevmiyeNoSayac
+- [`MuhasebeYevmiyeNoSayac.cs`](backend/Muhasebe/MuhasebeFisleri/Entities/MuhasebeYevmiyeNoSayac.cs) — `BaseEntity<int>`, alanlar: `TesisId`, `MaliYil`, `SonNumara`.
+- Sayaç tesis ve mali yıl bazlı çalışır.
+
+### 2. DbContext Değişiklikleri
+- [`StysAppDbContext`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:154) içine `public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari` eklendi.
+- Fluent API: `muhasebe.MuhasebeYevmiyeNoSayaclari` tablosu, `TesisId + MaliYil` unique filtered index (`[IsDeleted] = 0`).
+- Migration: `20260515073138_AddMuhasebeYevmiyeNoSayac`
+
+### 3. IMuhasebeFisService
+- [`OnaylaAsync(int id, CancellationToken)`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs:11) metodu eklendi.
+
+### 4. MuhasebeFisService.OnaylaAsync
+- [`MuhasebeFisService.OnaylaAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:100) — Transaction içinde çalışır.
+- Kontrol listesi:
+  1. Fiş var ve silinmemiş olmalı
+  2. Sadece Taslak fiş onaylanabilir
+  3. YevmiyeNo zaten varsa tekrar onaylanamaz
+  4. En az iki satır olmalı
+  5. ToplamBorc = ToplamAlacak
+  6. ToplamBorc > 0
+  7. Açık muhasebe dönemi kontrolü (IMuhasebeDonemService)
+  8. Satır hesapları: silinmemiş, aktif, DetayHesapMi=true, HareketGorebilirMi=true
+  9. YevmiyeNo üretimi (transaction içinde UPDLOCK, ROWLOCK, HOLDLOCK)
+  10. Fiş Durum = Onayli, YevmiyeNo set edilir
+- Update/Delete: Zaten sadece Taslak fişlere izin veriliyor (değişiklik yok).
+
+### 5. Yevmiye No Üretim Mantığı
+- [`YevmiyeNoUretAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:40) — `MuhasebeHesapKoduSayac` ile aynı SQL lock pattern'i:
+  ```sql
+  SELECT * FROM [muhasebe].[MuhasebeYevmiyeNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+  WHERE [IsDeleted] = 0 AND [TesisId] = @tesisId AND [MaliYil] = @maliYil
+  ```
+- Yoksa oluştur (SonNumara=1), varsa SonNumara bir artır.
+- 3 deneme + unique conflict retry + son deneme lock ile.
+- Transaction zorunlu — yoksa 500 hata.
+
+### 6. Controller Endpoint
+- `POST ui/muhasebe/fisler/{id}/onayla` — [`MuhasebeFisController.Onayla`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs:78)
+- Permission: `MuhasebeFisYonetimi.Manage`
+
+### 7. Build Sonucu
+- Backend: BAŞARILI — 0 Error, 6 warning (tümü pre-existing)
+
+### 8. Eklenen Dosyalar
+Dosya | Açıklama |
+|---|---|
+[`MuhasebeYevmiyeNoSayac.cs`](backend/Muhasebe/MuhasebeFisleri/Entities/MuhasebeYevmiyeNoSayac.cs) | Entity |
+[`20260515073138_AddMuhasebeYevmiyeNoSayac.cs`](backend/Infrastructure/EntityFramework/Migrations/20260515073138_AddMuhasebeYevmiyeNoSayac.cs) | EF Migration |
+
+### 9. Değiştirilen Dosyalar
+Dosya | Değişiklik |
+|---|---|
+[`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:154) | DbSet + Fluent API |
+[`IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs:11) | `OnaylaAsync` imzası |
+[`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:40) | `OnaylaAsync` + `YevmiyeNoUretAsync` + `IsUniqueConflict` |
+[`MuhasebeFisController.cs`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs:78) | `POST {id}/onayla` endpoint |
+
+### 10. Manuel Test Senaryosu
+# | Test | Beklenen |
+|---|---|---|
+1 | Taslak fiş onayla | 200, Durum=Onayli, YevmiyeNo > 0 |
+2 | Aynı tesis/mali yılda ikinci fiş onayla | YevmiyeNo bir artmalı |
+3 | Onaylı fişi tekrar onayla | 400 "Yalnızca taslak durumundaki fişler onaylanabilir" |
+4 | Onaylı fişi güncelle | 400 "Yalnızca taslak durumundaki fişler güncellenebilir" |
+5 | Onaylı fişi sil | 400 "Yalnızca taslak durumundaki fişler silinebilir" |
+6 | Açık dönem yokken fiş onayla | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı" |
+7 | Borç/alacak dengesi bozuk fiş onayla | 400 "Toplam borç (...) ile toplam alacak (...) eşit olmalıdır" |
+8 | Farklı tesis, aynı mali yıl — sayaç bağımsız | YevmiyeNo 1'den başlar |

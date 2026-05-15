@@ -74,4 +74,11 @@ public class MuhasebeFisController : UIController
         await _service.DeleteAsync(id);
         return Ok();
     }
+
+    [HttpPost("{id:int}/onayla")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    public async Task<ActionResult<MuhasebeFisDto>> Onayla(int id, CancellationToken cancellationToken)
+    {
+        return Ok(await _service.OnaylaAsync(id, cancellationToken));
+    }
 }

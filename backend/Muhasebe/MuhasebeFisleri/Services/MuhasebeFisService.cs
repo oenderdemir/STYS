@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
@@ -35,6 +36,152 @@ public class MuhasebeFisService
     {
         var entity = await _repository.GetByIdWithSatirlarAsync(id, cancellationToken);
         return Mapper.Map<MuhasebeFisDto?>(entity);
+    }
+
+    private async Task<int> YevmiyeNoUretAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
+    {
+        var dbTransaction = _dbContext.Database.CurrentTransaction;
+        if (dbTransaction is null)
+        {
+            throw new BaseException("Yevmiye no üretimi için aktif transaction bulunamadı.", 500);
+        }
+
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            var sayac = await _dbContext.MuhasebeYevmiyeNoSayaclari
+                .FromSqlInterpolated($@"
+SELECT *
+FROM [muhasebe].[MuhasebeYevmiyeNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (sayac is null)
+            {
+                var created = new MuhasebeYevmiyeNoSayac
+                {
+                    TesisId = tesisId,
+                    MaliYil = maliYil,
+                    SonNumara = 1
+                };
+
+                await _dbContext.MuhasebeYevmiyeNoSayaclari.AddAsync(created, cancellationToken);
+                try
+                {
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    return created.SonNumara;
+                }
+                catch (DbUpdateException ex) when (attempt < 3 && IsUniqueConflict(ex))
+                {
+                    _dbContext.Entry(created).State = EntityState.Detached;
+                    continue;
+                }
+            }
+            else
+            {
+                sayac.SonNumara += 1;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return sayac.SonNumara;
+            }
+        }
+
+        // Son deneme: lock ile yeniden al ve artır
+        var finalSayac = await _dbContext.MuhasebeYevmiyeNoSayaclari
+            .FromSqlInterpolated($@"
+SELECT *
+FROM [muhasebe].[MuhasebeYevmiyeNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Yevmiye no sayaç kaydı oluşturulamadı.", 409);
+
+        finalSayac.SonNumara += 1;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return finalSayac.SonNumara;
+    }
+
+    public async Task<MuhasebeFisDto> OnaylaAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var fis = await _dbContext.MuhasebeFisler
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+
+            if (fis is null)
+                throw new BaseException("Fiş bulunamadı.", 404);
+
+            // 1. Sadece Taslak fiş onaylanabilir
+            if (fis.Durum != MuhasebeFisDurumlari.Taslak)
+                throw new BaseException("Yalnızca taslak durumundaki fişler onaylanabilir.", 400);
+
+            // 2. YevmiyeNo zaten varsa tekrar onaylanamaz
+            if (fis.YevmiyeNo.HasValue)
+                throw new BaseException("Fiş zaten onaylanmış.", 400);
+
+            // 3. En az iki satır
+            var aktifSatirlar = fis.Satirlar.Where(s => !s.IsDeleted).ToList();
+            if (aktifSatirlar.Count < 2)
+                throw new BaseException("Onaylanacak fiş en az iki satır içermelidir.", 400);
+
+            // 4. ToplamBorc = ToplamAlacak
+            if (fis.ToplamBorc != fis.ToplamAlacak)
+                throw new BaseException($"Toplam borç ({fis.ToplamBorc:N2}) ile toplam alacak ({fis.ToplamAlacak:N2}) eşit olmalıdır.", 400);
+
+            // 5. ToplamBorc > 0
+            if (fis.ToplamBorc <= 0)
+                throw new BaseException("Toplam borç tutarı sıfırdan büyük olmalıdır.", 400);
+
+            // 6. Açık dönem kontrolü
+            var donem = await _muhasebeDonemService.GetAktifDonemAsync(fis.TesisId, fis.FisTarihi, cancellationToken);
+            if (donem is null)
+                throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+            if (fis.MaliYil != donem.MaliYil || fis.Donem != donem.DonemNo)
+                throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
+
+            // 7. Satır hesaplarını doğrula
+            foreach (var satir in aktifSatirlar)
+            {
+                var hesap = await _dbContext.MuhasebeHesapPlanlari
+                    .FirstOrDefaultAsync(x => x.Id == satir.MuhasebeHesapPlaniId, cancellationToken);
+
+                if (hesap is null)
+                    throw new BaseException($"Satır {satir.SiraNo}: seçilen muhasebe hesabı bulunamadı.", 400);
+                if (hesap.IsDeleted)
+                    throw new BaseException($"Satır {satir.SiraNo}: seçilen muhasebe hesabı silinmiştir.", 400);
+                if (!hesap.AktifMi)
+                    throw new BaseException($"Satır {satir.SiraNo}: seçilen muhasebe hesabı aktif değildir.", 400);
+                if (!hesap.DetayHesapMi)
+                    throw new BaseException($"Satır {satir.SiraNo}: ana hesap seçilemez. Detay hesap seçilmelidir.", 400);
+                if (!hesap.HareketGorebilirMi)
+                    throw new BaseException($"Satır {satir.SiraNo}: hareket görebilir detay hesap seçilmelidir.", 400);
+            }
+
+            // 8. Yevmiye no üret
+            var yevmiyeNo = await YevmiyeNoUretAsync(fis.TesisId, fis.MaliYil, cancellationToken);
+
+            // 9. Fişi onayla
+            fis.YevmiyeNo = yevmiyeNo;
+            fis.Durum = MuhasebeFisDurumlari.Onayli;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            // Reload
+            var reloaded = await _repository.GetByIdWithSatirlarAsync(fis.Id, cancellationToken)
+                ?? throw new BaseException("Onaylanan fiş okunamadı.", 500);
+            return Mapper.Map<MuhasebeFisDto>(reloaded);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static bool IsUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);
     }
 
     public async Task<List<MuhasebeFisDto>> GetByKaynakAsync(

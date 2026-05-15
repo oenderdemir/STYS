@@ -4208,3 +4208,102 @@ Silinmiş fiş ve satırların sorgu sonuçlarında dönmeye devam etmesi, günc
 | 3 | Silinmiş fiş update | 404 "Fiş bulunamadı" |
 | 4 | Silinmiş fiş delete | 404 "Fiş bulunamadı" |
 | 5 | Silinmiş satırlar fiş detayı | Satirlar[]'da sadece IsDeleted=false olanlar |
+
+---
+
+## Tur 146 — Faz 6: Muhasebe Dönemleri Altyapısı
+**Tarih:** 2026-05-15
+
+### 1. Eklenen Dosyalar
+
+| # | Dosya | Açıklama |
+|---|---|---|
+| 1 | `backend/Muhasebe/MuhasebeDonemleri/Entities/MuhasebeDonem.cs` | Muhasebe dönemi entity (TesisId FK, MaliYil, DonemNo, tarih aralığı, KapaliMi, KapanisTarihi) |
+| 2 | `backend/Muhasebe/MuhasebeDonemleri/Dtos/MuhasebeDonemDtos.cs` | MuhasebeDonemDto + CreateMuhasebeDonemRequest + UpdateMuhasebeDonemRequest |
+| 3 | `backend/Muhasebe/MuhasebeDonemleri/Mapping/MuhasebeDonemProfile.cs` | AutoMapper profile (Entity→Dto TesisAdi map, Request→Dto) |
+| 4 | `backend/Muhasebe/MuhasebeDonemleri/Repositories/IMuhasebeDonemRepository.cs` | Repository interface (GetAktifDonemAsync, GetByTesisYilDonemAsync, TarihAraligiCakisiyorMuAsync) |
+| 5 | `backend/Muhasebe/MuhasebeDonemleri/Repositories/MuhasebeDonemRepository.cs` | Repository implementation (filtered queries with IsDeleted=false) |
+| 6 | `backend/Muhasebe/MuhasebeDonemleri/Services/IMuhasebeDonemService.cs` | Service interface (GetAktifDonemAsync, DonemKapatAsync, DonemAcAsync) |
+| 7 | `backend/Muhasebe/MuhasebeDonemleri/Services/MuhasebeDonemService.cs` | Service implementation (14 validasyon kuralı, CRUD, dönem aç/kapat) |
+| 8 | `backend/Muhasebe/MuhasebeDonemleri/Controllers/MuhasebeDonemController.cs` | Controller (`ui/muhasebe/donemler` route) |
+| 9 | `backend/Infrastructure/EntityFramework/Migrations/20260515064707_AddMuhasebeDonemleri.cs` | EF Core migration |
+
+### 2. Değiştirilen Dosyalar
+
+| # | Dosya | Değişiklik |
+|---|---|---|
+| 1 | `backend/Infrastructure/EntityFramework/StysAppDbContext.cs` | using eklendi, DbSet<MuhasebeDonem> eklendi, Fluent API konfigürasyonu eklendi |
+| 2 | `backend/StructurePermissions.cs` | MuhasebeDonemYonetimi permission class eklendi (Menu, View, Manage, ClosePeriod) |
+| 3 | `backend/Program.cs` | IMuhasebeDonemService DI registration eklendi |
+| 4 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs` | IMuhasebeDonemService inject, AddAsync/UpdateAsync içinde açık dönem kontrolü eklendi |
+
+### 3. DbContext Değişikliği
+
+**Fluent API:**
+```csharp
+entity.ToTable("MuhasebeDonemler", muhasebeSchema);
+entity.Property(x => x.Aciklama).HasMaxLength(1024);
+entity.HasOne(x => x.Tesis).WithMany().HasForeignKey(x => x.TesisId).OnDelete(DeleteBehavior.Restrict);
+entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.DonemNo }).IsUnique().HasFilter("[IsDeleted] = 0");
+entity.HasIndex(x => new { x.TesisId, x.BaslangicTarihi, x.BitisTarihi });
+entity.HasIndex(x => x.KapaliMi);
+```
+
+### 4. Migration Adı
+`20260515064707_AddMuhasebeDonemleri`
+
+**Tablo:** `muhasebe.MuhasebeDonemler` (TesisId FK Restrict, 3 index: unique filtered, tarih aralığı, KapaliMi)
+
+### 5. MuhasebeDonemService Validasyonları
+
+1. TesisId > 0 (Geçerli bir tesis seçilmelidir)
+2. Tesis var mı, silinmiş mi (Seçilen tesis bulunamadı)
+3. MaliYil 2000-2100 aralığında olmalı
+4. DonemNo 1-12 aralığında olmalı
+5. BaslangicTarihi < BitisTarihi
+6. Aynı TesisId + MaliYil + DonemNo için ikinci kayıt oluşturulamaz
+7. Aynı tesis içinde tarih aralıkları çakışamaz
+8. Create sırasında KapaliMi=false, KapanisTarihi=null
+9. Kapalı dönem silinemez
+10. Kapalı dönemde tarih/dönem bilgileri değiştirilemez (sadece Aciklama)
+11. KapaliMi değişikliği update üzerinden yapılamaz (DonemKapatAsync/DonemAcAsync kullanılmalı)
+12. Dönem kapatılırken zaten kapalıysa hata
+13. Dönem açılırken zaten açıksa hata
+14. Tüm hata mesajları Türkçe, BaseException ile fırlatılır
+
+### 6. MuhasebeFisService Açık Dönem Kontrolü
+
+NormalizeAndValidateCreateAsync sonunda:
+- `GetAktifDonemAsync(tesisId, fisTarihi)` çağrısı
+- Dönem yoksa: "Fiş tarihi için açık muhasebe dönemi bulunamadı"
+- MaliYıl/Dönem uyumsuzsa: "Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir"
+
+### 7. Controller Endpointleri
+
+| Metod | Route | Permission |
+|-------|-------|-----------|
+| GET | `ui/muhasebe/donemler` | View |
+| GET | `ui/muhasebe/donemler/{id}` | View |
+| GET | `ui/muhasebe/donemler/aktif?tesisId=&tarih=` | View |
+| POST | `ui/muhasebe/donemler` | Manage |
+| PUT | `ui/muhasebe/donemler/{id}` | Manage |
+| DELETE | `ui/muhasebe/donemler/{id}` | Manage |
+| POST | `ui/muhasebe/donemler/{id}/kapat` | ClosePeriod |
+| POST | `ui/muhasebe/donemler/{id}/ac` | ClosePeriod |
+
+### 8. Build Sonucu
+- Backend: BAŞARILI — 0 Error, 6 warning (Snappier NU1903 + diğer pre-existing)
+
+### 9. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | TesisId=1, MaliYil=2026, DonemNo=1 için açık dönem oluştur | 200, KapaliMi=false |
+| 2 | DTO'da TesisAdi doğru gelmeli | Tesis.Ad değeri |
+| 3 | Aynı tesis/yıl/dönem için ikinci kayıt | 400 "Aynı tesis, mali yıl ve dönem için kayıt zaten mevcut" |
+| 4 | Aynı tesis içinde çakışan tarih aralıklı dönem | 400 "Seçilen tarih aralığı ... çakışıyor" |
+| 5 | Farklı tesis için aynı tarih/yıl/dönem | 200 (farklı tesis, bağımsız) |
+| 6 | Açık döneme ait tarihle taslak fiş oluştur | 200 |
+| 7 | Dönem kapatıldıktan sonra aynı tarihe fiş | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı" |
+| 8 | Kapalı dönem silinememeli | 400 "Kapalı dönem silinemez" |
+| 9 | Kapalı dönem tekrar açılabilmeli | 200, KapaliMi=false, KapanisTarihi=null |

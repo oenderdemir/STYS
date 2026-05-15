@@ -374,6 +374,14 @@ public static class StructurePermissions
         public const string Manage = "MuhasebeVergiHesapEslemeYonetimi.Manage";
     }
 
+    public static class MuhasebeDonemYonetimi
+    {
+        public const string Menu = "MuhasebeDonemYonetimi.Menu";
+        public const string View = "MuhasebeDonemYonetimi.View";
+        public const string Manage = "MuhasebeDonemYonetimi.Manage";
+        public const string ClosePeriod = "MuhasebeDonemYonetimi.ClosePeriod";
+    }
+
     public static class MuhasebeFisYonetimi
     {
         public const string Menu = "MuhasebeFisYonetimi.Menu";

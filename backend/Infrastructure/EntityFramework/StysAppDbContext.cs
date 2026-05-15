@@ -26,6 +26,7 @@ using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
@@ -149,6 +150,7 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
     public DbSet<MuhasebeFis> MuhasebeFisler => Set<MuhasebeFis>();
     public DbSet<MuhasebeFisSatir> MuhasebeFisSatirlari => Set<MuhasebeFisSatir>();
+    public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2024,6 +2026,27 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.CariKartId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MuhasebeDonem>(entity =>
+        {
+            entity.ToTable("MuhasebeDonemler", muhasebeSchema);
+
+            entity.Property(x => x.Aciklama)
+                .HasMaxLength(1024);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.DonemNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.TesisId, x.BaslangicTarihi, x.BitisTarihi });
+
+            entity.HasIndex(x => x.KapaliMi);
         });
 
         modelBuilder.Entity<Bildirim>(entity =>

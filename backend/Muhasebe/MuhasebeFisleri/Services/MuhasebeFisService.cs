@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
@@ -16,15 +17,18 @@ public class MuhasebeFisService
 {
     private readonly IMuhasebeFisRepository _repository;
     private readonly StysAppDbContext _dbContext;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
 
     public MuhasebeFisService(
         IMuhasebeFisRepository repository,
         IMapper mapper,
-        StysAppDbContext dbContext)
+        StysAppDbContext dbContext,
+        IMuhasebeDonemService muhasebeDonemService)
         : base(repository, mapper)
     {
         _repository = repository;
         _dbContext = dbContext;
+        _muhasebeDonemService = muhasebeDonemService;
     }
 
     public async Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default)
@@ -226,5 +230,17 @@ public class MuhasebeFisService
 
         dto.ToplamBorc = toplamBorc;
         dto.ToplamAlacak = toplamAlacak;
+
+        // 19. Açık muhasebe dönemi kontrolü
+        var donem = await _muhasebeDonemService.GetAktifDonemAsync(
+            dto.TesisId,
+            dto.FisTarihi,
+            cancellationToken);
+
+        if (donem is null)
+            throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+
+        if (dto.MaliYil != donem.MaliYil || dto.Donem != donem.DonemNo)
+            throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
     }
 }

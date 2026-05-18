@@ -83,4 +83,11 @@ public class MuhasebeHesapBakiyeController : UIController
         [FromQuery] int donem,
         CancellationToken cancellationToken)
         => Ok(await _service.GetByTesisYilDonemAsync(tesisId, maliYil, donem, cancellationToken));
+
+    [HttpPost("rebuild")]
+    [Permission(StructurePermissions.MuhasebeHesapBakiyeYonetimi.Rebuild)]
+    public async Task<ActionResult<MuhasebeHesapBakiyeRebuildResultDto>> Rebuild(
+        [FromBody] MuhasebeHesapBakiyeRebuildRequest request,
+        CancellationToken cancellationToken)
+        => Ok(await _service.RebuildAsync(request, cancellationToken));
 }

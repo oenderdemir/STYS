@@ -19,4 +19,7 @@ public interface IMuhasebeHesapBakiyeService : IBaseRdbmsService<MuhasebeHesapBa
         int maliYil,
         int donem,
         CancellationToken cancellationToken = default);
+    Task<MuhasebeHesapBakiyeRebuildResultDto> RebuildAsync(
+        MuhasebeHesapBakiyeRebuildRequest request,
+        CancellationToken cancellationToken = default);
 }

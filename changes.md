@@ -5385,3 +5385,93 @@ Aynı bakiye hesaplama mantığı (`BorcToplam - AlacakToplam → BorcBakiye/Ala
 4 | Hesap planında olmayan bir üst kod için onaylama (örn: alt hesap "999.01" ama "999" hesap planında yok) | 400 "Üst muhasebe hesabı bulunamadı: 999" |
 5 | Onaylı fiş bakiyeleri | Doğru artırmalı |
 6 | Ters kayıt fişi bakiyeleri | Doğru ters etki yapmalı (borç/alacak ters çevrilmiş) |
+
+---
+
+## Faz 15 — MuhasebeHesapBakiye Rebuild Endpoint (2026-05-19)
+
+### Amaç
+`MuhasebeHesapBakiye` tablosunda veri bozulursa veya geçmiş fişlerden bakiye tablosu yeniden oluşturulmak istenirse, belirli tesis + mali yıl + opsiyonel dönem için tüm bakiye kayıtları `MuhasebeFis`/`MuhasebeFisSatir` kayıtlarından yeniden hesaplanabilsin.
+
+### Eklenen DTO'lar
+**Dosya:** [`MuhasebeHesapBakiyeDtos.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Dtos/MuhasebeHesapBakiyeDtos.cs)
+
+DTO | Açıklama |
+|-----|----------|
+`MuhasebeHesapBakiyeRebuildRequest` | `TesisId`, `MaliYil`, `Donem?` (null = tüm yıl), `ForceHardDelete` |
+`MuhasebeHesapBakiyeRebuildResultDto` | `IslenenFisSayisi`, `IslenenSatirSayisi`, `SilinenBakiyeKaydiSayisi`, `OlusturulanBakiyeKaydiSayisi`, `BaslamaZamani`, `BitisZamani`, `Mesaj` |
+
+### Servis Metodu
+**Interface** — [`IMuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/IMuhasebeHesapBakiyeService.cs:23):
+- `Task<MuhasebeHesapBakiyeRebuildResultDto> RebuildAsync(MuhasebeHesapBakiyeRebuildRequest, CancellationToken)`
+
+**Implementation** — [`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs:37):
+
+- **Validasyon:** TesisId > 0, MaliYil 2000-2100, Donem 1-12, tesis var ve silinmemiş
+- **Kapsam:** Sadece `Onayli` ve `TersKayit` durumundaki fişler; `Taslak` ve `Iptal` dahil değil
+- **Rebuild akışı (transaction içinde):**
+  1. Mevcut bakiye kayıtları soft delete (`IsDeleted=true`), `SaveChangesAsync` ile hemen kaydet
+  2. Fişlerden `SelectMany` projection ile satırlar okunur (tracking yükü azaltılır)
+  3. Hesaplar ve üst hesaplar tek sorguda çekilir
+  4. Bellekte `Dictionary<BakiyeKey, BakiyeAggregate>` ile gruplanır
+  5. Her satır için `KonsolideMi=false` (gerçek hesap) ve `KonsolideMi=true` (üst hesaplar) işlenir
+  6. `AddRangeAsync` ile toplu eklenir
+  7. `SaveChangesAsync` + `CommitAsync`
+- **Hata yönetimi:** Hesap bulunamazsa `BaseException("Fiş satırındaki muhasebe hesabı bulunamadı veya aktif değil. HesapId: {id}", 400)`, üst hesap bulunamazsa `BaseException("Üst muhasebe hesabı bulunamadı: {kod}", 400)`
+- **Rollback:** Exception durumunda `transaction.RollbackAsync`
+
+### Controller Endpoint
+**Dosya:** [`MuhasebeHesapBakiyeController.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Controllers/MuhasebeHesapBakiyeController.cs:87)
+
+```
+POST ui/muhasebe/hesap-bakiyeleri/rebuild
+Body: MuhasebeHesapBakiyeRebuildRequest
+Response: MuhasebeHesapBakiyeRebuildResultDto
+Permission: MuhasebeHesapBakiyeYonetimi.Rebuild
+```
+
+### Performans Yaklaşımı
+- Fiş satırları `SelectMany` projection ile okunur — tracking yükü yok
+- Hesap planı ve üst hesaplar tek seferde çekilir (N+1 yok)
+- Bakiye hesapları bellekte `Dictionary<BakiyeKey, BakiyeAggregate>` ile gruplanır
+- Yeni kayıtlar `AddRangeAsync` ile toplu eklenir
+- Bu fazda gerçek bulk insert paketi (`EFCore.BulkExtensions`) eklenmez
+- Kod yorumu: "Büyük veri hacminde rebuild işlemi batch/arka plan job olarak tasarlanmalıdır"
+
+### Transaction Akışı
+```
+BeginTransaction
+  ├─ Mevcut bakiyeleri soft delete → SaveChanges (unique index çakışmasını önlemek için hemen)
+  ├─ Fiş satırlarını projection ile oku
+  ├─ Hesapları/üst hesapları çek
+  ├─ Bellekte aggregate hesapla
+  ├─ AddRangeAsync + SaveChanges
+  └─ CommitAsync
+Hata → RollbackAsync
+```
+
+### Değişen Dosyalar
+# | Dosya | Değişiklik |
+|---|-------|------------|
+1 | [`MuhasebeHesapBakiyeDtos.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Dtos/MuhasebeHesapBakiyeDtos.cs) | `MuhasebeHesapBakiyeRebuildRequest` + `MuhasebeHesapBakiyeRebuildResultDto` eklendi |
+2 | [`IMuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/IMuhasebeHesapBakiyeService.cs) | `RebuildAsync` metodu eklendi |
+3 | [`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs) | `RebuildAsync` implementasyonu, `BakiyeKey`, `BakiyeAggregate`, `GetUstHesapKodlari` eklendi |
+4 | [`MuhasebeHesapBakiyeController.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Controllers/MuhasebeHesapBakiyeController.cs) | `POST rebuild` endpoint eklendi |
+
+### Build
+- **Backend:** ✅ 0 errors, 6 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test Senaryosu
+# | Test | Beklenen |
+|---|------|----------|
+1 | Onaylı ve ters kayıt fişleri olan tesis/yıl için rebuild | Bakiye kayıtları yeniden oluşmalı |
+2 | Taslak fişler rebuild kapsamına dahil mi? | Dahil edilmemeli |
+3 | Iptal durumundaki orijinal fişler dahil mi? | Dahil edilmemeli |
+4 | TersKayit fişleri dahil mi? | Dahil edilmeli |
+5 | Gerçek hesaplar | `KonsolideMi=false` olarak oluşmalı |
+6 | Üst hesaplar | `KonsolideMi=true` olarak oluşmalı |
+7 | Mevcut bakiye kayıtları | Soft delete edilmeli, yeni kayıtlar oluşturulmalı |
+8 | Aynı unique key duplicate kontrolü | Duplicate oluşmamalı |
+9 | Üst hesap eksikse | 400 "Üst muhasebe hesabı bulunamadı: {kod}" |
+10 | Result alanları | `IslenenFisSayisi`, `IslenenSatirSayisi`, `SilinenBakiyeKaydiSayisi`, `OlusturulanBakiyeKaydiSayisi` dolu dönmeli |
+11 | Aynı rebuild iki kere çalıştırma | Sonuç tutarlı kalmalı |

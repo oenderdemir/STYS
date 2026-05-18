@@ -87,3 +87,37 @@ public class MuhasebeHesapBakiyeFilterDto
             : HesapKoduBitis.Trim();
     }
 }
+
+public class MuhasebeHesapBakiyeRebuildRequest
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+
+    /// <summary>
+    /// Null ise tüm yıl rebuild edilir. Dolu ise sadece ilgili dönem rebuild edilir.
+    /// </summary>
+    public int? Donem { get; set; }
+
+    /// <summary>
+    /// Varsayılan false. Bu fazda true gelse bile soft delete tercih edilir.
+    /// </summary>
+    public bool ForceHardDelete { get; set; } = false;
+}
+
+public class MuhasebeHesapBakiyeRebuildResultDto
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    public int IslenenFisSayisi { get; set; }
+    public int IslenenSatirSayisi { get; set; }
+
+    public int SilinenBakiyeKaydiSayisi { get; set; }
+    public int OlusturulanBakiyeKaydiSayisi { get; set; }
+
+    public DateTime BaslamaZamani { get; set; }
+    public DateTime BitisZamani { get; set; }
+
+    public string Mesaj { get; set; } = string.Empty;
+}

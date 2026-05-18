@@ -5079,3 +5079,113 @@ Sonuç:
 | 6 | PUT (Update) kendi kaydı üzerinde değişiklik | Başarılı (kendini duplicate saymaz) |
 | 7 | VergiTipi "kdv " (küçük harf + boşluk) gönder | "KDV" olarak normalize edilmeli, duplicate kontrolü normalize sonrası çalışmalı |
 | 8 | Oran 18.005 gönder | 18.01'e yuvarlanmalı |
+
+---
+
+## Faz 13 — MuhasebeHesapBakiye Altyapısı (2026-05-18)
+
+### Amaç
+Muhasebe fiş onaylama/iptal sırasında hesaplanacak bakiye özetlerini saklayacak bir cache/özet tablosu (`MuhasebeHesapBakiyeleri`) oluşturmak. Bu faz sadece altyapıyı kurar — **mevcut mizan endpoint'ini değiştirmez, fiş onaylama/iptal sırasında bakiye güncellemez.** Tüm güncelleme mantığı Faz 14'e bırakılmıştır.
+
+### Entity: `MuhasebeHesapBakiye : BaseEntity<int>`
+- `TesisId` (int), `MaliYil` (int), `Donem` (int), `MuhasebeHesapPlaniId` (int), `KonsolideMi` (bool)
+- `HesapKodu` (string, max 64), `HesapAdi` (string, max 512)
+- `BorcToplam` (decimal, 18,2), `AlacakToplam` (decimal, 18,2)
+- `BorcBakiye` (decimal, 18,2) — hesaplanan alan (service'te normalize)
+- `AlacakBakiye` (decimal, 18,2) — hesaplanan alan
+- `SonGuncellemeTarihi` (DateTime) — UTC now, her yazmada otomatik
+- Navigation: `Tesis?`, `MuhasebeHesapPlani?`
+
+### DTO: `MuhasebeHesapBakiyeDto : BaseRdbmsDto<int>`
+- Tüm entity alanları + `TesisAdi`, `Bakiye`, `BakiyeTipi` (computed, AutoMapper)
+- `Bakiye` = `Math.Abs(BorcToplam - AlacakToplam)`
+- `BakiyeTipi` = `"Borc"` / `"Alacak"` / `"Sifir"`
+- `MuhasebeHesapBakiyeFilterDto` ile filtreleme: TesisId, MaliYil, Donem, MuhasebeHesapPlaniId, KonsolideMi, HesapKoduBaslangic/Bitis, Page/PageSize
+
+### AutoMapper: `MuhasebeHesapBakiyeProfile`
+- Entity → DTO: `TesisAdi`, `Bakiye`, `BakiyeTipi` computed
+- DTO → Entity, CreateRequest → DTO, UpdateRequest → DTO
+
+### Repository: `MuhasebeHesapBakiyeRepository`
+- `ApplyFilter` private: `!IsDeleted` bazlı, tüm alanlara göre `IQueryable` chain filtre
+- Sıralama: TesisId → MaliYil → Donem → HesapKodu → KonsolideMi
+- Özel metotlar: `GetFilteredAsync`, `CountFilteredAsync`, `GetByTesisYilDonemAsync` (Include Tesis + MuhasebeHesapPlani)
+- `GetByUniqueKeyAsync` ile duplicate kontrolü
+
+### Service: `MuhasebeHesapBakiyeService`
+- **10 validasyon kuralı:**
+  1. TesisId > 0
+  2. MaliYil 2000–2100
+  3. Donem 1–12
+  4. MuhasebeHesapPlaniId > 0
+  5. BorcToplam >= 0
+  6. AlacakToplam >= 0
+  7. Tesis var ve silinmemiş
+  8. MuhasebeHesapPlani var, silinmemiş ve aktif
+  9. `HesapKodu` = hesap.TamKod, `HesapAdi` = hesap.Ad (her yazmada otomatik set edilir)
+  10. Duplicate check: aynı TesisId + MaliYil + Donem + MuhasebeHesapPlaniId + KonsolideMi, !IsDeleted, Update'te kendi ID hariç
+- Duplicate hata mesajı: "Aynı tesis, mali yıl, dönem, hesap ve konsolide bilgisi için aktif kayıt zaten mevcut."
+- `NormalizeAndSetComputedFields`: `BorcBakiye`/`AlacakBakiye` hesaplama, `SonGuncellemeTarihi = DateTime.UtcNow`
+- `GetFilteredAsync`, `CountFilteredAsync`, `GetByTesisYilDonemAsync` delegasyonu
+
+### Controller: `MuhasebeHesapBakiyeController`
+- Route: `ui/muhasebe/hesap-bakiyeleri`
+- `[Permission(StructurePermissions.MuhasebeHesapBakiyeYonetimi.View/Manage)]`
+- Endpoints: GET, GET/{id}, POST, PUT/{id}, DELETE/{id}, POST filter, POST filter/count, GET by-donem
+
+### Permissions: `StructurePermissions.MuhasebeHesapBakiyeYonetimi`
+- Menu, View, Manage, Rebuild
+
+### DbContext
+- `DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri`
+- Fluent API: schema `muhasebe`, FK Tesisler (dbo) ve MuhasebeHesapPlanlari (muhasebe) — DeleteBehavior.Restrict
+- Filtered unique index: `(TesisId, MaliYil, Donem, MuhasebeHesapPlaniId, KonsolideMi) WHERE [IsDeleted] = 0`
+- Ayrı indexler: HesapKodu, KonsolideMi, (TesisId, MaliYil, Donem)
+
+### Program.cs DI
+- `builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>()`
+
+### Migration
+- `20260518213851_AddMuhasebeHesapBakiyeleri.cs` — tablo, FK'ler, tüm indexler
+
+### Eklenen Dosyalar
+| # | Dosya | Açıklama |
+|---|-------|----------|
+| 1 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Entities/MuhasebeHesapBakiye.cs` | Entity |
+| 2 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Dtos/MuhasebeHesapBakiyeDtos.cs` | DTO + FilterDto + Request DTO'lar |
+| 3 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Mapping/MuhasebeHesapBakiyeProfile.cs` | AutoMapper profile |
+| 4 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/IMuhasebeHesapBakiyeRepository.cs` | Repository interface |
+| 5 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/MuhasebeHesapBakiyeRepository.cs` | Repository implementation |
+| 6 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/IMuhasebeHesapBakiyeService.cs` | Service interface |
+| 7 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs` | Service implementation |
+| 8 | `backend/Muhasebe/MuhasebeHesapBakiyeleri/Controllers/MuhasebeHesapBakiyeController.cs` | Controller |
+| 9 | `backend/Infrastructure/EntityFramework/Migrations/20260518213851_AddMuhasebeHesapBakiyeleri.cs` | EF Core migration |
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/StructurePermissions.cs` | `MuhasebeHesapBakiyeYonetimi` permission sınıfı eklendi |
+| 2 | `backend/Infrastructure/EntityFramework/StysAppDbContext.cs` | Using, DbSet, Fluent API konfigürasyonu eklendi |
+| 3 | `backend/Program.cs` | Using + DI kaydı eklendi |
+
+### Build
+- **Backend:** ✅ 0 errors, 6 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test Senaryosu
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | POST /ui/muhasebe/hesap-bakiyeleri (geçerli veri) | 201 Created, HesapKodu = TamKod, HesapAdi = hesap.Ad |
+| 2 | POST aynı TesisId+MaliYil+Donem+MuhasebeHesapPlaniId+KonsolideMi | 400 "Aynı tesis, mali yıl, dönem, hesap ve konsolide bilgisi için aktif kayıt zaten mevcut." |
+| 3 | POST TesisId=0 | 400 validasyon hatası (TesisId > 0) |
+| 4 | POST MaliYil=1999 | 400 validasyon hatası (MaliYil 2000-2100) |
+| 5 | POST Donem=13 | 400 validasyon hatası (Donem 1-12) |
+| 6 | POST MuhasebeHesapPlaniId=0 | 400 validasyon hatası |
+| 7 | POST BorcToplam=-1 | 400 validasyon hatası (BorcToplam >= 0) |
+| 8 | POST geçersiz TesisId (var olmayan) | 400 "Tesis bulunamadı" |
+| 9 | POST geçersiz/silinmiş HesapPlaniId | 400 "Muhasebe hesap planı kaydı bulunamadı" |
+| 10 | GET /ui/muhasebe/hesap-bakiyeleri | Liste dönmeli, TesisAdi/Bakiye/BakiyeTipi computed |
+| 11 | GET /ui/muhasebe/hesap-bakiyeleri/{id} | Tek kayıt, computed alanlar dolu |
+| 12 | PUT /ui/muhasebe/hesap-bakiyeleri/{id} | Başarılı güncelleme, HesapKodu/HesapAdi güncellenmiş |
+| 13 | DELETE /ui/muhasebe/hesap-bakiyeleri/{id} | Soft delete (IsDeleted=true) |
+| 14 | POST /ui/muhasebe/hesap-bakiyeleri/filter | Filtreli liste, sayfalama çalışıyor |
+| 15 | GET /ui/muhasebe/hesap-bakiyeleri/by-donem?tesisId=1&maliYil=2026&donem=5 | O döneme ait tüm bakiye kayıtları |

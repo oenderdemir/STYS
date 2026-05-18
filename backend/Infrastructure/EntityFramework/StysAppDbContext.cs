@@ -26,6 +26,7 @@ using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Restoranlar.Entities;
@@ -152,6 +153,7 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeFisSatir> MuhasebeFisSatirlari => Set<MuhasebeFisSatir>();
     public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
     public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari => Set<MuhasebeYevmiyeNoSayac>();
+    public DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri => Set<MuhasebeHesapBakiye>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2067,6 +2069,56 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.MaliYil })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<MuhasebeHesapBakiye>(entity =>
+        {
+            entity.ToTable("MuhasebeHesapBakiyeleri", muhasebeSchema);
+
+            entity.Property(x => x.HesapKodu)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(x => x.HesapAdi)
+                .HasMaxLength(512)
+                .IsRequired();
+
+            entity.Property(x => x.BorcToplam)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.AlacakToplam)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.BorcBakiye)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.AlacakBakiye)
+                .HasPrecision(18, 2);
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new
+            {
+                x.TesisId,
+                x.MaliYil,
+                x.Donem,
+                x.MuhasebeHesapPlaniId,
+                x.KonsolideMi
+            })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.Donem });
+            entity.HasIndex(x => x.HesapKodu);
+            entity.HasIndex(x => x.KonsolideMi);
         });
 
         modelBuilder.Entity<Bildirim>(entity =>

@@ -9,7 +9,9 @@ using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 
 namespace STYS.Muhasebe.MuhasebeFisleri.Services;
 
@@ -710,6 +712,130 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             .ToList();
 
         // 12. DTO'yu döndür (genel toplamlar konsolidasyon öncesinden)
+        return new MizanDto
+        {
+            TesisId = filter.TesisId,
+            GenelToplamBorc = genelToplamBorc,
+            GenelToplamAlacak = genelToplamAlacak,
+            GenelBorcBakiye = genelBorcBakiye,
+            GenelAlacakBakiye = genelAlacakBakiye,
+            Satirlar = pagedSatirlar,
+        };
+    }
+
+    /// <summary>
+    /// Mizanı <see cref="MuhasebeHesapBakiye"/> özet tablosundan okur.
+    /// Büyük veri hacminde MuhasebeFisSatir üzerinden SUM/GROUP BY yapmak yerine
+    /// dönemsel özet kayıtları kullanıldığı için daha performanslıdır.
+    /// Bakiye tablosunun güncel olmadığı düşünülürse rebuild endpoint'i çalıştırılmalıdır.
+    /// </summary>
+    public async Task<MizanDto> GetMizanBakiyeAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Normalize
+        filter.Normalize();
+
+        // 2. Validasyon
+        if (filter.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (filter.BaslangicTarihi.HasValue || filter.BitisTarihi.HasValue)
+            throw new BaseException("Bakiye tablosundan mizan için tarih aralığı yerine MaliYil/Donem filtresi kullanılmalıdır.", 400);
+
+        if (!filter.MaliYil.HasValue)
+            throw new BaseException("Bakiye tablosundan mizan için mali yıl seçilmelidir.", 400);
+
+        if (filter.MaliYil.Value < 2000 || filter.MaliYil.Value > 2100)
+            throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
+
+        if (filter.Donem.HasValue && (filter.Donem.Value < 1 || filter.Donem.Value > 12))
+            throw new BaseException("Dönem numarası 1-12 aralığında olmalıdır.", 400);
+
+        // 3. Bakiye tablosunu sorgula
+        var query = _dbContext.MuhasebeHesapBakiyeleri
+            .Include(x => x.MuhasebeHesapPlani)
+            .Where(x => !x.IsDeleted
+                && x.TesisId == filter.TesisId
+                && x.MaliYil == filter.MaliYil.Value);
+
+        if (filter.Donem.HasValue)
+            query = query.Where(x => x.Donem == filter.Donem.Value);
+
+        // KonsolideMi filtresi
+        if (!filter.AltHesaplariDahilEt)
+        {
+            // Sadece gerçek hareket hesapları
+            query = query.Where(x => !x.KonsolideMi);
+        }
+
+        // SadeceHareketGorenHesaplar filtresi
+        if (filter.SadeceHareketGorenHesaplar)
+            query = query.Where(x => x.BorcToplam != 0 || x.AlacakToplam != 0);
+
+        // Hesap kodu aralığı filtresi
+        if (filter.HesapKoduBaslangic is not null)
+            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) >= 0);
+
+        if (filter.HesapKoduBitis is not null)
+            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) <= 0);
+
+        var bakiyeKayitlari = await query
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // 4. Genel toplamları sadece KonsolideMi=false olanlardan hesapla
+        var gercekKayitlar = bakiyeKayitlari
+            .Where(x => !x.KonsolideMi)
+            .ToList();
+
+        var genelToplamBorc = gercekKayitlar.Sum(x => x.BorcToplam);
+        var genelToplamAlacak = gercekKayitlar.Sum(x => x.AlacakToplam);
+        var genelNet = genelToplamBorc - genelToplamAlacak;
+        var genelBorcBakiye = genelNet > 0 ? genelNet : 0;
+        var genelAlacakBakiye = genelNet < 0 ? Math.Abs(genelNet) : 0;
+
+        // 5. Aynı HesapKodu için GroupBy ile birleştir
+        var gruplar = bakiyeKayitlari
+            .GroupBy(x => x.HesapKodu)
+            .Select(g =>
+            {
+                // TesisId eşleşen hesap planı bilgisi öncelikli, yoksa ilk kayıt
+                var tercihli = g
+                    .OrderByDescending(x => x.MuhasebeHesapPlani?.TesisId == filter.TesisId)
+                    .ThenByDescending(x => x.MuhasebeHesapPlani?.TesisId == null)
+                    .First();
+
+                var hesapPlani = tercihli.MuhasebeHesapPlani;
+                var toplamBorc = g.Sum(x => x.BorcToplam);
+                var toplamAlacak = g.Sum(x => x.AlacakToplam);
+                var net = toplamBorc - toplamAlacak;
+
+                return new MizanSatirDto
+                {
+                    MuhasebeHesapPlaniId = hesapPlani?.Id ?? tercihli.MuhasebeHesapPlaniId,
+                    HesapKodu = g.Key,
+                    HesapAdi = hesapPlani?.Ad ?? tercihli.HesapAdi,
+                    DetayHesapMi = hesapPlani?.DetayHesapMi ?? false,
+                    HareketGorebilirMi = hesapPlani?.HareketGorebilirMi ?? true,
+                    ToplamBorc = toplamBorc,
+                    ToplamAlacak = toplamAlacak,
+                    BorcBakiye = net > 0 ? net : 0,
+                    AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+                    Bakiye = Math.Abs(net),
+                    BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+                    KonsolideSatirMi = g.Any(x => x.KonsolideMi) && !g.All(x => x.KonsolideMi),
+                    Seviye = g.Key.Split('.').Length,
+                };
+            })
+            .OrderBy(s => s.HesapKodu, StringComparer.Ordinal)
+            .ToList();
+
+        // 6. Sayfalama (display satırlarına uygulanır)
+        var pagedSatirlar = gruplar
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        // 7. DTO'yu döndür
         return new MizanDto
         {
             TesisId = filter.TesisId,

@@ -136,4 +136,13 @@ public class MuhasebeFisController : UIController
     {
         return Ok(await _service.GetMizanAsync(filter, cancellationToken));
     }
+
+    [HttpPost("mizan-bakiye")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<MizanDto>> GetMizanBakiye(
+        [FromBody] MizanFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.GetMizanBakiyeAsync(filter, cancellationToken));
+    }
 }

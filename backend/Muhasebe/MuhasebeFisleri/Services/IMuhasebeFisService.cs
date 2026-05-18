@@ -15,4 +15,5 @@ public interface IMuhasebeFisService : IBaseRdbmsService<MuhasebeFisDto, Muhaseb
     Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<MuavinDefterDto> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default);
     Task<MizanDto> GetMizanAsync(MizanFilterDto filter, CancellationToken cancellationToken = default);
+    Task<MizanDto> GetMizanBakiyeAsync(MizanFilterDto filter, CancellationToken cancellationToken = default);
 }

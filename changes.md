@@ -5475,3 +5475,68 @@ Hata → RollbackAsync
 9 | Üst hesap eksikse | 400 "Üst muhasebe hesabı bulunamadı: {kod}" |
 10 | Result alanları | `IslenenFisSayisi`, `IslenenSatirSayisi`, `SilinenBakiyeKaydiSayisi`, `OlusturulanBakiyeKaydiSayisi` dolu dönmeli |
 11 | Aynı rebuild iki kere çalıştırma | Sonuç tutarlı kalmalı |
+
+---
+
+## Faz 16 — Bakiye Tablosundan Hızlı Mizan Endpoint (2026-05-19)
+
+### Amaç
+Mizanı her seferinde `MuhasebeFisSatir` üzerinden SUM/GROUP BY ile üretmek yerine, önceden güncellenmiş `MuhasebeHesapBakiye` özet tablosundan hızlıca okumak. Mevcut `POST ui/muhasebe/fisler/mizan` endpoint'i bozulmadan yeni `POST ui/muhasebe/fisler/mizan-bakiye` endpoint'i eklendi.
+
+### Yeni Endpoint
+```
+POST ui/muhasebe/fisler/mizan-bakiye
+Body: MizanFilterDto
+Response: MizanDto
+Permission: MuhasebeFisYonetimi.View
+```
+
+### Service Metodu
+**Interface** — [`IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs:18):
+- `Task<MizanDto> GetMizanBakiyeAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)`
+
+**Implementation** — [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:728):
+- **Validasyon:** TesisId > 0, MaliYil zorunlu (2000-2100), Donem opsiyonel 1-12, BaslangicTarihi/BitisTarihi doluysa hata
+- **Bakiye tablosu sorgusu:** `MuhasebeHesapBakiyeleri` üzerinden `Include(MuhasebeHesapPlani)` ile
+  - `IsDeleted=false`, `TesisId`, `MaliYil`, opsiyonel `Donem`
+  - `AltHesaplariDahilEt=false` → sadece `KonsolideMi=false`
+  - `SadeceHareketGorenHesaplar=true` → `BorcToplam != 0 || AlacakToplam != 0`
+  - HesapKodu aralığı: `string.Compare` ile
+- **Birleştirme:** Aynı `HesapKodu` için `GroupBy` ile gerçek ve konsolide satırlar tek satırda toplanır
+- **Hesap planı bilgisi:** TesisId eşleşen kayıt öncelikli, yoksa ilk kayıt kullanılır
+- **Genel toplamlar:** Sadece `KonsolideMi=false` olan gerçek hareket hesaplarından hesaplanır (konsolide satırlar şişirmez)
+- **Sayfalama:** `OrderBy(HesapKodu)` → `Skip`/`Take`
+
+### Bakiye Tablosundan Okuma Mantığı
+1. `MuhasebeHesapBakiyeleri` → `Include(MuhasebeHesapPlani)` → `AsNoTracking()` → `ToListAsync`
+2. Genel toplamlar sadece `KonsolideMi=false` kayıtlardan
+3. `GroupBy(HesapKodu)` ile aynı kod birleştirilir
+4. Her grup için `MizanSatirDto` oluşturulur
+5. `OrderBy(HesapKodu)` + sayfalama
+
+### Genel Toplamların Çift Sayımı Nasıl Engellendi
+Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `GenelAlacakBakiye`) yalnızca `KonsolideMi=false` olan gerçek hareket hesaplarından hesaplanır. `KonsolideMi=true` olan üst hesap konsolide satırları liste satırlarında gösterilebilir ancak genel toplamlara dahil edilmez. Bu sayede aynı hareketin hem gerçek hem konsolide satırda görünmesi genel toplamları şişirmez.
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | [`IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs) | `GetMizanBakiyeAsync` metodu eklendi |
+| 2 | [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs) | `GetMizanBakiyeAsync` implementasyonu + `using` direktifleri eklendi |
+| 3 | [`MuhasebeFisController.cs`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs) | `POST mizan-bakiye` endpoint eklendi |
+
+### Build
+- **Backend:** ✅ 0 errors, 6 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test Senaryosu
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | `POST ui/muhasebe/fisler/mizan-bakiye` TesisId + MaliYil ile çağır | 200, `MizanDto` dönmeli |
+| 2 | MaliYil verilmezse | 400 "Bakiye tablosundan mizan için mali yıl seçilmelidir." |
+| 3 | BaslangicTarihi/BitisTarihi verilirse | 400 "Bakiye tablosundan mizan için tarih aralığı yerine MaliYil/Donem filtresi kullanılmalıdır." |
+| 4 | `AltHesaplariDahilEt=false` | Sadece `KonsolideMi=false` gerçek hesaplar dönmeli |
+| 5 | `AltHesaplariDahilEt=true` | `KonsolideMi=true` üst hesaplar da görünmeli |
+| 6 | Aynı HesapKodu için gerçek ve konsolide kayıt varsa | Tek satır dönmeli, toplamlar birleşmeli |
+| 7 | GenelToplamBorc/Alacak konsolide satırlar nedeniyle | İkiye katlanmamalı |
+| 8 | HesapKoduBaslangic/HesapKoduBitis filtresi | Doğru çalışmalı |
+| 9 | Page/PageSize | Display satırlarına uygulanmalı |
+| 10 | Mevcut `POST ui/muhasebe/fisler/mizan` endpoint'i | Bozulmamalı, aynen çalışmalı |

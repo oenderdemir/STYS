@@ -5540,3 +5540,98 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 | 8 | HesapKoduBaslangic/HesapKoduBitis filtresi | Doğru çalışmalı |
 | 9 | Page/PageSize | Display satırlarına uygulanmalı |
 | 10 | Mevcut `POST ui/muhasebe/fisler/mizan` endpoint'i | Bozulmamalı, aynen çalışmalı |
+## Faz 16A — MuhasebeHesapBakiye Sorgu Alanları (2026-05-19)
+
+### Amaç
+`MuhasebeHesapBakiye` tablosuna sorgu-filtreleme ve raporlama kolaylığı sağlayacak 4 computed alan eklenmesi.
+
+### 1. Entity Değişiklikleri
+[`MuhasebeHesapBakiye.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Entities/MuhasebeHesapBakiye.cs:36-51) — 4 yeni alan:
+
+| Alan | Tip | Açıklama |
+|------|-----|----------|
+| `NetBakiye` | `decimal` | `BorcToplam - AlacakToplam`. Pozitif = borç bakiyesi, negatif = alacak bakiyesi |
+| `BakiyeTipi` | `string` | `"Borc"` / `"Alacak"` / `"Sifir"` |
+| `HesapSeviyesi` | `int` | `HesapKodu` segment sayısı. Örn: "150" → 1, "150.01" → 2 |
+| `UstHesapKodu` | `string?` | Bir üst hesabın tam kodu. Örn: "150.01.001" → "150.01", "150" → null |
+
+### 2. DTO Değişiklikleri
+[`MuhasebeHesapBakiyeDtos.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Dtos/MuhasebeHesapBakiyeDtos.cs:26-31):
+- `MuhasebeHesapBakiyeDto`: `NetBakiye`, `BakiyeTipi`, `HesapSeviyesi`, `UstHesapKodu` alanları eklendi
+- `MuhasebeHesapBakiyeFilterDto`: `HesapSeviyesi` (int?), `UstHesapKodu` (string?), `BakiyeTipi` (string?) filtre alanları eklendi
+- `Normalize()`: `UstHesapKodu` ve `BakiyeTipi` trim/normalize mantığı eklendi
+
+### 3. Fluent API / DbContext
+[`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:2098-2134):
+- `NetBakiye` → `HasPrecision(18,2)`
+- `BakiyeTipi` → `HasMaxLength(16).IsRequired()`
+- `UstHesapKodu` → `HasMaxLength(64)`
+- 3 yeni index:
+  - `(TesisId, MaliYil, Donem, HesapSeviyesi)` — seviye bazlı sorgular için
+  - `UstHesapKodu` — üst hesaba göre filtreleme için
+  - `BakiyeTipi` — borç/alacak filtrelemesi için
+
+### 4. Migration
+**Migration adı:** `20260518232359_AddMuhasebeHesapBakiyeSorguAlanlari`
+- 4 yeni kolon: `NetBakiye`, `BakiyeTipi`, `HesapSeviyesi`, `UstHesapKodu`
+- 3 yeni index: `IX_MuhasebeHesapBakiyeleri_BakiyeTipi`, `IX_MuhasebeHesapBakiyeleri_TesisId_MaliYil_Donem_HesapSeviyesi`, `IX_MuhasebeHesapBakiyeleri_UstHesapKodu`
+
+### 5. Hesaplanan Alanların Set Edilme Mekanizması
+
+**Her iki serviste de aynı helper metotlar mevcut:**
+
+#### `MuhasebeHesapBakiyeGuncellemeService` (fiş onay/iptal akışı)
+[`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs:205-239):
+- `RecalculateBakiye(MuhasebeHesapBakiye bakiye)` — entity seviyesinde 4 alanı set eder
+- `CalculateHesapSeviyesi(string hesapKodu)` — `Split('.')` ile segment sayısı
+- `GetUstHesapKodu(string hesapKodu)` — son segment hariç join
+
+#### `MuhasebeHesapBakiyeService` (rebuild + manuel CRUD)
+[`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs:399-514):
+- `NormalizeAndSetComputedFields(MuhasebeHesapBakiyeDto dto)` — DTO seviyesinde 4 alanı set eder
+- `RecalculateBakiye(MuhasebeHesapBakiye bakiye)` — entity seviyesinde rebuild sırasında çağrılır
+- `CalculateHesapSeviyesi(string)` ve `GetUstHesapKodu(string)` — static helpers
+
+**Rebuild akışı:** Her yeni `MuhasebeHesapBakiye` oluşturulduğunda `RecalculateBakiye(yeniBakiye)` çağrılarak 4 alan doğrudan set edilir.
+
+### 6. Repository ApplyFilter
+[`MuhasebeHesapBakiyeRepository.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/MuhasebeHesapBakiyeRepository.cs:121-129):
+- `HesapSeviyesi` filtresi: `x.HesapSeviyesi == filter.HesapSeviyesi.Value`
+- `UstHesapKodu` filtresi: `x.UstHesapKodu == filter.UstHesapKodu`
+- `BakiyeTipi` filtresi: `x.BakiyeTipi == filter.BakiyeTipi`
+
+### 7. AutoMapper
+[`MuhasebeHesapBakiyeProfile.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Mapping/MuhasebeHesapBakiyeProfile.cs:13):
+- `Bakiye` mapping: `Math.Abs(s.NetBakiye)` (önceden `Math.Abs(s.BorcToplam - s.AlacakToplam)` idi)
+- `BakiyeTipi` auto-mapped (entity'deki stored değer kullanılır)
+
+### 8. Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | [`MuhasebeHesapBakiye.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Entities/MuhasebeHesapBakiye.cs) | 4 yeni alan eklendi |
+| 2 | [`MuhasebeHesapBakiyeDtos.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Dtos/MuhasebeHesapBakiyeDtos.cs) | DTO + FilterDto + Normalize güncellendi |
+| 3 | [`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs) | Fluent API + 3 yeni index |
+| 4 | [`MuhasebeHesapBakiyeProfile.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Mapping/MuhasebeHesapBakiyeProfile.cs) | Bakiye mapping NetBakiye üzerinden |
+| 5 | [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs) | RecalculateBakiye + helpers |
+| 6 | [`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs) | RecalculateBakiye + NormalizeAndSetComputedFields + helpers |
+| 7 | [`MuhasebeHesapBakiyeRepository.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/MuhasebeHesapBakiyeRepository.cs) | ApplyFilter güncellendi |
+| 8 | `20260518232359_AddMuhasebeHesapBakiyeSorguAlanlari.cs` | EF migration (4 kolon + 3 index) |
+
+### 9. Build
+- **Backend:** ✅ 0 errors, 6 warnings (tümü önceden var olan uyarılar)
+
+### 10. Manuel Test Senaryosu
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | Rebuild sonrası `NetBakiye` alanı | `BorcToplam - AlacakToplam` doğru hesaplanmış olmalı |
+| 2 | Rebuild sonrası `BakiyeTipi` alanı | Borç fazlaysa "Borc", alacak fazlaysa "Alacak", eşitse "Sifir" |
+| 3 | Rebuild sonrası `HesapSeviyesi` alanı | "150" → 1, "150.01" → 2, "150.01.001" → 3 |
+| 4 | Rebuild sonrası `UstHesapKodu` alanı | "150.01.001" → "150.01", "150.01" → "150", "150" → null |
+| 5 | Fiş onaylama sonrası bakiye güncelleme | 4 computed alan doğru set edilmeli |
+| 6 | `HesapSeviyesi` filtresi ile listeleme | Sadece istenen seviyedeki hesaplar dönmeli |
+| 7 | `UstHesapKodu` filtresi ile listeleme | Sadece belirtilen üst koda bağlı hesaplar dönmeli |
+| 8 | `BakiyeTipi` filtresi ile listeleme | Sadece "Borc" veya "Alacak" tipindeki kayıtlar dönmeli |
+| 9 | Mevcut `POST ui/muhasebe/fisler/mizan-bakiye` | Bozulmamalı, aynen çalışmalı |
+| 10 | Mevcut `POST ui/muhasebe/fisler/mizan` | Bozulmamalı, aynen çalışmalı |
+
+---

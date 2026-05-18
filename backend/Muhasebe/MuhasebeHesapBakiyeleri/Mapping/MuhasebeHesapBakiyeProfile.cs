@@ -10,11 +10,7 @@ public class MuhasebeHesapBakiyeProfile : Profile
     {
         CreateMap<MuhasebeHesapBakiye, MuhasebeHesapBakiyeDto>()
             .ForMember(d => d.TesisAdi, o => o.MapFrom(s => s.Tesis != null ? s.Tesis.Ad : null))
-            .ForMember(d => d.Bakiye, o => o.MapFrom(s => Math.Abs(s.BorcToplam - s.AlacakToplam)))
-            .ForMember(d => d.BakiyeTipi, o => o.MapFrom(s =>
-                s.BorcToplam > s.AlacakToplam ? "Borc" :
-                s.AlacakToplam > s.BorcToplam ? "Alacak" :
-                "Sifir"));
+            .ForMember(d => d.Bakiye, o => o.MapFrom(s => Math.Abs(s.NetBakiye)));
 
         CreateMap<MuhasebeHesapBakiyeDto, MuhasebeHesapBakiye>();
         CreateMap<CreateMuhasebeHesapBakiyeRequest, MuhasebeHesapBakiyeDto>();

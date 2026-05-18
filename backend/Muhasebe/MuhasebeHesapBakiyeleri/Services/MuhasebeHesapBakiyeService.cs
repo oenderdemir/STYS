@@ -273,7 +273,7 @@ public class MuhasebeHesapBakiyeService
             {
                 var net = agg.BorcToplam - agg.AlacakToplam;
 
-                yeniBakiyeler.Add(new MuhasebeHesapBakiye
+                var yeniBakiye = new MuhasebeHesapBakiye
                 {
                     TesisId = agg.TesisId,
                     MaliYil = agg.MaliYil,
@@ -284,10 +284,13 @@ public class MuhasebeHesapBakiyeService
                     KonsolideMi = agg.KonsolideMi,
                     BorcToplam = agg.BorcToplam,
                     AlacakToplam = agg.AlacakToplam,
-                    BorcBakiye = net > 0 ? net : 0,
-                    AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
                     SonGuncellemeTarihi = DateTime.UtcNow
-                });
+                };
+
+                // Hesaplanan alanları set et
+                RecalculateBakiye(yeniBakiye);
+
+                yeniBakiyeler.Add(yeniBakiye);
             }
 
             await _dbContext.MuhasebeHesapBakiyeleri
@@ -397,11 +400,40 @@ public class MuhasebeHesapBakiyeService
     {
         // Bakiye alanları hesapla
         var net = dto.BorcToplam - dto.AlacakToplam;
+        dto.NetBakiye = net;
         dto.BorcBakiye = net > 0 ? net : 0;
         dto.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
+        dto.BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir";
+        dto.Bakiye = Math.Abs(net);
+
+        dto.HesapSeviyesi = CalculateHesapSeviyesi(dto.HesapKodu);
+        dto.UstHesapKodu = GetUstHesapKodu(dto.HesapKodu);
 
         // Son güncelleme tarihi
         dto.SonGuncellemeTarihi = DateTime.UtcNow;
+    }
+
+    private static int CalculateHesapSeviyesi(string hesapKodu)
+    {
+        if (string.IsNullOrWhiteSpace(hesapKodu))
+            return 0;
+
+        return hesapKodu
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+    }
+
+    private static string? GetUstHesapKodu(string hesapKodu)
+    {
+        if (string.IsNullOrWhiteSpace(hesapKodu))
+            return null;
+
+        var parts = hesapKodu.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length <= 1)
+            return null;
+
+        return string.Join('.', parts.Take(parts.Length - 1));
     }
 
     private async Task ValidateAsync(MuhasebeHesapBakiyeDto dto, CancellationToken cancellationToken, int? existingId = null)
@@ -464,6 +496,19 @@ public class MuhasebeHesapBakiyeService
         var duplicateExists = await duplicateQuery.AnyAsync(cancellationToken);
         if (duplicateExists)
             throw new BaseException("Aynı tesis, mali yıl, dönem, hesap ve konsolide bilgisi için aktif kayıt zaten mevcut.", 400);
+    }
+
+    private static void RecalculateBakiye(MuhasebeHesapBakiye bakiye)
+    {
+        var net = bakiye.BorcToplam - bakiye.AlacakToplam;
+
+        bakiye.NetBakiye = net;
+        bakiye.BorcBakiye = net > 0 ? net : 0;
+        bakiye.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
+        bakiye.BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir";
+
+        bakiye.HesapSeviyesi = CalculateHesapSeviyesi(bakiye.HesapKodu);
+        bakiye.UstHesapKodu = GetUstHesapKodu(bakiye.HesapKodu);
     }
 
     // ── Rebuild yardımcı tipleri ve metotları ──

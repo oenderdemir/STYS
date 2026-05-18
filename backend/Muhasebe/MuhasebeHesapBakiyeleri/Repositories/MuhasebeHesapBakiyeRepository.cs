@@ -118,6 +118,15 @@ public class MuhasebeHesapBakiyeRepository
         if (!string.IsNullOrEmpty(filter.HesapKoduBitis))
             query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis) <= 0);
 
+        if (filter.HesapSeviyesi.HasValue)
+            query = query.Where(x => x.HesapSeviyesi == filter.HesapSeviyesi.Value);
+
+        if (!string.IsNullOrEmpty(filter.UstHesapKodu))
+            query = query.Where(x => x.UstHesapKodu == filter.UstHesapKodu);
+
+        if (!string.IsNullOrEmpty(filter.BakiyeTipi))
+            query = query.Where(x => x.BakiyeTipi == filter.BakiyeTipi);
+
         return query;
     }
 }

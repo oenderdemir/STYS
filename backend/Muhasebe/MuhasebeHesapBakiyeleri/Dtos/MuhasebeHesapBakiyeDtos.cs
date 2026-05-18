@@ -23,8 +23,12 @@ public class MuhasebeHesapBakiyeDto : BaseRdbmsDto<int>
     public decimal BorcBakiye { get; set; }
     public decimal AlacakBakiye { get; set; }
 
+    public decimal NetBakiye { get; set; }
     public decimal Bakiye { get; set; }
     public string BakiyeTipi { get; set; } = string.Empty;
+
+    public int HesapSeviyesi { get; set; }
+    public string? UstHesapKodu { get; set; }
 
     public DateTime SonGuncellemeTarihi { get; set; }
 }
@@ -69,6 +73,10 @@ public class MuhasebeHesapBakiyeFilterDto
 
     public bool? KonsolideMi { get; set; }
 
+    public int? HesapSeviyesi { get; set; }
+    public string? UstHesapKodu { get; set; }
+    public string? BakiyeTipi { get; set; }
+
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 500;
 
@@ -85,6 +93,14 @@ public class MuhasebeHesapBakiyeFilterDto
         HesapKoduBitis = string.IsNullOrWhiteSpace(HesapKoduBitis)
             ? null
             : HesapKoduBitis.Trim();
+
+        UstHesapKodu = string.IsNullOrWhiteSpace(UstHesapKodu)
+            ? null
+            : UstHesapKodu.Trim();
+
+        BakiyeTipi = string.IsNullOrWhiteSpace(BakiyeTipi)
+            ? null
+            : BakiyeTipi.Trim();
     }
 }
 

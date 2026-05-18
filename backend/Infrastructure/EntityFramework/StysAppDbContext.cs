@@ -2095,6 +2095,16 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AlacakBakiye)
                 .HasPrecision(18, 2);
 
+            entity.Property(x => x.NetBakiye)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.BakiyeTipi)
+                .HasMaxLength(16)
+                .IsRequired();
+
+            entity.Property(x => x.UstHesapKodu)
+                .HasMaxLength(64);
+
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
@@ -2119,6 +2129,9 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.Donem });
             entity.HasIndex(x => x.HesapKodu);
             entity.HasIndex(x => x.KonsolideMi);
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.Donem, x.HesapSeviyesi });
+            entity.HasIndex(x => x.UstHesapKodu);
+            entity.HasIndex(x => x.BakiyeTipi);
         });
 
         modelBuilder.Entity<Bildirim>(entity =>

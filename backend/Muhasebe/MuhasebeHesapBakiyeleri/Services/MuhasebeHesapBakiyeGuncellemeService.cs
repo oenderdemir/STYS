@@ -205,8 +205,37 @@ public class MuhasebeHesapBakiyeGuncellemeService
     private static void RecalculateBakiye(MuhasebeHesapBakiye bakiye)
     {
         var net = bakiye.BorcToplam - bakiye.AlacakToplam;
+
+        bakiye.NetBakiye = net;
         bakiye.BorcBakiye = net > 0 ? net : 0;
         bakiye.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
+        bakiye.BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir";
+
+        bakiye.HesapSeviyesi = CalculateHesapSeviyesi(bakiye.HesapKodu);
+        bakiye.UstHesapKodu = GetUstHesapKodu(bakiye.HesapKodu);
+    }
+
+    private static int CalculateHesapSeviyesi(string hesapKodu)
+    {
+        if (string.IsNullOrWhiteSpace(hesapKodu))
+            return 0;
+
+        return hesapKodu
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+    }
+
+    private static string? GetUstHesapKodu(string hesapKodu)
+    {
+        if (string.IsNullOrWhiteSpace(hesapKodu))
+            return null;
+
+        var parts = hesapKodu.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length <= 1)
+            return null;
+
+        return string.Join('.', parts.Take(parts.Length - 1));
     }
 
     /// <summary>

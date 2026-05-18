@@ -85,19 +85,18 @@ public class MuhasebeHesapBakiyeGuncellemeService
                 kod => kod,
                 kod =>
                 {
-                    var tesisli = ustHesapListesi
-                        .FirstOrDefault(x => x.TamKod == kod && x.TesisId == fis.TesisId);
+                    var secilen = ustHesapListesi
+                        .Where(x => x.TamKod == kod)
+                        .OrderByDescending(x => x.TesisId == fis.TesisId)
+                        .ThenByDescending(x => x.TesisId == null)
+                        .FirstOrDefault();
 
-                    if (tesisli is not null)
-                        return tesisli;
+                    if (secilen is null)
+                        throw new BaseException(
+                            $"Üst muhasebe hesabı bulunamadı: {kod}",
+                            400);
 
-                    var genel = ustHesapListesi
-                        .FirstOrDefault(x => x.TamKod == kod && x.TesisId == null);
-
-                    if (genel is not null)
-                        return genel;
-
-                    return ustHesapListesi.First(x => x.TamKod == kod);
+                    return secilen;
                 });
         }
 
@@ -148,54 +147,66 @@ public class MuhasebeHesapBakiyeGuncellemeService
         decimal alacak,
         CancellationToken cancellationToken)
     {
-        // Mevcut kayıt var mı?
-        var mevcut = await _dbContext.MuhasebeHesapBakiyeleri
-            .FirstOrDefaultAsync(x =>
+        // Önce henüz SaveChanges yapılmamış local tracked entity'leri ara.
+        // Aynı fiş içinde aynı unique key birden fazla kez işlenirse,
+        // ilk çağrıda eklenen Added entity ikinci çağrıda DB sorgusuyla bulunamaz
+        // ve duplicate unique index hatası oluşabilir.
+        var mevcut = _dbContext.MuhasebeHesapBakiyeleri.Local
+            .FirstOrDefault(x =>
                 x.TesisId == tesisId
                 && x.MaliYil == maliYil
                 && x.Donem == donem
                 && x.MuhasebeHesapPlaniId == hesap.Id
                 && x.KonsolideMi == konsolideMi
-                && !x.IsDeleted,
-                cancellationToken);
+                && !x.IsDeleted);
+
+        if (mevcut is null)
+        {
+            mevcut = await _dbContext.MuhasebeHesapBakiyeleri
+                .FirstOrDefaultAsync(x =>
+                    x.TesisId == tesisId
+                    && x.MaliYil == maliYil
+                    && x.Donem == donem
+                    && x.MuhasebeHesapPlaniId == hesap.Id
+                    && x.KonsolideMi == konsolideMi
+                    && !x.IsDeleted,
+                    cancellationToken);
+        }
 
         if (mevcut is not null)
         {
-            // Mevcut kaydı güncelle
             mevcut.BorcToplam += borc;
             mevcut.AlacakToplam += alacak;
-
-            var net = mevcut.BorcToplam - mevcut.AlacakToplam;
-            mevcut.BorcBakiye = net > 0 ? net : 0;
-            mevcut.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
-
             mevcut.HesapKodu = hesap.TamKod;
             mevcut.HesapAdi = hesap.Ad;
             mevcut.SonGuncellemeTarihi = DateTime.UtcNow;
+            RecalculateBakiye(mevcut);
+            return;
         }
-        else
+
+        var yeni = new MuhasebeHesapBakiye
         {
-            // Yeni kayıt oluştur
-            var net = borc - alacak;
+            TesisId = tesisId,
+            MaliYil = maliYil,
+            Donem = donem,
+            MuhasebeHesapPlaniId = hesap.Id,
+            HesapKodu = hesap.TamKod,
+            HesapAdi = hesap.Ad,
+            KonsolideMi = konsolideMi,
+            BorcToplam = borc,
+            AlacakToplam = alacak,
+            SonGuncellemeTarihi = DateTime.UtcNow,
+        };
 
-            var yeni = new MuhasebeHesapBakiye
-            {
-                TesisId = tesisId,
-                MaliYil = maliYil,
-                Donem = donem,
-                MuhasebeHesapPlaniId = hesap.Id,
-                HesapKodu = hesap.TamKod,
-                HesapAdi = hesap.Ad,
-                KonsolideMi = konsolideMi,
-                BorcToplam = borc,
-                AlacakToplam = alacak,
-                BorcBakiye = net > 0 ? net : 0,
-                AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
-                SonGuncellemeTarihi = DateTime.UtcNow,
-            };
+        RecalculateBakiye(yeni);
+        await _dbContext.MuhasebeHesapBakiyeleri.AddAsync(yeni, cancellationToken);
+    }
 
-            await _dbContext.MuhasebeHesapBakiyeleri.AddAsync(yeni, cancellationToken);
-        }
+    private static void RecalculateBakiye(MuhasebeHesapBakiye bakiye)
+    {
+        var net = bakiye.BorcToplam - bakiye.AlacakToplam;
+        bakiye.BorcBakiye = net > 0 ? net : 0;
+        bakiye.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
     }
 
     /// <summary>

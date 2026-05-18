@@ -5300,3 +5300,88 @@ Fiş onaylandığında ve ters kayıt oluşturulduğunda `MuhasebeHesapBakiye` t
 | 6 | Onaylı fişi tekrar onaylamayı dene | 400 "Fiş zaten onaylanmış" — bakiye değişmemeli |
 | 7 | İptal edilmiş fişi tekrar iptal etmeyi dene | 400 "Fiş zaten iptal edilmiş" — bakiye değişmemeli |
 | 8 | Taslak fiş için `FisBakiyeleriniIsleAsync` çağır | 400 "Muhasebe bakiyesi yalnızca onaylı veya ters kayıt fişleri için güncellenebilir" |
+
+---
+
+## Faz 14 Küçük Düzeltme — `MuhasebeHesapBakiyeGuncellemeService` Güvenlik Düzeltmesi (2026-05-19)
+
+### Amaç
+`MuhasebeHesapBakiyeGuncellemeService` içinde iki güvenlik açığını kapatmak:
+1. Aynı transaction içinde aynı unique key ile duplicate `MuhasebeHesapBakiye` eklenmesini engellemek
+2. Üst hesap bulunamadığında teknik exception (null reference) yerine kullanıcı dostu hata vermek
+
+### Problem 1: Local tracked entity kontrolü eksik
+
+**Dosya:** [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs:141)
+
+**Hata:** `BakiyeSatiriArtirAsync` mevcut kayıtları sadece DB'den arıyordu. Servis `SaveChanges` çağırmadığı için, aynı fiş içinde aynı `(TesisId, MaliYil, Donem, MuhasebeHesapPlaniId, KonsolideMi)` kombinasyonu birden fazla kez işlenirse:
+- İlk çağrıda `Added` state'inde eklenen entity
+- İkinci çağrıda DB sorgusuyla bulunamaz
+- Sonuç: aynı unique key ile ikinci bir entity eklenir → `SaveChanges` sırasında unique index hatası
+
+**Çözüm:**
+1. [`BakiyeSatiriArtirAsync`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs:154) içinde önce `_dbContext.MuhasebeHesapBakiyeleri.Local` ile tracked entity aranır
+2. Local'da yoksa DB'den sorgulanır
+3. Bulunursa güncelle, bulunamazsa yeni oluştur
+
+```csharp
+// Önce henüz SaveChanges yapılmamış local tracked entity'leri ara
+var mevcut = _dbContext.MuhasebeHesapBakiyeleri.Local
+    .FirstOrDefault(x =>
+        x.TesisId == tesisId
+        && x.MaliYil == maliYil
+        && x.Donem == donem
+        && x.MuhasebeHesapPlaniId == hesap.Id
+        && x.KonsolideMi == konsolideMi
+        && !x.IsDeleted);
+
+if (mevcut is null)
+{
+    mevcut = await _dbContext.MuhasebeHesapBakiyeleri
+        .FirstOrDefaultAsync(x => ...);
+}
+```
+
+### Problem 2: Üst hesap bulunamadığında teknik exception
+
+**Dosya:** [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs:88)
+
+**Hata:** `ustHesapLookup` dictionary oluşturulurken `First(x => x.TamKod == kod)` kullanılıyordu. Eğer üst hesap kodu DB'de yoksa `InvalidOperationException` (Sequence contains no matching element) fırlıyordu — kullanıcı dostu değil.
+
+**Çözüm:**
+1. `First(...)` → `FirstOrDefault(...)` + null kontrolü
+2. Null ise `BaseException($"Üst muhasebe hesabı bulunamadı: {kod}", 400)` fırlat
+3. Seçim sırası aynı: `OrderByDescending(TesisId == fis.TesisId) → ThenByDescending(TesisId == null)` ile en uygun kayıt
+
+```csharp
+var secilen = ustHesapListesi
+    .Where(x => x.TamKod == kod)
+    .OrderByDescending(x => x.TesisId == fis.TesisId)
+    .ThenByDescending(x => x.TesisId == null)
+    .FirstOrDefault();
+
+if (secilen is null)
+    throw new BaseException($"Üst muhasebe hesabı bulunamadı: {kod}", 400);
+```
+
+### Ek iyileştirme: `RecalculateBakiye` helper
+
+Aynı bakiye hesaplama mantığı (`BorcToplam - AlacakToplam → BorcBakiye/AlacakBakiye`) iki yerde tekrarlanıyordu. Kod tekrarını önlemek için `private static void RecalculateBakiye(MuhasebeHesapBakiye)` helper metodu oluşturuldu.
+
+### Değişen Dosyalar
+# | Dosya | Değişiklik |
+|---|-------|------------|
+1 | [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs) | `BakiyeSatiriArtirAsync`: Local tracked entity kontrolü eklendi, `RecalculateBakiye` helper'a çıkarıldı; `ustHesapLookup`: `First` → `FirstOrDefault` + `BaseException` |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test Senaryosu
+# | Test | Beklenen |
+|---|------|----------|
+1 | Aynı fiş içinde aynı hesap iki satırda geçsin (örn: 150.01.001 borç 100 + 150.01.001 borç 200) | Tek `MuhasebeHesapBakiye` kaydı oluşmalı, `BorcToplam = 300` |
+2 | Aynı fiş içinde 150.01.001 ve 150.01.002 hesapları varsa | 150.01 ve 150 konsolide bakiye kayıtları duplicate oluşmadan birleşmeli |
+3 | `SaveChanges` sonrası | Unique index hatası oluşmamalı |
+4 | Hesap planında olmayan bir üst kod için onaylama (örn: alt hesap "999.01" ama "999" hesap planında yok) | 400 "Üst muhasebe hesabı bulunamadı: 999" |
+5 | Onaylı fiş bakiyeleri | Doğru artırmalı |
+6 | Ters kayıt fişi bakiyeleri | Doğru ters etki yapmalı (borç/alacak ters çevrilmiş) |

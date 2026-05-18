@@ -4974,3 +4974,56 @@ Sonuç:
 | 5 | Genel toplamlar | Sadece gerçek hareket satırlarından, çift sayım yok |
 | 6 | SadeceHareketGorenHesaplar=true | Sıfır bakiyeli konsolide hesaplar listelenmemeli |
 | 7 | Üst hesabın kendi hareketi | Konsolidasyon kendi hareketini KAPSAMAZ (ayrı satır) |
+
+
+---
+
+## Ara Düzeltme Fazı 1 — Mizan Konsolidasyon Birleştirme + Muavin Unused Parametre (2026-05-18)
+
+### Düzeltme 1: Faz 12 — Konsolide Üst Hesap ile Gerçek Üst Hesap Satırı Birleştirme
+
+**Problem:** `GetMizanAsync` içinde üst hesabın kendi doğrudan hareketi varsa, aynı hesap kodu iki satır olarak dönebiliyordu (biri `KonsolideSatirMi=false` kendi hareketi, biri `KonsolideSatirMi=true` konsolide).
+
+**Çözüm:**
+- Konsolide satır eklenmeden önce `mizanSatirlar` içinde aynı `HesapKodu` var mı kontrol edilir
+- Varsa (`existingAncestorSatir`): ToplamBorc/ToplamAlacak mevcut satıra eklenir, `KonsolideSatirMi=true` yapılır, `RecalculateMizanSatirBakiye` ile bakiyeler yenilenir
+- Yoksa: Mevcut davranış — yeni konsolide satır eklenir
+
+**Genel Toplamlar Düzeltmesi:**
+- Genel toplamlar artık konsolidasyon ÖNCESİ hesaplanır (adım 8)
+- Bu sayede üst hesabın kendi gerçek hareketi genel toplamdan düşmez
+- Konsolide satırlar genel toplamları şişirmez
+
+**Yeni Helper:** `RecalculateMizanSatirBakiye(MizanSatirDto satir)` — Net bakiyeyi ToplamBorc ve ToplamAlacak'tan yeniden hesaplar
+
+### Düzeltme 2: Faz 10 — GetMuavinDefterAsync Kullanılmayan Parametre
+
+**Problem:** `IMuhasebeFisRepository.GetMuavinDefterAsync` `hesapKoduPrefix` parametresini alıyor ancak repository implementasyonunda kullanılmıyordu. Hesap filtresi zaten service tarafında yapılıyor.
+
+**Çözüm:**
+- `IMuhasebeFisRepository.GetMuavinDefterAsync` imzasından `hesapKoduPrefix` kaldırıldı
+- `MuhasebeFisRepository.GetMuavinDefterAsync` implementasyon imzası güncellendi
+- `MuhasebeFisService.GetMuavinDefterAsync` çağrısı güncellendi
+- Service tarafındaki `hesapKoduPrefix` değişkeni korundu (AltHesaplariDahilEt satır filtrelemede kullanılıyor)
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs` | Konsolidasyon birleştirme + `RecalculateMizanSatirBakiye` helper + genel toplamlar konsolidasyon öncesine alındı + Muavin çağrı güncelleme |
+| 2 | `backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs` | `hesapKoduPrefix` parametresi kaldırıldı |
+| 3 | `backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs` | `hesapKoduPrefix` parametresi kaldırıldı |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | 150 → 50 borç, 150.01 → 100 borç, 150.02 → 200 borç, AltHesaplariDahilEt=true | 150 tek satır, borç 350, KonsolideSatirMi=true |
+| 2 | Aynı senaryo AltHesaplariDahilEt=false | 150 sadece kendi hareketiyle (50), konsolide satır YOK |
+| 3 | GenelToplamBorc | 350 (50+100+200), konsolide üst satır nedeniyle ikiye katlanmamalı |
+| 4 | Üst hesabın kendi hareketi genel toplamdan düşmemeli | 50 dahil edilmeli |
+| 5 | KonsolideSatirMi birleşen satırda true | Doğrulanmalı |
+| 6 | Seviye doğru | 150→1, 150.01→2, 150.02→2 |
+| 7 | Muavin defter endpoint'i çalışmalı | Eskisi gibi |
+| 8 | Muavin defter AltHesaplariDahilEt=true | Alt hesapları dahil etmeye devam etmeli |

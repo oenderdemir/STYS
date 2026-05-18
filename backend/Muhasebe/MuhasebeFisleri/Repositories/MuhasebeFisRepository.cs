@@ -63,7 +63,7 @@ public class MuhasebeFisRepository
         return await query.CountAsync(cancellationToken);
     }
 
-    public async Task<List<MuhasebeFis>> GetMuavinDefterAsync(MuavinDefterFilterDto filter, string hesapKoduPrefix, CancellationToken cancellationToken = default)
+    public async Task<List<MuhasebeFis>> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.MuhasebeFisler
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))

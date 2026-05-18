@@ -412,7 +412,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         var hesapKoduPrefix = hesap.TamKod!;
 
         // 4. Repository'den fişleri çek
-        var fisler = await _repository.GetMuavinDefterAsync(filter, hesapKoduPrefix, cancellationToken);
+        var fisler = await _repository.GetMuavinDefterAsync(filter, cancellationToken);
 
         // 5. Satırları flatten ve filtrele
         var tumSatirlar = new List<MuavinDefterSatirDto>();
@@ -591,7 +591,15 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             satir.Seviye = satir.HesapKodu.Split('.').Length;
         }
 
-        // 8. AltHesaplariDahilEt konsolidasyonu
+        // 8. Genel toplamları konsolidasyon ÖNCESİ hesapla
+        // (böylece sadece gerçek hareket satırları toplanır; üst hesap kendi
+        //  hareketi varsa ve sonradan KonsolideSatirMi=true yapılırsa düşmez)
+        var genelToplamBorc = mizanSatirlar.Sum(s => s.ToplamBorc);
+        var genelToplamAlacak = mizanSatirlar.Sum(s => s.ToplamAlacak);
+        var genelBorcBakiye = mizanSatirlar.Sum(s => s.BorcBakiye);
+        var genelAlacakBakiye = mizanSatirlar.Sum(s => s.AlacakBakiye);
+
+        // 9. AltHesaplariDahilEt konsolidasyonu
         if (filter.AltHesaplariDahilEt && mizanSatirlar.Count > 0)
         {
             // Gerçek hareket gören hesaplardan üst hesap kodlarını topla
@@ -637,38 +645,47 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     if (filter.SadeceHareketGorenHesaplar && consolidatedBorc == 0 && consolidatedAlacak == 0)
                         continue;
 
-                    var net = consolidatedBorc - consolidatedAlacak;
+                    // Üst hesap zaten mizanSatirlar'da varsa (kendi doğrudan hareketi olabilir),
+                    // konsolide toplamları mevcut satıra ekle; yoksa yeni satır oluştur.
+                    var existingAncestorSatir = mizanSatirlar
+                        .FirstOrDefault(x => x.HesapKodu == ancestorKod && !x.KonsolideSatirMi);
 
-                    mizanSatirlar.Add(new MizanSatirDto
+                    if (existingAncestorSatir is not null)
                     {
-                        MuhasebeHesapPlaniId = ancestorHesap.Id,
-                        HesapKodu = ancestorKod,
-                        HesapAdi = ancestorHesap.Ad ?? string.Empty,
-                        DetayHesapMi = ancestorHesap.DetayHesapMi,
-                        HareketGorebilirMi = ancestorHesap.HareketGorebilirMi,
-                        ToplamBorc = consolidatedBorc,
-                        ToplamAlacak = consolidatedAlacak,
-                        BorcBakiye = net > 0 ? net : 0,
-                        AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
-                        Bakiye = Math.Abs(net),
-                        BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
-                        KonsolideSatirMi = true,
-                        Seviye = ancestorKod.Split('.').Length,
-                    });
+                        existingAncestorSatir.ToplamBorc += consolidatedBorc;
+                        existingAncestorSatir.ToplamAlacak += consolidatedAlacak;
+                        existingAncestorSatir.KonsolideSatirMi = true;
+                        RecalculateMizanSatirBakiye(existingAncestorSatir);
+                    }
+                    else
+                    {
+                        var net = consolidatedBorc - consolidatedAlacak;
+
+                        mizanSatirlar.Add(new MizanSatirDto
+                        {
+                            MuhasebeHesapPlaniId = ancestorHesap.Id,
+                            HesapKodu = ancestorKod,
+                            HesapAdi = ancestorHesap.Ad ?? string.Empty,
+                            DetayHesapMi = ancestorHesap.DetayHesapMi,
+                            HareketGorebilirMi = ancestorHesap.HareketGorebilirMi,
+                            ToplamBorc = consolidatedBorc,
+                            ToplamAlacak = consolidatedAlacak,
+                            BorcBakiye = net > 0 ? net : 0,
+                            AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+                            Bakiye = Math.Abs(net),
+                            BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+                            KonsolideSatirMi = true,
+                            Seviye = ancestorKod.Split('.').Length,
+                        });
+                    }
                 }
             }
         }
 
-        // 9. Sırala: HesapKodu ascending
+        // 10. Sırala: HesapKodu ascending
         mizanSatirlar = mizanSatirlar
             .OrderBy(s => s.HesapKodu, StringComparer.Ordinal)
             .ToList();
-
-        // 10. Genel toplamlar (sadece gerçek hareket satırları üzerinden, konsolide satırları sayma)
-        var genelToplamBorc = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.ToplamBorc);
-        var genelToplamAlacak = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.ToplamAlacak);
-        var genelBorcBakiye = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.BorcBakiye);
-        var genelAlacakBakiye = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.AlacakBakiye);
 
         // 11. Sayfalama (hesap satırı bazlı)
         var pagedSatirlar = mizanSatirlar
@@ -676,7 +693,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             .Take(filter.PageSize)
             .ToList();
 
-        // 12. DTO'yu döndür
+        // 12. DTO'yu döndür (genel toplamlar konsolidasyon öncesinden)
         return new MizanDto
         {
             TesisId = filter.TesisId,
@@ -686,6 +703,18 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             GenelAlacakBakiye = genelAlacakBakiye,
             Satirlar = pagedSatirlar,
         };
+    }
+
+    /// <summary>
+    /// MizanSatirDto bakiyelerini ToplamBorc ve ToplamAlacak'a göre yeniden hesaplar.
+    /// </summary>
+    private static void RecalculateMizanSatirBakiye(MizanSatirDto satir)
+    {
+        var net = satir.ToplamBorc - satir.ToplamAlacak;
+        satir.BorcBakiye = net > 0 ? net : 0;
+        satir.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
+        satir.Bakiye = Math.Abs(net);
+        satir.BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir";
     }
 
     /// <summary>

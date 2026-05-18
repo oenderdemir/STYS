@@ -37,25 +37,73 @@ public class MuhasebeVergiHesapEslemeService
         return Mapper.Map<MuhasebeVergiHesapEslemeDto?>(entity);
     }
 
+    public override async Task<IEnumerable<MuhasebeVergiHesapEslemeDto>> GetAllAsync(Func<IQueryable<MuhasebeVergiHesapEsleme>, IQueryable<MuhasebeVergiHesapEsleme>>? include = null)
+    {
+        var effectiveInclude = include ?? (q => q
+            .Include(x => x.AlisKdvHesap)
+            .Include(x => x.SatisKdvHesap)
+            .Where(x => !x.IsDeleted)
+            .OrderBy(x => x.VergiTipi)
+            .ThenBy(x => x.Oran)
+            .ThenBy(x => x.TesisId));
+        return await base.GetAllAsync(effectiveInclude);
+    }
+
+    public override async Task<MuhasebeVergiHesapEslemeDto?> GetByIdAsync(int id, Func<IQueryable<MuhasebeVergiHesapEsleme>, IQueryable<MuhasebeVergiHesapEsleme>>? include = null)
+    {
+        var effectiveInclude = include ?? (q => q
+            .Include(x => x.AlisKdvHesap)
+            .Include(x => x.SatisKdvHesap)
+            .Where(x => !x.IsDeleted));
+        return await base.GetByIdAsync(id, effectiveInclude);
+    }
+
     public override async Task<MuhasebeVergiHesapEslemeDto> AddAsync(MuhasebeVergiHesapEslemeDto dto)
     {
+        NormalizeDto(dto);
         await ValidateAsync(dto, CancellationToken.None);
         return await base.AddAsync(dto);
     }
 
     public override async Task<MuhasebeVergiHesapEslemeDto> UpdateAsync(MuhasebeVergiHesapEslemeDto dto)
     {
-        await ValidateAsync(dto, CancellationToken.None);
+        NormalizeDto(dto);
+        await ValidateAsync(dto, CancellationToken.None, dto.Id);
         return await base.UpdateAsync(dto);
     }
 
-    private async Task ValidateAsync(MuhasebeVergiHesapEslemeDto dto, CancellationToken cancellationToken)
+    private static void NormalizeDto(MuhasebeVergiHesapEslemeDto dto)
+    {
+        dto.VergiTipi = dto.VergiTipi?.Trim().ToUpperInvariant() ?? string.Empty;
+        dto.Oran = Math.Round(dto.Oran, 2);
+    }
+
+    private async Task ValidateAsync(MuhasebeVergiHesapEslemeDto dto, CancellationToken cancellationToken, int? existingId = null)
     {
         if (string.IsNullOrWhiteSpace(dto.VergiTipi))
             throw new BaseException("Vergi tipi boş olamaz.", 400);
 
         if (!VergiTipleri.Hepsi.Contains(dto.VergiTipi))
             throw new BaseException($"Desteklenmeyen vergi tipi: {dto.VergiTipi}. Desteklenenler: {string.Join(", ", VergiTipleri.Hepsi)}", 400);
+
+        // Duplicate aktif kayıt kontrolü
+        var duplicateQuery = _dbContext.MuhasebeVergiHesapEslemeleri
+            .Where(x => x.VergiTipi == dto.VergiTipi
+                && x.Oran == dto.Oran
+                && x.AktifMi
+                && !x.IsDeleted);
+
+        if (dto.TesisId.HasValue)
+            duplicateQuery = duplicateQuery.Where(x => x.TesisId == dto.TesisId.Value);
+        else
+            duplicateQuery = duplicateQuery.Where(x => x.TesisId == null);
+
+        if (existingId.HasValue)
+            duplicateQuery = duplicateQuery.Where(x => x.Id != existingId.Value);
+
+        var duplicateExists = await duplicateQuery.AnyAsync(cancellationToken);
+        if (duplicateExists)
+            throw new BaseException("Aynı tesis, vergi tipi ve oran için aktif vergi hesap eşlemesi zaten mevcut.", 400);
 
         if (dto.Oran < 0 || dto.Oran > 100)
             throw new BaseException("Vergi oranı 0 ile 100 arasında olmalıdır.", 400);

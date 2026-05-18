@@ -5027,3 +5027,55 @@ Sonuç:
 | 6 | Seviye doğru | 150→1, 150.01→2, 150.02→2 |
 | 7 | Muavin defter endpoint'i çalışmalı | Eskisi gibi |
 | 8 | Muavin defter AltHesaplariDahilEt=true | Alt hesapları dahil etmeye devam etmeli |
+
+
+---
+
+## Ara Düzeltme Fazı 2 — MuhasebeVergiHesapEsleme Duplicate Validasyon + Include'lu Okuma (2026-05-19)
+
+### Düzeltme 1: Duplicate Aktif Kayıt Validasyonu
+
+**Problem:** Aynı `TesisId + VergiTipi + Oran` için birden fazla aktif (!IsDeleted) eşleme kaydı oluşturulabiliyordu. Kullanıcıya anlamsız DB unique constraint hatası dönüyordu.
+
+**Çözüm:**
+- `ValidateAsync` metoduna `existingId` parametresi eklendi (Create'te null, Update'te mevcut ID)
+- `_dbContext.MuhasebeVergiHesapEslemeleri` üzerinden duplicate sorgusu: `VergiTipi == dto.VergiTipi && Oran == dto.Oran && AktifMi && !IsDeleted`, TesisId null/non-null durumuna göre filtreli
+- Update senaryosunda `x.Id != existingId.Value` ile kendi kaydını hariç tutar
+- Kullanıcı dostu hata mesajı: "Aynı tesis, vergi tipi ve oran için aktif vergi hesap eşlemesi zaten mevcut."
+
+### Düzeltme 2: Include'lu GetAllAsync / GetByIdAsync
+
+**Problem:** `GetAllAsync` ve `GetByIdAsync` base servis üzerinden çalışıyor, `AlisKdvHesap` ve `SatisKdvHesap` navigation property'leri include edilmiyordu. Bu nedenle DTO'daki `AlisKdvHesapKodu`, `AlisKdvHesapAdi`, `SatisKdvHesapKodu`, `SatisKdvHesapAdi` alanları hep null dönüyordu.
+
+**Çözüm:**
+- `GetAllAsync` override: varsayılan include zinciri → `.Include(x => x.AlisKdvHesap).Include(x => x.SatisKdvHesap).Where(x => !x.IsDeleted).OrderBy(x => x.VergiTipi).ThenBy(x => x.Oran).ThenBy(x => x.TesisId)`
+- `GetByIdAsync` override: varsayılan include zinciri → `.Include(x => x.AlisKdvHesap).Include(x => x.SatisKdvHesap).Where(x => !x.IsDeleted)`
+- Her iki override da çağıran tarafın özel `include` lambdası vermesine izin verir (verilmezse varsayılan include kullanılır)
+- **Not:** AutoMapper profile'ı (`MuhasebeVergiHesapEslemeProfile.cs`) zaten navigation property'ler üzerinden `Kod` ve `Ad` mapping'lerini doğru yapıyordu — değişiklik gerekmedi
+
+### VergiTipi ve Oran Normalizasyonu
+
+**Ek:** `NormalizeDto` static helper eklendi:
+- `VergiTipi` → Trim + ToUpperInvariant (örn. "kdv " → "KDV")
+- `Oran` → `Math.Round(dto.Oran, 2)` (örn. 18.005 → 18.01)
+- `AddAsync` ve `UpdateAsync` içinde validasyondan ÖNCE çağrılır
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeVergiHesapEslemeleri/Services/MuhasebeVergiHesapEslemeService.cs` | `GetAllAsync`/`GetByIdAsync` override (include), `NormalizeDto` helper, `ValidateAsync` duplicate check, `AddAsync`/`UpdateAsync` normalize çağrısı |
+
+### Build
+- **Backend:** ✅ 0 errors, 6 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | GET /ui/muhasebe/vergi-hesap-esleme | Dönen listede AlisKdvHesapKodu, AlisKdvHesapAdi, SatisKdvHesapKodu, SatisKdvHesapAdi dolu gelmeli |
+| 2 | GET /ui/muhasebe/vergi-hesap-esleme/{id} | Aynı şekilde Kod/Ad alanları dolu olmalı |
+| 3 | POST (Create) aynı TesisId+VergiTipi+Oran ile aktif kayıt varken | 400 "Aynı tesis, vergi tipi ve oran için aktif vergi hesap eşlemesi zaten mevcut." |
+| 4 | POST (Create) farklı TesisId ile aynı VergiTipi+Oran | Başarılı (farklı tesis) |
+| 5 | POST (Create) genel (TesisId=null) için aynı VergiTipi+Oran ile ikinci kayıt | 400 duplicate hatası |
+| 6 | PUT (Update) kendi kaydı üzerinde değişiklik | Başarılı (kendini duplicate saymaz) |
+| 7 | VergiTipi "kdv " (küçük harf + boşluk) gönder | "KDV" olarak normalize edilmeli, duplicate kontrolü normalize sonrası çalışmalı |
+| 8 | Oran 18.005 gönder | 18.01'e yuvarlanmalı |

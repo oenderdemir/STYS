@@ -9,6 +9,7 @@ using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 
 namespace STYS.Muhasebe.MuhasebeFisleri.Services;
 
@@ -19,17 +20,20 @@ public class MuhasebeFisService
     private readonly IMuhasebeFisRepository _repository;
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
+    private readonly IMuhasebeHesapBakiyeGuncellemeService _muhasebeHesapBakiyeGuncellemeService;
 
     public MuhasebeFisService(
         IMuhasebeFisRepository repository,
         IMapper mapper,
         StysAppDbContext dbContext,
-        IMuhasebeDonemService muhasebeDonemService)
+        IMuhasebeDonemService muhasebeDonemService,
+        IMuhasebeHesapBakiyeGuncellemeService muhasebeHesapBakiyeGuncellemeService)
         : base(repository, mapper)
     {
         _repository = repository;
         _dbContext = dbContext;
         _muhasebeDonemService = muhasebeDonemService;
+        _muhasebeHesapBakiyeGuncellemeService = muhasebeHesapBakiyeGuncellemeService;
     }
 
     public async Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default)
@@ -183,6 +187,11 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             fis.YevmiyeNo = yevmiyeNo;
             fis.Durum = MuhasebeFisDurumlari.Onayli;
 
+            // 13. Hesap bakiyelerini güncelle
+            await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(
+                fis,
+                cancellationToken);
+
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
@@ -315,6 +324,13 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             // 14. Orijinal fişi iptal et ve TersKayitFisId ata
             orijinalFis.Durum = MuhasebeFisDurumlari.Iptal;
             orijinalFis.TersKayitFisId = tersFis.Id;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // 15. Ters kayıt fişi bakiyelerini güncelle
+            await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(
+                tersFis,
+                cancellationToken);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 

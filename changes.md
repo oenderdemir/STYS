@@ -5226,3 +5226,77 @@ Muhasebe fiş onaylama/iptal sırasında hesaplanacak bakiye özetlerini saklaya
 | 3 | POST /ui/muhasebe/hesap-bakiyeleri/filter | TesisAdi dolu gelmeli |
 | 4 | GET /ui/muhasebe/hesap-bakiyeleri/by-donem?tesisId=1&maliYil=2026&donem=5 | TesisAdi dolu gelmeli |
 | 5 | POST /ui/muhasebe/hesap-bakiyeleri/filter/count | Çalışmaya devam etmeli (count, include olmadan) |
+
+---
+
+## Faz 14 — MuhasebeHesapBakiye Fiş Onay/İptal Entegrasyonu (2026-05-19)
+
+### Amaç
+Fiş onaylandığında ve ters kayıt oluşturulduğunda `MuhasebeHesapBakiye` tablosunu güncellemek. Bu fazda **sadece** bakiye güncelleme servisi ve `MuhasebeFisService` entegrasyonu yapılır. Mizan endpoint'i hâlâ `MuhasebeFis` tablosundan okumaya devam eder. Rebuild endpoint, stok/KDV entegrasyonu, rapor/export yok.
+
+### Yeni Servis: `MuhasebeHesapBakiyeGuncellemeService`
+
+**Interface** — [`IMuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/IMuhasebeHesapBakiyeGuncellemeService.cs):
+- `FisBakiyeleriniIsleAsync(MuhasebeFis fis, CancellationToken cancellationToken)` — sadece `Onayli` veya `TersKayit` durumundaki fişler için çalışır, diğer durumlarda `BaseException` fırlatır
+
+**Implementation** — [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs):
+1. `fis.Satirlar.Where(!IsDeleted)` ile aktif satırları alır
+2. Satırlardaki `MuhasebeHesapPlaniId`'lerden hesapları DB'den çeker (hesap bulunamazsa hata)
+3. `GetUstHesapKodlari` ile üst hesap kodlarını çıkarır (örn: "150.01.001" → ["150", "150.01"])
+4. Üst hesapları DB'den çeker — her `TamKod` için: önce `TesisId == fis.TesisId`, yoksa `TesisId == null`, yoksa ilk aktif kayıt
+5. Her satır için:
+   - **KonsolideMi = false**: gerçek hareket hesabının kendi bakiyesini artırır
+   - **KonsolideMi = true**: üst hesap bakiyelerini artırır
+6. `BakiyeSatiriArtirAsync` private helper: mevcut kayıt varsa `BorcToplam += borc`, `AlacakToplam += alacak`, yoksa yeni kayıt oluşturur. `BorcBakiye`/`AlacakBakiye` yeniden hesaplanır, `SonGuncellemeTarihi = DateTime.UtcNow`
+
+**ÖNEMLİ:** Bu servis `SaveChanges` çağırmaz. Sadece `DbContext` tracking değişikliklerini hazırlar. Commit, çağıran `MuhasebeFisService` transaction'ı içinde yapılır.
+
+### `MuhasebeFisService` Entegrasyonu
+
+**OnaylaAsync** — [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:186):
+- `fis.Durum = Onayli` set edildikten sonra, `SaveChangesAsync` öncesinde:
+  ```csharp
+  await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(fis, cancellationToken);
+  ```
+- Bakiye güncelleme ve fiş onayı aynı transaction içinde commit edilir
+
+**IptalEtAsync** — [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:330):
+- Ters kayıt fişi oluşturulup `SaveChangesAsync` yapıldıktan, orijinal fiş iptal edildikten sonra:
+  ```csharp
+  await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(tersFis, cancellationToken);
+  ```
+- Ardından `SaveChangesAsync` + `CommitAsync`
+- **Orijinal iptal edilen fiş için ayrıca bakiye düşme yapılmaz** — ters kayıt fişi zaten borç/alacak ters çevrilmiş şekilde bakiyeye işlenir
+
+### Idempotency Notu
+- `Onayli` fiş tekrar onaylanamaz (sadece `Taslak` → `Onayli`)
+- `Iptal` fiş tekrar iptal edilemez (`TersKayitFisId` kontrolü)
+- Bu nedenle aynı fiş iki kere bakiyeye işlenmez
+- Kod yorumunda "İleride idempotency için `BakiyeIslendiMi` alanı eklenebilir" notu var
+
+### Eklenen Dosyalar
+| # | Dosya | Açıklama |
+|---|-------|----------|
+| 1 | [`IMuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/IMuhasebeHesapBakiyeGuncellemeService.cs) | Interface |
+| 2 | [`MuhasebeHesapBakiyeGuncellemeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeGuncellemeService.cs) | Implementation — `FisBakiyeleriniIsleAsync`, `BakiyeSatiriArtirAsync`, `GetUstHesapKodlari` |
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:10) | Constructor: `IMuhasebeHesapBakiyeGuncellemeService` inject; `OnaylaAsync`: bakiye güncelleme çağrısı eklendi; `IptalEtAsync`: ters kayıt bakiye güncelleme çağrısı + `SaveChangesAsync` eklendi |
+| 2 | [`Program.cs`](backend/Program.cs:110) | DI: `builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>()` |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test Senaryosu
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | Taslak fiş oluştur | `MuhasebeHesapBakiye` tablosu değişmemeli |
+| 2 | Fiş onayla (örn: 150.01.001 borç 100, 100.01 alacak 100) | `KonsolideMi=false`: 150.01.001 BorcToplam+100, 100.01 AlacakToplam+100; `KonsolideMi=true`: 150.01 BorcToplam+100, 150 BorcToplam+100 |
+| 3 | Aynı tesis/mali yıl/dönem/hesap/konsolide için ikinci fiş onayla | Aynı bakiye kaydı artmalı, yeni duplicate kayıt oluşmamalı |
+| 4 | Onaylı fişi iptal et | Sadece ters kayıt fişi bakiyeye işlenmeli (borç/alacak ters) |
+| 5 | Ters kayıt sonrası bakiye | Orijinal + ters kayıt toplamı dengede olmalı (net bakiye 0) |
+| 6 | Onaylı fişi tekrar onaylamayı dene | 400 "Fiş zaten onaylanmış" — bakiye değişmemeli |
+| 7 | İptal edilmiş fişi tekrar iptal etmeyi dene | 400 "Fiş zaten iptal edilmiş" — bakiye değişmemeli |
+| 8 | Taslak fiş için `FisBakiyeleriniIsleAsync` çağır | 400 "Muhasebe bakiyesi yalnızca onaylı veya ters kayıt fişleri için güncellenebilir" |

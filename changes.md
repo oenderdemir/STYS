@@ -5635,3 +5635,23 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 | 10 | Mevcut `POST ui/muhasebe/fisler/mizan` | Bozulmamalı, aynen çalışmalı |
 
 ---
+
+
+### Faz 16B küçük düzeltme: `KonsolideSatirMi` hesaplama mantığı düzeltildi
+
+**Tarih:** 2026-05-19
+
+**Değişiklik:** `MuhasebeFisService.GetMizanBakiyeAsync` metodunda `KonsolideSatirMi` hesaplama mantığı düzeltildi.
+
+**Eski:** `g.Any(x => x.KonsolideMi) && !g.All(x => x.KonsolideMi)`
+**Yeni:** `g.Any(x => x.KonsolideMi)`
+
+**Hata:** Bir hesap grubundaki tüm satırlar konsolide (`KonsolideMi=true`) olduğunda `!g.All()` false dönüyor, bu da `KonsolideSatirMi=false` olmasına yol açıyordu. Oysa tamamen konsolide satırlardan oluşan bir grup da konsolide satır olarak işaretlenmeli.
+
+**Etkilenen dosyalar:**
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:825` | `KonsolideSatirMi` hesabı düzeltildi |
+
+**Build:** 0 error, 6 warning (önceden var olan warning'ler)
+

@@ -822,7 +822,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
                     Bakiye = Math.Abs(net),
                     BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
-                    KonsolideSatirMi = g.Any(x => x.KonsolideMi) && !g.All(x => x.KonsolideMi),
+                    KonsolideSatirMi = g.Any(x => x.KonsolideMi),
                     Seviye = g.Key.Split('.').Length,
                 };
             })

@@ -269,6 +269,18 @@ public class MizanSatirDto
 
     public decimal Bakiye { get; set; }
     public string BakiyeTipi { get; set; } = string.Empty; // Borc / Alacak / Sifir
+
+    /// <summary>
+    /// Sadece alt hesapların konsolidasyonu ile oluşan üst hesap satırı ise true.
+    /// Doğrudan hareket gören hesap satırları için false.
+    /// </summary>
+    public bool KonsolideSatirMi { get; set; }
+
+    /// <summary>
+    /// Hesap kodundaki segment sayısı (nokta ile ayrılmış parça sayısı).
+    /// Örn: "150" → 1, "150.01" → 2, "150.01.001" → 3
+    /// </summary>
+    public int Seviye { get; set; }
 }
 
 public class MizanDto

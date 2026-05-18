@@ -585,24 +585,98 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             });
         }
 
-        // 7. Sırala: HesapKodu ascending
+        // 7. Seviye ata (segment sayısı)
+        foreach (var satir in mizanSatirlar)
+        {
+            satir.Seviye = satir.HesapKodu.Split('.').Length;
+        }
+
+        // 8. AltHesaplariDahilEt konsolidasyonu
+        if (filter.AltHesaplariDahilEt && mizanSatirlar.Count > 0)
+        {
+            // Gerçek hareket gören hesaplardan üst hesap kodlarını topla
+            var ancestorKodlari = new HashSet<string>();
+            foreach (var satir in mizanSatirlar)
+            {
+                foreach (var ustKod in GetUstHesapKodlari(satir.HesapKodu))
+                {
+                    ancestorKodlari.Add(ustKod);
+                }
+            }
+
+            if (ancestorKodlari.Count > 0)
+            {
+                // Üst hesapları veritabanından çek
+                var ancestorHesaplar = await _dbContext.MuhasebeHesapPlanlari
+                    .AsNoTracking()
+                    .Where(h => ancestorKodlari.Contains(h.TamKod) && h.AktifMi && !h.IsDeleted)
+                    .ToDictionaryAsync(h => h.TamKod, h => h, cancellationToken);
+
+                // Her üst hesap için alt hesaplardan toplamları konsolide et
+                // (her zaman gerçek hareket satırlarından topla, konsolide satırları atla)
+                foreach (var ancestorKod in ancestorKodlari)
+                {
+                    if (!ancestorHesaplar.TryGetValue(ancestorKod, out var ancestorHesap))
+                        continue;
+
+                    decimal consolidatedBorc = 0;
+                    decimal consolidatedAlacak = 0;
+                    var prefix = ancestorKod + ".";
+
+                    foreach (var satir in mizanSatirlar)
+                    {
+                        if (satir.KonsolideSatirMi)
+                            continue; // sadece gerçek hareket satırlarını topla
+                        if (satir.HesapKodu.StartsWith(prefix, StringComparison.Ordinal))
+                        {
+                            consolidatedBorc += satir.ToplamBorc;
+                            consolidatedAlacak += satir.ToplamAlacak;
+                        }
+                    }
+
+                    if (filter.SadeceHareketGorenHesaplar && consolidatedBorc == 0 && consolidatedAlacak == 0)
+                        continue;
+
+                    var net = consolidatedBorc - consolidatedAlacak;
+
+                    mizanSatirlar.Add(new MizanSatirDto
+                    {
+                        MuhasebeHesapPlaniId = ancestorHesap.Id,
+                        HesapKodu = ancestorKod,
+                        HesapAdi = ancestorHesap.Ad ?? string.Empty,
+                        DetayHesapMi = ancestorHesap.DetayHesapMi,
+                        HareketGorebilirMi = ancestorHesap.HareketGorebilirMi,
+                        ToplamBorc = consolidatedBorc,
+                        ToplamAlacak = consolidatedAlacak,
+                        BorcBakiye = net > 0 ? net : 0,
+                        AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+                        Bakiye = Math.Abs(net),
+                        BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+                        KonsolideSatirMi = true,
+                        Seviye = ancestorKod.Split('.').Length,
+                    });
+                }
+            }
+        }
+
+        // 9. Sırala: HesapKodu ascending
         mizanSatirlar = mizanSatirlar
             .OrderBy(s => s.HesapKodu, StringComparer.Ordinal)
             .ToList();
 
-        // 8. Genel toplamlar (sayfalama öncesi, tüm satırlar üzerinden)
-        var genelToplamBorc = mizanSatirlar.Sum(s => s.ToplamBorc);
-        var genelToplamAlacak = mizanSatirlar.Sum(s => s.ToplamAlacak);
-        var genelBorcBakiye = mizanSatirlar.Sum(s => s.BorcBakiye);
-        var genelAlacakBakiye = mizanSatirlar.Sum(s => s.AlacakBakiye);
+        // 10. Genel toplamlar (sadece gerçek hareket satırları üzerinden, konsolide satırları sayma)
+        var genelToplamBorc = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.ToplamBorc);
+        var genelToplamAlacak = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.ToplamAlacak);
+        var genelBorcBakiye = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.BorcBakiye);
+        var genelAlacakBakiye = mizanSatirlar.Where(s => !s.KonsolideSatirMi).Sum(s => s.AlacakBakiye);
 
-        // 9. Sayfalama (hesap satırı bazlı)
+        // 11. Sayfalama (hesap satırı bazlı)
         var pagedSatirlar = mizanSatirlar
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
             .ToList();
 
-        // 10. DTO'yu döndür
+        // 12. DTO'yu döndür
         return new MizanDto
         {
             TesisId = filter.TesisId,
@@ -612,6 +686,24 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             GenelAlacakBakiye = genelAlacakBakiye,
             Satirlar = pagedSatirlar,
         };
+    }
+
+    /// <summary>
+    /// Nokta ile ayrılmış tam hesap kodundan üst hesap kodlarını türetir.
+    /// Örn: "150.01.001" → ["150", "150.01"]
+    /// Örn: "150" → []
+    /// </summary>
+    private static List<string> GetUstHesapKodlari(string tamKod)
+    {
+        var result = new List<string>();
+        var segments = tamKod.Split('.');
+
+        for (int i = 0; i < segments.Length - 1; i++)
+        {
+            result.Add(string.Join(".", segments.Take(i + 1)));
+        }
+
+        return result;
     }
 
     private static bool IsUniqueConflict(DbUpdateException ex)

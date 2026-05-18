@@ -98,6 +98,41 @@ public class MuhasebeFisRepository
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<List<MuhasebeFis>> GetMizanFisleriAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.MuhasebeFisler
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .ThenInclude(s => s.MuhasebeHesapPlani)
+            .AsNoTracking();
+
+        // Sadece Onayli ve TersKayit durumundaki fişler
+        query = query.Where(x =>
+            x.Durum == MuhasebeFisDurumlari.Onayli ||
+            x.Durum == MuhasebeFisDurumlari.TersKayit);
+
+        query = query.Where(x => !x.IsDeleted);
+        query = query.Where(x => x.TesisId == filter.TesisId);
+
+        if (filter.MaliYil.HasValue)
+            query = query.Where(x => x.MaliYil == filter.MaliYil.Value);
+
+        if (filter.Donem.HasValue)
+            query = query.Where(x => x.Donem == filter.Donem.Value);
+
+        if (filter.BaslangicTarihi.HasValue)
+            query = query.Where(x => x.FisTarihi >= filter.BaslangicTarihi.Value);
+
+        if (filter.BitisTarihi.HasValue)
+            query = query.Where(x => x.FisTarihi <= filter.BitisTarihi.Value);
+
+        query = query
+            .OrderBy(x => x.FisTarihi)
+            .ThenBy(x => x.YevmiyeNo)
+            .ThenBy(x => x.Id);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<List<MuhasebeFis>> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.MuhasebeFisler

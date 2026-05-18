@@ -499,6 +499,121 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         };
     }
 
+    public async Task<MizanDto> GetMizanAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Normalize
+        filter.Normalize();
+
+        // 2. Validasyon
+        if (filter.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (filter.BaslangicTarihi.HasValue && filter.BitisTarihi.HasValue && filter.BaslangicTarihi.Value > filter.BitisTarihi.Value)
+            throw new BaseException("Başlangıç tarihi bitiş tarihinden büyük olamaz.", 400);
+
+        if (filter.MaliYil.HasValue && (filter.MaliYil.Value < 2000 || filter.MaliYil.Value > 2100))
+            throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
+
+        if (filter.Donem.HasValue && (filter.Donem.Value < 1 || filter.Donem.Value > 12))
+            throw new BaseException("Dönem numarası 1-12 aralığında olmalıdır.", 400);
+
+        // 3. Repository'den fişleri çek
+        var fisler = await _repository.GetMizanFisleriAsync(filter, cancellationToken);
+
+        // 4. Satırları flatten et, sadece geçerli hesap satırları
+        var satirGruplari = new Dictionary<(int Id, string Kod, string Ad, bool Detay, bool HareketGor), (decimal Borc, decimal Alacak)>();
+
+        foreach (var fis in fisler)
+        {
+            foreach (var satir in fis.Satirlar)
+            {
+                if (satir.IsDeleted) continue;
+                var hesap = satir.MuhasebeHesapPlani;
+                if (hesap is null || hesap.IsDeleted || !hesap.AktifMi) continue;
+
+                var hesapKodu = hesap.TamKod ?? string.Empty;
+
+                // 5. Hesap kodu aralığı filtresi
+                if (filter.HesapKoduBaslangic is not null &&
+                    string.Compare(hesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) < 0)
+                    continue;
+
+                if (filter.HesapKoduBitis is not null &&
+                    string.Compare(hesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) > 0)
+                    continue;
+
+                var key = (hesap.Id, hesapKodu, hesap.Ad ?? string.Empty, hesap.DetayHesapMi, hesap.HareketGorebilirMi);
+
+                if (satirGruplari.TryGetValue(key, out var totals))
+                {
+                    satirGruplari[key] = (totals.Borc + satir.Borc, totals.Alacak + satir.Alacak);
+                }
+                else
+                {
+                    satirGruplari[key] = (satir.Borc, satir.Alacak);
+                }
+            }
+        }
+
+        // 6. Mizan satırlarını oluştur
+        var mizanSatirlar = new List<MizanSatirDto>();
+
+        foreach (var kvp in satirGruplari)
+        {
+            var (id, kod, ad, detay, hareketGor) = kvp.Key;
+            var (toplamBorc, toplamAlacak) = kvp.Value;
+
+            // SadeceHareketGorenHesaplar filtresi
+            if (filter.SadeceHareketGorenHesaplar && toplamBorc == 0 && toplamAlacak == 0)
+                continue;
+
+            var net = toplamBorc - toplamAlacak;
+
+            mizanSatirlar.Add(new MizanSatirDto
+            {
+                MuhasebeHesapPlaniId = id,
+                HesapKodu = kod,
+                HesapAdi = ad,
+                DetayHesapMi = detay,
+                HareketGorebilirMi = hareketGor,
+                ToplamBorc = toplamBorc,
+                ToplamAlacak = toplamAlacak,
+                BorcBakiye = net > 0 ? net : 0,
+                AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+                Bakiye = Math.Abs(net),
+                BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+            });
+        }
+
+        // 7. Sırala: HesapKodu ascending
+        mizanSatirlar = mizanSatirlar
+            .OrderBy(s => s.HesapKodu, StringComparer.Ordinal)
+            .ToList();
+
+        // 8. Genel toplamlar (sayfalama öncesi, tüm satırlar üzerinden)
+        var genelToplamBorc = mizanSatirlar.Sum(s => s.ToplamBorc);
+        var genelToplamAlacak = mizanSatirlar.Sum(s => s.ToplamAlacak);
+        var genelBorcBakiye = mizanSatirlar.Sum(s => s.BorcBakiye);
+        var genelAlacakBakiye = mizanSatirlar.Sum(s => s.AlacakBakiye);
+
+        // 9. Sayfalama (hesap satırı bazlı)
+        var pagedSatirlar = mizanSatirlar
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        // 10. DTO'yu döndür
+        return new MizanDto
+        {
+            TesisId = filter.TesisId,
+            GenelToplamBorc = genelToplamBorc,
+            GenelToplamAlacak = genelToplamAlacak,
+            GenelBorcBakiye = genelBorcBakiye,
+            GenelAlacakBakiye = genelAlacakBakiye,
+            Satirlar = pagedSatirlar,
+        };
+    }
+
     private static bool IsUniqueConflict(DbUpdateException ex)
     {
         return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);

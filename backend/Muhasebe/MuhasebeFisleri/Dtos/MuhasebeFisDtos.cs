@@ -215,3 +215,71 @@ public class MuavinDefterDto
 
     public List<MuavinDefterSatirDto> Satirlar { get; set; } = [];
 }
+
+public class MizanFilterDto
+{
+    public int TesisId { get; set; }
+
+    public DateTime? BaslangicTarihi { get; set; }
+    public DateTime? BitisTarihi { get; set; }
+
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    public bool SadeceHareketGorenHesaplar { get; set; } = true;
+    public bool AltHesaplariDahilEt { get; set; } = true;
+
+    public string? HesapKoduBaslangic { get; set; }
+    public string? HesapKoduBitis { get; set; }
+
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 500;
+
+    public void Normalize()
+    {
+        if (Page < 1) Page = 1;
+        if (PageSize < 1) PageSize = 500;
+        if (PageSize > 2000) PageSize = 2000;
+
+        HesapKoduBaslangic = string.IsNullOrWhiteSpace(HesapKoduBaslangic)
+            ? null
+            : HesapKoduBaslangic.Trim();
+
+        HesapKoduBitis = string.IsNullOrWhiteSpace(HesapKoduBitis)
+            ? null
+            : HesapKoduBitis.Trim();
+    }
+}
+
+public class MizanSatirDto
+{
+    public int MuhasebeHesapPlaniId { get; set; }
+
+    public string HesapKodu { get; set; } = string.Empty;
+    public string HesapAdi { get; set; } = string.Empty;
+
+    public bool DetayHesapMi { get; set; }
+    public bool HareketGorebilirMi { get; set; }
+
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+
+    public decimal BorcBakiye { get; set; }
+    public decimal AlacakBakiye { get; set; }
+
+    public decimal Bakiye { get; set; }
+    public string BakiyeTipi { get; set; } = string.Empty; // Borc / Alacak / Sifir
+}
+
+public class MizanDto
+{
+    public int TesisId { get; set; }
+
+    public decimal GenelToplamBorc { get; set; }
+    public decimal GenelToplamAlacak { get; set; }
+
+    public decimal GenelBorcBakiye { get; set; }
+    public decimal GenelAlacakBakiye { get; set; }
+
+    public List<MizanSatirDto> Satirlar { get; set; } = [];
+}

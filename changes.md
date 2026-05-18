@@ -4825,3 +4825,92 @@ Muavin defter endpoint'i eklendi. Belirli bir muhasebe hesabının hareketlerini
 | 8 | BakiyeTipi | Borc/Alacak/Sifir doğru |
 | 9 | Page/PageSize | Satır bazlı sayfalama |
 | 10 | Yürüyen bakiye | Her satırda kümülatif bakiye doğru |
+
+---
+
+## Tur 155 — Faz 11: Mizan (2026-05-18)
+
+### Yapılan
+Mizan endpoint'i eklendi. Belirli bir tesisin hesap planındaki hesapların borç/alacak toplamlarını ve bakiyelerini hesap bazında gruplayarak listeler.
+
+### Eklenen DTO'lar
+| DTO | Açıklama |
+|-----|----------|
+| `MizanFilterDto` | TesisId, tarih aralığı, MaliYil, Donem, SadeceHareketGorenHesaplar, AltHesaplariDahilEt, HesapKoduBaslangic/Bitis, Page/PageSize |
+| `MizanSatirDto` | Hesap bilgileri + ToplamBorc/Alacak + BorcBakiye/AlacakBakiye + Bakiye/BakiyeTipi |
+| `MizanDto` | GenelToplamBorc/Alacak + GenelBorcBakiye/AlacakBakiye + Satirlar |
+
+### Repository
+- `IMuhasebeFisRepository.GetMizanFisleriAsync(filter, cancellationToken)` eklendi
+- `MuhasebeFisRepository.GetMizanFisleriAsync`: Sadece Onayli ve TersKayit fişlerini getirir. TesisId zorunlu. MaliYil, Donem, tarih aralığı opsiyonel. Satırlar + hesap planı include/ThenInclude. AsNoTracking. Sayfalama yok (service tarafında uygulanır).
+
+### Service
+- `IMuhasebeFisService.GetMizanAsync(filter, cancellationToken)` eklendi
+- `MuhasebeFisService.GetMizanAsync`:
+  1. Normalize + validasyon (TesisId > 0, tarih sırası, MaliYil 2000-2100, Donem 1-12)
+  2. Repository'den fişleri çek
+  3. Satırları flatten et:
+     - Sadece `satir.IsDeleted=false`, `hesap != null`, `hesap.IsDeleted=false`, `hesap.AktifMi=true`
+     - HesapKoduBaslangic/Bitis string karşılaştırma filtresi
+  4. Hesap bazında `GroupBy` (Id, TamKod, Ad, DetayHesapMi, HareketGorebilirMi):
+     - ToplamBorc = Sum(Borc), ToplamAlacak = Sum(Alacak)
+     - Net = ToplamBorc - ToplamAlacak
+     - BorcBakiye = Net > 0 ? Net : 0
+     - AlacakBakiye = Net < 0 ? Abs(Net) : 0
+     - Bakiye = Abs(Net), BakiyeTipi = Borc/Alacak/Sifir
+  5. `SadeceHareketGorenHesaplar=true` → ToplamBorc != 0 veya ToplamAlacak != 0 olanlar
+  6. `AltHesaplariDahilEt` bu fazda konsolidasyon yapmaz; gelecek faza bırakıldı
+  7. Sırala: HesapKodu ascending (Ordinal)
+  8. Genel toplamlar (sayfalama öncesi, tüm satırlar)
+  9. Sayfalama (hesap satırı bazlı)
+
+### Controller
+- `POST ui/muhasebe/fisler/mizan` endpoint'i
+- Body: `MizanFilterDto`
+- Response: `MizanDto`
+- Permission: `MuhasebeFisYonetimi.View`
+
+### Bakiye Hesaplama
+| Alan | Formül |
+|------|--------|
+| Net | ToplamBorc - ToplamAlacak |
+| BorcBakiye | Net > 0 ? Net : 0 |
+| AlacakBakiye | Net < 0 ? Abs(Net) : 0 |
+| Bakiye | Abs(Net) |
+| BakiyeTipi | Net > 0 → "Borc", Net < 0 → "Alacak", Net == 0 → "Sifir" |
+
+### Durum Kuralları
+| Durum | Mizanda Görünür? |
+|-------|------------------|
+| Onayli | ✅ Evet |
+| TersKayit | ✅ Evet |
+| Taslak | ❌ Hayır |
+| Iptal | ❌ Hayır |
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs` | `MizanFilterDto`, `MizanSatirDto`, `MizanDto` eklendi |
+| 2 | `backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs` | `GetMizanFisleriAsync` imzası eklendi |
+| 3 | `backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs` | `GetMizanFisleriAsync` implementasyonu |
+| 4 | `backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs` | `GetMizanAsync` imzası eklendi |
+| 5 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs` | `GetMizanAsync` implementasyonu (flatten + group + bakiye + sayfalama) |
+| 6 | `backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs` | `POST mizan` endpoint'i |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | Belirli tesis için mizan | Hesaplar listelenmeli |
+| 2 | Durum kontrolü | Sadece Onayli + TersKayit fişler |
+| 3 | Taslak fişler | Görünmemeli |
+| 4 | Iptal fişler | Görünmemeli |
+| 5 | Hesap bazında gruplama | ToplamBorc ve ToplamAlacak doğru |
+| 6 | BorcBakiye / AlacakBakiye | Doğru hesaplanmalı |
+| 7 | GenelToplamBorc / GenelToplamAlacak | Dönmeli |
+| 8 | Tarih aralığı filtresi | Çalışmalı |
+| 9 | HesapKoduBaslangic/Bitis | Çalışmalı |
+| 10 | Page/PageSize | Hesap satırı bazlı çalışmalı |
+| 11 | Toplamlar | Tüm filtrelenmiş satırları kapsamalı |

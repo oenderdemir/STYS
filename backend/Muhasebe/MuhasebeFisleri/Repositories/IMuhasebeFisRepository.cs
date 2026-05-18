@@ -12,4 +12,5 @@ public interface IMuhasebeFisRepository : IBaseRdbmsRepository<MuhasebeFis, int>
     Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFis>> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFis>> GetMuavinDefterAsync(MuavinDefterFilterDto filter, string hesapKoduPrefix, CancellationToken cancellationToken = default);
+    Task<List<MuhasebeFis>> GetMizanFisleriAsync(MizanFilterDto filter, CancellationToken cancellationToken = default);
 }

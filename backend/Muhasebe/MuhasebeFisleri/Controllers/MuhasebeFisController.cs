@@ -81,4 +81,14 @@ public class MuhasebeFisController : UIController
     {
         return Ok(await _service.OnaylaAsync(id, cancellationToken));
     }
+
+    [HttpPost("{id:int}/iptal")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    public async Task<ActionResult<MuhasebeFisDto>> IptalEt(
+        int id,
+        [FromBody] MuhasebeFisIptalRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.IptalEtAsync(id, request?.Aciklama, cancellationToken));
+    }
 }

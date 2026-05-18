@@ -17,6 +17,8 @@ public class MuhasebeFisDto : BaseRdbmsDto<int>
     public decimal ToplamBorc { get; set; }
     public decimal ToplamAlacak { get; set; }
     public string? Aciklama { get; set; }
+    public int? TersKayitFisId { get; set; }
+    public int? IptalEdilenFisId { get; set; }
     public List<MuhasebeFisSatirDto> Satirlar { get; set; } = [];
 }
 
@@ -75,4 +77,9 @@ public class UpdateMuhasebeFisRequest
     public string FisTipi { get; set; } = string.Empty;
     public string? Aciklama { get; set; }
     public List<CreateMuhasebeFisSatirRequest> Satirlar { get; set; } = [];
+}
+
+public class MuhasebeFisIptalRequest
+{
+    public string? Aciklama { get; set; }
 }

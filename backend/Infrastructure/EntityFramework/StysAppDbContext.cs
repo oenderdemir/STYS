@@ -1918,6 +1918,16 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.KaynakModul, x.KaynakId })
                 .HasFilter("[KaynakId] IS NOT NULL AND [IsDeleted] = 0");
             entity.HasIndex(x => x.Durum);
+            entity.HasIndex(x => x.TersKayitFisId);
+            entity.HasIndex(x => x.IptalEdilenFisId);
+            entity.HasOne(x => x.TersKayitFis)
+                .WithMany()
+                .HasForeignKey(x => x.TersKayitFisId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.IptalEdilenFis)
+                .WithMany()
+                .HasForeignKey(x => x.IptalEdilenFisId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(x => x.Satirlar)
                 .WithOne(x => x.MuhasebeFis)
                 .HasForeignKey(x => x.MuhasebeFisId)

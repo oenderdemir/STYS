@@ -9,4 +9,5 @@ public interface IMuhasebeFisService : IBaseRdbmsService<MuhasebeFisDto, Muhaseb
     Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFisDto>> GetByKaynakAsync(string kaynakModul, int kaynakId, CancellationToken cancellationToken = default);
     Task<MuhasebeFisDto> OnaylaAsync(int id, CancellationToken cancellationToken = default);
+    Task<MuhasebeFisDto> IptalEtAsync(int id, string? aciklama = null, CancellationToken cancellationToken = default);
 }

@@ -4463,3 +4463,106 @@ Dosya | Değişiklik |
 | 4 | Borç ve alacak ikisi de sıfır olan satır varsa onayla | 400 "Satır X: borç veya alacak girilmelidir." |
 | 5 | Negatif borç/alacak olan satır varsa onayla | 400 "Satır X: borç veya alacak negatif olamaz." |
 | 6 | Geçerli taslak fiş onayla | 200, Durum=Onayli, YevmiyeNo > 0 |
+
+## Tur 150: Faz 8 — Fiş İptali ve Ters Kayıt Altyapısı (2026-05-18)
+
+### 1. Uygulanan Çözümün Özeti
+
+Onaylı muhasebe fişini iptal etme ve ters kayıt fişi oluşturma altyapısı kuruldu. İptal sırasında orijinal fişin borç/alacak yönleri ters çevrilmiş, tesis+mali yıl bazlı yeni bir yevmiye numarasına sahip ters kayıt fişi oluşturulur. Tüm işlem tek bir transaction içinde atomik olarak gerçekleşir.
+
+### 2. Yeni Dosyalar
+
+| Dosya | Açıklama |
+|---|---|
+| [`20260518104613_AddMuhasebeFisTersKayitBaglantilari.cs`](backend/Infrastructure/EntityFramework/Migrations/20260518104613_AddMuhasebeFisTersKayitBaglantilari.cs) | `MuhasebeFisler` tablosuna `TersKayitFisId`, `IptalEdilenFisId` nullable FK + index |
+
+### 3. Değiştirilen Dosyalar
+
+| Dosya | Değişiklik |
+|---|---|
+| [`MuhasebeFis.cs`](backend/Muhasebe/MuhasebeFisleri/Entities/MuhasebeFis.cs:32) | `TersKayitFisId`, `IptalEdilenFisId` + navigation property'ler eklendi |
+| [`MuhasebeFisDtos.cs`](backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs:19) | `TersKayitFisId`, `IptalEdilenFisId` DTO alanları + `MuhasebeFisIptalRequest` eklendi |
+| [`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:1921) | `HasOne/WithMany/HasForeignKey` + `HasIndex` (TersKayitFisId, IptalEdilenFisId) |
+| [`IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs:12) | `IptalEtAsync` imzası |
+| [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:203) | `IptalEtAsync` implementasyonu (14 adım) |
+| [`MuhasebeFisController.cs`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs:85) | `POST {id}/iptal` endpoint |
+
+### 4. Entity/DTO Alanları
+
+| Entity | DTO | Açıklama |
+|---|---|---|
+| `int? TersKayitFisId` | `int? TersKayitFisId` | Orijinal fişin ters kaydını işaret eder |
+| `int? IptalEdilenFisId` | `int? IptalEdilenFisId` | Ters kayıt fişinin orijinal fişini işaret eder |
+| `MuhasebeFis? TersKayitFis` | — | Navigation property (yalnızca entity) |
+| `MuhasebeFis? IptalEdilenFis` | — | Navigation property (yalnızca entity) |
+
+### 5. IptalEtAsync Kuralları (14 Adım)
+
+| # | Kural | Hata (HTTP) |
+|---|---|---|
+| 1 | Fiş var olmalı, silinmemiş olmalı | 404 |
+| 2 | Sadece Onayli fiş iptal edilebilir | 400 |
+| 3 | YevmiyeNo dolu olmalı | 400 |
+| 4 | Daha önce iptal edilmemiş olmalı (Durum=Iptal veya TersKayitFisId dolu) | 400 |
+| 5 | Ters kayıt fişi iptal edilemez (Durum=TersKayit) | 400 |
+| 6 | Açık muhasebe dönemi bulunmalı | 400 |
+| 7 | En az 2 aktif satır olmalı | 400 |
+| 8 | Ters kayıt fişi oluştur (borç↔alacak ters çevrilir) | — |
+| 9 | Ters kayıt borç/alacak dengesi kontrolü | 400 |
+| 10 | Ters kayıt satır hesapları doğrulama | 400 |
+| 11 | Ters kayıt için yeni YevmiyeNo üret | — |
+| 12 | Ters kayıt fişini kaydet | — |
+| 13 | Orijinal fişi Iptal yap, TersKayitFisId ata | — |
+| 14 | Herhangi bir hata → full rollback | — |
+
+### 6. Ters Kayıt Oluşturma Mantığı
+
+- **FisNo**: `"TERS-" + orijinal.FisNo`
+- **FisTipi**: `MuhasebeFisTipleri.Duzeltme`
+- **Durum**: `MuhasebeFisDurumlari.TersKayit`
+- **ToplamBorc**: orijinalin ToplamAlacak değeri
+- **ToplamAlacak**: orijinalin ToplamBorc değeri
+- **Satır Borc**: orijinal satırın Alacak değeri
+- **Satır Alacak**: orijinal satırın Borc değeri
+- **Diğer alanlar** (MuhasebeHesapPlaniId, CariKartId, vb.): aynen korunur
+- **Aciklama**: istekten gelen değer veya `"Fiş iptal ters kaydı: {orijinalFisNo}"`
+
+### 7. Controller Endpoint
+
+```
+POST /ui/muhasebe/fisler/{id}/iptal
+Permission: MuhasebeFisYonetimi.Manage
+Body: { "aciklama": "..." } (opsiyonel)
+Response: İptal edilmiş MuhasebeFisDto (Durum=Iptal, TersKayitFisId dolu)
+```
+
+### 8. Backend Build Sonucu
+
+```
+0 hata, 6 uyarı (önceden var olan)
+```
+
+### 9. Migration
+
+```
+20260518104613_AddMuhasebeFisTersKayitBaglantilari
+- MuhasebeFisler tablosuna TersKayitFisId (nullable int, FK self-reference, Restrict)
+- MuhasebeFisler tablosuna IptalEdilenFisId (nullable int, FK self-reference, Restrict)
+- Index: IX_MuhasebeFisler_TersKayitFisId
+- Index: IX_MuhasebeFisler_IptalEdilenFisId
+```
+
+### 10. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | Onaylı fişi iptal et | 200, orijinal Durum=Iptal, TersKayitFisId dolu |
+| 2 | Ters kayıt fişi oluştu mu? | Ters kayıt Durum=TersKayit, kendi YevmiyeNo'su var |
+| 3 | Ters kayıt IptalEdilenFisId doğru mu? | Orijinal fiş Id'sini göstermeli |
+| 4 | Taslak fişi iptal etmeye çalış | 400 "Yalnızca onaylı durumdaki fişler iptal edilebilir." |
+| 5 | İptal edilmiş fişi tekrar iptal et | 400 "Fiş zaten iptal edilmiş." |
+| 6 | Ters kayıt fişini iptal etmeye çalış | 400 "Ters kayıt fişi iptal edilemez." |
+| 7 | Kapalı dönemdeki fişi iptal et | 400 "Fiş tarihi için açık muhasebe dönemi bulunamadı." |
+| 8 | Ters kayıt satırlarında borç/alacak doğru mu? | Ters Borc = Orijinal Alacak, Ters Alacak = Orijinal Borc |
+| 9 | Ters kayıt borç/alacak dengesi doğru mu? | ToplamBorc = ToplamAlacak, > 0 |
+| 10 | Onaylı fişi update/delete et | 400 (zaten Taslak olmadığı için) |

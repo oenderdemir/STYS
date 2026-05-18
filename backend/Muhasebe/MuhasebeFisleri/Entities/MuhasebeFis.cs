@@ -29,5 +29,11 @@ public class MuhasebeFis : BaseEntity<int>
 
     public string? Aciklama { get; set; }
 
+    public int? TersKayitFisId { get; set; }
+    public int? IptalEdilenFisId { get; set; }
+
+    public MuhasebeFis? TersKayitFis { get; set; }
+    public MuhasebeFis? IptalEdilenFis { get; set; }
+
     public ICollection<MuhasebeFisSatir> Satirlar { get; set; } = new List<MuhasebeFisSatir>();
 }

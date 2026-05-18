@@ -5189,3 +5189,40 @@ Muhasebe fiş onaylama/iptal sırasında hesaplanacak bakiye özetlerini saklaya
 | 13 | DELETE /ui/muhasebe/hesap-bakiyeleri/{id} | Soft delete (IsDeleted=true) |
 | 14 | POST /ui/muhasebe/hesap-bakiyeleri/filter | Filtreli liste, sayfalama çalışıyor |
 | 15 | GET /ui/muhasebe/hesap-bakiyeleri/by-donem?tesisId=1&maliYil=2026&donem=5 | O döneme ait tüm bakiye kayıtları |
+
+---
+
+## Faz 13 Küçük Düzeltme — MuhasebeHesapBakiye Include/Display Düzeltmesi (2026-05-19)
+
+### Problem
+`MuhasebeHesapBakiyeDto` içinde `TesisAdi` alanı AutoMapper üzerinden `Tesis.Ad` navigation'dan map ediliyor. Ancak `GetAllAsync`, `GetByIdAsync` ve `GetFilteredAsync` sorgularında `Tesis` ve `MuhasebeHesapPlani` include edilmediği için `TesisAdi` boş (null) dönüyordu.
+
+### Çözüm
+
+**1. Repository** — [`MuhasebeHesapBakiyeRepository.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/MuhasebeHesapBakiyeRepository.cs:46):
+- `GetFilteredAsync`: `.Include(x => x.Tesis).Include(x => x.MuhasebeHesapPlani)` eklendi
+- `CountFilteredAsync`: include yok (count performans için gerekli değil)
+- `GetByTesisYilDonemAsync`: zaten include vardı — değişiklik yok
+
+**2. Service** — [`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs:56):
+- `GetAllAsync` override: `.Include(Tesis).Include(MuhasebeHesapPlani).Where(!IsDeleted).OrderBy(TesisId).ThenBy(MaliYil).ThenBy(Donem).ThenBy(HesapKodu).ThenBy(KonsolideMi)`
+- `GetByIdAsync` override: `.Include(Tesis).Include(MuhasebeHesapPlani).Where(!IsDeleted)`
+- Çağıran tarafın özel `include` lambdası vermesine izin verir (verilmezse varsayılan kullanılır)
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | [`MuhasebeHesapBakiyeRepository.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Repositories/MuhasebeHesapBakiyeRepository.cs:42) | `GetFilteredAsync` içinde `.Include(x => x.Tesis).Include(x => x.MuhasebeHesapPlani)` |
+| 2 | [`MuhasebeHesapBakiyeService.cs`](backend/Muhasebe/MuhasebeHesapBakiyeleri/Services/MuhasebeHesapBakiyeService.cs:56) | `GetAllAsync` override — varsayılan include zinciri; `GetByIdAsync` override — varsayılan include zinciri |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | GET /ui/muhasebe/hesap-bakiyeleri | TesisAdi dolu gelmeli |
+| 2 | GET /ui/muhasebe/hesap-bakiyeleri/{id} | TesisAdi dolu gelmeli |
+| 3 | POST /ui/muhasebe/hesap-bakiyeleri/filter | TesisAdi dolu gelmeli |
+| 4 | GET /ui/muhasebe/hesap-bakiyeleri/by-donem?tesisId=1&maliYil=2026&donem=5 | TesisAdi dolu gelmeli |
+| 5 | POST /ui/muhasebe/hesap-bakiyeleri/filter/count | Çalışmaya devam etmeli (count, include olmadan) |

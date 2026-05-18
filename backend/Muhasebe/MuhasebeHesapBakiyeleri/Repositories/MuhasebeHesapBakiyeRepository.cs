@@ -43,7 +43,12 @@ public class MuhasebeHesapBakiyeRepository
         MuhasebeHesapBakiyeFilterDto filter,
         CancellationToken cancellationToken = default)
     {
-        var query = ApplyFilter(_dbContext.MuhasebeHesapBakiyeleri.AsNoTracking(), filter);
+        var query = ApplyFilter(
+            _dbContext.MuhasebeHesapBakiyeleri
+                .Include(x => x.Tesis)
+                .Include(x => x.MuhasebeHesapPlani)
+                .AsNoTracking(),
+            filter);
 
         query = query
             .OrderBy(x => x.TesisId)

@@ -53,6 +53,34 @@ public class MuhasebeHesapBakiyeService
         return Mapper.Map<List<MuhasebeHesapBakiyeDto>>(entities);
     }
 
+    public override async Task<IEnumerable<MuhasebeHesapBakiyeDto>> GetAllAsync(
+        Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>>? include = null)
+    {
+        var effectiveInclude = include ?? (q => q
+            .Include(x => x.Tesis)
+            .Include(x => x.MuhasebeHesapPlani)
+            .Where(x => !x.IsDeleted)
+            .OrderBy(x => x.TesisId)
+                .ThenBy(x => x.MaliYil)
+                .ThenBy(x => x.Donem)
+                .ThenBy(x => x.HesapKodu)
+                .ThenBy(x => x.KonsolideMi));
+
+        return await base.GetAllAsync(effectiveInclude);
+    }
+
+    public override async Task<MuhasebeHesapBakiyeDto?> GetByIdAsync(
+        int id,
+        Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>>? include = null)
+    {
+        var effectiveInclude = include ?? (q => q
+            .Include(x => x.Tesis)
+            .Include(x => x.MuhasebeHesapPlani)
+            .Where(x => !x.IsDeleted));
+
+        return await base.GetByIdAsync(id, effectiveInclude);
+    }
+
     public override async Task<MuhasebeHesapBakiyeDto> AddAsync(MuhasebeHesapBakiyeDto dto)
     {
         await ValidateAsync(dto, CancellationToken.None);

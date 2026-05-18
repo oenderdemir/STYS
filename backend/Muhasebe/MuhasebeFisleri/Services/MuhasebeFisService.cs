@@ -212,36 +212,37 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (orijinalFis is null)
                 throw new BaseException("Fiş bulunamadı.", 404);
 
-            // 2. Sadece Onayli fiş iptal edilebilir
-            if (orijinalFis.Durum != MuhasebeFisDurumlari.Onayli)
-                throw new BaseException("Yalnızca onaylı durumdaki fişler iptal edilebilir.", 400);
-
-            // 3. YevmiyeNo dolu olmalı
-            if (!orijinalFis.YevmiyeNo.HasValue)
-                throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
-
-            // 4. Daha önce iptal edilmemiş olmalı
+            // 2. Daha önce iptal edilmemiş olmalı
             if (orijinalFis.Durum == MuhasebeFisDurumlari.Iptal)
                 throw new BaseException("Fiş zaten iptal edilmiş.", 400);
 
-            if (orijinalFis.TersKayitFisId.HasValue)
-                throw new BaseException("Fiş zaten iptal edilmiş.", 400);
-
-            // 5. Ters kayıt fişi iptal edilemez
+            // 3. Ters kayıt fişi iptal edilemez
             if (orijinalFis.Durum == MuhasebeFisDurumlari.TersKayit)
                 throw new BaseException("Ters kayıt fişi iptal edilemez.", 400);
 
-            // 6. Açık dönem kontrolü
+            // 4. Sadece Onayli fiş iptal edilebilir
+            if (orijinalFis.Durum != MuhasebeFisDurumlari.Onayli)
+                throw new BaseException("Yalnızca onaylı durumdaki fişler iptal edilebilir.", 400);
+
+            // 5. TersKayitFisId doluysa zaten iptal
+            if (orijinalFis.TersKayitFisId.HasValue)
+                throw new BaseException("Fiş zaten iptal edilmiş.", 400);
+
+            // 6. YevmiyeNo dolu olmalı
+            if (!orijinalFis.YevmiyeNo.HasValue)
+                throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
+
+            // 7. Açık dönem kontrolü
             var donem = await _muhasebeDonemService.GetAktifDonemAsync(orijinalFis.TesisId, orijinalFis.FisTarihi, cancellationToken);
             if (donem is null)
                 throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
 
-            // 7. Aktif satırları al ve kontrol et
+            // 8. Aktif satırları al ve kontrol et
             var aktifSatirlar = orijinalFis.Satirlar.Where(s => !s.IsDeleted).ToList();
             if (aktifSatirlar.Count < 2)
                 throw new BaseException("İptal edilecek fiş en az iki satır içermelidir.", 400);
 
-            // 8. Ters kayıt fişini oluştur
+            // 9. Ters kayıt fişini oluştur
             var tersFis = new MuhasebeFis
             {
                 TesisId = orijinalFis.TesisId,
@@ -275,7 +276,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 }).ToList(),
             };
 
-            // 9. Ters kayıt borç/alacak dengesi kontrolü
+            // 10. Ters kayıt borç/alacak dengesi kontrolü
             var tersToplamBorc = tersFis.Satirlar.Sum(x => x.Borc);
             var tersToplamAlacak = tersFis.Satirlar.Sum(x => x.Alacak);
 
@@ -285,7 +286,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (tersToplamBorc <= 0)
                 throw new BaseException("Ters kayıt toplam borç tutarı sıfırdan büyük olmalıdır.", 400);
 
-            // 10. Ters kayıt satır hesaplarını doğrula
+            // 11. Ters kayıt satır hesaplarını doğrula
             foreach (var satir in tersFis.Satirlar)
             {
                 var hesap = await _dbContext.MuhasebeHesapPlanlari
@@ -303,22 +304,18 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     throw new BaseException($"Satır {satir.SiraNo}: hareket görebilir detay hesap seçilmelidir.", 400);
             }
 
-            // 11. Ters kayıt fişine yevmiye no üret
+            // 12. Ters kayıt fişine yevmiye no üret
             var yevmiyeNo = await YevmiyeNoUretAsync(tersFis.TesisId, tersFis.MaliYil, cancellationToken);
             tersFis.YevmiyeNo = yevmiyeNo;
 
-            // 12. Ters kayıt fişini kaydet
+            // 13. Ters kayıt fişini kaydet
             await _dbContext.MuhasebeFisler.AddAsync(tersFis, cancellationToken);
-
-            // 13. Orijinal fişi iptal et
-            orijinalFis.Durum = MuhasebeFisDurumlari.Iptal;
-            orijinalFis.TersKayitFisId = default; // will be set after SaveChanges
-            _dbContext.Entry(orijinalFis).Property(x => x.Durum).IsModified = true;
-
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            // 14. Orijinal fişe TersKayitFisId ata (tersFis.Id artık mevcut)
+            // 14. Orijinal fişi iptal et ve TersKayitFisId ata
+            orijinalFis.Durum = MuhasebeFisDurumlari.Iptal;
             orijinalFis.TersKayitFisId = tersFis.Id;
+
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);

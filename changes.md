@@ -4566,3 +4566,70 @@ Response: İptal edilmiş MuhasebeFisDto (Durum=Iptal, TersKayitFisId dolu)
 | 8 | Ters kayıt satırlarında borç/alacak doğru mu? | Ters Borc = Orijinal Alacak, Ters Alacak = Orijinal Borc |
 | 9 | Ters kayıt borç/alacak dengesi doğru mu? | ToplamBorc = ToplamAlacak, > 0 |
 | 10 | Onaylı fişi update/delete et | 400 (zaten Taslak olmadığı için) |
+
+## Tur 151: Faz 8 Düzeltme — İptal Kontrol Sırası ve Akış Sadeleştirmesi (2026-05-18)
+
+### 1. Değiştirilen Dosya
+
+- [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs) — `IptalEtAsync` metodu
+
+### 2. Durum Kontrol Sırası Düzeltmesi
+
+**Eski sıra:**
+1. `Durum != Onayli` → 400 ← diğer kontrolleri ulaşılamaz yapar
+2. `Durum == Iptal` → 400
+3. `Durum == TersKayit` → 400
+
+**Yeni sıra:**
+1. `Durum == Iptal` → 400 "Fiş zaten iptal edilmiş."
+2. `Durum == TersKayit` → 400 "Ters kayıt fişi iptal edilemez."
+3. `Durum != Onayli` → 400 "Yalnızca onaylı durumdaki fişler iptal edilebilir."
+4. `TersKayitFisId.HasValue` → 400 (Durum `Onayli` ama FK doluysa yine hata)
+
+Bu sayede tüm kontroller ulaşılabilir ve anlamlı hata mesajları döner.
+
+### 3. Orijinal Fiş İptal Akışı Sadeleştirmesi
+
+**Eski akış (3 SaveChanges):**
+```
+AddAsync(tersFis)
+orijinal.Durum = Iptal; orijinal.TersKayitFisId = default
+IsModified = true
+SaveChanges       ← 1
+orijinal.TersKayitFisId = tersFis.Id
+SaveChanges       ← 2
+```
+
+**Yeni akış (2 SaveChanges):**
+```
+AddAsync(tersFis)
+SaveChanges       ← 1 (tersFis.Id üretilir)
+orijinal.Durum = Iptal; orijinal.TersKayitFisId = tersFis.Id
+SaveChanges       ← 2 (ikisi birden)
+```
+
+Kaldırılan:
+- `orijinalFis.TersKayitFisId = default`
+- `_dbContext.Entry(orijinalFis).Property(x => x.Durum).IsModified = true`
+- Ara `SaveChangesAsync` (gerek yok, tersFis'in Id'si ilk SaveChanges'tan sonra EF tarafından doldurulur)
+
+### 4. Yorum Numaralandırması
+
+IptalEtAsync içindeki adım yorumları 1-14 olarak yeniden numaralandı:
+1. Fişi getir, 2. Iptal kontrolü, 3. TersKayit kontrolü, 4. Onayli kontrolü, 5. TersKayitFisId, 6. YevmiyeNo, 7. Açık dönem, 8. Satır sayısı, 9. Ters fiş oluştur, 10. Denge, 11. Hesap doğrula, 12. Yevmiye no üret, 13. Ters fişi kaydet, 14. Orijinali iptal et.
+
+### 5. Build Sonucu
+
+```
+0 hata, 6 uyarı (önceden var olan)
+```
+
+### 6. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | İptal edilmiş fişi tekrar iptal et | 400 "Fiş zaten iptal edilmiş." |
+| 2 | Ters kayıt fişini iptal etmeye çalış | 400 "Ters kayıt fişi iptal edilemez." |
+| 3 | Taslak fişi iptal etmeye çalış | 400 "Yalnızca onaylı durumdaki fişler iptal edilebilir." |
+| 4 | Onaylı fişi iptal et | 200, Durum=Iptal, TersKayitFisId=dolu, ters kayıt oluşmuş |
+| 5 | Ters kayıt fişi ayrı YevmiyeNo aldı mı? | Orijinalden farklı bir YevmiyeNo |

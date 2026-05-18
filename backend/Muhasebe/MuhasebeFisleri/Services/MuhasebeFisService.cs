@@ -332,6 +332,61 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         }
     }
 
+    public async Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        filter.Normalize();
+        var entities = await _repository.GetFilteredAsync(filter, cancellationToken);
+        return Mapper.Map<List<MuhasebeFisDto>>(entities);
+    }
+
+    public async Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        filter.Normalize();
+        return await _repository.CountFilteredAsync(filter, cancellationToken);
+    }
+
+    public async Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        filter.Normalize();
+
+        var fisler = await _repository.GetYevmiyeDefteriAsync(filter, cancellationToken);
+
+        var satirlar = new List<YevmiyeDefteriSatirDto>();
+
+        foreach (var fis in fisler)
+        {
+            foreach (var satir in fis.Satirlar.OrderBy(s => s.SiraNo))
+            {
+                satirlar.Add(new YevmiyeDefteriSatirDto
+                {
+                    FisId = fis.Id,
+                    FisNo = fis.FisNo,
+                    YevmiyeNo = fis.YevmiyeNo,
+                    FisTarihi = fis.FisTarihi,
+                    FisTipi = fis.FisTipi,
+                    Durum = fis.Durum,
+                    SiraNo = satir.SiraNo,
+                    MuhasebeHesapPlaniId = satir.MuhasebeHesapPlaniId,
+                    MuhasebeHesapKodu = satir.MuhasebeHesapPlani?.TamKod,
+                    MuhasebeHesapAdi = satir.MuhasebeHesapPlani?.Ad,
+                    Borc = satir.Borc,
+                    Alacak = satir.Alacak,
+                    SatirAciklama = satir.Aciklama,
+                    FisAciklama = fis.Aciklama,
+                    KaynakModul = fis.KaynakModul,
+                    KaynakId = fis.KaynakId,
+                });
+            }
+        }
+
+        return new YevmiyeDefteriDto
+        {
+            Satirlar = satirlar,
+            ToplamBorc = satirlar.Sum(s => s.Borc),
+            ToplamAlacak = satirlar.Sum(s => s.Alacak),
+        };
+    }
+
     private static bool IsUniqueConflict(DbUpdateException ex)
     {
         return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);

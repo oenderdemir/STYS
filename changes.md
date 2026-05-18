@@ -4633,3 +4633,90 @@ IptalEtAsync içindeki adım yorumları 1-14 olarak yeniden numaralandı:
 | 3 | Taslak fişi iptal etmeye çalış | 400 "Yalnızca onaylı durumdaki fişler iptal edilebilir." |
 | 4 | Onaylı fişi iptal et | 200, Durum=Iptal, TersKayitFisId=dolu, ters kayıt oluşmuş |
 | 5 | Ters kayıt fişi ayrı YevmiyeNo aldı mı? | Orijinalden farklı bir YevmiyeNo |
+
+## Tur 152: Faz 9 — Fiş Listeleme/Filtreleme ve Yevmiye Defteri (2026-05-18)
+
+### 1. Eklenen DTO'lar
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs`](backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs)
+
+| DTO | Açıklama |
+|---|---|
+| `MuhasebeFisFilterDto` | 14 filtre alanı + Page/PageSize + `Normalize()` metodu |
+| `YevmiyeDefteriSatirDto` | 17 alan: fiş bilgisi + hesap kodu/adı + borç/alacak |
+| `YevmiyeDefteriDto` | Satır listesi + ToplamBorc + ToplamAlacak |
+
+**Filtre alanları:** TesisId, MaliYil, Donem, BaslangicTarihi, BitisTarihi, FisTipi, Durum, KaynakModul, KaynakId, YevmiyeNoBaslangic, YevmiyeNoBitis, FisNo (Contains), Aciklama (Contains), Page, PageSize.
+
+**Normalize kuralları:** Page < 1 → 1, PageSize < 1 → 50, PageSize > 500 → 500.
+
+### 2. Değiştirilen Repository Metotları
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs`](backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs)
+
+3 yeni metot eklendi:
+- `Task<List<MuhasebeFis>> GetFilteredAsync(MuhasebeFisFilterDto filter, ...)`
+- `Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, ...)`
+- `Task<List<MuhasebeFis>> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, ...)`
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs`](backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs)
+
+- `ApplyFilter()` — ortak filtreleme mantığı (private): IsDeleted=false + tüm filtre alanları (eşitlik, aralık, Contains)
+- `GetFilteredAsync` — Include Satırlar+HesapPlani, OrderByDescending FisTarihi → Id, Skip/Take
+- `CountFilteredAsync` — ApplyFilter + CountAsync
+- `GetYevmiyeDefteriAsync` — Include Satırlar+HesapPlani, default Durum filtresi (Onayli, TersKayit), OrderBy FisTarihi → YevmiyeNo → Id
+- Tüm sorgularda `AsNoTracking()` kullanıldı
+
+### 3. Değiştirilen Service Metotları
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs)
+
+3 yeni metot eklendi (interface).
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs)
+
+- `GetFilteredAsync` — filter.Normalize() → repository → AutoMapper.Map
+- `CountFilteredAsync` — filter.Normalize() → repository
+- `GetYevmiyeDefteriAsync` — filter.Normalize() → repository → flatten satırlar (fiş bilgisi + hesap Kodu/Adı + talep bilgisi) → ToplamBorc/ToplamAlacak hesapla → YevmiyeDefteriDto döndür
+
+AutoMapper mevcut `MuhasebeFisProfile` zaten `MuhasebeHesapKodu`/`MuhasebeHesapAdi` mapping'ini yapıyordu, değişiklik gerekmedi.
+
+### 4. Controller Endpointleri
+
+**Dosya:** [`backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs)
+
+| Method | Route | Permission | Response |
+|---|---|---|---|
+| POST | `ui/muhasebe/fisler/filter` | View | `List<MuhasebeFisDto>` |
+| POST | `ui/muhasebe/fisler/filter/count` | View | `int` |
+| POST | `ui/muhasebe/fisler/yevmiye-defteri` | View | `YevmiyeDefteriDto` |
+
+Body: `MuhasebeFisFilterDto` (JSON)
+
+### 5. Yevmiye Defteri Default Durum Filtresi
+
+- Kullanıcı `Durum` göndermezse: `WHERE Durum IN ('Onayli', 'TersKayit')`
+- Kullanıcı `Durum` gönderirse: gönderilen değere göre eşitlik
+- `Iptal` durumundaki orijinal fiş default olarak yevmiye defterine dahil edilmez
+- Ters kayıt fişleri (Durum=TersKayit) default olarak dahil edilir
+
+### 6. Build Sonucu
+
+```
+0 hata, 6 uyarı (önceden var olan)
+```
+
+### 7. Manuel Test Senaryosu
+
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | TesisId + MaliYil + Donem filtresiyle fiş listesi | Filtreyle eşleşen fişler dönmeli |
+| 2 | Tarih aralığı filtresi | BaslangicTarihi - BitisTarihi aralığındaki fişler |
+| 3 | Durum=Taslak filtresi | Sadece Taslak durumundaki fişler |
+| 4 | KaynakModul + KaynakId filtresi | Belirtilen kaynaktan oluşan fişler |
+| 5 | YevmiyeNo aralığı filtresi | Belirtilen yevmiye no aralığı |
+| 6 | Page/PageSize | Sayfalama düzgün çalışmalı |
+| 7 | Yevmiye defteri (boş Durum) | Sadece Onayli + TersKayit fişleri gelmeli |
+| 8 | Yevmiye defteri (boş Durum) | Iptal durumundaki orijinal fiş gelmemeli |
+| 9 | Yevmiye defteri satırları | MuhasebeHesapKodu ve MuhasebeHesapAdi dolu gelmeli |
+| 10 | Yevmiye defteri toplamları | ToplamBorc ve ToplamAlacak doğru hesaplanmalı |

@@ -83,3 +83,67 @@ public class MuhasebeFisIptalRequest
 {
     public string? Aciklama { get; set; }
 }
+
+public class MuhasebeFisFilterDto
+{
+    public int? TesisId { get; set; }
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    public DateTime? BaslangicTarihi { get; set; }
+    public DateTime? BitisTarihi { get; set; }
+
+    public string? FisTipi { get; set; }
+    public string? Durum { get; set; }
+    public string? KaynakModul { get; set; }
+    public int? KaynakId { get; set; }
+
+    public int? YevmiyeNoBaslangic { get; set; }
+    public int? YevmiyeNoBitis { get; set; }
+
+    public string? FisNo { get; set; }
+    public string? Aciklama { get; set; }
+
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+
+    public void Normalize()
+    {
+        if (Page < 1) Page = 1;
+        if (PageSize < 1) PageSize = 50;
+        if (PageSize > 500) PageSize = 500;
+    }
+}
+
+public class YevmiyeDefteriSatirDto
+{
+    public int FisId { get; set; }
+    public string FisNo { get; set; } = string.Empty;
+    public int? YevmiyeNo { get; set; }
+
+    public DateTime FisTarihi { get; set; }
+    public string FisTipi { get; set; } = string.Empty;
+    public string Durum { get; set; } = string.Empty;
+
+    public int SiraNo { get; set; }
+
+    public int MuhasebeHesapPlaniId { get; set; }
+    public string? MuhasebeHesapKodu { get; set; }
+    public string? MuhasebeHesapAdi { get; set; }
+
+    public decimal Borc { get; set; }
+    public decimal Alacak { get; set; }
+
+    public string? SatirAciklama { get; set; }
+    public string? FisAciklama { get; set; }
+
+    public string KaynakModul { get; set; } = string.Empty;
+    public int? KaynakId { get; set; }
+}
+
+public class YevmiyeDefteriDto
+{
+    public List<YevmiyeDefteriSatirDto> Satirlar { get; set; } = [];
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+}

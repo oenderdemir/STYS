@@ -91,4 +91,31 @@ public class MuhasebeFisController : UIController
     {
         return Ok(await _service.IptalEtAsync(id, request?.Aciklama, cancellationToken));
     }
+
+    [HttpPost("filter")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<List<MuhasebeFisDto>>> GetFiltered(
+        [FromBody] MuhasebeFisFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.GetFilteredAsync(filter, cancellationToken));
+    }
+
+    [HttpPost("filter/count")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<int>> CountFiltered(
+        [FromBody] MuhasebeFisFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.CountFilteredAsync(filter, cancellationToken));
+    }
+
+    [HttpPost("yevmiye-defteri")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<YevmiyeDefteriDto>> GetYevmiyeDefteri(
+        [FromBody] MuhasebeFisFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.GetYevmiyeDefteriAsync(filter, cancellationToken));
+    }
 }

@@ -147,3 +147,71 @@ public class YevmiyeDefteriDto
     public decimal ToplamBorc { get; set; }
     public decimal ToplamAlacak { get; set; }
 }
+
+public class MuavinDefterFilterDto
+{
+    public int TesisId { get; set; }
+    public int MuhasebeHesapPlaniId { get; set; }
+
+    public DateTime? BaslangicTarihi { get; set; }
+    public DateTime? BitisTarihi { get; set; }
+
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    public bool AltHesaplariDahilEt { get; set; } = false;
+
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 100;
+
+    public void Normalize()
+    {
+        if (Page < 1) Page = 1;
+        if (PageSize < 1) PageSize = 100;
+        if (PageSize > 1000) PageSize = 1000;
+    }
+}
+
+public class MuavinDefterSatirDto
+{
+    public int FisId { get; set; }
+    public string FisNo { get; set; } = string.Empty;
+    public int? YevmiyeNo { get; set; }
+
+    public DateTime FisTarihi { get; set; }
+    public string FisTipi { get; set; } = string.Empty;
+    public string Durum { get; set; } = string.Empty;
+
+    public int SiraNo { get; set; }
+
+    public int MuhasebeHesapPlaniId { get; set; }
+    public string? MuhasebeHesapKodu { get; set; }
+    public string? MuhasebeHesapAdi { get; set; }
+
+    public decimal Borc { get; set; }
+    public decimal Alacak { get; set; }
+
+    public decimal Bakiye { get; set; }
+    public string BakiyeTipi { get; set; } = string.Empty; // Borc / Alacak / Sifir
+
+    public string? SatirAciklama { get; set; }
+    public string? FisAciklama { get; set; }
+
+    public string KaynakModul { get; set; } = string.Empty;
+    public int? KaynakId { get; set; }
+}
+
+public class MuavinDefterDto
+{
+    public int TesisId { get; set; }
+    public int MuhasebeHesapPlaniId { get; set; }
+    public string? MuhasebeHesapKodu { get; set; }
+    public string? MuhasebeHesapAdi { get; set; }
+
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+    public decimal Bakiye { get; set; }
+    public string BakiyeTipi { get; set; } = string.Empty; // Borc / Alacak / Sifir
+
+    public List<MuavinDefterSatirDto> Satirlar { get; set; } = [];
+}

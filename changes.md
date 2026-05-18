@@ -4751,3 +4751,77 @@ Body: `MuhasebeFisFilterDto` (JSON)
 | 2 | filter endpoint'ine Durum=Onayli gönder | Sadece Onayli fişler dönmeli |
 | 3 | filter endpoint'ine Durum boş/null gönder | Tüm durumdaki fişler dönmeli (filtre uygulanmamalı) |
 | 4 | yevmiye-defteri endpoint'ine boş Durum | Öncekiyle aynı: Onayli + TersKayit (özel mantık korunuyor) |
+
+---
+
+## Tur 154 — Faz 10: Muavin Defter (2026-05-18)
+
+### Yapılan
+Muavin defter endpoint'i eklendi. Belirli bir muhasebe hesabının hareketlerini tarih aralığında listeleyip yürüyen bakiye hesaplar.
+
+### Eklenen DTO'lar
+| DTO | Açıklama |
+|-----|----------|
+| `MuavinDefterFilterDto` | TesisId, MuhasebeHesapPlaniId, tarih aralığı, MaliYil, Donem, AltHesaplariDahilEt, Page/PageSize |
+| `MuavinDefterSatirDto` | Fiş bilgileri + Hesap bilgileri + Borc/Alacak + Bakiye/BakiyeTipi + Açıklamalar |
+| `MuavinDefterDto` | Hesap bilgileri + ToplamBorc/ToplamAlacak/Bakiye/BakiyeTipi + Satirlar |
+
+### Repository
+- `IMuhasebeFisRepository.GetMuavinDefterAsync(filter, hesapKoduPrefix, cancellationToken)` eklendi
+- `MuhasebeFisRepository.GetMuavinDefterAsync`: Sadece Onayli ve TersKayit fişlerini getirir. TesisId zorunlu. MaliYil, Donem, BaslangicTarihi, BitisTarihi opsiyonel filtreler. Satırlar ve hesap planı include edilir. FisTarihi → YevmiyeNo → Id sıralaması.
+
+### Service
+- `IMuhasebeFisService.GetMuavinDefterAsync(filter, cancellationToken)` eklendi
+- `MuhasebeFisService.GetMuavinDefterAsync`:
+  1. Normalize + validasyon (TesisId, MuhasebeHesapPlaniId, tarih sırası)
+  2. Seçilen hesabı bul (AktifMi=true, IsDeleted=false) → bulunamazsa 404
+  3. Repository'den fişleri çek
+  4. Satırları flatten et + hesap filtresi uygula:
+     - `AltHesaplariDahilEt=false` → sadece `satir.MuhasebeHesapPlaniId == filter.MuhasebeHesapPlaniId`
+     - `AltHesaplariDahilEt=true` → `satir.MuhasebeHesapPlani.TamKod.StartsWith(hesapKoduPrefix)`
+  5. Sırala: FisTarihi → YevmiyeNo → FisId → SiraNo
+  6. Yürüyen bakiye hesapla (tüm satırlar üzerinden): bakiye += Borc - Alacak, BakiyeTipi = Borc/Alacak/Sifir
+  7. Toplamlar (tüm filtrelenmiş satırlar): ToplamBorc, ToplamAlacak, net bakiye
+  8. Sayfalama (sadece istenen sayfadaki satırlar)
+  9. DTO'yu döndür
+
+### Controller
+- `POST ui/muhasebe/fisler/muavin-defter` endpoint'i
+- Body: `MuavinDefterFilterDto`
+- Response: `MuavinDefterDto`
+- Permission: `MuhasebeFisYonetimi.View`
+
+### Durum Kuralları
+| Durum | Muavinde Görünür? |
+|-------|-------------------|
+| Onayli | ✅ Evet |
+| TersKayit | ✅ Evet |
+| Taslak | ❌ Hayır |
+| Iptal | ❌ Hayır |
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs` | `MuavinDefterFilterDto`, `MuavinDefterSatirDto`, `MuavinDefterDto` eklendi |
+| 2 | `backend/Muhasebe/MuhasebeFisleri/Repositories/IMuhasebeFisRepository.cs` | `GetMuavinDefterAsync` imzası eklendi |
+| 3 | `backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs` | `GetMuavinDefterAsync` implementasyonu |
+| 4 | `backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs` | `GetMuavinDefterAsync` imzası eklendi |
+| 5 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs` | `GetMuavinDefterAsync` implementasyonu (flatten + filtre + bakiye + sayfalama) |
+| 6 | `backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs` | `POST muavin-defter` endpoint'i |
+
+### Build
+- **Backend:** ✅ 0 errors, 5 warnings (tümü önceden var olan uyarılar)
+
+### Manuel Test
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | Belirli bir hesap için muavin defter | Sadece o hesabın hareketleri |
+| 2 | Durum kontrolü | Sadece Onayli + TersKayit fiş satırları |
+| 3 | Taslak fişler | Görünmemeli |
+| 4 | Iptal fişler | Görünmemeli |
+| 5 | AltHesaplariDahilEt=false | Sadece seçilen hesap |
+| 6 | AltHesaplariDahilEt=true | Alt hesaplar da dahil |
+| 7 | Toplamlar | Tüm filtrelenmiş satırları kapsamalı |
+| 8 | BakiyeTipi | Borc/Alacak/Sifir doğru |
+| 9 | Page/PageSize | Satır bazlı sayfalama |
+| 10 | Yürüyen bakiye | Her satırda kümülatif bakiye doğru |

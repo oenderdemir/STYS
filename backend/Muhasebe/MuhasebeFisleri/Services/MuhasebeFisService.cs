@@ -387,6 +387,118 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         };
     }
 
+    public async Task<MuavinDefterDto> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Normalize
+        filter.Normalize();
+
+        // 2. Validasyon
+        if (filter.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (filter.MuhasebeHesapPlaniId <= 0)
+            throw new BaseException("Geçerli bir muhasebe hesabı seçilmelidir.", 400);
+
+        if (filter.BaslangicTarihi.HasValue && filter.BitisTarihi.HasValue && filter.BaslangicTarihi.Value > filter.BitisTarihi.Value)
+            throw new BaseException("Başlangıç tarihi bitiş tarihinden büyük olamaz.", 400);
+
+        // 3. Seçilen hesabı bul
+        var hesap = await _dbContext.MuhasebeHesapPlanlari
+            .FirstOrDefaultAsync(x => x.Id == filter.MuhasebeHesapPlaniId && !x.IsDeleted && x.AktifMi, cancellationToken);
+
+        if (hesap is null)
+            throw new BaseException("Seçilen muhasebe hesabı bulunamadı.", 404);
+
+        var hesapKoduPrefix = hesap.TamKod!;
+
+        // 4. Repository'den fişleri çek
+        var fisler = await _repository.GetMuavinDefterAsync(filter, hesapKoduPrefix, cancellationToken);
+
+        // 5. Satırları flatten ve filtrele
+        var tumSatirlar = new List<MuavinDefterSatirDto>();
+
+        foreach (var fis in fisler)
+        {
+            foreach (var satir in fis.Satirlar.OrderBy(s => s.SiraNo))
+            {
+                // Hesap filtresi
+                if (!filter.AltHesaplariDahilEt)
+                {
+                    if (satir.MuhasebeHesapPlaniId != filter.MuhasebeHesapPlaniId)
+                        continue;
+                }
+                else
+                {
+                    if (satir.MuhasebeHesapPlani?.TamKod is null ||
+                        !satir.MuhasebeHesapPlani.TamKod.StartsWith(hesapKoduPrefix))
+                        continue;
+                }
+
+                tumSatirlar.Add(new MuavinDefterSatirDto
+                {
+                    FisId = fis.Id,
+                    FisNo = fis.FisNo,
+                    YevmiyeNo = fis.YevmiyeNo,
+                    FisTarihi = fis.FisTarihi,
+                    FisTipi = fis.FisTipi,
+                    Durum = fis.Durum,
+                    SiraNo = satir.SiraNo,
+                    MuhasebeHesapPlaniId = satir.MuhasebeHesapPlaniId,
+                    MuhasebeHesapKodu = satir.MuhasebeHesapPlani?.TamKod,
+                    MuhasebeHesapAdi = satir.MuhasebeHesapPlani?.Ad,
+                    Borc = satir.Borc,
+                    Alacak = satir.Alacak,
+                    SatirAciklama = satir.Aciklama,
+                    FisAciklama = fis.Aciklama,
+                    KaynakModul = fis.KaynakModul,
+                    KaynakId = fis.KaynakId,
+                });
+            }
+        }
+
+        // 7. Sırala: FisTarihi, YevmiyeNo, FisId, SiraNo
+        tumSatirlar = tumSatirlar
+            .OrderBy(s => s.FisTarihi)
+            .ThenBy(s => s.YevmiyeNo)
+            .ThenBy(s => s.FisId)
+            .ThenBy(s => s.SiraNo)
+            .ToList();
+
+        // 8. Yürüyen bakiye hesapla (tüm satırlar üzerinden)
+        decimal bakiye = 0;
+        foreach (var satir in tumSatirlar)
+        {
+            bakiye += satir.Borc - satir.Alacak;
+            satir.Bakiye = Math.Abs(bakiye);
+            satir.BakiyeTipi = bakiye > 0 ? "Borc" : bakiye < 0 ? "Alacak" : "Sifir";
+        }
+
+        // 9. Toplamlar (tüm filtrelenmiş satırlar üzerinden)
+        var toplamBorc = tumSatirlar.Sum(s => s.Borc);
+        var toplamAlacak = tumSatirlar.Sum(s => s.Alacak);
+        var netBakiye = toplamBorc - toplamAlacak;
+
+        // 10. Sayfalama (sadece istenen sayfadaki satırlar)
+        var pagedSatirlar = tumSatirlar
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        // 11. DTO'yu oluştur
+        return new MuavinDefterDto
+        {
+            TesisId = filter.TesisId,
+            MuhasebeHesapPlaniId = filter.MuhasebeHesapPlaniId,
+            MuhasebeHesapKodu = hesap.TamKod,
+            MuhasebeHesapAdi = hesap.Ad,
+            ToplamBorc = toplamBorc,
+            ToplamAlacak = toplamAlacak,
+            Bakiye = Math.Abs(netBakiye),
+            BakiyeTipi = netBakiye > 0 ? "Borc" : netBakiye < 0 ? "Alacak" : "Sifir",
+            Satirlar = pagedSatirlar,
+        };
+    }
+
     private static bool IsUniqueConflict(DbUpdateException ex)
     {
         return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);

@@ -118,4 +118,13 @@ public class MuhasebeFisController : UIController
     {
         return Ok(await _service.GetYevmiyeDefteriAsync(filter, cancellationToken));
     }
+
+    [HttpPost("muavin-defter")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<MuavinDefterDto>> GetMuavinDefter(
+        [FromBody] MuavinDefterFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _service.GetMuavinDefterAsync(filter, cancellationToken));
+    }
 }

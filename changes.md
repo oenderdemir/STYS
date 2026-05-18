@@ -4720,3 +4720,34 @@ Body: `MuhasebeFisFilterDto` (JSON)
 | 8 | Yevmiye defteri (boş Durum) | Iptal durumundaki orijinal fiş gelmemeli |
 | 9 | Yevmiye defteri satırları | MuhasebeHesapKodu ve MuhasebeHesapAdi dolu gelmeli |
 | 10 | Yevmiye defteri toplamları | ToplamBorc ve ToplamAlacak doğru hesaplanmalı |
+
+---
+
+## Tur 153 — Faz 9 Düzeltme: ApplyFilter'a Durum filtresi eklendi (2026-05-18)
+
+### Problem
+`MuhasebeFisFilterDto` içinde `Durum` alanı olmasına rağmen `ApplyFilter` metodunda `Durum` filtresi uygulanmıyordu. `POST /ui/muhasebe/fisler/filter` ve `POST /ui/muhasebe/fisler/filter/count` endpointlerine `Durum="Taslak"` gönderildiğinde filtre çalışmıyor, tüm durumdaki fişler dönüyordu.
+
+### Yapılan
+- `MuhasebeFisRepository.ApplyFilter` metoduna `FisTipi` filtresinden sonra `Durum` filtresi eklendi:
+  ```csharp
+  if (!string.IsNullOrWhiteSpace(filter.Durum))
+      query = query.Where(x => x.Durum == filter.Durum);
+  ```
+- `GetYevmiyeDefteriAsync` içindeki özel Durum mantığı (varsayılan: `Onayli` + `TersKayit`) korundu — `ApplyFilter` içindeki yeni Durum filtresi `string.IsNullOrWhiteSpace` kontrolü yaptığı için boş Durum durumunda devreye girmez, dolu Durum durumunda ise iki filtre aynı koşulu ekler (çakışma yok, zararsız).
+
+### Değişen Dosyalar
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Repositories/MuhasebeFisRepository.cs` | `ApplyFilter` metoduna `Durum` filtresi eklendi (`FisTipi` ile `KaynakModul` arasına) |
+
+### Build
+- **Backend:** ✅ 0 errors, 1 warning (önceden var olan NuGet uyarısı)
+
+### Test
+| # | Test | Beklenen |
+|---|---|---|
+| 1 | filter endpoint'ine Durum=Taslak gönder | Sadece Taslak fişler dönmeli |
+| 2 | filter endpoint'ine Durum=Onayli gönder | Sadece Onayli fişler dönmeli |
+| 3 | filter endpoint'ine Durum boş/null gönder | Tüm durumdaki fişler dönmeli (filtre uygulanmamalı) |
+| 4 | yevmiye-defteri endpoint'ine boş Durum | Öncekiyle aynı: Onayli + TersKayit (özel mantık korunuyor) |

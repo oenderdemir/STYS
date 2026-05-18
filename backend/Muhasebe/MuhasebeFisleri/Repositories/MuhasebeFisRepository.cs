@@ -114,6 +114,9 @@ public class MuhasebeFisRepository
         if (!string.IsNullOrWhiteSpace(filter.FisTipi))
             query = query.Where(x => x.FisTipi == filter.FisTipi);
 
+        if (!string.IsNullOrWhiteSpace(filter.Durum))
+            query = query.Where(x => x.Durum == filter.Durum);
+
         if (!string.IsNullOrWhiteSpace(filter.KaynakModul))
             query = query.Where(x => x.KaynakModul == filter.KaynakModul);
 

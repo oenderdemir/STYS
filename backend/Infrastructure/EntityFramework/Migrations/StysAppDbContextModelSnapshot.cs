@@ -3980,6 +3980,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
+                    b.HasIndex("TesisId", "MaliYil", "Donem", "KonsolideMi", "HesapKodu")
+                        .HasDatabaseName("IX_MuhasebeHesapBakiyeleri_MizanBakiye")
+                        .HasFilter("[IsDeleted] = 0");
+
                     b.ToTable("MuhasebeHesapBakiyeleri", "muhasebe");
                 });
 

@@ -766,11 +766,17 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         if (filter.SadeceHareketGorenHesaplar)
             query = query.Where(x => x.BorcToplam != 0 || x.AlacakToplam != 0);
 
-        if (filter.HesapKoduBaslangic is not null)
-            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) >= 0);
+        if (!string.IsNullOrWhiteSpace(filter.HesapKoduBaslangic))
+        {
+            var baslangic = filter.HesapKoduBaslangic.Trim();
+            query = query.Where(x => string.Compare(x.HesapKodu, baslangic) >= 0);
+        }
 
-        if (filter.HesapKoduBitis is not null)
-            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) <= 0);
+        if (!string.IsNullOrWhiteSpace(filter.HesapKoduBitis))
+        {
+            var bitis = filter.HesapKoduBitis.Trim();
+            query = query.Where(x => string.Compare(x.HesapKodu, bitis) <= 0);
+        }
 
         // 4. Genel toplamları DB tarafında hesapla (sadece KonsolideMi=false gerçek kayıtlar)
         var genelQuery = query.Where(x => !x.KonsolideMi);
@@ -909,11 +915,17 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         if (filter.SadeceHareketGorenHesaplar)
             query = query.Where(x => x.BorcToplam != 0 || x.AlacakToplam != 0);
 
-        if (filter.HesapKoduBaslangic is not null)
-            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) >= 0);
+        if (!string.IsNullOrWhiteSpace(filter.HesapKoduBaslangic))
+        {
+            var baslangic = filter.HesapKoduBaslangic.Trim();
+            query = query.Where(x => string.Compare(x.HesapKodu, baslangic) >= 0);
+        }
 
-        if (filter.HesapKoduBitis is not null)
-            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) <= 0);
+        if (!string.IsNullOrWhiteSpace(filter.HesapKoduBitis))
+        {
+            var bitis = filter.HesapKoduBitis.Trim();
+            query = query.Where(x => string.Compare(x.HesapKodu, bitis) <= 0);
+        }
 
         // 3. Genel toplamlar (sadece KonsolideMi=false)
         var genelQuery = query.Where(x => !x.KonsolideMi);
@@ -962,21 +974,48 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         var hesapPlaniLookup = hesapPlanlari.ToDictionary(x => x.Id);
 
         // 6. Excel oluştur
+        // İleride çok büyük veri için streaming export değerlendirilebilir.
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Hızlı Mizan");
 
-        // Başlık satırı
+        // Başlık ve üst bilgi satırları
+        var now = DateTime.Now;
+        var baslangicKodu = !string.IsNullOrWhiteSpace(filter.HesapKoduBaslangic) ? filter.HesapKoduBaslangic.Trim() : null;
+        var bitisKodu = !string.IsNullOrWhiteSpace(filter.HesapKoduBitis) ? filter.HesapKoduBitis.Trim() : null;
+
+        ws.Cell(1, 1).Value = "Hızlı Mizan Raporu";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+
+        ws.Cell(2, 1).Value = "Export Tarihi:";
+        ws.Cell(2, 2).Value = now.ToString("dd.MM.yyyy HH:mm");
+
+        ws.Cell(3, 1).Value = "Tesis Id:";
+        ws.Cell(3, 2).Value = filter.TesisId;
+
+        ws.Cell(4, 1).Value = "Mali Yıl:";
+        ws.Cell(4, 2).Value = filter.MaliYil;
+
+        ws.Cell(5, 1).Value = "Dönem:";
+        ws.Cell(5, 2).Value = filter.Donem.HasValue ? filter.Donem.Value.ToString() : "Tümü";
+
+        ws.Cell(6, 1).Value = "Hesap Kodu Aralığı:";
+        ws.Cell(6, 2).Value = $"{(baslangicKodu ?? "-")} / {(bitisKodu ?? "-")}";
+
+        // Kolon başlıkları (satır 8)
         var headers = new[] { "Hesap Kodu", "Hesap Adı", "Seviye", "Borç Toplamı", "Alacak Toplamı", "Borç Bakiye", "Alacak Bakiye", "Net Bakiye", "Bakiye Tipi" };
         for (int i = 0; i < headers.Length; i++)
         {
-            var cell = ws.Cell(1, i + 1);
+            var cell = ws.Cell(8, i + 1);
             cell.Value = headers[i];
             cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
         }
 
-        // Veri satırları
-        int row = 2;
-        decimal toplamBorc = 0, toplamAlacak = 0, toplamBorcBakiye = 0, toplamAlacakBakiye = 0, toplamNetBakiye = 0;
+        // Freeze pane: başlık satırlarını dondur
+        ws.SheetView.FreezeRows(8);
+
+        // Veri satırları (satır 9'dan başlar)
+        int row = 9;
 
         foreach (var agg in allRows)
         {
@@ -994,12 +1033,6 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             ws.Cell(row, 8).Value = Math.Abs(net);
             ws.Cell(row, 9).Value = net > 0 ? "Borç" : net < 0 ? "Alacak" : "Sıfır";
 
-            toplamBorc += agg.ToplamBorc;
-            toplamAlacak += agg.ToplamAlacak;
-            toplamBorcBakiye += net > 0 ? net : 0;
-            toplamAlacakBakiye += net < 0 ? Math.Abs(net) : 0;
-            toplamNetBakiye += Math.Abs(net);
-
             row++;
         }
 
@@ -1010,14 +1043,19 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             ws.Column(col).Style.NumberFormat.Format = "#,##0.00";
         }
 
-        // Toplam satırı
+        // Toplam satırı (genelToplam değerlerini kullan; AltHesaplariDahilEt=true olduğunda konsolide satırlar toplamı şişirmez)
+        var gtBorc = genelToplam?.GenelToplamBorc ?? 0;
+        var gtAlacak = genelToplam?.GenelToplamAlacak ?? 0;
+        var gtBorcBakiye = genelToplam?.GenelBorcBakiye ?? 0;
+        var gtAlacakBakiye = genelToplam?.GenelAlacakBakiye ?? 0;
+        var gtNetBakiye = Math.Abs(gtBorcBakiye - gtAlacakBakiye);
+
         ws.Cell(row, 1).Value = "TOPLAM";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        ws.Cell(row, 4).Value = toplamBorc;
-        ws.Cell(row, 5).Value = toplamAlacak;
-        ws.Cell(row, 6).Value = toplamBorcBakiye;
-        ws.Cell(row, 7).Value = toplamAlacakBakiye;
-        ws.Cell(row, 8).Value = toplamNetBakiye;
+        ws.Cell(row, 4).Value = gtBorc;
+        ws.Cell(row, 5).Value = gtAlacak;
+        ws.Cell(row, 6).Value = gtBorcBakiye;
+        ws.Cell(row, 7).Value = gtAlacakBakiye;
+        ws.Cell(row, 8).Value = gtNetBakiye;
 
         for (int i = 1; i <= 9; i++)
         {

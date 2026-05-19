@@ -1578,105 +1578,118 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             aciklama += $" | KDV Oranı: %{request.KdvOrani.Value} | KDV Dahil: {(request.KdvDahilMi ? "Evet" : "Hayır")}";
         }
 
-        // 9. Fiş ve satırları transaction içinde oluştur
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-        try
+        // 9. Fiş ve satırları transaction içinde oluştur (aynı anda iki işlem aynı TSN
+        //    numarasını üretirse yeni fiş no ile tekrar dene)
+        const int maxRetry = 3;
+        for (int attempt = 0; attempt < maxRetry; attempt++)
         {
-            var satirlar = new List<MuhasebeFisSatir>
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            try
             {
-                new()
+                var satirlar = new List<MuhasebeFisSatir>
                 {
-                    MuhasebeHesapPlaniId = borcHesapKontrol.Id,
-                    SiraNo = 1,
-                    Borc = matrah,
-                    Alacak = 0,
-                    ParaBirimi = "TRY",
-                    Kur = 1,
-                    Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
-                },
-            };
+                    new()
+                    {
+                        MuhasebeHesapPlaniId = borcHesapKontrol.Id,
+                        SiraNo = 1,
+                        Borc = matrah,
+                        Alacak = 0,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
+                    },
+                };
 
-            int siraNo = 2;
+                int siraNo = 2;
 
-            if (kdvHesap is not null && kdvTutari > 0)
-            {
+                if (kdvHesap is not null && kdvTutari > 0)
+                {
+                    satirlar.Add(new MuhasebeFisSatir
+                    {
+                        MuhasebeHesapPlaniId = kdvHesap.Id,
+                        SiraNo = siraNo++,
+                        Borc = kdvTutari,
+                        Alacak = 0,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} KDV kaydı (%{request.KdvOrani!.Value})",
+                    });
+                }
+
                 satirlar.Add(new MuhasebeFisSatir
                 {
-                    MuhasebeHesapPlaniId = kdvHesap.Id,
-                    SiraNo = siraNo++,
-                    Borc = kdvTutari,
-                    Alacak = 0,
+                    MuhasebeHesapPlaniId = alacakHesap.Id,
+                    SiraNo = siraNo,
+                    Borc = 0,
+                    Alacak = genelToplam,
                     ParaBirimi = "TRY",
                     Kur = 1,
-                    Aciklama = $"Taşınır kodu {tasinirKodu} KDV kaydı (%{request.KdvOrani!.Value})",
+                    Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
                 });
+
+                var toplamBorc = matrah + kdvTutari;
+                var toplamAlacak = genelToplam;
+
+                var fisNo = await GenerateFisNoAsync(
+                    request.TesisId,
+                    request.MaliYil,
+                    MuhasebeFisTipleri.Mahsup,
+                    MuhasebeKaynakModulleri.TasinirHareket,
+                    cancellationToken);
+
+                var fis = new MuhasebeFis
+                {
+                    TesisId = request.TesisId,
+                    MaliYil = request.MaliYil,
+                    Donem = donem,
+                    FisNo = fisNo,
+                    FisTarihi = request.FisTarihi,
+                    FisTipi = MuhasebeFisTipleri.Mahsup,
+                    KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,
+                    Durum = MuhasebeFisDurumlari.Taslak,
+                    Aciklama = aciklama,
+                    ToplamBorc = toplamBorc,
+                    ToplamAlacak = toplamAlacak,
+                    Satirlar = satirlar,
+                };
+
+                await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                return new TasinirMuhasebeFisiOlusturResultDto
+                {
+                    MuhasebeFisId = fis.Id,
+                    FisNo = fis.FisNo,
+                    Durum = fis.Durum,
+                    BorcHesapKodu = borcHesapKontrol.TamKod ?? string.Empty,
+                    BorcHesapAdi = borcHesapKontrol.Ad,
+                    AlacakHesapKodu = alacakHesap.TamKod ?? string.Empty,
+                    AlacakHesapAdi = alacakHesap.Ad,
+                    ToplamBorc = toplamBorc,
+                    ToplamAlacak = toplamAlacak,
+                    Matrah = matrah,
+                    KdvTutari = kdvTutari,
+                    GenelToplam = genelToplam,
+                    KdvHesapKodu = kdvHesap?.TamKod,
+                    KdvHesapAdi = kdvHesap?.Ad,
+                    Mesaj = "Taşınır muhasebe fişi taslağı oluşturuldu.",
+                };
             }
-
-            satirlar.Add(new MuhasebeFisSatir
+            catch (DbUpdateException ex) when (IsUniqueConflict(ex) && attempt < maxRetry - 1)
             {
-                MuhasebeHesapPlaniId = alacakHesap.Id,
-                SiraNo = siraNo,
-                Borc = 0,
-                Alacak = genelToplam,
-                ParaBirimi = "TRY",
-                Kur = 1,
-                Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
-            });
-
-            var toplamBorc = matrah + kdvTutari;
-            var toplamAlacak = genelToplam;
-
-            var fisNo = await GenerateFisNoAsync(
-                request.TesisId,
-                request.MaliYil,
-                MuhasebeFisTipleri.Mahsup,
-                MuhasebeKaynakModulleri.TasinirHareket,
-                cancellationToken);
-
-            var fis = new MuhasebeFis
+                await transaction.RollbackAsync(cancellationToken);
+                _dbContext.ChangeTracker.Clear();
+                continue;
+            }
+            catch
             {
-                TesisId = request.TesisId,
-                MaliYil = request.MaliYil,
-                Donem = donem,
-                FisNo = fisNo,
-                FisTarihi = request.FisTarihi,
-                FisTipi = MuhasebeFisTipleri.Mahsup,
-                KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,
-                Durum = MuhasebeFisDurumlari.Taslak,
-                Aciklama = aciklama,
-                ToplamBorc = toplamBorc,
-                ToplamAlacak = toplamAlacak,
-                Satirlar = satirlar,
-            };
-
-            await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            return new TasinirMuhasebeFisiOlusturResultDto
-            {
-                MuhasebeFisId = fis.Id,
-                FisNo = fis.FisNo,
-                Durum = fis.Durum,
-                BorcHesapKodu = borcHesapKontrol.TamKod ?? string.Empty,
-                BorcHesapAdi = borcHesapKontrol.Ad,
-                AlacakHesapKodu = alacakHesap.TamKod ?? string.Empty,
-                AlacakHesapAdi = alacakHesap.Ad,
-                ToplamBorc = toplamBorc,
-                ToplamAlacak = toplamAlacak,
-                Matrah = matrah,
-                KdvTutari = kdvTutari,
-                GenelToplam = genelToplam,
-                KdvHesapKodu = kdvHesap?.TamKod,
-                KdvHesapAdi = kdvHesap?.Ad,
-                Mesaj = "Taşınır muhasebe fişi taslağı oluşturuldu.",
-            };
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
         }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+
+        throw new BaseException("Fiş numarası üretilemedi. Lütfen tekrar deneyiniz.", 500);
     }
 }

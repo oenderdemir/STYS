@@ -62,6 +62,7 @@ import { HesaplarPage } from './app/pages/muhasebe/hesaplar/hesaplar';
 import { PaketTurleriPage } from './app/pages/muhasebe/paket-turleri/paket-turleri';
 import { HizliMizanComponent } from './app/pages/muhasebe/hizli-mizan/hizli-mizan.component';
 import { TasinirFisTaslagiPageComponent } from './app/pages/muhasebe/tasinir-fis-taslagi/tasinir-fis-taslagi-page.component';
+import { MuhasebeFislerComponent } from './app/pages/muhasebe/fisler/muhasebe-fisler.component';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -148,6 +149,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/paket-turleri', component: PaketTurleriPage, data: { breadcrumb: ['Muhasebe', 'Paket Turleri'] } },
             { path: 'muhasebe/hizli-mizan', component: HizliMizanComponent, data: { breadcrumb: ['Muhasebe', 'Hizli Mizan'] } },
             { path: 'muhasebe/tasinir-fis-taslagi', component: TasinirFisTaslagiPageComponent, data: { breadcrumb: ['Muhasebe', 'Tasinir Fis Taslagi'] } },
+            { path: 'muhasebe/fisler', component: MuhasebeFislerComponent, data: { breadcrumb: ['Muhasebe', 'Muhasebe Fisleri'] } },
             { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes'), data: { breadcrumb: ['Ana Menu', 'UI Kit'] } },
             { path: 'documentation', component: Documentation, data: { breadcrumb: ['Sistem', 'Dokumantasyon'] } },

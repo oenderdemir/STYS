@@ -5845,3 +5845,47 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 
 ### Frontend
 - Frontend: `npm run build` başarılı (0 error, 3 pre-existing budget warning)
+
+## Faz 20A: Hızlı Mizan Frontend İyileştirmeleri (2026-05-19)
+
+### Amaç
+Hızlı Mizan ekranında kullanıcı deneyimini iyileştiren 4 küçük düzeltme:
+1. UI metinlerinde Türkçe karakterlerin doğru kullanımı
+2. Mali yıl max değerinin 2100 yapılması
+3. İlk tesisin otomatik seçilme davranışının kaldırılması
+4. Sayfa boyutu (pageSize) seçim dropdown'u eklenmesi
+
+### Değişiklikler
+
+**1. UI metinlerini Türkçe karakterli hale getir:**
+- `hizli-mizan.component.html`: Tüm kullanıcıya görünen metinlerde Türkçe karakterler eklendi
+  - "onaylanmis" → "onaylanmış", "olusturulan" → "oluşturulan", "goruntuler" → "görüntüler", "Guncel" → "Güncel", "icindir" → "içindir"
+  - "seciniz" → "seçiniz", "Donem" → "Dönem", "Tum donemler" → "Tüm dönemler"
+  - "Baslangic" → "Başlangıç", "Bitis" → "Bitiş", "Orn" → "Örn"
+  - "goren" → "gören", "hesaplari" → "hesapları"
+  - "Borc" → "Borç", "Alacak" → "Alacak"
+  - "Hizli" → "Hızlı", "Borc Bakiyesi" → "Borç Bakiyesi"
+  - "Islem" → "İşlem", "Kayit bulunamadi" → "Kayıt bulunamadı"
+  - "Onceki" → "Önceki"
+  - "Filtre secimlerini yapip...dugmesine tiklayin" → "Filtre seçimlerini yapıp...düğmesine tıklayın"
+- `hizli-mizan.component.ts`: Validation ve hata mesajlarında Türkçe karakterler
+  - "Tesis secimi" → "Tesis seçimi", "Mali yil" → "Mali yıl"
+  - "Islem basarisiz" → "İşlem başarısız", "Sifir" → "Sıfır"
+
+**2. Mali yıl max değerini 2100 yap:**
+- `hizli-mizan.component.html`: `<input>` max attribute `2099` → `2100` olarak değiştirildi
+
+**3. İlk tesisi otomatik seçme davranışını kaldır:**
+- `hizli-mizan.component.ts` `loadTesisler()`: `if (!this.filter.tesisId && ...)` bloğu kaldırıldı
+- Kullanıcı artık tesisi manuel olarak seçmek zorunda; boş bırakılırsa validation hatası gösteriliyor
+
+**4. Sayfa boyutu (pageSize) seçimi ekle:**
+- `hizli-mizan.component.ts`: `PAGE_SIZE_SECENEKLERI` sabiti eklendi (100, 200, 500, 1000)
+- `hizli-mizan.component.ts`: `onPageSizeChange()` metodu eklendi — pageSize değişince page=1 yapıp yeniden arama
+- `hizli-mizan.component.html`: Pagination alanına p-select dropdown eklendi, label "Sayfa boyutu:"
+
+### Backend
+- Backend: DEĞİŞMEDİ (backend koduna dokunulmadı)
+
+### Frontend
+- Frontend: `npm run build` başarılı (0 error, 3 pre-existing budget warning)

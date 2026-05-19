@@ -6,7 +6,7 @@
     <div class="flex align-items-center gap-2 p-3 surface-100 border-round">
       <i class="pi pi-info-circle text-primary"></i>
       <span class="text-sm"
-        >Bu ekran, onaylanmis muhasebe fislerinden olusturulan hesap bakiyeleri uzerinden hizli mizan goruntuler. Guncel bakiye bilgisi icindir.</span
+        >Bu ekran, onaylanmış muhasebe fişlerinden oluşturulan hesap bakiyeleri üzerinden hızlı mizan görüntüler. Güncel bakiye bilgisi içindir.</span
       >
     </div>
   </div>
@@ -22,22 +22,22 @@
       optionLabel="label"
       optionValue="value"
       [(ngModel)]="filter.tesisId"
-      placeholder="Tesis seciniz"
+      placeholder="Tesis seçiniz"
       appendTo="body" />
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block font-medium mb-2">Mali Yil <span class="text-red-500">*</span></label>
-    <input pInputText class="w-full" type="number" [(ngModel)]="filter.maliYil" placeholder="Orn: 2026" min="2000" max="2099" />
+    <label class="block font-medium mb-2">Mali Yıl <span class="text-red-500">*</span></label>
+    <input pInputText class="w-full" type="number" [(ngModel)]="filter.maliYil" placeholder="Örn: 2026" min="2000" max="2100" />
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block font-medium mb-2">Donem</label>
+    <label class="block font-medium mb-2">Dönem</label>
     <p-select
       class="w-full"
       [options]="donemSecenekleri"
       optionLabel="label"
       optionValue="value"
       [(ngModel)]="filter.donem"
-      placeholder="Tum donemler"
+      placeholder="Tüm dönemler"
       appendTo="body" />
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end">
@@ -46,22 +46,22 @@
 
   <!-- Hesap kodu araligi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block font-medium mb-2">Hesap Kodu Baslangic</label>
-    <input pInputText class="w-full" [(ngModel)]="filter.hesapKoduBaslangic" placeholder="Orn: 100" maxlength="64" />
+    <label class="block font-medium mb-2">Hesap Kodu Başlangıç</label>
+    <input pInputText class="w-full" [(ngModel)]="filter.hesapKoduBaslangic" placeholder="Örn: 100" maxlength="64" />
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block font-medium mb-2">Hesap Kodu Bitis</label>
-    <input pInputText class="w-full" [(ngModel)]="filter.hesapKoduBitis" placeholder="Orn: 199" maxlength="64" />
+    <label class="block font-medium mb-2">Hesap Kodu Bitiş</label>
+    <input pInputText class="w-full" [(ngModel)]="filter.hesapKoduBitis" placeholder="Örn: 199" maxlength="64" />
   </div>
 
   <!-- Checkbox secenekleri -->
   <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-center gap-3">
     <p-checkbox [(ngModel)]="filter.sadeceHareketGorenHesaplar" [binary]="true" inputId="chkHareketGoren" />
-    <label for="chkHareketGoren" class="cursor-pointer">Sadece hareket goren hesaplar</label>
+    <label for="chkHareketGoren" class="cursor-pointer">Sadece hareket gören hesaplar</label>
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-center gap-3">
     <p-checkbox [(ngModel)]="filter.altHesaplariDahilEt" [binary]="true" inputId="chkAltHesaplar" />
-    <label for="chkAltHesaplar" class="cursor-pointer">Alt hesaplari dahil et</label>
+    <label for="chkAltHesaplar" class="cursor-pointer">Alt hesapları dahil et</label>
   </div>
 </div>
 
@@ -69,7 +69,7 @@
 <div *ngIf="result" class="grid grid-cols-12 gap-3 mb-4">
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
     <div class="p-3 border-round surface-card shadow-1">
-      <div class="text-sm text-color-secondary mb-1">Genel Toplam Borc</div>
+      <div class="text-sm text-color-secondary mb-1">Genel Toplam Borç</div>
       <div class="text-xl font-bold">{{ result.genelToplamBorc | number : '1.2-2' }} ₺</div>
     </div>
   </div>
@@ -81,7 +81,7 @@
   </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
     <div class="p-3 border-round surface-card shadow-1">
-      <div class="text-sm text-color-secondary mb-1">Genel Borc Bakiyesi</div>
+      <div class="text-sm text-color-secondary mb-1">Genel Borç Bakiyesi</div>
       <div class="text-xl font-bold text-red-500">{{ result.genelBorcBakiye | number : '1.2-2' }} ₺</div>
     </div>
   </div>
@@ -104,7 +104,7 @@
   styleClass="p-datatable-striped">
   <ng-template #caption>
     <div class="flex justify-content-between align-items-center">
-      <h5 class="m-0">Hizli Mizan</h5>
+      <h5 class="m-0">Hızlı Mizan</h5>
       <span class="text-sm text-color-secondary" *ngIf="getSayfaDurumu()">{{ getSayfaDurumu() }} / Sayfa {{ filter.page }}</span>
     </div>
   </ng-template>
@@ -112,9 +112,9 @@
     <tr>
       <th>Hesap Kodu</th>
       <th>Hesap Adi</th>
-      <th class="text-right">Toplam Borc</th>
+      <th class="text-right">Toplam Borç</th>
       <th class="text-right">Toplam Alacak</th>
-      <th class="text-right">Borc Bakiyesi</th>
+      <th class="text-right">Borç Bakiyesi</th>
       <th class="text-right">Alacak Bakiyesi</th>
       <th class="text-right">Bakiye</th>
       <th>Bakiye Tipi</th>
@@ -144,13 +144,13 @@
         <span *ngIf="getKonsolideBadge(satir)" class="text-xs px-2 py-1 border-round surface-100 text-color-secondary">
           {{ getKonsolideBadge(satir) }}
         </span>
-        <span *ngIf="!satir.konsolideSatirMi && satir.hareketGorebilirMi" class="text-xs">Islem</span>
+        <span *ngIf="!satir.konsolideSatirMi && satir.hareketGorebilirMi" class="text-xs">İşlem</span>
       </td>
     </tr>
   </ng-template>
   <ng-template #emptymessage>
     <tr>
-      <td colspan="10" class="text-center p-4 text-color-secondary">Kayit bulunamadi.</td>
+      <td colspan="10" class="text-center p-4 text-color-secondary">Kayıt bulunamadı.</td>
     </tr>
   </ng-template>
 </p-table>
@@ -158,13 +158,25 @@
 <!-- Sayfalama -->
 <div *ngIf="result" class="flex justify-content-between align-items-center mt-3">
   <p-button
-    label="Onceki"
+    label="Önceki"
     icon="pi pi-chevron-left"
     severity="secondary"
     [outlined]="true"
     [disabled]="filter.page <= 1"
     (onClick)="oncekiSayfa()" />
   <span class="text-sm text-color-secondary">Sayfa {{ filter.page }}</span>
+  <div class="flex align-items-center gap-2">
+    <label for="pageSizeSelect" class="text-sm text-color-secondary">Sayfa boyutu:</label>
+    <p-select
+      inputId="pageSizeSelect"
+      [options]="pageSizeSecenekleri"
+      optionLabel="label"
+      optionValue="value"
+      [(ngModel)]="filter.pageSize"
+      (onChange)="onPageSizeChange()"
+      appendTo="body"
+      styleClass="w-7rem" />
+  </div>
   <p-button
     label="Sonraki"
     icon="pi pi-chevron-right"
@@ -177,5 +189,5 @@
 
 <!-- Yukleme gostergesi -->
 <div *ngIf="!result && !loading" class="text-center p-4 surface-50 border-round">
-  <p class="text-color-secondary m-0">Filtre secimlerini yapip "Ara" dugmesine tiklayin.</p>
+  <p class="text-color-secondary m-0">Filtre seçimlerini yapıp "Ara" düğmesine tıklayın.</p>
 </div>

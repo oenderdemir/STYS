@@ -43,6 +43,13 @@ const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
     { label: '12. Donem', value: 12 }
 ];
 
+const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
+    { label: '100', value: 100 },
+    { label: '200', value: 200 },
+    { label: '500', value: 500 },
+    { label: '1000', value: 1000 }
+];
+
 @Component({
     selector: 'app-hizli-mizan',
     standalone: true,
@@ -73,6 +80,7 @@ export class HizliMizanComponent implements OnInit {
 
     tesisSecenekleri: TesisSecenek[] = [];
     readonly donemSecenekleri = DONEM_SECENEKLERI;
+    readonly pageSizeSecenekleri = PAGE_SIZE_SECENEKLERI;
 
     ngOnInit(): void {
         this.loadTesisler();
@@ -89,9 +97,6 @@ export class HizliMizanComponent implements OnInit {
                     .sort((a, b) => a.ad.localeCompare(b.ad))
                     .map((t) => ({ label: t.ad, value: t.id }));
 
-                if (!this.filter.tesisId && this.tesisSecenekleri.length > 0) {
-                    this.filter.tesisId = this.tesisSecenekleri[0].value;
-                }
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
@@ -106,7 +111,7 @@ export class HizliMizanComponent implements OnInit {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
-                detail: 'Tesis secimi zorunludur.'
+                detail: 'Tesis seçimi zorunludur.'
             });
             return;
         }
@@ -115,7 +120,7 @@ export class HizliMizanComponent implements OnInit {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
-                detail: 'Mali yil zorunludur.'
+                detail: 'Mali yıl zorunludur.'
             });
             return;
         }
@@ -149,6 +154,11 @@ export class HizliMizanComponent implements OnInit {
         this.ara();
     }
 
+    onPageSizeChange(): void {
+        this.filter.page = 1;
+        this.ara();
+    }
+
     sonrakiSayfa(): void {
         if (!this.result || this.result.satirlar.length < this.filter.pageSize) {
             return;
@@ -175,7 +185,7 @@ export class HizliMizanComponent implements OnInit {
             case 'Alacak':
                 return 'Alacak';
             default:
-                return 'Sifir';
+                return 'Sıfır';
         }
     }
 
@@ -209,7 +219,7 @@ export class HizliMizanComponent implements OnInit {
     }
 
     private showError(error: unknown): void {
-        const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'Islem basarisiz.';
+        const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'İşlem başarısız.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }

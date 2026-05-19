@@ -295,3 +295,68 @@ public class MizanDto
 
     public List<MizanSatirDto> Satirlar { get; set; } = [];
 }
+
+/// <summary>
+/// Eski mizan (MuhasebeFisSatir tabanlı) ile hızlı mizan (MuhasebeHesapBakiye tabanlı)
+/// sonuçlarını karşılaştıran doğrulama/denetim DTO'su.
+/// </summary>
+public class MizanKarsilastirmaDto
+{
+    public int TesisId { get; set; }
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    public decimal EskiGenelToplamBorc { get; set; }
+    public decimal HizliGenelToplamBorc { get; set; }
+    public decimal GenelToplamBorcFark { get; set; }
+
+    public decimal EskiGenelToplamAlacak { get; set; }
+    public decimal HizliGenelToplamAlacak { get; set; }
+    public decimal GenelToplamAlacakFark { get; set; }
+
+    public decimal EskiGenelBorcBakiye { get; set; }
+    public decimal HizliGenelBorcBakiye { get; set; }
+    public decimal GenelBorcBakiyeFark { get; set; }
+
+    public decimal EskiGenelAlacakBakiye { get; set; }
+    public decimal HizliGenelAlacakBakiye { get; set; }
+    public decimal GenelAlacakBakiyeFark { get; set; }
+
+    public int EskiSatirSayisi { get; set; }
+    public int HizliSatirSayisi { get; set; }
+    public int FarkliSatirSayisi { get; set; }
+
+    public bool EslesiyorMu { get; set; }
+
+    public List<MizanKarsilastirmaSatirDto> Farklar { get; set; } = new();
+}
+
+public class MizanKarsilastirmaSatirDto
+{
+    public string HesapKodu { get; set; } = string.Empty;
+    public string HesapAdi { get; set; } = string.Empty;
+
+    public bool EskiMizandaVarMi { get; set; }
+    public bool HizliMizandaVarMi { get; set; }
+
+    public decimal EskiToplamBorc { get; set; }
+    public decimal HizliToplamBorc { get; set; }
+    public decimal ToplamBorcFark { get; set; }
+
+    public decimal EskiToplamAlacak { get; set; }
+    public decimal HizliToplamAlacak { get; set; }
+    public decimal ToplamAlacakFark { get; set; }
+
+    public decimal EskiBorcBakiye { get; set; }
+    public decimal HizliBorcBakiye { get; set; }
+    public decimal BorcBakiyeFark { get; set; }
+
+    public decimal EskiAlacakBakiye { get; set; }
+    public decimal HizliAlacakBakiye { get; set; }
+    public decimal AlacakBakiyeFark { get; set; }
+
+    /// <summary>
+    /// SadeceEskiMizandaVar / SadeceHizliMizandaVar / TutarFarki / HesapAdiFarki
+    /// </summary>
+    public string FarkTipi { get; set; } = string.Empty;
+}

@@ -5889,3 +5889,73 @@ Hızlı Mizan ekranında kullanıcı deneyimini iyileştiren 4 küçük düzeltm
 
 ### Frontend
 - Frontend: `npm run build` başarılı (0 error, 3 pre-existing budget warning)
+
+## Faz 21: Mizan Karşılaştırma Endpoint'i (2026-05-19)
+
+### Amaç
+Eski mizan (MuhasebeFisSatir tabanlı) ile hızlı mizan (MuhasebeHesapBakiye tabanlı) sonuçlarını aynı filtreyle karşılaştıran, doğrulama/test/denetim amaçlı bir endpoint eklemek.
+
+### Değişiklikler
+
+**1. Yeni DTO'lar:**
+- [`backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs`](backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs:298): `MizanKarsilastirmaDto` ve `MizanKarsilastirmaSatirDto` eklendi
+  - Genel toplam karşılaştırmaları (borç, alacak, borç bakiyesi, alacak bakiyesi)
+  - Satır sayıları ve farklı satır sayısı
+  - `EslesiyorMu` bool
+  - Satır bazında fark detayları (`FarkTipi` ile: SadeceEskiMizandaVar, SadeceHizliMizandaVar, TutarFarki, HesapAdiFarki)
+
+**2. Service Interface:**
+- [`backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/IMuhasebeFisService.cs:19): `KarsilastirMizanAsync` metodu eklendi
+
+**3. Service Implementation:**
+- [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:1120): `KarsilastirMizanAsync` uygulandı
+  - Validasyon: TesisId zorunlu, tarih aralığı verilirse hata, MaliYil zorunlu
+  - Sayfalama devre dışı (Page=1, PageSize=100000) — tüm satırlar karşılaştırılır
+  - Eski mizan ve hızlı mizan aynı filtreyle çağrılır
+  - HesapKodu bazında GroupBy + Aggregate ile dictionary oluşturulur
+  - Tüm hesap kodları union yapılıp sıralanır
+  - Tolerans: 0.01 TL
+  - Her hesap kodu için fark kontrolü: varlık, tutar, hesap adı
+  - Sadece farklı satırlar dönülür
+  - Genel toplam farkları hesaplanır
+
+**4. AggregateMizanSatiri helper:**
+- [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:1265): Aynı hesap kodu birden fazla satırda gelirse birleştiren private static method
+
+**5. Controller Endpoint:**
+- [`backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs`](backend/Muhasebe/MuhasebeFisleri/Controllers/MuhasebeFisController.cs:149): `POST ui/muhasebe/fisler/mizan-karsilastir`
+  - Permission: `StructurePermissions.MuhasebeFisYonetimi.View`
+  - Request: `MizanFilterDto`
+  - Response: `MizanKarsilastirmaDto`
+
+### Karşılaştırma Mantığı
+1. Aynı filtre ile `GetMizanAsync` (eski) ve `GetMizanBakiyeAsync` (hızlı) çağrılır
+2. Satırlar HesapKodu bazında `GroupBy` + `AggregateMizanSatiri` ile birleştirilip dictionary yapılır
+3. Tüm hesap kodları `Union` ile birleştirilir, `OrderBy(StringComparer.Ordinal)` ile sıralanır
+4. Her hesap kodu için:
+   - Eski/yeni varlık kontrolü
+   - ToplamBorc, ToplamAlacak, BorcBakiye, AlacakBakiye farkları
+   - HesapAdi farkı
+   - `FarkTipi` belirlenir
+5. `EslesiyorMu`: Farklar.Count == 0 ve tüm genel toplam farkları tolerance altında
+
+### Tolerans
+- `0.01m` (1 kuruş)
+
+### Backend
+- Backend: `dotnet build` başarılı — 0 error, 5 pre-existing warning
+
+### Frontend
+- Frontend: DEĞİŞMEDİ (frontend değişikliği yok)
+
+### Manuel Test Senaryosu
+1. `POST ui/muhasebe/fisler/mizan-karsilastir` çalışmalı
+2. Aynı filtreyle eski mizan ve hızlı mizan çağrılmalı
+3. Sonuçlar aynıysa `EslesiyorMu=true` dönmeli
+4. Fark varsa `EslesiyorMu=false` dönmeli
+5. Sadece eski mizanda olan hesaplar `FarkTipi=SadeceEskiMizandaVar`
+6. Sadece hızlı mizanda olan hesaplar `FarkTipi=SadeceHizliMizandaVar`
+7. Tutar farkları `FarkTipi=TutarFarki`
+8. Genel toplam farkları dönmeli
+9. Tarih aralığı gönderilirse 400 hata
+10. MaliYil gönderilmezse 400 hata

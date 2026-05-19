@@ -145,4 +145,14 @@ public class MuhasebeFisController : UIController
     {
         return Ok(await _service.GetMizanBakiyeAsync(filter, cancellationToken));
     }
+
+    [HttpPost("mizan-karsilastir")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<MizanKarsilastirmaDto>> KarsilastirMizan(
+        [FromBody] MizanFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        var result = await _service.KarsilastirMizanAsync(filter, cancellationToken);
+        return Ok(result);
+    }
 }

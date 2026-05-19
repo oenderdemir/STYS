@@ -1114,4 +1114,206 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         dto.ToplamAlacak = toplamAlacak;
 
     }
+
+    /// <summary>
+    /// Bu endpoint doğrulama/denetim amaçlıdır. Büyük veri hacminde tüm mizan satırlarını
+    /// karşılaştırdığı için operasyonel rapor ekranlarında kullanılmamalıdır.
+    /// </summary>
+    public async Task<MizanKarsilastirmaDto> KarsilastirMizanAsync(
+        MizanFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Normalize
+        filter.Normalize();
+
+        // 2. Validasyon
+        if (filter.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (filter.BaslangicTarihi.HasValue || filter.BitisTarihi.HasValue)
+            throw new BaseException(
+                "Bakiye tablosu ile mizan karşılaştırması için tarih aralığı yerine MaliYil/Donem filtresi kullanılmalıdır.", 400);
+
+        if (!filter.MaliYil.HasValue)
+            throw new BaseException(
+                "Bakiye tablosu ile mizan karşılaştırması için mali yıl seçilmelidir.", 400);
+
+        // 3. Sayfalama devre dışı — tüm satırlar karşılaştırılacak
+        var compareFilter = new MizanFilterDto
+        {
+            TesisId = filter.TesisId,
+            MaliYil = filter.MaliYil,
+            Donem = filter.Donem,
+            HesapKoduBaslangic = filter.HesapKoduBaslangic,
+            HesapKoduBitis = filter.HesapKoduBitis,
+            SadeceHareketGorenHesaplar = filter.SadeceHareketGorenHesaplar,
+            AltHesaplariDahilEt = filter.AltHesaplariDahilEt,
+            Page = 1,
+            PageSize = 100000
+        };
+
+        // 4. Eski mizan (MuhasebeFisSatir tabanlı)
+        var eskiMizan = await GetMizanAsync(compareFilter, cancellationToken);
+
+        // 5. Hızlı mizan (MuhasebeHesapBakiye tabanlı)
+        var hizliMizan = await GetMizanBakiyeAsync(compareFilter, cancellationToken);
+
+        // 6. Satırları HesapKodu bazında dictionary yap
+        var eskiDict = eskiMizan.Satirlar
+            .GroupBy(x => x.HesapKodu)
+            .ToDictionary(g => g.Key, g => AggregateMizanSatiri(g.ToList()));
+
+        var hizliDict = hizliMizan.Satirlar
+            .GroupBy(x => x.HesapKodu)
+            .ToDictionary(g => g.Key, g => AggregateMizanSatiri(g.ToList()));
+
+        // 7. Tüm hesap kodlarını birleştir
+        var tumHesapKodlari = eskiDict.Keys
+            .Union(hizliDict.Keys)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        // 8. Tolerans
+        const decimal tolerance = 0.01m;
+
+        // 9. Her hesap kodu için fark kontrolü
+        var farklar = new List<MizanKarsilastirmaSatirDto>();
+
+        foreach (var hesapKodu in tumHesapKodlari)
+        {
+            var eskiVar = eskiDict.TryGetValue(hesapKodu, out var eskiSatir);
+            var hizliVar = hizliDict.TryGetValue(hesapKodu, out var hizliSatir);
+
+            var karsilastirmaSatir = new MizanKarsilastirmaSatirDto
+            {
+                HesapKodu = hesapKodu,
+                HesapAdi = (hizliSatir ?? eskiSatir)!.HesapAdi,
+                EskiMizandaVarMi = eskiVar,
+                HizliMizandaVarMi = hizliVar
+            };
+
+            if (eskiVar)
+            {
+                karsilastirmaSatir.EskiToplamBorc = eskiSatir!.ToplamBorc;
+                karsilastirmaSatir.EskiToplamAlacak = eskiSatir.ToplamAlacak;
+                karsilastirmaSatir.EskiBorcBakiye = eskiSatir.BorcBakiye;
+                karsilastirmaSatir.EskiAlacakBakiye = eskiSatir.AlacakBakiye;
+            }
+
+            if (hizliVar)
+            {
+                karsilastirmaSatir.HizliToplamBorc = hizliSatir!.ToplamBorc;
+                karsilastirmaSatir.HizliToplamAlacak = hizliSatir.ToplamAlacak;
+                karsilastirmaSatir.HizliBorcBakiye = hizliSatir.BorcBakiye;
+                karsilastirmaSatir.HizliAlacakBakiye = hizliSatir.AlacakBakiye;
+            }
+
+            if (eskiVar && hizliVar)
+            {
+                karsilastirmaSatir.ToplamBorcFark = hizliSatir!.ToplamBorc - eskiSatir!.ToplamBorc;
+                karsilastirmaSatir.ToplamAlacakFark = hizliSatir.ToplamAlacak - eskiSatir.ToplamAlacak;
+                karsilastirmaSatir.BorcBakiyeFark = hizliSatir.BorcBakiye - eskiSatir.BorcBakiye;
+                karsilastirmaSatir.AlacakBakiyeFark = hizliSatir.AlacakBakiye - eskiSatir.AlacakBakiye;
+            }
+
+            // FarkTipi belirleme
+            if (!eskiVar && hizliVar)
+            {
+                karsilastirmaSatir.FarkTipi = "SadeceHizliMizandaVar";
+            }
+            else if (eskiVar && !hizliVar)
+            {
+                karsilastirmaSatir.FarkTipi = "SadeceEskiMizandaVar";
+            }
+            else if (eskiVar && hizliVar)
+            {
+                var hasTutarFark =
+                    Math.Abs(karsilastirmaSatir.ToplamBorcFark) > tolerance ||
+                    Math.Abs(karsilastirmaSatir.ToplamAlacakFark) > tolerance ||
+                    Math.Abs(karsilastirmaSatir.BorcBakiyeFark) > tolerance ||
+                    Math.Abs(karsilastirmaSatir.AlacakBakiyeFark) > tolerance;
+
+                var hasAdFark = !string.Equals(
+                    eskiSatir!.HesapAdi, hizliSatir!.HesapAdi, StringComparison.Ordinal);
+
+                if (hasTutarFark)
+                    karsilastirmaSatir.FarkTipi = "TutarFarki";
+                else if (hasAdFark)
+                    karsilastirmaSatir.FarkTipi = "HesapAdiFarki";
+            }
+
+            // Sadece fark varsa listeye ekle
+            if (!string.IsNullOrEmpty(karsilastirmaSatir.FarkTipi))
+                farklar.Add(karsilastirmaSatir);
+        }
+
+        // 10. Genel toplam farklarını hesapla
+        var genelBorçFark = hizliMizan.GenelToplamBorc - eskiMizan.GenelToplamBorc;
+        var genelAlacakFark = hizliMizan.GenelToplamAlacak - eskiMizan.GenelToplamAlacak;
+        var genelBorçBakiyeFark = hizliMizan.GenelBorcBakiye - eskiMizan.GenelBorcBakiye;
+        var genelAlacakBakiyeFark = hizliMizan.GenelAlacakBakiye - eskiMizan.GenelAlacakBakiye;
+
+        var eslesiyorMu = farklar.Count == 0
+            && Math.Abs(genelBorçFark) <= tolerance
+            && Math.Abs(genelAlacakFark) <= tolerance
+            && Math.Abs(genelBorçBakiyeFark) <= tolerance
+            && Math.Abs(genelAlacakBakiyeFark) <= tolerance;
+
+        return new MizanKarsilastirmaDto
+        {
+            TesisId = filter.TesisId,
+            MaliYil = filter.MaliYil,
+            Donem = filter.Donem,
+
+            EskiGenelToplamBorc = eskiMizan.GenelToplamBorc,
+            HizliGenelToplamBorc = hizliMizan.GenelToplamBorc,
+            GenelToplamBorcFark = genelBorçFark,
+
+            EskiGenelToplamAlacak = eskiMizan.GenelToplamAlacak,
+            HizliGenelToplamAlacak = hizliMizan.GenelToplamAlacak,
+            GenelToplamAlacakFark = genelAlacakFark,
+
+            EskiGenelBorcBakiye = eskiMizan.GenelBorcBakiye,
+            HizliGenelBorcBakiye = hizliMizan.GenelBorcBakiye,
+            GenelBorcBakiyeFark = genelBorçBakiyeFark,
+
+            EskiGenelAlacakBakiye = eskiMizan.GenelAlacakBakiye,
+            HizliGenelAlacakBakiye = hizliMizan.GenelAlacakBakiye,
+            GenelAlacakBakiyeFark = genelAlacakBakiyeFark,
+
+            EskiSatirSayisi = eskiMizan.Satirlar.Count,
+            HizliSatirSayisi = hizliMizan.Satirlar.Count,
+            FarkliSatirSayisi = farklar.Count,
+
+            EslesiyorMu = eslesiyorMu,
+            Farklar = farklar
+        };
+    }
+
+    /// <summary>
+    /// Aynı hesap kodu birden fazla satırda gelirse birleştir.
+    /// </summary>
+    private static MizanSatirDto AggregateMizanSatiri(List<MizanSatirDto> satirlar)
+    {
+        var ilk = satirlar.First();
+        var toplamBorc = satirlar.Sum(x => x.ToplamBorc);
+        var toplamAlacak = satirlar.Sum(x => x.ToplamAlacak);
+        var net = toplamBorc - toplamAlacak;
+
+        return new MizanSatirDto
+        {
+            MuhasebeHesapPlaniId = ilk.MuhasebeHesapPlaniId,
+            HesapKodu = ilk.HesapKodu,
+            HesapAdi = ilk.HesapAdi,
+            DetayHesapMi = ilk.DetayHesapMi,
+            HareketGorebilirMi = ilk.HareketGorebilirMi,
+            ToplamBorc = toplamBorc,
+            ToplamAlacak = toplamAlacak,
+            BorcBakiye = net > 0 ? net : 0,
+            AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+            Bakiye = Math.Abs(net),
+            BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+            KonsolideSatirMi = satirlar.Any(x => x.KonsolideSatirMi),
+            Seviye = ilk.Seviye
+        };
+    }
 }

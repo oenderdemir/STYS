@@ -7,49 +7,49 @@
     <p-select
       [options]="tesisSecenekleri"
       [(ngModel)]="filter.tesisId"
-      placeholder="Tesis seciniz"
+      placeholder="Tesis seçiniz"
       optionLabel="label"
       optionValue="value"
       [showClear]="true"
       styleClass="w-full" />
   </div>
 
-  <!-- Mali Yil -->
+  <!-- Mali Yıl -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Mali Yil</label>
+    <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
     <p-select
       [options]="maliYilSecenekleri"
       [(ngModel)]="filter.maliYil"
-      placeholder="Mali Yil"
+      placeholder="Mali Yıl"
       optionLabel="label"
       optionValue="value"
       styleClass="w-full" />
   </div>
 
-  <!-- Donem -->
+  <!-- Dönem -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Donem</label>
+    <label class="block mb-1 text-sm font-medium">Dönem</label>
     <p-select
       [options]="donemSecenekleri"
       [(ngModel)]="filter.donem"
-      placeholder="Donem"
+      placeholder="Dönem"
       optionLabel="label"
       optionValue="value"
       styleClass="w-full" />
   </div>
 
-  <!-- Baslangic Tarihi -->
+  <!-- Başlangıç Tarihi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Baslangic Tarihi</label>
+    <label class="block mb-1 text-sm font-medium">Başlangıç Tarihi</label>
     <input
       type="date"
       [(ngModel)]="filter.baslangicTarihi"
       class="w-full p-inputtext p-component p-element" />
   </div>
 
-  <!-- Bitis Tarihi -->
+  <!-- Bitiş Tarihi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Bitis Tarihi</label>
+    <label class="block mb-1 text-sm font-medium">Bitiş Tarihi</label>
     <input
       type="date"
       [(ngModel)]="filter.bitisTarihi"
@@ -58,13 +58,13 @@
 </div>
 
 <div class="grid grid-cols-12 gap-3 mb-4">
-  <!-- Fis Tipi -->
+  <!-- Fiş Tipi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Fis Tipi</label>
+    <label class="block mb-1 text-sm font-medium">Fiş Tipi</label>
     <p-select
       [options]="fisTipiSecenekleri"
       [(ngModel)]="filter.fisTipi"
-      placeholder="Tumu"
+      placeholder="Tümü"
       optionLabel="label"
       optionValue="value"
       styleClass="w-full" />
@@ -76,31 +76,31 @@
     <p-select
       [options]="durumSecenekleri"
       [(ngModel)]="filter.durum"
-      placeholder="Tumu"
+      placeholder="Tümü"
       optionLabel="label"
       optionValue="value"
       styleClass="w-full" />
   </div>
 
-  <!-- Fis No -->
+  <!-- Fiş No -->
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block mb-1 text-sm font-medium">Fis No</label>
+    <label class="block mb-1 text-sm font-medium">Fiş No</label>
     <input
       type="text"
       pInputText
       [(ngModel)]="filter.fisNo"
-      placeholder="Fis no ile ara..."
+      placeholder="Fiş no ile ara..."
       class="w-full" />
   </div>
 
-  <!-- Aciklama -->
+  <!-- Açıklama -->
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block mb-1 text-sm font-medium">Aciklama</label>
+    <label class="block mb-1 text-sm font-medium">Açıklama</label>
     <input
       type="text"
       pInputText
       [(ngModel)]="filter.aciklama"
-      placeholder="Aciklama ile ara..."
+      placeholder="Açıklama ile ara..."
       class="w-full" />
   </div>
 
@@ -132,13 +132,13 @@
   <ng-template #header>
     <tr>
       <th class="w-3rem">#</th>
-      <th>Fis No</th>
+      <th>Fiş No</th>
       <th>Tarih</th>
       <th>Tipi</th>
       <th>Durum</th>
-      <th class="text-right">Borc</th>
+      <th class="text-right">Borç</th>
       <th class="text-right">Alacak</th>
-      <th>Aciklama</th>
+      <th>Açıklama</th>
       <th class="w-5rem"></th>
     </tr>
   </ng-template>
@@ -150,13 +150,13 @@
       <td>{{ row.fisTarihi | date:'dd.MM.yyyy' }}</td>
       <td>
         <p-tag
-          [value]="row.fisTipi"
+          [value]="getFisTipiLabel(row.fisTipi)"
           [severity]="getFisTipiSeverity(row.fisTipi)"
           styleClass="text-xs" />
       </td>
       <td>
         <p-tag
-          [value]="row.durum"
+          [value]="getDurumLabel(row.durum)"
           [severity]="getDurumSeverity(row.durum)"
           styleClass="text-xs" />
       </td>
@@ -178,7 +178,7 @@
   <ng-template #emptymessage>
     <tr>
       <td colspan="9" class="text-center text-color-secondary p-4">
-        Gosterilecek fis bulunamadi.
+        Gösterilecek fiş bulunamadı.
       </td>
     </tr>
   </ng-template>
@@ -186,7 +186,7 @@
 
 <div class="flex justify-content-between align-items-center mt-3">
   <p-button
-    label="Onceki"
+    label="Önceki"
     icon="pi pi-chevron-left"
     (onClick)="oncekiSayfa()"
     [disabled]="filter.page <= 1"

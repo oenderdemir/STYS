@@ -29,7 +29,7 @@ interface TesisSecenek {
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const currentYear = new Date().getFullYear();
     const options: Array<{ label: string; value: number | null }> = [
-        { label: 'Tumu', value: null }
+        { label: 'Tümü', value: null }
     ];
     for (let y = currentYear - 3; y <= currentYear + 1; y++) {
         options.push({ label: String(y), value: y });
@@ -38,36 +38,36 @@ const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (()
 })();
 
 const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
-    { label: 'Tum Donemler', value: null },
-    { label: '1. Donem', value: 1 },
-    { label: '2. Donem', value: 2 },
-    { label: '3. Donem', value: 3 },
-    { label: '4. Donem', value: 4 },
-    { label: '5. Donem', value: 5 },
-    { label: '6. Donem', value: 6 },
-    { label: '7. Donem', value: 7 },
-    { label: '8. Donem', value: 8 },
-    { label: '9. Donem', value: 9 },
-    { label: '10. Donem', value: 10 },
-    { label: '11. Donem', value: 11 },
-    { label: '12. Donem', value: 12 }
+    { label: 'Tüm Dönemler', value: null },
+    { label: '1. Dönem', value: 1 },
+    { label: '2. Dönem', value: 2 },
+    { label: '3. Dönem', value: 3 },
+    { label: '4. Dönem', value: 4 },
+    { label: '5. Dönem', value: 5 },
+    { label: '6. Dönem', value: 6 },
+    { label: '7. Dönem', value: 7 },
+    { label: '8. Dönem', value: 8 },
+    { label: '9. Dönem', value: 9 },
+    { label: '10. Dönem', value: 10 },
+    { label: '11. Dönem', value: 11 },
+    { label: '12. Dönem', value: 12 }
 ];
 
 const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string | null }> = [
-    { label: 'Tumu', value: null },
+    { label: 'Tümü', value: null },
     { label: 'Mahsup', value: 'Mahsup' },
     { label: 'Tahsil', value: 'Tahsil' },
     { label: 'Tediye', value: 'Tediye' },
-    { label: 'Acilis', value: 'Acilis' },
-    { label: 'Kapanis', value: 'Kapanis' }
+    { label: 'Açılış', value: 'Acilis' },
+    { label: 'Kapanış', value: 'Kapanis' }
 ];
 
 const DURUM_SECENEKLERI: Array<{ label: string; value: string | null }> = [
-    { label: 'Tumu', value: null },
+    { label: 'Tümü', value: null },
     { label: 'Taslak', value: 'Taslak' },
-    { label: 'Onayli', value: 'Onayli' },
-    { label: 'Iptal', value: 'Iptal' },
-    { label: 'Ters Kayit', value: 'TersKayit' }
+    { label: 'Onaylı', value: 'Onayli' },
+    { label: 'İptal', value: 'Iptal' },
+    { label: 'Ters Kayıt', value: 'TersKayit' }
 ];
 
 const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
@@ -228,8 +228,16 @@ export class MuhasebeFislerComponent implements OnInit {
     }
 
     goToFis(row: MuhasebeFisModel): void {
+        // Directly apply highlight and re-filter when already on the same component.
+        // This avoids relying on ngOnInit which doesn't re-fire on same-route navigation
+        // because Angular reuses the component instance.
+        this.filter.fisNo = row.fisNo;
+        this.highlightedFisId = row.id;
+        this.highlightedFisNo = row.fisNo;
+        this.ara();
         this.router.navigate(['/muhasebe/fisler'], {
-            queryParams: { id: row.id, fisNo: row.fisNo }
+            queryParams: { id: row.id, fisNo: row.fisNo },
+            replaceUrl: true
         });
     }
 
@@ -241,6 +249,27 @@ export class MuhasebeFislerComponent implements OnInit {
             return true;
         }
         return false;
+    }
+
+    getDurumLabel(durum: string): string {
+        switch (durum) {
+            case 'Taslak':   return 'Taslak';
+            case 'Onayli':   return 'Onaylı';
+            case 'Iptal':    return 'İptal';
+            case 'TersKayit': return 'Ters Kayıt';
+            default:         return durum;
+        }
+    }
+
+    getFisTipiLabel(fisTipi: string): string {
+        switch (fisTipi) {
+            case 'Mahsup':  return 'Mahsup';
+            case 'Tahsil':  return 'Tahsil';
+            case 'Tediye':  return 'Tediye';
+            case 'Acilis':  return 'Açılış';
+            case 'Kapanis': return 'Kapanış';
+            default:        return fisTipi;
+        }
     }
 
     getDurumSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
@@ -274,7 +303,7 @@ export class MuhasebeFislerComponent implements OnInit {
     }
 
     private showError(error: unknown): void {
-        const message = tryReadApiMessage(error) ?? 'Bir hata olustu.';
+        const message = tryReadApiMessage(error) ?? 'Bir hata oluştu.';
         this.messageService.add({
             severity: UiSeverity.Error,
             summary: 'Hata',

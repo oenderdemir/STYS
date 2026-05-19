@@ -5726,3 +5726,45 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 | 4 | `Bakiye`, `BorcBakiye`, `AlacakBakiye`, `BakiyeTipi` | Final `NetBakiye` üzerinden doğru |
 | 5 | Genel toplamlar sadece `KonsolideMi=false` | Korundu |
 | 6 | `POST ui/muhasebe/fisler/mizan` | Bozulmaz |
+
+
+### Faz 19: Mizan-bakiye için composite filtered index eklendi
+
+**Tarih:** 2026-05-19
+
+**Amaç:** `GetMizanBakiyeAsync` metodunun sık kullandığı `TesisId + MaliYil + Donem + KonsolideMi + HesapKodu` filtre kombinasyonuna uygun composite filtered index ekleyerek mizan-bakiye sorgularını hızlandırmak.
+
+**Değişiklikler:**
+
+| # | Değişiklik | Açıklama |
+|---|------------|----------|
+| 1 | DbContext Fluent API'ye index eklendi | `entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.Donem, x.KonsolideMi, x.HesapKodu }).HasDatabaseName("IX_MuhasebeHesapBakiyeleri_MizanBakiye").HasFilter("[IsDeleted] = 0")` |
+| 2 | Migration oluşturuldu | `AddMuhasebeHesapBakiyeMizanBakiyeIndex` — sadece index ekler, `Down`'da index'i düşürür |
+
+**Indexin hızlandırdığı sorgular:**
+1. Belirli tesis + mali yıl + dönem için mizan: `WHERE TesisId=@p0 AND MaliYil=@p1 AND Donem=@p2 AND IsDeleted=0 ORDER BY HesapKodu`
+2. `AltHesaplariDahilEt=false` iken sadece gerçek kayıtlar: `WHERE TesisId=@p0 AND MaliYil=@p1 AND Donem=@p2 AND KonsolideMi=0 AND IsDeleted=0`
+3. Hesap kodu aralığı: `WHERE TesisId=@p0 AND MaliYil=@p1 AND Donem=@p2 AND HesapKodu>=@p3 AND HesapKodu<=@p4 AND IsDeleted=0`
+4. `GROUP BY HesapKodu, ORDER BY HesapKodu` aggregate sorguları
+
+**Not:** `Donem` opsiyonel olduğunda index prefix (`TesisId + MaliYil`) kısmen kullanılabilir.
+
+**Etkilenen dosyalar:**
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Infrastructure/EntityFramework/StysAppDbContext.cs:2136-2144` | Yeni composite filtered index eklendi |
+| 2 | `backend/Infrastructure/EntityFramework/Migrations/20260519000100_AddMuhasebeHesapBakiyeMizanBakiyeIndex.cs` | Yeni migration |
+
+**Build:** 0 error, 6 warning (önceden var olan warning'ler)
+
+**Manuel test senaryosu:**
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | Migration başarıyla oluşmalı | EF Core tarafından tanınmalı |
+| 2 | `dotnet build` hatasız | 0 error |
+| 3 | Veritabanında index oluşmalı | `IX_MuhasebeHesapBakiyeleri_MizanBakiye` |
+| 4 | `POST ui/muhasebe/fisler/mizan-bakiye` | Eski sonuçları aynen dönmeli |
+| 5 | `AltHesaplariDahilEt=false` | Çalışmalı |
+| 6 | `AltHesaplariDahilEt=true` | Çalışmalı |
+| 7 | Donem dolu/boş | Her iki senaryo çalışmalı |
+| 8 | HesapKoduBaslangic/HesapKoduBitis | Çalışmalı |

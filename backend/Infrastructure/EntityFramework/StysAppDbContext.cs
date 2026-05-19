@@ -2132,6 +2132,17 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.MaliYil, x.Donem, x.HesapSeviyesi });
             entity.HasIndex(x => x.UstHesapKodu);
             entity.HasIndex(x => x.BakiyeTipi);
+
+            entity.HasIndex(x => new
+            {
+                x.TesisId,
+                x.MaliYil,
+                x.Donem,
+                x.KonsolideMi,
+                x.HesapKodu
+            })
+            .HasDatabaseName("IX_MuhasebeHesapBakiyeleri_MizanBakiye")
+            .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<Bildirim>(entity =>

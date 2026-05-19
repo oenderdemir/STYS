@@ -5655,3 +5655,43 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 
 **Build:** 0 error, 6 warning (önceden var olan warning'ler)
 
+
+
+### Faz 17: `GetMizanBakiyeAsync` performans optimizasyonu (DB-side aggregation)
+
+**Tarih:** 2026-05-19
+
+**Amaç:** Mizan-bakiye endpoint'ini büyük veri hacminde daha performanslı hale getirmek; tüm bakiye kayıtlarını belleğe çekmek yerine aggregation, sıralama ve sayfalamayı DB tarafında yapmak.
+
+**Değişiklikler:**
+
+| # | Değişiklik | Açıklama |
+|---|------------|----------|
+| 1 | Genel toplamlar DB'de | `genelQuery.GroupBy(x => 1).Select(g => ...)` ile `Sum(BorcToplam)`, `Sum(AlacakToplam)`, `Sum(BorcBakiye)`, `Sum(AlacakBakiye)` tek sorguda hesaplanır |
+| 2 | HesapKodu bazlı aggregation DB'de | `query.GroupBy(x => x.HesapKodu).Select(g => ...)` ile `Sum(BorcToplam)`, `Sum(AlacakToplam)`, `Any(KonsolideMi)`, `Min(HesapSeviyesi)`, `Min(MuhasebeHesapPlaniId)`, `Min(HesapAdi)` gruplanır |
+| 3 | Sayfalama DB'de | `OrderBy(HesapKodu).Skip().Take()` DB tarafında uygulanır; sadece sayfa kadar satır belleğe alınır |
+| 4 | Hesap planı ayrı sorgu | Sayfadaki `IlkHesapPlaniId`'ler `Distinct` ile toplanır, `MuhasebeHesapPlanlari` tablosundan ayrıca çekilir, `ToDictionary` lookup ile DTO'ya yazılır |
+| 5 | `Include` kaldırıldı | Aggregate DB tarafında yapıldığı için `Include(x => x.MuhasebeHesapPlani)` gereksiz; `AsNoTracking` en başta query'e eklendi |
+| 6 | Boş sonuç erken dönüş | `aggregatePage.Count == 0` ise genel toplamlar dolu boş `MizanDto` döner; hesap planı sorgusu atlanır |
+| 7 | Metot yorumu güncellendi | "Genel toplamlar ve hesap kodu bazlı aggregation DB tarafında yapılır; sadece istenen sayfa kadar kayıt belleğe alınır." |
+
+**Etkilenen dosyalar:**
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:726-870` | `GetMizanBakiyeAsync` tamamen DB-side aggregation ile yeniden yazıldı |
+
+**Build:** 0 error, 6 warning (önceden var olan warning'ler)
+
+**Manuel test senaryosu:**
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | `POST ui/muhasebe/fisler/mizan-bakiye` aynı filtrelerle çağrılır | 200, aynı format |
+| 2 | Genel toplamlar Faz 16B ile aynı | `GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `GenelAlacakBakiye` aynı |
+| 3 | `AltHesaplariDahilEt=false` | Sadece `KonsolideMi=false` kayıtlar |
+| 4 | `AltHesaplariDahilEt=true` | Konsolide kayıtlar dahil |
+| 5 | Aynı HesapKodu gerçek+konsolide | Tek satırda birleşir |
+| 6 | `KonsolideSatirMi` | `g.Any(x => x.KonsolideMi)` doğru çalışır |
+| 7 | Page/PageSize | DB tarafında uygulanır |
+| 8 | Büyük veri | Tüm kayıtlar belleğe alınmaz |
+| 9 | Mevcut `POST ui/muhasebe/fisler/mizan` | Bozulmaz |
+

@@ -725,9 +725,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     /// <summary>
     /// Mizanı <see cref="MuhasebeHesapBakiye"/> özet tablosundan okur.
-    /// Büyük veri hacminde MuhasebeFisSatir üzerinden SUM/GROUP BY yapmak yerine
-    /// dönemsel özet kayıtları kullanıldığı için daha performanslıdır.
-    /// Bakiye tablosunun güncel olmadığı düşünülürse rebuild endpoint'i çalıştırılmalıdır.
+    /// Genel toplamlar ve hesap kodu bazlı aggregation DB tarafında yapılır;
+    /// sadece istenen sayfa kadar kayıt belleğe alınır.
     /// </summary>
     public async Task<MizanDto> GetMizanBakiyeAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)
     {
@@ -750,9 +749,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         if (filter.Donem.HasValue && (filter.Donem.Value < 1 || filter.Donem.Value > 12))
             throw new BaseException("Dönem numarası 1-12 aralığında olmalıdır.", 400);
 
-        // 3. Bakiye tablosunu sorgula
+        // 3. Temel filtre sorgusu (AsNoTracking; Include kullanılmaz — aggregate DB tarafında yapılır)
         var query = _dbContext.MuhasebeHesapBakiyeleri
-            .Include(x => x.MuhasebeHesapPlani)
+            .AsNoTracking()
             .Where(x => !x.IsDeleted
                 && x.TesisId == filter.TesisId
                 && x.MaliYil == filter.MaliYil.Value);
@@ -760,90 +759,113 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         if (filter.Donem.HasValue)
             query = query.Where(x => x.Donem == filter.Donem.Value);
 
-        // KonsolideMi filtresi
         if (!filter.AltHesaplariDahilEt)
-        {
-            // Sadece gerçek hareket hesapları
             query = query.Where(x => !x.KonsolideMi);
-        }
 
-        // SadeceHareketGorenHesaplar filtresi
         if (filter.SadeceHareketGorenHesaplar)
             query = query.Where(x => x.BorcToplam != 0 || x.AlacakToplam != 0);
 
-        // Hesap kodu aralığı filtresi
         if (filter.HesapKoduBaslangic is not null)
             query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) >= 0);
 
         if (filter.HesapKoduBitis is not null)
             query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) <= 0);
 
-        var bakiyeKayitlari = await query
+        // 4. Genel toplamları DB tarafında hesapla (sadece KonsolideMi=false gerçek kayıtlar)
+        var genelQuery = query.Where(x => !x.KonsolideMi);
+
+        var genelToplam = await genelQuery
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                GenelToplamBorc = g.Sum(x => x.BorcToplam),
+                GenelToplamAlacak = g.Sum(x => x.AlacakToplam),
+                GenelBorcBakiye = g.Sum(x => x.BorcBakiye),
+                GenelAlacakBakiye = g.Sum(x => x.AlacakBakiye)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // 5. Display satırlarını DB tarafında HesapKodu bazında grupla
+        var aggregateQuery = query
+            .GroupBy(x => x.HesapKodu)
+            .Select(g => new
+            {
+                HesapKodu = g.Key,
+                ToplamBorc = g.Sum(x => x.BorcToplam),
+                ToplamAlacak = g.Sum(x => x.AlacakToplam),
+                KonsolideSatirMi = g.Any(x => x.KonsolideMi),
+                Seviye = g.Min(x => x.HesapSeviyesi),
+                IlkHesapPlaniId = g.Min(x => x.MuhasebeHesapPlaniId),
+                HesapAdi = g.Min(x => x.HesapAdi)
+            });
+
+        // 6. Sıralama ve sayfalama DB tarafında
+        var aggregatePage = await aggregateQuery
+            .OrderBy(x => x.HesapKodu)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(cancellationToken);
+
+        // 7. Boş sonuç
+        if (aggregatePage.Count == 0)
+        {
+            return new MizanDto
+            {
+                TesisId = filter.TesisId,
+                GenelToplamBorc = genelToplam?.GenelToplamBorc ?? 0,
+                GenelToplamAlacak = genelToplam?.GenelToplamAlacak ?? 0,
+                GenelBorcBakiye = genelToplam?.GenelBorcBakiye ?? 0,
+                GenelAlacakBakiye = genelToplam?.GenelAlacakBakiye ?? 0,
+                Satirlar = []
+            };
+        }
+
+        // 8. Sayfadaki hesap planı ID'leri için ayrı sorgu
+        var hesapPlaniIds = aggregatePage
+            .Select(x => x.IlkHesapPlaniId)
+            .Distinct()
+            .ToList();
+
+        var hesapPlanlari = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => hesapPlaniIds.Contains(x.Id))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // 4. Genel toplamları sadece KonsolideMi=false olanlardan hesapla
-        var gercekKayitlar = bakiyeKayitlari
-            .Where(x => !x.KonsolideMi)
-            .ToList();
+        var hesapPlaniLookup = hesapPlanlari.ToDictionary(x => x.Id);
 
-        var genelToplamBorc = gercekKayitlar.Sum(x => x.BorcToplam);
-        var genelToplamAlacak = gercekKayitlar.Sum(x => x.AlacakToplam);
-        var genelNet = genelToplamBorc - genelToplamAlacak;
-        var genelBorcBakiye = genelNet > 0 ? genelNet : 0;
-        var genelAlacakBakiye = genelNet < 0 ? Math.Abs(genelNet) : 0;
+        // 9. DTO'ları oluştur
+        var satirlar = aggregatePage.Select(agg =>
+        {
+            var net = agg.ToplamBorc - agg.ToplamAlacak;
+            hesapPlaniLookup.TryGetValue(agg.IlkHesapPlaniId, out var hp);
 
-        // 5. Aynı HesapKodu için GroupBy ile birleştir
-        var gruplar = bakiyeKayitlari
-            .GroupBy(x => x.HesapKodu)
-            .Select(g =>
+            return new MizanSatirDto
             {
-                // TesisId eşleşen hesap planı bilgisi öncelikli, yoksa ilk kayıt
-                var tercihli = g
-                    .OrderByDescending(x => x.MuhasebeHesapPlani?.TesisId == filter.TesisId)
-                    .ThenByDescending(x => x.MuhasebeHesapPlani?.TesisId == null)
-                    .First();
+                MuhasebeHesapPlaniId = hp?.Id ?? agg.IlkHesapPlaniId,
+                HesapKodu = agg.HesapKodu,
+                HesapAdi = hp?.Ad ?? agg.HesapAdi ?? string.Empty,
+                DetayHesapMi = hp?.DetayHesapMi ?? false,
+                HareketGorebilirMi = hp?.HareketGorebilirMi ?? true,
+                ToplamBorc = agg.ToplamBorc,
+                ToplamAlacak = agg.ToplamAlacak,
+                BorcBakiye = net > 0 ? net : 0,
+                AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
+                Bakiye = Math.Abs(net),
+                BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
+                KonsolideSatirMi = agg.KonsolideSatirMi,
+                Seviye = agg.Seviye,
+            };
+        }).ToList();
 
-                var hesapPlani = tercihli.MuhasebeHesapPlani;
-                var toplamBorc = g.Sum(x => x.BorcToplam);
-                var toplamAlacak = g.Sum(x => x.AlacakToplam);
-                var net = toplamBorc - toplamAlacak;
-
-                return new MizanSatirDto
-                {
-                    MuhasebeHesapPlaniId = hesapPlani?.Id ?? tercihli.MuhasebeHesapPlaniId,
-                    HesapKodu = g.Key,
-                    HesapAdi = hesapPlani?.Ad ?? tercihli.HesapAdi,
-                    DetayHesapMi = hesapPlani?.DetayHesapMi ?? false,
-                    HareketGorebilirMi = hesapPlani?.HareketGorebilirMi ?? true,
-                    ToplamBorc = toplamBorc,
-                    ToplamAlacak = toplamAlacak,
-                    BorcBakiye = net > 0 ? net : 0,
-                    AlacakBakiye = net < 0 ? Math.Abs(net) : 0,
-                    Bakiye = Math.Abs(net),
-                    BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir",
-                    KonsolideSatirMi = g.Any(x => x.KonsolideMi),
-                    Seviye = g.Key.Split('.').Length,
-                };
-            })
-            .OrderBy(s => s.HesapKodu, StringComparer.Ordinal)
-            .ToList();
-
-        // 6. Sayfalama (display satırlarına uygulanır)
-        var pagedSatirlar = gruplar
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToList();
-
-        // 7. DTO'yu döndür
+        // 10. DTO'yu döndür
         return new MizanDto
         {
             TesisId = filter.TesisId,
-            GenelToplamBorc = genelToplamBorc,
-            GenelToplamAlacak = genelToplamAlacak,
-            GenelBorcBakiye = genelBorcBakiye,
-            GenelAlacakBakiye = genelAlacakBakiye,
-            Satirlar = pagedSatirlar,
+            GenelToplamBorc = genelToplam?.GenelToplamBorc ?? 0,
+            GenelToplamAlacak = genelToplam?.GenelToplamAlacak ?? 0,
+            GenelBorcBakiye = genelToplam?.GenelBorcBakiye ?? 0,
+            GenelAlacakBakiye = genelToplam?.GenelAlacakBakiye ?? 0,
+            Satirlar = satirlar,
         };
     }
 

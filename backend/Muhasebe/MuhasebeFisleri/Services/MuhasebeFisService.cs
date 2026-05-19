@@ -921,12 +921,55 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         entity.ToplamBorc = dto.ToplamBorc;
         entity.ToplamAlacak = dto.ToplamAlacak;
         entity.Durum = MuhasebeFisDurumlari.Taslak;
-        entity.FisNo = string.IsNullOrWhiteSpace(dto.FisNo)
-            ? GenerateTaslakFisNo()
-            : dto.FisNo;
         entity.Satirlar = Mapper.Map<List<MuhasebeFisSatir>>(dto.Satirlar);
-        await _dbContext.MuhasebeFisler.AddAsync(entity);
-        await _dbContext.SaveChangesAsync();
+
+        // Manuel FisNo girilmişse trim + duplicate kontrolü
+        if (!string.IsNullOrWhiteSpace(dto.FisNo))
+        {
+            var manuelFisNo = dto.FisNo.Trim();
+            var duplicate = await _dbContext.MuhasebeFisler
+                .AnyAsync(x => x.TesisId == dto.TesisId
+                    && x.FisNo == manuelFisNo
+                    && !x.IsDeleted);
+            if (duplicate)
+                throw new BaseException(
+                    $"Aynı tesis içinde bu fiş numarası zaten kullanılıyor: {manuelFisNo}", 400);
+
+            entity.FisNo = manuelFisNo;
+        }
+
+        // Otomatik fiş no üretimi (retry ile)
+        const int maxRetry = 3;
+        for (int attempt = 0; attempt < maxRetry; attempt++)
+        {
+            if (string.IsNullOrWhiteSpace(dto.FisNo))
+            {
+                entity.FisNo = await GenerateFisNoAsync(
+                    entity.TesisId,
+                    entity.MaliYil,
+                    entity.FisTipi,
+                    entity.KaynakModul,
+                    CancellationToken.None);
+            }
+
+            try
+            {
+                await _dbContext.MuhasebeFisler.AddAsync(entity);
+                await _dbContext.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+            {
+                // Manuel fiş no ise retry yapma, direkt fırlat
+                if (!string.IsNullOrWhiteSpace(dto.FisNo) || attempt == maxRetry - 1)
+                    throw;
+
+                // Otomatik numara çakıştıysa tekrar dene
+                _dbContext.Entry(entity).State = EntityState.Detached;
+                entity.Id = 0;
+            }
+        }
+
         var created = await _repository.GetByIdWithSatirlarAsync(entity.Id)
             ?? throw new BaseException("Fiş oluşturulamadı.", 500);
         return Mapper.Map<MuhasebeFisDto>(created);
@@ -1002,9 +1045,49 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         await _dbContext.SaveChangesAsync();
     }
 
-    private static string GenerateTaslakFisNo()
+    private static string GetFisTipiKodu(string fisTipi, string? kaynakModul)
     {
-        return $"TASLAK-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+        if (kaynakModul == MuhasebeKaynakModulleri.TasinirHareket)
+            return "TSN";
+
+        return fisTipi switch
+        {
+            MuhasebeFisTipleri.Mahsup => "MHS",
+            MuhasebeFisTipleri.Tahsil => "THS",
+            MuhasebeFisTipleri.Tediye => "TDY",
+            MuhasebeFisTipleri.Acilis => "ACL",
+            MuhasebeFisTipleri.Kapanis => "KPN",
+            _ => "MHS"
+        };
+    }
+
+    private async Task<string> GenerateFisNoAsync(
+        int tesisId,
+        int maliYil,
+        string fisTipi,
+        string? kaynakModul,
+        CancellationToken cancellationToken)
+    {
+        var fisTipiKodu = GetFisTipiKodu(fisTipi, kaynakModul);
+        var prefix = $"{maliYil}-{fisTipiKodu}-";
+
+        var mevcutFisNolar = await _dbContext.MuhasebeFisler
+            .Where(x => x.TesisId == tesisId
+                && x.MaliYil == maliYil
+                && !x.IsDeleted
+                && x.FisNo.StartsWith(prefix))
+            .Select(x => x.FisNo)
+            .ToListAsync(cancellationToken);
+
+        int maxSira = 0;
+        foreach (var fisNo in mevcutFisNolar)
+        {
+            var siraStr = fisNo.Substring(prefix.Length);
+            if (int.TryParse(siraStr, out var sira) && sira > maxSira)
+                maxSira = sira;
+        }
+
+        return $"{prefix}{(maxSira + 1):D6}";
     }
 
     private async Task NormalizeAndValidateCreateAsync(MuhasebeFisDto dto, CancellationToken cancellationToken)
@@ -1544,12 +1627,19 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             var toplamBorc = matrah + kdvTutari;
             var toplamAlacak = genelToplam;
 
+            var fisNo = await GenerateFisNoAsync(
+                request.TesisId,
+                request.MaliYil,
+                MuhasebeFisTipleri.Mahsup,
+                MuhasebeKaynakModulleri.TasinirHareket,
+                cancellationToken);
+
             var fis = new MuhasebeFis
             {
                 TesisId = request.TesisId,
                 MaliYil = request.MaliYil,
                 Donem = donem,
-                FisNo = GenerateTaslakFisNo(),
+                FisNo = fisNo,
                 FisTarihi = request.FisTarihi,
                 FisTipi = MuhasebeFisTipleri.Mahsup,
                 KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,

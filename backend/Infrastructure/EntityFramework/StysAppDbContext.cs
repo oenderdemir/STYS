@@ -1917,6 +1917,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ToplamAlacak).HasPrecision(18, 2);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.HasIndex(x => new { x.TesisId, x.FisTarihi });
+            entity.HasIndex(x => new { x.TesisId, x.FisNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [FisNo] IS NOT NULL");
             entity.HasIndex(x => new { x.KaynakModul, x.KaynakId })
                 .HasFilter("[KaynakId] IS NOT NULL AND [IsDeleted] = 0");
             entity.HasIndex(x => x.Durum);

@@ -7,6 +7,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
+import { DialogService, DynamicDialogModule, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
@@ -14,20 +15,38 @@ import { TableModule } from 'primeng/table';
 import { TabsModule } from 'primeng/tabs';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { DepolarService } from '../depolar/depolar.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
+import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
+import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
 import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, StokBakiyeModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
 @Component({
     selector: 'app-stok-hareketleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TabsModule, ToastModule, ToolbarModule],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        ConfirmDialogModule,
+        DialogModule,
+        DynamicDialogModule,
+        InputNumberModule,
+        InputTextModule,
+        SelectModule,
+        TableModule,
+        TabsModule,
+        ToastModule,
+        ToolbarModule,
+        TooltipModule
+    ],
     templateUrl: './stok-hareketleri.html',
-    providers: [MessageService, ConfirmationService]
+    providers: [MessageService, ConfirmationService, DialogService]
 })
 export class StokHareketleriPage implements OnInit {
     private readonly service = inject(StokHareketleriService);
@@ -36,6 +55,7 @@ export class StokHareketleriPage implements OnInit {
     private readonly cariKartService = inject(CariKartlarService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
+    private readonly dialogService = inject(DialogService);
     private readonly cdr = inject(ChangeDetectorRef);
 
     loading = false;
@@ -57,6 +77,12 @@ export class StokHareketleriPage implements OnInit {
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
     cariKartOptions: Array<{ label: string; value: number }> = [];
 
+    /** Full TasinirKart models indexed by id for O(1) lookups of tesisId and stokKodu. */
+    private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
+
+    /** Active DynamicDialog reference for the muhasebe fiş taslağı dialog. */
+    private fisTaslagiDialogRef: DynamicDialogRef | null = null;
+
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
 
@@ -75,7 +101,9 @@ export class StokHareketleriPage implements OnInit {
         });
         this.tasinirKartService.getAll().subscribe({
             next: (items) => {
-                this.tasinirKartOptions = items.filter((x) => x.aktifMi).map((x) => ({ label: `${x.stokKodu} - ${x.ad}`, value: x.id! }));
+                const aktifler = items.filter((x) => x.aktifMi);
+                this.tasinirKartOptions = aktifler.map((x) => ({ label: `${x.stokKodu} - ${x.ad}`, value: x.id! }));
+                this.tasinirKartByIdMap = new Map(aktifler.map((x) => [x.id!, x]));
                 this.cdr.detectChanges();
             }
         });
@@ -151,7 +179,7 @@ export class StokHareketleriPage implements OnInit {
 
     save(): void {
         if (!this.model.depoId || !this.model.tasinirKartId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Depo ve tasinir kart secimi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Depo ve taşınır kart seçimi zorunludur.' });
             return;
         }
 
@@ -181,7 +209,7 @@ export class StokHareketleriPage implements OnInit {
                 this.dialogVisible = false;
                 this.load();
                 this.loadSummary();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Kayıt kaydedildi.' });
             },
             error: (error: unknown) => this.showError(error)
         });
@@ -193,17 +221,17 @@ export class StokHareketleriPage implements OnInit {
         }
 
         this.confirmationService.confirm({
-            message: 'Kayit silinsin mi?',
+            message: 'Kayıt silinsin mi?',
             header: 'Onay',
             icon: 'pi pi-exclamation-triangle',
             acceptLabel: 'Evet',
-            rejectLabel: 'Hayir',
+            rejectLabel: 'Hayır',
             accept: () => {
                 this.service.delete(item.id!).subscribe({
                     next: () => {
                         this.load();
                         this.loadSummary();
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Kayıt silindi.' });
                     },
                     error: (error: unknown) => this.showError(error)
                 });
@@ -211,12 +239,113 @@ export class StokHareketleriPage implements OnInit {
         });
     }
 
+    // ──────────────────────────────────────────
+    // Muhasebe Fiş Taslağı Oluştur
+    // ──────────────────────────────────────────
+
+    /**
+     * Determines whether the "Muhasebe Fiş Taslağı Oluştur" button should be enabled for a row.
+     * Requires: resolved tesisId > 0, resolved tasinirKodu non-empty, and row.tutar > 0.
+     */
+    canCreateMuhasebeFisTaslagi(row: StokHareketModel): boolean {
+        if (!row.tutar || row.tutar <= 0) {
+            return false;
+        }
+        if (!row.tasinirKartId) {
+            return false;
+        }
+        const kart = this.tasinirKartByIdMap.get(row.tasinirKartId);
+        if (!kart || !kart.tesisId || kart.tesisId <= 0) {
+            return false;
+        }
+        if (!kart.stokKodu?.trim()) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Returns a user-friendly tooltip explaining why the button is disabled,
+     * or the enabled tooltip text if the button is active.
+     */
+    getMuhasebeFisTaslagiTooltip(row: StokHareketModel): string {
+        if (!row.tutar || row.tutar <= 0) {
+            return 'Tutar sıfır veya negatif olduğu için muhasebe fiş taslağı oluşturulamaz.';
+        }
+        if (!row.tasinirKartId) {
+            return 'Taşınır kart bilgisi bulunamadı.';
+        }
+        const kart = this.tasinirKartByIdMap.get(row.tasinirKartId);
+        if (!kart || !kart.tesisId || kart.tesisId <= 0) {
+            return 'Tesis bilgisi bulunamadı.';
+        }
+        if (!kart.stokKodu?.trim()) {
+            return 'Taşınır kodu bulunamadı.';
+        }
+        return 'Muhasebe fiş taslağı oluştur';
+    }
+
+    /**
+     * Opens the TasinirMuhasebeFisTaslagiDialogComponent as a DynamicDialog with
+     * pre-filled data from the selected stok hareket row.
+     */
+    muhasebeFisTaslagiOlustur(row: StokHareketModel): void {
+        if (this.fisTaslagiDialogRef) {
+            return;
+        }
+
+        const kart = this.tasinirKartByIdMap.get(row.tasinirKartId);
+        if (!kart) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Eksik Bilgi',
+                detail: 'Taşınır kart bilgisi bulunamadı.'
+            });
+            return;
+        }
+
+        const tesisId = kart.tesisId ?? 0;
+        const tasinirKodu = kart.stokKodu?.trim() ?? '';
+
+        if (tesisId <= 0 || !tasinirKodu) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Eksik Bilgi',
+                detail: 'Tesis veya taşınır kodu bilgisi eksik.'
+            });
+            return;
+        }
+
+        this.fisTaslagiDialogRef = this.dialogService.open(TasinirMuhasebeFisTaslagiDialogComponent, {
+            header: 'Stok Hareketinden Muhasebe Fiş Taslağı Oluştur',
+            width: '900px',
+            modal: true,
+            closable: true,
+            dismissableMask: false,
+            data: {
+                tesisId,
+                tasinirKodu,
+                tutar: row.tutar,
+                referansTipi: 'StokHareket',
+                referansId: String(row.id ?? ''),
+                belgeNo: row.belgeNo?.trim() || null,
+                aciklama: row.aciklama?.trim() || null
+            }
+        });
+
+        this.fisTaslagiDialogRef?.onClose.subscribe(() => {
+            this.fisTaslagiDialogRef = null;
+        });
+    }
+
+    // ──────────────────────────────────────────
+
     private createEmpty(): StokHareketModel {
         return {
             depoId: 0,
             tasinirKartId: 0,
             hareketTarihi: new Date().toISOString(),
-            hareketTipi: 'Giris',
+            hareketTipi: 'Giriş',
             miktar: 1,
             birimFiyat: 0,
             tutar: 0,
@@ -231,7 +360,7 @@ export class StokHareketleriPage implements OnInit {
     }
 
     private showError(error: unknown): void {
-        const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'Islem basarisiz.';
+        const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'İşlem başarısız.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }

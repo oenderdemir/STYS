@@ -374,6 +374,11 @@ public class TasinirMuhasebeFisiOlusturRequest
     public string? BelgeNo { get; set; }
     public string? ReferansTipi { get; set; }
     public string? ReferansId { get; set; }
+
+    // KDV (opsiyonel)
+    public decimal? KdvOrani { get; set; }
+    public string? KdvHesapKodu { get; set; }
+    public bool KdvDahilMi { get; set; } = false;
 }
 
 public class TasinirMuhasebeFisiOlusturResultDto
@@ -388,4 +393,11 @@ public class TasinirMuhasebeFisiOlusturResultDto
     public decimal ToplamBorc { get; set; }
     public decimal ToplamAlacak { get; set; }
     public string Mesaj { get; set; } = string.Empty;
+
+    // KDV response
+    public decimal Matrah { get; set; }
+    public decimal KdvTutari { get; set; }
+    public decimal GenelToplam { get; set; }
+    public string? KdvHesapKodu { get; set; }
+    public string? KdvHesapAdi { get; set; }
 }

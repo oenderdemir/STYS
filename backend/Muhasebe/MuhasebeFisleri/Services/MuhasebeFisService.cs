@@ -1350,6 +1350,19 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             ? "320"
             : request.AlacakHesapKodu.Trim();
 
+        // 1b. KDV validasyonları
+        string? kdvHesapKodu = null;
+        if (request.KdvOrani.HasValue)
+        {
+            if (request.KdvOrani.Value <= 0 || request.KdvOrani.Value > 100)
+                throw new BaseException("KDV oranı 0 ile 100 arasında olmalıdır.", 400);
+
+            if (string.IsNullOrWhiteSpace(request.KdvHesapKodu))
+                throw new BaseException("KDV hesap kodu zorunludur.", 400);
+
+            kdvHesapKodu = request.KdvHesapKodu.Trim();
+        }
+
         // 2. Donem çözümle
         int donem;
         if (request.Donem.HasValue)
@@ -1418,7 +1431,51 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             ?? throw new BaseException(
                 $"Alacak hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {alacakHesapKodu}", 400);
 
-        // 7. Açıklama oluştur
+        // 6b. KDV hesabı kontrolü
+        MuhasebeHesapPlani? kdvHesap = null;
+        if (kdvHesapKodu is not null)
+        {
+            kdvHesap = await _dbContext.MuhasebeHesapPlanlari
+                .AsNoTracking()
+                .Where(x => x.TamKod == kdvHesapKodu
+                    && !x.IsDeleted
+                    && x.AktifMi
+                    && x.HareketGorebilirMi
+                    && x.DetayHesapMi
+                    && (x.TesisId == request.TesisId || x.TesisId == null))
+                .OrderByDescending(x => x.TesisId == request.TesisId)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new BaseException(
+                    $"KDV hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {kdvHesapKodu}", 400);
+        }
+
+        // 7. KDV hesaplama
+        decimal matrah, kdvTutari, genelToplam;
+        if (request.KdvOrani.HasValue)
+        {
+            if (request.KdvDahilMi)
+            {
+                // KDV dahil: Tutar = genelToplam
+                genelToplam = request.Tutar;
+                matrah = Math.Round(genelToplam / (1 + request.KdvOrani.Value / 100), 2);
+                kdvTutari = genelToplam - matrah;
+            }
+            else
+            {
+                // KDV hariç: Tutar = matrah
+                matrah = request.Tutar;
+                kdvTutari = Math.Round(matrah * request.KdvOrani.Value / 100, 2);
+                genelToplam = matrah + kdvTutari;
+            }
+        }
+        else
+        {
+            matrah = request.Tutar;
+            kdvTutari = 0;
+            genelToplam = request.Tutar;
+        }
+
+        // 8. Açıklama oluştur
         var aciklama = !string.IsNullOrWhiteSpace(request.Aciklama)
             ? request.Aciklama
             : $"Taşınır kodu {tasinirKodu} için otomatik muhasebe fişi taslağı";
@@ -1433,11 +1490,60 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             aciklama += $" | Belge No: {request.BelgeNo}";
         }
 
-        // 8. Fiş ve satırları transaction içinde oluştur
+        if (request.KdvOrani.HasValue)
+        {
+            aciklama += $" | KDV Oranı: %{request.KdvOrani.Value} | KDV Dahil: {(request.KdvDahilMi ? "Evet" : "Hayır")}";
+        }
+
+        // 9. Fiş ve satırları transaction içinde oluştur
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
         {
+            var satirlar = new List<MuhasebeFisSatir>
+            {
+                new()
+                {
+                    MuhasebeHesapPlaniId = borcHesapKontrol.Id,
+                    SiraNo = 1,
+                    Borc = matrah,
+                    Alacak = 0,
+                    ParaBirimi = "TRY",
+                    Kur = 1,
+                    Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
+                },
+            };
+
+            int siraNo = 2;
+
+            if (kdvHesap is not null && kdvTutari > 0)
+            {
+                satirlar.Add(new MuhasebeFisSatir
+                {
+                    MuhasebeHesapPlaniId = kdvHesap.Id,
+                    SiraNo = siraNo++,
+                    Borc = kdvTutari,
+                    Alacak = 0,
+                    ParaBirimi = "TRY",
+                    Kur = 1,
+                    Aciklama = $"Taşınır kodu {tasinirKodu} KDV kaydı (%{request.KdvOrani!.Value})",
+                });
+            }
+
+            satirlar.Add(new MuhasebeFisSatir
+            {
+                MuhasebeHesapPlaniId = alacakHesap.Id,
+                SiraNo = siraNo,
+                Borc = 0,
+                Alacak = genelToplam,
+                ParaBirimi = "TRY",
+                Kur = 1,
+                Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
+            });
+
+            var toplamBorc = matrah + kdvTutari;
+            var toplamAlacak = genelToplam;
+
             var fis = new MuhasebeFis
             {
                 TesisId = request.TesisId,
@@ -1449,31 +1555,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,
                 Durum = MuhasebeFisDurumlari.Taslak,
                 Aciklama = aciklama,
-                ToplamBorc = request.Tutar,
-                ToplamAlacak = request.Tutar,
-                Satirlar = new List<MuhasebeFisSatir>
-                {
-                    new()
-                    {
-                        MuhasebeHesapPlaniId = borcHesapKontrol.Id,
-                        SiraNo = 1,
-                        Borc = request.Tutar,
-                        Alacak = 0,
-                        ParaBirimi = "TRY",
-                        Kur = 1,
-                        Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
-                    },
-                    new()
-                    {
-                        MuhasebeHesapPlaniId = alacakHesap.Id,
-                        SiraNo = 2,
-                        Borc = 0,
-                        Alacak = request.Tutar,
-                        ParaBirimi = "TRY",
-                        Kur = 1,
-                        Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
-                    },
-                },
+                ToplamBorc = toplamBorc,
+                ToplamAlacak = toplamAlacak,
+                Satirlar = satirlar,
             };
 
             await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
@@ -1489,8 +1573,13 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 BorcHesapAdi = borcHesapKontrol.Ad,
                 AlacakHesapKodu = alacakHesap.TamKod ?? string.Empty,
                 AlacakHesapAdi = alacakHesap.Ad,
-                ToplamBorc = request.Tutar,
-                ToplamAlacak = request.Tutar,
+                ToplamBorc = toplamBorc,
+                ToplamAlacak = toplamAlacak,
+                Matrah = matrah,
+                KdvTutari = kdvTutari,
+                GenelToplam = genelToplam,
+                KdvHesapKodu = kdvHesap?.TamKod,
+                KdvHesapAdi = kdvHesap?.Ad,
                 Mesaj = "Taşınır muhasebe fişi taslağı oluşturuldu.",
             };
         }

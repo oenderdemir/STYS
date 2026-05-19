@@ -57,33 +57,66 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 oldType: "nvarchar(32)",
                 oldMaxLength: 32);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId",
-                schema: "muhasebe",
-                table: "TasinirKodMuhasebeHesapEslemeleri",
-                column: "TasinirKodId");
+            // Index may already exist from 20260514090929; create conditionally
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes i
+                    JOIN sys.tables t ON i.object_id = t.object_id
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE s.name = 'muhasebe'
+                      AND t.name = 'TasinirKodMuhasebeHesapEslemeleri'
+                      AND i.name = 'IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId'
+                )
+                CREATE INDEX [IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId]
+                    ON [muhasebe].[TasinirKodMuhasebeHesapEslemeleri] ([TasinirKodId]);
+            ");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi",
-                schema: "muhasebe",
-                table: "TasinirKodMuhasebeHesapEslemeleri",
-                columns: new[] { "TasinirKodId", "MalzemeTipi", "HareketTipi" },
-                unique: true,
-                filter: "[IsDeleted] = 0 AND [AktifMi] = 1 AND [VarsayilanMi] = 1");
+            // Index may already exist from 20260514090929; create conditionally
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.indexes i
+                    JOIN sys.tables t ON i.object_id = t.object_id
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE s.name = 'muhasebe'
+                      AND t.name = 'TasinirKodMuhasebeHesapEslemeleri'
+                      AND i.name = 'IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi'
+                )
+                CREATE UNIQUE INDEX [IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi]
+                    ON [muhasebe].[TasinirKodMuhasebeHesapEslemeleri] ([TasinirKodId], [MalzemeTipi], [HareketTipi])
+                    WHERE [IsDeleted] = 0 AND [AktifMi] = 1 AND [VarsayilanMi] = 1;
+            ");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId",
-                schema: "muhasebe",
-                table: "TasinirKodMuhasebeHesapEslemeleri");
+            // Index may have been created by 20260514090929; drop conditionally
+            migrationBuilder.Sql(@"
+                IF EXISTS (
+                    SELECT 1 FROM sys.indexes i
+                    JOIN sys.tables t ON i.object_id = t.object_id
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE s.name = 'muhasebe'
+                      AND t.name = 'TasinirKodMuhasebeHesapEslemeleri'
+                      AND i.name = 'IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId'
+                )
+                DROP INDEX [IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId]
+                    ON [muhasebe].[TasinirKodMuhasebeHesapEslemeleri];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi",
-                schema: "muhasebe",
-                table: "TasinirKodMuhasebeHesapEslemeleri");
+            // Index may have been created by 20260514090929; drop conditionally
+            migrationBuilder.Sql(@"
+                IF EXISTS (
+                    SELECT 1 FROM sys.indexes i
+                    JOIN sys.tables t ON i.object_id = t.object_id
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE s.name = 'muhasebe'
+                      AND t.name = 'TasinirKodMuhasebeHesapEslemeleri'
+                      AND i.name = 'IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi'
+                )
+                DROP INDEX [IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MalzemeTipi_HareketTipi]
+                    ON [muhasebe].[TasinirKodMuhasebeHesapEslemeleri];
+            ");
 
             migrationBuilder.AlterColumn<string>(
                 name: "MalzemeTipi",

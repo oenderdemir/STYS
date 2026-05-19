@@ -1,0 +1,237 @@
+<p-toast />
+
+<!-- Üst bilgi uyarısı -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12">
+        <div class="flex align-items-center gap-2 p-3 surface-100 border-round">
+            <i class="pi pi-info-circle text-primary"></i>
+            <span>Bir hesap seçerek o hesaba ait muavin defter kayıtlarını listeleyebilirsiniz. Hesap kodu alanına tam hesap kodunu girmeniz gerekmektedir (örn: 100.01.001).</span>
+        </div>
+    </div>
+</div>
+
+<!-- Filtre Satırı 1 -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">Tesis</label>
+        <p-select
+            [options]="tesisSecenekleri"
+            [(ngModel)]="filter.tesisId"
+            placeholder="Tesis seçiniz"
+            optionLabel="label"
+            optionValue="value"
+            class="w-full"
+            [filter]="true"
+            [showClear]="true">
+        </p-select>
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Mali Yıl</label>
+        <p-select
+            [options]="maliYilSecenekleri"
+            [(ngModel)]="filter.maliYil"
+            placeholder="Mali yıl"
+            optionLabel="label"
+            optionValue="value"
+            class="w-full">
+        </p-select>
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Dönem</label>
+        <p-select
+            [options]="donemSecenekleri"
+            [(ngModel)]="filter.donem"
+            placeholder="Dönem"
+            optionLabel="label"
+            optionValue="value"
+            class="w-full">
+        </p-select>
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">Başlangıç Tarihi</label>
+        <input
+            type="date"
+            [(ngModel)]="filter.baslangicTarihi"
+            class="w-full p-inputtext p-component" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">Bitiş Tarihi</label>
+        <input
+            type="date"
+            [(ngModel)]="filter.bitisTarihi"
+            class="w-full p-inputtext p-component" />
+    </div>
+</div>
+
+<!-- Filtre Satırı 2 -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">Hesap Kodu</label>
+        <input
+            type="text"
+            [(ngModel)]="hesapKoduInput"
+            placeholder="Örn: 100.01.001"
+            class="w-full p-inputtext p-component" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">&nbsp;</label>
+        <div class="flex align-items-center gap-2">
+            <p-checkbox
+                [(ngModel)]="filter.altHesaplariDahilEt"
+                [binary]="true"
+                inputId="altHesaplar">
+            </p-checkbox>
+            <label for="altHesaplar" class="text-sm">Alt hesapları dahil et</label>
+        </div>
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end gap-2">
+        <p-button
+            label="Ara"
+            icon="pi pi-search"
+            (onClick)="ara()"
+            [loading]="loading"
+            severity="primary">
+        </p-button>
+        <p-button
+            label="Temizle"
+            icon="pi pi-times"
+            (onClick)="temizle()"
+            [disabled]="loading"
+            severity="secondary">
+        </p-button>
+    </div>
+</div>
+
+<!-- Başlık / Özet -->
+<div *ngIf="result" class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12">
+        <div class="p-3 border-round surface-card shadow-1">
+            <div class="flex flex-wrap align-items-center gap-3">
+                <span class="text-lg font-semibold">{{ result.muhasebeHesapKodu }} - {{ result.muhasebeHesapAdi }}</span>
+                <span class="text-sm text-500">|</span>
+                <span class="text-sm">Toplam Borç: <strong class="font-mono">{{ result.toplamBorc | number: '1.2-2' }}</strong></span>
+                <span class="text-sm">Toplam Alacak: <strong class="font-mono">{{ result.toplamAlacak | number: '1.2-2' }}</strong></span>
+                <span class="text-sm">Bakiye:
+                    <strong class="font-mono" [ngClass]="{ 'text-red-500': result.bakiyeTipi === 'Borc', 'text-green-500': result.bakiyeTipi === 'Alacak' }">
+                        {{ result.bakiye | number: '1.2-2' }} ({{ getBakiyeTipiLabel(result.bakiyeTipi) }})
+                    </strong>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tablo -->
+<p-table
+    *ngIf="result"
+    [value]="result.satirlar"
+    [loading]="loading"
+    [tableStyle]="{ 'min-width': '80rem' }"
+    [sortField]="'fisTarihi'"
+    [sortOrder]="1"
+    styleClass="p-datatable-sm p-datatable-striped">
+    <ng-template #caption>
+        <div class="flex justify-content-between align-items-center">
+            <span class="text-lg font-semibold">Muavin Defter</span>
+            <span *ngIf="result.satirlar.length" class="text-sm text-500">{{ result.satirlar.length }} kayıt</span>
+        </div>
+    </ng-template>
+    <ng-template #header>
+        <tr>
+            <th class="text-center" style="width: 60px">#</th>
+            <th class="text-center">Tarih</th>
+            <th class="text-center">Fiş No</th>
+            <th class="text-center">Yevmiye No</th>
+            <th class="text-center">Fiş Tipi</th>
+            <th class="text-center">Durum</th>
+            <th class="text-right">Borç</th>
+            <th class="text-right">Alacak</th>
+            <th class="text-right">Bakiye</th>
+            <th>Açıklama</th>
+            <th>Fiş Açıklaması</th>
+        </tr>
+    </ng-template>
+    <ng-template #body let-satir let-i="rowIndex">
+        <tr>
+            <td class="text-center text-sm text-500">{{ i + 1 }}</td>
+            <td class="text-center">{{ satir.fisTarihi | date: 'dd.MM.yyyy' }}</td>
+            <td class="text-center font-medium">{{ satir.fisNo }}</td>
+            <td class="text-center">
+                <span *ngIf="satir.yevmiyeNo">{{ satir.yevmiyeNo }}</span>
+                <span *ngIf="!satir.yevmiyeNo" class="text-500">-</span>
+            </td>
+            <td class="text-center">
+                <p-tag
+                    [value]="getFisTipiLabel(satir.fisTipi)"
+                    [severity]="getFisTipiSeverity(satir.fisTipi)"
+                    styleClass="text-xs">
+                </p-tag>
+            </td>
+            <td class="text-center">
+                <p-tag
+                    [value]="getDurumLabel(satir.durum)"
+                    [severity]="getDurumSeverity(satir.durum)"
+                    styleClass="text-xs">
+                </p-tag>
+            </td>
+            <td class="text-right font-mono">{{ satir.borc | number: '1.2-2' }}</td>
+            <td class="text-right font-mono">{{ satir.alacak | number: '1.2-2' }}</td>
+            <td class="text-right font-mono">
+                <span [ngClass]="{ 'text-red-500': satir.bakiyeTipi === 'Borc', 'text-green-500': satir.bakiyeTipi === 'Alacak' }">
+                    {{ satir.bakiye | number: '1.2-2' }}
+                </span>
+            </td>
+            <td class="text-sm">{{ satir.satirAciklama }}</td>
+            <td class="text-sm">{{ satir.fisAciklama }}</td>
+        </tr>
+    </ng-template>
+    <ng-template #emptymessage>
+        <tr>
+            <td colspan="11" class="text-center p-4 text-500">Görüntülenecek kayıt bulunamadı.</td>
+        </tr>
+    </ng-template>
+    <ng-template #summary>
+        <tr class="totals-row">
+            <td colspan="6" class="text-right font-semibold">Toplam</td>
+            <td class="text-right font-semibold font-mono">{{ result.toplamBorc | number: '1.2-2' }}</td>
+            <td class="text-right font-semibold font-mono">{{ result.toplamAlacak | number: '1.2-2' }}</td>
+            <td class="text-right font-semibold font-mono" [ngClass]="{ 'text-red-500': result.bakiyeTipi === 'Borc', 'text-green-500': result.bakiyeTipi === 'Alacak' }">
+                {{ result.bakiye | number: '1.2-2' }}
+            </td>
+            <td colspan="2"></td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<!-- Sayfalama -->
+<div *ngIf="result" class="flex justify-content-between align-items-center mt-3">
+    <p-button
+        label="Önceki"
+        icon="pi pi-chevron-left"
+        (onClick)="oncekiSayfa()"
+        [disabled]="filter.page <= 1 || loading"
+        severity="secondary">
+    </p-button>
+    <div class="flex align-items-center gap-2">
+        <span class="text-sm text-500">Sayfa {{ filter.page }} | {{ getSayfaDurumu() }} | Sayfa başına:</span>
+        <p-select
+            [options]="[10, 25, 50, 100]"
+            [(ngModel)]="filter.pageSize"
+            (onChange)="onPageSizeChange()"
+            class="w-7rem">
+        </p-select>
+    </div>
+    <p-button
+        label="Sonraki"
+        icon="pi pi-chevron-right"
+        (onClick)="sonrakiSayfa()"
+        [disabled]="!result || !result.satirlar.length || result.satirlar.length < filter.pageSize || loading"
+        severity="secondary">
+    </p-button>
+</div>
+
+<!-- Boş durum -->
+<div *ngIf="!result && !loading" class="flex flex-column align-items-center justify-content-center p-6 surface-50 border-round">
+    <i class="pi pi-list-check text-4xl text-300 mb-3"></i>
+    <p class="text-500 m-0">Hesap kodu girip "Ara" butonuna tıklayarak muavin defteri görüntüleyebilirsiniz.</p>
+</div>

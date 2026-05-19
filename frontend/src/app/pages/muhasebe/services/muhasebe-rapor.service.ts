@@ -4,7 +4,9 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
 import { MizanFilterModel, MizanKarsilastirmaModel, MizanModel } from '../models/mizan.model';
+import { MuavinDefterFilterModel, MuavinDefterModel } from '../models/muavin-defter.model';
 import { MuhasebeFisFilterModel } from '../models/muhasebe-fis.model';
+import { YevmiyeDefteriModel } from '../models/yevmiye-defteri.model';
 
 export interface MuhasebeTesisModel {
     id: number;
@@ -38,28 +40,54 @@ export class MuhasebeRaporService {
                     throw new Error(tryReadApiMessage(envelope) ?? 'Hizli mizan alinamadi.');
                 })
             );
-        }
-    
-        karsilastirMizan(filter: MizanFilterModel): Observable<MizanKarsilastirmaModel> {
-            return this.http.post<MizanKarsilastirmaModel>(
-                `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-karsilastir`,
-                filter
-            );
-        }
-    
-        exportMizanBakiyeExcel(filter: MizanFilterModel): Observable<Blob> {
-            return this.http.post(
-                `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-bakiye/export-excel`,
-                filter,
-                { responseType: 'blob' }
-            );
-        }
-
-        exportYevmiyeDefteriExcel(filter: MuhasebeFisFilterModel): Observable<Blob> {
-            return this.http.post(
-                `${this.apiBaseUrl}/ui/muhasebe/fisler/yevmiye-defteri/export-excel`,
-                filter,
-                { responseType: 'blob' }
-            );
-        }
     }
+
+    karsilastirMizan(filter: MizanFilterModel): Observable<MizanKarsilastirmaModel> {
+        return this.http.post<MizanKarsilastirmaModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-karsilastir`,
+            filter
+        );
+    }
+
+    exportMizanBakiyeExcel(filter: MizanFilterModel): Observable<Blob> {
+        return this.http.post(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-bakiye/export-excel`,
+            filter,
+            { responseType: 'blob' }
+        );
+    }
+
+    getYevmiyeDefteri(filter: MuhasebeFisFilterModel): Observable<YevmiyeDefteriModel> {
+        return this.http
+            .post<ApiResponse<YevmiyeDefteriModel>>(`${this.apiBaseUrl}/ui/muhasebe/fisler/yevmiye-defteri`, filter)
+            .pipe(
+                map((envelope) => {
+                    if (envelope.success && envelope.data) {
+                        return envelope.data;
+                    }
+                    throw new Error(tryReadApiMessage(envelope) ?? 'Yevmiye defteri alinamadi.');
+                })
+            );
+    }
+
+    exportYevmiyeDefteriExcel(filter: MuhasebeFisFilterModel): Observable<Blob> {
+        return this.http.post(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/yevmiye-defteri/export-excel`,
+            filter,
+            { responseType: 'blob' }
+        );
+    }
+
+    getMuavinDefter(filter: MuavinDefterFilterModel): Observable<MuavinDefterModel> {
+        return this.http
+            .post<ApiResponse<MuavinDefterModel>>(`${this.apiBaseUrl}/ui/muhasebe/fisler/muavin-defter`, filter)
+            .pipe(
+                map((envelope) => {
+                    if (envelope.success && envelope.data) {
+                        return envelope.data;
+                    }
+                    throw new Error(tryReadApiMessage(envelope) ?? 'Muavin defter alinamadi.');
+                })
+            );
+    }
+}

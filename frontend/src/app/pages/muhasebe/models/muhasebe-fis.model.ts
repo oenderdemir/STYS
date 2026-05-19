@@ -7,6 +7,8 @@ export interface MuhasebeFisFilterModel {
     fisTipi: string | null;
     durum: string | null;
     kaynakModul: string | null;
+    yevmiyeNoBaslangic: number | null;
+    yevmiyeNoBitis: number | null;
     fisNo: string | null;
     aciklama: string | null;
     page: number;
@@ -29,6 +31,8 @@ export function createDefaultFisFilter(): MuhasebeFisFilterModel {
         fisTipi: null,
         durum: null,
         kaynakModul: null,
+        yevmiyeNoBaslangic: null,
+        yevmiyeNoBitis: null,
         fisNo: null,
         aciklama: null,
         page: 1,
@@ -46,6 +50,8 @@ export function normalizeFisFilter(filter: MuhasebeFisFilterModel): MuhasebeFisF
         fisTipi: filter.fisTipi || null,
         durum: filter.durum || null,
         kaynakModul: filter.kaynakModul || null,
+        yevmiyeNoBaslangic: filter.yevmiyeNoBaslangic ?? null,
+        yevmiyeNoBitis: filter.yevmiyeNoBitis ?? null,
         fisNo: (filter.fisNo || '').trim() || null,
         aciklama: (filter.aciklama || '').trim() || null,
         page: filter.page < 1 ? 1 : filter.page,

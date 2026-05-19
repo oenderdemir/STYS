@@ -1,0 +1,18 @@
+<p-toast />
+
+<div class="page-container">
+  <div class="mb-4">
+    <div class="flex align-items-center gap-2 p-3 surface-100 border-round">
+      <i class="pi pi-info-circle text-primary"></i>
+      <span class="text-sm">
+        Bu ekrandan taşınır işlemi için otomatik muhasebe fişi taslağı oluşturabilirsiniz. Oluşturulan fiş <strong>taslak</strong> durumunda kaydedilir ve hesap bakiyelerini etkilemez.
+      </span>
+    </div>
+  </div>
+
+  <p-button
+    label="Yeni Taşınır Fişi Taslağı"
+    icon="pi pi-plus"
+    (onClick)="openDialog()"
+    styleClass="mb-4" />
+</div>

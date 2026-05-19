@@ -1,0 +1,268 @@
+<p-toast />
+
+<div class="dialog-container">
+  <!-- Bilgi metni -->
+  <div class="mb-4">
+    <div class="flex align-items-center gap-2 p-3 surface-100 border-round">
+      <i class="pi pi-info-circle text-primary"></i>
+      <span class="text-sm">
+        Bu form ile taşınır işleminden otomatik muhasebe fişi oluşturulur. Oluşturulan fiş <strong>taslak</strong> durumunda kaydedilir; bakiye güncellemez.
+      </span>
+    </div>
+  </div>
+
+  <!-- Form alanları -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <!-- Tesis -->
+    <div class="col-span-12 md:col-span-6">
+      <label class="block font-medium mb-2">Tesis <span class="text-red-500">*</span></label>
+      <p-select
+        class="w-full"
+        [options]="tesisSecenekleri"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="request.tesisId"
+        placeholder="Tesis seçiniz"
+        [loading]="tesislerLoading"
+        appendTo="body" />
+    </div>
+
+    <!-- Mali Yıl -->
+    <div class="col-span-12 md:col-span-3">
+      <label class="block font-medium mb-2">Mali Yıl <span class="text-red-500">*</span></label>
+      <input pInputText class="w-full" type="number" [(ngModel)]="request.maliYil" placeholder="Örn: 2026" min="2000" max="2100" />
+    </div>
+
+    <!-- Dönem -->
+    <div class="col-span-12 md:col-span-3">
+      <label class="block font-medium mb-2">Dönem</label>
+      <p-select
+        class="w-full"
+        [options]="donemSecenekleri"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="request.donem"
+        placeholder="Seçiniz (opsiyonel)"
+        appendTo="body" />
+    </div>
+
+    <!-- Fiş Tarihi -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Fiş Tarihi <span class="text-red-500">*</span></label>
+      <p-datepicker class="w-full" [(ngModel)]="request.fisTarihi" dateFormat="yy-mm-dd" showIcon [showOnFocus]="false" appendTo="body" />
+    </div>
+
+    <!-- Taşınır Kodu -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Taşınır Kodu <span class="text-red-500">*</span></label>
+      <input pInputText class="w-full" [(ngModel)]="request.tasinirKodu" placeholder="Örn: 150.01.01" maxlength="64" />
+    </div>
+
+    <!-- Tutar -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Tutar <span class="text-red-500">*</span></label>
+      <p-inputnumber class="w-full" [(ngModel)]="request.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" placeholder="0,00" />
+    </div>
+
+    <!-- Alacak Hesap Kodu -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Alacak Hesap Kodu</label>
+      <input pInputText class="w-full" [(ngModel)]="request.alacakHesapKodu" placeholder="Varsayılan: 320" maxlength="64" />
+    </div>
+
+    <!-- Belge No -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Belge No</label>
+      <input pInputText class="w-full" [(ngModel)]="request.belgeNo" placeholder="Opsiyonel" maxlength="128" />
+    </div>
+
+    <!-- Referans Tipi -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Referans Tipi</label>
+      <input pInputText class="w-full" [(ngModel)]="request.referansTipi" placeholder="Opsiyonel" maxlength="64" />
+    </div>
+
+    <!-- Referans ID -->
+    <div class="col-span-12 md:col-span-4">
+      <label class="block font-medium mb-2">Referans ID</label>
+      <input pInputText class="w-full" [(ngModel)]="request.referansId" placeholder="Opsiyonel" maxlength="128" />
+    </div>
+
+    <!-- Açıklama -->
+    <div class="col-span-12 {{ kdvEnabled ? 'md:col-span-8' : 'md:col-span-12' }}">
+      <label class="block font-medium mb-2">Açıklama</label>
+      <textarea pInputTextarea class="w-full" [(ngModel)]="request.aciklama" placeholder="Opsiyonel açıklama" rows="2" maxlength="512" style="resize: vertical"></textarea>
+    </div>
+
+    <!-- KDV Toggle -->
+    <div class="col-span-12 md:col-span-4 flex align-items-center gap-3" *ngIf="!kdvEnabled">
+      <p-button
+        label="KDV Ekle"
+        icon="pi pi-plus-circle"
+        severity="secondary"
+        [outlined]="true"
+        (onClick)="kdvEnabled = true"
+        styleClass="w-full" />
+    </div>
+  </div>
+
+  <!-- KDV Alanları -->
+  <div class="grid grid-cols-12 gap-3 mb-4 p-3 surface-50 border-round" *ngIf="kdvEnabled">
+    <div class="col-span-12 mb-2">
+      <div class="flex align-items-center gap-2">
+        <i class="pi pi-percentage text-primary"></i>
+        <span class="font-semibold">KDV Bilgileri</span>
+      </div>
+    </div>
+
+    <!-- KDV Oranı -->
+    <div class="col-span-12 md:col-span-3">
+      <label class="block font-medium mb-2">KDV Oranı <span class="text-red-500">*</span></label>
+      <p-select
+        class="w-full"
+        [options]="kdvOranSecenekleri"
+        optionLabel="label"
+        optionValue="value"
+        [(ngModel)]="request.kdvOrani"
+        placeholder="Seçiniz"
+        appendTo="body" />
+    </div>
+
+    <!-- KDV Hesap Kodu -->
+    <div class="col-span-12 md:col-span-5">
+      <label class="block font-medium mb-2">KDV Hesap Kodu <span class="text-red-500">*</span></label>
+      <input pInputText class="w-full" [(ngModel)]="request.kdvHesapKodu" placeholder="Örn: 191" maxlength="64" />
+    </div>
+
+    <!-- KDV Dahil/Hariç -->
+    <div class="col-span-12 md:col-span-4 flex align-items-center mt-4">
+      <p-checkbox [(ngModel)]="request.kdvDahilMi" [binary]="true" inputId="chkKdvDahil" />
+      <label for="chkKdvDahil" class="ml-2 cursor-pointer">KDV Dahil</label>
+    </div>
+  </div>
+
+  <!-- Aksiyon butonları -->
+  <div class="flex justify-content-between align-items-center mb-4">
+    <p-button
+      *ngIf="kdvEnabled"
+      label="KDV'yi Kaldır"
+      icon="pi pi-times-circle"
+      severity="secondary"
+      [outlined]="true"
+      (onClick)="kdvEnabled = false; request.kdvOrani = null; request.kdvHesapKodu = null; request.kdvDahilMi = false" />
+    <span *ngIf="!kdvEnabled"></span>
+
+    <div class="flex gap-2">
+      <p-button label="Kapat" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="kapat()" />
+      <p-button label="Taslak Oluştur" icon="pi pi-save" (onClick)="olustur()" [loading]="loading" />
+    </div>
+  </div>
+
+  <!-- Sonuç kartı -->
+  <div *ngIf="result" class="p-4 border-round surface-card shadow-1">
+    <h4 class="m-0 mb-3 flex align-items-center gap-2">
+      <i class="pi pi-check-circle text-green-500"></i>
+      Taslak Fiş Oluşturuldu
+    </h4>
+
+    <div class="grid grid-cols-12 gap-3">
+      <!-- Fiş No -->
+      <div class="col-span-12 md:col-span-4">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Fiş No</div>
+          <div class="text-lg font-semibold">{{ result.fisNo }}</div>
+        </div>
+      </div>
+
+      <!-- Durum -->
+      <div class="col-span-12 md:col-span-4">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Durum</div>
+          <div class="text-lg font-semibold">{{ result.durum }}</div>
+        </div>
+      </div>
+
+      <!-- Fiş ID -->
+      <div class="col-span-12 md:col-span-4">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Fiş ID</div>
+          <div class="text-lg font-semibold">{{ result.muhasebeFisId }}</div>
+        </div>
+      </div>
+
+      <!-- Borç Hesap -->
+      <div class="col-span-12 md:col-span-6">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Borç Hesap</div>
+          <div class="text-base font-semibold">{{ result.borcHesapKodu }} - {{ result.borcHesapAdi }}</div>
+        </div>
+      </div>
+
+      <!-- Alacak Hesap -->
+      <div class="col-span-12 md:col-span-6">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Alacak Hesap</div>
+          <div class="text-base font-semibold">{{ result.alacakHesapKodu }} - {{ result.alacakHesapAdi }}</div>
+        </div>
+      </div>
+
+      <!-- Toplam Borç -->
+      <div class="col-span-12 md:col-span-6">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Toplam Borç</div>
+          <div class="text-xl font-bold">{{ result.toplamBorc | number : '1.2-2' }} ₺</div>
+        </div>
+      </div>
+
+      <!-- Toplam Alacak -->
+      <div class="col-span-12 md:col-span-6">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Toplam Alacak</div>
+          <div class="text-xl font-bold">{{ result.toplamAlacak | number : '1.2-2' }} ₺</div>
+        </div>
+      </div>
+
+      <!-- KDV Bilgileri (varsa) -->
+      <ng-container *ngIf="result.kdvTutari > 0">
+        <!-- Matrah -->
+        <div class="col-span-12 md:col-span-4">
+          <div class="p-2 border-round surface-50">
+            <div class="text-xs text-color-secondary">Matrah</div>
+            <div class="text-lg font-semibold">{{ result.matrah | number : '1.2-2' }} ₺</div>
+          </div>
+        </div>
+
+        <!-- KDV Tutarı -->
+        <div class="col-span-12 md:col-span-4">
+          <div class="p-2 border-round surface-50">
+            <div class="text-xs text-color-secondary">KDV Tutarı</div>
+            <div class="text-lg font-semibold">{{ result.kdvTutari | number : '1.2-2' }} ₺</div>
+          </div>
+        </div>
+
+        <!-- Genel Toplam -->
+        <div class="col-span-12 md:col-span-4">
+          <div class="p-2 border-round surface-50">
+            <div class="text-xs text-color-secondary">Genel Toplam</div>
+            <div class="text-lg font-semibold">{{ result.genelToplam | number : '1.2-2' }} ₺</div>
+          </div>
+        </div>
+
+        <!-- KDV Hesap -->
+        <div class="col-span-12">
+          <div class="p-2 border-round surface-50">
+            <div class="text-xs text-color-secondary">KDV Hesap</div>
+            <div class="text-base font-semibold">{{ result.kdvHesapKodu }} - {{ result.kdvHesapAdi }}</div>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- Mesaj -->
+      <div class="col-span-12" *ngIf="result.mesaj">
+        <div class="p-2 border-round surface-100 text-sm text-color-secondary">
+          {{ result.mesaj }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

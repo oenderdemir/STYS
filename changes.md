@@ -5768,3 +5768,80 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 | 6 | `AltHesaplariDahilEt=true` | Çalışmalı |
 | 7 | Donem dolu/boş | Her iki senaryo çalışmalı |
 | 8 | HesapKoduBaslangic/HesapKoduBitis | Çalışmalı |
+
+
+---
+
+## Faz 20: Angular 21 Frontend Hızlı Mizan Ekranı (2026-05-19)
+
+### Yapılan Değişiklikler
+
+#### Frontend - Yeni Dosyalar
+- `frontend/src/app/pages/muhasebe/models/mizan.model.ts` — MizanFilterModel, MizanSatirModel, MizanModel, yardımcı fonksiyonlar
+- `frontend/src/app/pages/muhasebe/services/muhasebe-rapor.service.ts` — MuhasebeRaporService (getTesisler, getHizliMizan)
+- `frontend/src/app/pages/muhasebe/hizli-mizan/hizli-mizan.component.ts` — HizliMizanComponent (standalone)
+- `frontend/src/app/pages/muhasebe/hizli-mizan/hizli-mizan.component.html` — Şablon
+- `frontend/src/app/pages/muhasebe/hizli-mizan/hizli-mizan.component.scss` — Stil
+
+#### Frontend - Değişiklikler
+- `frontend/src/app.routes.ts` — `muhasebe/hizli-mizan` route eklendi
+
+### Özellik Detayları
+
+1. **Filtre Paneli:**
+   - Tesis seçimi (p-select, zorunlu, `/ui/rezervasyon/tesisler` endpoint'inden yüklenir)
+   - Mali Yıl (number input, zorunlu, varsayılan: içinde bulunulan yıl)
+   - Dönem (p-select, isteğe bağlı, 1-12 arası)
+   - Hesap Kodu Başlangıç/Bitiş (isteğe bağlı metin)
+   - Sadece Hareket Gören Hesaplar checkbox (varsayılan: true)
+   - Alt Hesapları Dahil Et checkbox (varsayılan: true)
+   - Ara butonu (loading durumu göstergeli)
+
+2. **Genel Toplam Kartları (4 adet, responsive grid):**
+   - Genel Toplam Borç
+   - Genel Toplam Alacak
+   - Genel Borç Bakiyesi (kırmızı)
+   - Genel Alacak Bakiyesi (yeşil)
+   - Desktop: 4 sütun, Tablet: 2 sütun, Mobil: 1 sütun
+
+3. **Mizan Tablosu (p-table, 10 sütun):**
+   - Hesap Kodu (Konsolide satırlar bold, Seviyeye göre padding-left)
+   - Hesap Adı
+   - Toplam Borç (sağa dayalı, ₺)
+   - Toplam Alacak (sağa dayalı, ₺)
+   - Borç Bakiyesi (sağa dayalı, ₺)
+   - Alacak Bakiyesi (sağa dayalı, ₺)
+   - Bakiye (sağa dayalı, bold)
+   - Bakiye Tipi (p-tag: Borç=kırmızı, Alacak=yeşil, Sıfır=gri)
+   - Seviye (ortalanmış)
+   - Durum (Konsolide / Sadece Konsolide / İşlem)
+
+4. **Sayfalama:**
+   - Önceki/Sonraki butonları (manuel)
+   - Sayfa durumu gösterimi (örn: "1-500 / Sayfa 1")
+   - Backend toplam kayıt sayısı dönmediği için, dönen satır sayısı < pageSize ise Sonraki butonu devre dışı
+
+5. **Boş Durum:**
+   - Hiç kayıt yoksa: "Kayıt bulunamadı."
+   - Henüz arama yapılmadıysa: "Filtre seçimlerini yapıp 'Ara' düğmesine tıklayın."
+
+6. **Bilgi Metni:**
+   - Tablonun üstünde, endpoint'in çalışma mantığını açıklayan bir bilgi kutusu
+
+### Teknik Detaylar
+
+- **Backend endpoint:** `POST ui/muhasebe/fisler/mizan-bakiye` (mevcut, değiştirilmedi)
+- **Backend koduna dokunulmadı, yeni endpoint eklenmedi**
+- **Servis pattern:** `ApiResponse<T>` wrapper → `map()` ile unwrap
+- **State yönetimi:** `MizanFilterModel` normalize edilerek gönderiliyor
+- **Sayfalama:** Manuel Previous/Next (page/pageSize parametreleriyle)
+- **Tesis listesi:** `GET ui/rezervasyon/tesisler` (mevcut endpoint)
+- **Dil:** Tüm kullanıcı mesajları Türkçe
+- **No `any` types:** Tüm tipler açık interface'lerle tanımlı
+- **No magic strings:** Sabitler `const` olarak tanımlı
+
+### Backend
+- Backend: DEĞİŞMEDİ (backend koduna dokunulmadı)
+
+### Frontend
+- Frontend: `npm run build` başarılı (0 error, 3 pre-existing budget warning)

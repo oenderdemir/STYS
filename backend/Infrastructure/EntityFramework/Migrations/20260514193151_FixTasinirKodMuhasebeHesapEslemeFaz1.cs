@@ -10,10 +10,19 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MuhasebeHesapPlaniId_IslemTuru",
-                schema: "muhasebe",
-                table: "TasinirKodMuhasebeHesapEslemeleri");
+            // Index may not exist on fresh databases; drop conditionally
+            migrationBuilder.Sql(@"
+                IF EXISTS (
+                    SELECT 1 FROM sys.indexes i
+                    JOIN sys.tables t ON i.object_id = t.object_id
+                    JOIN sys.schemas s ON t.schema_id = s.schema_id
+                    WHERE s.name = 'muhasebe'
+                      AND t.name = 'TasinirKodMuhasebeHesapEslemeleri'
+                      AND i.name = 'IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MuhasebeHesapPlaniId_IslemTuru'
+                )
+                DROP INDEX [IX_TasinirKodMuhasebeHesapEslemeleri_TasinirKodId_MuhasebeHesapPlaniId_IslemTuru]
+                    ON [muhasebe].[TasinirKodMuhasebeHesapEslemeleri];
+            ");
 
             migrationBuilder.AlterColumn<string>(
                 name: "MalzemeTipi",

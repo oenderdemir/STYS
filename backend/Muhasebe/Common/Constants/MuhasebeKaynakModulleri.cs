@@ -8,6 +8,7 @@ public static class MuhasebeKaynakModulleri
     public const string KasaHareket = "KasaHareket";
     public const string BankaHareket = "BankaHareket";
     public const string TahsilatOdemeBelgesi = "TahsilatOdemeBelgesi";
+    public const string TasinirHareket = "TasinirHareket";
 
     public static readonly string[] Hepsi =
     [
@@ -16,6 +17,7 @@ public static class MuhasebeKaynakModulleri
         CariHareket,
         KasaHareket,
         BankaHareket,
-        TahsilatOdemeBelgesi
+        TahsilatOdemeBelgesi,
+        TasinirHareket
     ];
 }

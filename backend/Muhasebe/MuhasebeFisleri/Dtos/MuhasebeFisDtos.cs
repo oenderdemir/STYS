@@ -360,3 +360,32 @@ public class MizanKarsilastirmaSatirDto
     /// </summary>
     public string FarkTipi { get; set; } = string.Empty;
 }
+
+public class TasinirMuhasebeFisiOlusturRequest
+{
+    public int TesisId { get; set; }
+    public int MaliYil { get; set; }
+    public int? Donem { get; set; }
+    public DateTime FisTarihi { get; set; }
+    public string TasinirKodu { get; set; } = string.Empty;
+    public decimal Tutar { get; set; }
+    public string? AlacakHesapKodu { get; set; }
+    public string? Aciklama { get; set; }
+    public string? BelgeNo { get; set; }
+    public string? ReferansTipi { get; set; }
+    public string? ReferansId { get; set; }
+}
+
+public class TasinirMuhasebeFisiOlusturResultDto
+{
+    public int MuhasebeFisId { get; set; }
+    public string FisNo { get; set; } = string.Empty;
+    public string Durum { get; set; } = string.Empty;
+    public string BorcHesapKodu { get; set; } = string.Empty;
+    public string BorcHesapAdi { get; set; } = string.Empty;
+    public string AlacakHesapKodu { get; set; } = string.Empty;
+    public string AlacakHesapAdi { get; set; } = string.Empty;
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+    public string Mesaj { get; set; } = string.Empty;
+}

@@ -1316,4 +1316,176 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             Seviye = ilk.Seviye
         };
     }
+
+    public async Task<TasinirMuhasebeFisiOlusturResultDto> TasinirMuhasebeFisiTaslagiOlusturAsync(
+        TasinirMuhasebeFisiOlusturRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Validasyonlar
+        if (request.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (request.MaliYil < 2000 || request.MaliYil > 2100)
+            throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
+
+        if (request.Donem.HasValue && (request.Donem.Value < 1 || request.Donem.Value > 12))
+            throw new BaseException("Dönem numarası 1-12 aralığında olmalıdır.", 400);
+
+        if (request.FisTarihi == default)
+            throw new BaseException("Fiş tarihi zorunludur.", 400);
+
+        var tasinirKodu = request.TasinirKodu?.Trim();
+        if (string.IsNullOrWhiteSpace(tasinirKodu))
+            throw new BaseException("Taşınır kodu zorunludur.", 400);
+
+        if (request.Tutar <= 0)
+            throw new BaseException("Tutar sıfırdan büyük olmalıdır.", 400);
+
+        var alacakHesapKodu = string.IsNullOrWhiteSpace(request.AlacakHesapKodu)
+            ? "320"
+            : request.AlacakHesapKodu.Trim();
+
+        // 2. Donem çözümle
+        int donem;
+        if (request.Donem.HasValue)
+        {
+            donem = request.Donem.Value;
+        }
+        else
+        {
+            var aktifDonem = await _muhasebeDonemService.GetAktifDonemAsync(
+                request.TesisId, request.FisTarihi, cancellationToken)
+                ?? throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+
+            if (request.MaliYil != aktifDonem.MaliYil)
+                throw new BaseException("Fişin mali yılı, açık muhasebe dönemi ile uyumlu değildir.", 400);
+
+            donem = aktifDonem.DonemNo;
+        }
+
+        // 3. Taşınır kodunu bul
+        var tasinirKodEntity = await _dbContext.TasinirKodlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Kod == tasinirKodu && !x.IsDeleted && x.AktifMi, cancellationToken)
+            ?? throw new BaseException(
+                $"Taşınır kodu bulunamadı veya aktif değil. Kod: {tasinirKodu}", 400);
+
+        // 4. Taşınır kodu muhasebe hesap eşlemesini bul
+        var esleme = await _dbContext.TasinirKodMuhasebeHesapEslemeleri
+            .Include(x => x.MuhasebeHesapPlani)
+            .FirstOrDefaultAsync(x => x.TasinirKodId == tasinirKodEntity.Id
+                && !x.IsDeleted
+                && x.AktifMi, cancellationToken)
+            ?? throw new BaseException(
+                $"Taşınır kodu için muhasebe hesap eşlemesi bulunamadı. Taşınır kodu: {tasinirKodu}", 400);
+
+        var borcHesap = esleme.MuhasebeHesapPlani;
+        if (borcHesap is null)
+            throw new BaseException(
+                $"Taşınır kodu için muhasebe hesap eşlemesi bulunamadı. Taşınır kodu: {tasinirKodu}", 400);
+
+        // 5. Borç hesabı kontrolü: hareket görebilir ve detay hesap olmalı
+        var borcHesapKontrol = await _dbContext.MuhasebeHesapPlanlari
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == borcHesap.Id
+                && !x.IsDeleted
+                && x.AktifMi
+                && x.HareketGorebilirMi
+                && x.DetayHesapMi, cancellationToken)
+            ?? throw new BaseException(
+                $"Borç hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {borcHesap.TamKod}", 400);
+
+        // 6. Alacak hesabı kontrolü
+        var alacakHesap = await _dbContext.MuhasebeHesapPlanlari
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.TamKod == alacakHesapKodu
+                && !x.IsDeleted
+                && x.AktifMi
+                && x.HareketGorebilirMi
+                && x.DetayHesapMi, cancellationToken)
+            ?? throw new BaseException(
+                $"Alacak hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {alacakHesapKodu}", 400);
+
+        // 7. Açıklama oluştur
+        var aciklama = !string.IsNullOrWhiteSpace(request.Aciklama)
+            ? request.Aciklama
+            : $"Taşınır kodu {tasinirKodu} için otomatik muhasebe fişi taslağı";
+
+        if (!string.IsNullOrWhiteSpace(request.ReferansTipi) || !string.IsNullOrWhiteSpace(request.ReferansId))
+        {
+            aciklama += $" | Referans: {request.ReferansTipi}/{request.ReferansId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BelgeNo))
+        {
+            aciklama += $" | Belge No: {request.BelgeNo}";
+        }
+
+        // 8. Fiş ve satırları transaction içinde oluştur
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var fis = new MuhasebeFis
+            {
+                TesisId = request.TesisId,
+                MaliYil = request.MaliYil,
+                Donem = donem,
+                FisNo = $"TASLAK-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                FisTarihi = request.FisTarihi,
+                FisTipi = MuhasebeFisTipleri.Mahsup,
+                KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,
+                Durum = MuhasebeFisDurumlari.Taslak,
+                Aciklama = aciklama,
+                ToplamBorc = request.Tutar,
+                ToplamAlacak = request.Tutar,
+                Satirlar = new List<MuhasebeFisSatir>
+                {
+                    new()
+                    {
+                        MuhasebeHesapPlaniId = borcHesapKontrol.Id,
+                        SiraNo = 1,
+                        Borc = request.Tutar,
+                        Alacak = 0,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
+                    },
+                    new()
+                    {
+                        MuhasebeHesapPlaniId = alacakHesap.Id,
+                        SiraNo = 2,
+                        Borc = 0,
+                        Alacak = request.Tutar,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
+                    },
+                },
+            };
+
+            await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new TasinirMuhasebeFisiOlusturResultDto
+            {
+                MuhasebeFisId = fis.Id,
+                FisNo = fis.FisNo,
+                Durum = fis.Durum,
+                BorcHesapKodu = borcHesapKontrol.TamKod ?? string.Empty,
+                BorcHesapAdi = borcHesapKontrol.Ad,
+                AlacakHesapKodu = alacakHesap.TamKod ?? string.Empty,
+                AlacakHesapAdi = alacakHesap.Ad,
+                ToplamBorc = request.Tutar,
+                ToplamAlacak = request.Tutar,
+                Mesaj = "Taşınır muhasebe fişi taslağı oluşturuldu.",
+            };
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
 }

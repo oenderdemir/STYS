@@ -155,4 +155,14 @@ public class MuhasebeFisController : UIController
         var result = await _service.KarsilastirMizanAsync(filter, cancellationToken);
         return Ok(result);
     }
+
+    [HttpPost("tasinir-fis-taslagi-olustur")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    public async Task<ActionResult<TasinirMuhasebeFisiOlusturResultDto>> TasinirFisTaslagiOlustur(
+        [FromBody] TasinirMuhasebeFisiOlusturRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _service.TasinirMuhasebeFisiTaslagiOlusturAsync(request, cancellationToken);
+        return Ok(result);
+    }
 }

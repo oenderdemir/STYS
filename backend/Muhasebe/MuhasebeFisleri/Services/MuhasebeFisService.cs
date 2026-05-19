@@ -922,7 +922,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         entity.ToplamAlacak = dto.ToplamAlacak;
         entity.Durum = MuhasebeFisDurumlari.Taslak;
         entity.FisNo = string.IsNullOrWhiteSpace(dto.FisNo)
-            ? $"TASLAK-{DateTime.UtcNow:yyyyMMddHHmmssfff}"
+            ? GenerateTaslakFisNo()
             : dto.FisNo;
         entity.Satirlar = Mapper.Map<List<MuhasebeFisSatir>>(dto.Satirlar);
         await _dbContext.MuhasebeFisler.AddAsync(entity);
@@ -1000,6 +1000,11 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         // Platform BaseEntity silme davranışı üzerinden fişi sil
         _dbContext.Entry(existing).State = EntityState.Deleted;
         await _dbContext.SaveChangesAsync();
+    }
+
+    private static string GenerateTaslakFisNo()
+    {
+        return $"TASLAK-{DateTime.UtcNow:yyyyMMddHHmmssfff}";
     }
 
     private async Task NormalizeAndValidateCreateAsync(MuhasebeFisDto dto, CancellationToken cancellationToken)
@@ -1371,8 +1376,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 $"Taşınır kodu bulunamadı veya aktif değil. Kod: {tasinirKodu}", 400);
 
         // 4. Taşınır kodu muhasebe hesap eşlemesini bul
+        // NOT: TasinirKodMuhasebeHesapEsleme entity'sinde TesisId bulunmadığından tesis/global önceliği uygulanmadı.
         var esleme = await _dbContext.TasinirKodMuhasebeHesapEslemeleri
             .Include(x => x.MuhasebeHesapPlani)
+            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TasinirKodId == tasinirKodEntity.Id
                 && !x.IsDeleted
                 && x.AktifMi, cancellationToken)
@@ -1384,25 +1391,30 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             throw new BaseException(
                 $"Taşınır kodu için muhasebe hesap eşlemesi bulunamadı. Taşınır kodu: {tasinirKodu}", 400);
 
-        // 5. Borç hesabı kontrolü: hareket görebilir ve detay hesap olmalı
+        // 5. Borç hesabı kontrolü: hareket görebilir, detay hesap olmalı ve tesis uyumu
         var borcHesapKontrol = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == borcHesap.Id
                 && !x.IsDeleted
                 && x.AktifMi
                 && x.HareketGorebilirMi
-                && x.DetayHesapMi, cancellationToken)
+                && x.DetayHesapMi
+                && (x.TesisId == request.TesisId || x.TesisId == null), cancellationToken)
             ?? throw new BaseException(
                 $"Borç hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {borcHesap.TamKod}", 400);
 
-        // 6. Alacak hesabı kontrolü
+        // 6. Alacak hesabı kontrolü: hareket görebilir, detay hesap olmalı ve tesis uyumu
+        // Aynı TamKod farklı tesislerde varsa önce tesis özel, sonra global hesap seçilir.
         var alacakHesap = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.TamKod == alacakHesapKodu
+            .Where(x => x.TamKod == alacakHesapKodu
                 && !x.IsDeleted
                 && x.AktifMi
                 && x.HareketGorebilirMi
-                && x.DetayHesapMi, cancellationToken)
+                && x.DetayHesapMi
+                && (x.TesisId == request.TesisId || x.TesisId == null))
+            .OrderByDescending(x => x.TesisId == request.TesisId)
+            .FirstOrDefaultAsync(cancellationToken)
             ?? throw new BaseException(
                 $"Alacak hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {alacakHesapKodu}", 400);
 
@@ -1431,7 +1443,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 TesisId = request.TesisId,
                 MaliYil = request.MaliYil,
                 Donem = donem,
-                FisNo = $"TASLAK-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                FisNo = GenerateTaslakFisNo(),
                 FisTarihi = request.FisTarihi,
                 FisTipi = MuhasebeFisTipleri.Mahsup,
                 KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,

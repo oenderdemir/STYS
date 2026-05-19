@@ -45,4 +45,12 @@ export class MuhasebeRaporService {
                 filter
             );
         }
+    
+        exportMizanBakiyeExcel(filter: MizanFilterModel): Observable<Blob> {
+            return this.http.post(
+                `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-bakiye/export-excel`,
+                filter,
+                { responseType: 'blob' }
+            );
+        }
     }

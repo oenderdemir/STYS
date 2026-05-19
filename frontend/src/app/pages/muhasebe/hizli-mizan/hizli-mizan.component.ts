@@ -83,6 +83,8 @@ export class HizliMizanComponent implements OnInit {
     karsilastirmaLoading = false;
     karsilastirmaSonucu: MizanKarsilastirmaModel | null = null;
 
+    exporting = false;
+
     tesisSecenekleri: TesisSecenek[] = [];
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly pageSizeSecenekleri = PAGE_SIZE_SECENEKLERI;
@@ -302,6 +304,52 @@ export class HizliMizanComponent implements OnInit {
             default:
                 return farkTipi;
         }
+    }
+
+    exportExcel(): void {
+        if (!this.validateFilter()) {
+            return;
+        }
+
+        const normalizedFilter = normalizeMizanFilter({ ...this.filter });
+
+        this.exporting = true;
+        this.service.exportMizanBakiyeExcel(normalizedFilter).pipe(finalize(() => {
+            this.exporting = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (blob) => {
+                this.downloadBlob(blob, this.createExcelFileName());
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Dışa Aktarım',
+                    detail: 'Hızlı mizan Excel dosyası indiriliyor.'
+                });
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    private createExcelFileName(): string {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = (now.getMonth() + 1).toString().padStart(2, '0');
+        const d = now.getDate().toString().padStart(2, '0');
+        const hh = now.getHours().toString().padStart(2, '0');
+        const mm = now.getMinutes().toString().padStart(2, '0');
+        const ss = now.getSeconds().toString().padStart(2, '0');
+        return `hizli-mizan-${y}${m}${d}-${hh}${mm}${ss}.xlsx`;
     }
 
     private showError(error: unknown): void {

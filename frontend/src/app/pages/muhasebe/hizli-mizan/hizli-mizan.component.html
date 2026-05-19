@@ -51,6 +51,16 @@
       [loading]="karsilastirmaLoading"
       styleClass="flex-1" />
   </div>
+  <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end">
+    <p-button
+      label="Excel'e Aktar"
+      icon="pi pi-file-excel"
+      severity="success"
+      (onClick)="exportExcel()"
+      [loading]="exporting"
+      [disabled]="!filter.tesisId || !filter.maliYil"
+      styleClass="w-full" />
+  </div>
 
   <!-- Hesap kodu araligi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-3">

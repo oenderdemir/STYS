@@ -146,6 +146,17 @@ public class MuhasebeFisController : UIController
         return Ok(await _service.GetMizanBakiyeAsync(filter, cancellationToken));
     }
 
+    [HttpPost("mizan-bakiye/export-excel")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<IActionResult> ExportMizanBakiyeExcel(
+        [FromBody] MizanFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        var excelBytes = await _service.ExportMizanBakiyeExcelAsync(filter, cancellationToken);
+        var fileName = $"hizli-mizan-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
+        return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
     [HttpPost("mizan-karsilastir")]
     [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
     public async Task<ActionResult<MizanKarsilastirmaDto>> KarsilastirMizan(

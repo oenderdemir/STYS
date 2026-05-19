@@ -1,4 +1,5 @@
 using AutoMapper;
+using ClosedXML.Excel;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
@@ -870,6 +871,165 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             GenelAlacakBakiye = genelToplam?.GenelAlacakBakiye ?? 0,
             Satirlar = satirlar,
         };
+    }
+
+    public async Task<byte[]> ExportMizanBakiyeExcelAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Normalize + validasyon (GetMizanBakiyeAsync ile aynı)
+        filter.Normalize();
+
+        if (filter.TesisId <= 0)
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+
+        if (filter.BaslangicTarihi.HasValue || filter.BitisTarihi.HasValue)
+            throw new BaseException("Bakiye tablosundan mizan için tarih aralığı yerine MaliYil/Donem filtresi kullanılmalıdır.", 400);
+
+        if (!filter.MaliYil.HasValue)
+            throw new BaseException("Bakiye tablosundan mizan için mali yıl seçilmelidir.", 400);
+
+        if (filter.MaliYil.Value < 2000 || filter.MaliYil.Value > 2100)
+            throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
+
+        if (filter.Donem.HasValue && (filter.Donem.Value < 1 || filter.Donem.Value > 12))
+            throw new BaseException("Dönem numarası 1-12 aralığında olmalıdır.", 400);
+
+        // 2. Temel filtre sorgusu (GetMizanBakiyeAsync ile aynı)
+        var query = _dbContext.MuhasebeHesapBakiyeleri
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                && x.TesisId == filter.TesisId
+                && x.MaliYil == filter.MaliYil.Value);
+
+        if (filter.Donem.HasValue)
+            query = query.Where(x => x.Donem == filter.Donem.Value);
+
+        if (!filter.AltHesaplariDahilEt)
+            query = query.Where(x => !x.KonsolideMi);
+
+        if (filter.SadeceHareketGorenHesaplar)
+            query = query.Where(x => x.BorcToplam != 0 || x.AlacakToplam != 0);
+
+        if (filter.HesapKoduBaslangic is not null)
+            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBaslangic, StringComparison.Ordinal) >= 0);
+
+        if (filter.HesapKoduBitis is not null)
+            query = query.Where(x => string.Compare(x.HesapKodu, filter.HesapKoduBitis, StringComparison.Ordinal) <= 0);
+
+        // 3. Genel toplamlar (sadece KonsolideMi=false)
+        var genelQuery = query.Where(x => !x.KonsolideMi);
+
+        var genelToplam = await genelQuery
+            .GroupBy(x => 1)
+            .Select(g => new
+            {
+                GenelToplamBorc = g.Sum(x => x.BorcToplam),
+                GenelToplamAlacak = g.Sum(x => x.AlacakToplam),
+                GenelBorcBakiye = g.Sum(x => x.BorcBakiye),
+                GenelAlacakBakiye = g.Sum(x => x.AlacakBakiye)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // 4. Tüm satırları sayfalamadan al
+        var allRows = await query
+            .GroupBy(x => x.HesapKodu)
+            .Select(g => new
+            {
+                HesapKodu = g.Key,
+                ToplamBorc = g.Sum(x => x.BorcToplam),
+                ToplamAlacak = g.Sum(x => x.AlacakToplam),
+                NetBakiye = g.Sum(x => x.NetBakiye),
+                BorcBakiye = g.Sum(x => x.BorcBakiye),
+                AlacakBakiye = g.Sum(x => x.AlacakBakiye),
+                KonsolideSatirMi = g.Any(x => x.KonsolideMi),
+                Seviye = g.Min(x => x.HesapSeviyesi),
+                IlkHesapPlaniId = g.Min(x => x.MuhasebeHesapPlaniId),
+                HesapAdi = g.Min(x => x.HesapAdi)
+            })
+            .OrderBy(x => x.HesapKodu)
+            .ToListAsync(cancellationToken);
+
+        // 5. Hesap planı lookup
+        var hesapPlaniIds = allRows
+            .Select(x => x.IlkHesapPlaniId)
+            .Distinct()
+            .ToList();
+
+        var hesapPlanlari = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => hesapPlaniIds.Contains(x.Id))
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var hesapPlaniLookup = hesapPlanlari.ToDictionary(x => x.Id);
+
+        // 6. Excel oluştur
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Hızlı Mizan");
+
+        // Başlık satırı
+        var headers = new[] { "Hesap Kodu", "Hesap Adı", "Seviye", "Borç Toplamı", "Alacak Toplamı", "Borç Bakiye", "Alacak Bakiye", "Net Bakiye", "Bakiye Tipi" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+        }
+
+        // Veri satırları
+        int row = 2;
+        decimal toplamBorc = 0, toplamAlacak = 0, toplamBorcBakiye = 0, toplamAlacakBakiye = 0, toplamNetBakiye = 0;
+
+        foreach (var agg in allRows)
+        {
+            var net = agg.NetBakiye;
+            hesapPlaniLookup.TryGetValue(agg.IlkHesapPlaniId, out var hp);
+            var ad = hp?.Ad ?? agg.HesapAdi ?? string.Empty;
+
+            ws.Cell(row, 1).Value = agg.HesapKodu;
+            ws.Cell(row, 2).Value = ad;
+            ws.Cell(row, 3).Value = agg.Seviye;
+            ws.Cell(row, 4).Value = agg.ToplamBorc;
+            ws.Cell(row, 5).Value = agg.ToplamAlacak;
+            ws.Cell(row, 6).Value = net > 0 ? net : 0;
+            ws.Cell(row, 7).Value = net < 0 ? Math.Abs(net) : 0;
+            ws.Cell(row, 8).Value = Math.Abs(net);
+            ws.Cell(row, 9).Value = net > 0 ? "Borç" : net < 0 ? "Alacak" : "Sıfır";
+
+            toplamBorc += agg.ToplamBorc;
+            toplamAlacak += agg.ToplamAlacak;
+            toplamBorcBakiye += net > 0 ? net : 0;
+            toplamAlacakBakiye += net < 0 ? Math.Abs(net) : 0;
+            toplamNetBakiye += Math.Abs(net);
+
+            row++;
+        }
+
+        // Sayısal sütunlar için format
+        var formatCols = new[] { 4, 5, 6, 7, 8 };
+        foreach (var col in formatCols)
+        {
+            ws.Column(col).Style.NumberFormat.Format = "#,##0.00";
+        }
+
+        // Toplam satırı
+        ws.Cell(row, 1).Value = "TOPLAM";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 4).Value = toplamBorc;
+        ws.Cell(row, 5).Value = toplamAlacak;
+        ws.Cell(row, 6).Value = toplamBorcBakiye;
+        ws.Cell(row, 7).Value = toplamAlacakBakiye;
+        ws.Cell(row, 8).Value = toplamNetBakiye;
+
+        for (int i = 1; i <= 9; i++)
+        {
+            ws.Cell(row, i).Style.Font.Bold = true;
+        }
+
+        // Otomatik sütun genişliği
+        ws.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
     }
 
     /// <summary>

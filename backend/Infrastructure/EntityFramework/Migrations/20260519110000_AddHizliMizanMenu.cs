@@ -1,13 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace STYS.Infrastructure.EntityFramework.Migrations;
 
-/// <inheritdoc />
+[DbContext(typeof(StysAppDbContext))]
+[Migration("20260519110000_AddHizliMizanMenu")]
 public partial class AddHizliMizanMenu : Migration
 {
-    /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql(

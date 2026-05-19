@@ -96,18 +96,18 @@ public partial class AddHizliMizanMenu : Migration
 
             SELECT TOP (1) @MenuItemId = [Id]
             FROM [TODBase].[MenuItems]
-            WHERE [Route] = N'muhasebe/hizli-mizan';
+            WHERE [Route] = N'muhasebe/hizli-mizan' AND [IsDeleted] = 0;
 
             IF @MenuItemId IS NULL
             BEGIN
                 SET @MenuItemId = NEWID();
                 INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt])
-                VALUES (@MenuItemId, N'Hizli Mizan', N'pi pi-chart-bar', N'muhasebe/hizli-mizan', @MuhasebeRootId, 12, 0, @Now, @Now);
+                VALUES (@MenuItemId, N'Hızlı Mizan', N'pi pi-chart-bar', N'muhasebe/hizli-mizan', @MuhasebeRootId, 12, 0, @Now, @Now);
             END
             ELSE
             BEGIN
                 UPDATE [TODBase].[MenuItems]
-                SET [Label] = N'Hizli Mizan',
+                SET [Label] = N'Hızlı Mizan',
                     [Icon] = N'pi pi-chart-bar',
                     [ParentId] = @MuhasebeRootId,
                     [MenuOrder] = 12,
@@ -131,6 +131,10 @@ public partial class AddHizliMizanMenu : Migration
     {
         migrationBuilder.Sql(
             """
+            -- Sadece Hizli Mizan MenuItem ve MenuItemRoles kayitlarini temizle.
+            -- MuhasebeFisYonetimi rolleri diger muhasebe fis sayfalari tarafindan da
+            -- kullanildigi icin Roller ve UserGroupRoles tablolarina dokunulmaz.
+
             DELETE mir
             FROM [TODBase].[MenuItemRoles] mir
             INNER JOIN [TODBase].[MenuItems] mi ON mi.[Id] = mir.[MenuItemId]
@@ -138,20 +142,6 @@ public partial class AddHizliMizanMenu : Migration
 
             DELETE FROM [TODBase].[MenuItems]
             WHERE [Route] = N'muhasebe/hizli-mizan';
-
-            -- MuhasebeFisYonetimi rollerini silme (diger muhasebe fis raporlari da kullandigi icin
-            -- sadece bu migrasyon ile eklenen UserGroupRoles baglantilarini temizliyoruz)
-            DECLARE @MenuRoleId uniqueidentifier;
-            DECLARE @ViewRoleId uniqueidentifier;
-            DECLARE @ManageRoleId uniqueidentifier;
-
-            SELECT TOP (1) @MenuRoleId = [Id] FROM [TODBase].[Roles] WHERE [Domain] = N'MuhasebeFisYonetimi' AND [Name] = N'Menu';
-            SELECT TOP (1) @ViewRoleId = [Id] FROM [TODBase].[Roles] WHERE [Domain] = N'MuhasebeFisYonetimi' AND [Name] = N'View';
-            SELECT TOP (1) @ManageRoleId = [Id] FROM [TODBase].[Roles] WHERE [Domain] = N'MuhasebeFisYonetimi' AND [Name] = N'Manage';
-
-            DELETE FROM [TODBase].[UserGroupRoles] WHERE [RoleId] IN (@MenuRoleId, @ViewRoleId, @ManageRoleId);
-            DELETE FROM [TODBase].[MenuItemRoles] WHERE [RoleId] IN (@MenuRoleId, @ViewRoleId, @ManageRoleId);
-            DELETE FROM [TODBase].[Roles] WHERE [Domain] = N'MuhasebeFisYonetimi';
             """);
     }
 }

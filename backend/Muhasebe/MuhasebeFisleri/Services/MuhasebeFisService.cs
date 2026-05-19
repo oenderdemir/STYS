@@ -793,6 +793,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 HesapKodu = g.Key,
                 ToplamBorc = g.Sum(x => x.BorcToplam),
                 ToplamAlacak = g.Sum(x => x.AlacakToplam),
+                NetBakiye = g.Sum(x => x.NetBakiye),
+                BorcBakiye = g.Sum(x => x.BorcBakiye),
+                AlacakBakiye = g.Sum(x => x.AlacakBakiye),
                 KonsolideSatirMi = g.Any(x => x.KonsolideMi),
                 Seviye = g.Min(x => x.HesapSeviyesi),
                 IlkHesapPlaniId = g.Min(x => x.MuhasebeHesapPlaniId),
@@ -836,7 +839,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         // 9. DTO'ları oluştur
         var satirlar = aggregatePage.Select(agg =>
         {
-            var net = agg.ToplamBorc - agg.ToplamAlacak;
+            var net = agg.NetBakiye;
             hesapPlaniLookup.TryGetValue(agg.IlkHesapPlaniId, out var hp);
 
             return new MizanSatirDto

@@ -5695,3 +5695,34 @@ Genel toplamlar (`GenelToplamBorc`, `GenelToplamAlacak`, `GenelBorcBakiye`, `Gen
 | 8 | Büyük veri | Tüm kayıtlar belleğe alınmaz |
 | 9 | Mevcut `POST ui/muhasebe/fisler/mizan` | Bozulmaz |
 
+
+### Faz 18: Mizan-bakiye endpoint'inde hazır bakiye alanlarını kullanma
+
+**Tarih:** 2026-05-19
+
+**Amaç:** `GetMizanBakiyeAsync` metodunda `net = ToplamBorc - ToplamAlacak` yeniden hesaplaması yerine `MuhasebeHesapBakiye` tablosunda hazır tutulan `NetBakiye`, `BorcBakiye`, `AlacakBakiye` alanlarını DB aggregate seviyesinde kullanmak.
+
+**Değişiklikler:**
+
+| # | Değişiklik | Açıklama |
+|---|------------|----------|
+| 1 | Aggregate query'ye `NetBakiye`, `BorcBakiye`, `AlacakBakiye` eklendi | `g.Sum(x => x.NetBakiye)`, `g.Sum(x => x.BorcBakiye)`, `g.Sum(x => x.AlacakBakiye)` DB tarafında hesaplanır |
+| 2 | DTO oluşturmada `agg.NetBakiye` kullanıldı | `var net = agg.ToplamBorc - agg.ToplamAlacak` yerine `var net = agg.NetBakiye` |
+| 3 | `BorcBakiye`/`AlacakBakiye`/`Bakiye`/`BakiyeTipi` final `NetBakiye` üzerinden hesaplanır | Aynı HesapKodu için gerçek+konsolide birleşince tek bakiye tipi daha okunabilir |
+
+**Etkilenen dosyalar:**
+| # | Dosya | Değişiklik |
+|---|-------|------------|
+| 1 | `backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:789-802,839-861` | aggregate query ve DTO oluşturma güncellendi |
+
+**Build:** 0 error, 6 warning (önceden var olan warning'ler)
+
+**Manuel test senaryosu:**
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | `POST ui/muhasebe/fisler/mizan-bakiye` aynı filtrelerle | 200, aynı format |
+| 2 | `ToplamBorc` ve `ToplamAlacak` değerleri | Faz 17 ile aynı |
+| 3 | `NetBakiye` DB'de `Sum(NetBakiye)` olarak hesaplanır | Doğru aggregate |
+| 4 | `Bakiye`, `BorcBakiye`, `AlacakBakiye`, `BakiyeTipi` | Final `NetBakiye` üzerinden doğru |
+| 5 | Genel toplamlar sadece `KonsolideMi=false` | Korundu |
+| 6 | `POST ui/muhasebe/fisler/mizan` | Bozulmaz |

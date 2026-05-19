@@ -15,6 +15,8 @@ import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import {
     MizanFilterModel,
+    MizanKarsilastirmaModel,
+    MizanKarsilastirmaSatirModel,
     MizanModel,
     MizanSatirModel,
     createDefaultMizanFilter,
@@ -78,6 +80,9 @@ export class HizliMizanComponent implements OnInit {
     filter: MizanFilterModel = createDefaultMizanFilter();
     result: MizanModel | null = null;
 
+    karsilastirmaLoading = false;
+    karsilastirmaSonucu: MizanKarsilastirmaModel | null = null;
+
     tesisSecenekleri: TesisSecenek[] = [];
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly pageSizeSecenekleri = PAGE_SIZE_SECENEKLERI;
@@ -106,14 +111,14 @@ export class HizliMizanComponent implements OnInit {
         });
     }
 
-    ara(): void {
+    private validateFilter(): boolean {
         if (!this.filter.tesisId) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Tesis seçimi zorunludur.'
             });
-            return;
+            return false;
         }
 
         if (!this.filter.maliYil) {
@@ -122,6 +127,14 @@ export class HizliMizanComponent implements OnInit {
                 summary: 'Eksik Bilgi',
                 detail: 'Mali yıl zorunludur.'
             });
+            return false;
+        }
+
+        return true;
+    }
+
+    ara(): void {
+        if (!this.validateFilter()) {
             return;
         }
 
@@ -129,6 +142,7 @@ export class HizliMizanComponent implements OnInit {
 
         this.loading = true;
         this.result = null;
+        this.karsilastirmaSonucu = null;
         this.service.getHizliMizan(normalizedFilter).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
@@ -144,6 +158,48 @@ export class HizliMizanComponent implements OnInit {
                 this.cdr.detectChanges();
             }
         });
+    }
+
+    karsilastir(): void {
+        if (!this.validateFilter()) {
+            return;
+        }
+
+        const normalizedFilter = normalizeMizanFilter({ ...this.filter });
+
+        this.karsilastirmaLoading = true;
+        this.karsilastirmaSonucu = null;
+
+        this.service.karsilastirMizan(normalizedFilter)
+            .pipe(finalize(() => {
+                this.karsilastirmaLoading = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (result) => {
+                    this.karsilastirmaSonucu = result;
+
+                    if (result.eslesiyorMu) {
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Karşılaştırma Başarılı',
+                            detail: 'Eski mizan ve hızlı mizan sonuçları eşleşiyor.'
+                        });
+                    } else {
+                        this.messageService.add({
+                            severity: UiSeverity.Warn,
+                            summary: 'Fark Bulundu',
+                            detail: `${result.farkliSatirSayisi} satırda fark bulundu.`
+                        });
+                    }
+
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     oncekiSayfa(): void {
@@ -216,6 +272,36 @@ export class HizliMizanComponent implements OnInit {
 
     sonrakiSayfaVarMi(): boolean {
         return !!(this.result && this.result.satirlar.length >= this.filter.pageSize);
+    }
+
+    getFarkTipiSeverity(farkTipi: string): 'warn' | 'info' | 'danger' | 'secondary' {
+        switch (farkTipi) {
+            case 'SadeceEskiMizandaVar':
+                return 'warn';
+            case 'SadeceHizliMizandaVar':
+                return 'info';
+            case 'TutarFarki':
+                return 'danger';
+            case 'HesapAdiFarki':
+                return 'secondary';
+            default:
+                return 'secondary';
+        }
+    }
+
+    getFarkTipiLabel(farkTipi: string): string {
+        switch (farkTipi) {
+            case 'SadeceEskiMizandaVar':
+                return 'Sadece Eski Mizanda Var';
+            case 'SadeceHizliMizandaVar':
+                return 'Sadece Hızlı Mizanda Var';
+            case 'TutarFarki':
+                return 'Tutar Farkı';
+            case 'HesapAdiFarki':
+                return 'Hesap Adı Farkı';
+            default:
+                return farkTipi;
+        }
     }
 
     private showError(error: unknown): void {

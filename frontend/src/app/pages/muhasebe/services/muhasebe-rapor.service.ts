@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { MizanFilterModel, MizanModel } from '../models/mizan.model';
+import { MizanFilterModel, MizanKarsilastirmaModel, MizanModel } from '../models/mizan.model';
 
 export interface MuhasebeTesisModel {
     id: number;
@@ -37,5 +37,12 @@ export class MuhasebeRaporService {
                     throw new Error(tryReadApiMessage(envelope) ?? 'Hizli mizan alinamadi.');
                 })
             );
+        }
+    
+        karsilastirMizan(filter: MizanFilterModel): Observable<MizanKarsilastirmaModel> {
+            return this.http.post<MizanKarsilastirmaModel>(
+                `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-karsilastir`,
+                filter
+            );
+        }
     }
-}

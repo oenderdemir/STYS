@@ -40,8 +40,16 @@
       placeholder="Tüm dönemler"
       appendTo="body" />
   </div>
-  <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end">
-    <p-button label="Ara" icon="pi pi-search" (onClick)="ara()" [loading]="loading" class="w-full" />
+  <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end gap-2">
+    <p-button label="Ara" icon="pi pi-search" (onClick)="ara()" [loading]="loading" styleClass="flex-1" />
+    <p-button
+      label="Eski Mizan ile Karşılaştır"
+      icon="pi pi-check-circle"
+      severity="help"
+      [outlined]="true"
+      (onClick)="karsilastir()"
+      [loading]="karsilastirmaLoading"
+      styleClass="flex-1" />
   </div>
 
   <!-- Hesap kodu araligi -->
@@ -89,6 +97,157 @@
     <div class="p-3 border-round surface-card shadow-1">
       <div class="text-sm text-color-secondary mb-1">Genel Alacak Bakiyesi</div>
       <div class="text-xl font-bold text-green-500">{{ result.genelAlacakBakiye | number : '1.2-2' }} ₺</div>
+    </div>
+  </div>
+</div>
+
+<!-- Karşılaştırma Sonucu -->
+<div *ngIf="karsilastirmaSonucu" class="mb-4">
+  <div class="p-4 border-round surface-card shadow-1">
+    <h4 class="m-0 mb-3 flex align-items-center gap-2">
+      <i class="pi pi-check-circle" *ngIf="karsilastirmaSonucu.eslesiyorMu" style="color: var(--green-500)"></i>
+      <i class="pi pi-exclamation-triangle" *ngIf="!karsilastirmaSonucu.eslesiyorMu" style="color: var(--orange-500)"></i>
+      Mizan Karşılaştırma Sonucu
+    </h4>
+
+    <p class="text-sm text-color-secondary mb-3">
+      Bu karşılaştırma denetim amaçlıdır. Büyük veri hacminde daha uzun sürebilir.
+    </p>
+
+    <!-- Eşleşme durumu -->
+    <div *ngIf="karsilastirmaSonucu.eslesiyorMu" class="p-3 border-round surface-100 mb-3">
+      <span class="text-green-500 font-semibold">✓ Eski mizan ve hızlı mizan eşleşiyor.</span>
+    </div>
+    <div *ngIf="!karsilastirmaSonucu.eslesiyorMu" class="p-3 border-round surface-100 mb-3">
+      <span class="text-orange-500 font-semibold">⚠ Eski mizan ve hızlı mizan arasında fark bulundu.</span>
+    </div>
+
+    <!-- Özet kartları -->
+    <div class="grid grid-cols-12 gap-3 mb-3">
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Eski Satır Sayısı</div>
+          <div class="text-lg font-semibold">{{ karsilastirmaSonucu.eskiSatirSayisi }}</div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Hızlı Satır Sayısı</div>
+          <div class="text-lg font-semibold">{{ karsilastirmaSonucu.hizliSatirSayisi }}</div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Farklı Satır Sayısı</div>
+          <div class="text-lg font-semibold" [ngClass]="{ 'text-orange-500': karsilastirmaSonucu.farkliSatirSayisi > 0 }">
+            {{ karsilastirmaSonucu.farkliSatirSayisi }}
+          </div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3"></div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-3">
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Genel Toplam Borç Farkı</div>
+          <div class="text-lg font-semibold" [ngClass]="{ 'text-red-500': karsilastirmaSonucu.genelToplamBorcFark !== 0 }">
+            {{ karsilastirmaSonucu.genelToplamBorcFark | number : '1.2-2' }} ₺
+          </div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Genel Toplam Alacak Farkı</div>
+          <div class="text-lg font-semibold" [ngClass]="{ 'text-red-500': karsilastirmaSonucu.genelToplamAlacakFark !== 0 }">
+            {{ karsilastirmaSonucu.genelToplamAlacakFark | number : '1.2-2' }} ₺
+          </div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Genel Borç Bakiye Farkı</div>
+          <div class="text-lg font-semibold" [ngClass]="{ 'text-red-500': karsilastirmaSonucu.genelBorcBakiyeFark !== 0 }">
+            {{ karsilastirmaSonucu.genelBorcBakiyeFark | number : '1.2-2' }} ₺
+          </div>
+        </div>
+      </div>
+      <div class="col-span-6 md:col-span-3">
+        <div class="p-2 border-round surface-50">
+          <div class="text-xs text-color-secondary">Genel Alacak Bakiye Farkı</div>
+          <div class="text-lg font-semibold" [ngClass]="{ 'text-red-500': karsilastirmaSonucu.genelAlacakBakiyeFark !== 0 }">
+            {{ karsilastirmaSonucu.genelAlacakBakiyeFark | number : '1.2-2' }} ₺
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fark tablosu -->
+    <div *ngIf="karsilastirmaSonucu.farklar && karsilastirmaSonucu.farklar.length > 0" class="mt-4">
+      <h5 class="m-0 mb-3">Fark Detayları</h5>
+      <p-table
+        [value]="karsilastirmaSonucu.farklar"
+        [scrollable]="true"
+        scrollHeight="400px"
+        [tableStyle]="{ 'min-width': '120rem' }"
+        styleClass="p-datatable-sm p-datatable-striped">
+        <ng-template #header>
+          <tr>
+            <th style="min-width: 100px">Hesap Kodu</th>
+            <th style="min-width: 200px">Hesap Adı</th>
+            <th style="min-width: 140px">Fark Tipi</th>
+            <th class="text-right" style="min-width: 120px">Eski Borç</th>
+            <th class="text-right" style="min-width: 120px">Hızlı Borç</th>
+            <th class="text-right" style="min-width: 120px">Borç Farkı</th>
+            <th class="text-right" style="min-width: 120px">Eski Alacak</th>
+            <th class="text-right" style="min-width: 120px">Hızlı Alacak</th>
+            <th class="text-right" style="min-width: 120px">Alacak Farkı</th>
+            <th class="text-right" style="min-width: 120px">Eski Borç Bakiye</th>
+            <th class="text-right" style="min-width: 120px">Hızlı Borç Bakiye</th>
+            <th class="text-right" style="min-width: 120px">Borç Bakiye Farkı</th>
+            <th class="text-right" style="min-width: 120px">Eski Alacak Bakiye</th>
+            <th class="text-right" style="min-width: 120px">Hızlı Alacak Bakiye</th>
+            <th class="text-right" style="min-width: 120px">Alacak Bakiye Farkı</th>
+          </tr>
+        </ng-template>
+        <ng-template #body let-satir>
+          <tr>
+            <td>{{ satir.hesapKodu }}</td>
+            <td>{{ satir.hesapAdi }}</td>
+            <td>
+              <p-tag
+                [value]="getFarkTipiLabel(satir.farkTipi)"
+                [severity]="getFarkTipiSeverity(satir.farkTipi)"
+                [rounded]="true" />
+            </td>
+            <td class="text-right">{{ satir.eskiToplamBorc | number : '1.2-2' }} ₺</td>
+            <td class="text-right">{{ satir.hizliToplamBorc | number : '1.2-2' }} ₺</td>
+            <td class="text-right" [ngClass]="{ 'text-red-500 font-semibold': satir.toplamBorcFark !== 0 }">
+              {{ satir.toplamBorcFark | number : '1.2-2' }} ₺
+            </td>
+            <td class="text-right">{{ satir.eskiToplamAlacak | number : '1.2-2' }} ₺</td>
+            <td class="text-right">{{ satir.hizliToplamAlacak | number : '1.2-2' }} ₺</td>
+            <td class="text-right" [ngClass]="{ 'text-red-500 font-semibold': satir.toplamAlacakFark !== 0 }">
+              {{ satir.toplamAlacakFark | number : '1.2-2' }} ₺
+            </td>
+            <td class="text-right">{{ satir.eskiBorcBakiye | number : '1.2-2' }} ₺</td>
+            <td class="text-right">{{ satir.hizliBorcBakiye | number : '1.2-2' }} ₺</td>
+            <td class="text-right" [ngClass]="{ 'text-red-500 font-semibold': satir.borcBakiyeFark !== 0 }">
+              {{ satir.borcBakiyeFark | number : '1.2-2' }} ₺
+            </td>
+            <td class="text-right">{{ satir.eskiAlacakBakiye | number : '1.2-2' }} ₺</td>
+            <td class="text-right">{{ satir.hizliAlacakBakiye | number : '1.2-2' }} ₺</td>
+            <td class="text-right" [ngClass]="{ 'text-red-500 font-semibold': satir.alacakBakiyeFark !== 0 }">
+              {{ satir.alacakBakiyeFark | number : '1.2-2' }} ₺
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template #emptymessage>
+          <tr>
+            <td colspan="15" class="text-center p-4 text-color-secondary">Fark bulunamadı.</td>
+          </tr>
+        </ng-template>
+      </p-table>
     </div>
   </div>
 </div>

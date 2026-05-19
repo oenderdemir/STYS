@@ -66,3 +66,59 @@ export interface MizanModel {
     genelAlacakBakiye: number;
     satirlar: MizanSatirModel[];
 }
+
+export interface MizanKarsilastirmaModel {
+    tesisId: number;
+    maliYil?: number | null;
+    donem?: number | null;
+
+    eskiGenelToplamBorc: number;
+    hizliGenelToplamBorc: number;
+    genelToplamBorcFark: number;
+
+    eskiGenelToplamAlacak: number;
+    hizliGenelToplamAlacak: number;
+    genelToplamAlacakFark: number;
+
+    eskiGenelBorcBakiye: number;
+    hizliGenelBorcBakiye: number;
+    genelBorcBakiyeFark: number;
+
+    eskiGenelAlacakBakiye: number;
+    hizliGenelAlacakBakiye: number;
+    genelAlacakBakiyeFark: number;
+
+    eskiSatirSayisi: number;
+    hizliSatirSayisi: number;
+    farkliSatirSayisi: number;
+
+    eslesiyorMu: boolean;
+
+    farklar: MizanKarsilastirmaSatirModel[];
+}
+
+export interface MizanKarsilastirmaSatirModel {
+    hesapKodu: string;
+    hesapAdi: string;
+
+    eskiMizandaVarMi: boolean;
+    hizliMizandaVarMi: boolean;
+
+    eskiToplamBorc: number;
+    hizliToplamBorc: number;
+    toplamBorcFark: number;
+
+    eskiToplamAlacak: number;
+    hizliToplamAlacak: number;
+    toplamAlacakFark: number;
+
+    eskiBorcBakiye: number;
+    hizliBorcBakiye: number;
+    borcBakiyeFark: number;
+
+    eskiAlacakBakiye: number;
+    hizliAlacakBakiye: number;
+    alacakBakiyeFark: number;
+
+    farkTipi: string;
+}

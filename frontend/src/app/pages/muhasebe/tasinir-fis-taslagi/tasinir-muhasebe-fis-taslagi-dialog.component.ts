@@ -87,6 +87,20 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     readonly kdvOranSecenekleri = KDV_ORAN_SECENEKLERI;
 
     ngOnInit(): void {
+        const data = this.config.data as Partial<TasinirMuhasebeFisiOlusturRequestModel> | undefined;
+        if (data) {
+            if (data.tesisId != null) { this.request.tesisId = data.tesisId; }
+            if (data.tasinirKodu != null) { this.request.tasinirKodu = data.tasinirKodu; }
+            if (data.tutar != null) { this.request.tutar = data.tutar; }
+            if (data.referansTipi != null) { this.request.referansTipi = data.referansTipi; }
+            if (data.referansId != null) { this.request.referansId = data.referansId; }
+            if (data.aciklama != null) { this.request.aciklama = data.aciklama; }
+            if (data.belgeNo != null) { this.request.belgeNo = data.belgeNo; }
+            if (data.fisTarihi != null) { this.request.fisTarihi = data.fisTarihi; }
+            if (data.maliYil != null) { this.request.maliYil = data.maliYil; }
+            if (data.donem != null) { this.request.donem = data.donem; }
+            if (data.alacakHesapKodu != null) { this.request.alacakHesapKodu = data.alacakHesapKodu; }
+        }
         this.loadTesisler();
     }
 
@@ -108,6 +122,21 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
         });
     }
 
+    private formatDate(value: string | Date): string {
+        if (value instanceof Date) {
+            const yyyy = value.getFullYear();
+            const mm = String(value.getMonth() + 1).padStart(2, '0');
+            const dd = String(value.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+        return value;
+    }
+
+    private trimToNull(value: string | null | undefined): string | null {
+        const trimmed = value?.trim();
+        return trimmed ? trimmed : null;
+    }
+
     private validate(): boolean {
         if (!this.request.tesisId) {
             this.messageService.add({
@@ -123,6 +152,24 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
                 severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
                 detail: 'Mali yıl zorunludur.'
+            });
+            return false;
+        }
+
+        if (this.request.maliYil < 2000 || this.request.maliYil > 2100) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Geçersiz Değer',
+                detail: 'Mali yıl 2000-2100 aralığında olmalıdır.'
+            });
+            return false;
+        }
+
+        if (this.request.donem && (this.request.donem < 1 || this.request.donem > 12)) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Geçersiz Değer',
+                detail: 'Dönem 1-12 aralığında olmalıdır.'
             });
             return false;
         }
@@ -186,13 +233,20 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
         this.result = null;
 
         const payload: TasinirMuhasebeFisiOlusturRequestModel = {
-            ...this.request,
             tesisId: this.request.tesisId!,
             maliYil: this.request.maliYil!,
+            donem: this.request.donem,
+            fisTarihi: this.formatDate(this.request.fisTarihi),
+            tasinirKodu: this.request.tasinirKodu.trim(),
             tutar: this.request.tutar!,
+            alacakHesapKodu: this.trimToNull(this.request.alacakHesapKodu),
+            aciklama: this.trimToNull(this.request.aciklama),
+            belgeNo: this.trimToNull(this.request.belgeNo),
+            referansTipi: this.trimToNull(this.request.referansTipi),
+            referansId: this.trimToNull(this.request.referansId),
             kdvDahilMi: this.kdvEnabled ? this.request.kdvDahilMi : false,
             kdvOrani: this.kdvEnabled ? this.request.kdvOrani : null,
-            kdvHesapKodu: this.kdvEnabled ? this.request.kdvHesapKodu : null
+            kdvHesapKodu: this.kdvEnabled ? this.trimToNull(this.request.kdvHesapKodu) : null
         };
 
         this.service.createTasinirFisTaslagi(payload).pipe(

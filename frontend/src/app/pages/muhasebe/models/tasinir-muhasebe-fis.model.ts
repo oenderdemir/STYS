@@ -2,7 +2,7 @@ export interface TasinirMuhasebeFisiOlusturRequestModel {
     tesisId: number | null;
     maliYil: number | null;
     donem: number | null;
-    fisTarihi: string;
+    fisTarihi: string | Date;
     tasinirKodu: string;
     tutar: number | null;
     alacakHesapKodu: string | null;

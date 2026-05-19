@@ -30,18 +30,9 @@ export class TasinirMuhasebeFisService {
     }
 
     createTasinirFisTaslagi(request: TasinirMuhasebeFisiOlusturRequestModel): Observable<TasinirMuhasebeFisiOlusturResultModel> {
-        return this.http
-            .post<ApiResponse<TasinirMuhasebeFisiOlusturResultModel>>(
-                `${this.apiBaseUrl}/ui/muhasebe/fisler/tasinir-fis-taslagi-olustur`,
-                request
-            )
-            .pipe(
-                map((envelope) => {
-                    if (envelope.success && envelope.data) {
-                        return envelope.data;
-                    }
-                    throw new Error(tryReadApiMessage(envelope) ?? 'Tasinir muhasebe fisi olusturulamadi.');
-                })
-            );
+        return this.http.post<TasinirMuhasebeFisiOlusturResultModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/tasinir-fis-taslagi-olustur`,
+            request
+        );
     }
 }

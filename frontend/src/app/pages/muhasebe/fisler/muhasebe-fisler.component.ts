@@ -105,6 +105,7 @@ export class MuhasebeFislerComponent implements OnInit {
     private readonly cdr = inject(ChangeDetectorRef);
 
     loading = false;
+    exporting = false;
     filter: MuhasebeFisFilterModel = createDefaultFisFilter();
     result: MuhasebeFisModel[] = [];
     totalCount = 0;
@@ -300,6 +301,44 @@ export class MuhasebeFislerComponent implements OnInit {
         const start = (this.filter.page - 1) * this.filter.pageSize + 1;
         const end = Math.min(this.filter.page * this.filter.pageSize, this.totalCount);
         return `${start}-${end} / ${this.totalCount}`;
+    }
+
+    exportExcel(): void {
+        const normalized = normalizeFisFilter(this.filter);
+        this.exporting = true;
+        this.raporService.exportYevmiyeDefteriExcel(normalized).pipe(finalize(() => {
+            this.exporting = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (blob) => {
+                this.downloadBlob(blob, this.createExcelFileName());
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Başarılı',
+                    detail: 'Yevmiye defteri Excel\'e aktarıldı.',
+                    life: 3000
+                });
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    private createExcelFileName(): string {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        return `yevmiye-defteri-${ts}.xlsx`;
     }
 
     private showError(error: unknown): void {

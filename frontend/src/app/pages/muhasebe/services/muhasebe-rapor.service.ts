@@ -4,6 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
 import { MizanFilterModel, MizanKarsilastirmaModel, MizanModel } from '../models/mizan.model';
+import { MuhasebeFisFilterModel } from '../models/muhasebe-fis.model';
 
 export interface MuhasebeTesisModel {
     id: number;
@@ -49,6 +50,14 @@ export class MuhasebeRaporService {
         exportMizanBakiyeExcel(filter: MizanFilterModel): Observable<Blob> {
             return this.http.post(
                 `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-bakiye/export-excel`,
+                filter,
+                { responseType: 'blob' }
+            );
+        }
+
+        exportYevmiyeDefteriExcel(filter: MuhasebeFisFilterModel): Observable<Blob> {
+            return this.http.post(
+                `${this.apiBaseUrl}/ui/muhasebe/fisler/yevmiye-defteri/export-excel`,
                 filter,
                 { responseType: 'blob' }
             );

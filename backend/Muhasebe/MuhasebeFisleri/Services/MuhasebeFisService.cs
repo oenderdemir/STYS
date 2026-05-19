@@ -406,6 +406,96 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         };
     }
 
+    public async Task<byte[]> ExportYevmiyeDefteriExcelAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Mevcut GetYevmiyeDefteriAsync mantığını kullan — pagination uygulanmıyor, tüm veri gelir
+        var yevmiyeDefteri = await GetYevmiyeDefteriAsync(filter, cancellationToken);
+        var satirlar = yevmiyeDefteri.Satirlar;
+
+        // 2. Excel oluştur
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Yevmiye Defteri");
+
+        var now = DateTime.Now;
+        var baslangicStr = filter.BaslangicTarihi.HasValue ? filter.BaslangicTarihi.Value.ToString("dd.MM.yyyy") : "-";
+        var bitisStr = filter.BitisTarihi.HasValue ? filter.BitisTarihi.Value.ToString("dd.MM.yyyy") : "-";
+        var fisTipiStr = !string.IsNullOrWhiteSpace(filter.FisTipi) ? filter.FisTipi : "Tümü";
+        var durumStr = !string.IsNullOrWhiteSpace(filter.Durum) ? filter.Durum : "Onaylı / Ters Kayıt";
+
+        // Üst bilgi satırları
+        ws.Cell(1, 1).Value = "Yevmiye Defteri Raporu";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(2, 1).Value = "Export Tarihi:";
+        ws.Cell(2, 2).Value = now.ToString("dd.MM.yyyy HH:mm");
+        ws.Cell(3, 1).Value = "Tesis Id:";
+        ws.Cell(3, 2).Value = filter.TesisId;
+        ws.Cell(4, 1).Value = "Mali Yıl:";
+        ws.Cell(4, 2).Value = filter.MaliYil;
+        ws.Cell(5, 1).Value = "Tarih Aralığı:";
+        ws.Cell(5, 2).Value = $"{baslangicStr} / {bitisStr}";
+        ws.Cell(6, 1).Value = "Fiş Tipi:";
+        ws.Cell(6, 2).Value = fisTipiStr;
+        ws.Cell(7, 1).Value = "Durum:";
+        ws.Cell(7, 2).Value = durumStr;
+
+        // Sütun başlıkları (row 9)
+        var headers = new[] { "Fiş No", "Fiş Tarihi", "Fiş Tipi", "Durum", "Hesap Kodu", "Hesap Adı", "Satır Açıklama", "Borç", "Alacak", "Fiş Açıklama", "Belge No", "Kaynak Modül", "Kaynak Id" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(9, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        ws.SheetView.FreezeRows(9);
+
+        // Veri satırları (row 10'dan başlayarak)
+        int row = 10;
+        foreach (var satir in satirlar)
+        {
+            ws.Cell(row, 1).Value = satir.FisNo;
+            ws.Cell(row, 2).Value = satir.FisTarihi;
+            ws.Cell(row, 2).Style.DateFormat.Format = "dd.MM.yyyy";
+            ws.Cell(row, 3).Value = satir.FisTipi;
+            ws.Cell(row, 4).Value = satir.Durum;
+            ws.Cell(row, 5).Value = satir.MuhasebeHesapKodu ?? "";
+            ws.Cell(row, 6).Value = satir.MuhasebeHesapAdi ?? "";
+            ws.Cell(row, 7).Value = satir.SatirAciklama ?? "";
+            ws.Cell(row, 8).Value = satir.Borc;
+            ws.Cell(row, 9).Value = satir.Alacak;
+            ws.Cell(row, 10).Value = satir.FisAciklama ?? "";
+            ws.Cell(row, 11).Value = "-";
+            ws.Cell(row, 12).Value = satir.KaynakModul;
+            ws.Cell(row, 13).Value = satir.KaynakId;
+            row++;
+        }
+
+        // Sayı formatı (Borç, Alacak sütunları: 8 ve 9)
+        ws.Column(8).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(9).Style.NumberFormat.Format = "#,##0.00";
+
+        // Toplam satırı
+        ws.Cell(row, 1).Value = "TOPLAM";
+        ws.Cell(row, 8).Value = yevmiyeDefteri.ToplamBorc;
+        ws.Cell(row, 9).Value = yevmiyeDefteri.ToplamAlacak;
+        // Borç/Alacak eşitlik kontrolü
+        if (yevmiyeDefteri.ToplamBorc != yevmiyeDefteri.ToplamAlacak)
+        {
+            ws.Cell(row, 10).Value = "UYARI: Borç-Alacak eşit değil!";
+            ws.Cell(row, 10).Style.Font.FontColor = XLColor.Red;
+        }
+        for (int i = 1; i <= 13; i++)
+            ws.Cell(row, i).Style.Font.Bold = true;
+
+        // Otomatik sütun genişliği ve filtre
+        ws.Columns().AdjustToContents();
+        ws.RangeUsed().SetAutoFilter();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
+
     public async Task<MuavinDefterDto> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default)
     {
         // 1. Normalize

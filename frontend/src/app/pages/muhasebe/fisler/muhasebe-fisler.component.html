@@ -105,7 +105,7 @@
   </div>
 
   <!-- Butonlar -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-2 flex align-items-end gap-2">
+  <div class="col-span-12 md:col-span-6 lg:col-span-3 flex align-items-end gap-2">
     <p-button
       label="Ara"
       icon="pi pi-search"
@@ -118,6 +118,12 @@
       (onClick)="temizle()"
       severity="secondary"
       [outlined]="true" />
+    <p-button
+      label="Excel'e Aktar"
+      icon="pi pi-file-excel"
+      severity="success"
+      (onClick)="exportExcel()"
+      [loading]="exporting" />
   </div>
 </div>
 

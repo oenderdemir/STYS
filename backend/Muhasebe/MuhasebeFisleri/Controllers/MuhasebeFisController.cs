@@ -119,6 +119,17 @@ public class MuhasebeFisController : UIController
         return Ok(await _service.GetYevmiyeDefteriAsync(filter, cancellationToken));
     }
 
+    [HttpPost("yevmiye-defteri/export-excel")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<IActionResult> ExportYevmiyeDefteriExcel(
+        [FromBody] MuhasebeFisFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        var excelBytes = await _service.ExportYevmiyeDefteriExcelAsync(filter, cancellationToken);
+        var fileName = $"yevmiye-defteri-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx";
+        return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
     [HttpPost("muavin-defter")]
     [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
     public async Task<ActionResult<MuavinDefterDto>> GetMuavinDefter(

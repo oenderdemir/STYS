@@ -54,6 +54,13 @@ export function normalizeFisFilter(filter: MuhasebeFisFilterModel): MuhasebeFisF
     return normalized;
 }
 
+export const MuhasebeFisDurumlari = {
+    Taslak: 'Taslak',
+    Onayli: 'Onaylı',
+    Iptal: 'İptal',
+    TersKayit: 'Ters Kayıt'
+} as const;
+
 export interface MuhasebeFisSatirModel {
     id: number;
     muhasebeFisId: number;

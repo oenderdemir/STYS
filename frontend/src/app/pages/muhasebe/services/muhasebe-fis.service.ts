@@ -28,4 +28,11 @@ export class MuhasebeFisService {
             `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}`
         );
     }
+
+    getByKaynak(kaynakModul: string, kaynakId: number): Observable<MuhasebeFisModel[]> {
+        return this.http.get<MuhasebeFisModel[]>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/by-kaynak`,
+            { params: { kaynakModul, kaynakId: String(kaynakId) } }
+        );
+    }
 }

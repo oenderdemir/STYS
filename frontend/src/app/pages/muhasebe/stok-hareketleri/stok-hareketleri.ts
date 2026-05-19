@@ -20,6 +20,8 @@ import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { DepolarService } from '../depolar/depolar.service';
+import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
+import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
@@ -53,6 +55,7 @@ export class StokHareketleriPage implements OnInit {
     private readonly depolarService = inject(DepolarService);
     private readonly tasinirKartService = inject(TasinirKartlariService);
     private readonly cariKartService = inject(CariKartlarService);
+    private readonly muhasebeFisService = inject(MuhasebeFisService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly dialogService = inject(DialogService);
@@ -288,6 +291,9 @@ export class StokHareketleriPage implements OnInit {
     /**
      * Opens the TasinirMuhasebeFisTaslagiDialogComponent as a DynamicDialog with
      * pre-filled data from the selected stok hareket row.
+     *
+     * Before opening the dialog, checks via getByKaynak whether an active
+     * (non-İptal) fiş already exists for this source operation.
      */
     muhasebeFisTaslagiOlustur(row: StokHareketModel): void {
         if (this.fisTaslagiDialogRef) {
@@ -313,6 +319,36 @@ export class StokHareketleriPage implements OnInit {
                 summary: 'Eksik Bilgi',
                 detail: 'Tesis veya taşınır kodu bilgisi eksik.'
             });
+            return;
+        }
+
+        // Frontend pre-check: bu kaynaktan (StokHareket) zaten aktif bir fiş var mı?
+        this.muhasebeFisService.getByKaynak('StokHareket', row.id!).subscribe({
+            next: (fisler) => {
+                const aktifFis = fisler.find(f => f.durum !== MuhasebeFisDurumlari.Iptal);
+                if (aktifFis) {
+                    this.messageService.add({
+                        severity: UiSeverity.Warn,
+                        summary: 'Fiş Zaten Mevcut',
+                        detail: `Bu stok hareketi için zaten bir muhasebe fişi oluşturulmuş. ` +
+                            `Mevcut fiş: ${aktifFis.fisNo} (Durum: ${aktifFis.durum}). ` +
+                            `Yeni fiş oluşturmak için önce mevcut fişi iptal ediniz.`
+                    });
+                    return;
+                }
+
+                this._openFisTaslagiDialog(tesisId, tasinirKodu, row);
+            },
+            error: () => {
+                // getByKaynak başarısız olsa bile dialog'u aç (backend zaten korumalı)
+                this._openFisTaslagiDialog(tesisId, tasinirKodu, row);
+            }
+        });
+    }
+
+    /** Internal helper to open the dialog after pre-checks pass. */
+    private _openFisTaslagiDialog(tesisId: number, tasinirKodu: string, row: StokHareketModel): void {
+        if (this.fisTaslagiDialogRef) {
             return;
         }
 

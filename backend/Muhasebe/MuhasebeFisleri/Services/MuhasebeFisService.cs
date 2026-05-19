@@ -1558,7 +1558,40 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             genelToplam = request.Tutar;
         }
 
-        // 8. Açıklama oluştur
+        // 8. Kaynak modül ve ID'yi request'ten çıkar
+        var kaynakModul = !string.IsNullOrWhiteSpace(request.ReferansTipi)
+            ? request.ReferansTipi
+            : MuhasebeKaynakModulleri.TasinirHareket;
+
+        int? kaynakId = null;
+        if (!string.IsNullOrWhiteSpace(request.ReferansId) && int.TryParse(request.ReferansId, out var parsedId))
+        {
+            kaynakId = parsedId;
+        }
+
+        // 9. Aynı kaynaktan daha önce oluşturulmuş aktif (İptal edilmemiş) fiş var mı kontrol et
+        if (kaynakId.HasValue)
+        {
+            var mevcutFis = await _dbContext.MuhasebeFisler
+                .AsNoTracking()
+                .Where(f => f.TesisId == request.TesisId
+                            && f.KaynakModul == kaynakModul
+                            && f.KaynakId == kaynakId.Value
+                            && f.Durum != MuhasebeFisDurumlari.Iptal)
+                .Select(f => new { f.Id, f.FisNo, f.Durum })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (mevcutFis is not null)
+            {
+                throw new BaseException(
+                    $"Bu kaynak işlem için zaten bir muhasebe fişi taslağı oluşturulmuş. " +
+                    $"Mevcut fiş: {mevcutFis.FisNo} (Durum: {mevcutFis.Durum}). " +
+                    $"Aynı kaynaktan yeni bir fiş oluşturmak için önce mevcut fişi iptal ediniz.",
+                    409);
+            }
+        }
+
+        // 10. Açıklama oluştur
         var aciklama = !string.IsNullOrWhiteSpace(request.Aciklama)
             ? request.Aciklama
             : $"Taşınır kodu {tasinirKodu} için otomatik muhasebe fişi taslağı";
@@ -1578,8 +1611,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             aciklama += $" | KDV Oranı: %{request.KdvOrani.Value} | KDV Dahil: {(request.KdvDahilMi ? "Evet" : "Hayır")}";
         }
 
-        // 9. Fiş ve satırları transaction içinde oluştur (aynı anda iki işlem aynı TSN
-        //    numarasını üretirse yeni fiş no ile tekrar dene)
+        // 11. Fiş ve satırları transaction içinde oluştur (aynı anda iki işlem aynı TSN
+        //     numarasını üretirse yeni fiş no ile tekrar dene)
         const int maxRetry = 3;
         for (int attempt = 0; attempt < maxRetry; attempt++)
         {
@@ -1587,6 +1620,26 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             try
             {
+                // Transaction içinde tekrar duplicate kontrolü (race condition önlemi)
+                if (kaynakId.HasValue)
+                {
+                    var transactionIciMevcutFis = await _dbContext.MuhasebeFisler
+                        .Where(f => f.TesisId == request.TesisId
+                                    && f.KaynakModul == kaynakModul
+                                    && f.KaynakId == kaynakId.Value
+                                    && f.Durum != MuhasebeFisDurumlari.Iptal)
+                        .Select(f => new { f.Id })
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (transactionIciMevcutFis is not null)
+                    {
+                        throw new BaseException(
+                            $"Bu kaynak işlem için zaten bir muhasebe fişi oluşturulmuş. " +
+                            $"Lütfen mevcut fişi kontrol ediniz.",
+                            409);
+                    }
+                }
+
                 var satirlar = new List<MuhasebeFisSatir>
                 {
                     new()
@@ -1635,7 +1688,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     request.TesisId,
                     request.MaliYil,
                     MuhasebeFisTipleri.Mahsup,
-                    MuhasebeKaynakModulleri.TasinirHareket,
+                    kaynakModul,
                     cancellationToken);
 
                 var fis = new MuhasebeFis
@@ -1646,7 +1699,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     FisNo = fisNo,
                     FisTarihi = request.FisTarihi,
                     FisTipi = MuhasebeFisTipleri.Mahsup,
-                    KaynakModul = MuhasebeKaynakModulleri.TasinirHareket,
+                    KaynakModul = kaynakModul,
+                    KaynakId = kaynakId,
                     Durum = MuhasebeFisDurumlari.Taslak,
                     Aciklama = aciklama,
                     ToplamBorc = toplamBorc,
@@ -1681,6 +1735,28 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _dbContext.ChangeTracker.Clear();
+
+                // Unique conflict'in FisNo mu yoksa kaynak duplicate mi olduğunu ayırt et
+                if (kaynakId.HasValue)
+                {
+                    var kaynakDuplicateMi = await _dbContext.MuhasebeFisler
+                        .AsNoTracking()
+                        .Where(f => f.TesisId == request.TesisId
+                                    && f.KaynakModul == kaynakModul
+                                    && f.KaynakId == kaynakId.Value
+                                    && f.Durum != MuhasebeFisDurumlari.Iptal)
+                        .AnyAsync(cancellationToken);
+
+                    if (kaynakDuplicateMi)
+                    {
+                        throw new BaseException(
+                            $"Bu kaynak işlem için zaten bir muhasebe fişi oluşturulmuş. " +
+                            $"Aynı kaynaktan yeni bir fiş oluşturmak için önce mevcut fişi iptal ediniz.",
+                            409);
+                    }
+                }
+
+                // FisNo çakışması → tekrar dene
                 continue;
             }
             catch

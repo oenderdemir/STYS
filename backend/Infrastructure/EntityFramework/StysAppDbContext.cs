@@ -1920,8 +1920,9 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.FisNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [FisNo] IS NOT NULL");
-            entity.HasIndex(x => new { x.KaynakModul, x.KaynakId })
-                .HasFilter("[KaynakId] IS NOT NULL AND [IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.KaynakModul, x.KaynakId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KaynakModul] IS NOT NULL AND [KaynakId] IS NOT NULL AND [Durum] <> 'Iptal'");
             entity.HasIndex(x => x.Durum);
             entity.HasIndex(x => x.TersKayitFisId);
             entity.HasIndex(x => x.IptalEdilenFisId);

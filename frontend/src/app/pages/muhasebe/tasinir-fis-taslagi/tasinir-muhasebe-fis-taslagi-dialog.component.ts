@@ -1,5 +1,6 @@
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
@@ -75,6 +76,7 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly ref = inject(DynamicDialogRef);
     private readonly config = inject(DynamicDialogConfig);
+    private readonly router = inject(Router);
 
     loading = false;
     tesislerLoading = false;
@@ -270,6 +272,19 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
 
     kapat(): void {
         this.ref.close();
+    }
+
+    muhasebeFisineGit(): void {
+        if (!this.result?.muhasebeFisId) {
+            return;
+        }
+        this.ref.close();
+        this.router.navigate(['/muhasebe/fisler'], {
+            queryParams: {
+                id: this.result.muhasebeFisId,
+                fisNo: this.result.fisNo
+            }
+        });
     }
 
     private showError(error: unknown): void {

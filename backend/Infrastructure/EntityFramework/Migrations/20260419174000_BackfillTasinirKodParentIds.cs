@@ -19,6 +19,7 @@ public partial class BackfillTasinirKodParentIds : Migration
                 SELECT
                     c.Id AS ChildId,
                     p.Id AS ParentId,
+                    c.Kod,
                     ROW_NUMBER() OVER
                     (
                         PARTITION BY c.Id
@@ -31,6 +32,15 @@ public partial class BackfillTasinirKodParentIds : Migration
                    AND c.Id <> p.Id
                    AND c.TamKod LIKE p.TamKod + N'.%'
                 WHERE c.UstKodId IS NULL
+            ),
+            Deduped AS
+            (
+                SELECT
+                    ChildId,
+                    ParentId,
+                    ROW_NUMBER() OVER (PARTITION BY ParentId, Kod ORDER BY ChildId) AS DupRN
+                FROM Candidates
+                WHERE RN = 1
             )
             UPDATE c
             SET
@@ -38,7 +48,7 @@ public partial class BackfillTasinirKodParentIds : Migration
                 c.UpdatedAt = SYSUTCDATETIME(),
                 c.UpdatedBy = N'migration_backfill_tasinir_parent'
             FROM [muhasebe].[TasinirKodlar] c
-            INNER JOIN Candidates x ON x.ChildId = c.Id AND x.RN = 1
+            INNER JOIN Deduped x ON x.ChildId = c.Id AND x.DupRN = 1
             WHERE c.IsDeleted = 0
               AND c.UstKodId IS NULL;
             """);

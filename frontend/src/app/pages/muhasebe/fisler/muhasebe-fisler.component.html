@@ -193,6 +193,16 @@
             [loading]="onaylananFisId === row.id"
             (onClick)="onayla(row)" />
           <p-button
+            *ngIf="row.durum === 'Taslak'"
+            icon="pi pi-trash"
+            severity="danger"
+            [text]="true"
+            size="small"
+            [rounded]="true"
+            pTooltip="Taslak fişi sil"
+            [loading]="silinenFisId === row.id"
+            (onClick)="sil(row)" />
+          <p-button
             *ngIf="row.durum === 'Onayli'"
             icon="pi pi-times"
             severity="danger"

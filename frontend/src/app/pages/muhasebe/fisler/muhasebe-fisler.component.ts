@@ -128,6 +128,7 @@ export class MuhasebeFislerComponent implements OnInit {
     // Aksiyon loading states (per-row tracking via row id)
     onaylananFisId: number | null = null;
     iptalEdilenFisId: number | null = null;
+    silinenFisId: number | null = null;
 
     // Düzenle dialog state
     duzenleDialogVisible = false;
@@ -345,6 +346,47 @@ export class MuhasebeFislerComponent implements OnInit {
                             detail: 'Fiş iptal edildi.',
                             life: 4000
                         });
+                        this.ara();
+                    },
+                    error: (error: unknown) => {
+                        this.showError(error);
+                    }
+                });
+            }
+        });
+    }
+
+    sil(row: MuhasebeFisModel): void {
+        this.confirmationService.confirm({
+            message: 'Bu taslak fişi silmek istiyor musunuz? Bu işlem sadece taslak fişi ve satırlarını pasifleştirir.',
+            header: 'Silme Onayı',
+            icon: 'pi pi-trash',
+            acceptLabel: 'Evet, Sil',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.silinenFisId = row.id;
+                this.cdr.detectChanges();
+
+                this.service.delete(row.id).pipe(finalize(() => {
+                    this.silinenFisId = null;
+                    this.cdr.detectChanges();
+                })).subscribe({
+                    next: () => {
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: `Taslak fiş silindi: ${row.fisNo}`,
+                            life: 4000
+                        });
+                        // Açık dialog varsa kapat
+                        this.detayDialogVisible = false;
+                        this.detayFis = null;
+                        this.duzenleDialogVisible = false;
+                        this.duzenleFis = null;
+                        this.duzenleSatirlar = [];
+                        // Highlight temizle
+                        this.highlightedFisId = null;
+                        this.highlightedFisNo = null;
                         this.ara();
                     },
                     error: (error: unknown) => {

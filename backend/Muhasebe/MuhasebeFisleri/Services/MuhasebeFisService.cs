@@ -1445,25 +1445,46 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     public override async Task DeleteAsync(int id)
     {
-        var existing = await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
 
-        if (existing is null)
-            throw new BaseException("Fiş bulunamadı.", 404);
-
-        if (existing.Durum != MuhasebeFisDurumlari.Taslak)
-            throw new BaseException("Yalnızca taslak durumundaki fişler silinebilir.", 400);
-
-        // Platform BaseEntity silme davranışı üzerinden fiş ve satırları sil
-        foreach (var satir in existing.Satirlar.Where(s => !s.IsDeleted))
+        try
         {
-            _dbContext.Entry(satir).State = EntityState.Deleted;
-        }
+            // 1. Fişi satırlarıyla çek
+            var fis = await _dbContext.MuhasebeFisler
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
 
-        // Platform BaseEntity silme davranışı üzerinden fişi sil
-        _dbContext.Entry(existing).State = EntityState.Deleted;
-        await _dbContext.SaveChangesAsync();
+            if (fis is null)
+                throw new BaseException("Fiş bulunamadı.", 404);
+
+            // 2. Sadece Taslak fiş silinebilir
+            if (fis.Durum != MuhasebeFisDurumlari.Taslak)
+                throw new BaseException("Sadece taslak fişler silinebilir. Onaylı fişler iptal/ters kayıt ile kapatılmalıdır.", 400);
+
+            // 3. YevmiyeNo almış fiş silinemez (ek güvenlik)
+            if (fis.YevmiyeNo.HasValue)
+                throw new BaseException("Yevmiye numarası almış fiş silinemez.", 400);
+
+            // 4. Aktif satırları soft-delete et
+            var now = DateTime.UtcNow;
+            foreach (var satir in fis.Satirlar.Where(s => !s.IsDeleted))
+            {
+                satir.IsDeleted = true;
+                satir.DeletedAt = now;
+            }
+
+            // 5. Fişi soft-delete et
+            fis.IsDeleted = true;
+            fis.DeletedAt = now;
+
+            await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     private static string GetFisTipiKodu(string fisTipi, string? kaynakModul)

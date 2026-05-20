@@ -50,6 +50,12 @@ export class MuhasebeFisService {
         );
     }
 
+    delete(id: number): Observable<void> {
+        return this.http.delete<void>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}`
+        );
+    }
+
     getByKaynak(kaynakModul: string, kaynakId: number): Observable<MuhasebeFisModel[]> {
         return this.http.get<MuhasebeFisModel[]>(
             `${this.apiBaseUrl}/ui/muhasebe/fisler/by-kaynak`,

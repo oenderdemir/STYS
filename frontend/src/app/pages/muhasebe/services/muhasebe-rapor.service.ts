@@ -90,4 +90,12 @@ export class MuhasebeRaporService {
                 })
             );
     }
+
+    exportMuavinDefterExcel(filter: MuavinDefterFilterModel): Observable<Blob> {
+        return this.http.post(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/muavin-defter/export-excel`,
+            filter,
+            { responseType: 'blob' }
+        );
+    }
 }

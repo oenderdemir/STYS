@@ -99,6 +99,14 @@
             [disabled]="loading"
             severity="secondary">
         </p-button>
+        <p-button
+            label="Excel'e Aktar"
+            icon="pi pi-file-excel"
+            (onClick)="exportExcel()"
+            [loading]="exporting"
+            [disabled]="!result || loading"
+            severity="success">
+        </p-button>
     </div>
 </div>
 

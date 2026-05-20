@@ -498,6 +498,121 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     public async Task<MuavinDefterDto> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default)
     {
+        // 1. Tüm veriyi hesapla (pagination uygulamadan)
+        var (tumSatirlar, hesap, toplamBorc, toplamAlacak, netBakiye) = await BuildMuavinDefterCoreAsync(filter, cancellationToken);
+
+        // 2. Sayfalama (sadece istenen sayfadaki satırlar)
+        var pagedSatirlar = tumSatirlar
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToList();
+
+        // 3. DTO'yu oluştur
+        return new MuavinDefterDto
+        {
+            TesisId = filter.TesisId,
+            MuhasebeHesapPlaniId = filter.MuhasebeHesapPlaniId,
+            MuhasebeHesapKodu = hesap.TamKod,
+            MuhasebeHesapAdi = hesap.Ad,
+            ToplamBorc = toplamBorc,
+            ToplamAlacak = toplamAlacak,
+            Bakiye = Math.Abs(netBakiye),
+            BakiyeTipi = netBakiye > 0 ? "Borc" : netBakiye < 0 ? "Alacak" : "Sifir",
+            Satirlar = pagedSatirlar,
+        };
+    }
+
+    public async Task<byte[]> ExportMuavinDefterExcelAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        // 1. Tüm veriyi hesapla (pagination uygulamadan)
+        var (tumSatirlar, hesap, toplamBorc, toplamAlacak, netBakiye) = await BuildMuavinDefterCoreAsync(filter, cancellationToken);
+
+        // 2. Excel oluştur
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Muavin Defter");
+
+        var now = DateTime.Now;
+        var baslangicStr = filter.BaslangicTarihi.HasValue ? filter.BaslangicTarihi.Value.ToString("dd.MM.yyyy") : "-";
+        var bitisStr = filter.BitisTarihi.HasValue ? filter.BitisTarihi.Value.ToString("dd.MM.yyyy") : "-";
+        var donemStr = filter.Donem.HasValue ? filter.Donem.Value.ToString() : "Tümü";
+        var altHesaplarDahilStr = filter.AltHesaplariDahilEt ? "Evet" : "Hayır";
+
+        // Üst bilgi satırları
+        ws.Cell(1, 1).Value = "Muavin Defter Raporu";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(2, 1).Value = "Export Tarihi:";
+        ws.Cell(2, 2).Value = now.ToString("dd.MM.yyyy HH:mm");
+        ws.Cell(3, 1).Value = "Tesis Id:";
+        ws.Cell(3, 2).Value = filter.TesisId;
+        ws.Cell(4, 1).Value = "Mali Yıl:";
+        ws.Cell(4, 2).Value = filter.MaliYil?.ToString() ?? "-";
+        ws.Cell(5, 1).Value = "Dönem:";
+        ws.Cell(5, 2).Value = donemStr;
+        ws.Cell(6, 1).Value = "Tarih Aralığı:";
+        ws.Cell(6, 2).Value = $"{baslangicStr} / {bitisStr}";
+        ws.Cell(7, 1).Value = "Hesap Kodu:";
+        ws.Cell(7, 2).Value = hesap.TamKod ?? "-";
+        ws.Cell(8, 1).Value = "Alt Hesaplar Dahil:";
+        ws.Cell(8, 2).Value = altHesaplarDahilStr;
+
+        // Sütun başlıkları (row 10)
+        var headers = new[] { "Tarih", "Yevmiye No", "Fiş No", "Fiş Tipi", "Hesap Kodu", "Hesap Adı", "Açıklama", "Borç", "Alacak", "Bakiye", "Bakiye Tipi" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(10, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        ws.SheetView.FreezeRows(10);
+
+        // Veri satırları (row 11'den başlayarak)
+        int row = 11;
+        foreach (var satir in tumSatirlar)
+        {
+            ws.Cell(row, 1).Value = satir.FisTarihi;
+            ws.Cell(row, 1).Style.DateFormat.Format = "dd.MM.yyyy";
+            ws.Cell(row, 2).Value = satir.YevmiyeNo;
+            ws.Cell(row, 3).Value = satir.FisNo;
+            ws.Cell(row, 4).Value = satir.FisTipi;
+            ws.Cell(row, 5).Value = satir.MuhasebeHesapKodu ?? "";
+            ws.Cell(row, 6).Value = satir.MuhasebeHesapAdi ?? "";
+            ws.Cell(row, 7).Value = satir.SatirAciklama ?? "";
+            ws.Cell(row, 8).Value = satir.Borc;
+            ws.Cell(row, 9).Value = satir.Alacak;
+            ws.Cell(row, 10).Value = satir.Bakiye;
+            ws.Cell(row, 11).Value = satir.BakiyeTipi;
+            row++;
+        }
+
+        // Sayı formatı (Borç, Alacak, Bakiye sütunları: 8, 9, 10)
+        ws.Column(8).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(9).Style.NumberFormat.Format = "#,##0.00";
+        ws.Column(10).Style.NumberFormat.Format = "#,##0.00";
+
+        // Toplam satırı
+        var sonBakiye = netBakiye;
+        var sonBakiyeTipi = netBakiye > 0 ? "Borc" : netBakiye < 0 ? "Alacak" : "Sifir";
+        ws.Cell(row, 1).Value = "TOPLAM";
+        ws.Cell(row, 8).Value = toplamBorc;
+        ws.Cell(row, 9).Value = toplamAlacak;
+        ws.Cell(row, 10).Value = Math.Abs(sonBakiye);
+        ws.Cell(row, 11).Value = sonBakiyeTipi;
+        for (int i = 1; i <= 11; i++)
+            ws.Cell(row, i).Style.Font.Bold = true;
+
+        // Otomatik sütun genişliği ve filtre
+        ws.Columns().AdjustToContents();
+        ws.RangeUsed()?.SetAutoFilter();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
+    }
+
+    private async Task<(List<MuavinDefterSatirDto> Satirlar, MuhasebeHesapPlani Hesap, decimal ToplamBorc, decimal ToplamAlacak, decimal NetBakiye)>
+        BuildMuavinDefterCoreAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken)
+    {
         // 1. Normalize
         filter.Normalize();
 
@@ -565,7 +680,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             }
         }
 
-        // 7. Sırala: FisTarihi, YevmiyeNo, FisId, SiraNo
+        // 6. Sırala: FisTarihi, YevmiyeNo, FisId, SiraNo
         tumSatirlar = tumSatirlar
             .OrderBy(s => s.FisTarihi)
             .ThenBy(s => s.YevmiyeNo)
@@ -573,7 +688,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             .ThenBy(s => s.SiraNo)
             .ToList();
 
-        // 8. Yürüyen bakiye hesapla (tüm satırlar üzerinden)
+        // 7. Yürüyen bakiye hesapla (tüm satırlar üzerinden)
         decimal bakiye = 0;
         foreach (var satir in tumSatirlar)
         {
@@ -582,30 +697,12 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             satir.BakiyeTipi = bakiye > 0 ? "Borc" : bakiye < 0 ? "Alacak" : "Sifir";
         }
 
-        // 9. Toplamlar (tüm filtrelenmiş satırlar üzerinden)
+        // 8. Toplamlar (tüm filtrelenmiş satırlar üzerinden)
         var toplamBorc = tumSatirlar.Sum(s => s.Borc);
         var toplamAlacak = tumSatirlar.Sum(s => s.Alacak);
         var netBakiye = toplamBorc - toplamAlacak;
 
-        // 10. Sayfalama (sadece istenen sayfadaki satırlar)
-        var pagedSatirlar = tumSatirlar
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToList();
-
-        // 11. DTO'yu oluştur
-        return new MuavinDefterDto
-        {
-            TesisId = filter.TesisId,
-            MuhasebeHesapPlaniId = filter.MuhasebeHesapPlaniId,
-            MuhasebeHesapKodu = hesap.TamKod,
-            MuhasebeHesapAdi = hesap.Ad,
-            ToplamBorc = toplamBorc,
-            ToplamAlacak = toplamAlacak,
-            Bakiye = Math.Abs(netBakiye),
-            BakiyeTipi = netBakiye > 0 ? "Borc" : netBakiye < 0 ? "Alacak" : "Sifir",
-            Satirlar = pagedSatirlar,
-        };
+        return (tumSatirlar, hesap, toplamBorc, toplamAlacak, netBakiye);
     }
 
     public async Task<MizanDto> GetMizanAsync(MizanFilterDto filter, CancellationToken cancellationToken = default)

@@ -83,6 +83,7 @@ export class MuavinDefterComponent implements OnInit {
     filter: MuavinDefterFilterModel = createDefaultMuavinDefterFilter();
     result: MuavinDefterModel | null = null;
     loading = false;
+    exporting = false;
 
     hesapKoduInput: string | null = null;
 
@@ -139,35 +140,40 @@ export class MuavinDefterComponent implements OnInit {
         return searchInTree(this.hesapPlaniTree);
     }
 
-    ara(): void {
+    private validateAndBuildFilter(): MuavinDefterFilterModel | null {
         if (!this.filter.tesisId) {
             this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen tesis seçiniz.' });
-            return;
+            return null;
         }
 
         const hesapKodu = (this.hesapKoduInput || '').trim();
         if (!hesapKodu) {
             this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen hesap kodu giriniz.' });
-            return;
+            return null;
         }
 
         if (!this.hesapPlaniLoaded) {
             this.ensureHesapPlaniLoaded();
-            // Wait for tree to load then retry
             this.messageService.add({ severity: 'info', summary: 'Bilgi', detail: 'Hesap planı yükleniyor, lütfen tekrar "Ara" butonuna tıklayınız.' });
-            return;
+            return null;
         }
 
         const hesapPlani = this.findHesapPlaniByKod(hesapKodu);
         if (!hesapPlani || !hesapPlani.id) {
             this.messageService.add({ severity: 'error', summary: 'Hata', detail: `"${hesapKodu}" kodlu hesap bulunamadı.` });
-            return;
+            return null;
         }
 
         const normalized = normalizeMuavinDefterFilter(this.filter);
         normalized.muhasebeHesapPlaniId = hesapPlani.id;
-        this.filter = normalized;
+        return normalized;
+    }
 
+    ara(): void {
+        const normalized = this.validateAndBuildFilter();
+        if (!normalized) return;
+
+        this.filter = normalized;
         this.result = null;
         this.loading = true;
 
@@ -182,6 +188,47 @@ export class MuavinDefterComponent implements OnInit {
                 this.showError(error);
             }
         });
+    }
+
+    exportExcel(): void {
+        const normalized = this.validateAndBuildFilter();
+        if (!normalized) return;
+
+        this.exporting = true;
+
+        this.raporService.exportMuavinDefterExcel(normalized).pipe(finalize(() => {
+            this.exporting = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (blob) => {
+                this.downloadBlob(blob, this.createExcelFileName());
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muavin defter Excel dosyası indiriliyor.' });
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        anchor.remove();
+    }
+
+    private createExcelFileName(): string {
+        const now = new Date();
+        const y = now.getFullYear();
+        const mo = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const mi = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        return `muavin-defter-${y}${mo}${d}-${h}${mi}${s}.xlsx`;
     }
 
     temizle(): void {

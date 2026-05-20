@@ -136,11 +136,8 @@ public class MuhasebeDonemService
         if (fisVar)
             throw new BaseException("Bu dönemde fiş bulunduğu için dönem silinemez.", 400);
 
-        // Soft-delete
-        var now = DateTime.UtcNow;
-        existing.IsDeleted = true;
-        existing.DeletedAt = now;
-        await _dbContext.SaveChangesAsync();
+        // Platform soft-delete standardı: ApplyAuditInfo, Deleted/DeletedAt/DeletedBy set eder
+        await base.DeleteAsync(id);
     }
 
     public async Task DonemKapatAsync(

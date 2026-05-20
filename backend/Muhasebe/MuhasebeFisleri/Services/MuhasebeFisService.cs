@@ -1393,14 +1393,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             existing.ToplamBorc = toplamBorc;
             existing.ToplamAlacak = toplamAlacak;
 
-            // 6. Eski satırları soft-delete (fiziksel silme değil, IsDeleted=true)
+            // 6. Eski satırları soft-delete (RemoveRange → ApplyAuditInfo soft-delete'e çevirir, DeletedBy set edilir)
+            // NOT: existing.Satirlar.Clear() kullanılmaz — cascade davranışı tetiklenmemeli
             var aktifEskiSatirlar = existing.Satirlar.Where(s => !s.IsDeleted).ToList();
-            var now = DateTime.UtcNow;
-            foreach (var oldSatir in aktifEskiSatirlar)
-            {
-                oldSatir.IsDeleted = true;
-                oldSatir.DeletedAt = now;
-            }
+            _dbContext.MuhasebeFisSatirlari.RemoveRange(aktifEskiSatirlar);
 
             // 7. Yeni satırları oluştur — linked alanları koru, DbSet üzerinden ekle
             var yeniSatirlar = new List<MuhasebeFisSatir>();
@@ -1462,17 +1458,13 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             // 3b. Açık dönem kontrolü
             await ValidateOpenPeriodAsync(fis.TesisId, fis.FisTarihi, fis.MaliYil, fis.Donem, CancellationToken.None);
 
-            // 4. Aktif satırları soft-delete et
-            var now = DateTime.UtcNow;
-            foreach (var satir in fis.Satirlar.Where(s => !s.IsDeleted))
-            {
-                satir.IsDeleted = true;
-                satir.DeletedAt = now;
-            }
+            // 4. Aktif satırları soft-delete (RemoveRange → ApplyAuditInfo: EntityState.Deleted → Modified + IsDeleted/DeletedAt/DeletedBy)
+            var aktifSatirlar = fis.Satirlar.Where(s => !s.IsDeleted).ToList();
+            if (aktifSatirlar.Count > 0)
+                _dbContext.MuhasebeFisSatirlari.RemoveRange(aktifSatirlar);
 
-            // 5. Fişi soft-delete et
-            fis.IsDeleted = true;
-            fis.DeletedAt = now;
+            // 5. Fişi soft-delete (Remove → ApplyAuditInfo)
+            _dbContext.MuhasebeFisler.Remove(fis);
 
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();

@@ -1,9 +1,11 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -141,6 +143,18 @@ public class MuhasebeDonemService
 
         if (existing.KapaliMi)
             throw new BaseException("Dönem zaten kapalıdır.", 400);
+
+        // Dönemde Taslak durumunda fiş varsa kapatılamaz
+        var taslakFisVar = await _dbContext.MuhasebeFisler
+            .AnyAsync(x => x.TesisId == existing.TesisId
+                && x.MaliYil == existing.MaliYil
+                && x.Donem == existing.DonemNo
+                && x.Durum == MuhasebeFisDurumlari.Taslak
+                && !x.IsDeleted,
+                cancellationToken);
+
+        if (taslakFisVar)
+            throw new BaseException("Bu dönemde Taslak durumunda fiş(ler) bulunmaktadır. Kapatmadan önce taslak fişler onaylanmalı veya silinmelidir.", 400);
 
         existing.KapaliMi = true;
         existing.KapanisTarihi = DateTime.UtcNow;

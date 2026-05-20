@@ -1,0 +1,247 @@
+<p-toast />
+
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <!-- Tesis -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-3">
+    <label class="block mb-1 text-sm font-medium">Tesis</label>
+    <p-select
+      [options]="tesisSecenekleri"
+      [(ngModel)]="filter.tesisId"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tesis seçiniz"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <!-- Mali Yıl -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
+    <p-select
+      [options]="maliYilSecenekleri"
+      [(ngModel)]="filter.maliYil"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Mali Yıl"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <!-- Durum -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Durum</label>
+    <p-select
+      [options]="durumSecenekleri"
+      [(ngModel)]="filter.kapaliMi"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Durum"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-3 lg:col-start-7 flex items-end gap-2">
+    <p-button
+      label="Yeni Dönem"
+      icon="pi pi-plus"
+      [raised]="true"
+      (onClick)="openCreate()" />
+    <p-button
+      label="Yenile"
+      icon="pi pi-refresh"
+      severity="secondary"
+      [outlined]="true"
+      [loading]="loading"
+      (onClick)="loadDonemler()" />
+  </div>
+</div>
+
+<p-table
+  [value]="filteredRecords"
+  [loading]="loading"
+  [paginator]="true"
+  [rows]="25"
+  [rowsPerPageOptions]="[10, 25, 50, 100]"
+  [showCurrentPageReport]="true"
+  currentPageReportTemplate="{totalRecords} kayıt"
+  styleClass="p-datatable-striped p-datatable-sm"
+  [rowHover]="true"
+  responsiveLayout="scroll">
+  <ng-template pTemplate="header">
+    <tr>
+      <th>Tesis</th>
+      <th>Mali Yıl</th>
+      <th>Dönem</th>
+      <th>Başlangıç</th>
+      <th>Bitiş</th>
+      <th>Durum</th>
+      <th>Kapanış Tarihi</th>
+      <th>Açıklama</th>
+      <th style="width: 200px">İşlemler</th>
+    </tr>
+  </ng-template>
+  <ng-template pTemplate="body" let-item>
+    <tr>
+      <td>{{ item.tesisAdi || ('Tesis #' + item.tesisId) }}</td>
+      <td>{{ item.maliYil }}</td>
+      <td>{{ item.donemNo }}</td>
+      <td>{{ item.baslangicTarihi | date:'dd.MM.yyyy' }}</td>
+      <td>{{ item.bitisTarihi | date:'dd.MM.yyyy' }}</td>
+      <td>
+        <p-tag
+          [value]="getDurumLabel(item.kapaliMi)"
+          [severity]="getDurumSeverity(item.kapaliMi)" />
+      </td>
+      <td>{{ item.kapanisTarihi ? (item.kapanisTarihi | date:'dd.MM.yyyy HH:mm') : '-' }}</td>
+      <td>{{ item.aciklama || '-' }}</td>
+      <td>
+        <div class="flex gap-1 flex-wrap">
+          <p-button
+            icon="pi pi-pencil"
+            severity="secondary"
+            [outlined]="true"
+            [rounded]="true"
+            size="small"
+            pTooltip="Düzenle"
+            (onClick)="openEdit(item)" />
+          @if (!item.kapaliMi) {
+            <p-button
+              icon="pi pi-lock"
+              severity="warn"
+              [outlined]="true"
+              [rounded]="true"
+              size="small"
+              pTooltip="Dönemi Kapat"
+              [loading]="kapatilanDonemId === item.id"
+              (onClick)="confirmKapat(item)" />
+          }
+          @if (item.kapaliMi) {
+            <p-button
+              icon="pi pi-unlock"
+              severity="success"
+              [outlined]="true"
+              [rounded]="true"
+              size="small"
+              pTooltip="Dönemi Aç"
+              [loading]="acilanDonemId === item.id"
+              (onClick)="confirmAc(item)" />
+          }
+          <p-button
+            icon="pi pi-trash"
+            severity="danger"
+            [outlined]="true"
+            [rounded]="true"
+            size="small"
+            pTooltip="Sil"
+            [loading]="silinenDonemId === item.id"
+            (onClick)="confirmDelete(item)" />
+        </div>
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template pTemplate="emptymessage">
+    <tr>
+      <td colspan="9" class="text-center p-4 text-gray-500">
+        @if (loading) {
+          Yükleniyor...
+        } @else {
+          Henüz kayıtlı muhasebe dönemi bulunmamaktadır.
+        }
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<p-dialog
+  [(visible)]="dialogVisible"
+  [header]="dialogMode === 'create' ? 'Yeni Dönem' : 'Dönem Düzenle'"
+  [modal]="true"
+  [style]="{ width: '32rem' }"
+  [closable]="true"
+  [dismissableMask]="true">
+  <div class="flex flex-col gap-3 mt-2">
+    <!-- Tesis -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Tesis <span class="text-red-500">*</span></label>
+      <p-select
+        [options]="tesisSecenekleri"
+        [(ngModel)]="model.tesisId"
+        placeholder="Tesis seçiniz"
+        optionLabel="label"
+        optionValue="value"
+        styleClass="w-full"
+        [disabled]="dialogMode === 'edit'" />
+    </div>
+
+    <!-- Mali Yıl -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Mali Yıl <span class="text-red-500">*</span></label>
+      <p-inputNumber
+        [(ngModel)]="model.maliYil"
+        [min]="2000"
+        [max]="2100"
+        [useGrouping]="false"
+        styleClass="w-full"
+        [disabled]="dialogMode === 'edit'" />
+    </div>
+
+    <!-- Dönem No -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Dönem No <span class="text-red-500">*</span></label>
+      <p-inputNumber
+        [(ngModel)]="model.donemNo"
+        [min]="1"
+        [max]="12"
+        [useGrouping]="false"
+        styleClass="w-full"
+        [disabled]="dialogMode === 'edit'" />
+    </div>
+
+    <!-- Başlangıç Tarihi -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Başlangıç Tarihi <span class="text-red-500">*</span></label>
+      <input
+        type="date"
+        [(ngModel)]="model.baslangicTarihi"
+        class="w-full p-inputtext p-component p-element"
+        [disabled]="dialogMode === 'edit' && model.kapaliMi" />
+    </div>
+
+    <!-- Bitiş Tarihi -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Bitiş Tarihi <span class="text-red-500">*</span></label>
+      <input
+        type="date"
+        [(ngModel)]="model.bitisTarihi"
+        class="w-full p-inputtext p-component p-element"
+        [disabled]="dialogMode === 'edit' && model.kapaliMi" />
+    </div>
+
+    <!-- Açıklama -->
+    <div>
+      <label class="block mb-1 text-sm font-medium">Açıklama</label>
+      <input
+        type="text"
+        pInputText
+        [(ngModel)]="model.aciklama"
+        class="w-full"
+        placeholder="Opsiyonel açıklama" />
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <p-button
+      label="Vazgeç"
+      severity="secondary"
+      [outlined]="true"
+      (onClick)="dialogVisible = false" />
+    <p-button
+      label="Kaydet"
+      icon="pi pi-check"
+      [loading]="saving"
+      (click)="save()" />
+  </ng-template>
+</p-dialog>
+
+<p-confirmDialog key="donemDialog" />

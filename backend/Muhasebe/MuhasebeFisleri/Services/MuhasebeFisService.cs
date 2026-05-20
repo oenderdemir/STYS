@@ -159,11 +159,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 throw new BaseException("Fiş toplamları satır toplamları ile uyumlu değildir.", 400);
 
             // 9. Açık dönem kontrolü
-            var donem = await _muhasebeDonemService.GetAktifDonemAsync(fis.TesisId, fis.FisTarihi, cancellationToken);
-            if (donem is null)
-                throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
-            if (fis.MaliYil != donem.MaliYil || fis.Donem != donem.DonemNo)
-                throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
+            await ValidateOpenPeriodAsync(fis.TesisId, fis.FisTarihi, fis.MaliYil, fis.Donem, cancellationToken);
 
             // 10. Satır hesaplarını doğrula
             foreach (var satir in aktifSatirlar)
@@ -245,9 +241,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
 
             // 7. Açık dönem kontrolü
-            var donem = await _muhasebeDonemService.GetAktifDonemAsync(orijinalFis.TesisId, orijinalFis.FisTarihi, cancellationToken);
-            if (donem is null)
-                throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+            await ValidateOpenPeriodAsync(orijinalFis.TesisId, orijinalFis.FisTarihi, orijinalFis.MaliYil, orijinalFis.Donem, cancellationToken);
 
             // 8. Aktif satırları al ve kontrol et
             var aktifSatirlar = orijinalFis.Satirlar.Where(s => !s.IsDeleted).ToList();
@@ -1465,6 +1459,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (fis.YevmiyeNo.HasValue)
                 throw new BaseException("Yevmiye numarası almış fiş silinemez.", 400);
 
+            // 3b. Açık dönem kontrolü
+            await ValidateOpenPeriodAsync(fis.TesisId, fis.FisTarihi, fis.MaliYil, fis.Donem, CancellationToken.None);
+
             // 4. Aktif satırları soft-delete et
             var now = DateTime.UtcNow;
             foreach (var satir in fis.Satirlar.Where(s => !s.IsDeleted))
@@ -1499,6 +1496,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             MuhasebeFisTipleri.Tediye => "TDY",
             MuhasebeFisTipleri.Acilis => "ACL",
             MuhasebeFisTipleri.Kapanis => "KPN",
+            MuhasebeFisTipleri.Duzeltme => "DZT",
             _ => "MHS"
         };
     }
@@ -1532,6 +1530,29 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         return $"{prefix}{(maxSira + 1):D6}";
     }
 
+    /// <summary>
+    /// Fişin dönemine ait açık muhasebe dönemi olup olmadığını kontrol eder.
+    /// Tüm fiş yazma işlemlerinde (create/update/delete/onayla/iptal) ortak kullanılır.
+    /// </summary>
+    private async Task ValidateOpenPeriodAsync(
+        int tesisId,
+        DateTime fisTarihi,
+        int maliYil,
+        int donemNo,
+        CancellationToken cancellationToken)
+    {
+        var donem = await _muhasebeDonemService.GetAktifDonemAsync(
+            tesisId,
+            fisTarihi,
+            cancellationToken);
+
+        if (donem is null)
+            throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
+
+        if (maliYil != donem.MaliYil || donemNo != donem.DonemNo)
+            throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
+    }
+
     private async Task NormalizeAndValidateCreateAsync(MuhasebeFisDto dto, CancellationToken cancellationToken)
     {
         // 1. TesisId > 0
@@ -1551,16 +1572,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             throw new BaseException("Fiş tarihi zorunludur.", 400);
 
         // 4b. Açık muhasebe dönemi kontrolü
-        var donem = await _muhasebeDonemService.GetAktifDonemAsync(
-            dto.TesisId,
-            dto.FisTarihi,
-            cancellationToken);
-
-        if (donem is null)
-            throw new BaseException("Fiş tarihi için açık muhasebe dönemi bulunamadı.", 400);
-
-        if (dto.MaliYil != donem.MaliYil || dto.Donem != donem.DonemNo)
-            throw new BaseException("Fişin mali yılı/dönemi, açık muhasebe dönemi ile uyumlu değildir.", 400);
+        await ValidateOpenPeriodAsync(dto.TesisId, dto.FisTarihi, dto.MaliYil, dto.Donem, cancellationToken);
 
         // 5. FisTipi desteklenen
         if (string.IsNullOrWhiteSpace(dto.FisTipi))

@@ -160,6 +160,7 @@ export const MuhasebeFisTipleri = {
     Tahsil: 'Tahsil',
     Tediye: 'Tediye',
     Acilis: 'Acilis',
-    Kapanis: 'Kapanis'
+    Kapanis: 'Kapanis',
+    Duzeltme: 'Duzeltme'
 } as const;
 

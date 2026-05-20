@@ -17,7 +17,6 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import {
     CreateMuhasebeFisRequestModel,
     CreateMuhasebeFisSatirRequestModel,
-    MuhasebeFisModel,
     MuhasebeFisTipleri
 } from '../models/muhasebe-fis.model';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
@@ -80,7 +79,8 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
     { label: 'Tahsil', value: MuhasebeFisTipleri.Tahsil },
     { label: 'Tediye', value: MuhasebeFisTipleri.Tediye },
     { label: 'Açılış', value: MuhasebeFisTipleri.Acilis },
-    { label: 'Kapanış', value: MuhasebeFisTipleri.Kapanis }
+    { label: 'Kapanış', value: MuhasebeFisTipleri.Kapanis },
+    { label: 'Düzeltme', value: MuhasebeFisTipleri.Duzeltme }
 ];
 
 @Component({
@@ -110,7 +110,6 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
 
-    loading = false;
     saving = false;
 
     // Form
@@ -136,9 +135,6 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     // Satır table
     satirlar: SatirRow[] = [];
 
-    // Hesap kodu lookup per row
-    hesapLookupMap: Map<number, HesapSecenek[]> = new Map();
-    hesapLookupLoadingMap: Map<number, boolean> = new Map();
     hesapLookupDialogVisible = false;
     lookupSatirIndex: number | null = null;
     hesapAramaMetni = '';
@@ -174,6 +170,10 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     ngOnInit(): void {
         this.loadTesisler();
         this.loadHesapPlani();
+        if (this.satirlar.length === 0) {
+            this.satirEkle();
+            this.satirEkle();
+        }
     }
 
     private loadTesisler(): void {
@@ -209,19 +209,23 @@ export class MuhasebeFisOlusturComponent implements OnInit {
         const result: HesapSecenek[] = [];
         for (const node of nodes) {
             if (!node.aktifMi) continue;
-            result.push({
-                label: `${node.tamKod} - ${node.ad}`,
-                value: node.id!,
-                tamKod: node.tamKod,
-                ad: node.ad,
-                seviyeNo: node.seviyeNo,
-                hasChildren: !!node.hasChildren
-            });
-            // Also add children from tree if present (tree may be flat or nested depending on backend)
-            // Tree is nested so we flatten recursively
             const children = (node as any).children as MuhasebeHesapPlaniModel[] | undefined;
-            if (children && children.length > 0) {
-                result.push(...this.flattenTree(children, prefix));
+            const hasChildren = !!(children && children.length > 0) || !!node.hasChildren;
+            if (hasChildren) {
+                // Parent accounts are not selectable; only recurse into children
+                if (children && children.length > 0) {
+                    result.push(...this.flattenTree(children, prefix));
+                }
+            } else {
+                // Leaf-only accounts are selectable
+                result.push({
+                    label: `${node.tamKod} - ${node.ad}`,
+                    value: node.id!,
+                    tamKod: node.tamKod,
+                    ad: node.ad,
+                    seviyeNo: node.seviyeNo,
+                    hasChildren: false
+                });
             }
         }
         return result;
@@ -275,6 +279,15 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     }
 
     satirSil(index: number): void {
+        if (this.satirlar.length <= 2) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Uyarı',
+                detail: 'En az 2 fiş satırı bulunmalıdır.',
+                life: 4000
+            });
+            return;
+        }
         this.satirlar.splice(index, 1);
         // Re-number siraNo
         this.satirlar.forEach((s, i) => s.siraNo = i + 1);

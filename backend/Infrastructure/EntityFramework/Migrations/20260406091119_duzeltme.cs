@@ -5,7 +5,7 @@
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     /// <inheritdoc />
-    public partial class duzeltme : Migration
+    public partial class Duzeltme : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

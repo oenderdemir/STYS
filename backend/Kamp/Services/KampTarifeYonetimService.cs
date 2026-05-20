@@ -84,7 +84,7 @@ public class KampTarifeYonetimService : IKampTarifeYonetimService
 
         var requestByIdMap = (request.Tarifeler ?? [])
             .Where(x => x.Id.HasValue && x.Id > 0)
-            .ToDictionary(x => x.Id.Value);
+            .ToDictionary(x => x.Id!.Value);
 
         // Update veya Insert
         foreach (var dto in request.Tarifeler ?? [])

@@ -19,7 +19,8 @@ public partial class BackfillTasinirKodParentIds : Migration
                 SELECT
                     c.Id AS ChildId,
                     p.Id AS ParentId,
-                    c.Kod,
+                    -- Local (leaf) code extracted from the last segment of TamKod
+                    RIGHT(c.TamKod, CHARINDEX(N'.', REVERSE(c.TamKod) + N'.') - 1) AS LocalKod,
                     ROW_NUMBER() OVER
                     (
                         PARTITION BY c.Id
@@ -38,11 +39,12 @@ public partial class BackfillTasinirKodParentIds : Migration
                 SELECT
                     ChildId,
                     ParentId,
-                    ROW_NUMBER() OVER (PARTITION BY ParentId, Kod ORDER BY ChildId) AS DupRN
+                    LocalKod,
+                    ROW_NUMBER() OVER (PARTITION BY ParentId, LocalKod ORDER BY ChildId) AS DupRN
                 FROM Candidates
                 WHERE RN = 1
             ),
-            -- Exclude children whose (ParentId, Kod) would conflict with
+            -- Exclude children whose (ParentId, LocalKod) would conflict with
             -- a row that already has UstKodId set (from an earlier migration or seed)
             ConflictCheck AS
             (
@@ -50,7 +52,7 @@ public partial class BackfillTasinirKodParentIds : Migration
                 FROM Deduped d
                 INNER JOIN [muhasebe].[TasinirKodlar] ex
                     ON ex.UstKodId = d.ParentId
-                   AND ex.Kod = d.Kod
+                   AND RIGHT(ex.TamKod, CHARINDEX(N'.', REVERSE(ex.TamKod) + N'.') - 1) = d.LocalKod
                    AND ex.Id != d.ChildId
                    AND ex.IsDeleted = 0
             )

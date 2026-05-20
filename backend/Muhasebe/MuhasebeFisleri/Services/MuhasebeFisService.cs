@@ -489,7 +489,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
         // Otomatik sütun genişliği ve filtre
         ws.Columns().AdjustToContents();
-        ws.RangeUsed().SetAutoFilter();
+        ws.RangeUsed()?.SetAutoFilter();
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);

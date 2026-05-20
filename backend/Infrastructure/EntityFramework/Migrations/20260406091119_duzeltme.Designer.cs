@@ -13,7 +13,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
     [Migration("20260406091119_duzeltme")]
-    partial class duzeltme
+    partial class Duzeltme
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

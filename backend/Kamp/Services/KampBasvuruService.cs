@@ -800,7 +800,7 @@ public class KampBasvuruService : IKampBasvuruService
             Kod = x.Kod,
             Ad = _parametreService.GetString(
                 KampKonaklamaBirimiTipleri.BuildParametreKodu(x.Kod, KampKonaklamaBirimiTipleri.AlanAd),
-                x.Kod),
+                x.Kod) ?? x.Kod,
             MinimumKisi = x.MinimumKisi,
             MaksimumKisi = x.MaksimumKisi
         }).ToList();

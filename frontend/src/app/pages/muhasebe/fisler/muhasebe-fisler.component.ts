@@ -1,20 +1,25 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, take } from 'rxjs';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
+import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import {
     MuhasebeFisFilterModel,
     MuhasebeFisModel,
+    MuhasebeFisSatirModel,
     createDefaultFisFilter,
     normalizeFisFilter
 } from '../models/muhasebe-fis.model';
@@ -86,20 +91,24 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         DatePipe,
         DecimalPipe,
         ButtonModule,
+        ConfirmDialogModule,
+        DialogModule,
         InputTextModule,
         SelectModule,
         TableModule,
         TagModule,
-        ToastModule
+        ToastModule,
+        TooltipModule
     ],
     templateUrl: './muhasebe-fisler.component.html',
     styleUrls: ['./muhasebe-fisler.component.scss'],
-    providers: [MessageService]
+    providers: [MessageService, ConfirmationService]
 })
 export class MuhasebeFislerComponent implements OnInit {
     private readonly service = inject(MuhasebeFisService);
     private readonly raporService = inject(MuhasebeRaporService);
     private readonly messageService = inject(MessageService);
+    private readonly confirmationService = inject(ConfirmationService);
     private readonly route = inject(ActivatedRoute);
     private readonly router = inject(Router);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -108,6 +117,15 @@ export class MuhasebeFislerComponent implements OnInit {
     filter: MuhasebeFisFilterModel = createDefaultFisFilter();
     result: MuhasebeFisModel[] = [];
     totalCount = 0;
+
+    // Detay dialog state
+    detayDialogVisible = false;
+    detayFis: MuhasebeFisModel | null = null;
+    detayLoading = false;
+
+    // Aksiyon loading states (per-row tracking via row id)
+    onaylananFisId: number | null = null;
+    iptalEdilenFisId: number | null = null;
 
     tesisSecenekleri: TesisSecenek[] = [];
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
@@ -241,6 +259,90 @@ export class MuhasebeFislerComponent implements OnInit {
         });
     }
 
+    openDetay(row: MuhasebeFisModel): void {
+        this.detayFis = null;
+        this.detayDialogVisible = true;
+        this.detayLoading = true;
+        this.cdr.detectChanges();
+
+        this.service.getById(row.id).pipe(finalize(() => {
+            this.detayLoading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (fis) => {
+                this.detayFis = fis;
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.detayDialogVisible = false;
+            }
+        });
+    }
+
+    onayla(row: MuhasebeFisModel): void {
+        this.confirmationService.confirm({
+            message: 'Bu fişi onaylamak istiyor musunuz? Onaylanan fiş muhasebe bakiyelerine işlenecektir.',
+            header: 'Onaylama Onayı',
+            icon: 'pi pi-check-circle',
+            acceptLabel: 'Evet, Onayla',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.onaylananFisId = row.id;
+                this.cdr.detectChanges();
+
+                this.service.onayla(row.id).pipe(finalize(() => {
+                    this.onaylananFisId = null;
+                    this.cdr.detectChanges();
+                })).subscribe({
+                    next: (onaylanan) => {
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: `Fiş onaylandı: ${onaylanan.fisNo}`,
+                            life: 4000
+                        });
+                        this.ara();
+                    },
+                    error: (error: unknown) => {
+                        this.showError(error);
+                    }
+                });
+            }
+        });
+    }
+
+    iptal(row: MuhasebeFisModel): void {
+        this.confirmationService.confirm({
+            message: 'Bu fişi iptal etmek istiyor musunuz? Sistem ters kayıt oluşturabilir.',
+            header: 'İptal Onayı',
+            icon: 'pi pi-exclamation-triangle',
+            acceptLabel: 'Evet, İptal Et',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.iptalEdilenFisId = row.id;
+                this.cdr.detectChanges();
+
+                this.service.iptal(row.id).pipe(finalize(() => {
+                    this.iptalEdilenFisId = null;
+                    this.cdr.detectChanges();
+                })).subscribe({
+                    next: () => {
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: 'Fiş iptal edildi.',
+                            life: 4000
+                        });
+                        this.ara();
+                    },
+                    error: (error: unknown) => {
+                        this.showError(error);
+                    }
+                });
+            }
+        });
+    }
+
     isHighlighted(row: MuhasebeFisModel): boolean {
         if (this.highlightedFisId && row.id === this.highlightedFisId) {
             return true;
@@ -249,6 +351,28 @@ export class MuhasebeFislerComponent implements OnInit {
             return true;
         }
         return false;
+    }
+
+    getDetayToplamBorc(): number {
+        if (!this.detayFis?.satirlar?.length) return 0;
+        return this.detayFis.satirlar.reduce((sum, s) => sum + (s.borc ?? 0), 0);
+    }
+
+    getDetayToplamAlacak(): number {
+        if (!this.detayFis?.satirlar?.length) return 0;
+        return this.detayFis.satirlar.reduce((sum, s) => sum + (s.alacak ?? 0), 0);
+    }
+
+    getDetayFark(): number {
+        return this.getDetayToplamBorc() - this.getDetayToplamAlacak();
+    }
+
+    getDenklikSeverity(): 'success' | 'danger' {
+        return this.getDetayFark() === 0 ? 'success' : 'danger';
+    }
+
+    getDenklikLabel(): string {
+        return this.getDetayFark() === 0 ? 'Dengede' : 'Dengesiz';
     }
 
     getDurumLabel(durum: string): string {

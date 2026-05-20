@@ -29,6 +29,20 @@ export class MuhasebeFisService {
         );
     }
 
+    onayla(id: number): Observable<MuhasebeFisModel> {
+        return this.http.post<MuhasebeFisModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}/onayla`,
+            {}
+        );
+    }
+
+    iptal(id: number, aciklama?: string | null): Observable<MuhasebeFisModel> {
+        return this.http.post<MuhasebeFisModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}/iptal`,
+            { aciklama: aciklama ?? null }
+        );
+    }
+
     getByKaynak(kaynakModul: string, kaynakId: number): Observable<MuhasebeFisModel[]> {
         return this.http.get<MuhasebeFisModel[]>(
             `${this.apiBaseUrl}/ui/muhasebe/fisler/by-kaynak`,

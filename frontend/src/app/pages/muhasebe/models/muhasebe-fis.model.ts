@@ -110,6 +110,12 @@ export interface UpdateMuhasebeFisSatirRequestModel {
     siraNo: number;
     borc: number;
     alacak: number;
+    paraBirimi: string;
+    kur: number;
+    cariKartId: number | null;
+    tasinirKartId: number | null;
+    depoId: number | null;
+    kasaBankaHesapId: number | null;
     aciklama: string | null;
 }
 

@@ -1362,49 +1362,80 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     public override async Task<MuhasebeFisDto> UpdateAsync(MuhasebeFisDto dto)
     {
-        var existing = await _dbContext.MuhasebeFisler
-            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-            .FirstOrDefaultAsync(x => x.Id == dto.Id && !x.IsDeleted);
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
 
-        if (existing is null)
-            throw new BaseException("Fiş bulunamadı.", 404);
-
-        if (existing.Durum != MuhasebeFisDurumlari.Taslak)
-            throw new BaseException("Yalnızca taslak durumundaki fişler güncellenebilir.", 400);
-
-        // Normalize ve validate
-        await NormalizeAndValidateCreateAsync(dto, CancellationToken.None);
-
-        // Header alanlarını güncelle
-        existing.TesisId = dto.TesisId;
-        existing.MaliYil = dto.MaliYil;
-        existing.Donem = dto.Donem;
-        existing.FisTarihi = dto.FisTarihi;
-        existing.FisTipi = dto.FisTipi;
-        existing.Aciklama = dto.Aciklama;
-        existing.ToplamBorc = dto.ToplamBorc;
-        existing.ToplamAlacak = dto.ToplamAlacak;
-
-        // Eski satırları sil (sadece silinmemiş olanları)
-        foreach (var oldSatir in existing.Satirlar.Where(s => !s.IsDeleted))
+        try
         {
-            _dbContext.Entry(oldSatir).State = EntityState.Deleted;
-        }
-        existing.Satirlar.Clear();
+            // 1. Mevcut fişi satırlarıyla getir
+            var existing = await _dbContext.MuhasebeFisler
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .FirstOrDefaultAsync(x => x.Id == dto.Id && !x.IsDeleted);
 
-        foreach (var satirDto in dto.Satirlar)
+            if (existing is null)
+                throw new BaseException("Fiş bulunamadı.", 404);
+
+            // 2. Sadece Taslak fişler güncellenebilir
+            if (existing.Durum != MuhasebeFisDurumlari.Taslak)
+                throw new BaseException("Yalnızca taslak durumundaki fişler güncellenebilir.", 400);
+
+            // 3. Normalize ve validate (dönem, satır sayısı, hesap planı, borç/alacak dengesi)
+            //    NormalizeAndValidateCreateAsync ayrıca dto.ToplamBorc ve dto.ToplamAlacak'ı
+            //    satırlardan yeniden hesaplar
+            await NormalizeAndValidateCreateAsync(dto, CancellationToken.None);
+
+            // 4. Toplamları backend'de satırlardan hesapla (güvenlik: frontend toplamlarına güvenme)
+            var toplamBorc = dto.Satirlar.Sum(x => x.Borc);
+            var toplamAlacak = dto.Satirlar.Sum(x => x.Alacak);
+            if (toplamBorc != toplamAlacak)
+                throw new BaseException($"Toplam borç ({toplamBorc:N2}) ile toplam alacak ({toplamAlacak:N2}) eşit olmalıdır.", 400);
+
+            // 5. Başlık alanlarını güncelle
+            existing.TesisId = dto.TesisId;
+            existing.MaliYil = dto.MaliYil;
+            existing.Donem = dto.Donem;
+            existing.FisTarihi = dto.FisTarihi;
+            existing.FisTipi = dto.FisTipi;
+            existing.Aciklama = dto.Aciklama;
+            existing.ToplamBorc = toplamBorc;
+            existing.ToplamAlacak = toplamAlacak;
+
+            // 6. Eski satırları soft-delete
+            foreach (var oldSatir in existing.Satirlar.Where(s => !s.IsDeleted))
+            {
+                _dbContext.Entry(oldSatir).State = EntityState.Deleted;
+            }
+            existing.Satirlar.Clear();
+
+            // 7. Yeni satırları ekle — linked alanları koru
+            foreach (var satirDto in dto.Satirlar)
+            {
+                var satir = Mapper.Map<MuhasebeFisSatir>(satirDto);
+                satir.MuhasebeFisId = existing.Id;
+
+                // Linked alanları AutoMapper sonrası açıkça koru
+                satir.ParaBirimi = string.IsNullOrWhiteSpace(satirDto.ParaBirimi) ? "TRY" : satirDto.ParaBirimi;
+                satir.Kur = satirDto.Kur <= 0 ? 1 : satirDto.Kur;
+                satir.CariKartId = satirDto.CariKartId;
+                satir.TasinirKartId = satirDto.TasinirKartId;
+                satir.DepoId = satirDto.DepoId;
+                satir.KasaBankaHesapId = satirDto.KasaBankaHesapId;
+
+                existing.Satirlar.Add(satir);
+            }
+
+            await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            // 8. Reload ve dön
+            var reloaded = await _repository.GetByIdWithSatirlarAsync(existing.Id)
+                ?? throw new BaseException("Güncellenen fiş okunamadı.", 500);
+            return Mapper.Map<MuhasebeFisDto>(reloaded);
+        }
+        catch
         {
-            var satir = Mapper.Map<MuhasebeFisSatir>(satirDto);
-            satir.MuhasebeFisId = existing.Id;
-            existing.Satirlar.Add(satir);
+            await transaction.RollbackAsync();
+            throw;
         }
-
-        await _dbContext.SaveChangesAsync();
-
-        // Reload complete entity with satırlar
-        var reloaded = await _repository.GetByIdWithSatirlarAsync(existing.Id)
-            ?? throw new BaseException("Güncellenen fiş okunamadı.", 500);
-        return Mapper.Map<MuhasebeFisDto>(reloaded);
     }
 
     public override async Task DeleteAsync(int id)

@@ -376,6 +376,12 @@ export class MuhasebeFislerComponent implements OnInit {
                     siraNo: s.siraNo,
                     borc: s.borc ?? 0,
                     alacak: s.alacak ?? 0,
+                    paraBirimi: s.paraBirimi ?? 'TRY',
+                    kur: s.kur ?? 1,
+                    cariKartId: s.cariKartId ?? null,
+                    tasinirKartId: s.tasinirKartId ?? null,
+                    depoId: s.depoId ?? null,
+                    kasaBankaHesapId: s.kasaBankaHesapId ?? null,
                     aciklama: s.aciklama ?? null
                 }));
             },

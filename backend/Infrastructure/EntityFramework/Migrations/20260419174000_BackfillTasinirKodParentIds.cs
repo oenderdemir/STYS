@@ -41,6 +41,18 @@ public partial class BackfillTasinirKodParentIds : Migration
                     ROW_NUMBER() OVER (PARTITION BY ParentId, Kod ORDER BY ChildId) AS DupRN
                 FROM Candidates
                 WHERE RN = 1
+            ),
+            -- Exclude children whose (ParentId, Kod) would conflict with
+            -- a row that already has UstKodId set (from an earlier migration or seed)
+            ConflictCheck AS
+            (
+                SELECT DISTINCT d.ChildId
+                FROM Deduped d
+                INNER JOIN [muhasebe].[TasinirKodlar] ex
+                    ON ex.UstKodId = d.ParentId
+                   AND ex.Kod = d.Kod
+                   AND ex.Id != d.ChildId
+                   AND ex.IsDeleted = 0
             )
             UPDATE c
             SET
@@ -49,8 +61,10 @@ public partial class BackfillTasinirKodParentIds : Migration
                 c.UpdatedBy = N'migration_backfill_tasinir_parent'
             FROM [muhasebe].[TasinirKodlar] c
             INNER JOIN Deduped x ON x.ChildId = c.Id AND x.DupRN = 1
+            LEFT JOIN ConflictCheck cf ON cf.ChildId = c.Id
             WHERE c.IsDeleted = 0
-              AND c.UstKodId IS NULL;
+              AND c.UstKodId IS NULL
+              AND cf.ChildId IS NULL;
             """);
     }
 

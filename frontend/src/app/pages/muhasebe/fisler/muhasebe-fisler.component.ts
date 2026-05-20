@@ -258,6 +258,10 @@ export class MuhasebeFislerComponent implements OnInit {
         this.ara();
     }
 
+    yeniFis(): void {
+        this.router.navigate(['/muhasebe/fisler/yeni']);
+    }
+
     goToFis(row: MuhasebeFisModel): void {
         // Directly apply highlight and re-filter when already on the same component.
         // This avoids relying on ngOnInit which doesn't re-fire on same-route navigation

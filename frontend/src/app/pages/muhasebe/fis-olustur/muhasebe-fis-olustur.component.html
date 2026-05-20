@@ -1,0 +1,312 @@
+<p-toast />
+
+<div class="mb-4">
+  <div class="flex align-items-center gap-2 mb-3">
+    <i class="pi pi-plus-circle text-xl text-primary"></i>
+    <h2 class="m-0 text-xl font-semibold">Yeni Muhasebe Fişi</h2>
+  </div>
+  <p class="m-0 text-sm text-color-secondary">
+    Manuel muhasebe fişi oluşturun. Fiş kaydedildiğinde Taslak durumunda oluşturulur.
+  </p>
+</div>
+
+<!-- Başlık formu -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <!-- Tesis -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-4">
+    <label class="block text-sm font-medium mb-1">Tesis <span class="text-red-500">*</span></label>
+    <p-select
+      [options]="tesisSecenekleri"
+      [(ngModel)]="tesisId"
+      optionLabel="label"
+      optionValue="value"
+      placeholder="Tesis seçiniz"
+      class="w-full"
+      [showClear]="false" />
+  </div>
+
+  <!-- Fiş Tarihi -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-4">
+    <label class="block text-sm font-medium mb-1">Fiş Tarihi <span class="text-red-500">*</span></label>
+    <input
+      type="date"
+      [(ngModel)]="fisTarihi"
+      class="w-full p-inputtext"
+      placeholder="gg.aa.yyyy" />
+  </div>
+
+  <!-- Mali Yıl -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block text-sm font-medium mb-1">Mali Yıl <span class="text-red-500">*</span></label>
+    <p-select
+      [options]="maliYilSecenekleri"
+      [(ngModel)]="maliYil"
+      optionLabel="label"
+      optionValue="value"
+      class="w-full"
+      [showClear]="false" />
+  </div>
+
+  <!-- Dönem -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block text-sm font-medium mb-1">Dönem <span class="text-red-500">*</span></label>
+    <p-select
+      [options]="donemSecenekleri"
+      [(ngModel)]="donem"
+      optionLabel="label"
+      optionValue="value"
+      class="w-full"
+      [showClear]="false" />
+  </div>
+</div>
+
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <!-- Fiş Tipi -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-4">
+    <label class="block text-sm font-medium mb-1">Fiş Tipi <span class="text-red-500">*</span></label>
+    <p-select
+      [options]="fisTipiSecenekleri"
+      [(ngModel)]="fisTipi"
+      optionLabel="label"
+      optionValue="value"
+      class="w-full"
+      [showClear]="false" />
+  </div>
+
+  <!-- Açıklama -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-8">
+    <label class="block text-sm font-medium mb-1">Açıklama</label>
+    <input
+      type="text"
+      [(ngModel)]="aciklama"
+      class="w-full p-inputtext"
+      placeholder="Fiş açıklaması (opsiyonel)" />
+  </div>
+</div>
+
+<!-- Kaynak Modül/Id (collapsible) -->
+<div class="mb-4">
+  <button
+    type="button"
+    class="p-button p-button-text p-button-sm w-full text-left"
+    (click)="kaynakCollapsed = !kaynakCollapsed">
+    <i class="pi pi-angle-right mr-2" [class.pi-angle-down]="!kaynakCollapsed"></i>
+    Kaynak Modül & Id
+  </button>
+  <div *ngIf="!kaynakCollapsed" class="grid grid-cols-12 gap-3 mt-2 p-3 surface-50 border-round">
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
+      <label class="block text-sm font-medium mb-1">Kaynak Modül</label>
+      <input
+        type="text"
+        [(ngModel)]="kaynakModul"
+        class="w-full p-inputtext"
+        placeholder="örn: Manuel" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
+      <label class="block text-sm font-medium mb-1">Kaynak Id</label>
+      <p-inputnumber
+        [(ngModel)]="kaynakId"
+        class="w-full"
+        [min]="0" />
+    </div>
+  </div>
+</div>
+
+<!-- Satır başlığı ve ekle butonu -->
+<div class="flex justify-content-between align-items-center mb-3">
+  <h3 class="m-0 text-lg font-medium">Fiş Satırları</h3>
+  <p-button
+    icon="pi pi-plus"
+    label="Satır Ekle"
+    severity="success"
+    size="small"
+    (onClick)="satirEkle()" />
+</div>
+
+<!-- Satır tablosu -->
+<p-table [value]="satirlar" styleClass="p-datatable-sm">
+  <ng-template #header>
+    <tr>
+      <th style="width: 3rem">#</th>
+      <th>Hesap Kodu</th>
+      <th>Hesap Adı</th>
+      <th style="width: 9rem">Borç</th>
+      <th style="width: 9rem">Alacak</th>
+      <th style="width: 5rem">PB</th>
+      <th style="width: 5rem">Kur</th>
+      <th>Açıklama</th>
+      <th style="width: 5rem"></th>
+    </tr>
+  </ng-template>
+  <ng-template #body let-satir let-i="rowIndex">
+    <tr>
+      <td class="text-center text-sm">{{ satir.siraNo || i + 1 }}</td>
+      <td>
+        <div class="flex align-items-center gap-2">
+          <input
+            type="text"
+            [(ngModel)]="satir.hesapKodu"
+            class="w-full p-inputtext text-sm"
+            placeholder="Hesap kodu"
+            [readonly]="true"
+            (click)="openHesapLookup(i)" />
+          <p-button
+            icon="pi pi-search"
+            size="small"
+            [text]="true"
+            [rounded]="true"
+            pTooltip="Hesap Planından Seç"
+            (onClick)="openHesapLookup(i)" />
+        </div>
+      </td>
+      <td class="text-sm">{{ satir.hesapAdi }}</td>
+      <td>
+        <p-inputnumber
+          [(ngModel)]="satir.borc"
+          mode="currency"
+          currency="TRY"
+          locale="tr-TR"
+          class="w-full"
+          [min]="0"
+          [maxFractionDigits]="2"
+          (ngModelChange)="onBorcChange(satir)" />
+      </td>
+      <td>
+        <p-inputnumber
+          [(ngModel)]="satir.alacak"
+          mode="currency"
+          currency="TRY"
+          locale="tr-TR"
+          class="w-full"
+          [min]="0"
+          [maxFractionDigits]="2"
+          (ngModelChange)="onAlacakChange(satir)" />
+      </td>
+      <td>
+        <input
+          type="text"
+          [(ngModel)]="satir.paraBirimi"
+          class="w-full p-inputtext text-sm"
+          maxlength="5" />
+      </td>
+      <td>
+        <p-inputnumber
+          [(ngModel)]="satir.kur"
+          class="w-full"
+          [min]="0.0001"
+          [maxFractionDigits]="4" />
+      </td>
+      <td>
+        <input
+          type="text"
+          [(ngModel)]="satir.aciklama"
+          class="w-full p-inputtext text-sm"
+          placeholder="Satır açıklaması" />
+      </td>
+      <td class="text-center">
+        <p-button
+          icon="pi pi-trash"
+          severity="danger"
+          size="small"
+          [text]="true"
+          [rounded]="true"
+          pTooltip="Satırı Sil"
+          (onClick)="satirSil(i)" />
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template #emptymessage>
+    <tr>
+      <td colspan="9" class="text-center p-4 text-color-secondary">
+        Henüz satır eklenmedi. "Satır Ekle" butonuna tıklayarak en az 2 satır ekleyiniz.
+      </td>
+    </tr>
+  </ng-template>
+  <ng-template #summary>
+    <tr class="font-semibold">
+      <td colspan="3" class="text-right">Toplam:</td>
+      <td class="text-right font-mono">{{ toplamBorc | number:'1.2-2' }}</td>
+      <td class="text-right font-mono">{{ toplamAlacak | number:'1.2-2' }}</td>
+      <td colspan="4">
+        <span class="ml-2">
+          Fark:
+          <span [ngClass]="{
+            'text-green-600': bakiyeDengede,
+            'text-red-600 font-bold': !bakiyeDengede
+          }">
+            {{ bakiye | number:'1.2-2' }}
+          </span>
+          <span *ngIf="bakiyeDengede" class="ml-1 text-green-600">✓ Dengede</span>
+        </span>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+
+<!-- Alt butonlar -->
+<div class="flex justify-content-end align-items-center gap-2 mt-4">
+  <p-button
+    label="Vazgeç"
+    icon="pi pi-times"
+    severity="secondary"
+    [outlined]="true"
+    (onClick)="vazgec()" />
+  <p-button
+    label="Kaydet"
+    icon="pi pi-save"
+    severity="primary"
+    [loading]="saving"
+    (onClick)="kaydet()" />
+</div>
+
+<!-- Hesap Planı Lookup Dialog -->
+<p-dialog
+  [(visible)]="hesapLookupDialogVisible"
+  header="Hesap Planından Seç"
+  [modal]="true"
+  [style]="{ width: '700px', maxWidth: '95vw' }"
+  [draggable]="false"
+  [resizable]="false">
+  <div class="mb-3">
+    <div class="flex align-items-center gap-2">
+      <input
+        type="text"
+        [(ngModel)]="hesapAramaMetni"
+        (ngModelChange)="filtreleHesaplar()"
+        class="w-full p-inputtext"
+        placeholder="Hesap kodu veya adı ile ara..." />
+      <p-button
+        icon="pi pi-search"
+        severity="secondary"
+        [text]="true"
+        [rounded]="true"
+        (onClick)="filtreleHesaplar()" />
+    </div>
+    <small class="text-color-secondary">Yalnızca aktif hesaplar listelenir. Detay hesap ve hareket görebilir hesaplar seçilmelidir.</small>
+  </div>
+
+  <div class="max-h-20rem overflow-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="surface-100">
+          <th class="text-left p-2" style="width: 8rem">Hesap Kodu</th>
+          <th class="text-left p-2">Hesap Adı</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let hesap of filtrelenmisHesaplar"
+          class="cursor-pointer hover:surface-100 border-top-1 surface-border"
+          (click)="secHesap(hesap)">
+          <td class="font-mono text-sm p-2">{{ hesap.tamKod }}</td>
+          <td class="text-sm p-2">{{ hesap.ad }}</td>
+        </tr>
+        <tr *ngIf="filtrelenmisHesaplar.length === 0">
+          <td colspan="2" class="text-center p-4 text-color-secondary">
+            Hesap bulunamadı.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</p-dialog>

@@ -128,3 +128,38 @@ export interface UpdateMuhasebeFisRequestModel {
     aciklama: string | null;
     satirlar: UpdateMuhasebeFisSatirRequestModel[];
 }
+
+export interface CreateMuhasebeFisSatirRequestModel {
+    muhasebeHesapPlaniId: number;
+    siraNo: number;
+    borc: number;
+    alacak: number;
+    paraBirimi: string;
+    kur: number;
+    cariKartId: number | null;
+    tasinirKartId: number | null;
+    depoId: number | null;
+    kasaBankaHesapId: number | null;
+    aciklama: string | null;
+}
+
+export interface CreateMuhasebeFisRequestModel {
+    tesisId: number;
+    maliYil: number;
+    donem: number;
+    fisTarihi: string;
+    fisTipi: string;
+    kaynakModul: string | null;
+    kaynakId: number | null;
+    aciklama: string | null;
+    satirlar: CreateMuhasebeFisSatirRequestModel[];
+}
+
+export const MuhasebeFisTipleri = {
+    Mahsup: 'Mahsup',
+    Tahsil: 'Tahsil',
+    Tediye: 'Tediye',
+    Acilis: 'Acilis',
+    Kapanis: 'Kapanis'
+} as const;
+

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { getApiBaseUrl } from '../../../core/config';
-import { MuhasebeFisFilterModel, MuhasebeFisModel, UpdateMuhasebeFisRequestModel } from '../models/muhasebe-fis.model';
+import { CreateMuhasebeFisRequestModel, MuhasebeFisFilterModel, MuhasebeFisModel, UpdateMuhasebeFisRequestModel } from '../models/muhasebe-fis.model';
 
 @Injectable({ providedIn: 'root' })
 export class MuhasebeFisService {
@@ -53,6 +53,13 @@ export class MuhasebeFisService {
     delete(id: number): Observable<void> {
         return this.http.delete<void>(
             `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}`
+        );
+    }
+
+    create(request: CreateMuhasebeFisRequestModel): Observable<MuhasebeFisModel> {
+        return this.http.post<MuhasebeFisModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler`,
+            request
         );
     }
 

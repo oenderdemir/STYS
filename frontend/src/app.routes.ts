@@ -65,6 +65,7 @@ import { MuavinDefterComponent } from './app/pages/muhasebe/muavin-defter/muavin
 import { TasinirFisTaslagiPageComponent } from './app/pages/muhasebe/tasinir-fis-taslagi/tasinir-fis-taslagi-page.component';
 import { YevmiyeDefteriComponent } from './app/pages/muhasebe/yevmiye-defteri/yevmiye-defteri.component';
 import { MuhasebeFislerComponent } from './app/pages/muhasebe/fisler/muhasebe-fisler.component';
+import { MuhasebeFisOlusturComponent } from './app/pages/muhasebe/fis-olustur/muhasebe-fis-olustur.component';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -152,6 +153,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/hizli-mizan', component: HizliMizanComponent, data: { breadcrumb: ['Muhasebe', 'Hizli Mizan'] } },
             { path: 'muhasebe/tasinir-fis-taslagi', component: TasinirFisTaslagiPageComponent, data: { breadcrumb: ['Muhasebe', 'Tasinir Fis Taslagi'] } },
             { path: 'muhasebe/fisler', component: MuhasebeFislerComponent, data: { breadcrumb: ['Muhasebe', 'Muhasebe Fisleri'] } },
+            { path: 'muhasebe/fisler/yeni', component: MuhasebeFisOlusturComponent, data: { breadcrumb: ['Muhasebe', 'Muhasebe Fisleri', 'Yeni Fis'] } },
             { path: 'muhasebe/yevmiye-defteri', component: YevmiyeDefteriComponent, data: { breadcrumb: ['Muhasebe', 'Yevmiye Defteri'] } },
             { path: 'muhasebe/muavin-defter', component: MuavinDefterComponent, data: { breadcrumb: ['Muhasebe', 'Muavin Defter'] } },
             { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },

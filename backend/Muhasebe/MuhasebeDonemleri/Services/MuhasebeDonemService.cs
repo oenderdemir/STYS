@@ -126,8 +126,20 @@ public class MuhasebeDonemService
         if (existing.KapaliMi)
             throw new BaseException("Kapalı dönem silinemez.", 400);
 
-        // Platform BaseEntity silme davranışı üzerinden dönemi sil
-        _dbContext.Entry(existing).State = EntityState.Deleted;
+        // Dönemde fiş varsa silinemez (açık dönem bile olsa)
+        var fisVar = await _dbContext.MuhasebeFisler
+            .AnyAsync(x => x.TesisId == existing.TesisId
+                && x.MaliYil == existing.MaliYil
+                && x.Donem == existing.DonemNo
+                && !x.IsDeleted);
+
+        if (fisVar)
+            throw new BaseException("Bu dönemde fiş bulunduğu için dönem silinemez.", 400);
+
+        // Soft-delete
+        var now = DateTime.UtcNow;
+        existing.IsDeleted = true;
+        existing.DeletedAt = now;
         await _dbContext.SaveChangesAsync();
     }
 

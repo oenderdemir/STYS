@@ -52,15 +52,15 @@ export class MuhasebeDonemService {
         );
     }
 
-    kapat(id: number): Observable<MuhasebeDonemDto> {
-        return this.http.post<MuhasebeDonemDto>(
+    kapat(id: number): Observable<void> {
+        return this.http.post<void>(
             `${this.apiBaseUrl}/ui/muhasebe/donemler/${id}/kapat`,
             {}
         );
     }
 
-    ac(id: number): Observable<MuhasebeDonemDto> {
-        return this.http.post<MuhasebeDonemDto>(
+    ac(id: number): Observable<void> {
+        return this.http.post<void>(
             `${this.apiBaseUrl}/ui/muhasebe/donemler/${id}/ac`,
             {}
         );

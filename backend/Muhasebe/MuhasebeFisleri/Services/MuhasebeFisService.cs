@@ -1399,14 +1399,17 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             existing.ToplamBorc = toplamBorc;
             existing.ToplamAlacak = toplamAlacak;
 
-            // 6. Eski satırları soft-delete
-            foreach (var oldSatir in existing.Satirlar.Where(s => !s.IsDeleted))
+            // 6. Eski satırları soft-delete (fiziksel silme değil, IsDeleted=true)
+            var aktifEskiSatirlar = existing.Satirlar.Where(s => !s.IsDeleted).ToList();
+            var now = DateTime.UtcNow;
+            foreach (var oldSatir in aktifEskiSatirlar)
             {
-                _dbContext.Entry(oldSatir).State = EntityState.Deleted;
+                oldSatir.IsDeleted = true;
+                oldSatir.DeletedAt = now;
             }
-            existing.Satirlar.Clear();
 
-            // 7. Yeni satırları ekle — linked alanları koru
+            // 7. Yeni satırları oluştur — linked alanları koru, DbSet üzerinden ekle
+            var yeniSatirlar = new List<MuhasebeFisSatir>();
             foreach (var satirDto in dto.Satirlar)
             {
                 var satir = Mapper.Map<MuhasebeFisSatir>(satirDto);
@@ -1420,8 +1423,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 satir.DepoId = satirDto.DepoId;
                 satir.KasaBankaHesapId = satirDto.KasaBankaHesapId;
 
-                existing.Satirlar.Add(satir);
+                yeniSatirlar.Add(satir);
             }
+
+            await _dbContext.MuhasebeFisSatirlari.AddRangeAsync(yeniSatirlar);
 
             await _dbContext.SaveChangesAsync();
             await transaction.CommitAsync();

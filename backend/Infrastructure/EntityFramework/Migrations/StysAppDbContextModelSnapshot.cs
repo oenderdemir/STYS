@@ -3736,8 +3736,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasIndex("TersKayitFisId");
 
-                    b.HasIndex("KaynakModul", "KaynakId")
-                        .HasFilter("[KaynakId] IS NOT NULL AND [IsDeleted] = 0");
+                    b.HasIndex("TesisId", "KaynakModul", "KaynakId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [KaynakModul] IS NOT NULL AND [KaynakId] IS NOT NULL AND [Durum] <> 'Iptal'");
 
                     b.HasIndex("TesisId", "FisNo")
                         .IsUnique()

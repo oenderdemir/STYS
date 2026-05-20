@@ -104,3 +104,21 @@ export interface MuhasebeFisModel {
     iptalEdilenFisId: number | null;
     satirlar: MuhasebeFisSatirModel[];
 }
+
+export interface UpdateMuhasebeFisSatirRequestModel {
+    muhasebeHesapPlaniId: number;
+    siraNo: number;
+    borc: number;
+    alacak: number;
+    aciklama: string | null;
+}
+
+export interface UpdateMuhasebeFisRequestModel {
+    tesisId: number;
+    fisTarihi: string;
+    maliYil: number;
+    donem: number;
+    fisTipi: string;
+    aciklama: string | null;
+    satirlar: UpdateMuhasebeFisSatirRequestModel[];
+}

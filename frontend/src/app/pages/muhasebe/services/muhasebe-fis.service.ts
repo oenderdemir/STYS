@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { getApiBaseUrl } from '../../../core/config';
-import { MuhasebeFisFilterModel, MuhasebeFisModel } from '../models/muhasebe-fis.model';
+import { MuhasebeFisFilterModel, MuhasebeFisModel, UpdateMuhasebeFisRequestModel } from '../models/muhasebe-fis.model';
 
 @Injectable({ providedIn: 'root' })
 export class MuhasebeFisService {
@@ -40,6 +40,13 @@ export class MuhasebeFisService {
         return this.http.post<MuhasebeFisModel>(
             `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}/iptal`,
             { aciklama: aciklama ?? null }
+        );
+    }
+
+    update(id: number, request: UpdateMuhasebeFisRequestModel): Observable<MuhasebeFisModel> {
+        return this.http.put<MuhasebeFisModel>(
+            `${this.apiBaseUrl}/ui/muhasebe/fisler/${id}`,
+            request
         );
     }
 

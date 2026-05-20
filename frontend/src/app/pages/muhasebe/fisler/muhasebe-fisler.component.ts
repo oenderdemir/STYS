@@ -1,5 +1,4 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -8,6 +7,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
@@ -20,6 +20,7 @@ import {
     MuhasebeFisFilterModel,
     MuhasebeFisModel,
     MuhasebeFisSatirModel,
+    UpdateMuhasebeFisSatirRequestModel,
     createDefaultFisFilter,
     normalizeFisFilter
 } from '../models/muhasebe-fis.model';
@@ -93,6 +94,7 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         ButtonModule,
         ConfirmDialogModule,
         DialogModule,
+        InputNumberModule,
         InputTextModule,
         SelectModule,
         TableModule,
@@ -127,10 +129,20 @@ export class MuhasebeFislerComponent implements OnInit {
     onaylananFisId: number | null = null;
     iptalEdilenFisId: number | null = null;
 
+    // Düzenle dialog state
+    duzenleDialogVisible = false;
+    duzenleFis: MuhasebeFisModel | null = null;
+    duzenleLoading = false;
+    duzenleSaving = false;
+    // Editable satır kopyaları (MuhasebeFisSatirModel'in alt kümesi)
+    duzenleSatirlar: UpdateMuhasebeFisSatirRequestModel[] = [];
+
     tesisSecenekleri: TesisSecenek[] = [];
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly fisTipiSecenekleri = FIS_TIPI_SECENEKLERI;
+    readonly fisTipiDuzenleSecenekleri: Array<{ label: string; value: string }> = FIS_TIPI_SECENEKLERI
+        .filter((f): f is { label: string; value: string } => f.value !== null);
     readonly durumSecenekleri = DURUM_SECENEKLERI;
     readonly pageSizeSecenekleri = PAGE_SIZE_SECENEKLERI;
 
@@ -342,6 +354,172 @@ export class MuhasebeFislerComponent implements OnInit {
             }
         });
     }
+
+    // ─── Düzenle dialog ───────────────────────────────────────────
+
+    openDuzenle(row: MuhasebeFisModel): void {
+        this.duzenleFis = null;
+        this.duzenleSatirlar = [];
+        this.duzenleDialogVisible = true;
+        this.duzenleLoading = true;
+        this.cdr.detectChanges();
+
+        this.service.getById(row.id).pipe(finalize(() => {
+            this.duzenleLoading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (fis) => {
+                this.duzenleFis = fis;
+                // Satırları editable modele kopyala
+                this.duzenleSatirlar = (fis.satirlar ?? []).map(s => ({
+                    muhasebeHesapPlaniId: s.muhasebeHesapPlaniId,
+                    siraNo: s.siraNo,
+                    borc: s.borc ?? 0,
+                    alacak: s.alacak ?? 0,
+                    aciklama: s.aciklama ?? null
+                }));
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.duzenleDialogVisible = false;
+            }
+        });
+    }
+
+    harici(): void {
+        this.duzenleDialogVisible = false;
+        this.duzenleFis = null;
+        this.duzenleSatirlar = [];
+    }
+
+    kaydet(): void {
+        if (!this.duzenleFis) return;
+
+        // Validasyon
+        const hata = this.validateDuzenle();
+        if (hata) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Doğrulama Hatası',
+                detail: hata,
+                life: 5000
+            });
+            return;
+        }
+
+        this.duzenleSaving = true;
+        this.cdr.detectChanges();
+
+        const request = {
+            tesisId: this.duzenleFis.tesisId,
+            fisTarihi: this.duzenleFis.fisTarihi,
+            maliYil: this.duzenleFis.maliYil,
+            donem: this.duzenleFis.donem,
+            fisTipi: this.duzenleFis.fisTipi,
+            aciklama: this.duzenleFis.aciklama?.trim() || null,
+            satirlar: this.duzenleSatirlar.map((s, i) => ({
+                ...s,
+                siraNo: i + 1,
+                aciklama: s.aciklama?.trim() || null
+            }))
+        };
+
+        this.service.update(this.duzenleFis.id, request).pipe(finalize(() => {
+            this.duzenleSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: () => {
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Başarılı',
+                    detail: 'Fiş güncellendi.',
+                    life: 4000
+                });
+                this.duzenleDialogVisible = false;
+                this.duzenleFis = null;
+                this.duzenleSatirlar = [];
+                // Detay dialog açıksa kapat
+                this.detayDialogVisible = false;
+                this.detayFis = null;
+                this.ara();
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    private validateDuzenle(): string | null {
+        if (!this.duzenleFis) return 'Fiş bilgisi bulunamadı.';
+
+        if (this.duzenleFis.durum !== 'Taslak') {
+            return 'Sadece taslak fişler düzenlenebilir.';
+        }
+
+        if (!this.duzenleFis.fisTarihi) {
+            return 'Fiş tarihi zorunludur.';
+        }
+
+        if (this.duzenleFis.maliYil < 2000 || this.duzenleFis.maliYil > 2100) {
+            return 'Mali yıl 2000-2100 aralığında olmalıdır.';
+        }
+
+        if (this.duzenleFis.donem && (this.duzenleFis.donem < 1 || this.duzenleFis.donem > 12)) {
+            return 'Dönem 1-12 aralığında olmalıdır.';
+        }
+
+        if (this.duzenleSatirlar.length < 2) {
+            return 'Fişte en az iki satır olmalıdır.';
+        }
+
+        for (let i = 0; i < this.duzenleSatirlar.length; i++) {
+            const s = this.duzenleSatirlar[i];
+            if (!s.muhasebeHesapPlaniId || s.muhasebeHesapPlaniId <= 0) {
+                return `Her satırda muhasebe hesabı seçilmelidir. (Satır ${i + 1})`;
+            }
+            if (s.borc > 0 && s.alacak > 0) {
+                return `Bir satırda hem borç hem alacak olamaz. (Satır ${i + 1})`;
+            }
+            if (s.borc < 0 || s.alacak < 0) {
+                return `Borç veya alacak negatif olamaz. (Satır ${i + 1})`;
+            }
+            if (s.borc === 0 && s.alacak === 0) {
+                return `Her satırda borç veya alacak tutarı girilmelidir. (Satır ${i + 1})`;
+            }
+        }
+
+        const toplamBorc = this.duzenleSatirlar.reduce((sum, s) => sum + (s.borc ?? 0), 0);
+        const toplamAlacak = this.duzenleSatirlar.reduce((sum, s) => sum + (s.alacak ?? 0), 0);
+        if (Math.abs(toplamBorc - toplamAlacak) > 0.009) {
+            return 'Fiş dengede olmalıdır. Toplam borç ve toplam alacak eşit olmalıdır.';
+        }
+
+        return null;
+    }
+
+    // ─── Düzenle dialog denge helpers ──────────────────────────────
+
+    getDuzenleToplamBorc(): number {
+        return this.duzenleSatirlar.reduce((sum, s) => sum + (s.borc ?? 0), 0);
+    }
+
+    getDuzenleToplamAlacak(): number {
+        return this.duzenleSatirlar.reduce((sum, s) => sum + (s.alacak ?? 0), 0);
+    }
+
+    getDuzenleFark(): number {
+        return this.getDuzenleToplamBorc() - this.getDuzenleToplamAlacak();
+    }
+
+    getDuzenleDenklikSeverity(): 'success' | 'danger' {
+        return Math.abs(this.getDuzenleFark()) <= 0.009 ? 'success' : 'danger';
+    }
+
+    getDuzenleDenklikLabel(): string {
+        return Math.abs(this.getDuzenleFark()) <= 0.009 ? 'Dengede' : 'Dengesiz';
+    }
+
+    // ─── Ortak ────────────────────────────────────────────────────
 
     isHighlighted(row: MuhasebeFisModel): boolean {
         if (this.highlightedFisId && row.id === this.highlightedFisId) {

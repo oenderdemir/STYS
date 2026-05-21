@@ -1,0 +1,315 @@
+<p-toast />
+
+<!-- Filtre Alanı -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <div class="col-span-12 md:col-span-6 lg:col-span-3">
+    <label class="block mb-1 text-sm font-medium">Tesis</label>
+    <p-select
+      [options]="tesisSecenekleri"
+      [(ngModel)]="filter.tesisId"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tüm tesisler"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [loading]="tesisLoading"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
+    <p-select
+      [options]="maliYilSecenekleri"
+      [(ngModel)]="filter.maliYil"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Mali Yıl"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2 lg:col-start-9 flex items-end justify-end gap-2">
+    <p-button
+      label="Yenile"
+      icon="pi pi-refresh"
+      severity="secondary"
+      [outlined]="true"
+      [loading]="loading"
+      (onClick)="loadDashboard()" />
+  </div>
+</div>
+
+<!-- Loading State -->
+<ng-container *ngIf="loading && !dashboard">
+  <div class="flex flex-column align-items-center justify-content-center py-8">
+    <p-progressSpinner [style]="{ width: '60px', height: '60px' }" />
+    <p class="mt-3 text-color-secondary">{{ loadingMessage }}</p>
+  </div>
+</ng-container>
+
+<!-- Dashboard İçeriği -->
+<ng-container *ngIf="!loading && dashboard">
+  <!-- Uyarılar -->
+  <div *ngIf="dashboard.uyarilar.length > 0" class="mb-4">
+    <ng-container *ngFor="let uyari of dashboard.uyarilar">
+      <p-message
+        [severity]="getUyariSeverity(uyari.severity)"
+        styleClass="w-full mb-2 block"
+        [closable]="false">
+        <div class="flex align-items-center justify-content-between w-full">
+          <span>{{ uyari.mesaj }}</span>
+          <a
+            *ngIf="uyari.route"
+            [routerLink]="['/', uyari.route]"
+            class="ml-3 text-sm underline whitespace-nowrap">
+            Git →
+          </a>
+        </div>
+      </p-message>
+    </ng-container>
+  </div>
+
+  <!-- İstatistik Kartları - 1. Satır -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <!-- Açık Dönem -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">Açık Dönem</div>
+        <div class="text-2xl font-bold text-primary">{{ dashboard.acikDonemSayisi }}</div>
+      </p-card>
+    </div>
+
+    <!-- Kapalı Dönem -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">Kapalı Dönem</div>
+        <div class="text-2xl font-bold text-color">{{ dashboard.kapaliDonemSayisi }}</div>
+      </p-card>
+    </div>
+
+    <!-- Taslak Fiş -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">Taslak Fiş</div>
+        <div class="text-2xl font-bold text-yellow-600">{{ dashboard.taslakFisSayisi }}</div>
+      </p-card>
+    </div>
+
+    <!-- Onaylı Fiş -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">Onaylı Fiş</div>
+        <div class="text-2xl font-bold text-green-600">{{ dashboard.onayliFisSayisi }}</div>
+      </p-card>
+    </div>
+
+    <!-- İptal Fiş -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">İptal Fiş</div>
+        <div class="text-2xl font-bold text-red-600">{{ dashboard.iptalFisSayisi }}</div>
+      </p-card>
+    </div>
+
+    <!-- Dengesiz Taslak -->
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="text-sm text-color-secondary mb-1">Dengesiz Taslak</div>
+        <div
+          class="text-2xl font-bold"
+          [ngClass]="dashboard.dengesizTaslakFisSayisi > 0 ? 'text-red-600' : 'text-green-600'">
+          {{ dashboard.dengesizTaslakFisSayisi }}
+        </div>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- İstatistik Kartları - 2. Satır (Finansal) -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <div class="text-sm text-color-secondary">Toplam Borç</div>
+          <i class="pi pi-arrow-up text-red-500"></i>
+        </div>
+        <div class="text-xl font-bold text-red-600">{{ formatPara(dashboard.toplamBorc) }} ₺</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <div class="text-sm text-color-secondary">Toplam Alacak</div>
+          <i class="pi pi-arrow-down text-green-500"></i>
+        </div>
+        <div class="text-xl font-bold text-green-600">{{ formatPara(dashboard.toplamAlacak) }} ₺</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <div class="text-sm text-color-secondary">Fark (Borç - Alacak)</div>
+          <i
+            class="pi"
+            [ngClass]="dashboard.fark >= 0 ? 'pi-arrow-up text-red-500' : 'pi-arrow-down text-green-500'">
+          </i>
+        </div>
+        <div [ngClass]="getFarkSinifi(dashboard.fark)">
+          {{ formatPara(dashboard.fark) }} ₺
+        </div>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- Açık Dönemler Tablosu -->
+  <div class="mb-4">
+    <div class="flex align-items-center justify-content-between mb-2">
+      <h3 class="text-lg font-semibold m-0">Açık Dönemler</h3>
+      <p-button
+        label="Dönemler"
+        icon="pi pi-arrow-right"
+        severity="secondary"
+        [text]="true"
+        size="small"
+        [routerLink]="['/muhasebe/donemler']" />
+    </div>
+    <p-table
+      [value]="dashboard.acikDonemler"
+      [loading]="loading"
+      styleClass="p-datatable-striped p-datatable-sm"
+      [rowHover]="true"
+      responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Dönem No</th>
+          <th>Mali Yıl</th>
+          <th>Başlangıç</th>
+          <th>Bitiş</th>
+          <th>Durum</th>
+        </tr>
+      </ng-template>
+      <ng-template let-row pTemplate="body">
+        <tr>
+          <td>{{ row.donemNo }}</td>
+          <td>{{ row.maliYil }}</td>
+          <td>{{ formatTarih(row.baslangicTarihi) }}</td>
+          <td>{{ formatTarih(row.bitisTarihi) }}</td>
+          <td>
+            <p-tag
+              [value]="getDonemKapatLabel(row.kapaliMi)"
+              [severity]="getDonemKapatSeverity(row.kapaliMi)"
+              styleClass="text-sm" />
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="5" class="text-center text-color-secondary">Açık dönem bulunamadı.</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Son Fişler Tablosu -->
+  <div class="mb-4">
+    <div class="flex align-items-center justify-content-between mb-2">
+      <h3 class="text-lg font-semibold m-0">Son Fişler</h3>
+      <p-button
+        label="Fişler"
+        icon="pi pi-arrow-right"
+        severity="secondary"
+        [text]="true"
+        size="small"
+        [routerLink]="['/muhasebe/fisler']" />
+    </div>
+    <p-table
+      [value]="dashboard.sonFisler"
+      [loading]="loading"
+      styleClass="p-datatable-striped p-datatable-sm"
+      [rowHover]="true"
+      responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Fiş No</th>
+          <th>Yevmiye</th>
+          <th>Tarih</th>
+          <th>Fiş Tipi</th>
+          <th>Durum</th>
+          <th>Borç</th>
+          <th>Alacak</th>
+          <th>Açıklama</th>
+        </tr>
+      </ng-template>
+      <ng-template let-row pTemplate="body">
+        <tr>
+          <td>{{ row.fisNo }}</td>
+          <td>{{ row.yevmiyeNo ?? '-' }}</td>
+          <td>{{ formatTarihKisa(row.fisTarihi) }}</td>
+          <td>
+            <p-tag
+              [value]="getFisTipiLabel(row.fisTipi)"
+              [severity]="getFisTipiSeverity(row.fisTipi)"
+              styleClass="text-sm" />
+          </td>
+          <td>
+            <p-tag
+              [value]="getDurumLabel(row.durum)"
+              [severity]="getDurumSeverity(row.durum)"
+              styleClass="text-sm" />
+          </td>
+          <td class="text-right">{{ formatPara(row.toplamBorc) }}</td>
+          <td class="text-right">{{ formatPara(row.toplamAlacak) }}</td>
+          <td>{{ row.aciklama ?? '' | slice:0:50 }}{{ (row.aciklama?.length ?? 0) > 50 ? '...' : '' }}</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="8" class="text-center text-color-secondary">Fiş bulunamadı.</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Hızlı Eylem Butonları -->
+  <div class="flex flex-wrap gap-2 mb-4">
+    <p-button
+      label="Yeni Fiş"
+      icon="pi pi-plus"
+      [raised]="true"
+      [routerLink]="['/muhasebe/fisler/yeni']" />
+    <p-button
+      label="Mizan"
+      icon="pi pi-file"
+      severity="secondary"
+      [outlined]="true"
+      [routerLink]="['/muhasebe/hizli-mizan']" />
+    <p-button
+      label="Yevmiye Defteri"
+      icon="pi pi-book"
+      severity="secondary"
+      [outlined]="true"
+      [routerLink]="['/muhasebe/yevmiye-defteri']" />
+    <p-button
+      label="Muavin Defter"
+      icon="pi pi-list"
+      severity="secondary"
+      [outlined]="true"
+      [routerLink]="['/muhasebe/muavin-defter']" />
+  </div>
+</ng-container>
+
+<!-- Boş Durum -->
+<ng-container *ngIf="!loading && !dashboard">
+  <div class="flex flex-column align-items-center justify-content-center py-8 text-color-secondary">
+    <i class="pi pi-exclamation-triangle text-4xl mb-3"></i>
+    <p class="text-lg">Dashboard verisi yüklenemedi.</p>
+    <p-button
+      label="Yeniden Dene"
+      icon="pi pi-refresh"
+      severity="secondary"
+      [outlined]="true"
+      (onClick)="loadDashboard()"
+      class="mt-2" />
+  </div>
+</ng-container>

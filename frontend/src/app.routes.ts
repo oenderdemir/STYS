@@ -64,6 +64,7 @@ import { HizliMizanComponent } from './app/pages/muhasebe/hizli-mizan/hizli-miza
 import { MuavinDefterComponent } from './app/pages/muhasebe/muavin-defter/muavin-defter.component';
 import { TasinirFisTaslagiPageComponent } from './app/pages/muhasebe/tasinir-fis-taslagi/tasinir-fis-taslagi-page.component';
 import { YevmiyeDefteriComponent } from './app/pages/muhasebe/yevmiye-defteri/yevmiye-defteri.component';
+import { MuhasebeDashboardComponent } from './app/pages/muhasebe/dashboard/muhasebe-dashboard.component';
 import { MuhasebeFislerComponent } from './app/pages/muhasebe/fisler/muhasebe-fisler.component';
 import { MuhasebeFisOlusturComponent } from './app/pages/muhasebe/fis-olustur/muhasebe-fis-olustur.component';
 import { MuhasebeDonemlerComponent } from './app/pages/muhasebe/donemler/muhasebe-donemler.component';
@@ -138,6 +139,7 @@ export const appRoutes: Routes = [
             { path: 'restoran-menu-yonetimi', component: RestoranMenuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Menu Yonetimi'] } },
             { path: 'restoran-siparis-yonetimi', component: RestoranSiparisYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Siparis Yonetimi'] } },
             { path: 'garson-servis', component: GarsonServisPage, data: { breadcrumb: ['Isletme', 'Restoran', 'Garson Servis'] } },
+            { path: 'muhasebe/dashboard', component: MuhasebeDashboardComponent, data: { breadcrumb: ['Muhasebe', 'Muhasebe Özet'] } },
             { path: 'muhasebe/cari-kartlar', component: CariKartlarPage, data: { breadcrumb: ['Muhasebe', 'Cari Kartlar'] } },
             { path: 'muhasebe/cari-hareketler', component: CariHareketlerPage, data: { breadcrumb: ['Muhasebe', 'Cari Hareketler'] } },
             { path: 'muhasebe/kasa-hareketleri', component: KasaHareketleriPage, data: { breadcrumb: ['Muhasebe', 'Kasa Hareketleri'] } },

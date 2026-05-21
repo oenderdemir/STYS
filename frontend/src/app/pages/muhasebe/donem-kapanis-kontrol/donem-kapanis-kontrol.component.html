@@ -1,0 +1,294 @@
+<p-toast />
+
+<div class="mb-4">
+  <h2 class="text-xl font-semibold mb-2">Dönem Kapanış Ön Kontrol</h2>
+  <p class="text-sm text-color-secondary">
+    Bir dönemi kapatmadan önce gerekli kontrolleri yapın. Tesis, mali yıl ve dönem bilgilerini seçip "Kontrol Et" butonuna basın.
+  </p>
+</div>
+
+<!-- Filtre Alanı -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <div class="col-span-12 md:col-span-6 lg:col-span-3">
+    <label class="block mb-1 text-sm font-medium">Tesis</label>
+    <p-select
+      [options]="tesisSecenekleri"
+      [(ngModel)]="filter.tesisId"
+      placeholder="Tesis seçiniz"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
+    <p-select
+      [options]="filteredMaliYilSecenekleri"
+      [(ngModel)]="filter.maliYil"
+      placeholder="Mali Yıl"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Dönem</label>
+    <p-select
+      [options]="filteredDonemSecenekleri"
+      [(ngModel)]="filter.donemNo"
+      placeholder="Dönem"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-3 lg:col-start-8 flex items-end">
+    <p-button
+      label="Kontrol Et"
+      icon="pi pi-search"
+      [raised]="true"
+      [loading]="checking"
+      [disabled]="loading || !filter.tesisId || !filter.maliYil || !filter.donemNo"
+      (onClick)="kontrolEt()" />
+  </div>
+</div>
+
+<!-- Loading -->
+<ng-container *ngIf="loading && !result">
+  <div class="flex flex-column align-items-center justify-content-center py-8">
+    <p-progressSpinner></p-progressSpinner>
+    <span class="mt-3 text-color-secondary">Yükleniyor...</span>
+  </div>
+</ng-container>
+
+<!-- Sonuç -->
+<ng-container *ngIf="!loading && result">
+  <!-- Durum Kartı -->
+  <div class="mb-4">
+    <p-card styleClass="shadow-1">
+      <div class="flex align-items-center justify-content-between">
+        <div>
+          <div class="text-sm text-color-secondary mb-2">
+            Tesis #{{ result.tesisId }} &mdash; {{ result.maliYil }} / Dönem {{ result.donemNo }}
+          </div>
+          <p-tag
+            [value]="getKapatilabilirLabel()"
+            [severity]="getKapatilabilirSeverity()"
+            styleClass="text-lg px-3 py-1" />
+        </div>
+        <div *ngIf="result.kapatilabilirMi" class="text-sm text-color-secondary max-w-20rem text-right">
+          <i class="pi pi-info-circle mr-1"></i>
+          Bu dönem kapatılabilir. Dönemi kapatmak için Muhasebe Dönemleri ekranındaki Kapat aksiyonunu kullanabilirsiniz.
+        </div>
+      </div>
+    </p-card>
+  </div>
+
+  <!-- Özet Kartlar -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold" [ngClass]="result.taslakFisSayisi > 0 ? 'text-red-600' : 'text-green-600'">
+          {{ result.taslakFisSayisi }}
+        </div>
+        <div class="text-sm text-color-secondary">Taslak Fiş</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold" [ngClass]="result.dengesizTaslakFisSayisi > 0 ? 'text-orange-600' : 'text-green-600'">
+          {{ result.dengesizTaslakFisSayisi }}
+        </div>
+        <div class="text-sm text-color-secondary">Dengesiz Taslak</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold text-blue-600">
+          {{ result.onayliFisSayisi }}
+        </div>
+        <div class="text-sm text-color-secondary">Onaylı Fiş</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold" [ngClass]="result.yevmiyeNoEksikOnayliFisSayisi > 0 ? 'text-red-600' : 'text-green-600'">
+          {{ result.yevmiyeNoEksikOnayliFisSayisi }}
+        </div>
+        <div class="text-sm text-color-secondary">Yevmiye No Eksik</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold" [ngClass]="result.dengesizOnayliFisSayisi > 0 ? 'text-red-600' : 'text-green-600'">
+          {{ result.dengesizOnayliFisSayisi }}
+        </div>
+        <div class="text-sm text-color-secondary">Dengesiz Onaylı</div>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="text-center shadow-1 h-full">
+        <div class="stat-card-value text-2xl font-bold" [ngClass]="getFarkSinifi(result.fark)">
+          {{ formatPara(result.fark) }}
+        </div>
+        <div class="text-sm text-color-secondary">Fark</div>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- Finansal Özet -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <span class="text-sm text-color-secondary">Toplam Borç</span>
+          <i class="pi pi-arrow-up text-red-500"></i>
+        </div>
+        <div class="text-xl font-bold">{{ formatPara(result.toplamBorc) }} ₺</div>
+      </p-card>
+    </div>
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <span class="text-sm text-color-secondary">Toplam Alacak</span>
+          <i class="pi pi-arrow-down text-green-500"></i>
+        </div>
+        <div class="text-xl font-bold">{{ formatPara(result.toplamAlacak) }} ₺</div>
+      </p-card>
+    </div>
+    <div class="col-span-12 md:col-span-4">
+      <p-card styleClass="shadow-1 h-full">
+        <div class="flex align-items-center justify-content-between mb-2">
+          <span class="text-sm text-color-secondary">Fark</span>
+          <i [ngClass]="absFark(result.fark) <= 0.009 ? 'pi pi-check-circle text-green-500' : 'pi pi-exclamation-triangle text-red-500'"></i>
+        </div>
+        <div class="text-xl font-bold" [ngClass]="getFarkSinifi(result.fark)">
+          {{ formatPara(result.fark) }} ₺
+        </div>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- Checklist -->
+  <div class="mb-4">
+    <h3 class="text-lg font-semibold mb-2">Kontrol Maddeleri</h3>
+    <p-table
+      [value]="result.maddeler"
+      styleClass="p-datatable-striped p-datatable-sm"
+      responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th style="width: 120px">Sonuç</th>
+          <th style="width: 200px">Başlık</th>
+          <th>Mesaj</th>
+          <th style="width: 100px">Önem</th>
+          <th style="width: 100px">Bloklayıcı</th>
+          <th style="width: 80px"></th>
+        </tr>
+      </ng-template>
+      <ng-template let-madde pTemplate="body">
+        <tr>
+          <td>
+            <p-tag
+              [value]="madde.basariliMi ? 'Başarılı' : 'Başarısız'"
+              [severity]="madde.basariliMi ? 'success' : 'danger'" />
+          </td>
+          <td class="font-medium">{{ madde.baslik }}</td>
+          <td>{{ madde.mesaj }}</td>
+          <td>
+            <p-tag
+              [value]="madde.severity"
+              [severity]="getSeverityTag(madde.severity)" />
+          </td>
+          <td>
+            <p-tag
+              [value]="madde.bloklayiciMi ? 'Evet' : 'Hayır'"
+              [severity]="madde.bloklayiciMi ? 'danger' : 'secondary'" />
+          </td>
+          <td>
+            <a *ngIf="madde.route"
+               [routerLink]="['/' + madde.route]"
+               class="text-primary font-medium no-underline">
+              Git
+              <i class="pi pi-arrow-right ml-1 text-xs"></i>
+            </a>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- Problemli Fişler -->
+  <div *ngIf="result.problemliFisler.length > 0" class="mb-4">
+    <h3 class="text-lg font-semibold mb-2">Problemli Fişler</h3>
+    <p-table
+      [value]="result.problemliFisler"
+      styleClass="p-datatable-striped p-datatable-sm"
+      responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Fiş No</th>
+          <th>Yevmiye No</th>
+          <th>Tarih</th>
+          <th>Fiş Tipi</th>
+          <th>Durum</th>
+          <th>Borç</th>
+          <th>Alacak</th>
+          <th>Problem Tipi</th>
+          <th style="width: 80px"></th>
+        </tr>
+      </ng-template>
+      <ng-template let-fis pTemplate="body">
+        <tr>
+          <td>
+            <a [routerLink]="['/muhasebe/fisler']"
+               [queryParams]="{ fisNo: fis.fisNo, id: fis.id }"
+               class="font-medium underline">
+              {{ fis.fisNo }}
+            </a>
+          </td>
+          <td>{{ fis.yevmiyeNo ?? '-' }}</td>
+          <td>{{ formatTarih(fis.fisTarihi) }}</td>
+          <td>
+            <p-tag
+              [value]="getFisTipiLabel(fis.fisTipi)"
+              [severity]="getFisTipiSeverity(fis.fisTipi)" />
+          </td>
+          <td>
+            <p-tag
+              [value]="getDurumLabel(fis.durum)"
+              [severity]="getDurumSeverity(fis.durum)" />
+          </td>
+          <td>{{ formatPara(fis.toplamBorc) }} ₺</td>
+          <td>{{ formatPara(fis.toplamAlacak) }} ₺</td>
+          <td>
+            <p-tag [value]="fis.problemTipi" severity="warn" />
+          </td>
+          <td>
+            <a [routerLink]="['/muhasebe/fisler']"
+               [queryParams]="{ fisNo: fis.fisNo, id: fis.id }"
+               class="text-primary font-medium no-underline">
+              Detay
+              <i class="pi pi-arrow-right ml-1 text-xs"></i>
+            </a>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</ng-container>
+
+<!-- Kontrol Yapılmamış -->
+<ng-container *ngIf="!loading && !result">
+  <div class="flex flex-column align-items-center justify-content-center py-8 text-color-secondary">
+    <i class="pi pi-search text-6xl mb-3"></i>
+    <p class="text-lg mb-2">Henüz kontrol yapılmadı</p>
+    <p class="text-sm">Tesis, mali yıl ve dönem seçip "Kontrol Et" butonuna basın.</p>
+  </div>
+</ng-container>

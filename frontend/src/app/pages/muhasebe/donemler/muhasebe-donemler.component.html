@@ -98,6 +98,15 @@
       <td>
         <div class="flex gap-1 flex-wrap">
           <p-button
+            icon="pi pi-check-square"
+            severity="help"
+            [outlined]="true"
+            [rounded]="true"
+            size="small"
+            pTooltip="Ön Kontrol"
+            [routerLink]="['/muhasebe/donem-kapanis-kontrol']"
+            [queryParams]="{ tesisId: item.tesisId, maliYil: item.maliYil, donemNo: item.donemNo }" />
+          <p-button
             icon="pi pi-pencil"
             severity="secondary"
             [outlined]="true"

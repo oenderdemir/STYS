@@ -19,6 +19,7 @@ using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
+using STYS.Muhasebe.DonemKapanis.Services;
 using STYS.MusteriMenu.Services;
 using STYS.OdaTemizlik.Services;
 using STYS.Rezervasyonlar.Services;
@@ -111,6 +112,7 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeServi
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
+builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

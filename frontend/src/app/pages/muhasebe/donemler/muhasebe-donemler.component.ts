@@ -1,6 +1,7 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -52,6 +53,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
     imports: [
         CommonModule,
         FormsModule,
+        RouterModule,
         DatePipe,
         ButtonModule,
         ConfirmDialogModule,

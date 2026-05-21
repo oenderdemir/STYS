@@ -9,6 +9,8 @@ public class DonemKapanisKontrolFilterDto
 
 public class DonemKapanisKontrolDto
 {
+    public int? DonemId { get; set; }
+
     public int TesisId { get; set; }
     public int MaliYil { get; set; }
     public int DonemNo { get; set; }

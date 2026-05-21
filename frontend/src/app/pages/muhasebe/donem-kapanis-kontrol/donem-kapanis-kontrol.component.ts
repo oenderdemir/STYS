@@ -3,9 +3,10 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
@@ -20,6 +21,7 @@ import {
     createDefaultKapanisFilter
 } from '../models/donem-kapanis-kontrol.model';
 import { DonemKapanisKontrolService } from '../services/donem-kapanis-kontrol.service';
+import { MuhasebeDonemService } from '../services/muhasebe-donem.service';
 import { MuhasebeRaporService, MuhasebeTesisModel } from '../services/muhasebe-rapor.service';
 
 interface TesisSecenek {
@@ -55,6 +57,7 @@ const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
         RouterModule,
         ButtonModule,
         CardModule,
+        ConfirmDialogModule,
         ProgressSpinnerModule,
         SelectModule,
         TableModule,
@@ -63,18 +66,21 @@ const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
     ],
     templateUrl: './donem-kapanis-kontrol.component.html',
     styleUrl: './donem-kapanis-kontrol.component.scss',
-    providers: [MessageService]
+    providers: [ConfirmationService, MessageService]
 })
 export class DonemKapanisKontrolComponent implements OnInit {
     private readonly service = inject(DonemKapanisKontrolService);
     private readonly raporService = inject(MuhasebeRaporService);
+    private readonly donemService = inject(MuhasebeDonemService);
     private readonly messageService = inject(MessageService);
+    private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
     private readonly route = inject(ActivatedRoute);
     private readonly router = inject(Router);
 
     loading = false;
     checking = false;
+    kapatiliyor = false;
 
     filter: DonemKapanisKontrolFilterModel = createDefaultKapanisFilter();
     result: DonemKapanisKontrolModel | null = null;
@@ -171,6 +177,46 @@ export class DonemKapanisKontrolComponent implements OnInit {
         })).subscribe({
             next: (response) => {
                 this.result = response;
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    confirmKapat(): void {
+        const id = this.result?.donemId;
+        if (!id) return;
+
+        this.confirmationService.confirm({
+            key: 'donemKapanisKontrol',
+            header: 'Dönem Kapat',
+            message: `Tesis #${this.result?.tesisId} - ${this.result?.maliYil} / Dönem ${this.result?.donemNo} kapatılacaktır.\n\nKapatılan döneme fiş girişi yapılamaz. Emin misiniz?`,
+            icon: 'pi pi-lock',
+            acceptLabel: 'Kapat',
+            rejectLabel: 'Vazgeç',
+            acceptButtonStyleClass: 'p-button-warning',
+            accept: () => {
+                this.kapatDonem(id);
+            }
+        });
+    }
+
+    private kapatDonem(id: number): void {
+        this.kapatiliyor = true;
+        this.cdr.detectChanges();
+
+        this.donemService.kapat(id).pipe(finalize(() => {
+            this.kapatiliyor = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: () => {
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Başarılı',
+                    detail: 'Dönem kapatıldı. Kontrol yenileniyor...'
+                });
+                this.kontrolEt();
             },
             error: (error: unknown) => {
                 this.showError(error);

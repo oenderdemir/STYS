@@ -5,6 +5,7 @@ export interface DonemKapanisKontrolFilterModel {
 }
 
 export interface DonemKapanisKontrolModel {
+    donemId?: number | null;
     tesisId: number;
     maliYil: number;
     donemNo: number;

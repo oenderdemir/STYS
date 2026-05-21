@@ -50,6 +50,7 @@ public class DonemKapanisKontrolService : IDonemKapanisKontrolService
             return result;
         }
 
+        result.DonemId = donem.Id;
         result.DonemVarMi = true;
         result.Maddeler.Add(new DonemKapanisKontrolMaddeDto
         {

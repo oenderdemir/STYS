@@ -29,6 +29,7 @@ using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
+using STYS.Muhasebe.Kdv.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -154,6 +155,7 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
     public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari => Set<MuhasebeYevmiyeNoSayac>();
     public DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri => Set<MuhasebeHesapBakiye>();
+    public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2073,6 +2075,28 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.MaliYil })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<KdvIstisnaTanim>(entity =>
+        {
+            entity.ToTable("KdvIstisnaTanimlari", muhasebeSchema);
+
+            entity.Property(x => x.Kod)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Ad)
+                .HasMaxLength(250)
+                .IsRequired();
+
+            entity.Property(x => x.Aciklama)
+                .HasMaxLength(1000);
+
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.UygulamaTipi, x.AktifMi });
         });
 
         modelBuilder.Entity<MuhasebeHesapBakiye>(entity =>

@@ -1,0 +1,247 @@
+<p-toast />
+
+<div class="flex align-items-center justify-content-between mb-4">
+    <h2 class="text-xl font-semibold m-0">KDV İstisna Tanımları</h2>
+    <p-button
+        label="Yeni Tanım"
+        icon="pi pi-plus"
+        severity="primary"
+        (onClick)="openCreate()" />
+</div>
+
+<p-table
+    [value]="items"
+    [loading]="loading"
+    [rows]="10"
+    [paginator]="true"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="{first}-{last} / {totalRecords} kayıt"
+    [rowsPerPageOptions]="[10, 25, 50]"
+    responsiveLayout="scroll"
+    styleClass="p-datatable-sm">
+    <ng-template pTemplate="header">
+        <tr>
+            <th style="width: 120px">Kod</th>
+            <th style="width: 200px">Ad</th>
+            <th style="width: 160px">Uygulama Tipi</th>
+            <th style="width: 90px">Aktif</th>
+            <th style="width: 220px">Kullanım</th>
+            <th style="width: 90px">İade</th>
+            <th style="width: 90px">E-Belge Zor.</th>
+            <th style="width: 180px">Geçerlilik</th>
+            <th style="width: 120px"></th>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-item>
+        <tr>
+            <td>
+                <span class="font-medium">{{ item.kod }}</span>
+            </td>
+            <td>{{ item.ad }}</td>
+            <td>
+                <p-tag
+                    [value]="getUygulamaTipiLabel(item.uygulamaTipi)"
+                    [severity]="getUygulamaTipiSeverity(item.uygulamaTipi)" />
+            </td>
+            <td>
+                @if (item.aktifMi) {
+                    <i class="pi pi-check-circle text-green-500"></i>
+                } @else {
+                    <i class="pi pi-times-circle text-gray-400"></i>
+                }
+            </td>
+            <td>
+                <div class="flex gap-1 flex-wrap">
+                    @if (item.satisIslemlerindeKullanilirMi) {
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Satış</span>
+                    }
+                    @if (item.alisIslemlerindeKullanilirMi) {
+                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Alış</span>
+                    }
+                    @if (!item.satisIslemlerindeKullanilirMi && !item.alisIslemlerindeKullanilirMi) {
+                        <span class="text-xs text-gray-400">—</span>
+                    }
+                </div>
+            </td>
+            <td>
+                @if (item.iadeHakkiVarMi) {
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Var</span>
+                } @else {
+                    <span class="text-xs text-gray-400">—</span>
+                }
+            </td>
+            <td>
+                @if (item.eBelgeKoduZorunluMu) {
+                    <i class="pi pi-check text-blue-500"></i>
+                } @else {
+                    <span class="text-xs text-gray-400">—</span>
+                }
+            </td>
+            <td>
+                <div class="text-sm">
+                    @if (item.gecerlilikBaslangicTarihi || item.gecerlilikBitisTarihi) {
+                        <span>
+                            {{ item.gecerlilikBaslangicTarihi ? (item.gecerlilikBaslangicTarihi | date: 'dd.MM.yyyy') : '—' }}
+                            —
+                            {{ item.gecerlilikBitisTarihi ? (item.gecerlilikBitisTarihi | date: 'dd.MM.yyyy') : '—' }}
+                        </span>
+                    } @else {
+                        <span class="text-gray-400">—</span>
+                    }
+                </div>
+            </td>
+            <td>
+                <div class="flex gap-1">
+                    <p-button
+                        icon="pi pi-pencil"
+                        severity="secondary"
+                        size="small"
+                        [rounded]="true"
+                        [text]="true"
+                        (onClick)="openEdit(item)"
+                        pTooltip="Düzenle"
+                        tooltipPosition="top" />
+                    <p-button
+                        icon="pi pi-trash"
+                        severity="danger"
+                        size="small"
+                        [rounded]="true"
+                        [text]="true"
+                        (onClick)="confirmDelete(item)"
+                        pTooltip="Sil"
+                        tooltipPosition="top" />
+                </div>
+            </td>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+        <tr>
+            <td colspan="9" class="text-center p-4 text-gray-500">
+                @if (loading) {
+                    <span>Yükleniyor...</span>
+                } @else {
+                    <span>Henüz bir KDV istisna tanımı bulunmamaktadır.</span>
+                }
+            </td>
+        </tr>
+    </ng-template>
+</p-table>
+
+<p-dialog
+    [(visible)]="dialogVisible"
+    [header]="isEditing ? 'KDV İstisna Tanımı Düzenle' : 'Yeni KDV İstisna Tanımı'"
+    [modal]="true"
+    [style]="{ width: '650px' }"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="editForm.reset()">
+    <form [formGroup]="editForm" (ngSubmit)="save()">
+        <div class="flex flex-col gap-3 mt-2">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Kod <span class="text-red-500">*</span></label>
+                    <input
+                        pInputText
+                        formControlName="kod"
+                        class="w-full"
+                        maxlength="50"
+                        autocomplete="off" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Uygulama Tipi <span class="text-red-500">*</span></label>
+                    <p-select
+                        formControlName="uygulamaTipi"
+                        [options]="uygulamaTipiSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        styleClass="w-full"
+                        [filter]="false" />
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1">Ad <span class="text-red-500">*</span></label>
+                <input
+                    pInputText
+                    formControlName="ad"
+                    class="w-full"
+                    maxlength="250"
+                    autocomplete="off" />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1">Açıklama</label>
+                <textarea
+                    pInputTextarea
+                    formControlName="aciklama"
+                    class="w-full"
+                    rows="2"
+                    maxlength="1000"
+                    [autoResize]="true"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Geçerlilik Başlangıç</label>
+                    <input
+                        type="date"
+                        formControlName="gecerlilikBaslangicTarihi"
+                        class="w-full p-inputtext p-component" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Geçerlilik Bitiş</label>
+                    <input
+                        type="date"
+                        formControlName="gecerlilikBitisTarihi"
+                        class="w-full p-inputtext p-component" />
+                </div>
+            </div>
+
+            <div class="border rounded p-3">
+                <p class="text-sm font-medium mb-2">Özellikler</p>
+                <div class="grid grid-cols-2 gap-x-6 gap-y-2">
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="satisIslemlerindeKullanilirMi" />
+                        <label class="text-sm">Satış İşlemlerinde Kullanılır</label>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="alisIslemlerindeKullanilirMi" />
+                        <label class="text-sm">Alış İşlemlerinde Kullanılır</label>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="yuklenilenKdvIndirilebilirMi" />
+                        <label class="text-sm">Yüklenilen KDV İndirilebilir</label>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="iadeHakkiVarMi" />
+                        <label class="text-sm">İade Hakkı Var</label>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="eBelgeKoduZorunluMu" />
+                        <label class="text-sm">E-Belge Kodu Zorunlu</label>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch formControlName="aktifMi" />
+                        <label class="text-sm">Aktif</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+        <p-button
+            label="İptal"
+            severity="secondary"
+            [outlined]="true"
+            (onClick)="dialogVisible = false" />
+        <p-button
+            [label]="isEditing ? 'Güncelle' : 'Kaydet'"
+            severity="primary"
+            [loading]="saving"
+            [disabled]="editForm.invalid"
+            (onClick)="save()" />
+    </ng-template>
+</p-dialog>
+
+<p-confirmDialog />

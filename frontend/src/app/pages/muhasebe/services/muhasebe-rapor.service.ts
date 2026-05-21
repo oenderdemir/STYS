@@ -43,10 +43,16 @@ export class MuhasebeRaporService {
     }
 
     karsilastirMizan(filter: MizanFilterModel): Observable<MizanKarsilastirmaModel> {
-        return this.http.post<MizanKarsilastirmaModel>(
-            `${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-karsilastir`,
-            filter
-        );
+        return this.http
+            .post<ApiResponse<MizanKarsilastirmaModel>>(`${this.apiBaseUrl}/ui/muhasebe/fisler/mizan-karsilastir`, filter)
+            .pipe(
+                map((envelope) => {
+                    if (envelope.success && envelope.data) {
+                        return envelope.data;
+                    }
+                    throw new Error(tryReadApiMessage(envelope) ?? 'Mizan karsilastirma alinamadi.');
+                })
+            );
     }
 
     exportMizanBakiyeExcel(filter: MizanFilterModel): Observable<Blob> {

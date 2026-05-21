@@ -1,4 +1,4 @@
-import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -19,9 +19,6 @@ import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 import {
     MuhasebeDashboardFilterModel,
     MuhasebeDashboardModel,
-    MuhasebeDashboardDonemOzetModel,
-    MuhasebeDashboardFisOzetModel,
-    MuhasebeDashboardUyariModel,
     createDefaultDashboardFilter
 } from '../models/muhasebe-dashboard.model';
 
@@ -74,6 +71,11 @@ export class MuhasebeDashboardComponent implements OnInit {
     tesisLoading = false;
 
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
+
+    donemSecenekleri: Array<{ label: string; value: number | null }> = [
+        { label: 'Tümü', value: null },
+        ...Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1 }))
+    ];
 
     ngOnInit(): void {
         this.loadTesisler();

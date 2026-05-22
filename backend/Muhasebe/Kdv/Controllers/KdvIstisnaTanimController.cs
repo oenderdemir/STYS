@@ -63,4 +63,11 @@ public class KdvIstisnaTanimController : UIController
         await _service.DeleteAsync(id);
         return Ok();
     }
+
+    [HttpPost("filter")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<ActionResult<IEnumerable<KdvIstisnaTanimDto>>> Filter(
+        [FromBody] KdvIstisnaTanimFilterDto filter,
+        CancellationToken cancellationToken)
+        => Ok(await _service.FilterAsync(filter, cancellationToken));
 }

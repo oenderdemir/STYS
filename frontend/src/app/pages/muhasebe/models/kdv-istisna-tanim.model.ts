@@ -14,6 +14,9 @@ export const KDV_UYGULAMA_TIPI_SECENEKLERI: Array<{ label: string; value: KdvUyg
         value: Number(key) as KdvUygulamaTipi
     }));
 
+export const ISTISNA_SECENEKLERI: Array<{ label: string; value: KdvUygulamaTipi }> =
+    KDV_UYGULAMA_TIPI_SECENEKLERI.filter(s => s.value !== 1);
+
 export interface KdvIstisnaTanimDto {
     id: number;
     kod: string;

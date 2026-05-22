@@ -6,4 +6,5 @@ namespace STYS.Muhasebe.Kdv.Services;
 
 public interface IKdvIstisnaTanimService : IBaseRdbmsService<KdvIstisnaTanimDto, KdvIstisnaTanim, int>
 {
+    Task<List<KdvIstisnaTanimDto>> FilterAsync(KdvIstisnaTanimFilterDto filter, CancellationToken cancellationToken = default);
 }

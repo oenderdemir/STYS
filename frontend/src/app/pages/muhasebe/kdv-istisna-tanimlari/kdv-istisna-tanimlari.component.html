@@ -9,6 +9,83 @@
         (onClick)="openCreate()" />
 </div>
 
+<!-- Filter Row -->
+<div class="grid grid-cols-12 gap-3 mb-4" [formGroup]="filterForm">
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Kod</label>
+        <input
+            pInputText
+            formControlName="kod"
+            class="w-full"
+            maxlength="50"
+            autocomplete="off"
+            placeholder="Koda göre ara..." />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+        <label class="block text-sm font-medium mb-1">Ad</label>
+        <input
+            pInputText
+            formControlName="ad"
+            class="w-full"
+            maxlength="250"
+            autocomplete="off"
+            placeholder="Ada göre ara..." />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Uygulama Tipi</label>
+        <p-select
+            formControlName="uygulamaTipi"
+            [options]="FILTER_UYGULAMA_TIPI_SECENEKLERI"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full"
+            [filter]="false" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Aktif / Pasif</label>
+        <p-select
+            formControlName="aktifMi"
+            [options]="AKTIF_SECENEKLERI"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full"
+            [filter]="false" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+        <label class="block text-sm font-medium mb-1">Satış Kullanım</label>
+        <p-select
+            formControlName="satisIslemlerindeKullanilirMi"
+            [options]="KULLANIM_SECENEKLERI"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full"
+            [filter]="false" />
+    </div>
+    <div class="col-span-12 md:col-span-6 lg:col-span-1">
+        <label class="block text-sm font-medium mb-1">Alış Kullanım</label>
+        <p-select
+            formControlName="alisIslemlerindeKullanilirMi"
+            [options]="KULLANIM_SECENEKLERI"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full"
+            [filter]="false" />
+    </div>
+    <div class="col-span-12 flex items-end gap-2">
+        <p-button
+            label="Ara"
+            icon="pi pi-search"
+            severity="primary"
+            (onClick)="applyFilter()" />
+        <p-button
+            label="Temizle"
+            icon="pi pi-filter-slash"
+            severity="secondary"
+            [outlined]="true"
+            (onClick)="clearFilter()" />
+    </div>
+</div>
+
 <p-table
     [value]="items"
     [loading]="loading"

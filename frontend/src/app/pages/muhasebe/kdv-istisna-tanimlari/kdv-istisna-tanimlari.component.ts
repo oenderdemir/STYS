@@ -19,13 +19,16 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { finalize } from 'rxjs';
+import { tryReadApiMessage } from '../../../core/api';
 import {
     CreateKdvIstisnaTanimRequest,
+    ISTISNA_SECENEKLERI,
     KDV_UYGULAMA_TIPI_LABELS,
-    KDV_UYGULAMA_TIPI_SECENEKLERI,
     KdvIstisnaTanimDto,
+    KdvIstisnaTanimFilterDto,
     KdvUygulamaTipi,
-    UpdateKdvIstisnaTanimRequest
+    UpdateKdvIstisnaTanimRequest,
+    createDefaultKdvIstisnaTanimFilter
 } from '../models/kdv-istisna-tanim.model';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 
@@ -66,11 +69,44 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
     editForm!: FormGroup;
     editingItem: KdvIstisnaTanimDto | null = null;
 
-    uygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
+    filter!: KdvIstisnaTanimFilterDto;
+    filterForm!: FormGroup;
+
+    uygulamaTipiSecenekleri = ISTISNA_SECENEKLERI;
+
+    readonly AKTIF_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
+        { label: 'Tümü', value: null },
+        { label: 'Aktif', value: true },
+        { label: 'Pasif', value: false }
+    ];
+
+    readonly KULLANIM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
+        { label: 'Tümü', value: null },
+        { label: 'Evet', value: true },
+        { label: 'Hayır', value: false }
+    ];
+
+    readonly FILTER_UYGULAMA_TIPI_SECENEKLERI: Array<{ label: string; value: KdvUygulamaTipi | null }> = [
+        { label: 'Tümü', value: null },
+        ...ISTISNA_SECENEKLERI
+    ];
 
     ngOnInit(): void {
+        this.filter = createDefaultKdvIstisnaTanimFilter();
+        this.buildFilterForm();
         this.buildForm();
         this.loadItems();
+    }
+
+    private buildFilterForm(): void {
+        this.filterForm = this.fb.group({
+            kod: [null],
+            ad: [null],
+            uygulamaTipi: [null],
+            aktifMi: [null],
+            satisIslemlerindeKullanilirMi: [null],
+            alisIslemlerindeKullanilirMi: [null]
+        });
     }
 
     private buildForm(): void {
@@ -78,7 +114,7 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
             kod: ['', [Validators.required, Validators.maxLength(50)]],
             ad: ['', [Validators.required, Validators.maxLength(250)]],
             aciklama: [null],
-            uygulamaTipi: [1, Validators.required],
+            uygulamaTipi: [2, Validators.required],
             satisIslemlerindeKullanilirMi: [false],
             alisIslemlerindeKullanilirMi: [false],
             yuklenilenKdvIndirilebilirMi: [false],
@@ -90,10 +126,36 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
         });
     }
 
+    applyFilter(): void {
+        const formValue = this.filterForm.value;
+        this.filter = {
+            kod: formValue.kod?.trim() || null,
+            ad: formValue.ad?.trim() || null,
+            uygulamaTipi: formValue.uygulamaTipi ?? null,
+            aktifMi: formValue.aktifMi ?? null,
+            satisIslemlerindeKullanilirMi: formValue.satisIslemlerindeKullanilirMi ?? null,
+            alisIslemlerindeKullanilirMi: formValue.alisIslemlerindeKullanilirMi ?? null
+        };
+        this.loadItems();
+    }
+
+    clearFilter(): void {
+        this.filterForm.reset({
+            kod: null,
+            ad: null,
+            uygulamaTipi: null,
+            aktifMi: null,
+            satisIslemlerindeKullanilirMi: null,
+            alisIslemlerindeKullanilirMi: null
+        });
+        this.filter = createDefaultKdvIstisnaTanimFilter();
+        this.loadItems();
+    }
+
     private loadItems(): void {
         this.loading = true;
         this.service
-            .getAll()
+            .filter(this.filter)
             .pipe(finalize(() => (this.loading = false)))
             .subscribe({
                 next: (records) => (this.items = records),
@@ -107,8 +169,6 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
 
     getUygulamaTipiSeverity(tip: KdvUygulamaTipi): 'info' | 'warn' | 'success' | 'secondary' {
         switch (tip) {
-            case 1:
-                return 'info';
             case 2:
                 return 'success';
             case 3:
@@ -129,7 +189,7 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
             kod: '',
             ad: '',
             aciklama: null,
-            uygulamaTipi: 1,
+            uygulamaTipi: 2,
             satisIslemlerindeKullanilirMi: false,
             alisIslemlerindeKullanilirMi: false,
             yuklenilenKdvIndirilebilirMi: false,
@@ -180,14 +240,27 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
     save(): void {
         if (this.editForm.invalid) return;
 
-        this.saving = true;
         const formValue = this.editForm.value;
 
-        const baslangic = formValue.gecerlilikBaslangicTarihi
-            ? new Date(formValue.gecerlilikBaslangicTarihi).toISOString()
+        // Client-side date validation
+        const baslangicRaw = formValue.gecerlilikBaslangicTarihi;
+        const bitisRaw = formValue.gecerlilikBitisTarihi;
+        if (baslangicRaw && bitisRaw && new Date(bitisRaw) <= new Date(baslangicRaw)) {
+            this.messageService.add({
+                severity: 'error',
+                summary: 'Hata',
+                detail: 'Geçerlilik bitiş tarihi, başlangıç tarihinden sonra olmalıdır.'
+            });
+            return;
+        }
+
+        this.saving = true;
+
+        const baslangic = baslangicRaw
+            ? new Date(baslangicRaw).toISOString()
             : null;
-        const bitis = formValue.gecerlilikBitisTarihi
-            ? new Date(formValue.gecerlilikBitisTarihi).toISOString()
+        const bitis = bitisRaw
+            ? new Date(bitisRaw).toISOString()
             : null;
 
         if (this.isEditing && this.editingItem) {
@@ -282,7 +355,7 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
     }
 
     private showError(error: unknown): void {
-        const detail = error instanceof Error ? error.message : 'Bir hata oluştu.';
+        const detail = tryReadApiMessage(error) ?? 'Bir hata oluştu.';
         this.messageService.add({
             severity: 'error',
             summary: 'Hata',

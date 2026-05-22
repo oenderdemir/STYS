@@ -411,7 +411,9 @@ export class StokHareketleriPage implements OnInit {
                 aciklama: row.aciklama?.trim() || null,
                 kdvUygulamaTipi: row.kdvUygulamaTipi,
                 kdvIstisnaKodu: row.kdvIstisnaKodu,
-                kdvIstisnaAciklamasi: row.kdvIstisnaAciklamasi
+                kdvIstisnaAciklamasi: row.kdvIstisnaAciklamasi,
+                hareketTipi: row.hareketTipi,
+                kdvTutari: row.kdvTutari
             }
         });
 

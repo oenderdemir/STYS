@@ -16,6 +16,10 @@ export interface TasinirMuhasebeFisiOlusturRequestModel {
     kdvUygulamaTipi: number;
     kdvIstisnaKodu: string | null;
     kdvIstisnaAciklamasi: string | null;
+    /** StokHareket'ten gelen hareket tipi (Giriş/Çıkış/Transfer/İade/Sarf/SayımFarkı/Zimmet) */
+    hareketTipi: string | null;
+    /** StokHareket'te önceden hesaplanmış KDV tutarı */
+    kdvTutari: number;
 }
 
 export function createDefaultTasinirFisRequest(): TasinirMuhasebeFisiOlusturRequestModel {
@@ -40,7 +44,9 @@ export function createDefaultTasinirFisRequest(): TasinirMuhasebeFisiOlusturRequ
         kdvDahilMi: false,
         kdvUygulamaTipi: 1,
         kdvIstisnaKodu: null,
-        kdvIstisnaAciklamasi: null
+        kdvIstisnaAciklamasi: null,
+        hareketTipi: null,
+        kdvTutari: 0
     };
 }
 

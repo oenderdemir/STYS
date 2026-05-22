@@ -105,6 +105,8 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             if (data.kdvUygulamaTipi != null) { this.request.kdvUygulamaTipi = data.kdvUygulamaTipi; }
             if (data.kdvIstisnaKodu != null) { this.request.kdvIstisnaKodu = data.kdvIstisnaKodu; }
             if (data.kdvIstisnaAciklamasi != null) { this.request.kdvIstisnaAciklamasi = data.kdvIstisnaAciklamasi; }
+            if (data.hareketTipi != null) { this.request.hareketTipi = data.hareketTipi; }
+            if (data.kdvTutari != null) { this.request.kdvTutari = data.kdvTutari; }
         }
         this.loadTesisler();
     }
@@ -254,7 +256,9 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             kdvHesapKodu: this.kdvEnabled ? this.trimToNull(this.request.kdvHesapKodu) : null,
             kdvUygulamaTipi: this.request.kdvUygulamaTipi,
             kdvIstisnaKodu: this.request.kdvIstisnaKodu,
-            kdvIstisnaAciklamasi: this.request.kdvIstisnaAciklamasi
+            kdvIstisnaAciklamasi: this.request.kdvIstisnaAciklamasi,
+            hareketTipi: this.request.hareketTipi,
+            kdvTutari: this.request.kdvTutari
         };
 
         this.service.createTasinirFisTaslagi(payload).pipe(

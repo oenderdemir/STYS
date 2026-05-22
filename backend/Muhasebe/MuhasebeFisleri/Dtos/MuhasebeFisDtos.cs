@@ -388,6 +388,12 @@ public class TasinirMuhasebeFisiOlusturRequest
 
     /// <summary>İstisna tanım açıklaması (snapshot, StokHareket'ten gelir).</summary>
     public string? KdvIstisnaAciklamasi { get; set; }
+
+    /// <summary>Stok hareket tipi (StokHareket'ten gelir, KDV yönü için).</summary>
+    public string? HareketTipi { get; set; }
+
+    /// <summary>StokHareket'te önceden hesaplanmış KDV tutarı.</summary>
+    public decimal KdvTutari { get; set; }
 }
 
 public class TasinirMuhasebeFisiOlusturResultDto

@@ -4,10 +4,12 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
+using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
@@ -1523,6 +1525,37 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
     }
 
     /// <summary>
+    /// KDV hesabını (191 veya 391) hesap planından bulur.
+    /// Tesis özel hesap önceliklidir, yoksa global (TesisId=null) hesap getirilir.
+    /// </summary>
+    private async Task<MuhasebeHesapPlani> GetKdvHesabiAsync(
+        int tesisId,
+        string tamKod,
+        CancellationToken cancellationToken)
+    {
+        var kdvHesap = await _dbContext.MuhasebeHesapPlanlari
+            .AsNoTracking()
+            .Where(x => x.TamKod == tamKod
+                && !x.IsDeleted
+                && x.AktifMi
+                && x.HareketGorebilirMi
+                && x.DetayHesapMi
+                && (x.TesisId == tesisId || x.TesisId == null))
+            .OrderByDescending(x => x.TesisId == tesisId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (kdvHesap is null)
+        {
+            var hesapAdi = tamKod == "191" ? "İndirilecek KDV (191)" : "Hesaplanan KDV (391)";
+            throw new BaseException(
+                $"KDV hesabı ({hesapAdi}) hesap planında bulunamadı veya hareket görebilir değil. " +
+                $"Lütfen {tamKod} kodlu detay hesabı hesap planında tanımlayın.", 400);
+        }
+
+        return kdvHesap;
+    }
+
+    /// <summary>
     /// Fişin dönemine ait açık muhasebe dönemi olup olmadığını kontrol eder.
     /// Tüm fiş yazma işlemlerinde (create/update/delete/onayla/iptal) ortak kullanılır.
     /// </summary>
@@ -1880,9 +1913,22 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             : request.AlacakHesapKodu.Trim();
 
         // 1b. KDV validasyonları
+        // StokHareket kaynaklı ise KDV bilgileri StokHareket'ten gelir, otomatik çözülür.
+        var stokHareketKaynakliMi = !string.IsNullOrWhiteSpace(request.HareketTipi);
+
         string? kdvHesapKodu = null;
-        if (request.KdvOrani.HasValue)
+        if (stokHareketKaynakliMi)
         {
+            // StokHareket'ten gelen KDV: KdvUygulamaTipi ve KdvTutari zaten StokHareketService tarafından hesaplanmıştır.
+            if (!Enum.IsDefined(typeof(KdvUygulamaTipi), request.KdvUygulamaTipi))
+                throw new BaseException($"Geçersiz KDV uygulama tipi: {request.KdvUygulamaTipi}.", 400);
+
+            if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli)
+                throw new BaseException("Tevkifatlı KDV işlemleri bu fazda muhasebeleştirilemez.", 400);
+        }
+        else if (request.KdvOrani.HasValue)
+        {
+            // Manuel KDV girişi (mevcut davranış korunur)
             if (request.KdvOrani.Value <= 0 || request.KdvOrani.Value > 100)
                 throw new BaseException("KDV oranı 0 ile 100 arasında olmalıdır.", 400);
 
@@ -1962,36 +2008,41 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
         // 6b. KDV hesabı kontrolü
         MuhasebeHesapPlani? kdvHesap = null;
-        if (kdvHesapKodu is not null)
+        if (stokHareketKaynakliMi)
         {
-            kdvHesap = await _dbContext.MuhasebeHesapPlanlari
-                .AsNoTracking()
-                .Where(x => x.TamKod == kdvHesapKodu
-                    && !x.IsDeleted
-                    && x.AktifMi
-                    && x.HareketGorebilirMi
-                    && x.DetayHesapMi
-                    && (x.TesisId == request.TesisId || x.TesisId == null))
-                .OrderByDescending(x => x.TesisId == request.TesisId)
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? throw new BaseException(
-                    $"KDV hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {kdvHesapKodu}", 400);
+            // StokHareket kaynaklı: 191 veya 391 hesabını KDV yönüne göre otomatik bul
+            var isCikis = request.HareketTipi is not null
+                && StokHareketTipleri.CikisEtkisi.Contains(request.HareketTipi);
+            var kdvHesapTamKod = isCikis ? "391" : "191";
+
+            kdvHesap = await GetKdvHesabiAsync(request.TesisId, kdvHesapTamKod, cancellationToken);
+        }
+        else if (kdvHesapKodu is not null)
+        {
+            // Manuel: kullanıcının girdiği hesap kodu
+            kdvHesap = await GetKdvHesabiAsync(request.TesisId, kdvHesapKodu, cancellationToken);
         }
 
         // 7. KDV hesaplama
         decimal matrah, kdvTutari, genelToplam;
-        if (request.KdvOrani.HasValue)
+        if (stokHareketKaynakliMi)
         {
+            // StokHareket kaynaklı: KDV tutarı zaten StokHareketService tarafından hesaplanmıştır.
+            matrah = request.Tutar;
+            kdvTutari = request.KdvTutari;
+            genelToplam = matrah + kdvTutari;
+        }
+        else if (request.KdvOrani.HasValue)
+        {
+            // Manuel KDV hesaplama (mevcut davranış korunur)
             if (request.KdvDahilMi)
             {
-                // KDV dahil: Tutar = genelToplam
                 genelToplam = request.Tutar;
                 matrah = Math.Round(genelToplam / (1 + request.KdvOrani.Value / 100), 2);
                 kdvTutari = genelToplam - matrah;
             }
             else
             {
-                // KDV hariç: Tutar = matrah
                 matrah = request.Tutar;
                 kdvTutari = Math.Round(matrah * request.KdvOrani.Value / 100, 2);
                 genelToplam = matrah + kdvTutari;
@@ -2110,9 +2161,70 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     }
                 }
 
-                var satirlar = new List<MuhasebeFisSatir>
+                var satirlar = new List<MuhasebeFisSatir>();
+
+                // KDV'li stok çıkışlarında 391 Hesaplanan KDV alacak satırı,
+                // KDV'li stok girişlerinde 191 İndirilecek KDV borç satırı eklenir.
+                // İstisnalı/kapsam dışı işlemlerde KDV satırı oluşturulmaz.
+                var isCikis = stokHareketKaynakliMi
+                    && request.HareketTipi is not null
+                    && StokHareketTipleri.CikisEtkisi.Contains(request.HareketTipi);
+
+                decimal toplamBorc, toplamAlacak;
+
+                if (isCikis)
                 {
-                    new()
+                    // SATIŞ/ÇIKIŞ: Alacak tarafına stok/satış hesabı + KDV, Borç tarafına karşı hesap
+                    var kdvDahilToplam = matrah + kdvTutari;
+
+                    // Karşı hesap Borç (KDV dahil toplam)
+                    satirlar.Add(new MuhasebeFisSatir
+                    {
+                        MuhasebeHesapPlaniId = alacakHesap.Id,
+                        SiraNo = 1,
+                        Borc = kdvDahilToplam,
+                        Alacak = 0,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
+                    });
+
+                    int siraNo = 2;
+
+                    // Stok/taşınır hesabı Alacak (matrah)
+                    satirlar.Add(new MuhasebeFisSatir
+                    {
+                        MuhasebeHesapPlaniId = borcHesapKontrol.Id,
+                        SiraNo = siraNo++,
+                        Borc = 0,
+                        Alacak = matrah,
+                        ParaBirimi = "TRY",
+                        Kur = 1,
+                        Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
+                    });
+
+                    // KDV'li ise 391 Hesaplanan KDV Alacak
+                    if (kdvHesap is not null && kdvTutari > 0)
+                    {
+                        satirlar.Add(new MuhasebeFisSatir
+                        {
+                            MuhasebeHesapPlaniId = kdvHesap.Id,
+                            SiraNo = siraNo,
+                            Borc = 0,
+                            Alacak = kdvTutari,
+                            ParaBirimi = "TRY",
+                            Kur = 1,
+                            Aciklama = $"KDV - {request.BelgeNo ?? ""} - {tasinirKodu}",
+                        });
+                    }
+
+                    toplamBorc = kdvDahilToplam;
+                    toplamAlacak = matrah + kdvTutari;
+                }
+                else
+                {
+                    // GİRİŞ/ALIŞ: Borç tarafına stok/taşınır hesabı + KDV, Alacak tarafına karşı hesap
+                    satirlar.Add(new MuhasebeFisSatir
                     {
                         MuhasebeHesapPlaniId = borcHesapKontrol.Id,
                         SiraNo = 1,
@@ -2121,38 +2233,39 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                         ParaBirimi = "TRY",
                         Kur = 1,
                         Aciklama = $"Taşınır kodu {tasinirKodu} borç kaydı",
-                    },
-                };
+                    });
 
-                int siraNo = 2;
+                    int siraNo = 2;
 
-                if (kdvHesap is not null && kdvTutari > 0)
-                {
+                    // KDV'li ise 191 İndirilecek KDV Borç
+                    if (kdvHesap is not null && kdvTutari > 0)
+                    {
+                        satirlar.Add(new MuhasebeFisSatir
+                        {
+                            MuhasebeHesapPlaniId = kdvHesap.Id,
+                            SiraNo = siraNo++,
+                            Borc = kdvTutari,
+                            Alacak = 0,
+                            ParaBirimi = "TRY",
+                            Kur = 1,
+                            Aciklama = $"KDV - {request.BelgeNo ?? ""} - {tasinirKodu}",
+                        });
+                    }
+
                     satirlar.Add(new MuhasebeFisSatir
                     {
-                        MuhasebeHesapPlaniId = kdvHesap.Id,
-                        SiraNo = siraNo++,
-                        Borc = kdvTutari,
-                        Alacak = 0,
+                        MuhasebeHesapPlaniId = alacakHesap.Id,
+                        SiraNo = siraNo,
+                        Borc = 0,
+                        Alacak = genelToplam,
                         ParaBirimi = "TRY",
                         Kur = 1,
-                        Aciklama = $"Taşınır kodu {tasinirKodu} KDV kaydı (%{request.KdvOrani!.Value})",
+                        Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
                     });
+
+                    toplamBorc = matrah + kdvTutari;
+                    toplamAlacak = genelToplam;
                 }
-
-                satirlar.Add(new MuhasebeFisSatir
-                {
-                    MuhasebeHesapPlaniId = alacakHesap.Id,
-                    SiraNo = siraNo,
-                    Borc = 0,
-                    Alacak = genelToplam,
-                    ParaBirimi = "TRY",
-                    Kur = 1,
-                    Aciklama = $"Taşınır kodu {tasinirKodu} alacak kaydı",
-                });
-
-                var toplamBorc = matrah + kdvTutari;
-                var toplamAlacak = genelToplam;
 
                 var fisNo = await GenerateFisNoAsync(
                     request.TesisId,

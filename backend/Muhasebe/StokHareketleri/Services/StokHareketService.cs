@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Depolar.Repositories;
+using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
@@ -216,11 +217,17 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyKdvAsync(StokHareketDto dto)
     {
+        var islemYonu = dto.HareketTipi == StokHareketTipleri.Cikis
+            ? KdvIslemYonu.Satis
+            : KdvIslemYonu.Alis;
+
         var result = await _kdvUygulamaService.ValidateAndSnapshotAsync(
             dto.KdvUygulamaTipi,
             dto.KdvIstisnaTanimId,
             dto.KdvOrani,
-            dto.Tutar);
+            dto.Tutar,
+            dto.HareketTarihi,
+            islemYonu);
 
         dto.KdvUygulamaTipi = result.KdvUygulamaTipi;
         dto.KdvIstisnaTanimId = result.KdvIstisnaTanimId;

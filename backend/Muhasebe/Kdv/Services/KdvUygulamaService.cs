@@ -18,6 +18,8 @@ public class KdvUygulamaService : IKdvUygulamaService
         int? kdvIstisnaTanimId,
         decimal kdvOrani,
         decimal tutar,
+        DateTime islemTarihi,
+        KdvIslemYonu islemYonu,
         CancellationToken cancellationToken = default)
     {
         var result = new KdvUygulamaResult
@@ -26,6 +28,12 @@ public class KdvUygulamaService : IKdvUygulamaService
             KdvOrani = kdvOrani,
             KdvTutari = 0
         };
+
+        // Enum geçerlilik kontrolü (Section 3)
+        if (!Enum.IsDefined(typeof(KdvUygulamaTipi), kdvUygulamaTipi))
+        {
+            throw new BaseException("Geçersiz KDV uygulama tipi.", 400);
+        }
 
         if (kdvOrani < 0 || kdvOrani > 100)
         {
@@ -42,18 +50,24 @@ public class KdvUygulamaService : IKdvUygulamaService
         switch (tip)
         {
             case KdvUygulamaTipi.Kdvli:
-                // KDV oranı > 0 olmalı
+                // Section 8: KDV'li işlemlerde istisna tanımı seçilemez
+                if (kdvIstisnaTanimId.HasValue && kdvIstisnaTanimId.Value > 0)
+                {
+                    throw new BaseException("KDV'li işlemlerde KDV istisna tanımı seçilemez.", 400);
+                }
+
                 if (kdvOrani <= 0)
                 {
                     throw new BaseException("KDV'li işlemlerde KDV oranı 0'dan büyük olmalıdır.", 400);
                 }
+
                 result.KdvTutari = Math.Round(tutar * kdvOrani / 100m, 2, MidpointRounding.AwayFromZero);
                 break;
 
             case KdvUygulamaTipi.TamIstisna:
             case KdvUygulamaTipi.KismiIstisna:
             case KdvUygulamaTipi.KdvKapsamDisi:
-                // İstisna tanımı zorunlu
+                // Section 9: İstisnalı işlem validasyonu
                 if (!kdvIstisnaTanimId.HasValue || kdvIstisnaTanimId.Value <= 0)
                 {
                     throw new BaseException("İstisna/Kapsam dışı işlemlerde KDV istisna tanımı seçilmesi zorunludur.", 400);
@@ -70,10 +84,36 @@ public class KdvUygulamaService : IKdvUygulamaService
                     throw new BaseException("Seçilen KDV istisna tanımı pasif durumda.", 400);
                 }
 
-                // İstisna tanımının UygulamaTipi ile gelen tip uyuşmalı
+                // Uygulama tipi eşleşmeli
                 if ((int)tanim.UygulamaTipi != kdvUygulamaTipi)
                 {
                     throw new BaseException("KDV istisna tanımının uygulama tipi ile seçilen uygulama tipi uyuşmuyor.", 400);
+                }
+
+                // Section 6: Satış/Alış kullanım kontrolü
+                if (islemYonu == KdvIslemYonu.Satis && !tanim.SatisIslemlerindeKullanilirMi)
+                {
+                    throw new BaseException("Seçilen KDV istisna tanımı satış işlemlerinde kullanılamaz.", 400);
+                }
+
+                if (islemYonu == KdvIslemYonu.Alis && !tanim.AlisIslemlerindeKullanilirMi)
+                {
+                    throw new BaseException("Seçilen KDV istisna tanımı alış işlemlerinde kullanılamaz.", 400);
+                }
+
+                // Section 7: Geçerlilik tarihi kontrolü
+                var islemDate = islemTarihi.Date;
+
+                if (tanim.GecerlilikBaslangicTarihi.HasValue && islemDate < tanim.GecerlilikBaslangicTarihi.Value.Date)
+                {
+                    throw new BaseException(
+                        $"KDV istisna tanımı ({tanim.Kod}) {tanim.GecerlilikBaslangicTarihi:dd.MM.yyyy} tarihinden önceki işlemlerde kullanılamaz.", 400);
+                }
+
+                if (tanim.GecerlilikBitisTarihi.HasValue && islemDate > tanim.GecerlilikBitisTarihi.Value.Date)
+                {
+                    throw new BaseException(
+                        $"KDV istisna tanımı ({tanim.Kod}) {tanim.GecerlilikBitisTarihi:dd.MM.yyyy} tarihinden sonraki işlemlerde kullanılamaz.", 400);
                 }
 
                 result.KdvIstisnaTanimId = tanim.Id;
@@ -84,14 +124,8 @@ public class KdvUygulamaService : IKdvUygulamaService
                 break;
 
             case KdvUygulamaTipi.Tevkifatli:
-                // Tevkifatlı: şimdilik basit, ileride detaylandırılacak
-                if (kdvOrani <= 0)
-                {
-                    throw new BaseException("Tevkifatlı işlemlerde KDV oranı 0'dan büyük olmalıdır.", 400);
-                }
-                result.KdvTutari = Math.Round(tutar * kdvOrani / 100m, 2, MidpointRounding.AwayFromZero);
-                // Tevkifat tanımı şimdilik zorunlu değil, ileride eklenecek
-                break;
+                // Section 10: Tevkifatlı henüz desteklenmiyor
+                throw new BaseException("Tevkifatlı KDV uygulaması henüz desteklenmemektedir.", 400);
 
             default:
                 throw new BaseException("Geçersiz KDV uygulama tipi.", 400);

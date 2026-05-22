@@ -1,5 +1,4 @@
-using STYS.Muhasebe.Kdv.Dtos;
-using STYS.Muhasebe.Kdv.Entities;
+using STYS.Muhasebe.Kdv.Enums;
 
 namespace STYS.Muhasebe.Kdv.Services;
 
@@ -15,12 +14,17 @@ public interface IKdvUygulamaService
     /// <param name="kdvIstisnaTanimId">İstisna tanımı ID (KDV'li değilse zorunlu olabilir).</param>
     /// <param name="kdvOrani">KDV oranı (yüzde).</param>
     /// <param name="tutar">Satır tutarı (KDV hariç).</param>
+    /// <param name="islemTarihi">İşlem tarihi (istisna geçerlilik kontrolü için).</param>
+    /// <param name="islemYonu">İşlem yönü (satış/alış kontrolü için).</param>
+    /// <param name="cancellationToken">İptal belirteci.</param>
     /// <returns>Snapshot alanlarıyla birlikte doğrulanmış KDV bilgisi.</returns>
     Task<KdvUygulamaResult> ValidateAndSnapshotAsync(
         int kdvUygulamaTipi,
         int? kdvIstisnaTanimId,
         decimal kdvOrani,
         decimal tutar,
+        DateTime islemTarihi,
+        KdvIslemYonu islemYonu,
         CancellationToken cancellationToken = default);
 }
 

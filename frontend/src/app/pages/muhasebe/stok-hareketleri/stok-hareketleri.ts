@@ -82,7 +82,12 @@ export class StokHareketleriPage implements OnInit {
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
     cariKartOptions: Array<{ label: string; value: number }> = [];
-    kdvIstisnaTanimOptions: Array<{ label: string; value: number }> = [];
+    /** Tüm aktif istisna tanımları (cache). */
+    private kdvIstisnaTanimAllOptions: Array<{ label: string; value: number }> = [];
+    /** Hareket tipi + KDV uygulama tipine göre filtrelenmiş istisna tanımları. */
+    filteredKdvIstisnaTanimOptions: Array<{ label: string; value: number }> = [];
+    /** Tevkifatlı hariç KDV uygulama tipi seçenekleri. */
+    filteredKdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI.filter(s => s.value !== 5);
 
     /** Full TasinirKart models indexed by id for O(1) lookups of tesisId and stokKodu. */
     private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
@@ -95,7 +100,6 @@ export class StokHareketleriPage implements OnInit {
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
-    readonly kdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
     readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
 
     ngOnInit(): void {
@@ -125,10 +129,12 @@ export class StokHareketleriPage implements OnInit {
                 this.cdr.detectChanges();
             }
         });
+        // Yalnızca aktif istisna tanımlarını yükle; yön/uygulama tipi filtresi anlık yapılır
         this.kdvIstisnaTanimService.filter({ kod: null, ad: null, uygulamaTipi: null, aktifMi: true, satisIslemlerindeKullanilirMi: null, alisIslemlerindeKullanilirMi: null }).subscribe({
             next: (items) => {
-                this.kdvIstisnaTanimOptions = items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id }));
                 this.kdvIstisnaTanimByIdMap = new Map(items.map((x) => [x.id, x]));
+                this.kdvIstisnaTanimAllOptions = items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id }));
+                this.applyIstisnaFilter();
                 this.cdr.detectChanges();
             }
         });
@@ -187,12 +193,14 @@ export class StokHareketleriPage implements OnInit {
         if (this.selectedDepoId && this.selectedDepoId > 0) {
             this.model.depoId = this.selectedDepoId;
         }
+        this.applyIstisnaFilter();
         this.dialogVisible = true;
     }
 
     openEdit(item: StokHareketModel): void {
         this.dialogMode = 'edit';
         this.model = { ...item };
+        this.applyIstisnaFilter();
         this.dialogVisible = true;
     }
 
@@ -203,14 +211,20 @@ export class StokHareketleriPage implements OnInit {
         }
 
         // Client-side KDV validation
+        if (this.model.kdvUygulamaTipi === 5) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Desteklenmiyor', detail: 'Tevkifatlı KDV uygulaması henüz desteklenmemektedir.' });
+            return;
+        }
+
         if (this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur.' });
             return;
         }
 
-        const istisnaTanim = this.model.kdvIstisnaTanimId
-            ? this.kdvIstisnaTanimByIdMap.get(this.model.kdvIstisnaTanimId)
-            : null;
+        if (this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'KDV\'li işlemlerde istisna tanımı seçilemez.' });
+            return;
+        }
 
         const payload = {
             depoId: this.model.depoId,
@@ -228,10 +242,7 @@ export class StokHareketleriPage implements OnInit {
             durum: this.model.durum,
             kdvUygulamaTipi: this.model.kdvUygulamaTipi,
             kdvIstisnaTanimId: this.model.kdvIstisnaTanimId ?? null,
-            kdvIstisnaKodu: istisnaTanim?.kod ?? null,
-            kdvIstisnaAciklamasi: istisnaTanim?.ad ?? null,
-            kdvOrani: this.model.kdvOrani,
-            kdvTutari: this.model.kdvTutari
+            kdvOrani: this.model.kdvOrani
         };
 
         this.saving = true;
@@ -441,6 +452,19 @@ export class StokHareketleriPage implements OnInit {
         return this.kdvUygulamaTipiLabels[tip as KdvUygulamaTipi] ?? 'KDV\'li';
     }
 
+    /**
+     * Hareket tipine göre işlem yönünü belirle:
+     * Çıkış → Satış, diğerleri → Alış.
+     */
+    private getIslemYonu(): 'Satis' | 'Alis' {
+        return this.model.hareketTipi === 'Cikis' ? 'Satis' : 'Alis';
+    }
+
+    /** Hareket tipi değiştiğinde istisna filtresini yeniden uygula. */
+    onHareketTipiChange(): void {
+        this.applyIstisnaFilter();
+    }
+
     /** Called when KDV uygulama tipi changes in the dialog. Clears istisna selection if Kdvli. */
     onKdvUygulamaTipiChange(): void {
         if (this.model.kdvUygulamaTipi === 1) {
@@ -451,6 +475,44 @@ export class StokHareketleriPage implements OnInit {
         } else {
             this.model.kdvOrani = 0;
             this.model.kdvTutari = 0;
+        }
+        this.applyIstisnaFilter();
+    }
+
+    /**
+     * İstisna tanımı listesini; hareket tipi (işlem yönü) ve seçili KDV uygulama tipine göre filtreler.
+     * Yalnızca aktif (AktifMi = true) ve seçili yönde kullanılabilir tanımlar gösterilir.
+     */
+    private applyIstisnaFilter(): void {
+        const islemYonu = this.getIslemYonu();
+        const seciliTip = this.model.kdvUygulamaTipi;
+
+        let filteredIds: Set<number>;
+
+        if (seciliTip === 1) {
+            // KDV'li → istisna listesi boş
+            filteredIds = new Set();
+        } else {
+            filteredIds = new Set<number>();
+            for (const [id, tanim] of this.kdvIstisnaTanimByIdMap) {
+                // Aktif olmalı
+                if (!tanim.aktifMi) continue;
+                // Uygulama tipi eşleşmeli
+                if (tanim.uygulamaTipi !== seciliTip) continue;
+                // İşlem yönüne uygun olmalı
+                if (islemYonu === 'Satis' && !tanim.satisIslemlerindeKullanilirMi) continue;
+                if (islemYonu === 'Alis' && !tanim.alisIslemlerindeKullanilirMi) continue;
+                filteredIds.add(id);
+            }
+        }
+
+        this.filteredKdvIstisnaTanimOptions = this.kdvIstisnaTanimAllOptions.filter(o => filteredIds.has(o.value));
+
+        // Eğer mevcut seçili istisna artık listede yoksa temizle
+        if (this.model.kdvIstisnaTanimId && !filteredIds.has(this.model.kdvIstisnaTanimId)) {
+            this.model.kdvIstisnaTanimId = null;
+            this.model.kdvIstisnaKodu = null;
+            this.model.kdvIstisnaAciklamasi = null;
         }
     }
 

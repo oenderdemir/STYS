@@ -22,8 +22,27 @@ export interface StokHareketModel {
     kdvTutari: number;
 }
 
-export interface CreateStokHareketRequest extends Omit<StokHareketModel, 'id' | 'tutar'> {}
-export interface UpdateStokHareketRequest extends Omit<StokHareketModel, 'id' | 'tutar'> {}
+/** Create/Update payload — snapshot fields (KdvIstisnaKodu, KdvIstisnaAciklamasi, KdvTutari) server'da hesaplanır. */
+export interface CreateStokHareketRequest {
+    depoId: number;
+    tasinirKartId: number;
+    hareketTarihi: string;
+    hareketTipi: string;
+    miktar: number;
+    birimFiyat: number;
+    belgeNo?: string | null;
+    belgeTarihi?: string | null;
+    aciklama?: string | null;
+    cariKartId?: number | null;
+    kaynakModul?: string | null;
+    kaynakId?: number | null;
+    durum: string;
+    kdvUygulamaTipi: number;
+    kdvIstisnaTanimId?: number | null;
+    kdvOrani: number;
+}
+
+export interface UpdateStokHareketRequest extends CreateStokHareketRequest {}
 
 export interface StokBakiyeModel {
     depoId: number;

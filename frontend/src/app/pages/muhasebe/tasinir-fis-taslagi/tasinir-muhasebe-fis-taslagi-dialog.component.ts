@@ -102,6 +102,9 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             if (data.maliYil != null) { this.request.maliYil = data.maliYil; }
             if (data.donem != null) { this.request.donem = data.donem; }
             if (data.alacakHesapKodu != null) { this.request.alacakHesapKodu = data.alacakHesapKodu; }
+            if (data.kdvUygulamaTipi != null) { this.request.kdvUygulamaTipi = data.kdvUygulamaTipi; }
+            if (data.kdvIstisnaKodu != null) { this.request.kdvIstisnaKodu = data.kdvIstisnaKodu; }
+            if (data.kdvIstisnaAciklamasi != null) { this.request.kdvIstisnaAciklamasi = data.kdvIstisnaAciklamasi; }
         }
         this.loadTesisler();
     }
@@ -248,7 +251,10 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             referansId: this.trimToNull(this.request.referansId),
             kdvDahilMi: this.kdvEnabled ? this.request.kdvDahilMi : false,
             kdvOrani: this.kdvEnabled ? this.request.kdvOrani : null,
-            kdvHesapKodu: this.kdvEnabled ? this.trimToNull(this.request.kdvHesapKodu) : null
+            kdvHesapKodu: this.kdvEnabled ? this.trimToNull(this.request.kdvHesapKodu) : null,
+            kdvUygulamaTipi: this.request.kdvUygulamaTipi,
+            kdvIstisnaKodu: this.request.kdvIstisnaKodu,
+            kdvIstisnaAciklamasi: this.request.kdvIstisnaAciklamasi
         };
 
         this.service.createTasinirFisTaslagi(payload).pipe(

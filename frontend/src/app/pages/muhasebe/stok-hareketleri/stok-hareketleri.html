@@ -145,6 +145,18 @@
             <label class="block font-medium mb-2">Hareket Tarihi</label>
             <input pInputText class="w-full" type="datetime-local" [(ngModel)]="model.hareketTarihi" />
         </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">KDV Uygulama Tipi</label>
+            <p-select class="w-full" [options]="kdvUygulamaTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvUygulamaTipi" (onChange)="onKdvUygulamaTipiChange()" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-8" *ngIf="model.kdvUygulamaTipi !== 1">
+            <label class="block font-medium mb-2">KDV Istisna Tanimi</label>
+            <p-select class="w-full" [options]="kdvIstisnaTanimOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.kdvIstisnaTanimId" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-4" *ngIf="model.kdvUygulamaTipi === 1 || model.kdvUygulamaTipi === 5">
+            <label class="block font-medium mb-2">KDV Orani (%)</label>
+            <p-inputnumber [(ngModel)]="model.kdvOrani" [min]="0" [max]="100" [maxFractionDigits]="2" class="w-full" inputStyleClass="w-full" />
+        </div>
     </div>
 
     <ng-template #footer>

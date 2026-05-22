@@ -18,6 +18,13 @@ public class StokHareketDto : BaseRdbmsDto<int>
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
     public string Durum { get; set; } = string.Empty;
+
+    public int KdvUygulamaTipi { get; set; }
+    public int? KdvIstisnaTanimId { get; set; }
+    public string? KdvIstisnaKodu { get; set; }
+    public string? KdvIstisnaAciklamasi { get; set; }
+    public decimal KdvOrani { get; set; }
+    public decimal KdvTutari { get; set; }
 }
 
 public class CreateStokHareketRequest
@@ -35,6 +42,13 @@ public class CreateStokHareketRequest
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
     public string Durum { get; set; } = string.Empty;
+
+    public int KdvUygulamaTipi { get; set; }
+    public int? KdvIstisnaTanimId { get; set; }
+    public string? KdvIstisnaKodu { get; set; }
+    public string? KdvIstisnaAciklamasi { get; set; }
+    public decimal KdvOrani { get; set; }
+    public decimal KdvTutari { get; set; }
 }
 
 public class UpdateStokHareketRequest : CreateStokHareketRequest;

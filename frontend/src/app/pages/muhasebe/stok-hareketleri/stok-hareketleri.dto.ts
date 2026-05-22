@@ -14,6 +14,12 @@ export interface StokHareketModel {
     kaynakModul?: string | null;
     kaynakId?: number | null;
     durum: string;
+    kdvUygulamaTipi: number;
+    kdvIstisnaTanimId?: number | null;
+    kdvIstisnaKodu?: string | null;
+    kdvIstisnaAciklamasi?: string | null;
+    kdvOrani: number;
+    kdvTutari: number;
 }
 
 export interface CreateStokHareketRequest extends Omit<StokHareketModel, 'id' | 'tutar'> {}

@@ -2052,9 +2052,33 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             aciklama += $" | Belge No: {request.BelgeNo}";
         }
 
-        if (request.KdvOrani.HasValue)
+        if (request.KdvOrani.HasValue && request.KdvUygulamaTipi == 1) // Kdvli
         {
             aciklama += $" | KDV Oranı: %{request.KdvOrani.Value} | KDV Dahil: {(request.KdvDahilMi ? "Evet" : "Hayır")}";
+        }
+        else if (request.KdvUygulamaTipi == 5 && request.KdvOrani.HasValue) // Tevkifatlı
+        {
+            aciklama += $" | Tevkifatlı KDV Oranı: %{request.KdvOrani.Value}";
+        }
+        else if (request.KdvUygulamaTipi != 1) // İstisna/Kapsam Dışı
+        {
+            var kdvTipLabel = request.KdvUygulamaTipi switch
+            {
+                2 => "Tam İstisna",
+                3 => "Kısmi İstisna",
+                4 => "KDV Kapsam Dışı",
+                5 => "Tevkifatlı",
+                _ => "Diğer"
+            };
+            aciklama += $" | KDV: {kdvTipLabel}";
+            if (!string.IsNullOrWhiteSpace(request.KdvIstisnaKodu))
+            {
+                aciklama += $" | İstisna: {request.KdvIstisnaKodu}";
+                if (!string.IsNullOrWhiteSpace(request.KdvIstisnaAciklamasi))
+                {
+                    aciklama += $" - {request.KdvIstisnaAciklamasi}";
+                }
+            }
         }
 
         // 11. Fiş ve satırları transaction içinde oluştur (aynı anda iki işlem aynı TSN

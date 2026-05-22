@@ -13,6 +13,9 @@ export interface TasinirMuhasebeFisiOlusturRequestModel {
     kdvOrani: number | null;
     kdvHesapKodu: string | null;
     kdvDahilMi: boolean;
+    kdvUygulamaTipi: number;
+    kdvIstisnaKodu: string | null;
+    kdvIstisnaAciklamasi: string | null;
 }
 
 export function createDefaultTasinirFisRequest(): TasinirMuhasebeFisiOlusturRequestModel {
@@ -34,7 +37,10 @@ export function createDefaultTasinirFisRequest(): TasinirMuhasebeFisiOlusturRequ
         referansId: null,
         kdvOrani: null,
         kdvHesapKodu: null,
-        kdvDahilMi: false
+        kdvDahilMi: false,
+        kdvUygulamaTipi: 1,
+        kdvIstisnaKodu: null,
+        kdvIstisnaAciklamasi: null
     };
 }
 

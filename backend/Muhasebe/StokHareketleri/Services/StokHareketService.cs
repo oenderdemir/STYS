@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Depolar.Repositories;
+using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Repositories;
@@ -19,6 +20,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private readonly ITasinirKartRepository _tasinirKartRepository;
     private readonly ICariKartRepository _cariKartRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IKdvUygulamaService _kdvUygulamaService;
 
     public StokHareketService(
         IStokHareketRepository repository,
@@ -26,6 +28,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         ITasinirKartRepository tasinirKartRepository,
         ICariKartRepository cariKartRepository,
         IUserAccessScopeService userAccessScopeService,
+        IKdvUygulamaService kdvUygulamaService,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -34,12 +37,14 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         _tasinirKartRepository = tasinirKartRepository;
         _cariKartRepository = cariKartRepository;
         _userAccessScopeService = userAccessScopeService;
+        _kdvUygulamaService = kdvUygulamaService;
     }
 
     public override async Task<StokHareketDto> AddAsync(StokHareketDto dto)
     {
         await NormalizeAndValidateAsync(dto, null);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
+        await ApplyKdvAsync(dto);
         return await base.AddAsync(dto);
     }
 
@@ -52,6 +57,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
         await NormalizeAndValidateAsync(dto, dto.Id);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
+        await ApplyKdvAsync(dto);
         return await base.UpdateAsync(dto);
     }
 
@@ -206,6 +212,22 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             dto.HareketTarihi = DateTime.UtcNow;
         }
+    }
+
+    private async Task ApplyKdvAsync(StokHareketDto dto)
+    {
+        var result = await _kdvUygulamaService.ValidateAndSnapshotAsync(
+            dto.KdvUygulamaTipi,
+            dto.KdvIstisnaTanimId,
+            dto.KdvOrani,
+            dto.Tutar);
+
+        dto.KdvUygulamaTipi = result.KdvUygulamaTipi;
+        dto.KdvIstisnaTanimId = result.KdvIstisnaTanimId;
+        dto.KdvIstisnaKodu = result.KdvIstisnaKodu;
+        dto.KdvIstisnaAciklamasi = result.KdvIstisnaAciklamasi;
+        dto.KdvOrani = result.KdvOrani;
+        dto.KdvTutari = result.KdvTutari;
     }
 
     private static decimal CalculateTutar(decimal miktar, decimal birimFiyat)

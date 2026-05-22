@@ -379,6 +379,15 @@ public class TasinirMuhasebeFisiOlusturRequest
     public decimal? KdvOrani { get; set; }
     public string? KdvHesapKodu { get; set; }
     public bool KdvDahilMi { get; set; } = false;
+
+    /// <summary>KDV uygulama tipi (StokHareket'ten gelir).</summary>
+    public int KdvUygulamaTipi { get; set; } = 1; // Kdvli
+
+    /// <summary>İstisna tanım kodu (snapshot, StokHareket'ten gelir).</summary>
+    public string? KdvIstisnaKodu { get; set; }
+
+    /// <summary>İstisna tanım açıklaması (snapshot, StokHareket'ten gelir).</summary>
+    public string? KdvIstisnaAciklamasi { get; set; }
 }
 
 public class TasinirMuhasebeFisiOlusturResultDto

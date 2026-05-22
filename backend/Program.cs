@@ -17,6 +17,7 @@ using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
+using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
 using STYS.Muhasebe.DonemKapanis.Services;
@@ -113,6 +114,7 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapB
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();
+builder.Services.AddScoped<IKdvUygulamaService, KdvUygulamaService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

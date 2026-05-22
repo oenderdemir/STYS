@@ -24,8 +24,10 @@ import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
+import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
 import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, StokBakiyeModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
+import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
 @Component({
@@ -56,6 +58,7 @@ export class StokHareketleriPage implements OnInit {
     private readonly tasinirKartService = inject(TasinirKartlariService);
     private readonly cariKartService = inject(CariKartlarService);
     private readonly muhasebeFisService = inject(MuhasebeFisService);
+    private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly dialogService = inject(DialogService);
@@ -79,15 +82,21 @@ export class StokHareketleriPage implements OnInit {
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
     cariKartOptions: Array<{ label: string; value: number }> = [];
+    kdvIstisnaTanimOptions: Array<{ label: string; value: number }> = [];
 
     /** Full TasinirKart models indexed by id for O(1) lookups of tesisId and stokKodu. */
     private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
+
+    /** Full KdvIstisnaTanim records indexed by id for O(1) lookups. */
+    private kdvIstisnaTanimByIdMap = new Map<number, KdvIstisnaTanimDto>();
 
     /** Active DynamicDialog reference for the muhasebe fiş taslağı dialog. */
     private fisTaslagiDialogRef: DynamicDialogRef | null = null;
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
+    readonly kdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
+    readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
 
     ngOnInit(): void {
         this.loadReferences();
@@ -113,6 +122,13 @@ export class StokHareketleriPage implements OnInit {
         this.cariKartService.getAll().subscribe({
             next: (items) => {
                 this.cariKartOptions = items.map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
+                this.cdr.detectChanges();
+            }
+        });
+        this.kdvIstisnaTanimService.filter({ kod: null, ad: null, uygulamaTipi: null, aktifMi: true, satisIslemlerindeKullanilirMi: null, alisIslemlerindeKullanilirMi: null }).subscribe({
+            next: (items) => {
+                this.kdvIstisnaTanimOptions = items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id }));
+                this.kdvIstisnaTanimByIdMap = new Map(items.map((x) => [x.id, x]));
                 this.cdr.detectChanges();
             }
         });
@@ -186,6 +202,16 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
+        // Client-side KDV validation
+        if (this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur.' });
+            return;
+        }
+
+        const istisnaTanim = this.model.kdvIstisnaTanimId
+            ? this.kdvIstisnaTanimByIdMap.get(this.model.kdvIstisnaTanimId)
+            : null;
+
         const payload = {
             depoId: this.model.depoId,
             tasinirKartId: this.model.tasinirKartId,
@@ -199,7 +225,13 @@ export class StokHareketleriPage implements OnInit {
             cariKartId: this.model.cariKartId || null,
             kaynakModul: this.model.kaynakModul?.trim() || null,
             kaynakId: this.model.kaynakId || null,
-            durum: this.model.durum
+            durum: this.model.durum,
+            kdvUygulamaTipi: this.model.kdvUygulamaTipi,
+            kdvIstisnaTanimId: this.model.kdvIstisnaTanimId ?? null,
+            kdvIstisnaKodu: istisnaTanim?.kod ?? null,
+            kdvIstisnaAciklamasi: istisnaTanim?.ad ?? null,
+            kdvOrani: this.model.kdvOrani,
+            kdvTutari: this.model.kdvTutari
         };
 
         this.saving = true;
@@ -365,7 +397,10 @@ export class StokHareketleriPage implements OnInit {
                 referansTipi: 'StokHareket',
                 referansId: String(row.id ?? ''),
                 belgeNo: row.belgeNo?.trim() || null,
-                aciklama: row.aciklama?.trim() || null
+                aciklama: row.aciklama?.trim() || null,
+                kdvUygulamaTipi: row.kdvUygulamaTipi,
+                kdvIstisnaKodu: row.kdvIstisnaKodu,
+                kdvIstisnaAciklamasi: row.kdvIstisnaAciklamasi
             }
         });
 
@@ -391,8 +426,32 @@ export class StokHareketleriPage implements OnInit {
             cariKartId: null,
             kaynakModul: null,
             kaynakId: null,
-            durum: 'Aktif'
+            durum: 'Aktif',
+            kdvUygulamaTipi: 1,
+            kdvIstisnaTanimId: null,
+            kdvIstisnaKodu: null,
+            kdvIstisnaAciklamasi: null,
+            kdvOrani: 20,
+            kdvTutari: 0
         };
+    }
+
+    /** Resolve KDV uygulama tipi label for display in table. */
+    getKdvUygulamaTipiLabel(tip: number): string {
+        return this.kdvUygulamaTipiLabels[tip as KdvUygulamaTipi] ?? 'KDV\'li';
+    }
+
+    /** Called when KDV uygulama tipi changes in the dialog. Clears istisna selection if Kdvli. */
+    onKdvUygulamaTipiChange(): void {
+        if (this.model.kdvUygulamaTipi === 1) {
+            this.model.kdvIstisnaTanimId = null;
+            this.model.kdvIstisnaKodu = null;
+            this.model.kdvIstisnaAciklamasi = null;
+            this.model.kdvTutari = 0;
+        } else {
+            this.model.kdvOrani = 0;
+            this.model.kdvTutari = 0;
+        }
     }
 
     private showError(error: unknown): void {

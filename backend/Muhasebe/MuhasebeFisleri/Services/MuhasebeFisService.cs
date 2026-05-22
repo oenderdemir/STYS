@@ -1925,6 +1925,13 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli)
                 throw new BaseException("Tevkifatlı KDV işlemleri bu fazda muhasebeleştirilemez.", 400);
+
+            // Kdvli ise KdvTutari > 0 olmalı; istisna/kapsam dışı ise 0 olmalı.
+            if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && request.KdvTutari <= 0)
+                throw new BaseException("KDV'li işlemde KdvTutari sıfırdan büyük olmalıdır.", 400);
+
+            if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Kdvli && request.KdvTutari != 0)
+                throw new BaseException("İstisna/kapsam dışı işlemde KdvTutari sıfır olmalıdır.", 400);
         }
         else if (request.KdvOrani.HasValue)
         {
@@ -2007,8 +2014,13 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 $"Alacak hesabı hesap planında bulunamadı veya hareket görebilir değil. Hesap kodu: {alacakHesapKodu}", 400);
 
         // 6b. KDV hesabı kontrolü
+        // Sadece Kdvli + KdvTutari > 0 durumunda 191/391 hesabı aranır.
+        // İstisna/kapsam dışı işlemlerde (KdvTutari = 0) KDV hesabı aranmaz,
+        // böylece hesap planında 191/391 tanımlı olmasa bile fiş oluşturulabilir.
         MuhasebeHesapPlani? kdvHesap = null;
-        if (stokHareketKaynakliMi)
+        if (stokHareketKaynakliMi
+            && request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli
+            && request.KdvTutari > 0)
         {
             // StokHareket kaynaklı: 191 veya 391 hesabını KDV yönüne göre otomatik bul
             var isCikis = request.HareketTipi is not null
@@ -2017,7 +2029,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             kdvHesap = await GetKdvHesabiAsync(request.TesisId, kdvHesapTamKod, cancellationToken);
         }
-        else if (kdvHesapKodu is not null)
+        else if (!stokHareketKaynakliMi && kdvHesapKodu is not null)
         {
             // Manuel: kullanıcının girdiği hesap kodu
             kdvHesap = await GetKdvHesabiAsync(request.TesisId, kdvHesapKodu, cancellationToken);

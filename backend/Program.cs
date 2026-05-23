@@ -115,6 +115,7 @@ builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();
 builder.Services.AddScoped<IKdvUygulamaService, KdvUygulamaService>();
+builder.Services.AddScoped<IKdvHareketRaporService, KdvHareketRaporService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

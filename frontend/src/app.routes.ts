@@ -70,6 +70,7 @@ import { MuhasebeFisOlusturComponent } from './app/pages/muhasebe/fis-olustur/mu
 import { MuhasebeDonemlerComponent } from './app/pages/muhasebe/donemler/muhasebe-donemler.component';
 import { DonemKapanisKontrolComponent } from './app/pages/muhasebe/donem-kapanis-kontrol/donem-kapanis-kontrol.component';
 import { KdvIstisnaTanimlariComponent } from './app/pages/muhasebe/kdv-istisna-tanimlari/kdv-istisna-tanimlari.component';
+import { KdvHareketRaporuComponent } from './app/pages/muhasebe/kdv-hareket-raporu/kdv-hareket-raporu.component';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
@@ -162,6 +163,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/donemler', component: MuhasebeDonemlerComponent, data: { breadcrumb: ['Muhasebe', 'Muhasebe Donemleri'] } },
             { path: 'muhasebe/donem-kapanis-kontrol', component: DonemKapanisKontrolComponent, data: { breadcrumb: ['Muhasebe', 'Dönem Kapanış Ön Kontrol'] } },
             { path: 'muhasebe/kdv-istisna-tanimlari', component: KdvIstisnaTanimlariComponent, data: { breadcrumb: ['Muhasebe', 'KDV İstisna Tanımları'] } },
+            { path: 'muhasebe/kdv-hareket-raporu', component: KdvHareketRaporuComponent, data: { breadcrumb: ['Muhasebe', 'KDV Hareket Raporu'] } },
             { path: 'muhasebe/yevmiye-defteri', component: YevmiyeDefteriComponent, data: { breadcrumb: ['Muhasebe', 'Yevmiye Defteri'] } },
             { path: 'muhasebe/muavin-defter', component: MuavinDefterComponent, data: { breadcrumb: ['Muhasebe', 'Muavin Defter'] } },
             { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },

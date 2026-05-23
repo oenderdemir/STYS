@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
@@ -13,6 +14,8 @@ public class KdvHareketRaporService : IKdvHareketRaporService
     private readonly StysAppDbContext _db;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
+    private const int MaxExportRows = 50000;
+
     public KdvHareketRaporService(
         StysAppDbContext db,
         IUserAccessScopeService userAccessScopeService)
@@ -21,9 +24,14 @@ public class KdvHareketRaporService : IKdvHareketRaporService
         _userAccessScopeService = userAccessScopeService;
     }
 
-    public async Task<KdvHareketRaporDto> GetRaporAsync(
+    /// <summary>
+    /// Ortak filtreli stok hareketi sorgusunu oluşturur.
+    /// Muhasebe fiş join'i ve MusFisDurumu filtresi bu metoda dahil DEĞİLDİR;
+    /// her consumer kendi ihtiyacına göre join'i ve ek filtreleri ekler.
+    /// </summary>
+    private async Task<IQueryable<StokHareket>> BuildFilteredStokQueryAsync(
         KdvHareketRaporFilterDto filter,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
 
@@ -64,7 +72,16 @@ public class KdvHareketRaporService : IKdvHareketRaporService
             stokQuery = stokQuery.Where(s => s.KdvIstisnaKodu != null && s.KdvIstisnaKodu.Contains(kod));
         }
 
-        // Muhasebe fiş left join: KaynakModul == "StokHareket" && KaynakId == StokHareket.Id && IsDeleted == false && Durum != Iptal
+        return stokQuery;
+    }
+
+    public async Task<KdvHareketRaporDto> GetRaporAsync(
+        KdvHareketRaporFilterDto filter,
+        CancellationToken cancellationToken = default)
+    {
+        var stokQuery = await BuildFilteredStokQueryAsync(filter, cancellationToken);
+
+        // Muhasebe fiş left join
         var query = from stok in stokQuery
                     join musFis in _db.MuhasebeFisler
                         .Where(f => f.KaynakModul == "StokHareket" && f.IsDeleted == false && f.Durum != MuhasebeFisDurumlari.Iptal)
@@ -152,6 +169,179 @@ public class KdvHareketRaporService : IKdvHareketRaporService
             Ozet = ozet,
             ToplamKayitSayisi = totalCount
         };
+    }
+
+    public async Task<byte[]> ExportExcelAsync(
+        KdvHareketRaporFilterDto filter,
+        CancellationToken cancellationToken = default)
+    {
+        var stokQuery = await BuildFilteredStokQueryAsync(filter, cancellationToken);
+
+        // Muhasebe fiş left join
+        var query = from stok in stokQuery
+                    join musFis in _db.MuhasebeFisler
+                        .Where(f => f.KaynakModul == "StokHareket" && f.IsDeleted == false && f.Durum != MuhasebeFisDurumlari.Iptal)
+                        on stok.Id equals musFis.KaynakId into fisGroup
+                    from fis in fisGroup.DefaultIfEmpty()
+                    select new { stok, fis };
+
+        // MusFisDurumu filtresi
+        if (!string.IsNullOrWhiteSpace(filter.MusFisDurumu))
+        {
+            if (filter.MusFisDurumu == "FisiOlan")
+                query = query.Where(x => x.fis != null);
+            else if (filter.MusFisDurumu == "FisiOlmayan")
+                query = query.Where(x => x.fis == null);
+        }
+
+        // Toplam kayıt sayısını al — 50K limit kontrolü
+        var totalCount = await query.CountAsync(cancellationToken);
+        if (totalCount > MaxExportRows)
+            throw new InvalidOperationException(
+                $"Filtrelere uyan {totalCount:N0} kayıt bulundu. Excel export en fazla {MaxExportRows:N0} kayıt için desteklenmektedir. " +
+                "Lütfen tarih aralığını daraltın veya ek filtreler kullanın.");
+
+        // Tüm filtrelenmiş dataset'i oku (Take yok, export için tüm kayıtlar)
+        var allRows = await query
+            .OrderByDescending(x => x.stok.HareketTarihi)
+            .ThenByDescending(x => x.stok.Id)
+            .Select(x => new KdvHareketRaporSatirDto
+            {
+                Id = x.stok.Id,
+                HareketTarihi = x.stok.HareketTarihi,
+                HareketTipi = x.stok.HareketTipi,
+                DepoAdi = x.stok.Depo != null ? x.stok.Depo.Ad : string.Empty,
+                TasinirKod = x.stok.TasinirKart != null ? x.stok.TasinirKart.StokKodu : string.Empty,
+                TasinirAd = x.stok.TasinirKart != null ? x.stok.TasinirKart.Ad : string.Empty,
+                Miktar = x.stok.Miktar,
+                BirimFiyat = x.stok.BirimFiyat,
+                Tutar = x.stok.Tutar,
+                KdvUygulamaTipi = x.stok.KdvUygulamaTipi,
+                KdvUygulamaTipiAd = KdvUygulamaTipiAdi(x.stok.KdvUygulamaTipi),
+                KdvIstisnaKodu = x.stok.KdvIstisnaKodu,
+                KdvIstisnaAciklamasi = x.stok.KdvIstisnaAciklamasi,
+                KdvOrani = x.stok.KdvOrani,
+                KdvTutari = x.stok.KdvTutari,
+                KdvliTutar = x.stok.Tutar + x.stok.KdvTutari,
+                MusFisId = x.fis != null ? x.fis.Id : null,
+                MusFisNo = x.fis != null ? x.fis.FisNo : null,
+                MusFisDurumu = x.fis != null ? x.fis.Durum : null,
+                BelgeNo = x.stok.BelgeNo,
+                Aciklama = x.stok.Aciklama
+            })
+            .ToListAsync(cancellationToken);
+
+        // Özet hesapla
+        var kdvliSayisi = allRows.Count(x => x.KdvUygulamaTipi == 1);
+        var istisnaliSayisi = allRows.Count(x => x.KdvUygulamaTipi == 2 || x.KdvUygulamaTipi == 3);
+        var kdvKapsamDisiSayisi = allRows.Count(x => x.KdvUygulamaTipi == 4);
+        var tevkifatliSayisi = allRows.Count(x => x.KdvUygulamaTipi == 5);
+        var fisiOlanSayisi = allRows.Count(x => x.MusFisId.HasValue);
+        var fisiOlmayanSayisi = allRows.Count(x => !x.MusFisId.HasValue);
+        var toplamKdvTutari = allRows.Sum(x => x.KdvTutari);
+        var toplamTutar = allRows.Sum(x => x.Tutar);
+
+        // Excel oluştur
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("KDV Hareket Raporu");
+
+        var now = DateTime.Now;
+        var baslangicStr = filter.BaslangicTarihi.ToString("dd.MM.yyyy");
+        var bitisStr = filter.BitisTarihi.ToString("dd.MM.yyyy");
+
+        // Başlık
+        ws.Cell(1, 1).Value = "KDV Hareket Raporu";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        // Meta bilgiler
+        ws.Cell(3, 1).Value = "Export Tarihi:";
+        ws.Cell(3, 2).Value = now.ToString("dd.MM.yyyy HH:mm");
+        ws.Cell(4, 1).Value = "Tarih Aralığı:";
+        ws.Cell(4, 2).Value = $"{baslangicStr} — {bitisStr}";
+        ws.Cell(5, 1).Value = "Toplam Kayıt:";
+        ws.Cell(5, 2).Value = totalCount;
+
+        // Özet bölümü (row 7-11)
+        ws.Cell(7, 1).Value = "ÖZET";
+        ws.Cell(7, 1).Style.Font.Bold = true;
+        ws.Cell(7, 1).Style.Font.FontSize = 12;
+
+        ws.Cell(8, 1).Value = "KDV'li:";
+        ws.Cell(8, 2).Value = kdvliSayisi;
+        ws.Cell(8, 3).Value = "İstisnalı:";
+        ws.Cell(8, 4).Value = istisnaliSayisi;
+        ws.Cell(8, 5).Value = "Kapsam Dışı:";
+        ws.Cell(8, 6).Value = kdvKapsamDisiSayisi;
+        ws.Cell(8, 7).Value = "Tevkifatlı:";
+        ws.Cell(8, 8).Value = tevkifatliSayisi;
+        ws.Cell(9, 1).Value = "Fişi Olan:";
+        ws.Cell(9, 2).Value = fisiOlanSayisi;
+        ws.Cell(9, 3).Value = "Fişi Olmayan:";
+        ws.Cell(9, 4).Value = fisiOlmayanSayisi;
+        ws.Cell(9, 5).Value = "Toplam KDV:";
+        ws.Cell(9, 6).Value = toplamKdvTutari;
+        ws.Cell(9, 6).Style.NumberFormat.Format = "#,##0.00";
+        ws.Cell(9, 7).Value = "Toplam Tutar (KDV Hariç):";
+        ws.Cell(9, 8).Value = toplamTutar;
+        ws.Cell(9, 8).Style.NumberFormat.Format = "#,##0.00";
+
+        // Sütun başlıkları (row 13)
+        var headers = new[]
+        {
+            "Tarih", "İşlem", "Depo", "Taşınır Kod", "Taşınır Ad",
+            "Miktar", "Birim Fiyat", "Tutar", "KDV Tipi",
+            "İstisna Kodu", "İstisna Açıklaması", "KDV %",
+            "KDV Tutarı", "KDV'li Tutar", "Muh. Fiş No", "Muh. Fiş Durumu",
+            "Belge No", "Açıklama"
+        };
+
+        for (int i = 0; i < headers.Length; i++)
+        {
+            var cell = ws.Cell(13, i + 1);
+            cell.Value = headers[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        ws.SheetView.FreezeRows(13);
+
+        // Veri satırları (row 14'ten başlayarak)
+        int row = 14;
+        foreach (var satir in allRows)
+        {
+            ws.Cell(row, 1).Value = satir.HareketTarihi;
+            ws.Cell(row, 1).Style.DateFormat.Format = "dd.MM.yyyy HH:mm";
+            ws.Cell(row, 2).Value = satir.HareketTipi;
+            ws.Cell(row, 3).Value = satir.DepoAdi;
+            ws.Cell(row, 4).Value = satir.TasinirKod;
+            ws.Cell(row, 5).Value = satir.TasinirAd;
+            ws.Cell(row, 6).Value = (double)satir.Miktar;
+            ws.Cell(row, 7).Value = satir.BirimFiyat;
+            ws.Cell(row, 7).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 8).Value = satir.Tutar;
+            ws.Cell(row, 8).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 9).Value = satir.KdvUygulamaTipiAd;
+            ws.Cell(row, 10).Value = satir.KdvIstisnaKodu ?? "";
+            ws.Cell(row, 11).Value = satir.KdvIstisnaAciklamasi ?? "";
+            ws.Cell(row, 12).Value = satir.KdvOrani;
+            ws.Cell(row, 13).Value = satir.KdvTutari;
+            ws.Cell(row, 13).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 14).Value = satir.KdvliTutar;
+            ws.Cell(row, 14).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 15).Value = satir.MusFisNo ?? "";
+            ws.Cell(row, 16).Value = satir.MusFisDurumu ?? "";
+            ws.Cell(row, 17).Value = satir.BelgeNo ?? "";
+            ws.Cell(row, 18).Value = satir.Aciklama ?? "";
+            row++;
+        }
+
+        // Otomatik sütun genişliği ve filtre
+        ws.Columns().AdjustToContents();
+        ws.RangeUsed()?.SetAutoFilter();
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
     }
 
     private static string KdvUygulamaTipiAdi(int uygulamaTipi)

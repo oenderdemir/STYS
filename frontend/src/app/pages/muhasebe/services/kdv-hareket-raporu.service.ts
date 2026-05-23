@@ -28,4 +28,12 @@ export class KdvHareketRaporuService {
                 })
             );
     }
+
+    exportExcel(filter: KdvHareketRaporFilterModel): Observable<Blob> {
+        return this.http.post(
+            `${this.apiBaseUrl}/ui/muhasebe/kdv-hareket-raporu/export-excel`,
+            filter,
+            { responseType: 'blob' }
+        );
+    }
 }

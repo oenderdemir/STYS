@@ -133,6 +133,13 @@
       severity="secondary"
       (onClick)="clearFilter()" />
     <p-button
+      label="Excel"
+      icon="pi pi-file-excel"
+      severity="success"
+      [loading]="exporting"
+      [disabled]="!rapor || rapor.satirlar.length === 0"
+      (onClick)="exportExcel()" />
+    <p-button
       label="Sorgula"
       icon="pi pi-search"
       [loading]="loading"

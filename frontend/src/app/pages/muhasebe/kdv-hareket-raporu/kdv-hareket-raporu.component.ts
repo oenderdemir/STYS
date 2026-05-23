@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -73,10 +73,12 @@ export class KdvHareketRaporuComponent implements OnInit {
     private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
+    private readonly cdr = inject(ChangeDetectorRef);
 
     filter: KdvHareketRaporFilterModel = createDefaultKdvHareketRaporFilter();
     rapor: KdvHareketRaporModel | null = null;
     loading = false;
+    exporting = false;
     loadingMessage = 'KDV hareket raporu yükleniyor...';
 
     tesisSecenekleri: TesisSecenek[] = [];
@@ -284,6 +286,46 @@ export class KdvHareketRaporuComponent implements OnInit {
             case 'TersKayit': return 'Ters Kayıt';
             default: return durum;
         }
+    }
+
+    exportExcel(): void {
+        this.exporting = true;
+        this.cdr.detectChanges();
+        this.raporService.exportExcel(this.filter).pipe(
+            finalize(() => {
+                this.exporting = false;
+                this.cdr.detectChanges();
+            })
+        ).subscribe({
+            next: (blob) => {
+                this.downloadBlob(blob, this.getTimestamp());
+                this.messageService.add({
+                    severity: 'success',
+                    summary: 'Başarılı',
+                    detail: 'KDV hareket raporu Excel olarak indirildi.',
+                    life: 4000
+                });
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        anchor.remove();
+    }
+
+    private getTimestamp(): string {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `kdv-hareket-raporu-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.xlsx`;
     }
 
     navigateToFis(satir: KdvHareketRaporSatirModel): void {

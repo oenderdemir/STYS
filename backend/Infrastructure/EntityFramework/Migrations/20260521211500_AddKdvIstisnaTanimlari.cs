@@ -1,13 +1,15 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace STYS.Infrastructure.EntityFramework.Migrations
+namespace STYS.Infrastructure.EntityFramework.Migrations;
+
+[DbContext(typeof(StysAppDbContext))]
+[Migration("20260521211500_AddKdvIstisnaTanimlari")]
+public partial class AddKdvIstisnaTanimlari : Migration
 {
-    /// <inheritdoc />
-    public partial class AddKdvIstisnaTanimlari : Migration
-    {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -66,4 +68,3 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 schema: "muhasebe");
         }
     }
-}

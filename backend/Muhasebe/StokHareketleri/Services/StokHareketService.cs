@@ -217,7 +217,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyKdvAsync(StokHareketDto dto)
     {
-        var islemYonu = dto.HareketTipi == StokHareketTipleri.Cikis
+        var islemYonu = StokHareketTipleri.CikisEtkisi.Contains(dto.HareketTipi)
             ? KdvIslemYonu.Satis
             : KdvIslemYonu.Alis;
 

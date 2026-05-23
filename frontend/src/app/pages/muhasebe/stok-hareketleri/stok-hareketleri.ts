@@ -226,6 +226,16 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
+        if (this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li işlemlerde KDV oranı 0\'dan büyük olmalıdır.' });
+            return;
+        }
+
+        if (this.model.kdvUygulamaTipi !== 1 && this.model.kdvOrani !== 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Değer', detail: 'İstisna/kapsam dışı işlemlerde KDV oranı 0 olmalıdır.' });
+            return;
+        }
+
         const payload = {
             depoId: this.model.depoId,
             tasinirKartId: this.model.tasinirKartId,
@@ -454,12 +464,15 @@ export class StokHareketleriPage implements OnInit {
         return this.kdvUygulamaTipiLabels[tip as KdvUygulamaTipi] ?? 'KDV\'li';
     }
 
+    /** Çıkış etkisi olan hareket tipleri (backend StokHareketTipleri.CikisEtkisi ile aynı). */
+    private static readonly CIKIS_ETKISI = new Set<string>(['Cikis', 'Transfer', 'Sarf', 'Zimmet']);
+
     /**
      * Hareket tipine göre işlem yönünü belirle:
-     * Çıkış → Satış, diğerleri → Alış.
+     * Çıkış etkisi olanlar → Satış, diğerleri → Alış.
      */
     private getIslemYonu(): 'Satis' | 'Alis' {
-        return this.model.hareketTipi === 'Cikis' ? 'Satis' : 'Alis';
+        return StokHareketleriPage.CIKIS_ETKISI.has(this.model.hareketTipi) ? 'Satis' : 'Alis';
     }
 
     /** Hareket tipi değiştiğinde istisna filtresini yeniden uygula. */

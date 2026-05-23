@@ -19,7 +19,7 @@
     </p-tablist>
     <p-tabpanels>
         <p-tabpanel value="0">
-            <p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '80rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+            <p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '94rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
                 <ng-template #header>
                     <tr>
                         <th>Tarih</th>
@@ -29,6 +29,9 @@
                         <th>Miktar</th>
                         <th>Birim Fiyat</th>
                         <th>Tutar</th>
+                        <th>KDV Tipi</th>
+                        <th>KDV Oran</th>
+                        <th>KDV Tutar</th>
                         <th>Durum</th>
                         <th style="width: 10rem">Islem</th>
                     </tr>
@@ -42,6 +45,9 @@
                         <td>{{ item.miktar }}</td>
                         <td>{{ item.birimFiyat | number: '1.2-2' }}</td>
                         <td>{{ item.tutar | number: '1.2-2' }}</td>
+                        <td>{{ getKdvUygulamaTipiLabel(item.kdvUygulamaTipi) }}</td>
+                        <td>{{ item.kdvUygulamaTipi === 1 ? '%' + item.kdvOrani : item.kdvIstisnaKodu ?? '-' }}</td>
+                        <td>{{ item.kdvTutari | number: '1.2-2' }}</td>
                         <td>{{ item.durum }}</td>
                         <td>
                             <div class="flex gap-2">

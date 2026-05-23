@@ -1,0 +1,396 @@
+<p-toast />
+
+<!-- Filtre Alanı -->
+<div class="grid grid-cols-12 gap-3 mb-4">
+  <!-- Donem Bazlı Filtre -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
+    <p-select
+      [options]="maliYilSecenekleri"
+      [(ngModel)]="filter.maliYil"
+      placeholder="Mali yıl seçin"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Dönem</label>
+    <p-select
+      [options]="donemSecenekleri"
+      [(ngModel)]="filter.donem"
+      placeholder="Dönem seçin"
+      optionLabel="label"
+      optionValue="value"
+      styleClass="w-full" />
+  </div>
+
+  <!-- Direkt Tarih Aralığı -->
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Başlangıç Tarihi (isteğe bağlı)</label>
+    <p-datepicker
+      [(ngModel)]="filter.baslangicTarihi"
+      dateFormat="dd.mm.yy"
+      [showIcon]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Bitiş Tarihi (isteğe bağlı)</label>
+    <p-datepicker
+      [(ngModel)]="filter.bitisTarihi"
+      dateFormat="dd.mm.yy"
+      [showIcon]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Tesis</label>
+    <p-select
+      [options]="tesisSecenekleri"
+      [(ngModel)]="filter.tesisId"
+      placeholder="Tüm tesisler"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [loading]="tesisLoading"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Depo</label>
+    <p-select
+      [options]="depoSecenekleri"
+      [(ngModel)]="filter.depoId"
+      placeholder="Tüm depolar"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Taşınır Kart</label>
+    <p-select
+      [options]="tasinirKartSecenekleri"
+      [(ngModel)]="filter.tasinirKartId"
+      placeholder="Tüm taşınır kartlar"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [filter]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Hareket Tipi</label>
+    <p-select
+      [options]="hareketTipiSecenekleri"
+      [(ngModel)]="filter.hareketTipi"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">KDV Uygulama Tipi</label>
+    <p-select
+      [options]="kdvUygulamaTipiSecenekleri"
+      [(ngModel)]="filter.kdvUygulamaTipi"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">İstisna Tanımı</label>
+    <p-select
+      [options]="istisnaTanimSecenekleri"
+      [(ngModel)]="filter.kdvIstisnaTanimId"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [filter]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">İstisna Kodu</label>
+    <input
+      type="text"
+      [(ngModel)]="filter.kdvIstisnaKodu"
+      placeholder="İstisna kodu içinde ara..."
+      class="w-full p-inputtext p-component" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Muh. Fiş Durumu</label>
+    <p-select
+      [options]="musFisDurumuSecenekleri"
+      [(ngModel)]="filter.musFisDurumu"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2 flex items-end justify-end gap-2">
+    <p-button
+      label="Temizle"
+      icon="pi pi-undo"
+      severity="secondary"
+      (onClick)="clearFilter()" />
+    <p-button
+      label="Sorgula"
+      icon="pi pi-search"
+      [loading]="loading"
+      (onClick)="loadRapor()" />
+  </div>
+</div>
+
+<!-- Loading State -->
+<ng-container *ngIf="loading && !rapor">
+  <div class="flex flex-column align-items-center justify-content-center py-8">
+    <p-progressSpinner [style]="{ width: '60px', height: '60px' }" />
+    <p class="mt-3 text-color-secondary">{{ loadingMessage }}</p>
+  </div>
+</ng-container>
+
+<!-- Rapor İçeriği -->
+<ng-container *ngIf="rapor">
+  <!-- Dönem Bilgisi -->
+  <div class="mb-4">
+    <h3 class="text-xl font-semibold m-0">KDV Özet Raporu — {{ rapor.ozet.donemLabel }}</h3>
+  </div>
+
+  <!-- Özet Kartları - Satış (Hesaplanan KDV) -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
+      <p-card styleClass="shadow-1 border-round border-top-3 border-green-500">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Hesaplanan KDV (Satış)</div>
+            <div class="stat-card-value mt-2 text-green-600">{{ formatPara(rapor.ozet.hesaplananKdvTutari) }} ₺</div>
+            <div class="text-xs text-color-secondary mt-1">
+              {{ rapor.ozet.satisHareketSayisi }} hareket — Matrah: {{ formatPara(rapor.ozet.satisMatrahi) }} ₺
+            </div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
+      <p-card styleClass="shadow-1 border-round border-top-3 border-red-500">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">İndirilecek KDV (Alış)</div>
+            <div class="stat-card-value mt-2 text-red-600">{{ formatPara(rapor.ozet.indirilecekKdvTutari) }} ₺</div>
+            <div class="text-xs text-color-secondary mt-1">
+              {{ rapor.ozet.alisHareketSayisi }} hareket — Matrah: {{ formatPara(rapor.ozet.alisMatrahi) }} ₺
+            </div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
+      <p-card styleClass="shadow-1 border-round border-top-3 border-blue-500">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Net KDV (Tahmini)</div>
+            <div class="stat-card-value mt-2" [ngClass]="netKdvClass(rapor.ozet.netKdv)">
+              {{ formatPara(rapor.ozet.netKdv) }} ₺
+            </div>
+            <div class="text-xs text-color-secondary mt-1">
+              Hesaplanan − İndirilecek
+            </div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- Özet Kartları - İstisna/Kapsam Dışı -->
+  <div class="grid grid-cols-12 gap-3 mb-4">
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">İstisna Matrahı</div>
+            <div class="font-bold text-lg mt-1">{{ formatPara(rapor.ozet.istisnaMatrahi) }} ₺</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Kapsam Dışı Matrah</div>
+            <div class="font-bold text-lg mt-1">{{ formatPara(rapor.ozet.kapsamDisiMatrah) }} ₺</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Toplam Kayıt</div>
+            <div class="font-bold text-lg mt-1">{{ rapor.ozet.toplamKayitSayisi }}</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Fişi Olan</div>
+            <div class="font-bold text-lg mt-1 text-green-600">{{ rapor.ozet.fisiOlanSayisi }}</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Fişi Olmayan</div>
+            <div class="font-bold text-lg mt-1 text-orange-600">{{ rapor.ozet.fisiOlmayanSayisi }}</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+
+    <div class="col-span-6 md:col-span-4 lg:col-span-2">
+      <p-card styleClass="shadow-1 border-round">
+        <ng-template pTemplate="content">
+          <div class="text-center">
+            <div class="text-sm text-color-secondary">Satış / Alış</div>
+            <div class="font-bold text-lg mt-1">{{ rapor.ozet.satisHareketSayisi }} / {{ rapor.ozet.alisHareketSayisi }}</div>
+          </div>
+        </ng-template>
+      </p-card>
+    </div>
+  </div>
+
+  <!-- Uyarılar -->
+  <ng-container *ngIf="rapor.uyarilar.length > 0">
+    <h4 class="text-lg font-semibold mb-2">⚠️ Uyarılar</h4>
+    <div class="grid grid-cols-12 gap-3 mb-4">
+      <div *ngFor="let uyari of rapor.uyarilar" class="col-span-12 md:col-span-6">
+        <p-message [severity]="getUyariSeverity(uyari.uyariKodu)" styleClass="w-full">
+          <ng-template pTemplate="content">
+            <div class="flex align-items-start gap-3">
+              <i [class]="getUyariIcon(uyari.uyariKodu)" class="text-xl mt-1"></i>
+              <div>
+                <div class="font-semibold mb-1">{{ getUyariLabel(uyari.uyariKodu) }}</div>
+                <div class="text-sm">{{ uyari.uyariMesaji }}</div>
+                <div class="text-xs text-color-secondary mt-1">Etkilenen kayıt: {{ uyari.etkilenenKayitSayisi }}</div>
+              </div>
+            </div>
+          </ng-template>
+        </p-message>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Sonuç Yok -->
+  <ng-container *ngIf="rapor.ozet.toplamKayitSayisi === 0">
+    <p-message severity="info" styleClass="mb-4">
+      <ng-template pTemplate="content">
+        Seçili kriterlere uygun KDV hareketi bulunamadı.
+      </ng-template>
+    </p-message>
+  </ng-container>
+
+  <!-- Uygulama Tipi Özetleri Tablosu -->
+  <ng-container *ngIf="rapor.uygulamaTipiOzetleri.length > 0">
+    <h4 class="text-lg font-semibold mb-2">KDV Uygulama Tipi Özetleri</h4>
+    <p-table
+      [value]="rapor.uygulamaTipiOzetleri"
+      styleClass="p-datatable-sm p-datatable-striped mb-4"
+      dataKey="kdvUygulamaTipi">
+      <ng-template pTemplate="header">
+        <tr>
+          <th class="text-left">KDV Tipi</th>
+          <th class="text-right">Hareket Sayısı</th>
+          <th class="text-right">Matrah</th>
+          <th class="text-right">KDV Tutarı</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-satir>
+        <tr>
+          <td class="text-left">
+            <p-tag
+              [value]="satir.kdvUygulamaTipiAd"
+              [severity]="getKdvTipiSeverity(satir.kdvUygulamaTipi)"
+              styleClass="text-xs" />
+          </td>
+          <td class="text-right text-sm">{{ satir.hareketSayisi }}</td>
+          <td class="text-right text-sm">{{ formatPara(satir.matrah) }} ₺</td>
+          <td class="text-right text-sm font-semibold">{{ formatPara(satir.kdvTutari) }} ₺</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="4" class="text-center p-3">
+            <span class="text-color-secondary">Gösterilecek kayıt bulunamadı.</span>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </ng-container>
+
+  <!-- İstisna Kodu Özetleri Tablosu -->
+  <ng-container *ngIf="rapor.istisnaKoduOzetleri.length > 0">
+    <h4 class="text-lg font-semibold mb-2">İstisna Kodu Özetleri</h4>
+    <p-table
+      [value]="rapor.istisnaKoduOzetleri"
+      styleClass="p-datatable-sm p-datatable-striped mb-4"
+      dataKey="kdvIstisnaKodu">
+      <ng-template pTemplate="header">
+        <tr>
+          <th class="text-left">İstisna Kodu</th>
+          <th class="text-left">Açıklama</th>
+          <th class="text-right">Hareket Sayısı</th>
+          <th class="text-right">Matrah</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-satir>
+        <tr>
+          <td class="text-left text-sm font-mono">{{ satir.kdvIstisnaKodu }}</td>
+          <td class="text-left text-sm">{{ satir.kdvIstisnaAciklamasi ?? '—' }}</td>
+          <td class="text-right text-sm">{{ satir.hareketSayisi }}</td>
+          <td class="text-right text-sm">{{ formatPara(satir.matrah) }} ₺</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="4" class="text-center p-3">
+            <span class="text-color-secondary">Gösterilecek kayıt bulunamadı.</span>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </ng-container>
+</ng-container>
+
+<!-- İlk Yükleme (Henüz sorgulama yapılmamış) -->
+<ng-container *ngIf="!loading && !rapor">
+  <div class="flex flex-column align-items-center justify-content-center py-8">
+    <i class="pi pi-chart-bar text-5xl text-color-secondary mb-3"></i>
+    <p class="text-color-secondary text-lg">KDV özet raporunu görüntülemek için dönem seçip "Sorgula" butonuna tıklayın.</p>
+  </div>
+</ng-container>

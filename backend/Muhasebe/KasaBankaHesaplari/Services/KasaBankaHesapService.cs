@@ -59,39 +59,14 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
                 null,
                 CancellationToken.None);
 
-            var entity = new KasaBankaHesap
-            {
-                TesisId = dto.TesisId,
-                Tip = dto.Tip,
-                Kod = muhasebeDetay.Kod,
-                Ad = dto.Ad,
-                MuhasebeHesapPlaniId = muhasebeDetay.MuhasebeHesapPlaniId,
-                AnaMuhasebeHesapKodu = muhasebeDetay.AnaMuhasebeHesapKodu,
-                MuhasebeHesapSiraNo = muhasebeDetay.SiraNo,
-                ParaBirimi = dto.ParaBirimi,
-                ValorGunSayisi = dto.ValorGunSayisi,
-                KartAdi = dto.KartAdi,
-                KartNoMaskeli = dto.KartNoMaskeli,
-                KartLimiti = dto.KartLimiti,
-                HesapKesimGunu = dto.HesapKesimGunu,
-                SonOdemeGunu = dto.SonOdemeGunu,
-                BagliBankaHesapId = dto.BagliBankaHesapId,
-                BankaAdi = dto.BankaAdi,
-                SubeAdi = dto.SubeAdi,
-                HesapNo = dto.HesapNo,
-                Iban = dto.Iban,
-                MusteriNo = dto.MusteriNo,
-                HesapTuru = dto.HesapTuru,
-                SorumluKisi = dto.SorumluKisi,
-                Lokasyon = dto.Lokasyon,
-                AktifMi = dto.AktifMi,
-                Aciklama = dto.Aciklama
-            };
+            dto.MuhasebeHesapPlaniId = muhasebeDetay.MuhasebeHesapPlaniId;
+            dto.AnaMuhasebeHesapKodu = muhasebeDetay.AnaMuhasebeHesapKodu;
+            dto.MuhasebeHesapSiraNo = muhasebeDetay.SiraNo;
+            dto.Kod = muhasebeDetay.Kod;
 
-            await _dbContext.KasaBankaHesaplari.AddAsync(entity, CancellationToken.None);
-            await _dbContext.SaveChangesAsync(CancellationToken.None);
+            var result = await base.AddAsync(dto);
             await tx.CommitAsync(CancellationToken.None);
-            return Mapper.Map<KasaBankaHesapDto>(entity);
+            return result;
         }
         catch
         {

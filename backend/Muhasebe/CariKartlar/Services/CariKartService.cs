@@ -97,32 +97,14 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
                 null,
                 CancellationToken.None);
 
-            var entity = new CariKart
-            {
-                TesisId = dto.TesisId,
-                CariTipi = dto.CariTipi,
-                CariKodu = detay.Kod,
-                UnvanAdSoyad = dto.UnvanAdSoyad,
-                VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32),
-                VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128),
-                Telefon = NormalizeOptional(dto.Telefon, 32),
-                Eposta = NormalizeOptional(dto.Eposta, 256),
-                Adres = NormalizeOptional(dto.Adres, 512),
-                Il = NormalizeOptional(dto.Il, 128),
-                Ilce = NormalizeOptional(dto.Ilce, 128),
-                AktifMi = dto.AktifMi,
-                EFaturaMukellefiMi = dto.EFaturaMukellefiMi,
-                EArsivKapsamindaMi = dto.EArsivKapsamindaMi,
-                Aciklama = NormalizeOptional(dto.Aciklama, 1024),
-                AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu,
-                MuhasebeHesapSiraNo = detay.SiraNo,
-                MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId
-            };
+            dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+            dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
+            dto.MuhasebeHesapSiraNo = detay.SiraNo;
+            dto.CariKodu = detay.Kod;
 
-            await _dbContext.CariKartlar.AddAsync(entity, CancellationToken.None);
-            await _dbContext.SaveChangesAsync(CancellationToken.None);
+            var result = await base.AddAsync(dto);
             await tx.CommitAsync(CancellationToken.None);
-            return Mapper.Map<CariKartDto>(entity);
+            return result;
         }
         catch
         {

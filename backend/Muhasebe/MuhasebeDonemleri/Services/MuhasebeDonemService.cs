@@ -30,14 +30,14 @@ public class MuhasebeDonemService
 
     public override async Task<MuhasebeDonemDto?> GetByIdAsync(int id, System.Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
     {
-        var entity = await _repository.GetByIdAsync(id, q => q.Include(x => x.Tesis));
-        return Mapper.Map<MuhasebeDonemDto?>(entity);
+        var combinedInclude = CombineIncludes(q => q.Include(x => x.Tesis), include);
+        return await base.GetByIdAsync(id, combinedInclude);
     }
 
     public override async Task<IEnumerable<MuhasebeDonemDto>> GetAllAsync(System.Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
     {
-        var entities = await _repository.GetAllAsync(q => q.Include(x => x.Tesis));
-        return Mapper.Map<IEnumerable<MuhasebeDonemDto>>(entities);
+        var combinedInclude = CombineIncludes(q => q.Include(x => x.Tesis), include);
+        return await base.GetAllAsync(combinedInclude);
     }
 
     public async Task<MuhasebeDonemDto?> GetAktifDonemAsync(
@@ -56,12 +56,10 @@ public class MuhasebeDonemService
         dto.KapaliMi = false;
         dto.KapanisTarihi = null;
 
-        var entity = Mapper.Map<MuhasebeDonem>(dto);
-        await _dbContext.MuhasebeDonemler.AddAsync(entity);
-        await _dbContext.SaveChangesAsync();
+        var result = await base.AddAsync(dto);
 
         // Reload with Tesis include for TesisAdi
-        var created = await _repository.GetByIdAsync(entity.Id,
+        var created = await _repository.GetByIdAsync(result.Id!.Value,
             q => q.Include(x => x.Tesis))
             ?? throw new BaseException("Dönem oluşturulamadı.", 500);
         return Mapper.Map<MuhasebeDonemDto>(created);
@@ -260,5 +258,17 @@ public class MuhasebeDonemService
             dto.TesisId, dto.BaslangicTarihi, dto.BitisTarihi, existing.Id, cancellationToken);
         if (cakisiyor)
             throw new BaseException("Seçilen tarih aralığı aynı tesis için başka bir dönemle çakışıyor.", 400);
+    }
+
+    private static Func<IQueryable<T>, IQueryable<T>> CombineIncludes<T>(
+        Func<IQueryable<T>, IQueryable<T>> first,
+        Func<IQueryable<T>, IQueryable<T>>? second)
+    {
+        if (second is null)
+        {
+            return first;
+        }
+
+        return q => second(first(q));
     }
 }

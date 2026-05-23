@@ -5,6 +5,7 @@ using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Dtos;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.StokHareketleri.Entities;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.Kdv.Services;
 
@@ -12,6 +13,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
 {
     private readonly StysAppDbContext _db;
     private readonly IUserAccessScopeService _userAccessScopeService;
+
+    /// <summary>Özet hesaplamada memory'ye alınacak maksimum satır sayısı.</summary>
+    private const int MaxOzetRows = 100000;
 
     public KdvOzetRaporService(
         StysAppDbContext db,
@@ -48,7 +52,16 @@ public class KdvOzetRaporService : IKdvOzetRaporService
                 query = query.Where(x => x.fis == null);
         }
 
-        // 4. Tüm veriyi memory'ye al (özet hesaplamalar için)
+        // 4. Performance guard: count kontrolü
+        var rowCount = await query.CountAsync(cancellationToken);
+        if (rowCount > MaxOzetRows)
+        {
+            throw new BaseException(
+                $"KDV özet raporu en fazla {MaxOzetRows:N0} hareket için çalıştırılabilir. Lütfen filtreleri daraltınız.",
+                errorCode: 400);
+        }
+
+        // 5. Tüm veriyi memory'ye al (özet hesaplamalar için)
         var allData = await query
             .Select(x => new
             {
@@ -62,7 +75,7 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             })
             .ToListAsync(cancellationToken);
 
-        // 5. Satış / Alış yönünü belirle
+        // 6. Satış / Alış yönünü belirle
         var satisHareketler = allData
             .Where(x => StokHareketTipleri.CikisEtkisi.Contains(x.HareketTipi))
             .ToList();
@@ -71,7 +84,16 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             .Where(x => StokHareketTipleri.GirisEtkisi.Contains(x.HareketTipi))
             .ToList();
 
-        // 6. Özet hesapla (satış = hesaplanan KDV, alış = indirilecek KDV)
+        // 7. Tam/Kısmi istisna ayrımı (satış yönünde)
+        var tamIstisnaMatrahi = satisHareketler
+            .Where(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.TamIstisna)
+            .Sum(x => x.Tutar);
+
+        var kismiIstisnaMatrahi = satisHareketler
+            .Where(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.KismiIstisna)
+            .Sum(x => x.Tutar);
+
+        // 8. Özet hesapla (satış = hesaplanan KDV, alış = indirilecek KDV)
         var ozet = new KdvOzetRaporOzetDto
         {
             DonemLabel = $"{baslangicTarihi:dd.MM.yyyy} — {bitisTarihi:dd.MM.yyyy}",
@@ -90,10 +112,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             NetKdv = satisHareketler.Sum(x => x.KdvTutari) - alisHareketler.Sum(x => x.KdvTutari),
 
             // İstisna / Kapsam Dışı (satış yönündeki istisna ve kapsam dışı matrahlar)
-            IstisnaMatrahi = satisHareketler
-                .Where(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.TamIstisna
-                         || x.KdvUygulamaTipi == (int)KdvUygulamaTipi.KismiIstisna)
-                .Sum(x => x.Tutar),
+            TamIstisnaMatrahi = tamIstisnaMatrahi,
+            KismiIstisnaMatrahi = kismiIstisnaMatrahi,
+            IstisnaMatrahi = tamIstisnaMatrahi + kismiIstisnaMatrahi,
             KapsamDisiMatrah = satisHareketler
                 .Where(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.KdvKapsamDisi)
                 .Sum(x => x.Tutar),
@@ -104,7 +125,7 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             FisiOlmayanSayisi = allData.Count(x => !x.FisVar)
         };
 
-        // 7. Uygulama tipi özetleri
+        // 9. Uygulama tipi özetleri
         var uygulamaTipiOzetleri = allData
             .GroupBy(x => x.KdvUygulamaTipi)
             .Select(g => new KdvUygulamaTipiOzetDto
@@ -118,7 +139,7 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             .OrderBy(x => x.KdvUygulamaTipi)
             .ToList();
 
-        // 8. İstisna kodu özetleri (istisna kodu boş olmayanlar)
+        // 10. İstisna kodu özetleri (istisna kodu boş olmayanlar)
         var istisnaKoduOzetleri = allData
             .Where(x => !string.IsNullOrWhiteSpace(x.KdvIstisnaKodu))
             .GroupBy(x => new { x.KdvIstisnaKodu, x.KdvIstisnaAciklamasi })
@@ -132,7 +153,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             .OrderBy(x => x.KdvIstisnaKodu)
             .ToList();
 
-        // 9. Uyarıları belirle
+        // 11. Uyarıları belirle (severity ve route ile)
+        const string hareketRaporuRoute = "muhasebe/kdv-hareket-raporu";
+
         var uyarilar = new List<KdvOzetRaporUyariDto>();
 
         // MUHASEBE_FISI_EKSIK
@@ -144,7 +167,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
                 UyariKodu = "MUHASEBE_FISI_EKSIK",
                 UyariMesaji = $"Muhasebe fişi oluşmamış {fisiOlmayanlar} stok hareketi bulundu. " +
                               "Beyanname öncesi eksik fişlerin tamamlanması önerilir.",
-                EtkilenenKayitSayisi = fisiOlmayanlar
+                EtkilenenKayitSayisi = fisiOlmayanlar,
+                Severity = "warn",
+                Route = hareketRaporuRoute
             });
         }
 
@@ -158,7 +183,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
                 UyariKodu = "KDV_TUTARI_EKSIK",
                 UyariMesaji = $"KDV'li olarak işaretlenmiş ancak KDV tutarı sıfır olan {kdvliFakatKdvSifir} hareket bulundu. " +
                               "Taşınır kart KDV oranlarını kontrol edin.",
-                EtkilenenKayitSayisi = kdvliFakatKdvSifir
+                EtkilenenKayitSayisi = kdvliFakatKdvSifir,
+                Severity = "error",
+                Route = hareketRaporuRoute
             });
         }
 
@@ -174,7 +201,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
                 UyariKodu = "ISTISNA_KODU_EKSIK",
                 UyariMesaji = $"İstisnalı olarak işaretlenmiş ancak istisna kodu atanmamış {istisnaliKodsuz} hareket bulundu. " +
                               "Beyannamede istisna kodu zorunludur.",
-                EtkilenenKayitSayisi = istisnaliKodsuz
+                EtkilenenKayitSayisi = istisnaliKodsuz,
+                Severity = "warn",
+                Route = hareketRaporuRoute
             });
         }
 
@@ -187,7 +216,9 @@ public class KdvOzetRaporService : IKdvOzetRaporService
                 UyariKodu = "TEVKIFATLI_HAREKET_VAR",
                 UyariMesaji = $"Tevkifatlı {tevkifatliSayisi} hareket bulundu. " +
                               "Tevkifatlı KDV'nin beyannamede ayrıca bildirilmesi gerekir.",
-                EtkilenenKayitSayisi = tevkifatliSayisi
+                EtkilenenKayitSayisi = tevkifatliSayisi,
+                Severity = "warn",
+                Route = hareketRaporuRoute
             });
         }
 
@@ -211,9 +242,18 @@ public class KdvOzetRaporService : IKdvOzetRaporService
     {
         if (filter.MaliYil.HasValue && filter.Donem.HasValue)
         {
-            var ay = filter.Donem.Value;
-            var yil = filter.MaliYil.Value;
-            var baslangic = new DateTime(yil, ay, 1, 0, 0, 0, DateTimeKind.Utc);
+            var maliYil = filter.MaliYil.Value;
+            var donem = filter.Donem.Value;
+
+            // MaliYil validasyonu: 2000-2100
+            if (maliYil < 2000 || maliYil > 2100)
+                throw new BaseException("Mali yıl 2000 ile 2100 arasında olmalıdır.", errorCode: 400);
+
+            // Donem validasyonu: 1-12
+            if (donem < 1 || donem > 12)
+                throw new BaseException("Dönem 1 ile 12 arasında olmalıdır.", errorCode: 400);
+
+            var baslangic = new DateTime(maliYil, donem, 1, 0, 0, 0, DateTimeKind.Utc);
             var bitis = baslangic.AddMonths(1).AddSeconds(-1);
             return (baslangic, bitis);
         }

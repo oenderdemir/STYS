@@ -224,6 +224,10 @@
           <div class="text-center">
             <div class="text-sm text-color-secondary">İstisna Matrahı</div>
             <div class="font-bold text-lg mt-1">{{ formatPara(rapor.ozet.istisnaMatrahi) }} ₺</div>
+            <div class="text-xs text-color-secondary mt-1">
+              <span class="inline-block mr-2">Tam: {{ formatPara(rapor.ozet.tamIstisnaMatrahi) }} ₺</span>
+              <span class="inline-block">Kısmi: {{ formatPara(rapor.ozet.kismiIstisnaMatrahi) }} ₺</span>
+            </div>
           </div>
         </ng-template>
       </p-card>
@@ -290,14 +294,22 @@
     <h4 class="text-lg font-semibold mb-2">⚠️ Uyarılar</h4>
     <div class="grid grid-cols-12 gap-3 mb-4">
       <div *ngFor="let uyari of rapor.uyarilar" class="col-span-12 md:col-span-6">
-        <p-message [severity]="getUyariSeverity(uyari.uyariKodu)" styleClass="w-full">
+        <p-message [severity]="$any(uyari.severity || getUyariSeverity(uyari.uyariKodu))" styleClass="w-full">
           <ng-template pTemplate="content">
             <div class="flex align-items-start gap-3">
               <i [class]="getUyariIcon(uyari.uyariKodu)" class="text-xl mt-1"></i>
               <div>
                 <div class="font-semibold mb-1">{{ getUyariLabel(uyari.uyariKodu) }}</div>
                 <div class="text-sm">{{ uyari.uyariMesaji }}</div>
-                <div class="text-xs text-color-secondary mt-1">Etkilenen kayıt: {{ uyari.etkilenenKayitSayisi }}</div>
+                <div class="text-xs text-color-secondary mt-1 flex align-items-center gap-2 flex-wrap">
+                  <span>Etkilenen kayıt: {{ uyari.etkilenenKayitSayisi }}</span>
+                  <a *ngIf="uyari.route"
+                     [routerLink]="'/' + uyari.route"
+                     class="text-primary text-xs underline cursor-pointer hover:text-primary-600 inline-flex align-items-center gap-1">
+                    <i class="pi pi-arrow-right text-xs"></i>
+                    Detaylı raporu görüntüle
+                  </a>
+                </div>
               </div>
             </div>
           </ng-template>

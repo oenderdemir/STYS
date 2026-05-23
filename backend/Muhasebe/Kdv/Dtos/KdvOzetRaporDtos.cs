@@ -61,6 +61,8 @@ public class KdvOzetRaporOzetDto
 
     // İstisna / Kapsam Dışı
     public decimal IstisnaMatrahi { get; set; }
+    public decimal TamIstisnaMatrahi { get; set; }
+    public decimal KismiIstisnaMatrahi { get; set; }
     public decimal KapsamDisiMatrah { get; set; }
 
     // Genel
@@ -91,4 +93,6 @@ public class KdvOzetRaporUyariDto
     public string UyariKodu { get; set; } = string.Empty;
     public string UyariMesaji { get; set; } = string.Empty;
     public int EtkilenenKayitSayisi { get; set; }
+    public string Severity { get; set; } = "info";
+    public string? Route { get; set; }
 }

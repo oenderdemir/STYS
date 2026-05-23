@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -54,6 +55,7 @@ interface Secenek<T = number> {
     imports: [
         CommonModule,
         FormsModule,
+        RouterModule,
         ToastModule,
         ButtonModule,
         CardModule,
@@ -219,8 +221,16 @@ export class KdvOzetRaporuComponent implements OnInit {
         }
     }
 
-    getUyariSeverity(uyariKodu: string): 'warn' | 'error' | 'info' | 'success' {
-        switch (uyariKodu) {
+    getUyariSeverity(severity: string | null | undefined): 'warn' | 'error' | 'info' | 'success' | 'secondary' | 'contrast' {
+        if (!severity) return 'info';
+        switch (severity) {
+            case 'warn': return 'warn';
+            case 'error': return 'error';
+            case 'info': return 'info';
+            case 'success': return 'success';
+            case 'secondary': return 'secondary';
+            case 'contrast': return 'contrast';
+            // Backward compatibility: map by uyari kodu
             case 'MUHASEBE_FISI_EKSIK': return 'warn';
             case 'KDV_TUTARI_EKSIK': return 'error';
             case 'ISTISNA_KODU_EKSIK': return 'warn';

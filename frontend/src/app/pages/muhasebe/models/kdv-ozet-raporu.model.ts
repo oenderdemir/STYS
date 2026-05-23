@@ -54,6 +54,8 @@ export interface KdvOzetRaporOzetModel {
     netKdv: number;
     // İstisna / Kapsam Dışı
     istisnaMatrahi: number;
+    tamIstisnaMatrahi: number;
+    kismiIstisnaMatrahi: number;
     kapsamDisiMatrah: number;
     // Genel
     toplamKayitSayisi: number;
@@ -80,6 +82,8 @@ export interface KdvOzetRaporUyariModel {
     uyariKodu: string;
     uyariMesaji: string;
     etkilenenKayitSayisi: number;
+    severity?: string | null;
+    route?: string | null;
 }
 
 export const DONEM_SECENEKLERI: Array<{ label: string; value: number }> = [

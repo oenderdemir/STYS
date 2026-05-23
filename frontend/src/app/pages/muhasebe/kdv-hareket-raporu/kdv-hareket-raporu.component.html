@@ -37,6 +37,46 @@
   </div>
 
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Depo</label>
+    <p-select
+      [options]="depoSecenekleri"
+      [(ngModel)]="filter.depoId"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tüm depolar"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Taşınır Kart</label>
+    <p-select
+      [options]="tasinirKartSecenekleri"
+      [(ngModel)]="filter.tasinirKartId"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tüm taşınır kartlar"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [filter]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">Hareket Tipi</label>
+    <p-select
+      [options]="hareketTipiSecenekleri"
+      [(ngModel)]="filter.hareketTipi"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">KDV Uygulama Tipi</label>
     <p-select
       [options]="kdvUygulamaTipiSecenekleri"
@@ -47,6 +87,30 @@
       optionValue="value"
       [showClear]="true"
       styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">İstisna Tanımı</label>
+    <p-select
+      [options]="istisnaTanimSecenekleri"
+      [(ngModel)]="filter.kdvIstisnaTanimId"
+      (ngModelChange)="onFilterChange()"
+      placeholder="Tümü"
+      optionLabel="label"
+      optionValue="value"
+      [showClear]="true"
+      [filter]="true"
+      styleClass="w-full" />
+  </div>
+
+  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <label class="block mb-1 text-sm font-medium">İstisna Kodu</label>
+    <input
+      type="text"
+      [(ngModel)]="filter.kdvIstisnaKodu"
+      (ngModelChange)="onFilterChange()"
+      placeholder="İstisna kodu içinde ara..."
+      class="w-full p-inputtext p-component" />
   </div>
 
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
@@ -63,6 +127,11 @@
   </div>
 
   <div class="col-span-12 md:col-span-6 lg:col-span-2 flex items-end justify-end gap-2">
+    <p-button
+      label="Temizle"
+      icon="pi pi-undo"
+      severity="secondary"
+      (onClick)="clearFilter()" />
     <p-button
       label="Sorgula"
       icon="pi pi-search"
@@ -196,7 +265,7 @@
     <p-message severity="warn" styleClass="mb-4">
       <ng-template pTemplate="content">
         <i class="pi pi-exclamation-triangle mr-2"></i>
-        Toplam {{ rapor.toplamKayitSayisi }} kayıt bulundu. İlk 1000 kayıt gösteriliyor. Daha dar bir tarih aralığı seçiniz.
+        Toplam {{ rapor.toplamKayitSayisi }} kayıt bulundu. Tabloda ilk 1000 kayıt gösteriliyor; özetler tüm filtrelenmiş kayıtlar üzerinden hesaplanmıştır.
       </ng-template>
     </p-message>
   </ng-container>
@@ -284,7 +353,7 @@
                 [value]="getMusFisDurumuLabel(satir.musFisDurumu)"
                 [severity]="getMusFisDurumuSeverity(satir.musFisDurumu)"
                 styleClass="text-xs cursor-pointer"
-                (click)="navigateToFis(satir.musFisId)" />
+                (click)="navigateToFis(satir)" />
             </ng-container>
             <ng-template #noFis>
               <span class="text-color-secondary text-sm">—</span>

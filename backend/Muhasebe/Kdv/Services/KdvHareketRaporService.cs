@@ -35,7 +35,10 @@ public class KdvHareketRaporService : IKdvHareketRaporService
                         && s.HareketTarihi <= filter.BitisTarihi);
 
         if (scope.IsScoped)
-            stokQuery = stokQuery.Where(s => s.Depo != null && scope.TesisIds.Contains(s.Depo.TesisId!.Value));
+            stokQuery = stokQuery.Where(s =>
+                s.Depo != null &&
+                s.Depo.TesisId.HasValue &&
+                scope.TesisIds.Contains(s.Depo.TesisId.Value));
 
         if (filter.TesisId.HasValue)
             stokQuery = stokQuery.Where(s => s.Depo != null && s.Depo.TesisId == filter.TesisId.Value);
@@ -43,8 +46,23 @@ public class KdvHareketRaporService : IKdvHareketRaporService
         if (filter.DepoId.HasValue)
             stokQuery = stokQuery.Where(s => s.DepoId == filter.DepoId.Value);
 
+        if (filter.TasinirKartId.HasValue)
+            stokQuery = stokQuery.Where(s => s.TasinirKartId == filter.TasinirKartId.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.HareketTipi))
+            stokQuery = stokQuery.Where(s => s.HareketTipi == filter.HareketTipi.Trim());
+
         if (filter.KdvUygulamaTipi.HasValue)
             stokQuery = stokQuery.Where(s => s.KdvUygulamaTipi == (int)filter.KdvUygulamaTipi.Value);
+
+        if (filter.KdvIstisnaTanimId.HasValue)
+            stokQuery = stokQuery.Where(s => s.KdvIstisnaTanimId == filter.KdvIstisnaTanimId.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.KdvIstisnaKodu))
+        {
+            var kod = filter.KdvIstisnaKodu.Trim();
+            stokQuery = stokQuery.Where(s => s.KdvIstisnaKodu != null && s.KdvIstisnaKodu.Contains(kod));
+        }
 
         // Muhasebe fiş left join: KaynakModul == "StokHareket" && KaynakId == StokHareket.Id && IsDeleted == false && Durum != Iptal
         var query = from stok in stokQuery
@@ -63,11 +81,44 @@ public class KdvHareketRaporService : IKdvHareketRaporService
                 query = query.Where(x => x.fis == null);
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        // Özet: tüm filtrelenmiş dataset üzerinden hesapla (Take öncesi)
+        var ozetRaw = await query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                ToplamKayitSayisi = g.Count(),
+                KdvliSayisi = g.Count(x => x.stok.KdvUygulamaTipi == 1),
+                IstisnaliSayisi = g.Count(x => x.stok.KdvUygulamaTipi == 2 || x.stok.KdvUygulamaTipi == 3),
+                KdvKapsamDisiSayisi = g.Count(x => x.stok.KdvUygulamaTipi == 4),
+                TevkifatliSayisi = g.Count(x => x.stok.KdvUygulamaTipi == 5),
+                FisiOlanSayisi = g.Count(x => x.fis != null),
+                FisiOlmayanSayisi = g.Count(x => x.fis == null),
+                ToplamKdvTutari = g.Sum(x => x.stok.KdvTutari),
+                ToplamTutar = g.Sum(x => x.stok.Tutar)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
+        var ozet = ozetRaw != null
+            ? new KdvHareketRaporOzetDto
+            {
+                ToplamKayitSayisi = ozetRaw.ToplamKayitSayisi,
+                KdvliSayisi = ozetRaw.KdvliSayisi,
+                IstisnaliSayisi = ozetRaw.IstisnaliSayisi,
+                KdvKapsamDisiSayisi = ozetRaw.KdvKapsamDisiSayisi,
+                TevkifatliSayisi = ozetRaw.TevkifatliSayisi,
+                FisiOlanSayisi = ozetRaw.FisiOlanSayisi,
+                FisiOlmayanSayisi = ozetRaw.FisiOlmayanSayisi,
+                ToplamKdvTutari = ozetRaw.ToplamKdvTutari,
+                ToplamTutar = ozetRaw.ToplamTutar
+            }
+            : new KdvHareketRaporOzetDto();
+
+        var totalCount = ozet.ToplamKayitSayisi;
+
+        // Satırlar: ilk 1000 kayıt, tarih + id desc
         var rawItems = await query
             .OrderByDescending(x => x.stok.HareketTarihi)
-            .ThenBy(x => x.stok.Id)
+            .ThenByDescending(x => x.stok.Id)
             .Take(1000)
             .Select(x => new KdvHareketRaporSatirDto
             {
@@ -94,21 +145,6 @@ public class KdvHareketRaporService : IKdvHareketRaporService
                 Aciklama = x.stok.Aciklama
             })
             .ToListAsync(cancellationToken);
-
-        // Özet hesaplama
-        var ozet = new KdvHareketRaporOzetDto
-        {
-            ToplamKayitSayisi = totalCount,
-            KdvliSayisi = rawItems.Count(i => i.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli),
-            IstisnaliSayisi = rawItems.Count(i => i.KdvUygulamaTipi == (int)KdvUygulamaTipi.TamIstisna
-                                               || i.KdvUygulamaTipi == (int)KdvUygulamaTipi.KismiIstisna),
-            KdvKapsamDisiSayisi = rawItems.Count(i => i.KdvUygulamaTipi == (int)KdvUygulamaTipi.KdvKapsamDisi),
-            TevkifatliSayisi = rawItems.Count(i => i.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli),
-            FisiOlanSayisi = rawItems.Count(i => i.MusFisId.HasValue),
-            FisiOlmayanSayisi = rawItems.Count(i => !i.MusFisId.HasValue),
-            ToplamKdvTutari = rawItems.Sum(i => i.KdvTutari),
-            ToplamTutar = rawItems.Sum(i => i.Tutar)
-        };
 
         return new KdvHareketRaporDto
         {

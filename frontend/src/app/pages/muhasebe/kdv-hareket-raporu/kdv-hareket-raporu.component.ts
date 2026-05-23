@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -16,6 +17,13 @@ import { TooltipModule } from 'primeng/tooltip';
 import { HttpErrorResponse } from '@angular/common/http';
 import { KdvHareketRaporuService } from '../services/kdv-hareket-raporu.service';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
+import { DepolarService } from '../depolar/depolar.service';
+import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
+import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
+import { KdvIstisnaTanimDto, createDefaultKdvIstisnaTanimFilter } from '../models/kdv-istisna-tanim.model';
+import { DepoModel } from '../depolar/depolar.dto';
+import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
+import { STOK_HAREKET_TIPLERI } from '../stok-hareketleri/stok-hareketleri.dto';
 import {
     KdvHareketRaporFilterModel,
     KdvHareketRaporModel,
@@ -29,6 +37,11 @@ import {
 interface TesisSecenek {
     label: string;
     value: number | null;
+}
+
+interface Secenek<T = number> {
+    label: string;
+    value: T;
 }
 
 @Component({
@@ -55,7 +68,11 @@ interface TesisSecenek {
 export class KdvHareketRaporuComponent implements OnInit {
     private readonly raporService = inject(KdvHareketRaporuService);
     private readonly muhasebeRaporService = inject(MuhasebeRaporService);
+    private readonly depolarService = inject(DepolarService);
+    private readonly tasinirKartService = inject(TasinirKartlariService);
+    private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
     private readonly messageService = inject(MessageService);
+    private readonly router = inject(Router);
 
     filter: KdvHareketRaporFilterModel = createDefaultKdvHareketRaporFilter();
     rapor: KdvHareketRaporModel | null = null;
@@ -65,6 +82,11 @@ export class KdvHareketRaporuComponent implements OnInit {
     tesisSecenekleri: TesisSecenek[] = [];
     tesisLoading = false;
 
+    depoSecenekleri: Secenek<number>[] = [];
+    tasinirKartSecenekleri: Secenek<number>[] = [];
+    hareketTipiSecenekleri = STOK_HAREKET_TIPLERI;
+    istisnaTanimSecenekleri: Secenek<number>[] = [];
+
     kdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
     musFisDurumuSecenekleri = MUS_FIS_DURUMU_SECENEKLERI;
 
@@ -73,6 +95,9 @@ export class KdvHareketRaporuComponent implements OnInit {
 
     ngOnInit(): void {
         this.loadTesisler();
+        this.loadDepolar();
+        this.loadTasinirKartlar();
+        this.loadIstisnaTanimlari();
     }
 
     private loadTesisler(): void {
@@ -91,6 +116,54 @@ export class KdvHareketRaporuComponent implements OnInit {
                 this.tesisSecenekleri = [];
             }
         });
+    }
+
+    private loadDepolar(): void {
+        this.depolarService.getAll().subscribe({
+            next: (depolar) => {
+                this.depoSecenekleri = depolar.map(d => ({
+                    label: d.ad ?? d.kod ?? `Depo #${d.id}`,
+                    value: d.id!
+                }));
+            },
+            error: () => {
+                this.depoSecenekleri = [];
+            }
+        });
+    }
+
+    private loadTasinirKartlar(): void {
+        this.tasinirKartService.getAll().subscribe({
+            next: (kartlar) => {
+                this.tasinirKartSecenekleri = kartlar.map(k => ({
+                    label: `${k.stokKodu} - ${k.ad}`,
+                    value: k.id!
+                }));
+            },
+            error: () => {
+                this.tasinirKartSecenekleri = [];
+            }
+        });
+    }
+
+    private loadIstisnaTanimlari(): void {
+        this.kdvIstisnaTanimService.filter(createDefaultKdvIstisnaTanimFilter()).subscribe({
+            next: (tanimlar) => {
+                this.istisnaTanimSecenekleri = tanimlar.map(t => ({
+                    label: `${t.kod} - ${t.ad}`,
+                    value: t.id
+                }));
+            },
+            error: () => {
+                this.istisnaTanimSecenekleri = [];
+            }
+        });
+    }
+
+    clearFilter(): void {
+        this.filter = createDefaultKdvHareketRaporFilter();
+        this.rapor = null;
+        this.selectedRows = [];
     }
 
     loadRapor(): void {
@@ -213,8 +286,14 @@ export class KdvHareketRaporuComponent implements OnInit {
         }
     }
 
-    navigateToFis(fisId: number | null | undefined): void {
-        // TODO: Muhasebe fiş detay sayfasına yönlendirme
+    navigateToFis(satir: KdvHareketRaporSatirModel): void {
+        if (!satir.musFisId) return;
+        this.router.navigate(['/muhasebe/fisler'], {
+            queryParams: {
+                id: satir.musFisId,
+                fisNo: satir.musFisNo
+            }
+        });
     }
 
     private showError(error: unknown): void {

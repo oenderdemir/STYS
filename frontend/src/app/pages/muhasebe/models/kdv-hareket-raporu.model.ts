@@ -3,7 +3,11 @@ export interface KdvHareketRaporFilterModel {
     bitisTarihi: string;
     tesisId?: number | null;
     depoId?: number | null;
+    tasinirKartId?: number | null;
+    hareketTipi?: string | null;
     kdvUygulamaTipi?: number | null;
+    kdvIstisnaTanimId?: number | null;
+    kdvIstisnaKodu?: string | null;
     musFisDurumu?: string | null;
 }
 
@@ -15,7 +19,11 @@ export function createDefaultKdvHareketRaporFilter(): KdvHareketRaporFilterModel
         bitisTarihi: today.toISOString(),
         tesisId: null,
         depoId: null,
+        tasinirKartId: null,
+        hareketTipi: null,
         kdvUygulamaTipi: null,
+        kdvIstisnaTanimId: null,
+        kdvIstisnaKodu: null,
         musFisDurumu: null
     };
 }

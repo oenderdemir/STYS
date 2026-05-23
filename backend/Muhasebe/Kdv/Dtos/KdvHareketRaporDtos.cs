@@ -17,6 +17,11 @@ public class KdvHareketRaporFilterDto
     /// "FisiOlmayan" = muhasebe fişi henüz oluşmamış olanlar.
     /// </summary>
     public string? MusFisDurumu { get; set; }
+
+    public int? TasinirKartId { get; set; }
+    public string? HareketTipi { get; set; }
+    public int? KdvIstisnaTanimId { get; set; }
+    public string? KdvIstisnaKodu { get; set; }
 }
 
 public class KdvHareketRaporDto

@@ -1,10 +1,10 @@
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using TOD.Platform.Persistence.Rdbms.Dto;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Dtos;
 
-public class SatisBelgesiDto
+public class SatisBelgesiDto : BaseRdbmsDto<int>
 {
-    public int Id { get; set; }
     public string BelgeNo { get; set; } = string.Empty;
     public SatisBelgesiTipi BelgeTipi { get; set; }
     public SatisBelgesiDurumu Durum { get; set; }
@@ -37,9 +37,8 @@ public class SatisBelgesiDto
     public List<SatisBelgesiSatiriDto> Satirlar { get; set; } = [];
 }
 
-public class SatisBelgesiSatiriDto
+public class SatisBelgesiSatiriDto : BaseRdbmsDto<int>
 {
-    public int Id { get; set; }
     public int SatisBelgesiId { get; set; }
     public int SiraNo { get; set; }
     public SatisBelgesiSatirTipi SatirTipi { get; set; }

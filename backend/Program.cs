@@ -18,6 +18,7 @@ using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.Kdv.Services;
+using STYS.Muhasebe.SatisBelgeleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
@@ -69,6 +70,7 @@ var mapperConfig = new MapperConfiguration(cfg =>
 {
     cfg.AddMaps(typeof(TOD.Platform.Identity.DependencyInjection).Assembly);
     cfg.AddMaps(typeof(CountryProfile).Assembly);
+    cfg.AddMaps(typeof(SatisBelgesiProfile).Assembly);
 }, NullLoggerFactory.Instance);
 builder.Services.AddSingleton(mapperConfig);
 builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));

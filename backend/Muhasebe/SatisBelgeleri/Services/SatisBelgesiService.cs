@@ -1,16 +1,20 @@
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.SatisBelgeleri.Repositories;
+using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
-public class SatisBelgesiService : ISatisBelgesiService
+public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelgesi, int>, ISatisBelgesiService
 {
     private readonly StysAppDbContext _db;
+    private readonly ISatisBelgesiRepository _satisBelgesiRepository;
 
     /// <summary>Tevkifatlı satış satırları bu fazda desteklenmez.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -42,24 +46,54 @@ public class SatisBelgesiService : ISatisBelgesiService
         (int)SatisBelgesiDurumu.Taslak
     ];
 
-    public SatisBelgesiService(StysAppDbContext db)
+    public SatisBelgesiService(
+        ISatisBelgesiRepository satisBelgesiRepository,
+        StysAppDbContext db,
+        IMapper mapper)
+        : base(satisBelgesiRepository, mapper)
     {
+        _satisBelgesiRepository = satisBelgesiRepository;
         _db = db;
     }
 
+    // ── Satirları include eden yardımcı ──
+    private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlar =>
+        q => q.Include(x => x.Satirlar);
+
     // ──────────────────────────────────────────────
-    //  GetByIdAsync
+    //  GetByIdAsync (ISatisBelgesiService) — nullable olmayan dönüş
     // ──────────────────────────────────────────────
 
-    public async Task<SatisBelgesiDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<SatisBelgesiDto> GetByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .AsNoTracking()
-            .Include(x => x.Satirlar)
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+        var entity = await Repository.GetByIdAsync(id, IncludeSatirlar);
+        if (entity is null)
+            throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        return MapToDto(belge);
+        return Mapper.Map<SatisBelgesiDto>(entity);
+    }
+
+    // ──────────────────────────────────────────────
+    //  GetByIdAsync (base override) — nullable dönüş
+    // ──────────────────────────────────────────────
+
+    public override Task<SatisBelgesiDto?> GetByIdAsync(
+        int id,
+        Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>>? include)
+    {
+        var effectiveInclude = include is not null
+            ? CombineIncludes(IncludeSatirlar, include)
+            : IncludeSatirlar;
+        return base.GetByIdAsync(id, effectiveInclude);
+    }
+
+    private static Func<IQueryable<T>, IQueryable<T>> CombineIncludes<T>(
+        Func<IQueryable<T>, IQueryable<T>> first,
+        Func<IQueryable<T>, IQueryable<T>> second)
+    {
+        return q => second(first(q));
     }
 
     // ──────────────────────────────────────────────
@@ -73,7 +107,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         var query = _db.SatisBelgeleri
             .AsNoTracking()
             .Include(x => x.Satirlar)
-            .Where(x => x.IsDeleted == false);
+            .Where(x => !x.IsDeleted);
 
         if (filter.TesisId.HasValue)
             query = query.Where(x => x.TesisId == filter.TesisId.Value);
@@ -109,7 +143,7 @@ public class SatisBelgesiService : ISatisBelgesiService
             .ThenByDescending(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        return belgeler.Select(MapToDto).ToList();
+        return Mapper.Map<List<SatisBelgesiDto>>(belgeler);
     }
 
     // ──────────────────────────────────────────────
@@ -161,10 +195,10 @@ public class SatisBelgesiService : ISatisBelgesiService
         // 5. Belge toplamlarını hesapla
         HesaplaBelgeToplamlari(belge);
 
-        _db.SatisBelgeleri.Add(belge);
-        await _db.SaveChangesAsync(cancellationToken);
+        await Repository.AddAsync(belge);
+        await Repository.SaveChangesAsync(cancellationToken);
 
-        return MapToDto(belge);
+        return Mapper.Map<SatisBelgesiDto>(belge);
     }
 
     // ──────────────────────────────────────────────
@@ -176,9 +210,9 @@ public class SatisBelgesiService : ISatisBelgesiService
         UpdateSatisBelgesiRequest request,
         CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .Include(x => x.Satirlar)
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted,
+            q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         // Durum kontrolü
@@ -213,19 +247,21 @@ public class SatisBelgesiService : ISatisBelgesiService
         }
 
         HesaplaBelgeToplamlari(belge);
-        await _db.SaveChangesAsync(cancellationToken);
+        _satisBelgesiRepository.Update(belge);
+        await Repository.SaveChangesAsync(cancellationToken);
 
-        return MapToDto(belge);
+        return Mapper.Map<SatisBelgesiDto>(belge);
     }
 
     // ──────────────────────────────────────────────
-    //  DeleteAsync
+    //  DeleteAsync — soft-delete belge + satırlar
     // ──────────────────────────────────────────────
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted,
+            q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (!SilinebilirDurumlar.Contains((int)belge.Durum))
@@ -236,10 +272,16 @@ public class SatisBelgesiService : ISatisBelgesiService
                 errorCode: 400);
         }
 
-        // Soft delete — cascade delete satırları da siler
+        // Soft-delete: satırları da sil
+        foreach (var satir in belge.Satirlar.Where(s => !s.IsDeleted))
+        {
+            satir.IsDeleted = true;
+        }
+
         belge.IsDeleted = true;
 
-        await _db.SaveChangesAsync(cancellationToken);
+        _satisBelgesiRepository.Update(belge);
+        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -248,9 +290,9 @@ public class SatisBelgesiService : ISatisBelgesiService
 
     public async Task MuhasebeOnayinaGonderAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .Include(x => x.Satirlar)
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted,
+            q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (belge.Durum != SatisBelgesiDurumu.Taslak)
@@ -260,7 +302,7 @@ public class SatisBelgesiService : ISatisBelgesiService
                 errorCode: 400);
         }
 
-        if (belge.Satirlar.Count == 0)
+        if (belge.Satirlar.Count(s => !s.IsDeleted) == 0)
         {
             throw new BaseException("Satır içermeyen belge muhasebe onayına gönderilemez.", errorCode: 400);
         }
@@ -268,7 +310,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         belge.Durum = SatisBelgesiDurumu.MuhasebeOnayinda;
         belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -277,8 +319,8 @@ public class SatisBelgesiService : ISatisBelgesiService
 
     public async Task MuhasebeOnaylaAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
@@ -291,7 +333,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
         belge.MuhasebeOnayTarihi = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -306,8 +348,8 @@ public class SatisBelgesiService : ISatisBelgesiService
         if (string.IsNullOrWhiteSpace(redNedeni))
             throw new BaseException("Ret nedeni zorunludur.", errorCode: 400);
 
-        var belge = await _db.SatisBelgeleri
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
@@ -320,7 +362,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         belge.Durum = SatisBelgesiDurumu.Reddedildi;
         belge.RedNedeni = redNedeni.Trim();
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -329,8 +371,8 @@ public class SatisBelgesiService : ISatisBelgesiService
 
     public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await _db.SatisBelgeleri
-            .FirstOrDefaultAsync(x => x.Id == id && x.IsDeleted == false, cancellationToken)
+        var belge = await Repository.FirstOrDefaultAsync(
+            x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (belge.Durum == SatisBelgesiDurumu.IptalEdildi)
@@ -350,7 +392,7 @@ public class SatisBelgesiService : ISatisBelgesiService
 
         belge.Durum = SatisBelgesiDurumu.IptalEdildi;
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -423,12 +465,12 @@ public class SatisBelgesiService : ISatisBelgesiService
         if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && request.KdvOrani <= 0)
             throw new BaseException($"KDV'li satırda KDV oranı sıfırdan büyük olmalıdır. (SıraNo: {request.SiraNo})", errorCode: 400);
 
-        // İstisnalı satırlarda KdvIstisnaTanimId zorunlu
-        if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Kdvli && request.KdvUygulamaTipi != (int)KdvUygulamaTipi.KdvKapsamDisi)
+        // KDV'li olmayan tüm satırlarda KdvIstisnaTanimId zorunlu (KdvKapsamDisi dahil — bug fix)
+        if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Kdvli)
         {
             if (!request.KdvIstisnaTanimId.HasValue)
                 throw new BaseException(
-                    $"İstisnalı satırda KDV istisna tanımı zorunludur. (SıraNo: {request.SiraNo})",
+                    $"KDV'li olmayan satırda KDV istisna tanımı zorunludur. (SıraNo: {request.SiraNo})",
                     errorCode: 400);
 
             await ValidateKdvIstisnaTanimAsync(
@@ -446,7 +488,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         CancellationToken cancellationToken)
     {
         var tanim = await _db.KdvIstisnaTanimlari
-            .FirstOrDefaultAsync(x => x.Id == kdvIstisnaTanimId && x.IsDeleted == false, cancellationToken)
+            .FirstOrDefaultAsync(x => x.Id == kdvIstisnaTanimId && !x.IsDeleted, cancellationToken)
             ?? throw new BaseException(
                 $"KDV istisna tanımı bulunamadı. (Id: {kdvIstisnaTanimId})",
                 errorCode: 400);
@@ -524,7 +566,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         CancellationToken cancellationToken = default)
     {
         var query = _db.SatisBelgeleri
-            .Where(x => x.BelgeNo == belgeNo && x.IsDeleted == false);
+            .Where(x => x.BelgeNo == belgeNo && !x.IsDeleted);
 
         if (excludeId.HasValue)
             query = query.Where(x => x.Id != excludeId.Value);
@@ -544,7 +586,7 @@ public class SatisBelgesiService : ISatisBelgesiService
         if (kaynakId is null) return;
 
         var query = _db.SatisBelgeleri
-            .Where(x => x.IsDeleted == false
+            .Where(x => !x.IsDeleted
                         && x.KaynakModul == kaynakModul
                         && x.KaynakTipi == kaynakTipi
                         && x.KaynakId == kaynakId);
@@ -566,7 +608,7 @@ public class SatisBelgesiService : ISatisBelgesiService
     //  Private — Satır Oluşturma ve Hesaplama
     // ──────────────────────────────────────────────
 
-    private SatisBelgesiSatiri CreateSatirFromRequest(CreateSatisBelgesiSatiriRequest request)
+    private static SatisBelgesiSatiri CreateSatirFromRequest(CreateSatisBelgesiSatiriRequest request)
     {
         var matrah = request.Miktar * request.BirimFiyat;
         var kdvOrani = request.KdvOrani;
@@ -595,11 +637,11 @@ public class SatisBelgesiService : ISatisBelgesiService
         };
     }
 
-    private void HesaplaBelgeToplamlari(SatisBelgesi belge)
+    private static void HesaplaBelgeToplamlari(SatisBelgesi belge)
     {
-        belge.ToplamMatrah = belge.Satirlar.Sum(s => s.Matrah);
-        belge.ToplamKdv = belge.Satirlar.Sum(s => s.KdvTutari);
-        belge.GenelToplam = belge.Satirlar.Sum(s => s.SatirToplami);
+        belge.ToplamMatrah = belge.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.Matrah);
+        belge.ToplamKdv = belge.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.KdvTutari);
+        belge.GenelToplam = belge.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.SatirToplami);
     }
 
     // ──────────────────────────────────────────────
@@ -669,6 +711,7 @@ public class SatisBelgesiService : ISatisBelgesiService
             if (string.IsNullOrWhiteSpace(belge.MusteriAdSoyad))
                 throw new BaseException("Bireysel müşteri için ad soyad zorunludur.", errorCode: 400);
         }
+        _ = cancellationToken;
     }
 
     private async Task UpdateSatirlarAsync(
@@ -690,74 +733,5 @@ public class SatisBelgesiService : ISatisBelgesiService
             var satir = CreateSatirFromRequest(satirRequest);
             belge.Satirlar.Add(satir);
         }
-    }
-
-    // ──────────────────────────────────────────────
-    //  Private — Mapping
-    // ──────────────────────────────────────────────
-
-    private static SatisBelgesiDto MapToDto(SatisBelgesi belge)
-    {
-        return new SatisBelgesiDto
-        {
-            Id = belge.Id,
-            BelgeNo = belge.BelgeNo,
-            BelgeTipi = belge.BelgeTipi,
-            Durum = belge.Durum,
-            KaynakModul = belge.KaynakModul,
-            KaynakTipi = belge.KaynakTipi,
-            KaynakId = belge.KaynakId,
-            TesisId = belge.TesisId,
-            BelgeTarihi = belge.BelgeTarihi,
-            VadeTarihi = belge.VadeTarihi,
-            MusteriUnvan = belge.MusteriUnvan,
-            MusteriAdSoyad = belge.MusteriAdSoyad,
-            MusteriVergiNo = belge.MusteriVergiNo,
-            MusteriTcKimlikNo = belge.MusteriTcKimlikNo,
-            MusteriVergiDairesi = belge.MusteriVergiDairesi,
-            MusteriAdres = belge.MusteriAdres,
-            MusteriEposta = belge.MusteriEposta,
-            MusteriTelefon = belge.MusteriTelefon,
-            KurumsalMi = belge.KurumsalMi,
-            ToplamMatrah = belge.ToplamMatrah,
-            ToplamKdv = belge.ToplamKdv,
-            GenelToplam = belge.GenelToplam,
-            Aciklama = belge.Aciklama,
-            RedNedeni = belge.RedNedeni,
-            ResmiFaturaNo = belge.ResmiFaturaNo,
-            EBelgeUuid = belge.EBelgeUuid,
-            MuhasebeOnayinaGonderilmeTarihi = belge.MuhasebeOnayinaGonderilmeTarihi,
-            MuhasebeOnayTarihi = belge.MuhasebeOnayTarihi,
-            FaturaKesimTarihi = belge.FaturaKesimTarihi,
-            MusteriyeGonderimTarihi = belge.MusteriyeGonderimTarihi,
-            Satirlar = belge.Satirlar
-                .Where(s => s.IsDeleted == false)
-                .OrderBy(s => s.SiraNo)
-                .Select(MapSatirToDto)
-                .ToList()
-        };
-    }
-
-    private static SatisBelgesiSatiriDto MapSatirToDto(SatisBelgesiSatiri satir)
-    {
-        return new SatisBelgesiSatiriDto
-        {
-            Id = satir.Id,
-            SatisBelgesiId = satir.SatisBelgesiId,
-            SiraNo = satir.SiraNo,
-            SatirTipi = satir.SatirTipi,
-            Aciklama = satir.Aciklama,
-            Miktar = satir.Miktar,
-            BirimFiyat = satir.BirimFiyat,
-            Matrah = satir.Matrah,
-            KdvUygulamaTipi = (int)satir.KdvUygulamaTipi,
-            KdvIstisnaTanimId = satir.KdvIstisnaTanimId,
-            KdvIstisnaKodu = satir.KdvIstisnaKodu,
-            KdvIstisnaAciklamasi = satir.KdvIstisnaAciklamasi,
-            KdvOrani = satir.KdvOrani,
-            KdvTutari = satir.KdvTutari,
-            SatirToplami = satir.SatirToplami,
-            KaynakSatirId = satir.KaynakSatirId
-        };
     }
 }

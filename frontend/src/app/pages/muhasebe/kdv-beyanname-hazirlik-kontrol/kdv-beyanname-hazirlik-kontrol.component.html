@@ -207,6 +207,7 @@
               </div>
               <a *ngIf="madde.route"
                  [routerLink]="'/' + madde.route"
+                 [queryParams]="madde.routeQueryParams"
                  class="inline-flex align-items-center gap-1 text-xs text-primary underline mt-2 cursor-pointer hover:text-primary-600">
                 <i class="pi pi-arrow-right text-xs"></i>
                 Detaylı raporu görüntüle

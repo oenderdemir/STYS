@@ -16,12 +16,13 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     private readonly IKdvOzetRaporService _kdvOzetRaporService;
 
     private const string HareketRaporuRoute = "muhasebe/kdv-hareket-raporu";
+    private const int MaxChecklistRows = 100_000;
 
     // ── Internal data holder (replaces anonymous type / dynamic) ──
 
     private sealed record FisSatirVerisi(
         int MuhasebeHesapPlaniId,
-        string? MuhasebeHesapPlaniKod,
+        string? MuhasebeHesapPlaniTamKod,
         decimal Borc,
         decimal Alacak);
 
@@ -88,7 +89,7 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                         .Where(s => s.IsDeleted == false)
                         .Select(s => new FisSatirVerisi(
                             s.MuhasebeHesapPlaniId,
-                            s.MuhasebeHesapPlani != null ? s.MuhasebeHesapPlani.Kod : null,
+                            s.MuhasebeHesapPlani != null ? s.MuhasebeHesapPlani.TamKod : null,
                             s.Borc,
                             s.Alacak))
                         .ToList()
@@ -112,6 +113,13 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 x.Satirlar))
             .ToList();
 
+        // ── Performans guard: 100 000 satır sınırı ──
+        if (allData.Count > MaxChecklistRows)
+            throw new BaseException(
+                $"KDV beyanname hazırlık kontrolü için veri seti çok büyük ({allData.Count:N0} satır). " +
+                $"Maksimum {MaxChecklistRows:N0} satır desteklenmektedir. Lütfen daha dar bir tarih aralığı veya tesis/depo filtresi kullanın.",
+                errorCode: 413);
+
         // 5. Yön ayrımı
         var satisHareketler = allData
             .Where(x => StokHareketTipleri.CikisEtkisi.Contains(x.HareketTipi))
@@ -126,38 +134,49 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
         var indirilecekKdv = alisHareketler.Sum(x => x.KdvTutari);
         var netKdv = hesaplananKdv - indirilecekKdv;
 
+        // ── Detay linkleri için routeQueryParams ──
+        var routeQueryParams = (object?)new
+        {
+            maliYil = filter.MaliYil,
+            donem = filter.Donem,
+            baslangicTarihi = filter.BaslangicTarihi,
+            bitisTarihi = filter.BitisTarihi,
+            tesisId = filter.TesisId,
+            depoId = filter.DepoId
+        };
+
         // 7. Tüm kontrolleri çalıştır
         var kontroller = new List<KdvBeyannameHazirlikKontrolMaddesiDto>();
 
         // 1) KDV_HAREKET_VAR_MI
-        kontroller.Add(KontrolKdvHareketVarMi(allData));
+        kontroller.Add(KontrolKdvHareketVarMi(allData, routeQueryParams));
 
         // 2) MUHASEBE_FISI_EKSIK
-        kontroller.Add(KontrolMuhasebeFisiEksik(allData));
+        kontroller.Add(KontrolMuhasebeFisiEksik(allData, routeQueryParams));
 
         // 3) KDV_TUTARI_EKSIK
-        kontroller.Add(KontrolKdvTutariEksik(allData));
+        kontroller.Add(KontrolKdvTutariEksik(allData, routeQueryParams));
 
         // 4) ISTISNA_KODU_EKSIK
-        kontroller.Add(KontrolIstisnaKoduEksik(allData));
+        kontroller.Add(KontrolIstisnaKoduEksik(allData, routeQueryParams));
 
         // 5) TEVKIFATLI_HAREKET_VAR
-        kontroller.Add(KontrolTevkifatliHareketVar(allData));
+        kontroller.Add(KontrolTevkifatliHareketVar(allData, routeQueryParams));
 
         // 6) KDV_HESAP_UYUMU
-        kontroller.Add(KontrolKdvHesapUyumu(allData));
+        kontroller.Add(KontrolKdvHesapUyumu(allData, routeQueryParams));
 
         // 7) FIS_DENGE_KONTROLU
-        kontroller.Add(KontrolFisDengesi(allData));
+        kontroller.Add(KontrolFisDengesi(allData, routeQueryParams));
 
         // 8) TASLAK_FIS_VAR
-        kontroller.Add(KontrolTaslakFisVar(allData));
+        kontroller.Add(KontrolTaslakFisVar(allData, routeQueryParams));
 
         // 9) KDV_OZET_TUTARLILIK
-        kontroller.Add(await KontrolKdvOzetTutarlilikAsync(filter, hesaplananKdv, indirilecekKdv, netKdv, cancellationToken));
+        kontroller.Add(await KontrolKdvOzetTutarlilikAsync(filter, hesaplananKdv, indirilecekKdv, netKdv, routeQueryParams, cancellationToken));
 
         // 10) ISTISNA_AYRIMI_KONTROLU
-        kontroller.Add(KontrolIstisnaAyrimi(allData));
+        kontroller.Add(KontrolIstisnaAyrimi(allData, routeQueryParams));
 
         // 8. Özet sayıları hesapla
         var basarili = kontroller.Count(k => k.Durum == "Basarili");
@@ -188,13 +207,16 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     // ── Kontrol metotları ──
 
     /// <summary>1. Dönem içinde KDV hareketi var mı?</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvHareketVarMi(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvHareketVarMi(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         if (allData.Count == 0)
             return Uyari(
                 "KDV_HAREKET_VAR_MI",
                 "KDV Hareketi Var Mı?",
-                "Seçilen dönemde KDV hareketi bulunamadı.");
+                "Seçilen dönemde KDV hareketi bulunamadı.",
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "KDV_HAREKET_VAR_MI",
@@ -203,7 +225,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>2. Muhasebe fişi oluşmamış KDV hareketi var mı?</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolMuhasebeFisiEksik(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolMuhasebeFisiEksik(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var fisiOlmayanlar = allData.Count(x => x.FisId == null);
 
@@ -213,7 +237,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "Eksik Muhasebe Fişi",
                 $"KDV hareketlerinden {fisiOlmayanlar} tanesinin muhasebe fişi henüz oluşturulmamış.",
                 etkilenenKayitSayisi: fisiOlmayanlar,
-                route: HareketRaporuRoute);
+                route: HareketRaporuRoute,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "MUHASEBE_FISI_EKSIK",
@@ -222,7 +247,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>3. KDV'li olup KdvTutari <= 0 olan hareket var mı?</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvTutariEksik(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvTutariEksik(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var kdvliFakatKdvSifir = allData.Count(x =>
             x.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && x.KdvTutari == 0);
@@ -233,7 +260,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "KDV Tutarı Eksik",
                 $"KDV'li olarak işaretlenen {kdvliFakatKdvSifir} harekette KDV tutarı sıfır veya eksik.",
                 etkilenenKayitSayisi: kdvliFakatKdvSifir,
-                route: HareketRaporuRoute);
+                route: HareketRaporuRoute,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "KDV_TUTARI_EKSIK",
@@ -242,7 +270,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>4. İstisnalı/kapsam dışı olup istisna kodu eksik olan hareket var mı?</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolIstisnaKoduEksik(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolIstisnaKoduEksik(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var istisnaliTipler = new HashSet<int>
         {
@@ -261,7 +291,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "İstisna Kodu Eksik",
                 $"İstisna veya kapsam dışı hareketlerde istisna kodu eksik {istisnaliKodsuz} kayıt var.",
                 etkilenenKayitSayisi: istisnaliKodsuz,
-                route: HareketRaporuRoute);
+                route: HareketRaporuRoute,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "ISTISNA_KODU_EKSIK",
@@ -270,7 +301,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>5. Tevkifatlı hareket var mı?</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolTevkifatliHareketVar(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolTevkifatliHareketVar(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var tevkifatliSayisi = allData.Count(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli);
 
@@ -280,7 +313,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "Tevkifatlı Hareket Var",
                 $"Tevkifatlı KDV işlemleri bu sistemde henüz desteklenmemektedir. ({tevkifatliSayisi} kayıt)",
                 etkilenenKayitSayisi: tevkifatliSayisi,
-                route: HareketRaporuRoute);
+                route: HareketRaporuRoute,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "TEVKIFATLI_HAREKET_VAR",
@@ -288,8 +322,10 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
             "Tevkifatlı KDV hareketi bulunamadı.");
     }
 
-    /// <summary>6. 191/391 hesap uyumu kontrolü</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvHesapUyumu(List<StokFisVerisi> allData)
+    /// <summary>6. 191/391 hesap uyumu kontrolü (TamKod tabanlı)</summary>
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolKdvHesapUyumu(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var kdvliFisler = allData
             .Where(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && x.FisId != null && x.Satirlar != null)
@@ -306,8 +342,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
 
             var gerekliHesapVarMi = satirlar.Any(s =>
             {
-                var kod = s.MuhasebeHesapPlaniKod;
-                return kod != null && (kod == gerekliHesap || kod.StartsWith(gerekliHesap + "."));
+                var tamKod = s.MuhasebeHesapPlaniTamKod;
+                return tamKod != null && (tamKod == gerekliHesap || tamKod.StartsWith(gerekliHesap + "."));
             });
 
             if (!gerekliHesapVarMi)
@@ -319,7 +355,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "KDV_HESAP_UYUMU",
                 "KDV Hesap Uyumu",
                 $"KDV'li hareketlerden {eksikSayisi} tanesine ait muhasebe fişlerinde 191/391 KDV hesabı bulunamadı.",
-                etkilenenKayitSayisi: eksikSayisi);
+                etkilenenKayitSayisi: eksikSayisi,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "KDV_HESAP_UYUMU",
@@ -328,7 +365,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>7. Fiş dengesi kontrolü</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolFisDengesi(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolFisDengesi(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         // Benzersiz fiş ID'lerini al (fisi olan kayıtlar)
         var fisIdList = allData
@@ -356,7 +395,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "FIS_DENGE_KONTROLU",
                 "Fiş Dengesi Kontrolü",
                 $"Stok hareket kaynaklı {dengesizSayisi} muhasebe fişi dengeli değil.",
-                etkilenenKayitSayisi: dengesizSayisi);
+                etkilenenKayitSayisi: dengesizSayisi,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "FIS_DENGE_KONTROLU",
@@ -365,7 +405,9 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
     }
 
     /// <summary>8. Taslak fiş kontrolü</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolTaslakFisVar(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolTaslakFisVar(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var taslakFisliKayitlar = allData.Count(x =>
             x.FisId != null && x.FisDurum == MuhasebeFisDurumlari.Taslak);
@@ -375,7 +417,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
                 "TASLAK_FIS_VAR",
                 "Taslak Fiş Var",
                 $"Seçilen dönemde {taslakFisliKayitlar} hareket için taslak durumda muhasebe fişi var. Beyanname öncesi onaylanması önerilir.",
-                etkilenenKayitSayisi: taslakFisliKayitlar);
+                etkilenenKayitSayisi: taslakFisliKayitlar,
+                routeQueryParams: routeQueryParams);
 
         return Basarili(
             "TASLAK_FIS_VAR",
@@ -389,6 +432,7 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
         decimal hesaplananKdv,
         decimal indirilecekKdv,
         decimal netKdv,
+        object? routeQueryParams,
         CancellationToken cancellationToken)
     {
         try
@@ -428,7 +472,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
             return Bloklayici(
                 "KDV_OZET_TUTARLILIK",
                 "KDV Özet Raporu Tutarlılığı",
-                $"Checklist KDV değerleri KDV Özet Raporu ile uyumsuz. {string.Join("; ", uyumsuzluklar)}");
+                $"Checklist KDV değerleri KDV Özet Raporu ile uyumsuz. {string.Join("; ", uyumsuzluklar)}",
+                routeQueryParams: routeQueryParams);
         }
         catch
         {
@@ -436,12 +481,15 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
             return Uyari(
                 "KDV_OZET_TUTARLILIK",
                 "KDV Özet Raporu Tutarlılığı",
-                "KDV Özet Raporu çalıştırılamadığı için tutarlılık kontrolü yapılamadı.");
+                "KDV Özet Raporu çalıştırılamadığı için tutarlılık kontrolü yapılamadı.",
+                routeQueryParams: routeQueryParams);
         }
     }
 
     /// <summary>10. Tam/Kısmi istisna ayrımı kontrolü</summary>
-    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolIstisnaAyrimi(List<StokFisVerisi> allData)
+    private static KdvBeyannameHazirlikKontrolMaddesiDto KontrolIstisnaAyrimi(
+        List<StokFisVerisi> allData,
+        object? routeQueryParams = null)
     {
         var tamIstisna = allData.Count(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.TamIstisna);
         var kismiIstisna = allData.Count(x => x.KdvUygulamaTipi == (int)KdvUygulamaTipi.KismiIstisna);
@@ -476,7 +524,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
 
     private static KdvBeyannameHazirlikKontrolMaddesiDto Uyari(
         string kod, string baslik, string aciklama,
-        int? etkilenenKayitSayisi = null, string? route = null)
+        int? etkilenenKayitSayisi = null, string? route = null,
+        object? routeQueryParams = null)
     {
         return new KdvBeyannameHazirlikKontrolMaddesiDto
         {
@@ -487,13 +536,15 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
             Severity = "warn",
             BloklayiciMi = false,
             EtkilenenKayitSayisi = etkilenenKayitSayisi,
-            Route = route
+            Route = route,
+            RouteQueryParams = routeQueryParams
         };
     }
 
     private static KdvBeyannameHazirlikKontrolMaddesiDto Bloklayici(
         string kod, string baslik, string aciklama,
-        int? etkilenenKayitSayisi = null, string? route = null)
+        int? etkilenenKayitSayisi = null, string? route = null,
+        object? routeQueryParams = null)
     {
         return new KdvBeyannameHazirlikKontrolMaddesiDto
         {
@@ -504,7 +555,8 @@ public class KdvBeyannameHazirlikKontrolService : IKdvBeyannameHazirlikKontrolSe
             Severity = "error",
             BloklayiciMi = true,
             EtkilenenKayitSayisi = etkilenenKayitSayisi,
-            Route = route
+            Route = route,
+            RouteQueryParams = routeQueryParams
         };
     }
 

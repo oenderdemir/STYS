@@ -117,6 +117,7 @@ builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolServi
 builder.Services.AddScoped<IKdvUygulamaService, KdvUygulamaService>();
 builder.Services.AddScoped<IKdvHareketRaporService, KdvHareketRaporService>();
 builder.Services.AddScoped<IKdvOzetRaporService, KdvOzetRaporService>();
+builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazirlikKontrolService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

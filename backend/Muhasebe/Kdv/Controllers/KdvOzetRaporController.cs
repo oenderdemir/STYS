@@ -25,4 +25,18 @@ public class KdvOzetRaporController : UIController
         var result = await _service.GetOzetRaporAsync(filter, cancellationToken);
         return Ok(result);
     }
+
+    [HttpPost("export-excel")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    public async Task<IActionResult> ExportExcel(
+        [FromBody] KdvOzetRaporFilterDto filter,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _service.ExportExcelAsync(filter, cancellationToken);
+        var fileName = $"kdv-ozet-raporu-{DateTime.Now:yyyyMMdd-HHmm}.xlsx";
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
 }

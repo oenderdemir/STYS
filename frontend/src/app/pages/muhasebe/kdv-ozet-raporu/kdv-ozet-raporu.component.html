@@ -151,6 +151,13 @@
       icon="pi pi-search"
       [loading]="loading"
       (onClick)="loadRapor()" />
+    <p-button
+      label="Excel"
+      icon="pi pi-file-excel"
+      severity="success"
+      [loading]="exporting"
+      [disabled]="loading"
+      (onClick)="exportExcel()" />
   </div>
 </div>
 

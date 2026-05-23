@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
@@ -231,6 +232,208 @@ public class KdvOzetRaporService : IKdvOzetRaporService
             IstisnaKoduOzetleri = istisnaKoduOzetleri,
             Uyarilar = uyarilar
         };
+    }
+
+    /// <summary>
+    /// GetOzetRaporAsync sonucunu kullanarak Excel çıktısı üretir.
+    /// Tüm validasyon (MaliYil/Donem, 100K limit, access scope) GetOzetRaporAsync içinde çalışır.
+    /// </summary>
+    public async Task<byte[]> ExportExcelAsync(
+        KdvOzetRaporFilterDto filter,
+        CancellationToken cancellationToken = default)
+    {
+        // Aynı GetOzetRaporAsync sonucunu kullan; validasyon + hesaplama tek yerden
+        var rapor = await GetOzetRaporAsync(filter, cancellationToken);
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("KDV Özet Raporu");
+
+        var now = DateTime.Now;
+        int row = 1;
+
+        // ── Başlık ──
+        ws.Cell(row, 1).Value = "KDV Özet Raporu / Beyanname Hazırlık";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 1).Style.Font.FontSize = 14;
+
+        // ── Üst bilgiler ──
+        row = 3;
+        ws.Cell(row, 1).Value = "Oluşturma Tarihi:";
+        ws.Cell(row, 2).Value = now.ToString("dd.MM.yyyy HH:mm");
+
+        row = 4;
+        ws.Cell(row, 1).Value = "Dönem:";
+        ws.Cell(row, 2).Value = rapor.Ozet.DonemLabel;
+
+        row = 5;
+        ws.Cell(row, 1).Value = "Başlangıç Tarihi:";
+        ws.Cell(row, 2).Value = rapor.BaslangicTarihi.ToString("dd.MM.yyyy");
+
+        row = 6;
+        ws.Cell(row, 1).Value = "Bitiş Tarihi:";
+        ws.Cell(row, 2).Value = rapor.BitisTarihi.ToString("dd.MM.yyyy");
+
+        row = 7;
+        if (filter.TesisId.HasValue)
+        {
+            ws.Cell(row, 1).Value = "Tesis ID:";
+            ws.Cell(row, 2).Value = filter.TesisId.Value;
+            row++;
+        }
+        if (filter.DepoId.HasValue)
+        {
+            ws.Cell(row, 1).Value = "Depo ID:";
+            ws.Cell(row, 2).Value = filter.DepoId.Value;
+            row++;
+        }
+
+        row += 1;
+
+        // ── Ana özet alanları ──
+        int ozetBas = row;
+        ws.Cell(row, 1).Value = "ÖZET";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 1).Style.Font.FontSize = 12;
+        row++;
+
+        var oz = rapor.Ozet;
+        var ozetSatirlar = new (string Label, object Value)[]
+        {
+            ("Satış Hareket Sayısı", oz.SatisHareketSayisi),
+            ("KDV'li Satış Matrahı", oz.SatisMatrahi),
+            ("Hesaplanan KDV", oz.HesaplananKdvTutari),
+            ("Alış Hareket Sayısı", oz.AlisHareketSayisi),
+            ("KDV'li Alış Matrahı", oz.AlisMatrahi),
+            ("İndirilecek KDV", oz.IndirilecekKdvTutari),
+            ("Net KDV", oz.NetKdv),
+            ("İstisna Matrahı", oz.IstisnaMatrahi),
+            ("Tam İstisna Matrahı", oz.TamIstisnaMatrahi),
+            ("Kısmi İstisna Matrahı", oz.KismiIstisnaMatrahi),
+            ("KDV Kapsam Dışı Matrah", oz.KapsamDisiMatrah),
+            ("Toplam Kayıt", oz.ToplamKayitSayisi),
+            ("Fişi Olan", oz.FisiOlanSayisi),
+            ("Fişi Olmayan", oz.FisiOlmayanSayisi)
+        };
+
+        foreach (var (label, value) in ozetSatirlar)
+        {
+            ws.Cell(row, 1).Value = label;
+            ws.Cell(row, 1).Style.Font.Bold = true;
+            ws.Cell(row, 2).Value = value is decimal d ? (double)d : Convert.ToDouble(value);
+            if (value is decimal)
+                ws.Cell(row, 2).Style.NumberFormat.Format = "#,##0.00";
+            row++;
+        }
+
+        row += 1;
+
+        // ── Tablo 1: KDV Uygulama Tipi Özeti ──
+        ws.Cell(row, 1).Value = "KDV Uygulama Tipi Özeti";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 1).Style.Font.FontSize = 12;
+        row++;
+
+        var utHeaders = new[] { "KDV Uygulama Tipi", "Hareket Sayısı", "Matrah", "KDV Tutarı" };
+        for (int i = 0; i < utHeaders.Length; i++)
+        {
+            var cell = ws.Cell(row, i + 1);
+            cell.Value = utHeaders[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        row++;
+
+        foreach (var u in rapor.UygulamaTipiOzetleri)
+        {
+            ws.Cell(row, 1).Value = u.KdvUygulamaTipiAd;
+            ws.Cell(row, 2).Value = u.HareketSayisi;
+            ws.Cell(row, 3).Value = u.Matrah;
+            ws.Cell(row, 3).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 4).Value = u.KdvTutari;
+            ws.Cell(row, 4).Style.NumberFormat.Format = "#,##0.00";
+            row++;
+        }
+
+        row += 1;
+
+        // ── Tablo 2: KDV İstisna Kodu Özeti ──
+        ws.Cell(row, 1).Value = "KDV İstisna Kodu Özeti";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 1).Style.Font.FontSize = 12;
+        row++;
+
+        var ikHeaders = new[] { "İstisna Kodu", "İstisna Açıklaması", "Hareket Sayısı", "Matrah" };
+        for (int i = 0; i < ikHeaders.Length; i++)
+        {
+            var cell = ws.Cell(row, i + 1);
+            cell.Value = ikHeaders[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        row++;
+
+        if (rapor.IstisnaKoduOzetleri.Count == 0)
+        {
+            ws.Cell(row, 1).Value = "İstisna kodu verisi bulunmamaktadır.";
+            row++;
+        }
+        else
+        {
+            foreach (var ik in rapor.IstisnaKoduOzetleri)
+            {
+                ws.Cell(row, 1).Value = ik.KdvIstisnaKodu ?? "";
+                ws.Cell(row, 2).Value = ik.KdvIstisnaAciklamasi ?? "";
+                ws.Cell(row, 3).Value = ik.HareketSayisi;
+                ws.Cell(row, 4).Value = ik.Matrah;
+                ws.Cell(row, 4).Style.NumberFormat.Format = "#,##0.00";
+                row++;
+            }
+        }
+
+        row += 1;
+
+        // ── Tablo 3: Uyarılar ──
+        ws.Cell(row, 1).Value = "Uyarılar";
+        ws.Cell(row, 1).Style.Font.Bold = true;
+        ws.Cell(row, 1).Style.Font.FontSize = 12;
+        row++;
+
+        var uyHeaders = new[] { "Uyarı Kodu", "Severity", "Mesaj", "Etkilenen Kayıt Sayısı", "Route" };
+        for (int i = 0; i < uyHeaders.Length; i++)
+        {
+            var cell = ws.Cell(row, i + 1);
+            cell.Value = uyHeaders[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+        row++;
+
+        if (rapor.Uyarilar.Count == 0)
+        {
+            ws.Cell(row, 1).Value = "Uyarı bulunmamaktadır.";
+            row++;
+        }
+        else
+        {
+            foreach (var uy in rapor.Uyarilar)
+            {
+                ws.Cell(row, 1).Value = uy.UyariKodu;
+                ws.Cell(row, 2).Value = uy.Severity;
+                ws.Cell(row, 3).Value = uy.UyariMesaji;
+                ws.Cell(row, 4).Value = uy.EtkilenenKayitSayisi;
+                ws.Cell(row, 5).Value = uy.Route ?? "";
+                row++;
+            }
+        }
+
+        // ── Biçimlendirme ──
+        ws.Columns().AdjustToContents();
+        // Minimum genişlik garantisi
+        ws.Column(1).Width = ws.Column(1).Width < 30 ? 30 : ws.Column(1).Width;
+
+        using var ms = new MemoryStream();
+        workbook.SaveAs(ms);
+        return ms.ToArray();
     }
 
     /// <summary>

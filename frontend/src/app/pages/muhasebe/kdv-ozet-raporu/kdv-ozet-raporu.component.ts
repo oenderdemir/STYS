@@ -82,6 +82,7 @@ export class KdvOzetRaporuComponent implements OnInit {
     filter: KdvOzetRaporFilterModel = createDefaultKdvOzetRaporFilter();
     rapor: KdvOzetRaporModel | null = null;
     loading = false;
+    exporting = false;
     loadingMessage = 'KDV özet raporu yükleniyor...';
 
     maliYilSecenekleri: Secenek<number>[] = getMaliYilSecenekleri();
@@ -187,6 +188,44 @@ export class KdvOzetRaporuComponent implements OnInit {
                 this.rapor = null;
             }
         });
+    }
+
+    exportExcel(): void {
+        this.exporting = true;
+        this.cdr.markForCheck();
+
+        this.raporService.exportExcel(this.filter).pipe(
+            finalize(() => {
+                this.exporting = false;
+                this.cdr.markForCheck();
+            })
+        ).subscribe({
+            next: (blob) => {
+                this.downloadBlob(blob, this.getExportFileName());
+                this.messageService.add({
+                    severity: 'success',
+                    summary: 'Başarılı',
+                    detail: 'KDV özet raporu Excel olarak indirildi.'
+                });
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    private getExportFileName(): string {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        return `kdv-ozet-raporu-${timestamp}.xlsx`;
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
     }
 
     onFilterChange(): void {

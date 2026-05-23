@@ -30,6 +30,7 @@ using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.Kdv.Entities;
+using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -156,6 +157,8 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari => Set<MuhasebeYevmiyeNoSayac>();
     public DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri => Set<MuhasebeHesapBakiye>();
     public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
+    public DbSet<SatisBelgesi> SatisBelgeleri => Set<SatisBelgesi>();
+    public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2195,6 +2198,130 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.UserId, x.CreatedAt })
                 .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<SatisBelgesi>(entity =>
+        {
+            entity.ToTable("SatisBelgeleri", muhasebeSchema);
+
+            entity.Property(x => x.BelgeNo)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.KaynakTipi)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.KaynakId)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.MusteriUnvan)
+                .HasMaxLength(250);
+
+            entity.Property(x => x.MusteriAdSoyad)
+                .HasMaxLength(250);
+
+            entity.Property(x => x.MusteriVergiNo)
+                .HasMaxLength(20);
+
+            entity.Property(x => x.MusteriTcKimlikNo)
+                .HasMaxLength(20);
+
+            entity.Property(x => x.MusteriVergiDairesi)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.MusteriAdres)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.MusteriEposta)
+                .HasMaxLength(150);
+
+            entity.Property(x => x.MusteriTelefon)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Aciklama)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.RedNedeni)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ResmiFaturaNo)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.EBelgeUuid)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ToplamMatrah)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.ToplamKdv)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.GenelToplam)
+                .HasPrecision(18, 2);
+
+            entity.HasIndex(x => x.BelgeNo)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.KaynakModul, x.KaynakTipi, x.KaynakId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KaynakId] IS NOT NULL");
+
+            entity.HasIndex(x => new { x.TesisId, x.BelgeTarihi });
+
+            entity.HasIndex(x => x.Durum);
+
+            entity.HasIndex(x => x.KaynakModul);
+        });
+
+        modelBuilder.Entity<SatisBelgesiSatiri>(entity =>
+        {
+            entity.ToTable("SatisBelgesiSatirlari", muhasebeSchema);
+
+            entity.Property(x => x.Aciklama)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.KdvIstisnaKodu)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.KdvIstisnaAciklamasi)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.KaynakSatirId)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Miktar)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.BirimFiyat)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.Matrah)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.KdvOrani)
+                .HasPrecision(18, 4);
+
+            entity.Property(x => x.KdvTutari)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.SatirToplami)
+                .HasPrecision(18, 2);
+
+            entity.HasOne(x => x.SatisBelgesi)
+                .WithMany(x => x.Satirlar)
+                .HasForeignKey(x => x.SatisBelgesiId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.KdvIstisnaTanim)
+                .WithMany()
+                .HasForeignKey(x => x.KdvIstisnaTanimId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.SatisBelgesiId);
+
+            entity.HasIndex(x => x.KdvIstisnaTanimId);
         });
 
         modelBuilder.Entity<BildirimTercih>(entity =>

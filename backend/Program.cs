@@ -18,6 +18,7 @@ using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.Kdv.Services;
+using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
 using STYS.Muhasebe.DonemKapanis.Services;
@@ -118,6 +119,7 @@ builder.Services.AddScoped<IKdvUygulamaService, KdvUygulamaService>();
 builder.Services.AddScoped<IKdvHareketRaporService, KdvHareketRaporService>();
 builder.Services.AddScoped<IKdvOzetRaporService, KdvOzetRaporService>();
 builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazirlikKontrolService>();
+builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

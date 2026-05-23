@@ -1,0 +1,529 @@
+<p-toast></p-toast>
+<p-confirm-dialog></p-confirm-dialog>
+
+<div class="card">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <h3 class="m-0">Satış Belgeleri / Fatura Taslakları</h3>
+        </ng-template>
+        <ng-template pTemplate="right">
+            <p-button
+                label="Yeni Belge"
+                icon="pi pi-plus"
+                severity="success"
+                (click)="openCreateDialog()">
+            </p-button>
+        </ng-template>
+    </p-toolbar>
+
+    <!-- Filtre -->
+    <div class="grid mb-3">
+        <div class="col-12 md:col-3">
+            <label class="block text-sm mb-1">Durum</label>
+            <p-select
+                [options]="durumSecenekleri"
+                [ngModel]="filter().durum"
+                (ngModelChange)="onFilterFieldChange('durum', $event)"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Tümü"
+                [showClear]="true"
+                styleClass="w-full">
+            </p-select>
+        </div>
+        <div class="col-12 md:col-3">
+            <label class="block text-sm mb-1">Belge No</label>
+            <input
+                pInputText
+                class="w-full"
+                [(ngModel)]="filter().belgeNo"
+                (keyup.enter)="onFilterChange()"
+                placeholder="Belge no ara..." />
+        </div>
+        <div class="col-12 md:col-3">
+            <label class="block text-sm mb-1">Müşteri</label>
+            <input
+                pInputText
+                class="w-full"
+                [(ngModel)]="filter().musteri"
+                (keyup.enter)="onFilterChange()"
+                placeholder="Müşteri ara..." />
+        </div>
+        <div class="col-12 md:col-3 flex align-items-end gap-2">
+            <p-button
+                label="Ara"
+                icon="pi pi-search"
+                (click)="onFilterChange()">
+            </p-button>
+            <p-button
+                label="Temizle"
+                icon="pi pi-times"
+                severity="secondary"
+                (click)="clearFilter()">
+            </p-button>
+        </div>
+    </div>
+
+    <!-- Tablo -->
+    <p-table
+        [value]="belgeler()"
+        [loading]="loading()"
+        [paginator]="true"
+        [rows]="15"
+        [rowsPerPageOptions]="[10, 15, 25, 50]"
+        [showCurrentPageReport]="true"
+        currentPageReportTemplate="{first}-{last} / {totalRecords} kayıt"
+        styleClass="p-datatable-sm"
+        [tableStyle]="{ 'min-width': '60rem' }">
+
+        <ng-template pTemplate="header">
+            <tr>
+                <th style="width: 5rem">#</th>
+                <th>Belge No</th>
+                <th>Tarih</th>
+                <th>Müşteri</th>
+                <th>Tutar</th>
+                <th>Durum</th>
+                <th style="width: 12rem">İşlemler</th>
+            </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-belge let-i="rowIndex">
+            <tr>
+                <td>{{ i + 1 }}</td>
+                <td>
+                    <a
+                        href="javascript:void(0)"
+                        (click)="openDetayDialog(belge)"
+                        class="text-primary font-medium">
+                        {{ belge.belgeNo }}
+                    </a>
+                </td>
+                <td>{{ belge.belgeTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ getMusteriDisplay(belge) }}</td>
+                <td class="text-right">{{ belge.genelToplam | number: '1.2-2' }} ₺</td>
+                <td>
+                    <p-tag
+                        [value]="getDurumLabel(belge.durum)"
+                        [severity]="getDurumSeverity(belge.durum)">
+                    </p-tag>
+                </td>
+                <td>
+                    <div class="flex gap-1">
+                        <p-button
+                            *ngIf="canGonder(belge)"
+                            icon="pi pi-send"
+                            severity="info"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Muhasebe Onayına Gönder"
+                            (click)="muhasebeOnayinaGonder(belge)">
+                        </p-button>
+                        <p-button
+                            *ngIf="canOnayla(belge)"
+                            icon="pi pi-check"
+                            severity="success"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Onayla"
+                            (click)="muhasebeOnayla(belge)">
+                        </p-button>
+                        <p-button
+                            *ngIf="canReddet(belge)"
+                            icon="pi pi-times-circle"
+                            severity="danger"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Reddet"
+                            (click)="openRedDialog(belge)">
+                        </p-button>
+                        <p-button
+                            *ngIf="canEdit(belge)"
+                            icon="pi pi-pencil"
+                            severity="warn"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Düzenle"
+                            (click)="openEditDialog(belge)">
+                        </p-button>
+                        <p-button
+                            *ngIf="canDelete(belge)"
+                            icon="pi pi-trash"
+                            severity="danger"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Sil"
+                            (click)="confirmDelete(belge)">
+                        </p-button>
+                        <p-button
+                            *ngIf="canIptal(belge)"
+                            icon="pi pi-ban"
+                            severity="secondary"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="İptal Et"
+                            (click)="iptalEt(belge)">
+                        </p-button>
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="7" class="text-center text-color-secondary py-3">
+                    Henüz bir satış belgesi bulunmuyor.
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<!-- ──────────────── Oluşturma / Düzenleme Dialog ──────────────── -->
+<p-dialog
+    [(visible)]="dialogVisible"
+    [header]="isEditing() ? 'Satış Belgesini Düzenle' : 'Yeni Satış Belgesi'"
+    [modal]="true"
+    [style]="{width: '850px'}"
+    [maximizable]="true"
+    [closable]="true">
+    <ng-template pTemplate="content">
+        <div class="grid">
+            <!-- Sol panel: Belge bilgileri -->
+            <div class="col-12 md:col-4">
+                <h5 class="mt-0 mb-3">Belge Bilgileri</h5>
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Belge Tipi</label>
+                    <p-select
+                        [options]="belgeTipiSecenekleri"
+                        [ngModel]="formData().belgeTipi"
+                        (ngModelChange)="updateFormField('belgeTipi', $event)"
+                        optionLabel="label"
+                        optionValue="value"
+                        styleClass="w-full">
+                    </p-select>
+                </div>
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Belge No <span class="text-sm text-color-secondary">(Boş bırakılırsa otomatik)</span></label>
+                    <input
+                        pInputText
+                        class="w-full"
+                        [ngModel]="formData().belgeNo"
+                        (ngModelChange)="updateFormField('belgeNo', $event)"
+                        placeholder="ST-20260525-000001" />
+                </div>
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Belge Tarihi *</label>
+                    <p-datepicker
+                        [ngModel]="formData().belgeTarihi"
+                        (ngModelChange)="updateFormField('belgeTarihi', $event)"
+                        [showIcon]="true"
+                        dateFormat="yy-mm-dd"
+                        styleClass="w-full">
+                    </p-datepicker>
+                </div>
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Vade Tarihi</label>
+                    <p-datepicker
+                        [ngModel]="formData().vadeTarihi"
+                        (ngModelChange)="updateFormField('vadeTarihi', $event)"
+                        [showIcon]="true"
+                        dateFormat="yy-mm-dd"
+                        styleClass="w-full">
+                    </p-datepicker>
+                </div>
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Kaynak Modül</label>
+                    <p-select
+                        [options]="kaynakModulSecenekleri"
+                        [ngModel]="formData().kaynakModul"
+                        (ngModelChange)="updateFormField('kaynakModul', $event)"
+                        optionLabel="label"
+                        optionValue="value"
+                        styleClass="w-full">
+                    </p-select>
+                </div>
+
+                <div class="field mb-3">
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleSwitch
+                            [ngModel]="formData().kurumsalMi"
+                            (ngModelChange)="updateFormField('kurumsalMi', $event)"
+                            styleClass="mr-1">
+                        </p-toggleSwitch>
+                        <label class="text-sm">Kurumsal Müşteri</label>
+                    </div>
+                </div>
+
+                @if (formData().kurumsalMi) {
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Ünvan *</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriUnvan"
+                        (ngModelChange)="updateFormField('musteriUnvan', $event)" />
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Vergi No *</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriVergiNo"
+                        (ngModelChange)="updateFormField('musteriVergiNo', $event)" />
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Vergi Dairesi</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriVergiDairesi"
+                        (ngModelChange)="updateFormField('musteriVergiDairesi', $event)" />
+                </div>
+                } @else {
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Ad Soyad *</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriAdSoyad"
+                        (ngModelChange)="updateFormField('musteriAdSoyad', $event)" />
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">TC Kimlik No</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriTcKimlikNo"
+                        (ngModelChange)="updateFormField('musteriTcKimlikNo', $event)" />
+                </div>
+                }
+
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">E-posta</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriEposta"
+                        (ngModelChange)="updateFormField('musteriEposta', $event)" />
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Telefon</label>
+                    <input pInputText class="w-full"
+                        [ngModel]="formData().musteriTelefon"
+                        (ngModelChange)="updateFormField('musteriTelefon', $event)" />
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Adres</label>
+                    <p-textarea class="w-full" rows="2"
+                        [ngModel]="formData().musteriAdres"
+                        (ngModelChange)="updateFormField('musteriAdres', $event)">
+                    </p-textarea>
+                </div>
+                <div class="field mb-3">
+                    <label class="block text-sm mb-1">Açıklama</label>
+                    <p-textarea class="w-full" rows="2"
+                        [ngModel]="formData().aciklama"
+                        (ngModelChange)="updateFormField('aciklama', $event)">
+                    </p-textarea>
+                </div>
+            </div>
+
+            <!-- Sağ panel: Satırlar -->
+            <div class="col-12 md:col-8">
+                <div class="flex justify-content-between align-items-center mb-3">
+                    <h5 class="m-0">Satırlar</h5>
+                    <p-button
+                        label="Satır Ekle"
+                        icon="pi pi-plus"
+                        size="small"
+                        severity="info"
+                        (click)="addSatir()">
+                    </p-button>
+                </div>
+
+                @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
+                <div class="p-3 mb-3 border-round surface-border shadow-1">
+                    <div class="flex justify-content-between align-items-center mb-2">
+                        <span class="font-medium">Satır {{ satir.siraNo }}</span>
+                        <p-button
+                            icon="pi pi-trash"
+                            severity="danger"
+                            size="small"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Satırı Sil"
+                            (click)="removeSatir(si)">
+                        </p-button>
+                    </div>
+                    <div class="grid">
+                        <div class="col-12 md:col-4 field mb-2">
+                            <label class="block text-xs mb-1">Satır Tipi</label>
+                            <p-select
+                                [options]="satirTipiSecenekleri"
+                                [(ngModel)]="satir.satirTipi"
+                                optionLabel="label"
+                                optionValue="value"
+                                styleClass="w-full">
+                            </p-select>
+                        </div>
+                        <div class="col-12 md:col-8 field mb-2">
+                            <label class="block text-xs mb-1">Açıklama</label>
+                            <input pInputText class="w-full" [(ngModel)]="satir.aciklama" />
+                        </div>
+                        <div class="col-6 md:col-3 field mb-2">
+                            <label class="block text-xs mb-1">Miktar</label>
+                            <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
+                            </p-inputNumber>
+                        </div>
+                        <div class="col-6 md:col-3 field mb-2">
+                            <label class="block text-xs mb-1">Birim Fiyat</label>
+                            <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true">
+                            </p-inputNumber>
+                        </div>
+                        <div class="col-6 md:col-3 field mb-2">
+                            <label class="block text-xs mb-1">KDV Tipi</label>
+                            <p-select
+                                [options]="kdvUygulamaTipiSecenekleri"
+                                [(ngModel)]="satir.kdvUygulamaTipi"
+                                optionLabel="label"
+                                optionValue="value"
+                                styleClass="w-full">
+                            </p-select>
+                        </div>
+                        <div class="col-6 md:col-3 field mb-2">
+                            <label class="block text-xs mb-1">KDV Oranı (%)</label>
+                            <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
+                                [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
+                            </p-inputNumber>
+                        </div>
+                    </div>
+                    <div class="flex justify-content-end gap-3 text-sm text-color-secondary">
+                        <span>Matrah: {{ satir.miktar * satir.birimFiyat | number: '1.2-2' }} ₺</span>
+                        <span>KDV: {{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</span>
+                        <span class="font-medium">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                    </div>
+                </div>
+                }
+
+                @if (formData().satirlar.length > 0) {
+                <div class="flex justify-content-end p-3 bg-blue-50 border-round">
+                    <span class="text-lg font-bold text-blue-700">
+                        Genel Toplam: {{ previewGenelToplam() | number: '1.2-2' }} ₺
+                    </span>
+                </div>
+                }
+            </div>
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button label="İptal" severity="secondary" [outlined]="true" (click)="dialogVisible.set(false)"></p-button>
+        <p-button
+            label="Kaydet"
+            icon="pi pi-save"
+            [loading]="dialogLoading()"
+            (click)="saveBelge()">
+        </p-button>
+    </ng-template>
+</p-dialog>
+
+<!-- ──────────────── Detay Dialog ──────────────── -->
+<p-dialog
+    [(visible)]="detayDialogVisible"
+    header="Belge Detayı"
+    [modal]="true"
+    [style]="{width: '700px'}"
+    [closable]="true">
+
+    @if (detayBelge(); as belge) {
+    <div class="grid">
+        <div class="col-6">
+            <p><strong>Belge No:</strong> {{ belge.belgeNo }}</p>
+            <p><strong>Belge Tipi:</strong> {{ getBelgeTipiLabel(belge.belgeTipi) }}</p>
+            <p><strong>Tarih:</strong> {{ belge.belgeTarihi | date: 'dd.MM.yyyy' }}</p>
+            <p><strong>Vade:</strong> {{ belge.vadeTarihi ? (belge.vadeTarihi | date: 'dd.MM.yyyy') : '-' }}</p>
+            <p><strong>Durum:</strong>
+                <p-tag
+                    [value]="getDurumLabel(belge.durum)"
+                    [severity]="getDurumSeverity(belge.durum)">
+                </p-tag>
+            </p>
+            <p><strong>Kaynak:</strong> {{ getKaynakModulLabel(belge.kaynakModul) }} / {{ belge.kaynakTipi ?? '-' }} / {{ belge.kaynakId ?? '-' }}</p>
+        </div>
+        <div class="col-6">
+            <p><strong>Müşteri:</strong> {{ getMusteriDisplay(belge) }}</p>
+            <p><strong>Kurumsal:</strong> {{ belge.kurumsalMi ? 'Evet' : 'Hayır' }}</p>
+            @if (belge.kurumsalMi) {
+            <p><strong>Vergi No:</strong> {{ belge.musteriVergiNo ?? '-' }}</p>
+            <p><strong>Vergi Dairesi:</strong> {{ belge.musteriVergiDairesi ?? '-' }}</p>
+            } @else {
+            <p><strong>TC Kimlik:</strong> {{ belge.musteriTcKimlikNo ?? '-' }}</p>
+            }
+            <p><strong>E-posta:</strong> {{ belge.musteriEposta ?? '-' }}</p>
+            <p><strong>Telefon:</strong> {{ belge.musteriTelefon ?? '-' }}</p>
+            @if (belge.redNedeni) {
+            <p><strong>Ret Nedeni:</strong> <span class="text-red-600">{{ belge.redNedeni }}</span></p>
+            }
+        </div>
+    </div>
+
+    <h5 class="mt-3 mb-2">Satırlar</h5>
+    <p-table [value]="belge.satirlar" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>#</th>
+                <th>Tip</th>
+                <th>Açıklama</th>
+                <th class="text-right">Miktar</th>
+                <th class="text-right">Birim Fiyat</th>
+                <th class="text-right">Matrah</th>
+                <th class="text-right">KDV</th>
+                <th class="text-right">Toplam</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-satir>
+            <tr>
+                <td>{{ satir.siraNo }}</td>
+                <td>{{ getSatirTipiLabel(satir.satirTipi) }}</td>
+                <td>{{ satir.aciklama }}</td>
+                <td class="text-right">{{ satir.miktar | number: '1.2-2' }}</td>
+                <td class="text-right">{{ satir.birimFiyat | number: '1.2-2' }}</td>
+                <td class="text-right">{{ satir.matrah | number: '1.2-2' }}</td>
+                <td class="text-right">{{ satir.kdvTutari | number: '1.2-2' }} (%{{ satir.kdvOrani }})</td>
+                <td class="text-right font-medium">{{ satir.satirToplami | number: '1.2-2' }}</td>
+            </tr>
+        </ng-template>
+    </p-table>
+
+    <div class="flex justify-content-end mt-3 p-3 bg-blue-50 border-round">
+        <div class="text-right">
+            <p class="mb-1">Toplam Matrah: <strong>{{ belge.toplamMatrah | number: '1.2-2' }} ₺</strong></p>
+            <p class="mb-1">Toplam KDV: <strong>{{ belge.toplamKdv | number: '1.2-2' }} ₺</strong></p>
+            <p class="text-lg font-bold text-blue-700">Genel Toplam: {{ belge.genelToplam | number: '1.2-2' }} ₺</p>
+        </div>
+    </div>
+    }
+</p-dialog>
+
+<!-- ──────────────── Reddetme Dialog ──────────────── -->
+<p-dialog
+    [(visible)]="redDialogVisible"
+    header="Belgeyi Reddet"
+    [modal]="true"
+    [style]="{width: '450px'}"
+    [closable]="true">
+    <ng-template pTemplate="content">
+        <div class="field">
+            <label class="block text-sm mb-2">Ret Nedeni *</label>
+            <p-textarea
+                class="w-full"
+                rows="3"
+                [(ngModel)]="redNedeni"
+                placeholder="Reddetme nedenini açıklayınız...">
+            </p-textarea>
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button label="İptal" severity="secondary" [outlined]="true" (click)="redDialogVisible.set(false)"></p-button>
+        <p-button
+            label="Reddet"
+            icon="pi pi-times-circle"
+            severity="danger"
+            [loading]="redLoading()"
+            (click)="reddet()">
+        </p-button>
+    </ng-template>
+</p-dialog>

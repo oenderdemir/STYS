@@ -1,0 +1,18 @@
+:host {
+    display: block;
+
+    ::ng-deep {
+        .p-datatable .p-datatable-thead > tr > th {
+            white-space: nowrap;
+        }
+
+        .p-dialog .p-dialog-content {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    }
+
+    .text-right {
+        text-align: right;
+    }
+}

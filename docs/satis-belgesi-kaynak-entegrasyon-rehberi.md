@@ -500,3 +500,171 @@ Rezervasyon için access scope kontrolü [`RezervasyonService.GetScopedReservati
 | [`backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs) | Implementation (güncellenmiş — Faz 61A) |
 | [`backend/Rezervasyonlar/Controllers/RezervasyonController.cs`](../backend/Rezervasyonlar/Controllers/RezervasyonController.cs) | Controller endpoint |
 | [`backend/Program.cs`](../backend/Program.cs) | DI registration |
+
+---
+
+## 14. Faz 62 — Restoran Sipariş Entegrasyonu (IRestoranSatisBelgesiService)
+
+> **Kaynak entity**: `RestoranSiparis` → KaynakTipi = `"RestoranSiparis"`
+> **Satır tipi**: `SatisBelgesiSatirTipi.YiyecekIcecek` (2)
+> **Kaynak modül**: `SatisKaynakModulu.Restoran` (3)
+> **Access scope**: `RestoranSiparis → Restoran → TesisId` üzerinden `IUserAccessScopeService`
+
+### 14.1 Ön Koşullar
+
+- Sipariş durumu `RestoranSiparisDurumlari.Tamamlandi` olmalıdır.
+- İptal edilmiş siparişler için taslak oluşturulamaz.
+- İptal edilmiş kalemler (`RestoranSiparisKalemDurumlari.Iptal`) faturaya dahil edilmez.
+- Tüm aktif kalemler iptalse 400 hatası döner.
+
+### 14.2 RestoranSatisBelgesiTaslakRequest
+
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": false,
+  "musteriUnvan": null,
+  "musteriAdSoyad": "Ali Veli",
+  "musteriVergiNo": null,
+  "musteriTcKimlikNo": "12345678901",
+  "musteriVergiDairesi": null,
+  "musteriAdres": null,
+  "musteriEposta": "ali.veli@example.com",
+  "musteriTelefon": "05551234567",
+  "belgeTarihi": null,
+  "vadeTarihi": null,
+  "aciklama": null,
+  "kdvOrani": null,
+  "kdvIstisnaTanimId": null
+}
+```
+
+### 14.3 İş Akışı
+
+1. **Route/Body ID eşleşmesi**: `{siparisId}` route değeri ile `request.SiparisId` aynı olmalı.
+2. **Siparişi bul**: `.Include(x => x.Restoran).Include(x => x.Kalemler)` ile.
+3. **Access scope**: `Restoran.TesisId` üzerinden.
+4. **Durum validasyonu**: Yalnızca `Tamamlandi` siparişler, `Iptal` olanlar 400.
+5. **Aktif kalemleri filtrele**: `Kalem.Durum != Iptal`. Hiç yoksa 400.
+6. **Toplam tutar validasyonu**: `ToplamTutar <= 0` → 400.
+7. **Müşteri bilgileri**: Restoran siparişinde müşteri bilgisi olmadığından **request zorunludur**. Kurumsal için Ünvan + VergiNo, bireysel için AdSoyad zorunlu.
+8. **Satır üretimi**: Her aktif kalem → bir `SatisBelgesiTaslakSatirRequest`. Son kalemde kuruş yuvarlama farkı eklenir.
+9. **Belge tarihi/açıklama**: Request öncelikli, boşsa `SiparisTarihi` / `"Restoran siparişi: {SiparisNo}"`.
+10. **Taslak oluştur**: `ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync`.
+
+### 14.4 Endpoint
+
+```
+POST api/restoran-siparisleri/{siparisId}/satis-belgesi-taslagi-olustur
+Permission: RestoranSiparisYonetimi.Manage
+```
+
+### 14.5 Örnek İstekler
+
+**Bireysel fatura:**
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": false,
+  "musteriAdSoyad": "Ali Veli",
+  "musteriTcKimlikNo": "12345678901",
+  "musteriEposta": "ali.veli@example.com",
+  "musteriTelefon": "05551234567"
+}
+```
+
+**Kurumsal fatura:**
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": true,
+  "musteriUnvan": "ABC Ltd. Şti.",
+  "musteriVergiNo": "1234567890",
+  "musteriVergiDairesi": "Ankara",
+  "musteriAdres": "Çankaya/Ankara"
+}
+```
+
+**KDV oranı override (%20):**
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": false,
+  "musteriAdSoyad": "Ali Veli",
+  "kdvOrani": 20
+}
+```
+
+**KDV istisna:**
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": false,
+  "musteriAdSoyad": "Ali Veli",
+  "kdvIstisnaTanimId": 5
+}
+```
+
+**Tarih ve açıklama override:**
+```json
+{
+  "siparisId": 42,
+  "kurumsalMi": false,
+  "musteriAdSoyad": "Ali Veli",
+  "belgeTarihi": "2025-01-15",
+  "vadeTarihi": "2025-02-15",
+  "aciklama": "Yılbaşı gala yemeği siparişi"
+}
+```
+
+### 14.6 Satır Yapısı
+
+| Alan | Değer | Kaynak |
+|------|-------|--------|
+| `SatirTipi` | `YiyecekIcecek` (2) | Sabit |
+| `Aciklama` | `UrunAdiSnapshot` | `RestoranSiparisKalemi.UrunAdiSnapshot` |
+| `Miktar` | `Miktar` | `RestoranSiparisKalemi.Miktar` |
+| `BirimFiyat` | `BirimFiyat` | `RestoranSiparisKalemi.BirimFiyat` |
+| `KdvUygulamaTipi` | `Kdvli` veya istisna tipi | Request'ten |
+| `KdvOrani` | Varsayılan %10 veya override | Request'ten |
+| `KaynakSatirId` | `{siparisId}_{kalemId}` | Birleşik |
+
+### 14.7 Validasyon Özeti
+
+| Kural | Hata Kodu | Mesaj |
+|-------|-----------|-------|
+| Route/Body ID eşleşmiyor | 400 | "Sipariş ID uyuşmazlığı: route ve body farklı." |
+| Sipariş bulunamadı | 404 | "Sipariş bulunamadı." |
+| Scoped kullanıcı yetkisiz tesis | 403 | "Bu sipariş için yetkiniz bulunmuyor." |
+| İptal edilmiş sipariş | 400 | "İptal edilen sipariş için satış belgesi taslağı oluşturulamaz." |
+| Tamamlanmamış sipariş | 400 | "Satış belgesi taslağı yalnızca tamamlanmış siparişler için oluşturulabilir. Mevcut durum: {durum}" |
+| Aktif kalem yok | 400 | "Siparişte fatura edilebilir kalem bulunamadı." |
+| ToplamTutar ≤ 0 | 400 | "Sipariş toplam tutarı bulunamadığı için satış belgesi taslağı oluşturulamaz." |
+| Kurumsal + ünvan boş | 400 | "Kurumsal fatura için müşteri ünvanı zorunludur." |
+| Kurumsal + vergi no boş | 400 | "Kurumsal fatura için vergi numarası zorunludur." |
+| Bireysel + ad soyad boş | 400 | "Bireysel fatura için müşteri ad soyad zorunludur." |
+| KDV istisna tanımı bulunamadı | 400 | "KDV istisna tanımı bulunamadı (Id: {id})." |
+| Duplicate kaynak | 409 | "Bu kaynak için daha önce satış belgesi taslağı oluşturulmuş." |
+
+### 14.8 Farklar (Otel vs Restoran)
+
+| Özellik | Otel (Faz 61A) | Restoran (Faz 62) |
+|---------|---------------|-------------------|
+| Kaynak entity | `Rezervasyon` | `RestoranSiparis` |
+| KaynakTipi | `"RezervasyonCheckout"` | `"RestoranSiparis"` |
+| SatirTipi | `Konaklama` (1) | `YiyecekIcecek` (2) |
+| Müşteri bilgisi fallback | Rezervasyondan (`MisafirAdiSoyadi`, vb.) | Yok — request zorunlu |
+| Access scope | `Rezervasyon.TesisId` | `RestoranSiparis.Restoran.TesisId` |
+| İzin | `RezervasyonYonetimi.Manage` | `RestoranSiparisYonetimi.Manage` |
+| Satır başına gece/ürün | Her gece → 1 satır | Her kalem → 1 satır |
+| Durum şartı | `CheckOutTamamlandi` | `Tamamlandi` |
+
+### 14.9 Dosya Listesi
+
+| Dosya | Açıklama |
+|-------|----------|
+| [`backend/RestoranYonetimi/RestoranSiparisleri/Dtos/RestoranSatisBelgesiDtos.cs`](../backend/RestoranYonetimi/RestoranSiparisleri/Dtos/RestoranSatisBelgesiDtos.cs) | Request DTO |
+| [`backend/RestoranYonetimi/Services/IRestoranSatisBelgesiService.cs`](../backend/RestoranYonetimi/Services/IRestoranSatisBelgesiService.cs) | Interface |
+| [`backend/RestoranYonetimi/Services/RestoranSatisBelgesiService.cs`](../backend/RestoranYonetimi/Services/RestoranSatisBelgesiService.cs) | Implementation |
+| [`backend/RestoranYonetimi/RestoranSiparisleri/Controllers/RestoranSiparisleriController.cs`](../backend/RestoranYonetimi/RestoranSiparisleri/Controllers/RestoranSiparisleriController.cs) | Controller endpoint |
+| [`backend/Program.cs`](../backend/Program.cs) | DI registration |

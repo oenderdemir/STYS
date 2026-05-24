@@ -124,6 +124,7 @@ builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazi
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
 builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();
+builder.Services.AddScoped<IRestoranSatisBelgesiService, RestoranSatisBelgesiService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

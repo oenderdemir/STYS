@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Services;
+using STYS.RestoranYonetimi.Services;
 using System.Linq;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -12,10 +14,14 @@ namespace STYS.RestoranSiparisleri.Controllers;
 public class RestoranSiparisleriController : UIController
 {
     private readonly IRestoranSiparisService _service;
+    private readonly IRestoranSatisBelgesiService _satisBelgesiService;
 
-    public RestoranSiparisleriController(IRestoranSiparisService service)
+    public RestoranSiparisleriController(
+        IRestoranSiparisService service,
+        IRestoranSatisBelgesiService satisBelgesiService)
     {
         _service = service;
+        _satisBelgesiService = satisBelgesiService;
     }
 
     [HttpGet]
@@ -92,4 +98,16 @@ public class RestoranSiparisleriController : UIController
     [Permission(StructurePermissions.RestoranSiparisYonetimi.View)]
     public async Task<ActionResult<List<RestoranSiparisDto>>> GetAcikSiparisler([FromQuery] int? masaId, CancellationToken cancellationToken)
         => Ok(await _service.GetAcikSiparislerAsync(masaId, cancellationToken));
+
+    [HttpPost("{siparisId:int}/satis-belgesi-taslagi-olustur")]
+    [Permission(StructurePermissions.RestoranSiparisYonetimi.Manage)]
+    public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(
+        [FromRoute] int siparisId,
+        [FromBody] RestoranSatisBelgesiTaslakRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _satisBelgesiService.SatisBelgesiTaslagiOlusturAsync(
+            siparisId, request, cancellationToken);
+        return Ok(result);
+    }
 }

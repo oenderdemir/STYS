@@ -691,3 +691,76 @@ Satış belgesinden muhasebe fişi üretimi için gerekli tüm altyapı **mevcut
 **Önerilen hesap kurgusu:** 120 Alıcılar (Borç), 600 Satışlar (Alacak), 391 KDV (Alacak) — iade faturası için ters yön.
 
 **Tahmini iş yükü:** Faz 65B — 3-4 saat. Faz 65C — 2-3 saat (opsiyonel).
+
+---
+
+## 9. Faz 65B Sonucu — Satış Belgesi Muhasebe Fiş Bağlantısı
+
+**Tarih:** 2026-05-24
+**Durum:** ✅ Tamamlandı
+
+### 9.1. Yapılan Değişiklikler
+
+#### Entity — [`SatisBelgesi.cs`](backend/Muhasebe/SatisBelgeleri/Entities/SatisBelgesi.cs)
+
+- `using STYS.Muhasebe.MuhasebeFisleri.Entities;` eklendi
+- `public int? MuhasebeFisId { get; set; }` — nullable, fiş henüz oluşturulmamış belgeler için null
+- `public MuhasebeFis? MuhasebeFis { get; set; }` — navigation property
+- `public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }` — fişin ne zaman oluşturulduğunu takip
+
+#### DbContext — [`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:2270-2281)
+
+```csharp
+entity.HasOne(x => x.MuhasebeFis)
+    .WithMany()
+    .HasForeignKey(x => x.MuhasebeFisId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+entity.HasIndex(x => x.MuhasebeFisId)
+    .IsUnique()
+    .HasFilter("[MuhasebeFisId] IS NOT NULL AND [IsDeleted] = 0");
+```
+
+- FK: `DeleteBehavior.Restrict` — fiş silinmeden belge silinemez (her belge en fazla 1 fişe bağlı)
+- Unique filtered index: Bir fiş sadece bir belgeye bağlanabilir, null değerler çakışma yaratmaz
+
+#### DTO — [`SatisBelgesiDtos.cs`](backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiDtos.cs:37-39)
+
+- `SatisBelgesiDto`: `MuhasebeFisId` (int?) ve `MuhasebeFisOlusturmaTarihi` (DateTime?) eklendi
+- `CreateSatisBelgesiRequest` ve `UpdateSatisBelgesiRequest`: **DEĞİŞMEDİ** — bu alanlar backend tarafından set edilir, kullanıcıdan alınmaz
+
+#### AutoMapper — [`SatisBelgesiProfile.cs`](backend/Muhasebe/SatisBelgeleri/Mapping/SatisBelgesiProfile.cs)
+
+- **Değişiklik gerekmedi.** Convention-based mapping sayesinde aynı isimli alanlar (`MuhasebeFisId`, `MuhasebeFisOlusturmaTarihi`) otomatik eşleşiyor.
+- `CreateMap<SatisBelgesiDto, SatisBelgesi>()` tarafında yeni alanlar ignore edilmiyor — bu DTO→Entity yönünde olağan bir davranış, read senaryolarında sorun yaratmaz.
+
+#### Frontend — [`satis-belgesi.model.ts`](frontend/src/app/pages/muhasebe/models/satis-belgesi.model.ts:168-169)
+
+- `SatisBelgesiDto` interface: `muhasebeFisId?: number | null` ve `muhasebeFisOlusturmaTarihi?: string | null` eklendi
+- `CreateSatisBelgesiRequest` ve `UpdateSatisBelgesiRequest`: **DEĞİŞMEDİ**
+
+#### Migration — `20260524193546_AddSatisBelgesiMuhasebeFisBaglantisi`
+
+```sql
+-- EF Core tarafından otomatik oluşturuldu (elle yazılmadı)
+ALTER TABLE [muhasebe].[SatisBelgeleri] ADD [MuhasebeFisId] int NULL;
+ALTER TABLE [muhasebe].[SatisBelgeleri] ADD [MuhasebeFisOlusturmaTarihi] datetime2 NULL;
+CREATE UNIQUE INDEX [IX_SatisBelgeleri_MuhasebeFisId] ON [muhasebe].[SatisBelgeleri] ([MuhasebeFisId]) WHERE [MuhasebeFisId] IS NOT NULL AND [IsDeleted] = 0;
+ALTER TABLE [muhasebe].[SatisBelgeleri] ADD CONSTRAINT [FK_SatisBelgeleri_MuhasebeFisler_MuhasebeFisId] FOREIGN KEY ([MuhasebeFisId]) REFERENCES [muhasebe].[MuhasebeFisler] ([Id]) ON DELETE NO ACTION;
+```
+
+### 9.2. Bu Fazda Yapılmayanlar
+
+- ❌ Servis metodu oluşturulmadı (Faz 65C)
+- ❌ Controller endpoint eklenmedi (Faz 65C)
+- ❌ Fiş üretimi yapılmadı (Faz 65C)
+- ❌ Frontend buton/fiş görüntüleme eklenmedi (Faz 65C)
+
+### 9.3. Sonraki Adım — Faz 65C
+
+Faz 65C'de aşağıdakiler yapılacak:
+1. `SatisBelgesiMuhasebeFisiTaslagiOlusturAsync` metodu (`MuhasebeFisService` içinde)
+2. `MuhasebeKaynakModulleri.SatisBelgesi` sabiti
+3. `SatisBelgesiService.MuhasebeOnaylaAsync` → fiş oluşturma entegrasyonu
+4. Fiş görüntüleme/iptal endpoint'leri
+5. Frontend: Satış belgesi detay sayfasında fiş bağlantısı

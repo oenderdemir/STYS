@@ -2272,6 +2272,15 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.Durum);
 
             entity.HasIndex(x => x.KaynakModul);
+
+            entity.HasOne(x => x.MuhasebeFis)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeFisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.MuhasebeFisId)
+                .IsUnique()
+                .HasFilter("[MuhasebeFisId] IS NOT NULL AND [IsDeleted] = 0");
         });
 
         modelBuilder.Entity<SatisBelgesiSatiri>(entity =>

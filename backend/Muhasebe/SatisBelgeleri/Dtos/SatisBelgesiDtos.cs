@@ -34,6 +34,8 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public DateTime? MuhasebeOnayTarihi { get; set; }
     public DateTime? FaturaKesimTarihi { get; set; }
     public DateTime? MusteriyeGonderimTarihi { get; set; }
+    public int? MuhasebeFisId { get; set; }
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
     public List<SatisBelgesiSatiriDto> Satirlar { get; set; } = [];
 }
 

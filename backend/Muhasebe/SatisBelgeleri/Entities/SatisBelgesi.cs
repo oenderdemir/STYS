@@ -1,3 +1,4 @@
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -44,6 +45,10 @@ public class SatisBelgesi : BaseEntity<int>
     public DateTime? MuhasebeOnayTarihi { get; set; }
     public DateTime? FaturaKesimTarihi { get; set; }
     public DateTime? MusteriyeGonderimTarihi { get; set; }
+
+    public int? MuhasebeFisId { get; set; }
+    public MuhasebeFis? MuhasebeFis { get; set; }
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
 
     public ICollection<SatisBelgesiSatiri> Satirlar { get; set; } = new List<SatisBelgesiSatiri>();
 }

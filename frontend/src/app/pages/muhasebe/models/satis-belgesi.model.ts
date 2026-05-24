@@ -164,6 +164,8 @@ export interface SatisBelgesiDto {
     muhasebeOnayTarihi?: string | null;
     faturaKesimTarihi?: string | null;
     musteriyeGonderimTarihi?: string | null;
+    muhasebeFisId?: number | null;
+    muhasebeFisOlusturmaTarihi?: string | null;
     satirlar: SatisBelgesiSatiriDto[];
 }
 

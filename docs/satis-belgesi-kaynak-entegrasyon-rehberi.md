@@ -325,13 +325,15 @@ ISatisBelgesiService.CreateAsync
 
 ---
 
-## 13. Otel / Rezervasyon Checkout Entegrasyonu (Faz 61)
+## 13. Otel / Rezervasyon Checkout Entegrasyonu (Faz 61 / 61A)
 
 ### 13.1 Genel Bakış
 
 `IRezervasyonSatisBelgesiService`, check-out işlemi tamamlanmış rezervasyonlardan satış belgesi taslağı oluşturmak için [`ISatisBelgesiTaslakOlusturmaService`](#) ile entegrasyonu sağlar.
 
 **Prensip:** Otel modülü (Rezervasyonlar) doğrudan `SatisBelgesi` entity'si oluşturmaz veya `ISatisBelgesiService.CreateAsync` çağırmaz. Bunun yerine, rezervasyon verisini `ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync` metoduna iletir.
+
+> **Önemli:** Bu endpoint **fatura KESMEZ** — yalnızca satış belgesi taslağı oluşturur. e-Fatura/e-Arşiv entegrasyonu ve muhasebe fişi üretimi bu aşamada yoktur.
 
 ### 13.2 API Endpoint
 
@@ -341,50 +343,160 @@ POST ui/rezervasyon/kayitlar/{rezervasyonId:int}/satis-belgesi-taslagi-olustur
 
 **Permission:** `RezervasyonYonetimi.Manage`
 
-**Request Body:**
+**Response:** `SatisBelgesiDto`
+
+### 13.3 Request Body (Tam)
+
 ```json
 {
-  "rezervasyonId": {rezervasyonId}
+  "rezervasyonId": 12345,
+  "kurumsalMi": false,
+  "musteriUnvan": null,
+  "musteriAdSoyad": "Ahmet Yılmaz",
+  "musteriVergiNo": null,
+  "musteriTcKimlikNo": "12345678901",
+  "musteriVergiDairesi": null,
+  "musteriAdres": null,
+  "musteriEposta": "ahmet@example.com",
+  "musteriTelefon": "5551234567",
+  "belgeTarihi": null,
+  "vadeTarihi": null,
+  "aciklama": null,
+  "kdvOrani": null,
+  "kdvIstisnaTanimId": null
 }
 ```
 
-**Response:** `SatisBelgesiDto`
-
-### 13.3 İş Akışı
+### 13.4 İş Akışı (Güncel — Faz 61A)
 
 1. **Route/Body ID Eşleşmesi:** Route'daki `rezervasyonId` ile body'deki `RezervasyonId` eşleşmeli, aksi halde 400 döner.
 2. **Rezervasyon Bulma ve Access Scope:** Rezervasyon ID ile bulunur. Kullanıcı scoped ise rezervasyonun `TesisId` değeri kullanıcının scope'undaki tesislerden biri olmalıdır, değilse 403 döner.
 3. **Durum Validasyonu:** Yalnızca `CheckOutTamamlandi` durumundaki rezervasyonlar için taslak oluşturulabilir. `Iptal` durumundakiler reddedilir (400).
 4. **Gece Sayısı Hesaplama:** `(CikisTarihi.Date - GirisTarihi.Date).Days`
-5. **Satış Satırları:** Her gece için bir `Konaklama` tipi satır oluşturulur. KDV oranı varsayılan %10'dur. Yuvarlama farkları son satıra eklenir.
-6. **Müşteri Bilgileri:** Rezervasyonlar her zaman **bireysel** müşteri olarak işlenir (`KurumsalMi = false`). `MisafirAdiSoyadi` ve `TcKimlikNo` kullanılır.
-7. **Taslak Oluşturma:** `KaynakModul = Otel`, `KaynakTipi = "RezervasyonCheckout"`, `KaynakId = rezervasyonId.ToString()` ile [`ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync`](#) çağrılır.
+5. **Toplam Ücret Validasyonu:** `rezervasyon.ToplamUcret <= 0` ise 400 hatası döner.
+6. **Satış Satırları:** Her gece için bir `Konaklama` tipi satır oluşturulur. KDV parametreleri request'ten okunur (istisna veya override). Yuvarlama farkları son satıra eklenir.
+7. **Müşteri Bilgileri:** Request önceliklidir. Boş bireysel alanlar rezervasyondan tamamlanır. Kurumsal fatura için `MusteriUnvan` ve `MusteriVergiNo` zorunludur.
+8. **Belge Tarihi / Açıklama:** Request'teki değerler önceliklidir; boşsa rezervasyondan (`CikisTarihi` / otomatik açıklama) alınır.
+9. **E‑posta / Telefon:** Request'te varsa request'ten, yoksa rezervasyondan alınır.
+10. **Taslak Oluşturma:** `KaynakModul = Otel`, `KaynakTipi = "RezervasyonCheckout"`, `KaynakId = rezervasyonId.ToString()` ile [`ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync`](#) çağrılır.
 
-### 13.4 Access Scope
+### 13.5 Access Scope
 
 Rezervasyon için access scope kontrolü [`RezervasyonService.GetScopedReservationForManageAsync`](../backend/Rezervasyonlar/Services/RezervasyonService.cs) ile aynı pattern'i kullanır:
 
 - `IUserAccessScopeService.GetCurrentScopeAsync()` ile mevcut scope alınır
 - `scope.IsScoped && !scope.TesisIds.Contains(rezervasyon.TesisId)` → **403**
 
-### 13.5 Satır Yapısı
+### 13.6 Satır Yapısı
 
-| Alan | Değer |
-|------|-------|
-| `SatirTipi` | `Konaklama` (1) |
-| `Aciklama` | `"Konaklama — {geceTarihi:dd.MM.yyyy}"` |
-| `Miktar` | 1 |
-| `BirimFiyat` | `ToplamUcret / geceSayisi` (son satırda yuvarlama farkı eklenir) |
-| `KdvUygulamaTipi` | `Kdvli` (1) |
-| `KdvOrani` | 10% |
-| `KaynakSatirId` | `"{rezervasyonId}_{geceTarihi:yyyyMMdd}"` |
+| Alan | Varsayılan | KDV Override | İstisna |
+|------|-----------|--------------|---------|
+| `SatirTipi` | `Konaklama` (1) | `Konaklama` (1) | `Konaklama` (1) |
+| `Aciklama` | `"Konaklama — {geceTarihi:dd.MM.yyyy}"` | aynı | aynı |
+| `Miktar` | 1 | 1 | 1 |
+| `BirimFiyat` | `ToplamUcret / geceSayisi` | aynı | aynı |
+| `KdvUygulamaTipi` | `Kdvli` (1) | `Kdvli` (1) | İstisna tanımından okunur |
+| `KdvOrani` | %10 | `request.KdvOrani` | 0 |
+| `KdvIstisnaTanimId` | `null` | `null` | `request.KdvIstisnaTanimId` |
+| `KaynakSatirId` | `"{rezervasyonId}_{geceTarihi:yyyyMMdd}"` | aynı | aynı |
 
-### 13.6 Dosya Listesi
+### 13.7 Müşteri Bilgileri Çözümleme
+
+#### Bireysel Fatura (`kurumsalMi = false`)
+
+- `MusteriAdSoyad` zorunludur. Request'te boşsa `rezervasyon.MisafirAdiSoyadi` kullanılır.
+- `MusteriTcKimlikNo` request'ten gelir; boşsa `rezervasyon.TcKimlikNo` kullanılır.
+- `MusteriUnvan` ve `MusteriVergiNo` her zaman `null` olur.
+
+#### Kurumsal Fatura (`kurumsalMi = true`)
+
+- `MusteriUnvan` **zorunludur** (boşsa 400).
+- `MusteriVergiNo` **zorunludur** (boşsa 400).
+- `MusteriVergiDairesi` ve `MusteriAdres` request'ten aktarılır (isteğe bağlı).
+- `MusteriAdSoyad` boş bırakılır.
+
+### 13.8 Örnek Request'ler
+
+#### Bireysel Fatura (tüm bilgiler request'ten)
+
+```json
+{
+  "rezervasyonId": 12345,
+  "kurumsalMi": false,
+  "musteriAdSoyad": "Ahmet Yılmaz",
+  "musteriTcKimlikNo": "12345678901",
+  "musteriEposta": "ahmet@example.com",
+  "musteriTelefon": "5551234567"
+}
+```
+
+#### Bireysel Fatura (ad soyad rezervasyondan)
+
+```json
+{
+  "rezervasyonId": 12345,
+  "kurumsalMi": false
+}
+```
+
+#### Kurumsal Fatura
+
+```json
+{
+  "rezervasyonId": 12345,
+  "kurumsalMi": true,
+  "musteriUnvan": "ABC Turizm Ltd. Şti.",
+  "musteriVergiNo": "1234567890",
+  "musteriVergiDairesi": "Beyoğlu",
+  "musteriAdres": "İstiklal Cad. No:45 Beyoğlu/İstanbul",
+  "musteriEposta": "muhasebe@abcturizm.com",
+  "musteriTelefon": "2125554433"
+}
+```
+
+#### KDV Oranı Override (%20)
+
+```json
+{
+  "rezervasyonId": 12345,
+  "kurumsalMi": false,
+  "kdvOrani": 20.0
+}
+```
+
+#### KDV İstisna (Kapsam Dışı)
+
+```json
+{
+  "rezervasyonId": 12345,
+  "kurumsalMi": false,
+  "kdvIstisnaTanimId": 5
+}
+```
+
+### 13.9 Validasyon Özeti
+
+| Kural | Hata Kodu | Mesaj |
+|-------|-----------|-------|
+| Route/Body ID eşleşmiyor | 400 | "Rezervasyon ID uyuşmazlığı: route ve body farklı." |
+| Rezervasyon bulunamadı | 404 | "Rezervasyon bulunamadı." |
+| Scoped kullanıcı yetkisiz tesis | 403 | "Bu rezervasyon için yetkiniz bulunmuyor." |
+| İptal edilmiş rezervasyon | 400 | "İptal edilen rezervasyon için satış belgesi taslağı oluşturulamaz." |
+| Check-out tamamlanmamış | 400 | "Satış belgesi taslağı yalnızca check-out tamamlanmış rezervasyonlar için oluşturulabilir." |
+| Gece sayısı ≤ 0 | 400 | "Rezervasyon gece sayısı hesaplanamadı." |
+| ToplamUcret ≤ 0 | 400 | "Rezervasyon toplam tutarı bulunamadığı için satış belgesi taslağı oluşturulamaz." |
+| Kurumsal + ünvan boş | 400 | "Kurumsal fatura için müşteri ünvanı zorunludur." |
+| Kurumsal + vergi no boş | 400 | "Kurumsal fatura için vergi numarası zorunludur." |
+| Bireysel + ad soyad boş (rezervasyonda da yoksa) | 400 | "Bireysel fatura için müşteri ad soyad zorunludur." |
+| KDV istisna tanımı bulunamadı | 400 | "KDV istisna tanımı bulunamadı (Id: {id})." |
+| Duplicate kaynak | 409 | "Bu kaynak için daha önce satış belgesi taslağı oluşturulmuş." |
+
+### 13.10 Dosya Listesi
 
 | Dosya | Açıklama |
 |-------|----------|
-| [`backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs`](../backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs) | Request DTO |
+| [`backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs`](../backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs) | Request DTO (genişletilmiş — Faz 61A) |
 | [`backend/Rezervasyonlar/Services/IRezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/IRezervasyonSatisBelgesiService.cs) | Interface |
-| [`backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs) | Implementation |
+| [`backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs) | Implementation (güncellenmiş — Faz 61A) |
 | [`backend/Rezervasyonlar/Controllers/RezervasyonController.cs`](../backend/Rezervasyonlar/Controllers/RezervasyonController.cs) | Controller endpoint |
 | [`backend/Program.cs`](../backend/Program.cs) | DI registration |

@@ -18,6 +18,10 @@ namespace STYS.RestoranYonetimi.Services;
 /// Restoran modülü doğrudan SatisBelgesi entity'si oluşturmaz;
 /// bunun yerine ISatisBelgesiTaslakOlusturmaService üzerinden fatura altyapısına
 /// sipariş verisini iletir.
+///
+/// DbContext doğrudan kullanılır — ilgili entity'ler için repository/base metodu
+/// bulunsa da Include(Restoran, Kalemler) ve AsNoTracking(KdvIstisnaTanimlari)
+/// gibi ilişkili okumalar gerektiğinden DbContext tercih edilmiştir.
 /// </summary>
 public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
 {
@@ -137,6 +141,8 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             throw new BaseException("Geçersiz sipariş ID.", 400);
         }
 
+        // DbContext doğrudan kullanılır — Restoran ve Kalemler navigation'ları
+        // Include ile birlikte tek seferde çekilmelidir.
         var siparis = await _dbContext.RestoranSiparisleri
             .Include(x => x.Restoran)
             .Include(x => x.Kalemler)
@@ -147,14 +153,17 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             throw new BaseException("Sipariş bulunamadı.", 404);
         }
 
-        // Access scope kontrolü: RestoranSiparis → Restoran → TesisId
-        if (siparis.Restoran is not null)
+        // Restoran null olamaz; sipariş mutlaka bir restorana bağlıdır.
+        if (siparis.Restoran is null)
         {
-            var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-            if (scope.IsScoped && !scope.TesisIds.Contains(siparis.Restoran.TesisId))
-            {
-                throw new BaseException("Bu sipariş için yetkiniz bulunmuyor.", 403);
-            }
+            throw new BaseException("Restoran satış kaydı için tesis bilgisi bulunamadı.", 500);
+        }
+
+        // Access scope kontrolü: RestoranSiparis → Restoran → TesisId
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(siparis.Restoran.TesisId))
+        {
+            throw new BaseException("Bu sipariş için yetkiniz bulunmuyor.", 403);
         }
 
         return siparis;
@@ -213,6 +222,8 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
         }
         else
         {
+            // Ürün bazlı KDV oranı bulunmadığı için request/default oran kullanılır.
+            // RestoranMenuUrun entity'sinde KdvOrani alanı yoktur.
             kdvUygulamaTipi = KdvUygulamaTipi.Kdvli;
             kdvOrani = request.KdvOrani ?? VarsayilanKdvOrani;
         }
@@ -241,17 +252,23 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             });
         }
 
-        // Kuruş yuvarlama farkını son satıra ekle
+        // Kuruş yuvarlama farkını son satıra ekle.
+        // fark / Miktar ile bölünerek BirimFiyat'a eklenir; böylece
+        // Miktar > 1 olduğunda satır toplamı fark * Miktar kadar sapmaz.
         var fark = siparis.ToplamTutar - toplamDagitilan;
         if (fark != 0 && satirlar.Count > 0)
         {
             var sonSatir = satirlar[^1];
+            var birimFark = sonSatir.Miktar > 0
+                ? Math.Round(fark / sonSatir.Miktar, 2, MidpointRounding.AwayFromZero)
+                : fark;
+
             satirlar[^1] = new SatisBelgesiTaslakSatirRequest
             {
                 SatirTipi = sonSatir.SatirTipi,
                 Aciklama = sonSatir.Aciklama,
                 Miktar = sonSatir.Miktar,
-                BirimFiyat = sonSatir.BirimFiyat + fark,
+                BirimFiyat = sonSatir.BirimFiyat + birimFark,
                 KdvUygulamaTipi = sonSatir.KdvUygulamaTipi,
                 KdvOrani = sonSatir.KdvOrani,
                 KdvIstisnaTanimId = sonSatir.KdvIstisnaTanimId,

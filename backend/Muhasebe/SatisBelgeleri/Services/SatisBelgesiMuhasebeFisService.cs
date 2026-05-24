@@ -6,13 +6,12 @@ using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
-using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Repositories;
-using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
@@ -37,7 +36,6 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 {
     private readonly ISatisBelgesiRepository _satisBelgesiRepository;
-    private readonly IMuhasebeFisRepository _muhasebeFisRepository;
     private readonly StysAppDbContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
@@ -45,14 +43,12 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 
     public SatisBelgesiMuhasebeFisService(
         ISatisBelgesiRepository satisBelgesiRepository,
-        IMuhasebeFisRepository muhasebeFisRepository,
         StysAppDbContext dbContext,
         IMapper mapper,
         IMuhasebeDonemService muhasebeDonemService,
         ILogger<SatisBelgesiMuhasebeFisService> logger)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
-        _muhasebeFisRepository = muhasebeFisRepository;
         _dbContext = dbContext;
         _mapper = mapper;
         _muhasebeDonemService = muhasebeDonemService;
@@ -143,7 +139,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 
                 // Aynı kaynakla oluşturulmuş aktif fiş var mı?
                 var mevcutFis = await _dbContext.MuhasebeFisler
-                    .Where(f => f.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                    .Where(f => !f.IsDeleted
+                                && f.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
                                 && f.KaynakId == satisBelgesiId
                                 && f.Durum != MuhasebeFisDurumlari.Iptal)
                     .Select(f => new { f.Id, f.FisNo })
@@ -324,7 +321,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 // Kaynak duplicate mi yoksa FisNo çakışması mı ayırt et
                 var kaynakDuplicateMi = await _dbContext.MuhasebeFisler
                     .AsNoTracking()
-                    .Where(f => f.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                    .Where(f => !f.IsDeleted
+                                && f.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
                                 && f.KaynakId == satisBelgesiId
                                 && f.Durum != MuhasebeFisDurumlari.Iptal)
                     .AnyAsync(cancellationToken);
@@ -477,15 +475,53 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     }
 
     /// <summary>
-    /// KDV hesabını (391) hesap planından bulur.
-    /// Tesis özel hesap önceliklidir, yoksa global (TesisId=null) hesap getirilir.
-    /// MuhasebeFisService.GetKdvHesabiAsync ile aynı pattern.
+    /// Satış KDV hesabını (391) bulur.
+    ///
+    /// Arama sırası:
+    /// 1. MuhasebeVergiHesapEslemeleri tablosunda VergiTipi = "KDV" olan ve
+    ///    tesis özel (TesisId eşleşen) veya global (TesisId=null) aktif eşleme ara.
+    ///    Eşlemede satış KDV hesabı (SatisKdvHesap) kullanılır.
+    /// 2. Eşleme bulunamazsa fallback: MuhasebeHesapPlanlari üzerinden TamKod == "391"
+    ///    veya TamKod "391." prefix'i ile başlayan hesap ara.
+    ///
+    /// Her iki yöntemde de hesap aktif, hareket görebilir ve detay hesap olmalıdır.
+    /// Tesis özel sonuç global sonuca göre önceliklidir.
+    ///
+    /// MuhasebeFisService.GetKdvHesabiAsync private olduğu için aynı pattern
+    /// (VergiHesapEsleme tablosu ile zenginleştirilmiş) burada uygulanmıştır.
     /// </summary>
     private async Task<MuhasebeHesapPlani> GetKdvHesabiAsync(
         int tesisId,
         string tamKod,
         CancellationToken cancellationToken)
     {
+        // ── 1. Önce VergiHesapEsleme tablosunda satış KDV eşlemesi ara ──
+        var esleme = await _dbContext.MuhasebeVergiHesapEslemeleri
+            .AsNoTracking()
+            .Where(e => e.VergiTipi == "KDV"
+                        && !e.IsDeleted
+                        && e.AktifMi
+                        && (e.TesisId == tesisId || e.TesisId == null))
+            .OrderByDescending(e => e.TesisId == tesisId) // tesis özel öncelikli
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (esleme is not null)
+        {
+            // Eşlemedeki satış KDV hesabını doğrula: aktif, hareket görebilir, detay hesap
+            var eslemeHesap = await _dbContext.MuhasebeHesapPlanlari
+                .AsNoTracking()
+                .Where(x => x.Id == esleme.SatisKdvHesapId
+                            && !x.IsDeleted
+                            && x.AktifMi
+                            && x.HareketGorebilirMi
+                            && x.DetayHesapMi)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (eslemeHesap is not null)
+                return eslemeHesap;
+        }
+
+        // ── 2. Fallback: HesapPlanı üzerinden TamKod ile ara ──
         var kdvHesap = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
             .Where(x => x.TamKod == tamKod
@@ -497,14 +533,30 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             .OrderByDescending(x => x.TesisId == tesisId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (kdvHesap is null)
-        {
-            throw new BaseException(
-                $"KDV hesabı (Hesaplanan KDV 391) hesap planında bulunamadı veya hareket görebilir değil. " +
-                $"Lütfen 391 kodlu detay hesabı hesap planında tanımlayın.",
-                400);
-        }
+        if (kdvHesap is not null)
+            return kdvHesap;
 
-        return kdvHesap;
+        // ── 3. Son çare: TamKod "391." prefix ile başlayan detay hesap ara ──
+        var prefix = tamKod + ".";
+        kdvHesap = await _dbContext.MuhasebeHesapPlanlari
+            .AsNoTracking()
+            .Where(x => x.TamKod.StartsWith(prefix)
+                        && !x.IsDeleted
+                        && x.AktifMi
+                        && x.HareketGorebilirMi
+                        && x.DetayHesapMi
+                        && (x.TesisId == tesisId || x.TesisId == null))
+            .OrderByDescending(x => x.TesisId == tesisId)
+            .ThenBy(x => x.TamKod)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (kdvHesap is not null)
+            return kdvHesap;
+
+        throw new BaseException(
+            "Satış KDV hesabı (Hesaplanan KDV 391) bulunamadı. " +
+            "Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için satış KDV hesabı eşlemesi tanımlayın, " +
+            "veya hesap planında 391 kodlu aktif ve hareket görebilir bir detay hesap oluşturun.",
+            400);
     }
 }

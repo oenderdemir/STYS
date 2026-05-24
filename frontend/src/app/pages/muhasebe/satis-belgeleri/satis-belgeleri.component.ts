@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -72,6 +73,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly service = inject(SatisBelgesiService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
+    private readonly router = inject(Router);
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -411,6 +413,17 @@ export class SatisBelgeleriComponent implements OnInit {
 
     canFisOlustur(belge: SatisBelgesiDto): boolean {
         return belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi && !belge.muhasebeFisId;
+    }
+
+    hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
+        return !!belge.muhasebeFisId;
+    }
+
+    muhasebeFisineGit(belge: SatisBelgesiDto): void {
+        if (!belge.muhasebeFisId) {
+            return;
+        }
+        this.router.navigate(['/muhasebe/fisler'], { queryParams: { id: belge.muhasebeFisId } });
     }
 
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {

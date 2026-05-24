@@ -156,6 +156,15 @@
                             (click)="confirmDelete(belge)">
                         </p-button>
                         <p-button
+                            *ngIf="hasMuhasebeFisi(belge)"
+                            icon="pi pi-external-link"
+                            severity="primary"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Muhasebe Fişine Git"
+                            (click)="muhasebeFisineGit(belge)">
+                        </p-button>
+                        <p-button
                             *ngIf="canFisOlustur(belge)"
                             icon="pi pi-file"
                             severity="primary"
@@ -451,6 +460,18 @@
                 </p-tag>
             </p>
             <p><strong>Kaynak:</strong> {{ getKaynakModulLabel(belge.kaynakModul) }} / {{ belge.kaynakTipi ?? '-' }} / {{ belge.kaynakId ?? '-' }}</p>
+            <p><strong>Muhasebe Fişi:</strong>
+                @if (hasMuhasebeFisi(belge)) {
+                <a href="javascript:void(0)" (click)="muhasebeFisineGit(belge)" class="text-primary font-medium">
+                    Fiş #{{ belge.muhasebeFisId }}
+                </a>
+                @if (belge.muhasebeFisOlusturmaTarihi) {
+                <br /><small class="text-color-secondary">{{ belge.muhasebeFisOlusturmaTarihi | date: 'dd.MM.yyyy HH:mm' }}</small>
+                }
+                } @else {
+                <span class="text-color-secondary">Henüz oluşturulmadı</span>
+                }
+            </p>
         </div>
         <div class="col-6">
             <p><strong>Müşteri:</strong> {{ getMusteriDisplay(belge) }}</p>

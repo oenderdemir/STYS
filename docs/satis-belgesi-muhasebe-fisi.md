@@ -253,3 +253,63 @@ Buton yalnızca aşağıdaki koşulların tümü sağlandığında görünür:
 | [`satis-belgesi.service.ts`](frontend/src/app/pages/muhasebe/services/satis-belgesi.service.ts) | Değişiklik | `muhasebeFisiOlustur` HTTP metodu eklendi |
 | [`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) | Değişiklik | `canFisOlustur` helper + `muhasebeFisiOlustur` aksiyon |
 | [`satis-belgeleri.component.html`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.html) | Değişiklik | "Muhasebe Fişi Oluştur" butonu eklendi |
+
+## Faz 65E: Fiş Bilgisi ve Fişe Git Aksiyonu
+
+### Route Analizi
+
+Mevcut muhasebe fişleri listesi route'u: `/muhasebe/fisler`
+
+[`MuhasebeFislerComponent`](frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.ts) içinde `goToFis(row)` metodu `queryParams: { id: row.id }` ile aynı rotaya yönlenir ve ilgili fişi filtreler+vurgular. Detay route'u mevcut değildir; fiş detayı dialog üzerinden [`openDetay(row)`](frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.ts:279) ile açılır.
+
+### "Fişe Git" Butonu
+
+[`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts):
+
+```typescript
+hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
+    return !!belge.muhasebeFisId;
+}
+
+muhasebeFisineGit(belge: SatisBelgesiDto): void {
+    if (!belge.muhasebeFisId) {
+        return;
+    }
+    this.router.navigate(['/muhasebe/fisler'], { queryParams: { id: belge.muhasebeFisId } });
+}
+```
+
+- Buton ikonu: `pi pi-external-link`
+- Tooltip: "Muhasebe Fişine Git"
+- Constructor'a `Router` inject edildi
+
+### Detay Dialog'da Fiş Bilgisi
+
+[`satis-belgeleri.component.html`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.html) detay panelinde:
+
+- Fiş varsa: Tıklanabilir link "Fiş # {muhasebeFisId}" + oluşturma tarihi (`dd.MM.yyyy HH:mm`)
+- Fiş yoksa: "Henüz oluşturulmadı"
+
+### Görünürlük Kuralları (Güncel)
+
+| Buton | Görünme Koşulu |
+|-------|----------------|
+| Muhasebe Fişi Oluştur | `durum === MuhasebeOnaylandi && !muhasebeFisId` |
+| Muhasebe Fişine Git | `!!muhasebeFisId` |
+
+İki buton birbirini dışlar: Fiş oluşturulmamışsa "Oluştur", oluşturulmuşsa "Fişe Git" görünür.
+
+### Backend
+
+Bu fazda backend değişikliği yapılmamıştır. Mevcut `SatisBelgesiDto` zaten `muhasebeFisId` ve `muhasebeFisOlusturmaTarihi` alanlarını içermektedir (Faz 65B).
+
+### Migration
+
+Bu fazda migration gerekmemiştir.
+
+### Değişen Dosyalar (Faz 65E)
+
+| Dosya | Durum | Açıklama |
+|-------|-------|----------|
+| [`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) | Değişiklik | `Router` inject, `hasMuhasebeFisi` + `muhasebeFisineGit` metotları |
+| [`satis-belgeleri.component.html`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.html) | Değişiklik | "Fişe Git" butonu + detay dialog'da fiş bilgisi |

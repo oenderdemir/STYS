@@ -9,6 +9,7 @@ using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
+using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -1459,6 +1460,22 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             // 3b. Açık dönem kontrolü
             await ValidateOpenPeriodAsync(fis.TesisId, fis.FisTarihi, fis.MaliYil, fis.Donem, CancellationToken.None);
+
+            // 3c. Kaynak SatisBelgesi ise bağlı satış belgesindeki fiş referansını temizle.
+            //     Cross-aggregate işlem olduğu için DbContext üzerinden SatisBelgeleri set'ine
+            //     doğrudan erişiliyor. Taslak fiş henüz muhasebe etkisi doğurmadığından
+            //     satış belgesi yeniden düzenlenebilir/iptal edilebilir hale gelmelidir.
+            if (fis.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi && fis.KaynakId.HasValue)
+            {
+                var satisBelgesi = await _dbContext.SatisBelgeleri
+                    .FirstOrDefaultAsync(x => x.Id == fis.KaynakId.Value && !x.IsDeleted);
+
+                if (satisBelgesi is not null && satisBelgesi.MuhasebeFisId == fis.Id)
+                {
+                    satisBelgesi.MuhasebeFisId = null;
+                    satisBelgesi.MuhasebeFisOlusturmaTarihi = null;
+                }
+            }
 
             // 4. Aktif satırları soft-delete (RemoveRange → ApplyAuditInfo: EntityState.Deleted → Modified + IsDeleted/DeletedAt/DeletedBy)
             var aktifSatirlar = fis.Satirlar.Where(s => !s.IsDeleted).ToList();

@@ -1,7 +1,10 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -15,6 +18,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 {
     private readonly StysAppDbContext _db;
     private readonly ISatisBelgesiRepository _satisBelgesiRepository;
+    private readonly IMuhasebeFisRepository _muhasebeFisRepository;
+    private readonly ILogger<SatisBelgesiService> _logger;
 
     /// <summary>Tevkifatlı satış satırları bu fazda desteklenmez.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -49,32 +54,108 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     public SatisBelgesiService(
         ISatisBelgesiRepository satisBelgesiRepository,
         StysAppDbContext db,
-        IMapper mapper)
+        IMapper mapper,
+        IMuhasebeFisRepository muhasebeFisRepository,
+        ILogger<SatisBelgesiService> logger)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
         _db = db;
+        _muhasebeFisRepository = muhasebeFisRepository;
+        _logger = logger;
     }
 
     // ── Satirları include eden yardımcı ──
 
     // ──────────────────────────────────────────────
-    //  Private — Muhasebe Fişi Koruması (Faz 66)
+    //  Private — Muhasebe Fişi Koruması (Faz 68 — Durum-Bazlı)
     // ──────────────────────────────────────────────
 
     /// <summary>
-    /// Muhasebe fişi oluşturulmuş satış belgesinde değişiklik/silme/iptal
-    /// işlemlerini engeller. Bağlı muhasebe fişi olan belge muhasebe etkisi
-    /// doğurmuştur; değişiklik ancak ters kayıt/iptal prosedürü ile yapılmalıdır.
+    /// Bağlı muhasebe fişinin durumuna göre satış belgesi mutasyon işlemlerini
+    /// engeller veya serbest bırakır.
+    ///
+    /// Karar tablosu:
+    /// | Bağlı Fiş Durumu        | Karar                          |
+    /// |-------------------------|--------------------------------|
+    /// | MuhasebeFisId null      | Serbest                        |
+    /// | Fiş bulunamadı          | Hata + log warning              |
+    /// | IsDeleted = true        | Hata + log warning              |
+    /// | Taslak                  | Hata (önce fiş silinmeli)      |
+    /// | Onayli                  | Hata (önce iptal/ters kayıt)   |
+    /// | Iptal                   | Serbest                        |
+    /// | TersKayit               | Hata + log warning (tutarsızlık)|
+    /// | Bilinmeyen durum        | Hata                           |
     /// </summary>
-    private static void ThrowIfMuhasebeFisiOlusmus(SatisBelgesi belge, string islemAdi)
+    private async Task ThrowIfMuhasebeFisiIslemiEngellerAsync(
+        SatisBelgesi belge,
+        string islemAdi,
+        CancellationToken cancellationToken)
     {
-        if (belge.MuhasebeFisId.HasValue)
+        if (!belge.MuhasebeFisId.HasValue)
+            return; // Fiş yok → her şey serbest
+
+        // Bağlı fişi repository üzerinden oku (base metot kullanımı)
+        var fis = await _muhasebeFisRepository.FirstOrDefaultAsync(
+            x => x.Id == belge.MuhasebeFisId.Value);
+
+        // Durum 2: Fiş bulunamadı (veri tutarsızlığı)
+        if (fis is null)
         {
+            _logger.LogWarning(
+                "SatisBelgesi {BelgeId} için MuhasebeFisId={FisId} referansı var ancak fiş bulunamadı",
+                belge.Id, belge.MuhasebeFisId.Value);
+
             throw new BaseException(
-                $"Bu satış belgesi için muhasebe fişi oluşturulduğundan {islemAdi} işlemi yapılamaz. " +
-                "Önce bağlı muhasebe fişi için iptal/ters kayıt süreci işletilmelidir.",
+                "Satış belgesine bağlı muhasebe fişi bulunamadı. Sistem yöneticinize başvurun.",
                 errorCode: 400);
+        }
+
+        // Durum 3: Fiş soft-delete edilmiş (veri tutarsızlığı)
+        if (fis.IsDeleted)
+        {
+            _logger.LogWarning(
+                "SatisBelgesi {BelgeId} için MuhasebeFisId={FisId} referansı var ancak fiş silinmiş",
+                belge.Id, belge.MuhasebeFisId.Value);
+
+            throw new BaseException(
+                "Satış belgesine bağlı muhasebe fişi silinmiş görünüyor. Sistem yöneticinize başvurun.",
+                errorCode: 400);
+        }
+
+        // Durum bazlı karar
+        switch (fis.Durum)
+        {
+            case MuhasebeFisDurumlari.Taslak:
+                throw new BaseException(
+                    $"Bu satış belgesine bağlı muhasebe fişi taslak durumunda. Önce bağlı fişi silmeniz gerekir.",
+                    errorCode: 400);
+
+            case MuhasebeFisDurumlari.Onayli:
+                throw new BaseException(
+                    $"Bu satış belgesine bağlı muhasebe fişi onaylı durumdadır. " +
+                    "Önce bağlı fiş için iptal/ters kayıt süreci işletilmelidir.",
+                    errorCode: 400);
+
+            case MuhasebeFisDurumlari.Iptal:
+                // Ters kayıt oluşturulmuş, muhasebe etkisi sıfırlanmış → serbest
+                return;
+
+            case MuhasebeFisDurumlari.TersKayit:
+                // Bu durumda MuhasebeFisId normalde Iptal fişi göstermeli,
+                // TersKayit fişi göstermemeli. Veri tutarsızlığı kabul et.
+                _logger.LogWarning(
+                    "SatisBelgesi {BelgeId} MuhasebeFisId={FisId} bir TersKayit fişine işaret ediyor",
+                    belge.Id, belge.MuhasebeFisId.Value);
+
+                throw new BaseException(
+                    "Satış belgesi ters kayıt fişine bağlı görünüyor. Sistem yöneticinize başvurun.",
+                    errorCode: 400);
+
+            default:
+                throw new BaseException(
+                    $"Bağlı muhasebe fişinin durumu nedeniyle {islemAdi} işlemi yapılamaz: {fis.Durum}",
+                    errorCode: 400);
         }
     }
 
@@ -236,7 +317,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "güncelleme");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "güncelleme", cancellationToken);
 
         // Durum kontrolü
         if (!GuncellenebilirDurumlar.Contains((int)belge.Durum))
@@ -287,7 +368,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "silme");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "silme", cancellationToken);
 
         if (!SilinebilirDurumlar.Contains((int)belge.Durum))
         {
@@ -320,7 +401,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onayına gönderme");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
 
         if (belge.Durum != SatisBelgesiDurumu.Taslak)
         {
@@ -349,7 +430,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onaylama");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
         {
@@ -383,7 +464,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "reddetme");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "reddetme", cancellationToken);
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
         {
@@ -408,7 +489,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        ThrowIfMuhasebeFisiOlusmus(belge, "iptal");
+        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "iptal", cancellationToken);
 
         if (belge.Durum == SatisBelgesiDurumu.IptalEdildi)
         {

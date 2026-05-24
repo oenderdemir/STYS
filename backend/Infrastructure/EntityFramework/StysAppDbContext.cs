@@ -1925,9 +1925,12 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.FisNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [FisNo] IS NOT NULL");
+            // Ters kayıt (Durum = 'TersKayit') ve iptal edilmiş (Durum = 'Iptal') fişler
+            // aynı kaynak (TesisId + Modül + ID) için duplicate kabul edilmez.
+            // Bu sayede aynı satış belgesinden hem onaylı fiş hem ters kayıt fişi oluşabilir.
             entity.HasIndex(x => new { x.TesisId, x.KaynakModul, x.KaynakId })
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [KaynakModul] IS NOT NULL AND [KaynakId] IS NOT NULL AND [Durum] <> 'Iptal'");
+                .HasFilter("[IsDeleted] = 0 AND [KaynakModul] IS NOT NULL AND [KaynakId] IS NOT NULL AND [Durum] NOT IN ('Iptal', 'TersKayit')");
             entity.HasIndex(x => x.Durum);
             entity.HasIndex(x => x.TersKayitFisId);
             entity.HasIndex(x => x.IptalEdilenFisId);

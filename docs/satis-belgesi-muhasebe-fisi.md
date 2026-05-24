@@ -406,3 +406,87 @@ Bu akış ayrı bir fazda (Faz 67 veya sonrası) değerlendirilecektir.
 ### Migration
 
 Bu fazda model değişikliği yapılmadığından migration gerekmemiştir.
+
+---
+
+## Faz 68 — Bağlı Fiş Durumuna Göre Akıllı Koruma
+
+### Amaç
+
+Faz 66'daki salt `HasValue` kontrolü yerine, bağlı muhasebe fişinin durumuna göre akıllı karar veren bir koruma katmanı oluşturulmuştur. Ayrıca taslak fiş silindiğinde `SatisBelgesi.MuhasebeFisId` referansı otomatik temizlenir.
+
+### Unique Index Düzeltmesi
+
+Faz 67 analizinde tespit edilen ters kayıt çakışma riski için migration oluşturulmuştur:
+
+| Önceki Filter | Yeni Filter |
+|---------------|-------------|
+| `[Durum] <> 'Iptal'` | `[Durum] NOT IN ('Iptal', 'TersKayit')` |
+
+**Migration:** [`20260524211826_FixMuhasebeFisKaynakUniqueIndexForTersKayit`](backend/Infrastructure/EntityFramework/Migrations/20260524211826_FixMuhasebeFisKaynakUniqueIndexForTersKayit.cs)
+
+Bu sayede aynı kaynaktan (TesisId + KaynakModul + KaynakId) hem onaylı fiş hem de ters kayıt fişi oluşabilir.
+
+### Durum-Bazlı Helper: `ThrowIfMuhasebeFisiIslemiEngellerAsync`
+
+[`SatisBelgesiService.cs`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs) içinde eski statik `ThrowIfMuhasebeFisiOlusmus` kaldırılmış, yerine async durum-bazlı helper eklenmiştir.
+
+| Bağlı Fiş Durumu | Karar | Hata Mesajı |
+|---|---|---|
+| `MuhasebeFisId` null | ✅ Serbest | — |
+| Fiş bulunamadı | ❌ Hata + log warning | "Satış belgesine bağlı muhasebe fişi bulunamadı. Sistem yöneticinize başvurun." |
+| `IsDeleted = true` | ❌ Hata + log warning | "Satış belgesine bağlı muhasebe fişi silinmiş görünüyor. Sistem yöneticinize başvurun." |
+| `Taslak` | ❌ Hata | "Bu satış belgesine bağlı muhasebe fişi taslak durumunda. Önce bağlı fişi silmeniz gerekir." |
+| `Onayli` | ❌ Hata | "Bu satış belgesine bağlı muhasebe fişi onaylı durumdadır. Önce bağlı fiş için iptal/ters kayıt süreci işletilmelidir." |
+| `Iptal` | ✅ Serbest | Ters kayıt oluşturulmuş, muhasebe etkisi sıfırlanmış |
+| `TersKayit` | ❌ Hata + log warning | Veri tutarsızlığı — MuhasebeFisId TersKayit fişine işaret etmemeli |
+| Bilinmeyen durum | ❌ Hata | "Bağlı muhasebe fişinin durumu nedeniyle işlem yapılamaz: {Durum}" |
+
+### Etkilenen Metotlar
+
+6 mutasyon metodu da async helper'a geçirilmiştir:
+
+- [`UpdateAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:239)
+- [`DeleteAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:294)
+- [`MuhasebeOnayinaGonderAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:327)
+- [`MuhasebeOnaylaAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:356)
+- [`ReddetAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:390)
+- [`IptalEtAsync`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs:415)
+
+### Taslak Fiş Silindiğinde Referans Temizliği
+
+[`MuhasebeFisService.DeleteAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:1438) içine, fişin kaynağı `SatisBelgesi` ise ve durumu `Taslak` ise `SatisBelgesi.MuhasebeFisId` ve `MuhasebeFisOlusturmaTarihi` alanlarını temizleyen cross-aggregate güncelleme eklenmiştir.
+
+**Gerekçe:** Taslak fiş henüz muhasebe etkisi doğurmamıştır. Silindiğinde satış belgesi yeniden düzenlenebilir/iptal edilebilir hale gelmelidir. `DbContext` üzerinden `SatisBelgeleri` set'ine doğrudan erişim, cross-aggregate transaction gerektiği için kabul edilmiştir.
+
+### Onaylı Fiş İptal Edildiğinde Davranış
+
+[`MuhasebeFisService.IptalEtAsync`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs:211) sonrası `SatisBelgesi.MuhasebeFisId` **korunur**. Bunun yerine helper `Durum = Iptal` için satış belgesi iptaline izin verir (Seçenek B).
+
+### Frontend
+
+Frontend değişikliği yapılmamıştır (Seçenek A — güvenli tarafta kal). `MuhasebeFisId` doluysa tüm mutasyon butonları gizli kalır. Iptal fişli satış belgesini UI'dan iptal edebilme aksiyonu ayrı fazda (Faz 69) ele alınacaktır.
+
+### Yeni Bağımlılıklar
+
+[`SatisBelgesiService`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs) constructor'ına:
+- `IMuhasebeFisRepository` — bağlı fiş durumunu okumak için (base repository `FirstOrDefaultAsync` kullanılır)
+- `ILogger<SatisBelgesiService>` — veri tutarsızlık durumlarında warning loglamak için
+
+### Değişen Dosyalar (Faz 68)
+
+| Dosya | Durum | Açıklama |
+|-------|-------|----------|
+| [`SatisBelgesiService.cs`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs) | Değişiklik | `ThrowIfMuhasebeFisiOlusmus` → `ThrowIfMuhasebeFisiIslemiEngellerAsync`, DI genişletildi |
+| [`MuhasebeFisService.cs`](backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs) | Değişiklik | `DeleteAsync` içine cross-aggregate `SatisBelgesi.MuhasebeFisId` temizliği eklendi |
+| [`StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs) | Değişiklik | Unique index filter: `<> 'Iptal'` → `NOT IN ('Iptal', 'TersKayit')` |
+| [`20260524211826_FixMuhasebeFisKaynakUniqueIndexForTersKayit.cs`](backend/Infrastructure/EntityFramework/Migrations/20260524211826_FixMuhasebeFisKaynakUniqueIndexForTersKayit.cs) | Yeni | Migration |
+| [`satis-belgesi-muhasebe-fisi.md`](docs/satis-belgesi-muhasebe-fisi.md) | Değişiklik | Faz 68 dokümantasyonu eklendi |
+
+### Bu Fazda Yapılmayanlar
+
+- Satış belgesinden tek tuşla bağlı fişi iptal etme akışı (Faz 69)
+- Entegre iptal zinciri (Faz 69)
+- e-Fatura/e-Arşiv iptali (Faz 70+)
+- Frontend `can*` helper'ları güncellemesi (güvenli tarafta kal)
+- `IptalEtAsync` sonrası `MuhasebeFisId` temizliği (Seçenek B uygulandı — referans korunur, helper izin verir)

@@ -302,10 +302,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 errorCode: 400);
         }
 
-        if (belge.Satirlar.Count(s => !s.IsDeleted) == 0)
-        {
-            throw new BaseException("Satır içermeyen belge muhasebe onayına gönderilemez.", errorCode: 400);
-        }
+        // Kapsamlı ön-kontrol (satır, müşteri, KDV, toplam, kaynak duplicate)
+        await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
 
         belge.Durum = SatisBelgesiDurumu.MuhasebeOnayinda;
         belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
@@ -320,7 +318,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     public async Task MuhasebeOnaylaAsync(int id, CancellationToken cancellationToken = default)
     {
         var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted)
+            x => x.Id == id && !x.IsDeleted,
+            q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
@@ -329,6 +328,9 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 $"Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir. Mevcut durum: {belge.Durum}",
                 errorCode: 400);
         }
+
+        // Onay anında içerik tekrar doğrulanır (arada değişiklik olmadığından emin olmak için)
+        await ValidateBelgeMuhasebeOnaylanabilir(belge, cancellationToken);
 
         belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
         belge.MuhasebeOnayTarihi = DateTime.UtcNow;
@@ -393,6 +395,143 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         belge.Durum = SatisBelgesiDurumu.IptalEdildi;
 
         await Repository.SaveChangesAsync(cancellationToken);
+    }
+
+    // ──────────────────────────────────────────────
+    //  Private — Muhasebe Onay Validasyonları
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Belgeyi muhasebe onayına göndermeden önce tüm zorunlu kontrolleri yapar.
+    /// Aşağıdaki kontrolleri içerir:
+    /// 1. En az 1 aktif satır
+    /// 2. ToplamMatrah > 0
+    /// 3. GenelToplam > 0
+    /// 4. Kurumsal müşteri → MusteriUnvan + MusteriVergiNo dolu
+    /// 5. Bireysel müşteri → MusteriAdSoyad dolu
+    /// 6. Tevkifatlı satır kontrolü (bu fazda desteklenmez)
+    /// 7. KDV uygulama tipi geçerlilik kontrolü (her satırda)
+    /// 8. KDV'li satırda KdvOrani > 0
+    /// 9. KDV'siz satırda KdvIstisnaTanimId zorunlu
+    /// 10. Satır toplamları = Belge toplamları (tutarlılık)
+    /// 11. Kaynak duplicate kontrolü
+    /// 12. KDV istisna tanımı geçerlilik kontrolü
+    /// </summary>
+    private async Task ValidateBelgeOnayaGonderilebilir(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken)
+    {
+        var aktifSatirlar = belge.Satirlar.Where(s => !s.IsDeleted).ToList();
+
+        // 1. En az 1 aktif satır
+        if (aktifSatirlar.Count == 0)
+            throw new BaseException("Satır içermeyen belge muhasebe onayına gönderilemez.", errorCode: 400);
+
+        // 2. ToplamMatrah > 0
+        if (belge.ToplamMatrah <= 0)
+            throw new BaseException("Belge toplam matrahı sıfırdan büyük olmalıdır.", errorCode: 400);
+
+        // 3. GenelToplam > 0
+        if (belge.GenelToplam <= 0)
+            throw new BaseException("Belge genel toplamı sıfırdan büyük olmalıdır.", errorCode: 400);
+
+        // 4-5. Kurumsal/bireysel müşteri alanları
+        if (belge.KurumsalMi)
+        {
+            if (string.IsNullOrWhiteSpace(belge.MusteriUnvan))
+                throw new BaseException("Kurumsal müşteri için ünvan zorunludur.", errorCode: 400);
+            if (string.IsNullOrWhiteSpace(belge.MusteriVergiNo))
+                throw new BaseException("Kurumsal müşteri için vergi numarası zorunludur.", errorCode: 400);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(belge.MusteriAdSoyad))
+                throw new BaseException("Bireysel müşteri için ad soyad zorunludur.", errorCode: 400);
+        }
+
+        // 6-9. Her satır için KDV kontrolleri
+        foreach (var satir in aktifSatirlar)
+        {
+            // 6. Tevkifatlı kontrolü
+            if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Tevkifatli)
+                throw new BaseException(
+                    $"Tevkifatlı satış satırları bu aşamada desteklenmemektedir. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+
+            // 7. Desteklenen KDV uygulama tipi kontrolü
+            if (!DesteklenenKdvUygulamaTipleri.Contains((int)satir.KdvUygulamaTipi))
+                throw new BaseException(
+                    $"Geçersiz KDV uygulama tipi: {satir.KdvUygulamaTipi}. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+
+            // 8. KDV'li satırda KdvOrani > 0
+            if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Kdvli && satir.KdvOrani <= 0)
+                throw new BaseException(
+                    $"KDV'li satırda KDV oranı sıfırdan büyük olmalıdır. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+
+            // 9. KDV'siz satırda KdvIstisnaTanimId zorunlu
+            if (satir.KdvUygulamaTipi != KdvUygulamaTipi.Kdvli && !satir.KdvIstisnaTanimId.HasValue)
+                throw new BaseException(
+                    $"KDV'li olmayan satırda KDV istisna tanımı zorunludur. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+
+            // 12. KDV istisna tanımı geçerlilik kontrolü
+            if (satir.KdvIstisnaTanimId.HasValue)
+            {
+                await ValidateKdvIstisnaTanimAsync(
+                    satir.KdvIstisnaTanimId.Value,
+                    (int)satir.KdvUygulamaTipi,
+                    belge.BelgeTarihi,
+                    cancellationToken);
+            }
+        }
+
+        // 10. Satır toplamları = Belge toplamları (tutarlılık)
+        var hesaplananMatrah = aktifSatirlar.Sum(s => s.Matrah);
+        var hesaplananKdv = aktifSatirlar.Sum(s => s.KdvTutari);
+        var hesaplananGenelToplam = aktifSatirlar.Sum(s => s.SatirToplami);
+
+        if (belge.ToplamMatrah != hesaplananMatrah)
+            throw new BaseException(
+                $"Belge toplam matrahı ({belge.ToplamMatrah}) satır toplamlarıyla ({hesaplananMatrah}) uyuşmuyor. " +
+                "Belgeyi güncelleyip tekrar deneyin.",
+                errorCode: 400);
+
+        if (belge.ToplamKdv != hesaplananKdv)
+            throw new BaseException(
+                $"Belge toplam KDV'si ({belge.ToplamKdv}) satır KDV toplamlarıyla ({hesaplananKdv}) uyuşmuyor. " +
+                "Belgeyi güncelleyip tekrar deneyin.",
+                errorCode: 400);
+
+        if (belge.GenelToplam != hesaplananGenelToplam)
+            throw new BaseException(
+                $"Belge genel toplamı ({belge.GenelToplam}) satır genel toplamlarıyla ({hesaplananGenelToplam}) uyuşmuyor. " +
+                "Belgeyi güncelleyip tekrar deneyin.",
+                errorCode: 400);
+
+        // 11. Kaynak duplicate kontrolü (sadece manuel olmayan belgeler için)
+        if (belge.KaynakId is not null)
+        {
+            await ThrowIfKaynakDuplicateAsync(
+                belge.KaynakModul,
+                belge.KaynakTipi,
+                belge.KaynakId,
+                excludeId: belge.Id,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Muhasebe onayı anında belge içeriğini tekrar doğrular.
+    /// <see cref="ValidateBelgeOnayaGonderilebilir"/> ile aynı kontrolleri yapar.
+    /// Onaya gönderme ile onaylama arasında belge içeriğinin değişmediğinden emin olur.
+    /// </summary>
+    private async Task ValidateBelgeMuhasebeOnaylanabilir(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken)
+    {
+        await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
     }
 
     // ──────────────────────────────────────────────

@@ -57,6 +57,27 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     }
 
     // ── Satirları include eden yardımcı ──
+
+    // ──────────────────────────────────────────────
+    //  Private — Muhasebe Fişi Koruması (Faz 66)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Muhasebe fişi oluşturulmuş satış belgesinde değişiklik/silme/iptal
+    /// işlemlerini engeller. Bağlı muhasebe fişi olan belge muhasebe etkisi
+    /// doğurmuştur; değişiklik ancak ters kayıt/iptal prosedürü ile yapılmalıdır.
+    /// </summary>
+    private static void ThrowIfMuhasebeFisiOlusmus(SatisBelgesi belge, string islemAdi)
+    {
+        if (belge.MuhasebeFisId.HasValue)
+        {
+            throw new BaseException(
+                $"Bu satış belgesi için muhasebe fişi oluşturulduğundan {islemAdi} işlemi yapılamaz. " +
+                "Önce bağlı muhasebe fişi için iptal/ters kayıt süreci işletilmelidir.",
+                errorCode: 400);
+        }
+    }
+
     private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlar =>
         q => q.Include(x => x.Satirlar);
 
@@ -215,6 +236,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
+        ThrowIfMuhasebeFisiOlusmus(belge, "güncelleme");
+
         // Durum kontrolü
         if (!GuncellenebilirDurumlar.Contains((int)belge.Durum))
         {
@@ -264,6 +287,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
+        ThrowIfMuhasebeFisiOlusmus(belge, "silme");
+
         if (!SilinebilirDurumlar.Contains((int)belge.Durum))
         {
             throw new BaseException(
@@ -295,6 +320,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
+        ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onayına gönderme");
+
         if (belge.Durum != SatisBelgesiDurumu.Taslak)
         {
             throw new BaseException(
@@ -321,6 +348,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             x => x.Id == id && !x.IsDeleted,
             q => q.Include(x => x.Satirlar))
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+        ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onaylama");
 
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
         {
@@ -354,6 +383,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
+        ThrowIfMuhasebeFisiOlusmus(belge, "reddetme");
+
         if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
         {
             throw new BaseException(
@@ -376,6 +407,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         var belge = await Repository.FirstOrDefaultAsync(
             x => x.Id == id && !x.IsDeleted)
             ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+        ThrowIfMuhasebeFisiOlusmus(belge, "iptal");
 
         if (belge.Durum == SatisBelgesiDurumu.IptalEdildi)
         {

@@ -385,27 +385,35 @@ export class SatisBelgeleriComponent implements OnInit {
         return this.formData().satirlar.reduce((sum, s) => sum + this.previewSatirToplami(s), 0);
     }
 
+    // ── Faz 66: Bağlı muhasebe fişi olan belgelerde tüm mutasyon aksiyonları engellenir ──
+
     canEdit(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum === SatisBelgesiDurumu.Taslak || belge.durum === SatisBelgesiDurumu.Reddedildi;
     }
 
     canDelete(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum === SatisBelgesiDurumu.Taslak;
     }
 
     canGonder(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum === SatisBelgesiDurumu.Taslak;
     }
 
     canOnayla(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum === SatisBelgesiDurumu.MuhasebeOnayinda;
     }
 
     canReddet(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum === SatisBelgesiDurumu.MuhasebeOnayinda;
     }
 
     canIptal(belge: SatisBelgesiDto): boolean {
+        if (belge.muhasebeFisId) return false;
         return belge.durum !== SatisBelgesiDurumu.IptalEdildi &&
             belge.durum !== SatisBelgesiDurumu.FaturaKesildi &&
             belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;

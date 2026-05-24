@@ -313,3 +313,96 @@ Bu fazda migration gerekmemiştir.
 |-------|-------|----------|
 | [`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) | Değişiklik | `Router` inject, `hasMuhasebeFisi` + `muhasebeFisineGit` metotları |
 | [`satis-belgeleri.component.html`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.html) | Değişiklik | "Fişe Git" butonu + detay dialog'da fiş bilgisi |
+
+## Faz 66 — Bağlı Muhasebe Fişi Olan Satış Belgelerinde Koruma Kuralları
+
+### Amaç
+
+Satış belgesi ile muhasebe fişi bağlantısı kurulduktan sonra (`MuhasebeFisId` dolu), satış belgesi üzerinde yapılabilecek değişiklik/silme/iptal davranışlarını muhasebe fişi bütünlüğünü koruyacak şekilde netleştirir.
+
+### Temel İlke
+
+`MuhasebeFisId` dolu bir satış belgesi **muhasebe etkisi doğurmuştur**. Bu nedenle:
+
+- **Belge güncellenemez.**
+- **Belge silinemez.**
+- **Belge doğrudan iptal edilemez.**
+- **Belge reddedilemez.**
+- **Belge tekrar muhasebe onayına gönderilemez.**
+- **Belge tekrar muhasebe onaylanamaz.**
+
+Değişiklik ancak **bağlı muhasebe fişi için iptal/ters kayıt prosedürü** işletildikten sonra yapılabilir.
+
+### Backend Koruması
+
+[`SatisBelgesiService.cs`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs) içerisinde `ThrowIfMuhasebeFisiOlusmus` private helper'ı eklendi:
+
+```csharp
+private static void ThrowIfMuhasebeFisiOlusmus(SatisBelgesi belge, string islemAdi)
+{
+    if (belge.MuhasebeFisId.HasValue)
+    {
+        throw new BaseException(
+            $"Bu satış belgesi için muhasebe fişi oluşturulduğundan {islemAdi} işlemi yapılamaz. " +
+            "Önce bağlı muhasebe fişi için iptal/ters kayıt süreci işletilmelidir.",
+            errorCode: 400);
+    }
+}
+```
+
+Bu helper aşağıdaki tüm mutasyon metotlarında belge bulunduktan hemen sonra çağrılır:
+
+| Metot | Kontrol | Hata Mesajı |
+|-------|---------|-------------|
+| `UpdateAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "güncelleme")` | güncelleme işlemi yapılamaz |
+| `DeleteAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "silme")` | silme işlemi yapılamaz |
+| `IptalEtAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "iptal")` | iptal işlemi yapılamaz |
+| `ReddetAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "reddetme")` | reddetme işlemi yapılamaz |
+| `MuhasebeOnayinaGonderAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onayına gönderme")` | muhasebe onayına gönderme işlemi yapılamaz |
+| `MuhasebeOnaylaAsync` | `ThrowIfMuhasebeFisiOlusmus(belge, "muhasebe onaylama")` | muhasebe onaylama işlemi yapılamaz |
+
+### Frontend Görünürlük Kuralları (Güncel)
+
+[`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) içindeki `can*` helper'larına `muhasebeFisId` kontrolü eklendi. Bağlı fişi olan belgelerde tüm mutasyon butonları gizlenir.
+
+| Helper | Ek Kontrol | Sonuç |
+|--------|-----------|-------|
+| `canEdit` | `if (belge.muhasebeFisId) return false` | Düzenle butonu gizlenir |
+| `canDelete` | `if (belge.muhasebeFisId) return false` | Sil butonu gizlenir |
+| `canGonder` | `if (belge.muhasebeFisId) return false` | Onaya Gönder butonu gizlenir |
+| `canOnayla` | `if (belge.muhasebeFisId) return false` | Onayla butonu gizlenir |
+| `canReddet` | `if (belge.muhasebeFisId) return false` | Reddet butonu gizlenir |
+| `canIptal` | `if (belge.muhasebeFisId) return false` | İptal butonu gizlenir |
+| `canFisOlustur` | (zaten `!belge.muhasebeFisId` kontrolü var) | Değişiklik yok |
+| `hasMuhasebeFisi` | (zaten `!!belge.muhasebeFisId` kontrolü var) | Değişiklik yok |
+
+**Not:** Frontend görünürlük kuralları kullanıcı deneyimi içindir. Nihai güvenlik backend validasyonları ile sağlanır.
+
+### Bu Fazda Yapılmayanlar
+
+- Otomatik ters muhasebe fişi oluşturulmaz.
+- Muhasebe fişi otomatik iptal edilmez.
+- Bağlı fişi iptal edilmiş satış belgesini iptal etme akışı bu fazda ele alınmaz.
+- e-Fatura/e-Arşiv iptali yapılmaz.
+
+### Bağlı Fiş İptal/Ters Kayıt Süreci (Sonraki Faz)
+
+Bağlı muhasebe fişi olan bir satış belgesini iptal etmek gerektiğinde:
+
+1. Önce bağlı muhasebe fişi için ters kayıt fişi oluşturulmalıdır.
+2. Veya bağlı fiş iptal edilmelidir (`Durum = Iptal`).
+3. Ardından satış belgesi iptal edilebilir.
+
+Bu akış ayrı bir fazda (Faz 67 veya sonrası) değerlendirilecektir.
+
+### Değişen Dosyalar (Faz 66)
+
+| Dosya | Durum | Açıklama |
+|-------|-------|----------|
+| [`SatisBelgesiService.cs`](backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs) | Değişiklik | `ThrowIfMuhasebeFisiOlusmus` helper + 6 mutasyon metoduna koruma eklendi |
+| [`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) | Değişiklik | `can*` helper'larına `muhasebeFisId` kontrolü eklendi |
+| [`satis-belgesi-muhasebe-fisi.md`](docs/satis-belgesi-muhasebe-fisi.md) | Değişiklik | Faz 66 dokümantasyonu eklendi |
+
+### Migration
+
+Bu fazda model değişikliği yapılmadığından migration gerekmemiştir.

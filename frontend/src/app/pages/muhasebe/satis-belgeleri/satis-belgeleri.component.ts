@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { CardModule } from 'primeng/card';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
@@ -11,6 +12,7 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
+import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { TextareaModule } from 'primeng/textarea';
 import { ToastModule } from 'primeng/toast';
@@ -51,6 +53,7 @@ import {
         FormsModule,
         ReactiveFormsModule,
         ButtonModule,
+        CardModule,
         ConfirmDialogModule,
         DatePickerModule,
         DialogModule,
@@ -58,6 +61,7 @@ import {
         InputTextModule,
         SelectModule,
         TableModule,
+        TabsModule,
         TagModule,
         TextareaModule,
         ToastModule,
@@ -96,6 +100,9 @@ export class SatisBelgeleriComponent implements OnInit {
     // Detay dialog
     detayDialogVisible = signal(false);
     detayBelge = signal<SatisBelgesiDto | null>(null);
+
+    // Tab navigation
+    activeTab = signal('0');
 
     // ── Label/option maps (plain, not signals) ──
     durumLabels = SATIS_BELGESI_DURUMU_LABELS;
@@ -155,10 +162,17 @@ export class SatisBelgeleriComponent implements OnInit {
 
     // ── Create / Edit Dialog ──
 
+    onTabChange(value: string | number | undefined): void {
+        if (value !== undefined) {
+            this.activeTab.set(String(value));
+        }
+    }
+
     openCreateDialog(): void {
         this.isEditing.set(false);
         this.editingBelge.set(null);
         this.formData.set(createEmptyCreateSatisBelgesiRequest());
+        this.activeTab.set('0');
         this.dialogVisible.set(true);
     }
 
@@ -200,6 +214,7 @@ export class SatisBelgeleriComponent implements OnInit {
                 kaynakSatirId: s.kaynakSatirId
             }))
         });
+        this.activeTab.set('0');
         this.dialogVisible.set(true);
     }
 
@@ -379,6 +394,14 @@ export class SatisBelgeleriComponent implements OnInit {
 
     previewSatirToplami(satir: CreateSatisBelgesiSatiriRequest): number {
         return satir.miktar * satir.birimFiyat + this.previewKdvTutari(satir);
+    }
+
+    previewToplamMatrah(): number {
+        return this.formData().satirlar.reduce((sum, s) => sum + s.miktar * s.birimFiyat, 0);
+    }
+
+    previewToplamKdv(): number {
+        return this.formData().satirlar.reduce((sum, s) => sum + this.previewKdvTutari(s), 0);
     }
 
     previewGenelToplam(): number {

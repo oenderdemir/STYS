@@ -197,248 +197,369 @@
     </p-table>
 </div>
 
-<!-- ──────────────── Oluşturma / Düzenleme Dialog ──────────────── -->
+<!-- ════════════════════════════════════════════════
+     Oluşturma / Düzenleme Dialog — Tabbed Tasarım
+     ════════════════════════════════════════════════ -->
 <p-dialog
     [(visible)]="dialogVisible"
-    [header]="isEditing() ? 'Satış Belgesini Düzenle' : 'Yeni Satış Belgesi'"
+    [header]="isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi'"
     [modal]="true"
-    [style]="{width: '850px'}"
-    [maximizable]="true"
-    [closable]="true">
+    [style]="{width: '90vw', 'max-width': '1200px'}"
+    [closable]="true"
+    [draggable]="false">
+
     <ng-template pTemplate="content">
-        <div class="grid">
-            <!-- Sol panel: Belge bilgileri -->
-            <div class="col-12 md:col-4">
-                <h5 class="mt-0 mb-3">Belge Bilgileri</h5>
+        <div class="satis-belgesi-dialog-content belge-form">
+            <p-tabs [value]="activeTab()" (valueChange)="onTabChange($event)">
+                <p-tablist>
+                    <p-tab value="0">Belge & Müşteri Bilgileri</p-tab>
+                    <p-tab value="1">Satırlar</p-tab>
+                    <p-tab value="2">Özet</p-tab>
+                </p-tablist>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Belge Tipi</label>
-                    <p-select
-                        [options]="belgeTipiSecenekleri"
-                        [ngModel]="formData().belgeTipi"
-                        (ngModelChange)="updateFormField('belgeTipi', $event)"
-                        optionLabel="label"
-                        optionValue="value"
-                        styleClass="w-full">
-                    </p-select>
-                </div>
+                <p-tabpanels>
+                    <!-- ═══════ TAB 1: Belge & Müşteri Bilgileri ═══════ -->
+                    <p-tabpanel value="0">
+                        <div class="grid mt-2">
+                            <!-- Belge Bilgileri Kartı -->
+                            <div class="col-12 md:col-6">
+                                <div class="form-card">
+                                    <h5 class="mt-0 mb-3">Belge Bilgileri</h5>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Belge No <span class="text-sm text-color-secondary">(Boş bırakılırsa otomatik)</span></label>
-                    <input
-                        pInputText
-                        class="w-full"
-                        [ngModel]="formData().belgeNo"
-                        (ngModelChange)="updateFormField('belgeNo', $event)"
-                        placeholder="ST-20260525-000001" />
-                </div>
+                                    <div class="grid">
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Belge Tipi</label>
+                                            <p-select
+                                                [options]="belgeTipiSecenekleri"
+                                                [ngModel]="formData().belgeTipi"
+                                                (ngModelChange)="updateFormField('belgeTipi', $event)"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Belge Tarihi *</label>
-                    <p-datepicker
-                        [ngModel]="formData().belgeTarihi"
-                        (ngModelChange)="updateFormField('belgeTarihi', $event)"
-                        [showIcon]="true"
-                        dateFormat="yy-mm-dd"
-                        styleClass="w-full">
-                    </p-datepicker>
-                </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Belge No <span class="text-xs text-color-secondary">(Boş = otomatik)</span></label>
+                                            <input
+                                                pInputText
+                                                class="w-full"
+                                                [ngModel]="formData().belgeNo"
+                                                (ngModelChange)="updateFormField('belgeNo', $event)"
+                                                placeholder="ST-20260525-000001" />
+                                        </div>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Vade Tarihi</label>
-                    <p-datepicker
-                        [ngModel]="formData().vadeTarihi"
-                        (ngModelChange)="updateFormField('vadeTarihi', $event)"
-                        [showIcon]="true"
-                        dateFormat="yy-mm-dd"
-                        styleClass="w-full">
-                    </p-datepicker>
-                </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Belge Tarihi *</label>
+                                            <p-datepicker
+                                                [ngModel]="formData().belgeTarihi"
+                                                (ngModelChange)="updateFormField('belgeTarihi', $event)"
+                                                [showIcon]="true"
+                                                dateFormat="yy-mm-dd"
+                                                styleClass="w-full">
+                                            </p-datepicker>
+                                        </div>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Kaynak Modül</label>
-                    <p-select
-                        [options]="kaynakModulSecenekleri"
-                        [ngModel]="formData().kaynakModul"
-                        (ngModelChange)="updateFormField('kaynakModul', $event)"
-                        optionLabel="label"
-                        optionValue="value"
-                        styleClass="w-full">
-                    </p-select>
-                </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vade Tarihi</label>
+                                            <p-datepicker
+                                                [ngModel]="formData().vadeTarihi"
+                                                (ngModelChange)="updateFormField('vadeTarihi', $event)"
+                                                [showIcon]="true"
+                                                dateFormat="yy-mm-dd"
+                                                styleClass="w-full">
+                                            </p-datepicker>
+                                        </div>
 
-                <div class="field mb-3">
-                    <div class="flex align-items-center gap-2">
-                        <p-toggleSwitch
-                            [ngModel]="formData().kurumsalMi"
-                            (ngModelChange)="updateFormField('kurumsalMi', $event)"
-                            styleClass="mr-1">
-                        </p-toggleSwitch>
-                        <label class="text-sm">Kurumsal Müşteri</label>
-                    </div>
-                </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Kaynak Modül</label>
+                                            <p-select
+                                                [options]="kaynakModulSecenekleri"
+                                                [ngModel]="formData().kaynakModul"
+                                                (ngModelChange)="updateFormField('kaynakModul', $event)"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
 
-                @if (formData().kurumsalMi) {
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Ünvan *</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriUnvan"
-                        (ngModelChange)="updateFormField('musteriUnvan', $event)" />
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Vergi No *</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriVergiNo"
-                        (ngModelChange)="updateFormField('musteriVergiNo', $event)" />
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Vergi Dairesi</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriVergiDairesi"
-                        (ngModelChange)="updateFormField('musteriVergiDairesi', $event)" />
-                </div>
-                } @else {
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Ad Soyad *</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriAdSoyad"
-                        (ngModelChange)="updateFormField('musteriAdSoyad', $event)" />
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">TC Kimlik No</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriTcKimlikNo"
-                        (ngModelChange)="updateFormField('musteriTcKimlikNo', $event)" />
-                </div>
-                }
+                                        <div class="col-12 field">
+                                            <label>Açıklama</label>
+                                            <p-textarea class="w-full" rows="2"
+                                                [ngModel]="formData().aciklama"
+                                                (ngModelChange)="updateFormField('aciklama', $event)">
+                                            </p-textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">E-posta</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriEposta"
-                        (ngModelChange)="updateFormField('musteriEposta', $event)" />
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Telefon</label>
-                    <input pInputText class="w-full"
-                        [ngModel]="formData().musteriTelefon"
-                        (ngModelChange)="updateFormField('musteriTelefon', $event)" />
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Adres</label>
-                    <p-textarea class="w-full" rows="2"
-                        [ngModel]="formData().musteriAdres"
-                        (ngModelChange)="updateFormField('musteriAdres', $event)">
-                    </p-textarea>
-                </div>
-                <div class="field mb-3">
-                    <label class="block text-sm mb-1">Açıklama</label>
-                    <p-textarea class="w-full" rows="2"
-                        [ngModel]="formData().aciklama"
-                        (ngModelChange)="updateFormField('aciklama', $event)">
-                    </p-textarea>
-                </div>
-            </div>
+                            <!-- Müşteri Bilgileri Kartı -->
+                            <div class="col-12 md:col-6">
+                                <div class="form-card">
+                                    <div class="flex justify-content-between align-items-center mb-3">
+                                        <h5 class="m-0">Müşteri Bilgileri</h5>
+                                        <div class="flex align-items-center gap-2">
+                                            <p-toggleSwitch
+                                                [ngModel]="formData().kurumsalMi"
+                                                (ngModelChange)="updateFormField('kurumsalMi', $event)"
+                                                styleClass="mr-1">
+                                            </p-toggleSwitch>
+                                            <label class="text-sm">Kurumsal</label>
+                                        </div>
+                                    </div>
 
-            <!-- Sağ panel: Satırlar -->
-            <div class="col-12 md:col-8">
-                <div class="flex justify-content-between align-items-center mb-3">
-                    <h5 class="m-0">Satırlar</h5>
-                    <p-button
-                        label="Satır Ekle"
-                        icon="pi pi-plus"
-                        size="small"
-                        severity="info"
-                        (click)="addSatir()">
-                    </p-button>
-                </div>
+                                    <div class="grid">
+                                        @if (formData().kurumsalMi) {
+                                        <div class="col-12 field">
+                                            <label>Ünvan *</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriUnvan"
+                                                (ngModelChange)="updateFormField('musteriUnvan', $event)"
+                                                placeholder="Şirket ünvanı" />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi No *</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriVergiNo"
+                                                (ngModelChange)="updateFormField('musteriVergiNo', $event)"
+                                                placeholder="Vergi numarası" />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi Dairesi</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriVergiDairesi"
+                                                (ngModelChange)="updateFormField('musteriVergiDairesi', $event)"
+                                                placeholder="Vergi dairesi" />
+                                        </div>
+                                        } @else {
+                                        <div class="col-12 field">
+                                            <label>Ad Soyad *</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriAdSoyad"
+                                                (ngModelChange)="updateFormField('musteriAdSoyad', $event)"
+                                                placeholder="Ad soyad" />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>TC Kimlik No</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriTcKimlikNo"
+                                                (ngModelChange)="updateFormField('musteriTcKimlikNo', $event)"
+                                                placeholder="TC Kimlik numarası" />
+                                        </div>
+                                        }
 
-                @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
-                <div class="p-3 mb-3 border-round surface-border shadow-1">
-                    <div class="flex justify-content-between align-items-center mb-2">
-                        <span class="font-medium">Satır {{ satir.siraNo }}</span>
-                        <p-button
-                            icon="pi pi-trash"
-                            severity="danger"
-                            size="small"
-                            [rounded]="true"
-                            [text]="true"
-                            pTooltip="Satırı Sil"
-                            (click)="removeSatir(si)">
-                        </p-button>
-                    </div>
-                    <div class="grid">
-                        <div class="col-12 md:col-4 field mb-2">
-                            <label class="block text-xs mb-1">Satır Tipi</label>
-                            <p-select
-                                [options]="satirTipiSecenekleri"
-                                [(ngModel)]="satir.satirTipi"
-                                optionLabel="label"
-                                optionValue="value"
-                                styleClass="w-full">
-                            </p-select>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>E-posta</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriEposta"
+                                                (ngModelChange)="updateFormField('musteriEposta', $event)"
+                                                placeholder="ornek@firma.com" />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Telefon</label>
+                                            <input pInputText class="w-full"
+                                                [ngModel]="formData().musteriTelefon"
+                                                (ngModelChange)="updateFormField('musteriTelefon', $event)"
+                                                placeholder="+90 5XX XXX XX XX" />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>Adres</label>
+                                            <p-textarea class="w-full" rows="2"
+                                                [ngModel]="formData().musteriAdres"
+                                                (ngModelChange)="updateFormField('musteriAdres', $event)"
+                                                placeholder="Açık adres">
+                                            </p-textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-12 md:col-8 field mb-2">
-                            <label class="block text-xs mb-1">Açıklama</label>
-                            <input pInputText class="w-full" [(ngModel)]="satir.aciklama" />
-                        </div>
-                        <div class="col-6 md:col-3 field mb-2">
-                            <label class="block text-xs mb-1">Miktar</label>
-                            <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
-                            </p-inputNumber>
-                        </div>
-                        <div class="col-6 md:col-3 field mb-2">
-                            <label class="block text-xs mb-1">Birim Fiyat</label>
-                            <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true">
-                            </p-inputNumber>
-                        </div>
-                        <div class="col-6 md:col-3 field mb-2">
-                            <label class="block text-xs mb-1">KDV Tipi</label>
-                            <p-select
-                                [options]="kdvUygulamaTipiSecenekleri"
-                                [(ngModel)]="satir.kdvUygulamaTipi"
-                                optionLabel="label"
-                                optionValue="value"
-                                styleClass="w-full">
-                            </p-select>
-                        </div>
-                        <div class="col-6 md:col-3 field mb-2">
-                            <label class="block text-xs mb-1">KDV Oranı (%)</label>
-                            <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
-                                [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
-                            </p-inputNumber>
-                        </div>
-                    </div>
-                    <div class="flex justify-content-end gap-3 text-sm text-color-secondary">
-                        <span>Matrah: {{ satir.miktar * satir.birimFiyat | number: '1.2-2' }} ₺</span>
-                        <span>KDV: {{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</span>
-                        <span class="font-medium">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
-                    </div>
-                </div>
-                }
+                    </p-tabpanel>
 
+                    <!-- ═══════ TAB 2: Satırlar ═══════ -->
+                    <p-tabpanel value="1">
+                        <div class="mt-2">
+                            <div class="flex justify-content-between align-items-center mb-3">
+                                <h5 class="m-0">Satırlar ({{ formData().satirlar.length }})</h5>
+                                <p-button
+                                    label="Satır Ekle"
+                                    icon="pi pi-plus"
+                                    severity="info"
+                                    (click)="addSatir()">
+                                </p-button>
+                            </div>
+
+                            @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
+                            <div class="satir-card">
+                                <div class="satir-header">
+                                    <span class="satir-title">Satır {{ satir.siraNo }}</span>
+                                    <p-button
+                                        icon="pi pi-trash"
+                                        severity="danger"
+                                        size="small"
+                                        [rounded]="true"
+                                        [text]="true"
+                                        pTooltip="Satırı Sil"
+                                        (click)="removeSatir(si)">
+                                    </p-button>
+                                </div>
+
+                                <div class="satir-grid">
+                                    <!-- Row 1: Satır Tipi + Açıklama -->
+                                    <div class="field" style="grid-column: span 3;">
+                                        <label>Satır Tipi</label>
+                                        <p-select
+                                            [options]="satirTipiSecenekleri"
+                                            [(ngModel)]="satir.satirTipi"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            styleClass="w-full">
+                                        </p-select>
+                                    </div>
+                                    <div class="field" style="grid-column: span 9;">
+                                        <label>Açıklama</label>
+                                        <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması" />
+                                    </div>
+
+                                    <!-- Row 2: Miktar + Birim Fiyat + KDV Tipi + KDV Oranı -->
+                                    <div class="field" style="grid-column: span 3;">
+                                        <label>Miktar</label>
+                                        <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
+                                        </p-inputNumber>
+                                    </div>
+                                    <div class="field" style="grid-column: span 3;">
+                                        <label>Birim Fiyat (₺)</label>
+                                        <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
+                                        </p-inputNumber>
+                                    </div>
+                                    <div class="field" style="grid-column: span 3;">
+                                        <label>KDV Tipi</label>
+                                        <p-select
+                                            [options]="kdvUygulamaTipiSecenekleri"
+                                            [(ngModel)]="satir.kdvUygulamaTipi"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            styleClass="w-full">
+                                        </p-select>
+                                    </div>
+                                    <div class="field" style="grid-column: span 3;">
+                                        <label>KDV Oranı (%)</label>
+                                        <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
+                                            [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
+                                        </p-inputNumber>
+                                    </div>
+                                </div>
+
+                                <!-- Satır Hesaplanan Özet -->
+                                <div class="satir-summary">
+                                    <span>Matrah: <strong>{{ satir.miktar * satir.birimFiyat | number: '1.2-2' }} ₺</strong></span>
+                                    <span>KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="summary-total">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                                </div>
+                            </div>
+                            }
+
+                            @if (formData().satirlar.length === 0) {
+                            <div class="text-center text-color-secondary py-4">
+                                <i class="pi pi-info-circle mr-2"></i>
+                                Henüz satır eklenmedi. "Satır Ekle" butonuna tıklayarak en az bir satır ekleyin.
+                            </div>
+                            }
+
+                            <!-- Alt toplam çubuğu -->
+                            @if (formData().satirlar.length > 0) {
+                            <div class="flex justify-content-end mt-3 p-3 bg-primary-50 border-round">
+                                <span class="text-lg font-bold text-primary-700">
+                                    Genel Toplam: {{ previewGenelToplam() | number: '1.2-2' }} ₺
+                                </span>
+                            </div>
+                            }
+                        </div>
+                    </p-tabpanel>
+
+                    <!-- ═══════ TAB 3: Özet ═══════ -->
+                    <p-tabpanel value="2">
+                        <div class="mt-2">
+                            <h5 class="mb-3">Belge Özeti</h5>
+
+                            <div class="ozet-panel">
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Toplam Matrah</span>
+                                    <span class="ozet-value">{{ previewToplamMatrah() | number: '1.2-2' }} ₺</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Toplam KDV</span>
+                                    <span class="ozet-value">{{ previewToplamKdv() | number: '1.2-2' }} ₺</span>
+                                </div>
+                                <div class="ozet-genel-toplam">
+                                    <span class="ozet-genel-label">Genel Toplam</span>
+                                    <span>{{ previewGenelToplam() | number: '1.2-2' }} ₺</span>
+                                </div>
+                            </div>
+
+                            <div class="grid mt-3">
+                                <div class="col-12 md:col-6">
+                                    <div class="form-card">
+                                        <h6 class="mt-0 mb-3">Belge Detayları</h6>
+                                        <div class="text-sm">
+                                            <p class="mb-2"><strong>Belge No:</strong> {{ formData().belgeNo || '(Otomatik atanacak)' }}</p>
+                                            <p class="mb-2"><strong>Belge Tipi:</strong> {{ getBelgeTipiLabel(formData().belgeTipi) }}</p>
+                                            <p class="mb-2"><strong>Tarih:</strong> {{ formData().belgeTarihi }}</p>
+                                            <p class="mb-2"><strong>Vade:</strong> {{ formData().vadeTarihi || '-' }}</p>
+                                            <p class="mb-2"><strong>Kaynak Modül:</strong> {{ getKaynakModulLabel(formData().kaynakModul) }}</p>
+                                            <p class="mb-2"><strong>Satır Adedi:</strong> {{ formData().satirlar.length }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 md:col-6">
+                                    <div class="form-card">
+                                        <h6 class="mt-0 mb-3">Müşteri Bilgisi</h6>
+                                        <div class="text-sm">
+                                            <p class="mb-2"><strong>Tür:</strong> {{ formData().kurumsalMi ? 'Kurumsal' : 'Bireysel' }}</p>
+                                            @if (formData().kurumsalMi) {
+                                            <p class="mb-2"><strong>Ünvan:</strong> {{ formData().musteriUnvan || '-' }}</p>
+                                            <p class="mb-2"><strong>Vergi No:</strong> {{ formData().musteriVergiNo || '-' }}</p>
+                                            <p class="mb-2"><strong>Vergi Dairesi:</strong> {{ formData().musteriVergiDairesi || '-' }}</p>
+                                            } @else {
+                                            <p class="mb-2"><strong>Ad Soyad:</strong> {{ formData().musteriAdSoyad || '-' }}</p>
+                                            <p class="mb-2"><strong>TC Kimlik:</strong> {{ formData().musteriTcKimlikNo || '-' }}</p>
+                                            }
+                                            <p class="mb-2"><strong>E-posta:</strong> {{ formData().musteriEposta || '-' }}</p>
+                                            <p class="mb-2"><strong>Telefon:</strong> {{ formData().musteriTelefon || '-' }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </p-tabpanel>
+                </p-tabpanels>
+            </p-tabs>
+        </div>
+    </ng-template>
+
+    <ng-template pTemplate="footer">
+        <div class="dialog-footer">
+            <div class="footer-left">
                 @if (formData().satirlar.length > 0) {
-                <div class="flex justify-content-end p-3 bg-blue-50 border-round">
-                    <span class="text-lg font-bold text-blue-700">
-                        Genel Toplam: {{ previewGenelToplam() | number: '1.2-2' }} ₺
-                    </span>
-                </div>
+                <span>Toplam: <strong>{{ previewGenelToplam() | number: '1.2-2' }} ₺</strong></span>
                 }
+            </div>
+            <div class="footer-right">
+                <p-button label="İptal" severity="secondary" [outlined]="true" (click)="dialogVisible.set(false)"></p-button>
+                <p-button
+                    label="Kaydet"
+                    icon="pi pi-save"
+                    severity="success"
+                    [loading]="dialogLoading()"
+                    (click)="saveBelge()">
+                </p-button>
             </div>
         </div>
     </ng-template>
-    <ng-template pTemplate="footer">
-        <p-button label="İptal" severity="secondary" [outlined]="true" (click)="dialogVisible.set(false)"></p-button>
-        <p-button
-            label="Kaydet"
-            icon="pi pi-save"
-            [loading]="dialogLoading()"
-            (click)="saveBelge()">
-        </p-button>
-    </ng-template>
 </p-dialog>
 
-<!-- ──────────────── Detay Dialog ──────────────── -->
+<!-- ════════════════════ Detay Dialog ════════════════════ -->
 <p-dialog
     [(visible)]="detayDialogVisible"
     header="Belge Detayı"
@@ -528,7 +649,7 @@
     }
 </p-dialog>
 
-<!-- ──────────────── Reddetme Dialog ──────────────── -->
+<!-- ════════════════════ Reddetme Dialog ════════════════════ -->
 <p-dialog
     [(visible)]="redDialogVisible"
     header="Belgeyi Reddet"

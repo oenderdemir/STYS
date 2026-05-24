@@ -5,14 +5,197 @@
         .p-datatable .p-datatable-thead > tr > th {
             white-space: nowrap;
         }
-
-        .p-dialog .p-dialog-content {
-            max-height: 70vh;
-            overflow-y: auto;
-        }
     }
 
     .text-right {
         text-align: right;
+    }
+
+    // ── Dialog scroll management ──
+    .satis-belgesi-dialog-content {
+        max-height: 72vh;
+        overflow-y: auto;
+        padding-right: 0.25rem;
+
+        // Subtle scrollbar
+        &::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background-color: var(--surface-400);
+            border-radius: 3px;
+        }
+
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+    }
+
+    // ── Form layout ──
+    .belge-form {
+        .field {
+            margin-bottom: 1rem;
+
+            label {
+                display: block;
+                font-size: 0.8125rem;
+                font-weight: 500;
+                margin-bottom: 0.25rem;
+                color: var(--text-color-secondary);
+            }
+        }
+
+        // Cards inside tabs
+        .form-card {
+            background: var(--surface-card);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--border-radius);
+            padding: 1.25rem;
+        }
+    }
+
+    // ── Satır card styling ──
+    .satir-card {
+        background: var(--surface-section);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--border-radius);
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: box-shadow 0.15s;
+
+        &:hover {
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+        }
+
+        .satir-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--surface-border);
+
+            .satir-title {
+                font-weight: 600;
+                font-size: 0.9375rem;
+                color: var(--primary-color);
+            }
+        }
+
+        .satir-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 0.75rem;
+        }
+
+        .satir-summary {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1.25rem;
+            margin-top: 0.75rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed var(--surface-border);
+            font-size: 0.8125rem;
+            color: var(--text-color-secondary);
+            flex-wrap: wrap;
+
+            span {
+                white-space: nowrap;
+            }
+
+            .summary-total {
+                font-weight: 600;
+                color: var(--text-color);
+            }
+        }
+    }
+
+    // ── Summary tab ──
+    .ozet-panel {
+        background: var(--surface-section);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--border-radius);
+        padding: 1.5rem 2rem;
+
+        .ozet-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.5rem 0;
+            font-size: 0.9375rem;
+            border-bottom: 1px solid var(--surface-border);
+
+            &:last-child {
+                border-bottom: none;
+            }
+
+            .ozet-label {
+                color: var(--text-color-secondary);
+            }
+
+            .ozet-value {
+                font-weight: 500;
+            }
+        }
+
+        .ozet-genel-toplam {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 2px solid var(--primary-color);
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--primary-color);
+
+            .ozet-genel-label {
+                color: var(--text-color);
+                font-size: 1rem;
+            }
+        }
+    }
+
+    // ── Footer ──
+    .dialog-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+
+        .footer-left {
+            font-size: 0.8125rem;
+            color: var(--text-color-secondary);
+        }
+
+        .footer-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+    }
+
+    // ── Responsive ──
+    @media (max-width: 767px) {
+        .satir-card .satir-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .ozet-panel {
+            padding: 1rem;
+        }
+    }
+
+    @media (max-width: 575px) {
+        .satir-card .satir-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .satir-card .satir-summary {
+            flex-direction: column;
+            gap: 0.25rem;
+            align-items: flex-end;
+        }
     }
 }

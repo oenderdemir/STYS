@@ -75,6 +75,9 @@ public partial class SeedMuhasebeAdminRoleAndGroup : Migration
             -- MuhasebeAdmin identity role (unlimited scope via .Admin suffix)
             (N'MuhasebeAdmin', N'Admin'),
 
+            -- UIUser role (grants UI access)
+            (N'KullaniciTipi', N'UIUser'),
+
             -- Core Muhasebe domains: Menu, View, Manage
             (N'CariKartYonetimi', N'Menu'),
             (N'CariKartYonetimi', N'View'),

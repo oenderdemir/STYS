@@ -322,3 +322,69 @@ ISatisBelgesiService.CreateAsync
 | [`backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiTaslakOlusturmaService.cs`](../backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiTaslakOlusturmaService.cs) | Implementation |
 | [`backend/Muhasebe/SatisBelgeleri/Controllers/SatisBelgeleriController.cs`](../backend/Muhasebe/SatisBelgeleri/Controllers/SatisBelgeleriController.cs) | Controller endpoint |
 | [`backend/Program.cs`](../backend/Program.cs) | DI registration |
+
+---
+
+## 13. Otel / Rezervasyon Checkout Entegrasyonu (Faz 61)
+
+### 13.1 Genel Bakış
+
+`IRezervasyonSatisBelgesiService`, check-out işlemi tamamlanmış rezervasyonlardan satış belgesi taslağı oluşturmak için [`ISatisBelgesiTaslakOlusturmaService`](#) ile entegrasyonu sağlar.
+
+**Prensip:** Otel modülü (Rezervasyonlar) doğrudan `SatisBelgesi` entity'si oluşturmaz veya `ISatisBelgesiService.CreateAsync` çağırmaz. Bunun yerine, rezervasyon verisini `ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync` metoduna iletir.
+
+### 13.2 API Endpoint
+
+```
+POST ui/rezervasyon/kayitlar/{rezervasyonId:int}/satis-belgesi-taslagi-olustur
+```
+
+**Permission:** `RezervasyonYonetimi.Manage`
+
+**Request Body:**
+```json
+{
+  "rezervasyonId": {rezervasyonId}
+}
+```
+
+**Response:** `SatisBelgesiDto`
+
+### 13.3 İş Akışı
+
+1. **Route/Body ID Eşleşmesi:** Route'daki `rezervasyonId` ile body'deki `RezervasyonId` eşleşmeli, aksi halde 400 döner.
+2. **Rezervasyon Bulma ve Access Scope:** Rezervasyon ID ile bulunur. Kullanıcı scoped ise rezervasyonun `TesisId` değeri kullanıcının scope'undaki tesislerden biri olmalıdır, değilse 403 döner.
+3. **Durum Validasyonu:** Yalnızca `CheckOutTamamlandi` durumundaki rezervasyonlar için taslak oluşturulabilir. `Iptal` durumundakiler reddedilir (400).
+4. **Gece Sayısı Hesaplama:** `(CikisTarihi.Date - GirisTarihi.Date).Days`
+5. **Satış Satırları:** Her gece için bir `Konaklama` tipi satır oluşturulur. KDV oranı varsayılan %10'dur. Yuvarlama farkları son satıra eklenir.
+6. **Müşteri Bilgileri:** Rezervasyonlar her zaman **bireysel** müşteri olarak işlenir (`KurumsalMi = false`). `MisafirAdiSoyadi` ve `TcKimlikNo` kullanılır.
+7. **Taslak Oluşturma:** `KaynakModul = Otel`, `KaynakTipi = "RezervasyonCheckout"`, `KaynakId = rezervasyonId.ToString()` ile [`ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync`](#) çağrılır.
+
+### 13.4 Access Scope
+
+Rezervasyon için access scope kontrolü [`RezervasyonService.GetScopedReservationForManageAsync`](../backend/Rezervasyonlar/Services/RezervasyonService.cs) ile aynı pattern'i kullanır:
+
+- `IUserAccessScopeService.GetCurrentScopeAsync()` ile mevcut scope alınır
+- `scope.IsScoped && !scope.TesisIds.Contains(rezervasyon.TesisId)` → **403**
+
+### 13.5 Satır Yapısı
+
+| Alan | Değer |
+|------|-------|
+| `SatirTipi` | `Konaklama` (1) |
+| `Aciklama` | `"Konaklama — {geceTarihi:dd.MM.yyyy}"` |
+| `Miktar` | 1 |
+| `BirimFiyat` | `ToplamUcret / geceSayisi` (son satırda yuvarlama farkı eklenir) |
+| `KdvUygulamaTipi` | `Kdvli` (1) |
+| `KdvOrani` | 10% |
+| `KaynakSatirId` | `"{rezervasyonId}_{geceTarihi:yyyyMMdd}"` |
+
+### 13.6 Dosya Listesi
+
+| Dosya | Açıklama |
+|-------|----------|
+| [`backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs`](../backend/Rezervasyonlar/Dtos/RezervasyonSatisBelgesiDtos.cs) | Request DTO |
+| [`backend/Rezervasyonlar/Services/IRezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/IRezervasyonSatisBelgesiService.cs) | Interface |
+| [`backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs`](../backend/Rezervasyonlar/Services/RezervasyonSatisBelgesiService.cs) | Implementation |
+| [`backend/Rezervasyonlar/Controllers/RezervasyonController.cs`](../backend/Rezervasyonlar/Controllers/RezervasyonController.cs) | Controller endpoint |
+| [`backend/Program.cs`](../backend/Program.cs) | DI registration |

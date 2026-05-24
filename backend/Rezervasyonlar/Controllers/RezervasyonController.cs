@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Licensing;
 using STYS.Rezervasyonlar.Reporting;
+using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -13,10 +14,14 @@ namespace STYS.Rezervasyonlar.Controllers;
 public class RezervasyonController : UIController
 {
     private readonly IRezervasyonService _rezervasyonService;
+    private readonly IRezervasyonSatisBelgesiService _rezervasyonSatisBelgesiService;
 
-    public RezervasyonController(IRezervasyonService rezervasyonService)
+    public RezervasyonController(
+        IRezervasyonService rezervasyonService,
+        IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService)
     {
         _rezervasyonService = rezervasyonService;
+        _rezervasyonSatisBelgesiService = rezervasyonSatisBelgesiService;
     }
 
     [HttpGet("tesisler")]
@@ -348,5 +353,17 @@ public class RezervasyonController : UIController
         var fileBytes = OdemeRaporExportBuilder.BuildPdf(report);
         var fileName = $"odeme-raporu-{baslangicTarihi:yyyyMMdd}-{bitisTarihi:yyyyMMdd}.pdf";
         return File(fileBytes, "application/pdf", fileName);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/satis-belgesi-taslagi-olustur")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonSatisBelgesiTaslakRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonSatisBelgesiService.SatisBelgesiTaslagiOlusturAsync(
+            rezervasyonId, request, cancellationToken);
+        return Ok(result);
     }
 }

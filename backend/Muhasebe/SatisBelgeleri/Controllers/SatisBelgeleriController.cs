@@ -10,10 +10,14 @@ namespace STYS.Muhasebe.SatisBelgeleri.Controllers;
 public class SatisBelgeleriController : UIController
 {
     private readonly ISatisBelgesiService _service;
+    private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
 
-    public SatisBelgeleriController(ISatisBelgesiService service)
+    public SatisBelgeleriController(
+        ISatisBelgesiService service,
+        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService)
     {
         _service = service;
+        _taslakOlusturmaService = taslakOlusturmaService;
     }
 
     [HttpGet("{id:int}")]
@@ -41,6 +45,16 @@ public class SatisBelgeleriController : UIController
         CancellationToken cancellationToken)
     {
         var result = await _service.CreateAsync(request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kaynaktan-taslak-olustur")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    public async Task<IActionResult> KaynaktanTaslakOlustur(
+        [FromBody] SatisBelgesiTaslakOlusturRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _taslakOlusturmaService.KaynaktanTaslakOlusturAsync(request, cancellationToken);
         return Ok(result);
     }
 

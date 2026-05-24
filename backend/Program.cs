@@ -122,6 +122,7 @@ builder.Services.AddScoped<IKdvHareketRaporService, KdvHareketRaporService>();
 builder.Services.AddScoped<IKdvOzetRaporService, KdvOzetRaporService>();
 builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazirlikKontrolService>();
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
+builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

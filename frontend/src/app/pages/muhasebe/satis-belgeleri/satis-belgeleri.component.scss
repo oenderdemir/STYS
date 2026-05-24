@@ -13,9 +13,9 @@
 
     // ── Dialog scroll management ──
     .satis-belgesi-dialog-content {
-        max-height: 72vh;
+        max-height: 75vh;
         overflow-y: auto;
-        padding-right: 0.25rem;
+        width: 100%;
 
         // Subtle scrollbar
         &::-webkit-scrollbar {
@@ -32,8 +32,10 @@
         }
     }
 
-    // ── Form layout ──
+    // ── Full-width tab panels ──
     .belge-form {
+        width: 100%;
+
         .field {
             margin-bottom: 1rem;
 
@@ -52,6 +54,16 @@
             border: 1px solid var(--surface-border);
             border-radius: var(--border-radius);
             padding: 1.25rem;
+            height: 100%;
+        }
+
+        // Cari seçim alanı
+        .cari-selection-area {
+            background: var(--primary-50);
+            border: 1px solid var(--primary-200);
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
         }
     }
 
@@ -63,6 +75,7 @@
         padding: 1rem 1.25rem;
         margin-bottom: 0.75rem;
         transition: box-shadow 0.15s;
+        width: 100%;
 
         &:hover {
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -165,14 +178,30 @@
         width: 100%;
 
         .footer-left {
-            font-size: 0.8125rem;
-            color: var(--text-color-secondary);
+            font-size: 0.875rem;
+            color: var(--text-color);
+
+            strong {
+                color: var(--primary-color);
+                font-size: 1rem;
+            }
         }
 
         .footer-right {
             display: flex;
             gap: 0.5rem;
         }
+    }
+
+    // ── Readonly input styling ──
+    input[readonly] {
+        background-color: var(--surface-100);
+        cursor: default;
+    }
+
+    textarea[readonly] {
+        background-color: var(--surface-100);
+        cursor: default;
     }
 
     // ── Responsive ──

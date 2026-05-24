@@ -204,7 +204,7 @@
     [(visible)]="dialogVisible"
     [header]="isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi'"
     [modal]="true"
-    [style]="{width: '90vw', 'max-width': '1200px'}"
+    [style]="{width: '90vw', 'max-width': '1280px'}"
     [closable]="true"
     [draggable]="false">
 
@@ -212,19 +212,19 @@
         <div class="satis-belgesi-dialog-content belge-form">
             <p-tabs [value]="activeTab()" (valueChange)="onTabChange($event)">
                 <p-tablist>
-                    <p-tab value="0">Belge & Müşteri Bilgileri</p-tab>
+                    <p-tab value="0">Belge & Cari Bilgileri</p-tab>
                     <p-tab value="1">Satırlar</p-tab>
                     <p-tab value="2">Özet</p-tab>
                 </p-tablist>
 
                 <p-tabpanels>
-                    <!-- ═══════ TAB 1: Belge & Müşteri Bilgileri ═══════ -->
+                    <!-- ═══════ TAB 1: Belge & Cari Bilgileri ═══════ -->
                     <p-tabpanel value="0">
                         <div class="grid mt-2">
-                            <!-- Belge Bilgileri Kartı -->
-                            <div class="col-12 md:col-6">
+                            <!-- Belge Bilgileri Kartı (Sol) -->
+                            <div class="col-12 lg:col-6">
                                 <div class="form-card">
-                                    <h5 class="mt-0 mb-3">Belge Bilgileri</h5>
+                                    <h5 class="mt-0 mb-3">📋 Belge Bilgileri</h5>
 
                                     <div class="grid">
                                         <div class="col-12 md:col-6 field">
@@ -285,30 +285,144 @@
 
                                         <div class="col-12 field">
                                             <label>Açıklama</label>
-                                            <p-textarea class="w-full" rows="2"
+                                            <p-textarea class="w-full" rows="3"
                                                 [ngModel]="formData().aciklama"
-                                                (ngModelChange)="updateFormField('aciklama', $event)">
+                                                (ngModelChange)="updateFormField('aciklama', $event)"
+                                                placeholder="Belgeye ilişkin açıklama...">
                                             </p-textarea>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Müşteri Bilgileri Kartı -->
-                            <div class="col-12 md:col-6">
+                            <!-- Cari / Müşteri Bilgileri Kartı (Sağ) -->
+                            <div class="col-12 lg:col-6">
                                 <div class="form-card">
-                                    <div class="flex justify-content-between align-items-center mb-3">
-                                        <h5 class="m-0">Müşteri Bilgileri</h5>
-                                        <div class="flex align-items-center gap-2">
-                                            <p-toggleSwitch
-                                                [ngModel]="formData().kurumsalMi"
-                                                (ngModelChange)="updateFormField('kurumsalMi', $event)"
-                                                styleClass="mr-1">
-                                            </p-toggleSwitch>
-                                            <label class="text-sm">Kurumsal</label>
-                                        </div>
+                                    <h5 class="mt-0 mb-3">👤 Cari / Müşteri Bilgileri</h5>
+
+                                    <!-- Cari Kart Seçim Alanı -->
+                                    <div class="cari-selection-area">
+                                        <label class="block text-sm font-medium mb-2">
+                                            Cari Kart
+                                            @if (cariKartlarLoading()) {
+                                            <i class="pi pi-spin pi-spinner ml-1 text-xs"></i>
+                                            }
+                                        </label>
+                                        <p-autoComplete
+                                            class="w-full"
+                                            [ngModel]="selectedCari()"
+                                            (ngModelChange)="onCariKartSecildi($event)"
+                                            [suggestions]="filteredCariKartlar"
+                                            (completeMethod)="filterCari($event)"
+                                            [showEmptyMessage]="true"
+                                            emptyMessage="Cari kart bulunamadı"
+                                            [dropdown]="true"
+                                            [minLength]="0"
+                                            placeholder="Cari kart seçiniz (unvan, vergi no veya TCKN ile arayın)...">
+                                            <ng-template let-cari pTemplate="item">
+                                                <div class="flex align-items-center gap-2">
+                                                    <span>{{ cari.cariTipi === 'KurumsalMusteri' ? '🏢' : '👤' }}</span>
+                                                    <span class="font-medium">{{ cari.unvanAdSoyad }}</span>
+                                                    @if (cari.vergiNoTckn) {
+                                                    <span class="text-sm text-color-secondary">{{ cari.vergiNoTckn }}</span>
+                                                    }
+                                                    @if (cari.cariKodu) {
+                                                    <span class="text-xs text-color-secondary">[{{ cari.cariKodu }}]</span>
+                                                    }
+                                                </div>
+                                            </ng-template>
+                                            <ng-template let-cari pTemplate="selectedItem">
+                                                <div class="flex align-items-center gap-1">
+                                                    <span>{{ cari.cariTipi === 'KurumsalMusteri' ? '🏢' : '👤' }}</span>
+                                                    <span>{{ cari.unvanAdSoyad }}</span>
+                                                    @if (cari.vergiNoTckn) {
+                                                    <span class="text-sm text-color-secondary">— {{ cari.vergiNoTckn }}</span>
+                                                    }
+                                                </div>
+                                            </ng-template>
+                                        </p-autoComplete>
+                                        @if (!selectedCari() && !manuelMusteriGirisi()) {
+                                        <small class="text-color-secondary mt-1 block">
+                                            💡 Cari kart seçtiğinizde müşteri bilgileri otomatik doldurulur.
+                                        </small>
+                                        }
                                     </div>
 
+                                    <!-- Manuel Giriş Toggle -->
+                                    <div class="flex align-items-center justify-content-between mb-3">
+                                        <div class="flex align-items-center gap-2">
+                                            <p-toggleSwitch
+                                                [ngModel]="manuelMusteriGirisi()"
+                                                (ngModelChange)="onManuelMusteriGirisiChange($event)"
+                                                styleClass="mr-1">
+                                            </p-toggleSwitch>
+                                            <label class="text-sm cursor-pointer">Manuel müşteri bilgisi gireceğim</label>
+                                        </div>
+                                        @if (!manuelMusteriGirisi()) {
+                                        <p-tag value="Cari'den otomatik" severity="info" styleClass="text-xs"></p-tag>
+                                        } @else {
+                                        <p-tag value="Manuel Giriş" severity="warn" styleClass="text-xs"></p-tag>
+                                        }
+                                    </div>
+
+                                    <!-- Kurumsal / Bireysel Toggle -->
+                                    <div class="flex align-items-center gap-2 mb-3">
+                                        <p-toggleSwitch
+                                            [ngModel]="formData().kurumsalMi"
+                                            (ngModelChange)="updateFormField('kurumsalMi', $event)"
+                                            [disabled]="!manuelMusteriGirisi() && !!selectedCari()"
+                                            styleClass="mr-1">
+                                        </p-toggleSwitch>
+                                        <label class="text-sm">Kurumsal</label>
+                                    </div>
+
+                                    <!-- Seçili cari varsa bilgi gösterimi; yoksa manuel alanlar -->
+                                    @if (!manuelMusteriGirisi() && selectedCari(); as cari) {
+                                    <!-- Otomatik doldurulmuş readonly alanlar -->
+                                    <div class="grid">
+                                        @if (formData().kurumsalMi) {
+                                        <div class="col-12 field">
+                                            <label>Ünvan</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriUnvan" readonly
+                                                placeholder="Cari karttan otomatik doldurulur" />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi No</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiNo" readonly />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi Dairesi</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
+                                        </div>
+                                        } @else {
+                                        <div class="col-12 field">
+                                            <label>Ad Soyad</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
+                                                placeholder="Cari karttan otomatik doldurulur" />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>TC Kimlik No</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriTcKimlikNo" readonly />
+                                        </div>
+                                        }
+
+                                        <div class="col-12 md:col-6 field">
+                                            <label>E-posta</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriEposta" readonly />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Telefon</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriTelefon" readonly />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>Adres</label>
+                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" readonly
+                                                placeholder="Cari karttan otomatik doldurulur">
+                                            </p-textarea>
+                                        </div>
+                                    </div>
+                                    } @else {
+                                    <!-- Manuel giriş veya cari seçilmedi -->
                                     <div class="grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
@@ -372,6 +486,7 @@
                                             </p-textarea>
                                         </div>
                                     </div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -381,7 +496,7 @@
                     <p-tabpanel value="1">
                         <div class="mt-2">
                             <div class="flex justify-content-between align-items-center mb-3">
-                                <h5 class="m-0">Satırlar ({{ formData().satirlar.length }})</h5>
+                                <h5 class="m-0">📝 Satırlar ({{ formData().satirlar.length }})</h5>
                                 <p-button
                                     label="Satır Ekle"
                                     icon="pi pi-plus"
@@ -481,7 +596,7 @@
                     <!-- ═══════ TAB 3: Özet ═══════ -->
                     <p-tabpanel value="2">
                         <div class="mt-2">
-                            <h5 class="mb-3">Belge Özeti</h5>
+                            <h5 class="mb-3">📊 Belge Özeti</h5>
 
                             <div class="ozet-panel">
                                 <div class="ozet-row">
@@ -499,9 +614,9 @@
                             </div>
 
                             <div class="grid mt-3">
-                                <div class="col-12 md:col-6">
+                                <div class="col-12 lg:col-6">
                                     <div class="form-card">
-                                        <h6 class="mt-0 mb-3">Belge Detayları</h6>
+                                        <h6 class="mt-0 mb-3">📋 Belge Detayları</h6>
                                         <div class="text-sm">
                                             <p class="mb-2"><strong>Belge No:</strong> {{ formData().belgeNo || '(Otomatik atanacak)' }}</p>
                                             <p class="mb-2"><strong>Belge Tipi:</strong> {{ getBelgeTipiLabel(formData().belgeTipi) }}</p>
@@ -509,13 +624,19 @@
                                             <p class="mb-2"><strong>Vade:</strong> {{ formData().vadeTarihi || '-' }}</p>
                                             <p class="mb-2"><strong>Kaynak Modül:</strong> {{ getKaynakModulLabel(formData().kaynakModul) }}</p>
                                             <p class="mb-2"><strong>Satır Adedi:</strong> {{ formData().satirlar.length }}</p>
+                                            @if (formData().aciklama) {
+                                            <p class="mb-2"><strong>Açıklama:</strong> {{ formData().aciklama }}</p>
+                                            }
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-12 md:col-6">
+                                <div class="col-12 lg:col-6">
                                     <div class="form-card">
-                                        <h6 class="mt-0 mb-3">Müşteri Bilgisi</h6>
+                                        <h6 class="mt-0 mb-3">👤 Müşteri / Cari Bilgisi</h6>
                                         <div class="text-sm">
+                                            @if (selectedCari(); as cari) {
+                                            <p class="mb-2"><strong>Cari Kart:</strong> {{ cari.unvanAdSoyad }} ({{ cari.cariKodu || cari.vergiNoTckn || '-' }})</p>
+                                            }
                                             <p class="mb-2"><strong>Tür:</strong> {{ formData().kurumsalMi ? 'Kurumsal' : 'Bireysel' }}</p>
                                             @if (formData().kurumsalMi) {
                                             <p class="mb-2"><strong>Ünvan:</strong> {{ formData().musteriUnvan || '-' }}</p>
@@ -542,7 +663,7 @@
         <div class="dialog-footer">
             <div class="footer-left">
                 @if (formData().satirlar.length > 0) {
-                <span>Toplam: <strong>{{ previewGenelToplam() | number: '1.2-2' }} ₺</strong></span>
+                <span>Genel Toplam: <strong>{{ previewGenelToplam() | number: '1.2-2' }} ₺</strong></span>
                 }
             </div>
             <div class="footer-right">

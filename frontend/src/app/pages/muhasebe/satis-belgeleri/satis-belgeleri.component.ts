@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
+import { AutoCompleteModule } from 'primeng/autocomplete';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -19,7 +20,10 @@ import { ToastModule } from 'primeng/toast';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
+import { finalize } from 'rxjs';
 import { SatisBelgesiService } from '../services/satis-belgesi.service';
+import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
+import { CariKartModel } from '../cari-kartlar/cari-kartlar.dto';
 import {
     SatisBelgesiDto,
     SatisBelgesiDurumu,
@@ -52,6 +56,7 @@ import {
         CommonModule,
         FormsModule,
         ReactiveFormsModule,
+        AutoCompleteModule,
         ButtonModule,
         CardModule,
         ConfirmDialogModule,
@@ -75,6 +80,7 @@ import {
 })
 export class SatisBelgeleriComponent implements OnInit {
     private readonly service = inject(SatisBelgesiService);
+    private readonly cariKartService = inject(CariKartlarService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
@@ -90,6 +96,13 @@ export class SatisBelgeleriComponent implements OnInit {
     isEditing = signal(false);
     editingBelge = signal<SatisBelgesiDto | null>(null);
     formData = signal<CreateSatisBelgesiRequest>(createEmptyCreateSatisBelgesiRequest());
+
+    // Cari seçim
+    cariKartlar = signal<CariKartModel[]>([]);
+    cariKartlarLoading = signal(false);
+    selectedCari = signal<CariKartModel | null>(null);
+    filteredCariKartlar: CariKartModel[] = [];
+    manuelMusteriGirisi = signal(false);
 
     // Reddetme
     redDialogVisible = signal(false);
@@ -124,6 +137,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
     ngOnInit(): void {
         this.loadBelgeler();
+        this.loadCariKartlar();
     }
 
     // ── Load ──
@@ -138,6 +152,20 @@ export class SatisBelgeleriComponent implements OnInit {
             error: (err) => {
                 this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message });
                 this.loading.set(false);
+            }
+        });
+    }
+
+    loadCariKartlar(): void {
+        this.cariKartlarLoading.set(true);
+        this.cariKartService.getAll().pipe(
+            finalize(() => this.cariKartlarLoading.set(false))
+        ).subscribe({
+            next: (data) => {
+                this.cariKartlar.set(data.filter(c => c.aktifMi));
+            },
+            error: (err) => {
+                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Cari kartlar yüklenemedi: ' + err.message });
             }
         });
     }
@@ -160,6 +188,73 @@ export class SatisBelgeleriComponent implements OnInit {
         this.loadBelgeler();
     }
 
+    // ── Cari Kart AutoComplete ──
+
+    filterCari(event: { query: string }): void {
+        const query = (event.query ?? '').toLowerCase().trim();
+        const allCari = this.cariKartlar();
+        if (!query) {
+            this.filteredCariKartlar = [...allCari];
+            return;
+        }
+        this.filteredCariKartlar = allCari.filter(c =>
+            (c.unvanAdSoyad ?? '').toLowerCase().includes(query) ||
+            (c.vergiNoTckn ?? '').toLowerCase().includes(query) ||
+            (c.cariKodu ?? '').toLowerCase().includes(query)
+        );
+    }
+
+    onCariKartSecildi(cari: CariKartModel | null): void {
+        if (!cari) {
+            this.selectedCari.set(null);
+            return;
+        }
+
+        this.selectedCari.set(cari);
+        // Cari tipine göre kurumsal/bireysel belirle
+        const kurumsalMi = cari.cariTipi === 'KurumsalMusteri';
+
+        // Manuel müşteri girişi kapalıyken cari bilgilerini form alanlarına yaz
+        if (!this.manuelMusteriGirisi()) {
+            this.formData.update(f => ({
+                ...f,
+                kurumsalMi,
+                musteriUnvan: kurumsalMi ? cari.unvanAdSoyad : null,
+                musteriAdSoyad: !kurumsalMi ? cari.unvanAdSoyad : null,
+                musteriVergiNo: kurumsalMi ? (cari.vergiNoTckn ?? null) : null,
+                musteriTcKimlikNo: !kurumsalMi ? (cari.vergiNoTckn ?? null) : null,
+                musteriVergiDairesi: cari.vergiDairesi ?? null,
+                musteriAdres: cari.adres ?? null,
+                musteriEposta: cari.eposta ?? null,
+                musteriTelefon: cari.telefon ?? null
+            }));
+        }
+    }
+
+    onManuelMusteriGirisiChange(value: boolean): void {
+        this.manuelMusteriGirisi.set(value);
+        if (value) {
+            // Manuel mod açıldı — form alanlarını temizleme, kullanıcı kendi girer
+            // Cari seçimi hala referans olarak kalabilir
+        } else if (this.selectedCari()) {
+            // Manuel mod kapandı — seçili cari varsa bilgileri tekrar doldur
+            this.onCariKartSecildi(this.selectedCari());
+        }
+    }
+
+    // Cari display için format
+    formatCariDisplay(cari: CariKartModel): string {
+        const tip = cari.cariTipi === 'KurumsalMusteri' ? '🏢' : '👤';
+        let display = `${tip} ${cari.unvanAdSoyad}`;
+        if (cari.vergiNoTckn) {
+            display += ` — ${cari.vergiNoTckn}`;
+        }
+        if (cari.cariKodu) {
+            display += ` [${cari.cariKodu}]`;
+        }
+        return display;
+    }
+
     // ── Create / Edit Dialog ──
 
     onTabChange(value: string | number | undefined): void {
@@ -172,6 +267,9 @@ export class SatisBelgeleriComponent implements OnInit {
         this.isEditing.set(false);
         this.editingBelge.set(null);
         this.formData.set(createEmptyCreateSatisBelgesiRequest());
+        this.selectedCari.set(null);
+        this.manuelMusteriGirisi.set(false);
+        this.filteredCariKartlar = [...this.cariKartlar()];
         this.activeTab.set('0');
         this.dialogVisible.set(true);
     }
@@ -214,11 +312,25 @@ export class SatisBelgeleriComponent implements OnInit {
                 kaynakSatirId: s.kaynakSatirId
             }))
         });
+        // Edit modunda mevcut veriden cari eşleştirmeye çalışma (isteğe bağlı)
+        this.selectedCari.set(null);
+        this.manuelMusteriGirisi.set(false);
+        this.filteredCariKartlar = [...this.cariKartlar()];
         this.activeTab.set('0');
         this.dialogVisible.set(true);
     }
 
     saveBelge(): void {
+        // Validation: Cari seçilmemiş ve manuel mod kapalıysa uyar
+        if (!this.manuelMusteriGirisi() && !this.selectedCari()) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Eksik Bilgi',
+                detail: 'Lütfen cari kart seçiniz veya "Manuel müşteri bilgisi gireceğim" seçeneğini açınız.'
+            });
+            return;
+        }
+
         this.dialogLoading.set(true);
         if (this.isEditing()) {
             const id = this.editingBelge()!.id;

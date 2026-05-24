@@ -409,6 +409,27 @@ export class SatisBelgeleriComponent implements OnInit {
             belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;
     }
 
+    canFisOlustur(belge: SatisBelgesiDto): boolean {
+        return belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi && !belge.muhasebeFisId;
+    }
+
+    muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
+        this.confirmationService.confirm({
+            message: `"${belge.belgeNo}" için muhasebe fişi oluşturmak istediğinize emin misiniz?`,
+            header: 'Fiş Oluşturma Onayı',
+            icon: 'pi pi-file',
+            accept: () => {
+                this.service.muhasebeFisiOlustur(belge.id).subscribe({
+                    next: () => {
+                        this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muhasebe fişi oluşturuldu.' });
+                        this.loadBelgeler();
+                    },
+                    error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+                });
+            }
+        });
+    }
+
     // ── Template-safe label/severity helpers (avoids TS indexed-access errors in HTML) ──
 
     getDurumLabel(durum: SatisBelgesiDurumu): string {

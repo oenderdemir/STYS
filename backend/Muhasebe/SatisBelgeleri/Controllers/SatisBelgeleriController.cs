@@ -11,13 +11,16 @@ public class SatisBelgeleriController : UIController
 {
     private readonly ISatisBelgesiService _service;
     private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
+    private readonly ISatisBelgesiMuhasebeFisService _muhasebeFisService;
 
     public SatisBelgeleriController(
         ISatisBelgesiService service,
-        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService)
+        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        ISatisBelgesiMuhasebeFisService muhasebeFisService)
     {
         _service = service;
         _taslakOlusturmaService = taslakOlusturmaService;
+        _muhasebeFisService = muhasebeFisService;
     }
 
     [HttpGet("{id:int}")]
@@ -110,6 +113,14 @@ public class SatisBelgeleriController : UIController
     {
         await _service.IptalEtAsync(id, cancellationToken);
         return Ok();
+    }
+
+    [HttpPost("{id:int}/muhasebe-fisi-olustur")]
+    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    public async Task<IActionResult> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)
+    {
+        var result = await _muhasebeFisService.MuhasebeFisiOlusturAsync(id, cancellationToken);
+        return Ok(result);
     }
 }
 

@@ -71,6 +71,12 @@ export class SatisBelgesiService {
             .pipe(map(envelope => { if (!envelope.success) throw new Error(tryReadApiMessage(envelope) ?? 'İşlem başarısız.'); }));
     }
 
+    muhasebeFisiOlustur(id: number): Observable<SatisBelgesiDto> {
+        return this.http
+            .post<ApiResponse<SatisBelgesiDto>>(`${this.base}/${id}/muhasebe-fisi-olustur`, {})
+            .pipe(map(envelope => this.unwrap(envelope)));
+    }
+
     private unwrap<T>(envelope: ApiResponse<T>): T {
         if (envelope.success && envelope.data) {
             return envelope.data;

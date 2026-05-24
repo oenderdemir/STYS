@@ -156,6 +156,15 @@
                             (click)="confirmDelete(belge)">
                         </p-button>
                         <p-button
+                            *ngIf="canFisOlustur(belge)"
+                            icon="pi pi-file"
+                            severity="primary"
+                            [rounded]="true"
+                            [text]="true"
+                            pTooltip="Muhasebe Fişi Oluştur"
+                            (click)="muhasebeFisiOlustur(belge)">
+                        </p-button>
+                        <p-button
                             *ngIf="canIptal(belge)"
                             icon="pi pi-ban"
                             severity="secondary"

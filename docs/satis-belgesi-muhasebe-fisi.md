@@ -15,7 +15,8 @@
 | Proforma | ❌ | Hata döner |
 | İade faturası | ❌ | Hata döner (Faz 65D'de) |
 | Tevkifatlı satır | ❌ | Hata döner |
-| Controller endpoint | ❌ | Faz 65D'de eklenecek |
+| Controller endpoint | ✅ | Faz 65D'de eklendi |
+| Frontend buton/aksiyon | ✅ | Faz 65D'de eklendi |
 | MuhasebeOnaylaAsync entegrasyonu | ❌ | Faz 65E'de |
 | e-Fatura entegrasyonu | ❌ | Sonraki faz |
 | İptal / ters kayıt | ❌ | Sonraki faz |
@@ -166,3 +167,89 @@ public const string SatisBelgesi = "SatisBelgesi";
 | 404 | Belge veya hesap bulunamadı |
 | 409 | Zaten fiş oluşturulmuş (duplicate) |
 | 500 | Beklenmeyen hata (güncel belge okunamadı) |
+
+## Faz 65D: Controller Endpoint ve Frontend Aksiyonu
+
+### Controller Endpoint
+
+[`SatisBelgeleriController.cs`](backend/Muhasebe/SatisBelgeleri/Controllers/SatisBelgeleriController.cs):
+
+```csharp
+[HttpPost("{id:int}/muhasebe-fisi-olustur")]
+[Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+public async Task<IActionResult> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)
+{
+    var result = await _muhasebeFisService.MuhasebeFisiOlusturAsync(id, cancellationToken);
+    return Ok(result);
+}
+```
+
+- Route: `POST /ui/muhasebe/satis-belgeleri/{id:int}/muhasebe-fisi-olustur`
+- Yetki: `MuhasebeFisYonetimi.Manage` (diğer mutasyon endpoint'leriyle aynı)
+- Dönüş: `SatisBelgesiDto` (güncellenmiş belge, `muhasebeFisId` ve `muhasebeFisOlusturmaTarihi` dolu)
+- Constructor'a `ISatisBelgesiMuhasebeFisService` bağımlılığı eklendi
+
+### Frontend Service
+
+[`satis-belgesi.service.ts`](frontend/src/app/pages/muhasebe/services/satis-belgesi.service.ts):
+
+```typescript
+muhasebeFisiOlustur(id: number): Observable<SatisBelgesiDto> {
+    return this.http
+        .post<ApiResponse<SatisBelgesiDto>>(`${this.base}/${id}/muhasebe-fisi-olustur`, {})
+        .pipe(map(envelope => this.unwrap(envelope)));
+}
+```
+
+### Frontend Buton
+
+[`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts):
+
+```typescript
+canFisOlustur(belge: SatisBelgesiDto): boolean {
+    return belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi && !belge.muhasebeFisId;
+}
+
+muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
+    this.confirmationService.confirm({
+        message: `"${belge.belgeNo}" için muhasebe fişi oluşturmak istediğinize emin misiniz?`,
+        header: 'Fiş Oluşturma Onayı',
+        icon: 'pi pi-file',
+        accept: () => {
+            this.service.muhasebeFisiOlustur(belge.id).subscribe({
+                next: () => {
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muhasebe fişi oluşturuldu.' });
+                    this.loadBelgeler();
+                },
+                error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+            });
+        }
+    });
+}
+```
+
+### Görünürlük Kuralları
+
+Buton yalnızca aşağıdaki koşulların tümü sağlandığında görünür:
+
+| Koşul | Açıklama |
+|-------|----------|
+| `belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi` | Belge muhasebe onayından geçmiş olmalı |
+| `!belge.muhasebeFisId` | Daha önce fiş oluşturulmamış olmalı (null/undefined) |
+
+### Kullanıcı Deneyimi
+
+1. Kullanıcı "Muhasebe Fişi Oluştur" butonuna tıklar
+2. Onay dialog'u görüntülenir (`pi pi-file` ikonu ile)
+3. Kullanıcı onaylarsa endpoint çağrılır
+4. Başarılı olursa: "Muhasebe fişi oluşturuldu." toast mesajı gösterilir, tablo yenilenir (buton kaybolur çünkü `muhasebeFisId` artık dolu)
+5. Başarısız olursa: Hata mesajı toast ile gösterilir
+
+### Değişen Dosyalar (Faz 65D)
+
+| Dosya | Durum | Açıklama |
+|-------|-------|----------|
+| [`SatisBelgeleriController.cs`](backend/Muhasebe/SatisBelgeleri/Controllers/SatisBelgeleriController.cs) | Değişiklik | `MuhasebeFisiOlustur` endpoint'i ve DI eklendi |
+| [`satis-belgesi.service.ts`](frontend/src/app/pages/muhasebe/services/satis-belgesi.service.ts) | Değişiklik | `muhasebeFisiOlustur` HTTP metodu eklendi |
+| [`satis-belgeleri.component.ts`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.ts) | Değişiklik | `canFisOlustur` helper + `muhasebeFisiOlustur` aksiyon |
+| [`satis-belgeleri.component.html`](frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.html) | Değişiklik | "Muhasebe Fişi Oluştur" butonu eklendi |

@@ -668,3 +668,145 @@ Permission: RestoranSiparisYonetimi.Manage
 | [`backend/RestoranYonetimi/Services/RestoranSatisBelgesiService.cs`](../backend/RestoranYonetimi/Services/RestoranSatisBelgesiService.cs) | Implementation |
 | [`backend/RestoranYonetimi/RestoranSiparisleri/Controllers/RestoranSiparisleriController.cs`](../backend/RestoranYonetimi/RestoranSiparisleri/Controllers/RestoranSiparisleriController.cs) | Controller endpoint |
 | [`backend/Program.cs`](../backend/Program.cs) | DI registration |
+
+---
+
+## 15. Faz 63 — Kamp Rezervasyon Entegrasyonu
+
+> **Tarih:** 2025-05-24
+> **Kaynak Entity:** [`KampRezervasyon`](../backend/Kamp/Entities/KampRezervasyon.cs)
+> **KaynakTipi:** `"KampRezervasyon"`
+> **SatirTipi:** `KampHizmeti` (3)
+
+### 15.1 Genel Bakış
+
+Kamp modülü, rezervasyon verisinden satış belgesi taslağı oluşturmak için `IKampSatisBelgesiService` arayüzünü kullanır. Kamp modülü doğrudan `SatisBelgesi` entity'si oluşturmaz; bunun yerine `ISatisBelgesiTaslakOlusturmaService.KaynaktanTaslakOlusturAsync` üzerinden fatura altyapısına rezervasyon verisini iletir.
+
+### 15.2 Request Model
+
+**DTO:** [`KampSatisBelgesiTaslakRequest`](../backend/Kamp/Dto/KampSatisBelgesiDtos.cs)
+
+15 alanlı request modeli (Otel ve Restoran ile uyumlu):
+
+Alan | Tip | Zorunlu | Açıklama |
+|------|-----|---------|----------|
+`RezervasyonId` | `int` | Evet | Kamp rezervasyon Id'si (route ile eşleşmeli) |
+`KurumsalMi` | `bool` | Evet | Kurumsal fatura mı? |
+`MusteriUnvan` | `string?` | KurumsalMi=true ise | Kurumsal müşteri ünvanı |
+`MusteriAdSoyad` | `string?` | Bireyselde fallback'li | Boşsa `BasvuruSahibiAdiSoyadi` kullanılır |
+`MusteriVergiNo` | `string?` | KurumsalMi=true ise | Vergi numarası |
+`MusteriTcKimlikNo` | `string?` | Hayır | TC kimlik no |
+`MusteriVergiDairesi` | `string?` | Hayır | Vergi dairesi |
+`MusteriAdres` | `string?` | Hayır | Adres |
+`MusteriEposta` | `string?` | Hayır | E‑posta |
+`MusteriTelefon` | `string?` | Hayır | Telefon |
+`BelgeTarihi` | `DateTime?` | Hayır | Boşsa bugünün tarihi |
+`VadeTarihi` | `DateTime?` | Hayır | Vade tarihi |
+`Aciklama` | `string?` | Hayır | Boşsa otomatik açıklama |
+`KdvOrani` | `decimal?` | Hayır | Varsayılan %10 |
+`KdvIstisnaTanimId` | `int?` | Hayır | Verilirse KdvOrani göz ardı edilir |
+
+### 15.3 Endpoint
+
+```
+POST ui/kamp/kamp-rezervasyon/{rezervasyonId}/satis-belgesi-taslagi-olustur
+```
+
+**Permission:** `KampRezervasyonYonetimi.Manage`
+
+### 15.4 Servis Akışı (10 adım)
+
+1. **Route/Body ID eşleştirme:** `rezervasyonId` (route) ile `request.RezervasyonId` (body) aynı olmalı, değilse 400.
+2. **Rezervasyonu bul:** `KampRezervasyonlari` tablosundan `Include(KampBasvuru, KampDonemi)` ile çek, access scope kontrolü yap.
+3. **Durum validasyonu:** Yalnızca `Aktif` rezervasyonlar kabul edilir. `IptalEdildi` → 400.
+4. **Toplam tutar validasyonu:** `DonemToplamTutar <= 0` → 400.
+5. **Müşteri bilgilerini çözümle:** Bireyselde `MusteriAdSoyad` boşsa `BasvuruSahibiAdiSoyadi` fallback olarak kullanılır.
+6. **Satır oluştur:** Tek satır — `SatirTipi = KampHizmeti`, `Miktar = 1`, `BirimFiyat = DonemToplamTutar`.
+7. **Belge tarihi ve açıklama:** Request öncelikli; boşsa bugünün tarihi ve `"Kamp rezervasyonu: {RezervasyonNo}"`.
+8. **Taslak request oluştur:** `SatisBelgesiTaslakOlusturRequest` → `KaynakModul = Kamp`, `KaynakTipi = "KampRezervasyon"`.
+9. **Ortak servise ilet:** `_taslakOlusturmaService.KaynaktanTaslakOlusturAsync`.
+10. **Sonuç döndür:** `SatisBelgesiDto`.
+
+### 15.5 Örnek Request'ler
+
+**Bireysel fatura (fallback ile):**
+```json
+{
+  "rezervasyonId": 15,
+  "kurumsalMi": false
+}
+```
+→ `MusteriAdSoyad` boş olduğu için `KampRezervasyon.BasvuruSahibiAdiSoyadi` kullanılır.
+
+**Kurumsal fatura:**
+```json
+{
+  "rezervasyonId": 15,
+  "kurumsalMi": true,
+  "musteriUnvan": "ABC A.Ş.",
+  "musteriVergiNo": "1234567890",
+  "musteriVergiDairesi": "Ankara"
+}
+```
+
+**KDV istisnalı fatura:**
+```json
+{
+  "rezervasyonId": 15,
+  "kurumsalMi": false,
+  "kdvIstisnaTanimId": 5
+}
+```
+
+### 15.6 Satır Yapısı
+
+Kamp rezervasyonu **tek satır** olarak oluşturulur:
+
+Alan | Değer | Kaynak |
+|------|-------|--------|
+`SatirTipi` | `KampHizmeti` (3) | Sabit |
+`Aciklama` | `"Kamp rezervasyonu: {RezervasyonNo}"` | `KampRezervasyon.RezervasyonNo` |
+`Miktar` | `1` | Sabit |
+`BirimFiyat` | `DonemToplamTutar` | `KampRezervasyon.DonemToplamTutar` |
+`KdvUygulamaTipi` | `Kdvli` veya istisna tipi | Request'ten |
+`KdvOrani` | Varsayılan %10 veya override | Request'ten |
+`KaynakSatirId` | `"{rezervasyonId}"` | `KampRezervasyon.Id` |
+
+### 15.7 Validasyon Özeti
+
+Kural | Hata Kodu | Mesaj |
+|-------|-----------|-------|
+Route/Body ID eşleşmiyor | 400 | "Rezervasyon ID uyuşmazlığı: route ve body farklı." |
+Rezervasyon bulunamadı | 404 | "Kamp rezervasyonu bulunamadı." |
+Scoped kullanıcı yetkisiz tesis | 403 | "Bu rezervasyon için yetkiniz bulunmuyor." |
+İptal edilmiş rezervasyon | 400 | "İptal edilen rezervasyon için satış belgesi taslağı oluşturulamaz." |
+Aktif olmayan rezervasyon | 400 | "Satış belgesi taslağı yalnızca aktif rezervasyonlar için oluşturulabilir." |
+DonemToplamTutar ≤ 0 | 400 | "Rezervasyon dönem toplam tutarı bulunamadığı için satış belgesi taslağı oluşturulamaz." |
+Kurumsal + ünvan boş | 400 | "Kurumsal fatura için müşteri ünvanı zorunludur." |
+Kurumsal + vergi no boş | 400 | "Kurumsal fatura için vergi numarası zorunludur." |
+Bireysel + ad soyad boş (fallback de boş) | 400 | "Bireysel fatura için müşteri ad soyad zorunludur." |
+KDV istisna tanımı bulunamadı | 400 | "KDV istisna tanımı bulunamadı (Id: {id})." |
+Duplicate kaynak | 409 | "Bu kaynak için daha önce satış belgesi taslağı oluşturulmuş." |
+
+### 15.8 Farklar (Otel vs Restoran vs Kamp)
+
+Özellik | Otel (Faz 61A) | Restoran (Faz 62) | Kamp (Faz 63) |
+|---------|---------------|-------------------|---------------|
+Kaynak entity | `Rezervasyon` | `RestoranSiparis` | `KampRezervasyon` |
+KaynakTipi | `"RezervasyonCheckout"` | `"RestoranSiparis"` | `"KampRezervasyon"` |
+SatirTipi | `Konaklama` (1) | `YiyecekIcecek` (2) | `KampHizmeti` (3) |
+Müşteri bilgisi fallback | `MisafirAdiSoyadi` vb. | Yok — request zorunlu | `BasvuruSahibiAdiSoyadi` |
+Access scope | `Rezervasyon.TesisId` | `RestoranSiparis.Restoran.TesisId` | `KampRezervasyon.TesisId` (direct) |
+İzin | `RezervasyonYonetimi.Manage` | `RestoranSiparisYonetimi.Manage` | `KampRezervasyonYonetimi.Manage` |
+Satır sayısı | Gece başına 1 satır | Kalem başına 1 satır | Tek satır |
+Durum şartı | `CheckOutTamamlandi` | `Tamamlandi` | `Aktif` |
+
+### 15.9 Dosya Listesi
+
+Dosya | Açıklama |
+|-------|----------|
+[`backend/Kamp/Dto/KampSatisBelgesiDtos.cs`](../backend/Kamp/Dto/KampSatisBelgesiDtos.cs) | Request DTO |
+[`backend/Kamp/Services/IKampSatisBelgesiService.cs`](../backend/Kamp/Services/IKampSatisBelgesiService.cs) | Interface |
+[`backend/Kamp/Services/KampSatisBelgesiService.cs`](../backend/Kamp/Services/KampSatisBelgesiService.cs) | Implementation |
+[`backend/Kamp/Controllers/KampRezervasyonController.cs`](../backend/Kamp/Controllers/KampRezervasyonController.cs) | Controller endpoint |
+[`backend/Program.cs`](../backend/Program.cs) | DI registration |

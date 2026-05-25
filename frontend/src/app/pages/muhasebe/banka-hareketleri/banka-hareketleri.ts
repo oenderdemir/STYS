@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -14,6 +14,9 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { KasaBankaHesaplariService } from '../kasa-banka-hesaplari/kasa-banka-hesaplari.service';
 import { BankaHareketModel, CreateBankaHareketRequest, UpdateBankaHareketRequest } from './banka-hareketleri.dto';
 import { BankaHareketleriService } from './banka-hareketleri.service';
@@ -21,15 +24,18 @@ import { BankaHareketleriService } from './banka-hareketleri.service';
 @Component({
     selector: 'app-banka-hareketleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './banka-hareketleri.html',
     providers: [MessageService]
 })
 export class BankaHareketleriPage implements OnInit {
     private readonly service = inject(BankaHareketleriService);
     private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -40,21 +46,38 @@ export class BankaHareketleriPage implements OnInit {
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
-    bankaHesaplar: Array<{ label: string; value: number; bankaAdi: string; ibanHesap: string }> = [];
+    bankaHesaplar: Array<{ label: string; value: number; bankaAdi: string; ibanHesap: string; tesisId?: number | null }> = [];
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.closeOpenDialogForTesisChange();
+            this.loadBankaHesaplar();
+            this.load(1, this.pageSize);
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için banka hareketleri yenilendi.'
+            });
+        }
+    });
 
     ngOnInit(): void {
-        this.kasaBankaHesapService.getByTip('Banka', true).subscribe({
-            next: (items) => {
-                this.bankaHesaplar = items.map((x) => ({
-                    label: `${x.kod} - ${x.ad}`,
-                    value: x.id!,
-                    bankaAdi: x.bankaAdi ?? x.ad,
-                    ibanHesap: x.iban ?? x.hesapNo ?? x.kod
-                }));
-                this.cdr.detectChanges();
-            }
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.loadBankaHesaplar();
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => this.showError(error)
         });
-        this.load(1, this.pageSize);
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -65,6 +88,11 @@ export class BankaHareketleriPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
         this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
             this.loading = false;
@@ -85,18 +113,28 @@ export class BankaHareketleriPage implements OnInit {
     }
 
     openCreate(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         this.dialogVisible = true;
     }
 
     openEdit(item: BankaHareketModel): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.dialogVisible = true;
     }
 
     save(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
+
         if (!this.model.kasaBankaHesapId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Banka hesabi secimi zorunludur.' });
             return;
@@ -143,6 +181,29 @@ export class BankaHareketleriPage implements OnInit {
         });
     }
 
+    private loadBankaHesaplar(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.bankaHesaplar = [];
+            return;
+        }
+
+        this.kasaBankaHesapService.getByTip('Banka', true).subscribe({
+            next: (items) => {
+                this.bankaHesaplar = items
+                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
+                    .map((x) => ({
+                        label: `${x.kod} - ${x.ad}`,
+                        value: x.id!,
+                        bankaAdi: x.bankaAdi ?? x.ad,
+                        ibanHesap: x.iban ?? x.hesapNo ?? x.kod,
+                        tesisId: x.tesisId ?? null
+                    }));
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
     onBankaHesapChange(): void {
         if (!this.model.kasaBankaHesapId) {
             this.model.bankaAdi = '';
@@ -157,6 +218,28 @@ export class BankaHareketleriPage implements OnInit {
 
         this.model.bankaAdi = selected.bankaAdi;
         this.model.hesapKoduIban = selected.ibanHesap;
+    }
+
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible) {
+            return;
+        }
+
+        this.dialogVisible = false;
+        this.model = this.createEmpty();
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private createEmpty(): BankaHareketModel {

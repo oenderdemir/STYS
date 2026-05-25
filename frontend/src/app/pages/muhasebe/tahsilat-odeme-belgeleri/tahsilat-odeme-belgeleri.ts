@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -14,6 +14,9 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { BELGE_TIPLERI, CreateTahsilatOdemeBelgesiRequest, ODEME_YONTEMLERI, TahsilatOdemeBelgesiModel, TahsilatOdemeOzetModel, UpdateTahsilatOdemeBelgesiRequest } from './tahsilat-odeme-belgeleri.dto';
 import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.service';
@@ -21,15 +24,18 @@ import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.servic
 @Component({
     selector: 'app-tahsilat-odeme-belgeleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './tahsilat-odeme-belgeleri.html',
     providers: [MessageService]
 })
 export class TahsilatOdemeBelgeleriPage implements OnInit {
     private readonly service = inject(TahsilatOdemeBelgeleriService);
     private readonly cariKartService = inject(CariKartlarService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -40,21 +46,44 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
-    cariKartlar: Array<{ label: string; value: number }> = [];
+    cariKartlar: Array<{ label: string; value: number; tesisId?: number | null }> = [];
     gunlukOzet: TahsilatOdemeOzetModel | null = null;
 
     readonly belgeTipleri = BELGE_TIPLERI;
     readonly odemeYontemleri = ODEME_YONTEMLERI;
 
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.closeOpenDialogForTesisChange();
+            this.loadCariKartlar();
+            this.load(1, this.pageSize);
+            this.loadOzet();
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için tahsilat/ödeme belgeleri yenilendi.'
+            });
+        }
+    });
+
     ngOnInit(): void {
-        this.cariKartService.getAll().subscribe({
-            next: (items) => {
-                this.cariKartlar = items.map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
-                this.cdr.detectChanges();
-            }
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.loadCariKartlar();
+                this.load(1, this.pageSize);
+                this.loadOzet();
+            },
+            error: (error: unknown) => this.showError(error)
         });
-        this.load(1, this.pageSize);
-        this.loadOzet();
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -65,6 +94,11 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
         this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
             this.loading = false;
@@ -85,6 +119,12 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
     }
 
     loadOzet(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.gunlukOzet = null;
+            return;
+        }
+
         this.service.getGunlukOzet().subscribe({
             next: (ozet) => {
                 this.gunlukOzet = ozet;
@@ -94,18 +134,28 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
     }
 
     openCreate(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         this.dialogVisible = true;
     }
 
     openEdit(item: TahsilatOdemeBelgesiModel): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.dialogVisible = true;
     }
 
     save(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
+
         if (!this.model.belgeNo?.trim() || !this.model.cariKartId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Belge no ve cari secimi zorunludur.' });
             return;
@@ -138,6 +188,45 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
             },
             error: (error: unknown) => this.showError(error)
         });
+    }
+
+    private loadCariKartlar(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.cariKartlar = [];
+            return;
+        }
+
+        this.cariKartService.getAll().subscribe({
+            next: (items) => {
+                this.cariKartlar = items
+                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
+                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible) {
+            return;
+        }
+
+        this.dialogVisible = false;
+        this.model = this.createEmpty();
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     delete(item: TahsilatOdemeBelgesiModel): void {

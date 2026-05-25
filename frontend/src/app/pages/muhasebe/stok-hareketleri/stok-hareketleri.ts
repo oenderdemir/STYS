@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -18,6 +18,9 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { DepolarService } from '../depolar/depolar.service';
 import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
@@ -47,7 +50,9 @@ import { StokHareketleriService } from './stok-hareketleri.service';
         TabsModule,
         ToastModule,
         ToolbarModule,
-        TooltipModule
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './stok-hareketleri.html',
     providers: [MessageService, ConfirmationService, DialogService]
@@ -59,10 +64,13 @@ export class StokHareketleriPage implements OnInit {
     private readonly cariKartService = inject(CariKartlarService);
     private readonly muhasebeFisService = inject(MuhasebeFisService);
     private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly dialogService = inject(DialogService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -102,22 +110,65 @@ export class StokHareketleriPage implements OnInit {
     readonly durumlar = STOK_HAREKET_DURUMLARI;
     readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
 
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.selectedDepoId = undefined;
+            this.closeOpenDialogForTesisChange();
+            this.loadReferences();
+            this.load(1, this.pageSize);
+            this.loadSummary();
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için stok hareketleri yenilendi.'
+            });
+        }
+    });
+
     ngOnInit(): void {
-        this.loadReferences();
-        this.load(1, this.pageSize);
-        this.loadSummary();
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.loadReferences();
+                this.load(1, this.pageSize);
+                this.loadSummary();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     loadReferences(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.depoOptions = [];
+            this.tasinirKartOptions = [];
+            this.cariKartOptions = [];
+            this.tasinirKartByIdMap = new Map<number, TasinirKartModel>();
+            return;
+        }
+
         this.depolarService.getAll().subscribe({
             next: (items) => {
-                this.depoOptions = items.filter((x) => x.aktifMi).map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+                this.depoOptions = items
+                    .filter((x) => x.aktifMi && (!x.tesisId || x.tesisId === tesisId))
+                    .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+                if (this.selectedDepoId && !this.depoOptions.some((x) => x.value === this.selectedDepoId)) {
+                    this.selectedDepoId = undefined;
+                }
                 this.cdr.detectChanges();
             }
         });
         this.tasinirKartService.getAll().subscribe({
             next: (items) => {
-                const aktifler = items.filter((x) => x.aktifMi);
+                const aktifler = items.filter((x) => x.aktifMi && (!x.tesisId || x.tesisId === tesisId));
                 this.tasinirKartOptions = aktifler.map((x) => ({ label: `${x.stokKodu} - ${x.ad}`, value: x.id! }));
                 this.tasinirKartByIdMap = new Map(aktifler.map((x) => [x.id!, x]));
                 this.cdr.detectChanges();
@@ -125,7 +176,9 @@ export class StokHareketleriPage implements OnInit {
         });
         this.cariKartService.getAll().subscribe({
             next: (items) => {
-                this.cariKartOptions = items.map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
+                this.cariKartOptions = items
+                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
+                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
                 this.cdr.detectChanges();
             }
         });
@@ -173,6 +226,13 @@ export class StokHareketleriPage implements OnInit {
     }
 
     loadSummary(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.stokBakiye = [];
+            this.stokKartOzet = [];
+            return;
+        }
+
         this.service.getStokBakiye(this.selectedDepoId).subscribe({
             next: (items) => {
                 this.stokBakiye = items;
@@ -188,6 +248,9 @@ export class StokHareketleriPage implements OnInit {
     }
 
     openCreate(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         if (this.selectedDepoId && this.selectedDepoId > 0) {
@@ -198,6 +261,9 @@ export class StokHareketleriPage implements OnInit {
     }
 
     openEdit(item: StokHareketModel): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.applyIstisnaFilter();
@@ -205,6 +271,10 @@ export class StokHareketleriPage implements OnInit {
     }
 
     save(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
+
         if (!this.model.depoId || !this.model.tasinirKartId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Depo ve taşınır kart seçimi zorunludur.' });
             return;
@@ -432,6 +502,18 @@ export class StokHareketleriPage implements OnInit {
         });
     }
 
+    private closeOpenDialogForTesisChange(): void {
+        if (this.dialogVisible) {
+            this.dialogVisible = false;
+            this.model = this.createEmpty();
+        }
+
+        if (this.fisTaslagiDialogRef) {
+            this.fisTaslagiDialogRef.close();
+            this.fisTaslagiDialogRef = null;
+        }
+    }
+
     // ──────────────────────────────────────────
 
     private createEmpty(): StokHareketModel {
@@ -457,6 +539,19 @@ export class StokHareketleriPage implements OnInit {
             kdvOrani: 20,
             kdvTutari: 0
         };
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     /** Resolve KDV uygulama tipi label for display in table. */

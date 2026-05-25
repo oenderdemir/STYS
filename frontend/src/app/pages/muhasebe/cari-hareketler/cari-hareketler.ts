@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -14,6 +14,9 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { CariHareketModel, CreateCariHareketRequest, HAREKET_DURUMLARI, UpdateCariHareketRequest } from './cari-hareketler.dto';
 import { CariHareketlerService } from './cari-hareketler.service';
@@ -21,15 +24,18 @@ import { CariHareketlerService } from './cari-hareketler.service';
 @Component({
     selector: 'app-cari-hareketler-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './cari-hareketler.html',
     providers: [MessageService]
 })
 export class CariHareketlerPage implements OnInit {
     private readonly service = inject(CariHareketlerService);
     private readonly cariKartService = inject(CariKartlarService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -38,21 +44,41 @@ export class CariHareketlerPage implements OnInit {
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
-    cariKartlar: Array<{ label: string; value: number }> = [];
+    cariKartlar: Array<{ label: string; value: number; tesisId?: number | null }> = [];
     selectedCariKartId: number | null = null;
     dialogMode: 'create' | 'edit' = 'create';
     model: CariHareketModel = this.createEmpty();
     readonly durumlar = HAREKET_DURUMLARI;
 
-    ngOnInit(): void {
-        setTimeout(() => {
-            this.cariKartService.getAll().subscribe({
-                next: (items) => {
-                    this.cariKartlar = items.map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
-                    this.cdr.detectChanges();
-                }
-            });
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.closeOpenDialogForTesisChange();
+            this.loadCariKartlar();
             this.load(1, this.pageSize);
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için cari hareketler yenilendi.'
+            });
+        }
+    });
+
+    ngOnInit(): void {
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.loadCariKartlar();
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => this.showError(error)
         });
     }
 
@@ -64,6 +90,11 @@ export class CariHareketlerPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
         this.service.getPaged(pageNumber, pageSize, this.selectedCariKartId).pipe(finalize(() => {
             this.loading = false;
@@ -84,6 +115,9 @@ export class CariHareketlerPage implements OnInit {
     }
 
     openCreate(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         if (this.selectedCariKartId) {
@@ -93,12 +127,19 @@ export class CariHareketlerPage implements OnInit {
     }
 
     openEdit(item: CariHareketModel): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.dialogVisible = true;
     }
 
     save(): void {
+        if (this.getSeciliTesisIdOrWarn() === null) {
+            return;
+        }
+
         if (!this.model.cariKartId || !this.model.belgeTuru?.trim()) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Cari ve belge turu zorunludur.' });
             return;
@@ -142,6 +183,51 @@ export class CariHareketlerPage implements OnInit {
             next: () => this.load(),
             error: (error: unknown) => this.showError(error)
         });
+    }
+
+    private loadCariKartlar(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.cariKartlar = [];
+            this.selectedCariKartId = null;
+            return;
+        }
+
+        this.cariKartService.getAll().subscribe({
+            next: (items) => {
+                this.cariKartlar = items
+                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
+                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+
+                if (this.selectedCariKartId && !this.cariKartlar.some((x) => x.value === this.selectedCariKartId)) {
+                    this.selectedCariKartId = null;
+                }
+
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible) {
+            return;
+        }
+
+        this.dialogVisible = false;
+        this.model = this.createEmpty();
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private createEmpty(): CariHareketModel {

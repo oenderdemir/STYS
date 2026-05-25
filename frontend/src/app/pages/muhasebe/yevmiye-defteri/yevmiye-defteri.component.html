@@ -1,4 +1,6 @@
 <p-toast />
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
 <!-- Üst bilgi uyarısı -->
 <div class="grid grid-cols-12 gap-3 mb-4">
@@ -12,19 +14,6 @@
 
 <!-- Filtre Satırı 1 -->
 <div class="grid grid-cols-12 gap-3 mb-4">
-    <div class="col-span-12 md:col-span-6 lg:col-span-3">
-        <label class="block text-sm font-medium mb-1">Tesis</label>
-        <p-select
-            [options]="tesisSecenekleri"
-            [(ngModel)]="filter.tesisId"
-            placeholder="Tesis seçiniz"
-            optionLabel="label"
-            optionValue="value"
-            class="w-full"
-            [filter]="true"
-            [showClear]="true">
-        </p-select>
-    </div>
     <div class="col-span-12 md:col-span-6 lg:col-span-2">
         <label class="block text-sm font-medium mb-1">Mali Yıl</label>
         <p-select
@@ -36,7 +25,7 @@
             class="w-full">
         </p-select>
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
         <label class="block text-sm font-medium mb-1">Dönem</label>
         <p-select
             [options]="donemSecenekleri"
@@ -47,7 +36,7 @@
             class="w-full">
         </p-select>
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-3">
+    <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block text-sm font-medium mb-1">Başlangıç Tarihi</label>
         <input
             type="date"
@@ -65,7 +54,7 @@
 
 <!-- Filtre Satırı 2 -->
 <div class="grid grid-cols-12 gap-3 mb-4">
-    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
         <label class="block text-sm font-medium mb-1">Fiş Tipi</label>
         <p-select
             [options]="fisTipiSecenekleri"
@@ -76,7 +65,7 @@
             class="w-full">
         </p-select>
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <div class="col-span-12 md:col-span-6 lg:col-span-3">
         <label class="block text-sm font-medium mb-1">Durum</label>
         <p-select
             [options]="durumSecenekleri"

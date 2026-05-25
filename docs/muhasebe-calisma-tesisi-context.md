@@ -79,6 +79,46 @@ Her muhasebe sayfasının üst kısmında gösterilen bağlam çubuğu.
 - `muhasebe-fisler.component.ts`: Context servis entegre edildi, `loadTesisler()` kaldırıldı, `loadFromTesisContext()` eklendi.
 - `muhasebe-fisler.component.html`: Tesis dropdown grid'den kaldırıldı, context bar ve seçim dialog'u eklendi. Düzenleme dialog'undaki tesis dropdown context'e bağlandı.
 
+### ✅ Faz 69A — Rapor Ekranları Entegrasyonu
+- `yevmiye-defteri`: Tesis dropdown kaldırıldı. `filter.tesisId` artık `MuhasebeTesisContextService` üzerinden set ediliyor ve rapor / Excel çağrılarında seçili tesis zorunlu kullanılıyor.
+- `muavin-defter`: Tesis dropdown kaldırıldı. Hesap kodu, dönem ve tarih filtreleri korunurken `filter.tesisId` merkezi context'ten alınıyor.
+- `hizli-mizan`: Tesis dropdown kaldırıldı. Mizan ve karşılaştırma çağrıları seçili tesis ile çalışıyor; tesis değişince sonuçlar temizleniyor.
+- `dashboard`: Dashboard artık açılışta seçili çalışma tesisi ile yükleniyor. Tesis değişince dashboard verisi yeni bağlamla yeniden yükleniyor.
+- `kdv-hareket-raporu`: Tesis dropdown kaldırıldı. Filtre değişiklikleri ve manuel sorgu seçili tesis ile çalışıyor.
+- `kdv-ozet-raporu`: Tesis dropdown kaldırıldı. Sorgu ve Excel dışa aktarımı seçili tesis üzerinden yapılıyor.
+- `kdv-beyanname-hazirlik-kontrol`: Tesis dropdown kaldırıldı. Kontrol çağrıları seçili tesis ile yapılıyor.
+- `donem-kapanis-kontrol`: Tesis dropdown kaldırıldı. Kapanış ön kontrolü seçili çalışma tesisi ile çalışıyor; `maliYil` / `donemNo` query paramları korunuyor.
+
+## Faz 69A — Rapor Ekranları Entegrasyonu
+
+Bu faz ile muhasebe rapor ekranları için **merkezi çalışma tesisi tek tesis kaynağı** haline getirildi.
+
+### Entegre edilen rapor ekranları
+- Yevmiye Defteri
+- Muavin Defter
+- Hızlı Mizan
+- Muhasebe Dashboard
+- KDV Hareket Raporu
+- KDV Özet Raporu
+- KDV Beyanname Hazırlık Kontrol
+- Dönem Kapanış Kontrol
+
+### Kaldırılan tesis filtreleri
+- `filter.tesisId` için bağımsız `p-select` alanları kaldırıldı.
+- Ekranlardaki `tesisSecenekleri`, `loadTesisler()` ve benzeri lokal tesis yükleme akışları kaldırıldı.
+- Kullanıcı tesis değiştirmek istediğinde artık yalnızca üstteki `MuhasebeTesisContextBarComponent` üzerindeki **Değiştir** aksiyonunu kullanır.
+
+### Yeni davranış
+- Her rapor ekranının üstüne zorunlu seçim dialog'u ve context bar eklendi.
+- Sayfa açılışında seçili tesis yoksa `MuhasebeTesisSecimDialogComponent` zorunlu açılır.
+- Servis çağrıları öncesinde `requireSeciliTesisId()` kullanılarak `tesisId: null` gönderimi engellenir.
+- Tesis değiştiğinde mevcut rapor sonuçları temizlenir.
+- Dashboard ekranı tesis değişiminde veriyi otomatik yeniden yükler; diğer rapor ekranlarında kullanıcı mevcut akışı (`Ara`, `Sorgula`, `Kontrol Et`, `Excel`) ile devam eder.
+
+### Güvenlik notu
+- Backend access scope güvenliği aynen korunur.
+- Frontend tesis context sadece kullanıcı deneyimi içindir; backend yetki kontrolünün yerine geçmez.
+
 ---
 
 ## Entegrasyon Rehberi (Kalan Ekranlar İçin)
@@ -153,26 +193,29 @@ export class XxxComponent implements OnInit {
 
 ## Kalan Entegrasyon Listesi
 
-Aşağıdaki ekranlar yukarıdaki pattern ile güncellenmelidir:
+### Tamamlanan rapor ekranları
+| # | Ekran | Durum |
+|---|-------|-------|
+| 1 | **Yevmiye Defteri** | ✅ Tamamlandı (Faz 69A) |
+| 2 | **Muavin Defter** | ✅ Tamamlandı (Faz 69A) |
+| 3 | **Hızlı Mizan** | ✅ Tamamlandı (Faz 69A) |
+| 4 | **Dashboard** | ✅ Tamamlandı (Faz 69A) |
+| 5 | **KDV Hareket Raporu** | ✅ Tamamlandı (Faz 69A) |
+| 6 | **KDV Özet Raporu** | ✅ Tamamlandı (Faz 69A) |
+| 7 | **KDV Beyanname Kontrol** | ✅ Tamamlandı (Faz 69A) |
+| 8 | **Dönem Kapanış Kontrol** | ✅ Tamamlandı (Faz 69A) |
 
+### Kalan CRUD / operasyon ekranları
 | # | Ekran | Dosya | Tesis Kullanımı |
 |---|-------|-------|----------------|
 | 1 | **Fiş Oluştur** | `fis-olustur/muhasebe-fis-olustur.component.*` | `tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 2 | **Yevmiye Defteri** | `yevmiye-defteri/yevmiye-defteri.component.*` | `filter.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 3 | **Hızlı Mizan** | `hizli-mizan/hizli-mizan.component.*` | `filter.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 4 | **Muavin Defter** | `muavin-defter/muavin-defter.component.*` | `filter.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 5 | **Dashboard** | `dashboard/muhasebe-dashboard.component.*` | `filter.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 6 | **KDV Hareket Raporu** | `kdv-hareket-raporu/kdv-hareket-raporu.component.*` | `filter.tesisId`, `tesisSecenekleri` |
-| 7 | **KDV Özet Raporu** | `kdv-ozet-raporu/kdv-ozet-raporu.component.*` | `filter.tesisId`, `tesisSecenekleri` |
-| 8 | **KDV Beyanname Kontrol** | `kdv-beyanname-hazirlik-kontrol/...` | `filter.tesisId`, `tesisSecenekleri` |
-| 9 | **Dönemler** | `donemler/muhasebe-donemler.component.*` | `filter.tesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 10 | **Dönem Kapanış Kontrol** | `donem-kapanis-kontrol/...` | `filter.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 11 | **Cari Kartlar** | `cari-kartlar/cari-kartlar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 12 | **Hesaplar** | `hesaplar/hesaplar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 13 | **Kasa/Banka Hesapları** | `kasa-banka-hesaplari/kasa-banka-hesaplari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 14 | **Depolar** | `depolar/depolar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 15 | **Taşınır Kartları** | `tasinir-kartlari/tasinir-kartlari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 16 | **Taşınır Fiş Taslağı** | `tasinir-fis-taslagi/...` | `filter.tesisId`, `tesisSecenekleri` |
+| 2 | **Dönemler** | `donemler/muhasebe-donemler.component.*` | `filter.tesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 3 | **Cari Kartlar** | `cari-kartlar/cari-kartlar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 4 | **Hesaplar** | `hesaplar/hesaplar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 5 | **Kasa/Banka Hesapları** | `kasa-banka-hesaplari/kasa-banka-hesaplari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 6 | **Depolar** | `depolar/depolar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 7 | **Taşınır Kartları** | `tasinir-kartlari/tasinir-kartlari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
+| 8 | **Taşınır Fiş Taslağı** | `tasinir-fis-taslagi/...` | `filter.tesisId`, `tesisSecenekleri` |
 
 ---
 
@@ -215,4 +258,5 @@ Context servisi **yetkilendirme yapmaz**. Kullanıcının seçtiği tesise eriş
 
 - **Faz:** 69
 - **Oluşturma Tarihi:** 2026-05-25
-- **Durum:** Kısmi — core altyapı tamamlandı, Satış Belgeleri ve Fişler entegre edildi, diğer ekranlar entegrasyon rehberine göre yapılacak.
+- **Güncelleme:** Faz 69A rapor ekranları entegrasyonu eklendi.
+- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler ve rapor ekranları entegre edildi. Kalan CRUD / operasyon ekranları sonraki fazlara bırakıldı.

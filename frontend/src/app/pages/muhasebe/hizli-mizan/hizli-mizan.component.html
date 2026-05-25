@@ -1,4 +1,6 @@
 <p-toast />
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
 <div class="grid grid-cols-12 gap-3 mb-4">
   <!-- Bilgi metni -->
@@ -14,17 +16,6 @@
 
 <!-- Filtre paneli -->
 <div class="grid grid-cols-12 gap-3 mb-4">
-  <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block font-medium mb-2">Tesis <span class="text-red-500">*</span></label>
-    <p-select
-      class="w-full"
-      [options]="tesisSecenekleri"
-      optionLabel="label"
-      optionValue="value"
-      [(ngModel)]="filter.tesisId"
-      placeholder="Tesis seçiniz"
-      appendTo="body" />
-  </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3">
     <label class="block font-medium mb-2">Mali Yıl <span class="text-red-500">*</span></label>
     <input pInputText class="w-full" type="number" [(ngModel)]="filter.maliYil" placeholder="Örn: 2026" min="2000" max="2100" />
@@ -58,7 +49,7 @@
       severity="success"
       (onClick)="exportExcel()"
       [loading]="exporting"
-      [disabled]="!filter.tesisId || !filter.maliYil"
+      [disabled]="!filter.maliYil"
       styleClass="w-full" />
   </div>
 

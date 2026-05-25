@@ -1,4 +1,6 @@
 <p-toast />
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
 <!-- Filtre Alanı -->
 <div class="grid grid-cols-12 gap-3 mb-4">
@@ -19,20 +21,6 @@
       (ngModelChange)="onFilterChange()"
       dateFormat="dd.mm.yy"
       [showIcon]="true"
-      styleClass="w-full" />
-  </div>
-
-  <div class="col-span-12 md:col-span-6 lg:col-span-2">
-    <label class="block mb-1 text-sm font-medium">Tesis</label>
-    <p-select
-      [options]="tesisSecenekleri"
-      [(ngModel)]="filter.tesisId"
-      (ngModelChange)="onFilterChange()"
-      placeholder="Tüm tesisler"
-      optionLabel="label"
-      optionValue="value"
-      [showClear]="true"
-      [loading]="tesisLoading"
       styleClass="w-full" />
   </div>
 

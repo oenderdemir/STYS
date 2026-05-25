@@ -1,6 +1,6 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -10,6 +10,9 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     MuavinDefterFilterModel,
     MuavinDefterModel,
@@ -18,14 +21,9 @@ import {
     normalizeMuavinDefterFilter
 } from '../models/muavin-defter.model';
 import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
-import { MuhasebeRaporService, MuhasebeTesisModel } from '../services/muhasebe-rapor.service';
+import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
 
 interface DonemSecenek {
     label: string;
@@ -68,7 +66,9 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
         SelectModule,
         TableModule,
         TagModule,
-        ToastModule
+        ToastModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     providers: [MessageService],
     templateUrl: './muavin-defter.component.html',
@@ -77,6 +77,7 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
 export class MuavinDefterComponent implements OnInit {
     private readonly raporService = inject(MuhasebeRaporService);
     private readonly hesapPlaniService = inject(MuhasebeHesapPlaniService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
@@ -87,26 +88,32 @@ export class MuavinDefterComponent implements OnInit {
 
     hesapKoduInput: string | null = null;
 
-    tesisSecenekleri: TesisSecenek[] = [];
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     donemSecenekleri = DONEM_SECENEKLERI;
 
     private hesapPlaniTree: MuhasebeHesapPlaniModel[] = [];
     private hesapPlaniLoaded = false;
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        this.filter.tesisId = tesisId;
+        this.clearResults();
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-    }
-
-    private loadTesisler(): void {
-        this.raporService.getTesisler().pipe(finalize(() => {
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.filter.tesisId = this.currentTesisId;
+                this.cdr.detectChanges();
             },
             error: (error: unknown) => {
                 this.showError(error);
@@ -141,10 +148,11 @@ export class MuavinDefterComponent implements OnInit {
     }
 
     private validateAndBuildFilter(): MuavinDefterFilterModel | null {
-        if (!this.filter.tesisId) {
-            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen tesis seçiniz.' });
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
             return null;
         }
+        this.filter.tesisId = tesisId;
 
         const hesapKodu = (this.hesapKoduInput || '').trim();
         if (!hesapKodu) {
@@ -233,8 +241,9 @@ export class MuavinDefterComponent implements OnInit {
 
     temizle(): void {
         this.filter = createDefaultMuavinDefterFilter();
+        this.filter.tesisId = this.currentTesisId;
         this.hesapKoduInput = null;
-        this.result = null;
+        this.clearResults();
     }
 
     oncekiSayfa(): void {
@@ -315,6 +324,23 @@ export class MuavinDefterComponent implements OnInit {
         switch (fisTipi) {
             case 'Mahsup': return 'info';
             default: return 'secondary';
+        }
+    }
+
+    private clearResults(): void {
+        this.result = null;
+    }
+
+    private tryGetSeciliTesisId(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe raporunu çalıştırmak için önce çalışma tesisini seçiniz.'
+            });
+            return null;
         }
     }
 

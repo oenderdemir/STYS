@@ -1,27 +1,17 @@
 <p-toast />
 <p-confirmDialog key="donemKapanisKontrol" />
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
 <div class="mb-4">
   <h2 class="text-xl font-semibold mb-2">Dönem Kapanış Ön Kontrol</h2>
   <p class="text-sm text-color-secondary">
-    Bir dönemi kapatmadan önce gerekli kontrolleri yapın. Tesis, mali yıl ve dönem bilgilerini seçip "Kontrol Et" butonuna basın.
+    Bir dönemi kapatmadan önce gerekli kontrolleri yapın. Çalışma tesisi, mali yıl ve dönem bilgilerini seçip "Kontrol Et" butonuna basın.
   </p>
 </div>
 
 <!-- Filtre Alanı -->
 <div class="grid grid-cols-12 gap-3 mb-4">
-  <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block mb-1 text-sm font-medium">Tesis</label>
-    <p-select
-      [options]="tesisSecenekleri"
-      [(ngModel)]="filter.tesisId"
-      placeholder="Tesis seçiniz"
-      optionLabel="label"
-      optionValue="value"
-      [showClear]="true"
-      styleClass="w-full" />
-  </div>
-
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
     <p-select
@@ -50,7 +40,7 @@
       icon="pi pi-search"
       [raised]="true"
       [loading]="checking"
-      [disabled]="loading || !filter.tesisId || !filter.maliYil || !filter.donemNo"
+      [disabled]="loading || !filter.maliYil || !filter.donemNo"
       (onClick)="kontrolEt()" />
   </div>
 </div>
@@ -295,6 +285,6 @@
   <div class="flex flex-column align-items-center justify-content-center py-8 text-color-secondary">
     <i class="pi pi-search text-6xl mb-3"></i>
     <p class="text-lg mb-2">Henüz kontrol yapılmadı</p>
-    <p class="text-sm">Tesis, mali yıl ve dönem seçip "Kontrol Et" butonuna basın.</p>
+    <p class="text-sm">Çalışma tesisi, mali yıl ve dönem seçip "Kontrol Et" butonuna basın.</p>
   </div>
 </ng-container>

@@ -1,6 +1,6 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -9,6 +9,9 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     MuhasebeFisFilterModel,
     createDefaultFisFilter,
@@ -16,12 +19,7 @@ import {
     MuhasebeFisDurumlari
 } from '../models/muhasebe-fis.model';
 import { YevmiyeDefteriModel, YevmiyeDefteriSatirModel } from '../models/yevmiye-defteri.model';
-import { MuhasebeRaporService, MuhasebeTesisModel } from '../services/muhasebe-rapor.service';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
+import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 
 interface DonemSecenek {
     label: string;
@@ -92,7 +90,9 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
         SelectModule,
         TableModule,
         TagModule,
-        ToastModule
+        ToastModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     providers: [MessageService],
     templateUrl: './yevmiye-defteri.component.html',
@@ -100,6 +100,7 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
 })
 export class YevmiyeDefteriComponent implements OnInit {
     private readonly raporService = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
@@ -108,25 +109,31 @@ export class YevmiyeDefteriComponent implements OnInit {
     loading = false;
     exporting = false;
 
-    tesisSecenekleri: TesisSecenek[] = [];
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     donemSecenekleri = DONEM_SECENEKLERI;
     fisTipiSecenekleri = FIS_TIPI_SECENEKLERI;
     durumSecenekleri = DURUM_SECENEKLERI;
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        this.filter.tesisId = tesisId;
+        this.clearResults();
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-    }
-
-    private loadTesisler(): void {
-        this.raporService.getTesisler().pipe(finalize(() => {
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.filter.tesisId = this.currentTesisId;
+                this.cdr.detectChanges();
             },
             error: (error: unknown) => {
                 this.showError(error);
@@ -135,6 +142,12 @@ export class YevmiyeDefteriComponent implements OnInit {
     }
 
     ara(): void {
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
+            return;
+        }
+
+        this.filter.tesisId = tesisId;
         const normalized = normalizeFisFilter(this.filter);
         this.filter = normalized;
         this.result = null;
@@ -155,7 +168,8 @@ export class YevmiyeDefteriComponent implements OnInit {
 
     temizle(): void {
         this.filter = createDefaultFisFilter();
-        this.result = null;
+        this.filter.tesisId = this.currentTesisId;
+        this.clearResults();
     }
 
     getFark(): number {
@@ -204,11 +218,12 @@ export class YevmiyeDefteriComponent implements OnInit {
     }
 
     exportExcel(): void {
-        if (!this.filter.tesisId) {
-            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen önce tesis seçiniz.' });
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
             return;
         }
 
+        this.filter.tesisId = tesisId;
         const normalized = normalizeFisFilter(this.filter);
         this.exporting = true;
 
@@ -245,6 +260,23 @@ export class YevmiyeDefteriComponent implements OnInit {
         const mi = String(now.getMinutes()).padStart(2, '0');
         const s = String(now.getSeconds()).padStart(2, '0');
         return `yevmiye-defteri-${y}${mo}${d}-${h}${mi}${s}.xlsx`;
+    }
+
+    private clearResults(): void {
+        this.result = null;
+    }
+
+    private tryGetSeciliTesisId(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe raporunu çalıştırmak için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

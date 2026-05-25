@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, effect, inject } from '@angular/core';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -15,17 +15,14 @@ import { SkeletonModule } from 'primeng/skeleton';
 import { RouterModule } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MuhasebeDashboardService } from '../services/muhasebe-dashboard.service';
-import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     MuhasebeDashboardFilterModel,
     MuhasebeDashboardModel,
     createDefaultDashboardFilter
 } from '../models/muhasebe-dashboard.model';
-
-interface TesisSecenek {
-    label: string;
-    value: number | null;
-}
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const suankiYil = new Date().getFullYear();
@@ -51,7 +48,9 @@ const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (()
         MessageModule,
         SelectModule,
         ProgressSpinnerModule,
-        SkeletonModule
+        SkeletonModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     providers: [MessageService],
     templateUrl: './muhasebe-dashboard.component.html',
@@ -59,7 +58,7 @@ const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (()
 })
 export class MuhasebeDashboardComponent implements OnInit {
     private readonly dashboardService = inject(MuhasebeDashboardService);
-    private readonly raporService = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
 
     filter: MuhasebeDashboardFilterModel = createDefaultDashboardFilter();
@@ -67,40 +66,49 @@ export class MuhasebeDashboardComponent implements OnInit {
     loading = false;
     loadingMessage = 'Dashboard yükleniyor...';
 
-    tesisSecenekleri: TesisSecenek[] = [];
-    tesisLoading = false;
-
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
 
     donemSecenekleri: Array<{ label: string; value: number | null }> = [
         { label: 'Tümü', value: null },
         ...Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1 }))
     ];
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        this.filter.tesisId = tesisId;
+        this.dashboard = null;
+        this.loadDashboard();
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-        this.loadDashboard();
-    }
-
-    private loadTesisler(): void {
-        this.tesisLoading = true;
-        this.raporService.getTesisler().pipe(
-            finalize(() => (this.tesisLoading = false))
-        ).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad ?? `Tesis #${t.id}`,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.filter.tesisId = this.currentTesisId;
+                this.loadDashboard();
             },
             error: (error: unknown) => {
                 this.showError(error);
-                this.tesisSecenekleri = [];
             }
         });
     }
 
     loadDashboard(): void {
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
+            this.dashboard = null;
+            return;
+        }
+
+        this.filter.tesisId = tesisId;
         this.loading = true;
         this.dashboard = null;
         this.dashboardService.getDashboard(this.filter).pipe(
@@ -208,6 +216,19 @@ export class MuhasebeDashboardComponent implements OnInit {
     getFarkSinifi(fark: number): string {
         if (Math.abs(fark) < 0.01) return 'text-green-600 font-semibold';
         return 'text-red-600 font-semibold';
+    }
+
+    private tryGetSeciliTesisId(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe raporunu çalıştırmak için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

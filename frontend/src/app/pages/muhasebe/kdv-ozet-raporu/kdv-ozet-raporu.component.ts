@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -15,7 +15,9 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { DatePickerModule } from 'primeng/datepicker';
 import { HttpErrorResponse } from '@angular/common/http';
 import { KdvOzetRaporuService } from '../services/kdv-ozet-raporu.service';
-import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { DepolarService } from '../depolar/depolar.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
@@ -39,11 +41,6 @@ import {
 } from '../models/kdv-ozet-raporu.model';
 import { KDV_UYGULAMA_TIPI_SECENEKLERI, MUS_FIS_DURUMU_SECENEKLERI } from '../models/kdv-hareket-raporu.model';
 
-interface TesisSecenek {
-    label: string;
-    value: number | null;
-}
-
 interface Secenek<T = number> {
     label: string;
     value: T;
@@ -64,7 +61,9 @@ interface Secenek<T = number> {
         MessageModule,
         SelectModule,
         ProgressSpinnerModule,
-        DatePickerModule
+        DatePickerModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     providers: [MessageService],
     templateUrl: './kdv-ozet-raporu.component.html',
@@ -72,7 +71,7 @@ interface Secenek<T = number> {
 })
 export class KdvOzetRaporuComponent implements OnInit {
     private readonly raporService = inject(KdvOzetRaporuService);
-    private readonly muhasebeRaporService = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly depolarService = inject(DepolarService);
     private readonly tasinirKartService = inject(TasinirKartlariService);
     private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
@@ -88,9 +87,6 @@ export class KdvOzetRaporuComponent implements OnInit {
     maliYilSecenekleri: Secenek<number>[] = getMaliYilSecenekleri();
     donemSecenekleri = DONEM_SECENEKLERI;
 
-    tesisSecenekleri: TesisSecenek[] = [];
-    tesisLoading = false;
-
     depoSecenekleri: Secenek<number>[] = [];
     tasinirKartSecenekleri: Secenek<number>[] = [];
     hareketTipiSecenekleri = STOK_HAREKET_TIPLERI;
@@ -98,30 +94,35 @@ export class KdvOzetRaporuComponent implements OnInit {
 
     kdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
     musFisDurumuSecenekleri = MUS_FIS_DURUMU_SECENEKLERI;
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        this.filter.tesisId = tesisId;
+        this.clearResults();
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-        this.loadDepolar();
-        this.loadTasinirKartlar();
-        this.loadIstisnaTanimlari();
-    }
-
-    private loadTesisler(): void {
-        this.tesisLoading = true;
-        this.muhasebeRaporService.getTesisler().pipe(
-            finalize(() => (this.tesisLoading = false))
-        ).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad ?? `Tesis #${t.id}`,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.filter.tesisId = this.currentTesisId;
+                this.cdr.markForCheck();
             },
             error: (error: unknown) => {
                 this.showError(error);
-                this.tesisSecenekleri = [];
             }
         });
+        this.loadDepolar();
+        this.loadTasinirKartlar();
+        this.loadIstisnaTanimlari();
     }
 
     private loadDepolar(): void {
@@ -168,12 +169,19 @@ export class KdvOzetRaporuComponent implements OnInit {
 
     clearFilter(): void {
         this.filter = createDefaultKdvOzetRaporFilter();
-        this.rapor = null;
+        this.filter.tesisId = this.currentTesisId;
+        this.clearResults();
     }
 
     loadRapor(): void {
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
+            return;
+        }
+
+        this.filter.tesisId = tesisId;
         this.loading = true;
-        this.rapor = null;
+        this.clearResults();
         this.raporService.getOzetRapor(this.filter).pipe(
             finalize(() => {
                 this.loading = false;
@@ -191,6 +199,12 @@ export class KdvOzetRaporuComponent implements OnInit {
     }
 
     exportExcel(): void {
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
+            return;
+        }
+
+        this.filter.tesisId = tesisId;
         this.exporting = true;
         this.cdr.markForCheck();
 
@@ -290,6 +304,23 @@ export class KdvOzetRaporuComponent implements OnInit {
         if (netKdv > 0) return 'text-green-500';
         if (netKdv < 0) return 'text-red-500';
         return '';
+    }
+
+    private clearResults(): void {
+        this.rapor = null;
+    }
+
+    private tryGetSeciliTesisId(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe raporunu çalıştırmak için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

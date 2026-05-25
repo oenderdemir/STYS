@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -13,6 +13,9 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     MizanFilterModel,
     MizanKarsilastirmaModel,
@@ -23,11 +26,6 @@ import {
     normalizeMizanFilter
 } from '../models/mizan.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
 
 const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
     { label: 'Tum Donemler', value: null },
@@ -65,7 +63,9 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         SelectModule,
         TableModule,
         TagModule,
-        ToastModule
+        ToastModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './hizli-mizan.component.html',
     styleUrls: ['./hizli-mizan.component.scss'],
@@ -73,6 +73,7 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
 })
 export class HizliMizanComponent implements OnInit {
     private readonly service = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
@@ -85,43 +86,42 @@ export class HizliMizanComponent implements OnInit {
 
     exporting = false;
 
-    tesisSecenekleri: TesisSecenek[] = [];
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly pageSizeSecenekleri = PAGE_SIZE_SECENEKLERI;
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        this.filter.tesisId = tesisId;
+        this.clearResults();
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-    }
-
-    private loadTesisler(): void {
-        this.loading = true;
-        this.service.getTesisler().pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler
-                    .sort((a, b) => a.ad.localeCompare(b.ad))
-                    .map((t) => ({ label: t.ad, value: t.id }));
-
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.filter.tesisId = this.currentTesisId;
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
                 this.showError(error);
-                this.cdr.detectChanges();
             }
         });
     }
 
     private validateFilter(): boolean {
-        if (!this.filter.tesisId) {
-            this.messageService.add({
-                severity: UiSeverity.Warn,
-                summary: 'Eksik Bilgi',
-                detail: 'Tesis seçimi zorunludur.'
-            });
+        const tesisId = this.tryGetSeciliTesisId();
+        if (tesisId === null) {
             return false;
         }
+        this.filter.tesisId = tesisId;
 
         if (!this.filter.maliYil) {
             this.messageService.add({
@@ -350,6 +350,24 @@ export class HizliMizanComponent implements OnInit {
         const mm = now.getMinutes().toString().padStart(2, '0');
         const ss = now.getSeconds().toString().padStart(2, '0');
         return `hizli-mizan-${y}${m}${d}-${hh}${mm}${ss}.xlsx`;
+    }
+
+    private clearResults(): void {
+        this.result = null;
+        this.karsilastirmaSonucu = null;
+    }
+
+    private tryGetSeciliTesisId(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe raporunu çalıştırmak için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

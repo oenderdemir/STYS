@@ -17,6 +17,8 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TreeTableModule } from 'primeng/treetable';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { TasinirKodModel } from './tasinir-kodlari.dto';
 import { TasinirKodlariService } from './tasinir-kodlari.service';
 
@@ -26,12 +28,13 @@ type ParentOption = { label: string; value: number };
 @Component({
     selector: 'app-tasinir-kodlari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, AutoCompleteModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
+    imports: [CommonModule, FormsModule, AutoCompleteModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, TagModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './tasinir-kodlari.html',
     providers: [MessageService, ConfirmationService]
 })
 export class TasinirKodlariPage implements OnInit {
     private readonly service = inject(TasinirKodlariService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -49,6 +52,7 @@ export class TasinirKodlariPage implements OnInit {
     private parentSearchSeq = 0;
 
     ngOnInit(): void {
+        this.tesisContext.initialize().subscribe({ error: () => void 0 });
         this.load();
     }
 

@@ -14,18 +14,21 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { PaketTuruModel } from './paket-turleri.dto';
 import { PaketTurleriService } from './paket-turleri.service';
 
 @Component({
     selector: 'app-paket-turleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, MuhasebeTesisContextBarComponent, TableModule, ToastModule, ToolbarModule],
     templateUrl: './paket-turleri.html',
     providers: [MessageService, ConfirmationService]
 })
 export class PaketTurleriPage implements OnInit {
     private readonly service = inject(PaketTurleriService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -42,6 +45,7 @@ export class PaketTurleriPage implements OnInit {
     totalRecords = 0;
 
     ngOnInit(): void {
+        this.tesisContext.initialize().subscribe({ error: () => void 0 });
         this.load(1, this.pageSize);
     }
 

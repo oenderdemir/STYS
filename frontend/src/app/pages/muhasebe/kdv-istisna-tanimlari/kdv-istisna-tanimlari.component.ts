@@ -30,6 +30,8 @@ import {
     UpdateKdvIstisnaTanimRequest,
     createDefaultKdvIstisnaTanimFilter
 } from '../models/kdv-istisna-tanim.model';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 
 @Component({
@@ -43,6 +45,7 @@ import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
         ConfirmDialogModule,
         DialogModule,
         InputTextModule,
+        MuhasebeTesisContextBarComponent,
         TextareaModule,
         SelectModule,
         TableModule,
@@ -56,6 +59,7 @@ import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 })
 export class KdvIstisnaTanimlariComponent implements OnInit {
     private readonly service = inject(KdvIstisnaTanimService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly fb = inject(FormBuilder);
@@ -92,6 +96,7 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
     ];
 
     ngOnInit(): void {
+        this.tesisContext.initialize().subscribe({ error: () => void 0 });
         this.filter = createDefaultKdvIstisnaTanimFilter();
         this.buildFilterForm();
         this.buildForm();

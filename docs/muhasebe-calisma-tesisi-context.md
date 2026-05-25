@@ -301,6 +301,47 @@ Bu fazda `frontend/src/app/pages/muhasebe` ağacı tarandı ve kalan eski tesis 
 
 ---
 
+## Faz 69E — Global Tanım Ekranları ve Yetkili Tesis Doğrulaması
+
+Bu fazda global muhasebe tanım ekranlarında seçili çalışma tesisinin üst bilgi olarak gösterilmesi sağlandı ve `MuhasebeTesisContextService` için kullanılan tesis listesinin yetkili/aktif tesislerden geldiği doğrulandı.
+
+### Global ekranlar
+- Paket Türleri
+- KDV İstisna Tanımları
+- Taşınır Kodları
+- Muhasebe Hesap Planı
+
+### Global ekran davranışı
+- Bu ekranlarda tesisId filtre veya kayıt parametresi olarak kullanılmaz.
+- Bağımsız tesis dropdown'u yoktur.
+- Üstte yalnızca `MuhasebeTesisContextBarComponent` gösterilir.
+- Çalışma tesisini değiştirme akışı context bar üzerindeki **Değiştir** aksiyonuyla yapılır.
+- Bu ekranlar tesis seçilmeden de çalışmaya devam edebilir.
+
+### Tesis listesi ve doğrulama
+- `MuhasebeTesisContextService`, mevcut `RezervasyonController.GetTesisler()` endpoint'ini kullanır.
+- Bu endpoint `RezervasyonService.GetErisilebilirTesislerAsync()` üzerinden çalışır.
+- Liste yalnızca aktif tesisleri döndürür.
+- `IUserAccessScopeService` ile scope uygulandığı için scoped kullanıcılar sadece yetkili oldukları tesisleri görür.
+- localStorage'daki tesis seçimi, initialize sırasında yüklenen yetkili listeyle doğrulanır.
+- `selectTesis(...)` çağrısında listedeki tesisler dışında bir seçim reddedilir.
+
+### Güvenlik notu
+- Frontend localStorage güvenlik sınırı değildir.
+- Backend access scope güvenliği nihai yetki kontrolüdür.
+- Yetkisiz bir tesis ID'si manuel olarak yazılsa bile backend tarafı erişimi engeller.
+
+### Kalan notlar
+- `Hesaplar` ekranı tesis bazlıdır; bu fazın kapsamı dışındadır.
+- Paket Türleri, KDV İstisna Tanımları, Taşınır Kodları ve Muhasebe Hesap Planı global tanımlar olarak bırakılmıştır.
+
+### Son durum
+- Muhasebe modülünde tesis context bar tüm ilgili ekranlarda görünür.
+- Global tanım ekranlarında tesis bilgisi üst bilgi olarak yer alır.
+- Tesis listesi yetkili/aktif kayıtlarla sınırlıdır.
+
+---
+
 ## Entegrasyon Rehberi (Kalan Ekranlar İçin)
 
 Aşağıdaki pattern tüm muhasebe ekranları için geçerlidir. Her ekran için 3 değişiklik yapılması yeterlidir:
@@ -446,5 +487,5 @@ Context servisi **yetkilendirme yapmaz**. Kullanıcının seçtiği tesise eriş
 
 - **Faz:** 69
 - **Oluşturma Tarihi:** 2026-05-25
-- **Güncelleme:** Faz 69B CRUD / tanım ekranları, Faz 69C operasyon ekranları, Faz 69C-A servis filtre düzeltmeleri ve Faz 69D regresyon temizliği eklendi.
-- **Durum:** Tamamlandı sayılır — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C / 69C-A / 69D kapsamındaki ekranlar entegre edildi. Kalan ekranlar global tanım ekranları veya bilinçli yardımcı istisnalar olarak not edildi.
+- **Güncelleme:** Faz 69B CRUD / tanım ekranları, Faz 69C operasyon ekranları, Faz 69C-A servis filtre düzeltmeleri, Faz 69D regresyon temizliği ve Faz 69E global tanım/doğrulama adımı eklendi.
+- **Durum:** Tamamlandı sayılır — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C / 69C-A / 69D / 69E kapsamındaki ekranlar entegre edildi. Kalan ekranlar global tanım ekranları veya bilinçli yardımcı istisnalar olarak not edildi.

@@ -134,6 +134,12 @@ export class MuhasebeTesisContextService {
 
     /** Çalışma tesisini değiştir ve localStorage'a yaz. */
     selectTesis(tesis: MuhasebeTesisModel): void {
+        const allowed = this.tesisler().some(t => t.id === tesis.id);
+        if (!allowed) {
+            this.clearTesis();
+            throw new Error('Seçilen tesis için yetkiniz bulunmamaktadır.');
+        }
+
         this.seciliTesis.set(tesis);
         persistTesis(tesis);
     }

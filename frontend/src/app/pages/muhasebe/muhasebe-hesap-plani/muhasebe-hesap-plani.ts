@@ -16,18 +16,21 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TreeTableModule } from 'primeng/treetable';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { CreateMuhasebeHesapPlaniRequest, MuhasebeHesapPlaniModel, UpdateMuhasebeHesapPlaniRequest } from './muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
 
 @Component({
     selector: 'app-muhasebe-hesap-plani-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './muhasebe-hesap-plani.html',
     providers: [MessageService, ConfirmationService]
 })
 export class MuhasebeHesapPlaniPage implements OnInit {
     private readonly service = inject(MuhasebeHesapPlaniService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -42,6 +45,7 @@ export class MuhasebeHesapPlaniPage implements OnInit {
     ustHesapSecenekleri: Array<{ label: string; value: number }> = [];
 
     ngOnInit(): void {
+        this.tesisContext.initialize().subscribe({ error: () => void 0 });
         setTimeout(() => this.load());
     }
 

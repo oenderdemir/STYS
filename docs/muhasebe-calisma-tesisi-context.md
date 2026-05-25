@@ -121,6 +121,45 @@ Bu faz ile muhasebe rapor ekranları için **merkezi çalışma tesisi tek tesis
 
 ---
 
+## Faz 69B — CRUD / Tanım Ekranları Entegrasyonu
+
+Bu fazda merkezi çalışma tesisi altyapısı raporlardan CRUD / tanım / operasyon ekranlarına yayıldı. Bu batch'te global kabul edilen ekran tespit edilmedi; hedeflenen tüm ekranlar tesis bazlı çalışıyor.
+
+### Entegre edilen ekranlar
+- Fiş Oluştur
+- Dönemler
+- Cari Kartlar
+- Hesaplar
+- Kasa/Banka Hesapları
+- Depolar
+- Taşınır Kartları
+- Taşınır Fiş Taslağı
+
+### Kaldırılan tesis filtreleri
+- Ekranlardaki bağımsız tesis dropdown / filter alanları kaldırıldı.
+- Tesis seçimi artık yalnızca `MuhasebeTesisContextBarComponent` üzerinden değiştiriliyor.
+- Create/Edit formlarındaki tesis alanları readonly bilgiye dönüştürüldü veya tamamen kaldırıldı.
+
+### TesisId davranışı
+- Listeleme ve create/update payload'ları seçili çalışma tesisinden besleniyor.
+- `tesisId: null` gönderimi backend çağrılarında engelleniyor.
+- Açık dialog / form varsa tesis değişiminde güvenli şekilde kapatılıyor veya temizleniyor.
+
+### Tesis değişince davranış
+- Liste ekranlarında veri yeniden yükleniyor.
+- Açık form/diyalog varsa kapatılıyor.
+- Taşınır fiş taslağı modal dialog'u tesis değişiminde kapanıyor.
+
+### Güvenlik notu
+- Backend access scope güvenliği aynen korunur.
+- Frontend tesis context sadece kullanıcı deneyimi içindir; backend yetki kontrolünün yerine geçmez.
+
+### Kalan ekranlar
+- Bu faz kapsamında ele alınmayan diğer muhasebe operasyon/tanım ekranları sonraki fazlara bırakıldı.
+- Örnek kalanlar: `banka-hareketleri`, `cari-hareketler`, `kasa-hareketleri`, `stok-hareketleri`, `tahsilat-odeme-belgeleri`.
+
+---
+
 ## Entegrasyon Rehberi (Kalan Ekranlar İçin)
 
 Aşağıdaki pattern tüm muhasebe ekranları için geçerlidir. Her ekran için 3 değişiklik yapılması yeterlidir:
@@ -191,7 +230,11 @@ export class XxxComponent implements OnInit {
 
 ---
 
-## Kalan Entegrasyon Listesi
+## Faz 69B Sonrası Durum
+
+### Faz 69B ile tamamlanan CRUD / operasyon ekranları
+
+Bu fazda aşağıdaki ekranlar merkezi çalışma tesisi altyapısına bağlandı:
 
 ### Tamamlanan rapor ekranları
 | # | Ekran | Durum |
@@ -205,17 +248,21 @@ export class XxxComponent implements OnInit {
 | 7 | **KDV Beyanname Kontrol** | ✅ Tamamlandı (Faz 69A) |
 | 8 | **Dönem Kapanış Kontrol** | ✅ Tamamlandı (Faz 69A) |
 
-### Kalan CRUD / operasyon ekranları
+### Faz 69B ile tamamlanan CRUD / operasyon ekranları
 | # | Ekran | Dosya | Tesis Kullanımı |
 |---|-------|-------|----------------|
-| 1 | **Fiş Oluştur** | `fis-olustur/muhasebe-fis-olustur.component.*` | `tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 2 | **Dönemler** | `donemler/muhasebe-donemler.component.*` | `filter.tesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 3 | **Cari Kartlar** | `cari-kartlar/cari-kartlar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 4 | **Hesaplar** | `hesaplar/hesaplar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 5 | **Kasa/Banka Hesapları** | `kasa-banka-hesaplari/kasa-banka-hesaplari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 6 | **Depolar** | `depolar/depolar.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 7 | **Taşınır Kartları** | `tasinir-kartlari/tasinir-kartlari.*` | `selectedTesisId`, `model.tesisId`, `tesisSecenekleri`, `loadTesisler()` |
-| 8 | **Taşınır Fiş Taslağı** | `tasinir-fis-taslagi/...` | `filter.tesisId`, `tesisSecenekleri` |
+| 1 | **Fiş Oluştur** | `fis-olustur/muhasebe-fis-olustur.component.*` | `tesisId` artık context'ten alınıyor |
+| 2 | **Dönemler** | `donemler/muhasebe-donemler.component.*` | `filter.tesisId` ve `model.tesisId` context'ten besleniyor |
+| 3 | **Cari Kartlar** | `cari-kartlar/cari-kartlar.*` | `model.tesisId` context'ten geliyor |
+| 4 | **Hesaplar** | `hesaplar/hesaplar.*` | `model.tesisId` context'ten geliyor |
+| 5 | **Kasa/Banka Hesapları** | `kasa-banka-hesaplari/kasa-banka-hesaplari.*` | `model.tesisId` context'ten geliyor |
+| 6 | **Depolar** | `depolar/depolar.*` | `model.tesisId` context'ten geliyor |
+| 7 | **Taşınır Kartları** | `tasinir-kartlari/tasinir-kartlari.*` | `model.tesisId` context'ten geliyor |
+| 8 | **Taşınır Fiş Taslağı** | `tasinir-fis-taslagi/...` | `request.tesisId` context'ten geliyor |
+
+### Kalan muhasebe ekranları
+- Bu faz dışında kalan muhasebe operasyon / tanım ekranları ileriki fazlara bırakıldı.
+- Örnekler: `banka-hareketleri`, `cari-hareketler`, `kasa-hareketleri`, `stok-hareketleri`, `tahsilat-odeme-belgeleri`.
 
 ---
 
@@ -258,5 +305,5 @@ Context servisi **yetkilendirme yapmaz**. Kullanıcının seçtiği tesise eriş
 
 - **Faz:** 69
 - **Oluşturma Tarihi:** 2026-05-25
-- **Güncelleme:** Faz 69A rapor ekranları entegrasyonu eklendi.
-- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler ve rapor ekranları entegre edildi. Kalan CRUD / operasyon ekranları sonraki fazlara bırakıldı.
+- **Güncelleme:** Faz 69B CRUD / tanım ekranları entegrasyonu eklendi.
+- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B CRUD / tanım ekranları entegre edildi. Kalan diğer muhasebe operasyon ekranları sonraki fazlara bırakıldı.

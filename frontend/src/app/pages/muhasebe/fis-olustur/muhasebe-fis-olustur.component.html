@@ -1,4 +1,6 @@
 <p-toast />
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
 <div class="mb-4">
   <div class="flex align-items-center gap-2 mb-3">
@@ -12,21 +14,8 @@
 
 <!-- Başlık formu -->
 <div class="grid grid-cols-12 gap-3 mb-4">
-  <!-- Tesis -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-4">
-    <label class="block text-sm font-medium mb-1">Tesis <span class="text-red-500">*</span></label>
-    <p-select
-      [options]="tesisSecenekleri"
-      [(ngModel)]="tesisId"
-      optionLabel="label"
-      optionValue="value"
-      placeholder="Tesis seçiniz"
-      class="w-full"
-      [showClear]="false" />
-  </div>
-
   <!-- Fiş Tarihi -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-4">
+  <div class="col-span-12 md:col-span-6 lg:col-span-5">
     <label class="block text-sm font-medium mb-1">Fiş Tarihi <span class="text-red-500">*</span></label>
     <input
       type="date"
@@ -36,7 +25,7 @@
   </div>
 
   <!-- Mali Yıl -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+  <div class="col-span-12 md:col-span-6 lg:col-span-3">
     <label class="block text-sm font-medium mb-1">Mali Yıl <span class="text-red-500">*</span></label>
     <p-select
       [options]="maliYilSecenekleri"
@@ -48,7 +37,7 @@
   </div>
 
   <!-- Dönem -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-2">
+  <div class="col-span-12 md:col-span-6 lg:col-span-4">
     <label class="block text-sm font-medium mb-1">Dönem <span class="text-red-500">*</span></label>
     <p-select
       [options]="donemSecenekleri"

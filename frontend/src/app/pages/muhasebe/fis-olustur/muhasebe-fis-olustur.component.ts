@@ -1,5 +1,5 @@
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -14,6 +14,9 @@ import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     CreateMuhasebeFisRequestModel,
     CreateMuhasebeFisSatirRequestModel,
@@ -22,12 +25,6 @@ import {
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
-import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
 
 interface HesapSecenek {
     label: string;
@@ -97,7 +94,9 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
         SelectModule,
         TableModule,
         ToastModule,
-        TooltipModule
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './muhasebe-fis-olustur.component.html',
     styleUrls: ['./muhasebe-fis-olustur.component.scss'],
@@ -105,25 +104,26 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
 })
 export class MuhasebeFisOlusturComponent implements OnInit {
     private readonly service = inject(MuhasebeFisService);
-    private readonly raporService = inject(MuhasebeRaporService);
     private readonly hesapPlaniService = inject(MuhasebeHesapPlaniService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     saving = false;
 
     // Form
     tesisId: number | null = null;
     fisTarihi: string = '';
-    maliYil: number;
-    donem: number;
+    maliYil: number = 0;
+    donem: number = 1;
     fisTipi: string = MuhasebeFisTipleri.Mahsup;
     aciklama: string | null = null;
     kaynakModul: string | null = null;
     kaynakId: number | null = null;
 
     // Dropdown data
-    tesisSecenekleri: TesisSecenek[] = [];
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     donemSecenekleri = DONEM_SECENEKLERI;
     fisTipiSecenekleri = FIS_TIPI_SECENEKLERI;
@@ -143,6 +143,23 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     // Collapsible kaynak
     kaynakCollapsed = true;
 
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.resetFormForTesisChange(tesisId);
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için açık fiş formu temizlendi.'
+            });
+        }
+    });
+
     // Computed
     get toplamBorc(): number {
         return this.satirlar.reduce((sum, s) => sum + (s.borc || 0), 0);
@@ -161,30 +178,19 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     }
 
     constructor() {
-        const today = new Date();
-        this.fisTarihi = today.toISOString().split('T')[0];
-        this.maliYil = today.getFullYear();
-        this.donem = today.getMonth() + 1;
+        this.resetToDefaults();
     }
 
     ngOnInit(): void {
-        this.loadTesisler();
-        this.loadHesapPlani();
-        if (this.satirlar.length === 0) {
-            this.satirEkle();
-            this.satirEkle();
-        }
-    }
-
-    private loadTesisler(): void {
-        this.raporService.getTesisler().pipe(finalize(() => {
-            // nothing
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                if (this.currentTesisId) {
+                    this.tesisId = this.currentTesisId;
+                }
+                this.loadHesapPlani();
+                this.ensureInitialRows();
             },
             error: (error: unknown) => {
                 this.showError(error);
@@ -343,6 +349,13 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     }
 
     kaydet(): void {
+        const seciliTesisId = this.getSeciliTesisIdOrWarn();
+        if (seciliTesisId === null) {
+            return;
+        }
+
+        this.tesisId = seciliTesisId;
+
         const error = this.validateForm();
         if (error) {
             this.messageService.add({
@@ -369,7 +382,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
         }));
 
         const request: CreateMuhasebeFisRequestModel = {
-            tesisId: this.tesisId!,
+            tesisId: seciliTesisId,
             maliYil: this.maliYil,
             donem: this.donem,
             fisTarihi: this.fisTarihi,
@@ -413,5 +426,44 @@ export class MuhasebeFisOlusturComponent implements OnInit {
             detail: message,
             life: 6000
         });
+    }
+
+    private resetToDefaults(): void {
+        const today = new Date();
+        this.tesisId = null;
+        this.fisTarihi = today.toISOString().split('T')[0];
+        this.maliYil = today.getFullYear();
+        this.donem = today.getMonth() + 1;
+        this.fisTipi = MuhasebeFisTipleri.Mahsup;
+        this.aciklama = null;
+        this.kaynakModul = null;
+        this.kaynakId = null;
+    }
+
+    private ensureInitialRows(): void {
+        if (this.satirlar.length === 0) {
+            this.satirEkle();
+            this.satirEkle();
+        }
+    }
+
+    private resetFormForTesisChange(tesisId: number): void {
+        this.resetToDefaults();
+        this.tesisId = tesisId;
+        this.satirlar = [];
+        this.ensureInitialRows();
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 }

@@ -15,17 +15,13 @@ import { ToastModule } from 'primeng/toast';
 import { HttpErrorResponse } from '@angular/common/http';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import {
     TasinirMuhasebeFisiOlusturRequestModel,
     TasinirMuhasebeFisiOlusturResultModel,
     createDefaultTasinirFisRequest
 } from '../models/tasinir-muhasebe-fis.model';
 import { TasinirMuhasebeFisService } from '../services/tasinir-muhasebe-fis.service';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
 
 const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
     { label: 'Seçiniz (opsiyonel)', value: null },
@@ -77,21 +73,19 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     private readonly ref = inject(DynamicDialogRef);
     private readonly config = inject(DynamicDialogConfig);
     private readonly router = inject(Router);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
 
     loading = false;
-    tesislerLoading = false;
     kdvEnabled = false;
     result: TasinirMuhasebeFisiOlusturResultModel | null = null;
 
     request: TasinirMuhasebeFisiOlusturRequestModel = createDefaultTasinirFisRequest();
-    tesisSecenekleri: TesisSecenek[] = [];
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly kdvOranSecenekleri = KDV_ORAN_SECENEKLERI;
 
     ngOnInit(): void {
         const data = this.config.data as Partial<TasinirMuhasebeFisiOlusturRequestModel> | undefined;
         if (data) {
-            if (data.tesisId != null) { this.request.tesisId = data.tesisId; }
             if (data.tasinirKodu != null) { this.request.tasinirKodu = data.tasinirKodu; }
             if (data.tutar != null) { this.request.tutar = data.tutar; }
             if (data.referansTipi != null) { this.request.referansTipi = data.referansTipi; }
@@ -108,25 +102,7 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             if (data.hareketTipi != null) { this.request.hareketTipi = data.hareketTipi; }
             if (data.kdvTutari != null) { this.request.kdvTutari = data.kdvTutari; }
         }
-        this.loadTesisler();
-    }
-
-    private loadTesisler(): void {
-        this.tesislerLoading = true;
-        this.service.getTesisler().pipe(
-            finalize(() => {
-                this.tesislerLoading = false;
-            })
-        ).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler
-                    .sort((a, b) => a.ad.localeCompare(b.ad))
-                    .map((t) => ({ label: t.ad, value: t.id }));
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.request.tesisId = this.tesisContext.seciliTesis()?.id ?? null;
     }
 
     private formatDate(value: string | Date): string {
@@ -145,7 +121,8 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     }
 
     private validate(): boolean {
-        if (!this.request.tesisId) {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Eksik Bilgi',
@@ -153,6 +130,7 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             });
             return false;
         }
+        this.request.tesisId = tesisId;
 
         if (!this.request.maliYil) {
             this.messageService.add({
@@ -300,5 +278,13 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     private showError(error: unknown): void {
         const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'İşlem başarısız.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            return null;
+        }
     }
 }

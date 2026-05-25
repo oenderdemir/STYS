@@ -13,18 +13,14 @@
 
   <!-- Form alanları -->
   <div class="grid grid-cols-12 gap-3 mb-4">
-    <!-- Tesis -->
+    <!-- Çalışma Tesisi -->
     <div class="col-span-12 md:col-span-6">
-      <label class="block font-medium mb-2">Tesis <span class="text-red-500">*</span></label>
-      <p-select
+      <label class="block font-medium mb-2">Çalışma Tesisi <span class="text-red-500">*</span></label>
+      <input
+        pInputText
         class="w-full"
-        [options]="tesisSecenekleri"
-        optionLabel="label"
-        optionValue="value"
-        [(ngModel)]="request.tesisId"
-        placeholder="Tesis seçiniz"
-        [loading]="tesislerLoading"
-        appendTo="body" />
+        [value]="tesisContext.seciliTesis()?.ad ?? ('#' + (request.tesisId || ''))"
+        readonly />
     </div>
 
     <!-- Mali Yıl -->

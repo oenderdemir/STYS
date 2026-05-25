@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -19,12 +19,14 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TreeTableModule } from 'primeng/treetable';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     DepoCikisGrupModel,
     DepoModel,
     MALZEME_KAYIT_TIPI_OPTIONS,
-    MalzemeKayitTipi,
-    MuhasebeTesisModel
+    MalzemeKayitTipi
 } from './depolar.dto';
 import { DepolarService } from './depolar.service';
 
@@ -48,16 +50,21 @@ type DepoTreeNode = TreeNode<DepoModel>;
         TagModule,
         ToastModule,
         ToolbarModule,
-        TreeTableModule
+        TreeTableModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './depolar.html',
     providers: [MessageService, ConfirmationService]
 })
 export class DepolarPage implements OnInit {
     private readonly service = inject(DepolarService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -68,21 +75,46 @@ export class DepolarPage implements OnInit {
     treeRecords: DepoTreeNode[] = [];
     model: DepoModel = this.createEmpty();
 
-    tesisler: MuhasebeTesisModel[] = [];
-    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
-    formTesisSecenekleri: Array<{ label: string; value: number }> = [];
-    selectedTesisId: number | null = null;
-
     parentDepoSecenekleri: Array<{ label: string; value: number | null }> = [{ label: 'Ana Depo', value: null }];
     readonly malzemeKayitTipiOptions = MALZEME_KAYIT_TIPI_OPTIONS;
 
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.closeOpenDialogForTesisChange();
+            this.load();
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için depo ağacı yenilendi.'
+            });
+        }
+    });
+
     ngOnInit(): void {
-        this.loadTesisler();
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.load();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     load(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
-        this.service.getTree(this.selectedTesisId).pipe(finalize(() => {
+        this.service.getTree(tesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -99,9 +131,13 @@ export class DepolarPage implements OnInit {
     }
 
     openCreate(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
-        this.model.tesisId = this.selectedTesisId;
+        this.model.tesisId = tesisId;
         this.refreshParentDepoOptions();
         this.dialogVisible = true;
         this.cdr.detectChanges();
@@ -124,6 +160,13 @@ export class DepolarPage implements OnInit {
             return;
         }
 
+        const tesisId = this.dialogMode === 'create'
+            ? this.getSeciliTesisIdOrWarn()
+            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        if (tesisId === null) {
+            return;
+        }
+
         const invalidCikisGrup = (this.model.cikisGruplari ?? []).find((x) => !x.cikisGrupAdi?.trim());
         if (invalidCikisGrup) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Cikis gruplarinda cikis grup adi zorunludur.' });
@@ -132,7 +175,7 @@ export class DepolarPage implements OnInit {
 
         this.saving = true;
         const payload = {
-            tesisId: this.model.tesisId ?? null,
+            tesisId,
             ustDepoId: this.model.ustDepoId ?? null,
             muhasebeHesapPlaniId: null,
             kod: null,
@@ -217,20 +260,8 @@ export class DepolarPage implements OnInit {
         this.model.cikisGruplari = [...this.model.cikisGruplari];
     }
 
-    onTesisFilterChange(): void {
-        this.load();
-    }
-
-    onFormTesisChange(): void {
-        this.model.ustDepoId = null;
-        this.refreshParentDepoOptions();
-    }
-
     getTesisAdi(tesisId?: number | null): string {
-        if (!tesisId) {
-            return '-';
-        }
-        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+        return this.tesisContext.seciliTesis()?.ad ?? (tesisId ? `#${tesisId}` : '-');
     }
 
     getParentDepoAdi(ustDepoId?: number | null): string {
@@ -354,24 +385,27 @@ export class DepolarPage implements OnInit {
         };
     }
 
-    private loadTesisler(): void {
-        this.service.getTesisler().subscribe({
-            next: (items) => {
-                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
-                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
-                this.formTesisSecenekleri = this.tesisler.map((x) => ({ label: x.ad, value: x.id }));
-                if (!this.selectedTesisId && this.tesisler.length > 0) {
-                    this.selectedTesisId = this.tesisler[0].id;
-                }
-                this.load();
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.load();
-                this.cdr.detectChanges();
-            }
-        });
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible) {
+            return;
+        }
+
+        this.dialogVisible = false;
+        this.model = this.createEmpty();
+        this.parentDepoSecenekleri = [{ label: 'Ana Depo', value: null }];
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

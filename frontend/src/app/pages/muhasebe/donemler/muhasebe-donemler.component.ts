@@ -1,5 +1,5 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -16,6 +16,9 @@ import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import {
     CreateMuhasebeDonemRequest,
     MuhasebeDonemDto,
@@ -23,12 +26,6 @@ import {
     createDefaultDonemFilter
 } from '../models/muhasebe-donem.model';
 import { MuhasebeDonemService } from '../services/muhasebe-donem.service';
-import { MuhasebeRaporService, MuhasebeTesisModel } from '../services/muhasebe-rapor.service';
-
-interface TesisSecenek {
-    label: string;
-    value: number;
-}
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const currentYear = new Date().getFullYear();
@@ -64,7 +61,9 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
         TableModule,
         TagModule,
         ToastModule,
-        TooltipModule
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './muhasebe-donemler.component.html',
     styleUrl: './muhasebe-donemler.component.scss',
@@ -72,7 +71,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
 })
 export class MuhasebeDonemlerComponent implements OnInit {
     private readonly service = inject(MuhasebeDonemService);
-    private readonly raporService = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -88,7 +87,6 @@ export class MuhasebeDonemlerComponent implements OnInit {
     filter = createDefaultDonemFilter();
     model: MuhasebeDonemDto = this.createEmpty();
 
-    tesisSecenekleri: TesisSecenek[] = [];
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
 
@@ -96,24 +94,37 @@ export class MuhasebeDonemlerComponent implements OnInit {
     kapatilanDonemId: number | null = null;
     acilanDonemId: number | null = null;
     silinenDonemId: number | null = null;
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.filter.tesisId = tesisId;
+            if (this.dialogVisible) {
+                this.dialogVisible = false;
+                this.messageService.add({
+                    severity: UiSeverity.Warn,
+                    summary: 'Çalışma Tesisi Değişti',
+                    detail: 'Çalışma tesisi değiştiği için açık dönem formu kapatıldı.'
+                });
+            }
+            this.loadDonemler();
+        }
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
-    }
-
-    private loadTesisler(): void {
-        this.loading = true;
-        this.raporService.getTesisler().pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad,
-                    value: t.id
-                }));
-                if (this.tesisSecenekleri.length === 1) {
-                    this.filter.tesisId = this.tesisSecenekleri[0].value;
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                if (this.currentTesisId) {
+                    this.filter.tesisId = this.currentTesisId;
                 }
                 this.loadDonemler();
             },
@@ -168,8 +179,13 @@ export class MuhasebeDonemlerComponent implements OnInit {
     }
 
     openCreate(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.model.tesisId = tesisId;
         this.dialogVisible = true;
     }
 
@@ -180,9 +196,12 @@ export class MuhasebeDonemlerComponent implements OnInit {
     }
 
     save(): void {
-        if (!this.model.tesisId || this.model.tesisId <= 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis seçilmelidir.' });
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
             return;
+        }
+        if (this.dialogMode === 'create') {
+            this.model.tesisId = tesisId;
         }
         if (!this.model.maliYil || this.model.maliYil < 2000 || this.model.maliYil > 2100) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Geçerli bir mali yıl girilmelidir (2000-2100).' });
@@ -396,5 +415,18 @@ export class MuhasebeDonemlerComponent implements OnInit {
             detail: msg ?? 'Bir hata oluştu.',
             life: 8000
         });
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 }

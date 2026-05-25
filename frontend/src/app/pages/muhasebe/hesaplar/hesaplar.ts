@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -15,20 +15,26 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { CreateHesapRequest, HesapLookupModel, HesapModel, MuhasebeTesisModel, UpdateHesapRequest } from './hesaplar.dto';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { CreateHesapRequest, HesapLookupModel, HesapModel, UpdateHesapRequest } from './hesaplar.dto';
 import { HesaplarService } from './hesaplar.service';
 
 @Component({
     selector: 'app-hesaplar-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './hesaplar.html',
     providers: [MessageService]
 })
 export class HesaplarPage implements OnInit {
     private readonly service = inject(HesaplarService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -47,12 +53,37 @@ export class HesaplarPage implements OnInit {
     kasaHesaplari: Array<{ label: string; value: number }> = [];
     bankaHesaplari: Array<{ label: string; value: number }> = [];
     depolar: Array<{ label: string; value: number }> = [];
-    tesisler: MuhasebeTesisModel[] = [];
-    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
-    selectedTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.closeOpenDialogForTesisChange();
+            this.loadLookups();
+            this.load(1, this.pageSize);
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için hesap listesi yenilendi.'
+            });
+        }
+    });
 
     ngOnInit(): void {
-        this.loadTesisler();
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.loadLookups();
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -63,14 +94,19 @@ export class HesaplarPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (paged) => {
                 this.records = paged.items;
-                this.applyClientFilter();
+                this.filteredRecords = [...paged.items];
                 this.pageNumber = paged.pageNumber;
                 this.pageSize = paged.pageSize;
                 this.totalRecords = paged.totalCount;
@@ -80,9 +116,13 @@ export class HesaplarPage implements OnInit {
     }
 
     openCreate(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
+            return;
+        }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
-        this.model.tesisId = this.selectedTesisId;
+        this.model.tesisId = tesisId;
         this.dialogVisible = true;
     }
 
@@ -113,13 +153,20 @@ export class HesaplarPage implements OnInit {
             return;
         }
 
+        const tesisId = this.dialogMode === 'create'
+            ? this.getSeciliTesisIdOrWarn()
+            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        if (tesisId === null) {
+            return;
+        }
+
         if (!this.model.muhasebeHesapPlaniId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Muhasebe kodu secimi zorunludur.' });
             return;
         }
 
         const payload: CreateHesapRequest | UpdateHesapRequest = {
-            tesisId: this.model.tesisId ?? null,
+            tesisId,
             ad: this.model.ad.trim(),
             muhasebeHesapPlaniId: this.model.muhasebeHesapPlaniId,
             genelHesapMi: this.model.genelHesapMi,
@@ -160,17 +207,8 @@ export class HesaplarPage implements OnInit {
         });
     }
 
-    onTesisFilterChange(): void {
-        this.pageNumber = 1;
-        this.loadLookups();
-        this.load(1, this.pageSize);
-    }
-
     getTesisAdi(tesisId?: number | null): string {
-        if (!tesisId) {
-            return '-';
-        }
-        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+        return this.tesisContext.seciliTesis()?.ad ?? (tesisId ? `#${tesisId}` : '-');
     }
 
     private loadLookups(): void {
@@ -205,31 +243,26 @@ export class HesaplarPage implements OnInit {
         };
     }
 
-    private applyClientFilter(): void {
-        if (!this.selectedTesisId) {
-            this.filteredRecords = [...this.records];
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible) {
             return;
         }
-        this.filteredRecords = this.records.filter((x) => x.tesisId === this.selectedTesisId);
+
+        this.dialogVisible = false;
+        this.model = this.createEmpty();
     }
 
-    private loadTesisler(): void {
-        this.service.getTesisler().subscribe({
-            next: (items) => {
-                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
-                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
-                if (!this.selectedTesisId && this.tesisler.length > 0) {
-                    this.selectedTesisId = this.tesisler[0].id;
-                }
-                this.loadLookups();
-                this.load(1, this.pageSize);
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.loadLookups();
-                this.load(1, this.pageSize);
-            }
-        });
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

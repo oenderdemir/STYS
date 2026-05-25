@@ -1,3 +1,6 @@
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
+
 <p-toast />
 <p-confirmdialog />
 
@@ -5,19 +8,6 @@
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
-    </ng-template>
-    <ng-template #end>
-        <div class="w-18rem">
-            <p-select
-                [options]="tesisSecenekleri"
-                optionLabel="label"
-                optionValue="value"
-                [(ngModel)]="selectedTesisId"
-                placeholder="Tesis seciniz"
-                appendTo="body"
-                class="w-full"
-                (ngModelChange)="onTesisFilterChange()" />
-        </div>
     </ng-template>
 </p-toolbar>
 
@@ -64,15 +54,8 @@
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Depo Duzenle' : 'Yeni Depo'" [style]="{ width: '78rem', 'max-width': '98vw' }">
     <div class="grid grid-cols-12 gap-3 mt-1">
         <div class="col-span-12 md:col-span-4">
-            <label class="block font-medium mb-2">Tesis</label>
-            <p-select
-                class="w-full"
-                [options]="formTesisSecenekleri"
-                optionLabel="label"
-                optionValue="value"
-                [(ngModel)]="model.tesisId"
-                appendTo="body"
-                (ngModelChange)="onFormTesisChange()" />
+            <label class="block font-medium mb-2">Çalışma Tesisi</label>
+            <input pInputText class="w-full" [value]="tesisContext.seciliTesis()?.ad ?? ('#' + (model.tesisId || ''))" readonly />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Ust Depo</label>

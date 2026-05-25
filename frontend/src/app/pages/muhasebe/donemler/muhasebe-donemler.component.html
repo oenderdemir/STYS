@@ -1,20 +1,9 @@
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
+
 <p-toast />
 
 <div class="grid grid-cols-12 gap-3 mb-4">
-  <!-- Tesis -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block mb-1 text-sm font-medium">Tesis</label>
-    <p-select
-      [options]="tesisSecenekleri"
-      [(ngModel)]="filter.tesisId"
-      (ngModelChange)="onFilterChange()"
-      placeholder="Tesis seçiniz"
-      optionLabel="label"
-      optionValue="value"
-      [showClear]="true"
-      styleClass="w-full" />
-  </div>
-
   <!-- Mali Yıl -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
@@ -172,15 +161,12 @@
   <div class="flex flex-col gap-3 mt-2">
     <!-- Tesis -->
     <div>
-      <label class="block mb-1 text-sm font-medium">Tesis <span class="text-red-500">*</span></label>
-      <p-select
-        [options]="tesisSecenekleri"
-        [(ngModel)]="model.tesisId"
-        placeholder="Tesis seçiniz"
-        optionLabel="label"
-        optionValue="value"
-        styleClass="w-full"
-        [disabled]="dialogMode === 'edit'" />
+      <label class="block mb-1 text-sm font-medium">Çalışma Tesisi</label>
+      <input
+        type="text"
+        class="w-full p-inputtext p-component"
+        [value]="tesisContext.seciliTesis()?.ad ?? ('#' + (model.tesisId || ''))"
+        readonly />
     </div>
 
     <!-- Mali Yıl -->

@@ -1,21 +1,11 @@
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
+
 <p-toast />
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
-    </ng-template>
-    <ng-template #end>
-        <div class="w-18rem">
-            <p-select
-                [options]="tesisSecenekleri"
-                optionLabel="label"
-                optionValue="value"
-                [(ngModel)]="selectedTesisId"
-                placeholder="Tesis seciniz"
-                appendTo="body"
-                class="w-full"
-                (ngModelChange)="onTesisFilterChange()" />
-        </div>
     </ng-template>
 </p-toolbar>
 
@@ -53,8 +43,8 @@
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '56rem', 'max-width': '96vw' }">
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6">
-            <label class="block mb-2">Tesis</label>
-            <p-select class="w-full" [options]="tesisSecenekleri" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="model.tesisId" />
+            <label class="block mb-2">Çalışma Tesisi</label>
+            <input pInputText class="w-full" [value]="tesisContext.seciliTesis()?.ad ?? ('#' + (model.tesisId || ''))" readonly />
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block mb-2">Hesap Adi</label>

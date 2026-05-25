@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -15,20 +15,26 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
-import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, MuhasebeTesisModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from './kasa-banka-hesaplari.service';
 
 @Component({
     selector: 'app-kasa-banka-hesaplari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './kasa-banka-hesaplari.html',
     providers: [MessageService]
 })
 export class KasaBankaHesaplariPage implements OnInit {
     private readonly service = inject(KasaBankaHesaplariService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private contextInitialized = false;
+    private currentTesisId: number | null = null;
 
     loading = false;
     saving = false;
@@ -43,15 +49,38 @@ export class KasaBankaHesaplariPage implements OnInit {
     totalRecords = 0;
 
     readonly hesapTipleri = KASA_BANKA_HESAP_TIPLERI;
-    tesisler: MuhasebeTesisModel[] = [];
-    tesisSecenekleri: Array<{ label: string; value: number | null }> = [];
-    selectedTesisId: number | null = null;
     tipFilter: KasaBankaHesapTipi | null = null;
     secilenYeniTip: KasaBankaHesapTipi = 'NakitKasa';
     bagliBankaSecenekleri: Array<{ label: string; value: number }> = [];
 
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (!this.contextInitialized || this.currentTesisId === tesisId) {
+            return;
+        }
+
+        this.currentTesisId = tesisId;
+        if (tesisId) {
+            this.pageNumber = 1;
+            this.closeOpenDialogForTesisChange();
+            this.load(1, this.pageSize);
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Değişti',
+                detail: 'Çalışma tesisi değiştiği için finansal hesap listesi yenilendi.'
+            });
+        }
+    });
+
     ngOnInit(): void {
-        this.loadTesisler();
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.contextInitialized = true;
+                this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                this.load(1, this.pageSize);
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -62,8 +91,13 @@ export class KasaBankaHesaplariPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, this.selectedTesisId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -83,15 +117,23 @@ export class KasaBankaHesaplariPage implements OnInit {
     }
 
     openCreate(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
+            return;
+        }
         this.secilenYeniTip = 'NakitKasa';
         this.tipDialogVisible = true;
     }
 
     continueCreate(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null) {
+            return;
+        }
         this.tipDialogVisible = false;
         this.dialogMode = 'create';
         this.model = this.createEmpty(this.secilenYeniTip);
-        this.model.tesisId = this.selectedTesisId;
+        this.model.tesisId = tesisId;
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
     }
@@ -134,7 +176,14 @@ export class KasaBankaHesaplariPage implements OnInit {
             return;
         }
 
-        if (!this.model.tesisId || this.model.tesisId <= 0) {
+        const tesisId = this.dialogMode === 'create'
+            ? this.getSeciliTesisIdOrWarn()
+            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        if (tesisId === null) {
+            return;
+        }
+
+        if (!tesisId || tesisId <= 0) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis secimi zorunludur.' });
             return;
         }
@@ -150,7 +199,7 @@ export class KasaBankaHesaplariPage implements OnInit {
         }
 
         const payload: CreateKasaBankaHesapRequest | UpdateKasaBankaHesapRequest = {
-            tesisId: this.model.tesisId ?? null,
+            tesisId,
             tip: this.model.tip,
             kod: null,
             ad: this.model.ad.trim(),
@@ -208,16 +257,8 @@ export class KasaBankaHesaplariPage implements OnInit {
         return this.hesapTipleri.find((x) => x.value === tip)?.label ?? tip;
     }
 
-    onTesisFilterChange(): void {
-        this.pageNumber = 1;
-        this.load(1, this.pageSize);
-    }
-
     getTesisAdi(tesisId?: number | null): string {
-        if (!tesisId) {
-            return '-';
-        }
-        return this.tesisler.find((x) => x.id === tesisId)?.ad ?? `#${tesisId}`;
+        return this.tesisContext.seciliTesis()?.ad ?? (tesisId ? `#${tesisId}` : '-');
     }
 
     isTipOrTesisLocked(): boolean {
@@ -267,30 +308,34 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     applyClientFilter(): void {
         let list = [...this.records];
-        if (this.selectedTesisId) {
-            list = list.filter((x) => x.tesisId === this.selectedTesisId);
-        }
         if (this.tipFilter) {
             list = list.filter((x) => x.tip === this.tipFilter);
         }
         this.filteredRecords = list;
     }
 
-    private loadTesisler(): void {
-        this.service.getTesisler().subscribe({
-            next: (items) => {
-                this.tesisler = [...items].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''));
-                this.tesisSecenekleri = [{ label: 'Tum Tesisler', value: null }, ...this.tesisler.map((x) => ({ label: x.ad, value: x.id }))];
-                if (!this.selectedTesisId && this.tesisler.length > 0) {
-                    this.selectedTesisId = this.tesisler[0].id;
-                }
-                this.load(1, this.pageSize);
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.load(1, this.pageSize);
-            }
-        });
+    private closeOpenDialogForTesisChange(): void {
+        if (!this.dialogVisible && !this.tipDialogVisible) {
+            return;
+        }
+
+        this.dialogVisible = false;
+        this.tipDialogVisible = false;
+        this.model = this.createEmpty();
+        this.bagliBankaSecenekleri = [];
+    }
+
+    private getSeciliTesisIdOrWarn(): number | null {
+        try {
+            return this.tesisContext.requireSeciliTesisId();
+        } catch {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Çalışma Tesisi Seçilmedi',
+                detail: 'Muhasebe işlemi için önce çalışma tesisini seçiniz.'
+            });
+            return null;
+        }
     }
 
     private showError(error: unknown): void {

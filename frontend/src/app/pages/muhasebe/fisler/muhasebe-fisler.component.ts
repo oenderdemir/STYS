@@ -3,6 +3,9 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, take } from 'rxjs';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -100,7 +103,9 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         TableModule,
         TagModule,
         ToastModule,
-        TooltipModule
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     templateUrl: './muhasebe-fisler.component.html',
     styleUrls: ['./muhasebe-fisler.component.scss'],
@@ -109,6 +114,7 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
 export class MuhasebeFislerComponent implements OnInit {
     private readonly service = inject(MuhasebeFisService);
     private readonly raporService = inject(MuhasebeRaporService);
+    readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly route = inject(ActivatedRoute);
@@ -138,7 +144,6 @@ export class MuhasebeFislerComponent implements OnInit {
     // Editable satır kopyaları (MuhasebeFisSatirModel'in alt kümesi)
     duzenleSatirlar: UpdateMuhasebeFisSatirRequestModel[] = [];
 
-    tesisSecenekleri: TesisSecenek[] = [];
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     readonly donemSecenekleri = DONEM_SECENEKLERI;
     readonly fisTipiSecenekleri = FIS_TIPI_SECENEKLERI;
@@ -152,26 +157,24 @@ export class MuhasebeFislerComponent implements OnInit {
     highlightedFisNo: string | null = null;
 
     ngOnInit(): void {
-        this.loadTesisler();
-        this.readQueryParams();
-    }
-
-    private loadTesisler(): void {
-        this.loading = true;
-        this.raporService.getTesisler().pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (tesisler) => {
-                this.tesisSecenekleri = tesisler.map(t => ({
-                    label: t.ad,
-                    value: t.id
-                }));
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.loadFromTesisContext();
+                this.readQueryParams();
             },
             error: (error: unknown) => {
                 this.showError(error);
             }
         });
+    }
+
+    private loadFromTesisContext(): void {
+        const tesis = this.tesisContext.seciliTesis();
+        if (tesis) {
+            this.filter.tesisId = tesis.id;
+        }
+        // Trigger initial search after context is ready
+        this.cdr.detectChanges();
     }
 
     private readQueryParams(): void {

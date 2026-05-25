@@ -22,6 +22,9 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { finalize } from 'rxjs';
 import { SatisBelgesiService } from '../services/satis-belgesi.service';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { CariKartModel } from '../cari-kartlar/cari-kartlar.dto';
 import {
@@ -72,7 +75,9 @@ import {
         ToastModule,
         ToggleSwitchModule,
         ToolbarModule,
-        TooltipModule
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './satis-belgeleri.component.html',
@@ -80,6 +85,7 @@ import {
 })
 export class SatisBelgeleriComponent implements OnInit {
     private readonly service = inject(SatisBelgesiService);
+    private readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly cariKartService = inject(CariKartlarService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
@@ -136,15 +142,26 @@ export class SatisBelgeleriComponent implements OnInit {
     getMusteriDisplay = getMusteriDisplayName;
 
     ngOnInit(): void {
-        this.loadBelgeler();
-        this.loadCariKartlar();
+        this.tesisContext.initialize().subscribe({
+            next: () => {
+                this.loadBelgeler();
+                this.loadCariKartlar();
+            },
+            error: (err) => {
+                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Tesis listesi yüklenemedi: ' + err.message });
+            }
+        });
     }
 
     // ── Load ──
 
     loadBelgeler(): void {
         this.loading.set(true);
-        this.service.filter(this.filter()).subscribe({
+        // Çalışma tesisi seçilmişse filtreye yaz
+        const currentFilter = this.filter();
+        const tesis = this.tesisContext.seciliTesis();
+        const filterToSend = { ...currentFilter, tesisId: tesis?.id ?? currentFilter.tesisId };
+        this.service.filter(filterToSend).subscribe({
             next: (data) => {
                 this.belgeler.set(data);
                 this.loading.set(false);
@@ -266,7 +283,11 @@ export class SatisBelgeleriComponent implements OnInit {
     openCreateDialog(): void {
         this.isEditing.set(false);
         this.editingBelge.set(null);
-        this.formData.set(createEmptyCreateSatisBelgesiRequest());
+        const empty = createEmptyCreateSatisBelgesiRequest();
+        // Çalışma tesisi bağlamından tesisId'yi otomatik doldur
+        const tesis = this.tesisContext.seciliTesis();
+        empty.tesisId = tesis?.id ?? null;
+        this.formData.set(empty);
         this.selectedCari.set(null);
         this.manuelMusteriGirisi.set(false);
         this.filteredCariKartlar = [...this.cariKartlar()];

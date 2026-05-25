@@ -1,19 +1,9 @@
 <p-toast />
 
-<div class="grid grid-cols-12 gap-3 mb-4">
-  <!-- Tesis -->
-  <div class="col-span-12 md:col-span-6 lg:col-span-3">
-    <label class="block mb-1 text-sm font-medium">Tesis</label>
-    <p-select
-      [options]="tesisSecenekleri"
-      [(ngModel)]="filter.tesisId"
-      placeholder="Tesis seçiniz"
-      optionLabel="label"
-      optionValue="value"
-      [showClear]="true"
-      styleClass="w-full" />
-  </div>
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
 
+<div class="grid grid-cols-12 gap-3 mb-4">
   <!-- Mali Yıl -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
@@ -398,11 +388,11 @@
         <label class="block mb-1 text-sm font-medium">Yevmiye No</label>
         <input type="text" pInputText [value]="duzenleFis.yevmiyeNo ?? '-'" readonly class="w-full" />
       </div>
-      <!-- Tesis -->
+      <!-- Tesis (readonly - çalışma tesisinden gelir) -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block mb-1 text-sm font-medium">Tesis</label>
         <p-select
-          [options]="tesisSecenekleri"
+          [options]="tesisContext.tesisSecenekleri()"
           [(ngModel)]="duzenleFis.tesisId"
           placeholder="Tesis seçiniz"
           optionLabel="label"

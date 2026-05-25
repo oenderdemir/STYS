@@ -5959,3 +5959,73 @@ Eski mizan (MuhasebeFisSatir tabanlı) ile hızlı mizan (MuhasebeHesapBakiye ta
 8. Genel toplam farkları dönmeli
 9. Tarih aralığı gönderilirse 400 hata
 10. MaliYil gönderilmezse 400 hata
+
+## Faz 70A: Satış Belgesi Satırı — Depo, Taşınır Kart, Tevkifat Alanları (2026-05-25)
+
+### Amaç
+Satış belgeleri ekranında SQL hatasına neden olan eksik kolonları düzeltmek:
+- `Birim`, `DepoId`, `IndirimTutari`, `TasinirKartId`, `TevkifatPay`, `TevkifatPayda`, `TevkifatTutari`
+
+### Sorun
+Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` hatası dönüyordu. Entity ve DTO'da alanlar mevcut olmasına rağmen, migration veritabanına uygulanmamıştı.
+
+### Değişiklikler
+
+**1. Entity:**
+- [`backend/Muhasebe/SatisBelgeleri/Entities/SatisBelgesiSatiri.cs`](backend/Muhasebe/SatisBelgeleri/Entities/SatisBelgesiSatiri.cs): Yeni alanlar mevcut
+  - `int? TasinirKartId` + `TasinirKart? TasinirKart` navigation property
+  - `int? DepoId` + `Depo? Depo` navigation property
+  - `string Birim` (default: "Adet")
+  - `decimal IndirimTutari` (default: 0)
+  - `int? TevkifatPay`, `int? TevkifatPayda`
+  - `decimal TevkifatTutari` (default: 0)
+
+**2. DTO:**
+- [`backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiDtos.cs`](backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiDtos.cs): Tüm DTO'larda yeni alanlar mevcut (`SatisBelgesiSatiriDto`, `CreateSatisBelgesiSatiriRequest`, `UpdateSatisBelgesiSatiriRequest`)
+
+**3. DbContext Konfigürasyonu:**
+- [`backend/Infrastructure/EntityFramework/StysAppDbContext.cs`](backend/Infrastructure/EntityFramework/StysAppDbContext.cs:2289):
+  - `Birim`: nvarchar(32), required
+  - Tüm decimal alanlar: `HasPrecision(18, 2)`
+  - FK `TasinirKartId → TasinirKartlar`: `DeleteBehavior.Restrict`
+  - FK `DepoId → Depolar`: `DeleteBehavior.Restrict`
+  - Indexler: `TasinirKartId`, `DepoId`
+
+**4. Migration:**
+- [`backend/Infrastructure/EntityFramework/Migrations/20260525093000_Faz70SatisBelgesiSatiriAlanlari.cs`](backend/Infrastructure/EntityFramework/Migrations/20260525093000_Faz70SatisBelgesiSatiriAlanlari.cs):
+  - 7 yeni kolon (Birim, DepoId, IndirimTutari, TasinirKartId, TevkifatPay, TevkifatPayda, TevkifatTutari)
+  - FK'lar Restrict
+  - Up/Down metotları tam
+
+**5. Model Snapshot:**
+- [`backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs`](backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs:4473): Tüm kolonlar, indexler ve FK'lar snapshot'a işlenmiş
+
+### Veritabanı
+- `dotnet ef database update --context StysAppDbContext` başarılı — migration uygulandı
+
+### Decimal Precision
+| Alan | Tip | Precision |
+|------|-----|-----------|
+| IndirimTutari | decimal | 18,2 |
+| TevkifatTutari | decimal | 18,2 |
+| BirimFiyat | decimal | 18,2 |
+| Miktar | decimal | 18,2 |
+| Matrah | decimal | 18,2 |
+| KdvTutari | decimal | 18,2 |
+| SatirToplami | decimal | 18,2 |
+
+### Backend
+- Backend: `dotnet build` başarılı — 0 error, 0 warning
+
+### Frontend
+- Frontend: `npm run build` başarılı (0 error, 4 pre-existing budget warning)
+
+### Manuel Test Senaryosu
+1. Satış Belgeleri ekranı açılmalı — SQL hatası vermemeli
+2. Yeni belge oluşturulabilmeli
+3. Satır eklenebilmeli (Birim, IndirimTutari alanlarıyla)
+4. Depo seçimi yapılabilmeli
+5. Taşınır kart seçimi yapılabilmeli
+6. Tevkifat bilgileri girilebilmeli
+7. Mevcut belgeler listelenebilmeli
+8. Belge düzenlenebilmeli

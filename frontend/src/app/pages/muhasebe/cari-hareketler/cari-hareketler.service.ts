@@ -10,8 +10,11 @@ export class CariHareketlerService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(cariKartId?: number | null): Observable<CariHareketModel[]> {
+    getAll(tesisId?: number | null, cariKartId?: number | null): Observable<CariHareketModel[]> {
         let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         if (cariKartId && cariKartId > 0) {
             params = params.set('cariKartId', cariKartId);
         }
@@ -19,8 +22,11 @@ export class CariHareketlerService {
         return this.http.get<ApiResponse<CariHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler`, { params }).pipe(map(this.unwrapList));
     }
 
-    getPaged(pageNumber: number, pageSize: number, cariKartId?: number | null): Observable<PagedResponseDto<CariHareketModel>> {
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null, cariKartId?: number | null): Observable<PagedResponseDto<CariHareketModel>> {
         let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
         if (cariKartId && cariKartId > 0) {
             params = params.set('cariKartId', cariKartId);
         }

@@ -22,9 +22,12 @@ public class StokHareketleriController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
-    public async Task<ActionResult<List<StokHareketDto>>> GetList([FromQuery] int? depoId, CancellationToken cancellationToken)
+    public async Task<ActionResult<List<StokHareketDto>>> GetList([FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
     {
-        var items = await _service.GetAllAsync();
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.Depo != null && x.Depo.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+
         var query = items.AsQueryable();
         if (depoId.HasValue && depoId.Value > 0)
         {
@@ -36,13 +39,11 @@ public class StokHareketleriController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
-    public async Task<ActionResult<PagedResult<StokHareketDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? depoId, CancellationToken cancellationToken)
-    {
-        return Ok(await _service.GetPagedAsync(
+    public async Task<ActionResult<PagedResult<StokHareketDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(
             request,
-            predicate: depoId.HasValue && depoId.Value > 0 ? x => x.DepoId == depoId.Value : null,
+            predicate: BuildPredicate(tesisId, depoId),
             orderBy: q => q.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id)));
-    }
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
@@ -54,13 +55,13 @@ public class StokHareketleriController : UIController
 
     [HttpGet("stok-bakiye")]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
-    public async Task<ActionResult<List<StokBakiyeDto>>> GetStokBakiye([FromQuery] int? depoId, CancellationToken cancellationToken)
-        => Ok(await _service.GetStokBakiyeAsync(depoId, cancellationToken));
+    public async Task<ActionResult<List<StokBakiyeDto>>> GetStokBakiye([FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
+        => Ok(await _service.GetStokBakiyeAsync(tesisId, depoId, cancellationToken));
 
     [HttpGet("stok-kart-ozet")]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
-    public async Task<ActionResult<List<StokKartOzetDto>>> GetStokKartOzet([FromQuery] int? depoId, CancellationToken cancellationToken)
-        => Ok(await _service.GetStokKartOzetAsync(depoId, cancellationToken));
+    public async Task<ActionResult<List<StokKartOzetDto>>> GetStokKartOzet([FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
+        => Ok(await _service.GetStokKartOzetAsync(tesisId, depoId, cancellationToken));
 
     [HttpPost]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
@@ -83,4 +84,11 @@ public class StokHareketleriController : UIController
         await _service.DeleteAsync(id);
         return Ok();
     }
+
+    private static System.Linq.Expressions.Expression<Func<STYS.Muhasebe.StokHareketleri.Entities.StokHareket, bool>>? BuildPredicate(int? tesisId, int? depoId)
+        => tesisId.HasValue && tesisId.Value > 0 || depoId.HasValue && depoId.Value > 0
+            ? x =>
+                (!tesisId.HasValue || tesisId <= 0 || (x.Depo != null && x.Depo.TesisId == tesisId.Value)) &&
+                (!depoId.HasValue || depoId <= 0 || x.DepoId == depoId.Value)
+            : null;
 }

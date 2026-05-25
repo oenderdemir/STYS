@@ -22,9 +22,12 @@ public class CariHareketlerController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.CariHareketYonetimi.View)]
-    public async Task<ActionResult<List<CariHareketDto>>> GetList([FromQuery] int? cariKartId, CancellationToken cancellationToken)
+    public async Task<ActionResult<List<CariHareketDto>>> GetList([FromQuery] int? tesisId, [FromQuery] int? cariKartId, CancellationToken cancellationToken)
     {
-        var items = await _service.GetAllAsync();
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.CariKart != null && x.CariKart.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+
         var query = items.AsQueryable();
         if (cariKartId.HasValue && cariKartId.Value > 0)
         {
@@ -36,13 +39,11 @@ public class CariHareketlerController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.CariHareketYonetimi.View)]
-    public async Task<ActionResult<PagedResult<CariHareketDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? cariKartId, CancellationToken cancellationToken)
-    {
-        return Ok(await _service.GetPagedAsync(
+    public async Task<ActionResult<PagedResult<CariHareketDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, [FromQuery] int? cariKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(
             request,
-            predicate: cariKartId.HasValue && cariKartId.Value > 0 ? x => x.CariKartId == cariKartId.Value : null,
+            predicate: BuildPredicate(tesisId, cariKartId),
             orderBy: q => q.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id)));
-    }
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.CariHareketYonetimi.View)]
@@ -78,4 +79,11 @@ public class CariHareketlerController : UIController
         await _service.DeleteAsync(id);
         return Ok();
     }
+
+    private static System.Linq.Expressions.Expression<Func<STYS.Muhasebe.CariHareketler.Entities.CariHareket, bool>>? BuildPredicate(int? tesisId, int? cariKartId)
+        => tesisId.HasValue && tesisId.Value > 0 || cariKartId.HasValue && cariKartId.Value > 0
+            ? x =>
+                (!tesisId.HasValue || tesisId <= 0 || (x.CariKart != null && x.CariKart.TesisId == tesisId.Value)) &&
+                (!cariKartId.HasValue || cariKartId <= 0 || x.CariKartId == cariKartId.Value)
+            : null;
 }

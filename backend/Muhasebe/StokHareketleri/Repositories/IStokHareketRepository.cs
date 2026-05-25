@@ -6,6 +6,6 @@ namespace STYS.Muhasebe.StokHareketleri.Repositories;
 
 public interface IStokHareketRepository : IBaseRdbmsRepository<StokHareket, int>
 {
-    Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(int? depoId, CancellationToken cancellationToken = default);
-    Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(int? depoId, CancellationToken cancellationToken = default);
+    Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
+    Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
 }

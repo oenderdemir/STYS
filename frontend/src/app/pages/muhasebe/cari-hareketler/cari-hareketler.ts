@@ -96,7 +96,7 @@ export class CariHareketlerPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, this.selectedCariKartId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedCariKartId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({

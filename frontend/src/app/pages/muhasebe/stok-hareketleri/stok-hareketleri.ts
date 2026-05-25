@@ -206,8 +206,13 @@ export class StokHareketleriPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, this.selectedDepoId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedDepoId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -233,13 +238,13 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
-        this.service.getStokBakiye(this.selectedDepoId).subscribe({
+        this.service.getStokBakiye(tesisId, this.selectedDepoId).subscribe({
             next: (items) => {
                 this.stokBakiye = items;
                 this.cdr.detectChanges();
             }
         });
-        this.service.getStokKartOzet(this.selectedDepoId).subscribe({
+        this.service.getStokKartOzet(tesisId, this.selectedDepoId).subscribe({
             next: (items) => {
                 this.stokKartOzet = items;
                 this.cdr.detectChanges();

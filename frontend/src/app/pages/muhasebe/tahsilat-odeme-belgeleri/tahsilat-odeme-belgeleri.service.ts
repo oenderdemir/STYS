@@ -14,8 +14,11 @@ export class TahsilatOdemeBelgeleriService {
         return this.http.get<ApiResponse<TahsilatOdemeBelgesiModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri`).pipe(map(this.unwrapList));
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<TahsilatOdemeBelgesiModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId: number): Observable<PagedResponseDto<TahsilatOdemeBelgesiModel>> {
+        const params = new HttpParams()
+            .set('pageNumber', pageNumber)
+            .set('pageSize', pageSize)
+            .set('tesisId', tesisId);
         return this.http.get<ApiResponse<PagedResponseDto<TahsilatOdemeBelgesiModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 
@@ -36,10 +39,13 @@ export class TahsilatOdemeBelgeleriService {
         }));
     }
 
-    getGunlukOzet(gun?: string | null): Observable<TahsilatOdemeOzetModel> {
+    getGunlukOzet(gun?: string | null, tesisId?: number | null): Observable<TahsilatOdemeOzetModel> {
         let params = new HttpParams();
         if (gun) {
             params = params.set('gun', gun);
+        }
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
         }
 
         return this.http.get<ApiResponse<TahsilatOdemeOzetModel>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/gunluk-ozet`, { params }).pipe(map(this.unwrapSingle));

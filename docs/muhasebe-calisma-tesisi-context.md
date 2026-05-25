@@ -189,6 +189,32 @@ Bu faz ile merkezi çalışma tesisi altyapısı kalan muhasebe operasyon ekranl
 - Bu faz sonunda hedeflenen operasyon ekranları tamamlandı.
 - Muhasebe modülünde kalan diğer ekranlar varsa bunlar bu Faz 69 serisinin kapsamı dışında değerlendirilir.
 
+## Faz 69C-A — Servis Filtre Parametreleri Düzeltmesi
+
+Bu alt fazda Faz 69C ile bağlanan operasyon ekranlarının listeleme ve özet servis çağrılarında eksik kalan `tesisId` parametreleri tamamlandı.
+
+### Düzeltilen ekranlar
+- Banka Hareketleri
+- Kasa Hareketleri
+- Stok Hareketleri
+- Cari Hareketler
+- Tahsilat / Ödeme Belgeleri
+
+### Yapılan düzeltmeler
+- `BankaHareketleriService.getPaged(...)` ve `KasaHareketleriService.getPaged(...)` çağrıları seçili `tesisId` ile çalışacak hale getirildi.
+- `StokHareketleriService` listeleme ile birlikte stok bakiye ve stok kart özet çağrılarında da `tesisId` destekleyecek şekilde güncellendi.
+- `CariHareketlerService` listeleme çağrılarında `tesisId` query paramı eklendi.
+- `TahsilatOdemeBelgeleriService` listeleme ve günlük özet çağrıları seçili tesis ile çalışacak hale getirildi.
+
+### Backend durumu
+- Servis filtrelerinin bir kısmı backend controller tarafında da eksik olduğu için ilgili endpoint'ler küçük `tesisId` filter desteği ile güncellendi.
+- Migration gerekmedi.
+- Backend access scope güvenliği korunmaya devam ediyor.
+
+### Kalan durum
+- Bu alt faz sonunda hedeflenen operasyon ekranlarında listeleme ve özet akışları seçili çalışma tesisi ile uyumlu hale getirildi.
+- Seçenek listesi ve context bar davranışı Faz 69C'deki haliyle korunuyor.
+
 ---
 
 ## Entegrasyon Rehberi (Kalan Ekranlar İçin)
@@ -336,5 +362,5 @@ Context servisi **yetkilendirme yapmaz**. Kullanıcının seçtiği tesise eriş
 
 - **Faz:** 69
 - **Oluşturma Tarihi:** 2026-05-25
-- **Güncelleme:** Faz 69B CRUD / tanım ekranları ve Faz 69C operasyon ekranları entegrasyonu eklendi.
-- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C ekranları entegre edildi. Kalan diğer muhasebe ekranları sonraki fazlara bırakıldı.
+- **Güncelleme:** Faz 69B CRUD / tanım ekranları, Faz 69C operasyon ekranları ve Faz 69C-A servis filtre düzeltmeleri eklendi.
+- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C / 69C-A kapsamındaki ekranlar entegre edildi. Kalan diğer muhasebe ekranları sonraki fazlara bırakıldı.

@@ -14,8 +14,11 @@ export class BankaHareketleriService {
         return this.http.get<ApiResponse<BankaHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri`).pipe(map(this.unwrapList));
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<BankaHareketModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId: number): Observable<PagedResponseDto<BankaHareketModel>> {
+        const params = new HttpParams()
+            .set('pageNumber', pageNumber)
+            .set('pageSize', pageSize)
+            .set('tesisId', tesisId);
         return this.http.get<ApiResponse<PagedResponseDto<BankaHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/banka-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 

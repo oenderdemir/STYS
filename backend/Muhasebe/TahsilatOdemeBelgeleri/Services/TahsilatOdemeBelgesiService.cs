@@ -28,16 +28,23 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         _userAccessScopeService = userAccessScopeService;
     }
 
-    public async Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, CancellationToken cancellationToken = default)
+    public async Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default)
     {
         var list = await _repository.GetGunlukAsync(gun, cancellationToken);
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped)
+        if (scope.IsScoped || (tesisId.HasValue && tesisId.Value > 0))
         {
-            var scopedCariIds = await _cariKartRepository
-                .Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value))
-                .Select(x => x.Id)
-                .ToListAsync(cancellationToken);
+            var cariQuery = _cariKartRepository.Where(x => x.TesisId.HasValue);
+            if (scope.IsScoped)
+            {
+                cariQuery = cariQuery.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value));
+            }
+            if (tesisId.HasValue && tesisId.Value > 0)
+            {
+                cariQuery = cariQuery.Where(x => x.TesisId == tesisId.Value);
+            }
+
+            var scopedCariIds = await cariQuery.Select(x => x.Id).ToListAsync(cancellationToken);
             var scopedCariIdSet = scopedCariIds.ToHashSet();
             list = list.Where(x => scopedCariIdSet.Contains(x.CariKartId)).ToList();
         }

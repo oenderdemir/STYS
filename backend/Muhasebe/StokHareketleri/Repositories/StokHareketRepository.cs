@@ -17,9 +17,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         _dbContext = dbContext;
     }
 
-    public async Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(int? depoId, CancellationToken cancellationToken = default)
+    public async Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default)
     {
-        var rows = await BuildBaseQuery(depoId)
+        var rows = await BuildBaseQuery(depoIds)
             .Select(x => new
             {
                 x.DepoId,
@@ -54,9 +54,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .ToList();
     }
 
-    public async Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(int? depoId, CancellationToken cancellationToken = default)
+    public async Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default)
     {
-        var rows = await BuildBaseQuery(depoId)
+        var rows = await BuildBaseQuery(depoIds)
             .Select(x => new
             {
                 x.TasinirKartId,
@@ -84,7 +84,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .ToList();
     }
 
-    private IQueryable<StokHareket> BuildBaseQuery(int? depoId)
+    private IQueryable<StokHareket> BuildBaseQuery(IEnumerable<int>? depoIds)
     {
         var query = _dbContext.StokHareketleri
             .AsNoTracking()
@@ -92,9 +92,13 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .Include(x => x.TasinirKart)
             .Where(x => x.Durum == StokHareketDurumlari.Aktif);
 
-        if (depoId.HasValue && depoId.Value > 0)
+        if (depoIds is not null)
         {
-            query = query.Where(x => x.DepoId == depoId.Value);
+            var depoIdList = depoIds as int[] ?? depoIds.ToArray();
+            if (depoIdList.Length > 0)
+            {
+                query = query.Where(x => depoIdList.Contains(x.DepoId));
+            }
         }
 
         return query;

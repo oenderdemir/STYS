@@ -14,8 +14,11 @@ export class KasaHareketleriService {
         return this.http.get<ApiResponse<KasaHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri`).pipe(map(this.unwrapList));
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<KasaHareketModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId: number): Observable<PagedResponseDto<KasaHareketModel>> {
+        const params = new HttpParams()
+            .set('pageNumber', pageNumber)
+            .set('pageSize', pageSize)
+            .set('tesisId', tesisId);
         return this.http.get<ApiResponse<PagedResponseDto<KasaHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-hareketleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 

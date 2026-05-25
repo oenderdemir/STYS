@@ -22,13 +22,22 @@ public class BankaHareketleriController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.BankaHareketYonetimi.View)]
-    public async Task<ActionResult<List<BankaHareketDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id).ToList());
+    public async Task<ActionResult<List<BankaHareketDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.KasaBankaHesap != null && x.KasaBankaHesap.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+
+        return Ok(items.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id).ToList());
+    }
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.BankaHareketYonetimi.View)]
-    public async Task<ActionResult<PagedResult<BankaHareketDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id)));
+    public async Task<ActionResult<PagedResult<BankaHareketDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(
+            request,
+            predicate: tesisId.HasValue && tesisId.Value > 0 ? x => x.KasaBankaHesap != null && x.KasaBankaHesap.TesisId == tesisId.Value : null,
+            orderBy: q => q.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id)));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.BankaHareketYonetimi.View)]

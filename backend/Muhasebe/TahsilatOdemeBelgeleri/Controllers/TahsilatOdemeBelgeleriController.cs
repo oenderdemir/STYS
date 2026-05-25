@@ -22,13 +22,22 @@ public class TahsilatOdemeBelgeleriController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]
-    public async Task<ActionResult<List<TahsilatOdemeBelgesiDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id).ToList());
+    public async Task<ActionResult<List<TahsilatOdemeBelgesiDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.CariKart != null && x.CariKart.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+
+        return Ok(items.OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id).ToList());
+    }
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]
-    public async Task<ActionResult<PagedResult<TahsilatOdemeBelgesiDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id)));
+    public async Task<ActionResult<PagedResult<TahsilatOdemeBelgesiDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(
+            request,
+            predicate: tesisId.HasValue && tesisId.Value > 0 ? x => x.CariKart != null && x.CariKart.TesisId == tesisId.Value : null,
+            orderBy: q => q.OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id)));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]
@@ -40,8 +49,8 @@ public class TahsilatOdemeBelgeleriController : UIController
 
     [HttpGet("gunluk-ozet")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]
-    public async Task<ActionResult<TahsilatOdemeOzetDto>> GetGunlukOzet([FromQuery] DateTime? gun, CancellationToken cancellationToken)
-        => Ok(await _service.GetGunlukOzetAsync(gun?.Date ?? DateTime.Today, cancellationToken));
+    public async Task<ActionResult<TahsilatOdemeOzetDto>> GetGunlukOzet([FromQuery] DateTime? gun, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetGunlukOzetAsync(gun?.Date ?? DateTime.Today, tesisId, cancellationToken));
 
     [HttpPost]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.Manage)]

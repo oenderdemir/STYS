@@ -100,7 +100,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -125,7 +125,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
             return;
         }
 
-        this.service.getGunlukOzet().subscribe({
+        this.service.getGunlukOzet(null, tesisId).subscribe({
             next: (ozet) => {
                 this.gunlukOzet = ozet;
                 this.cdr.detectChanges();

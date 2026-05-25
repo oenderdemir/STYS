@@ -62,48 +62,70 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         return await base.UpdateAsync(dto);
     }
 
-    public async Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? depoId, CancellationToken cancellationToken = default)
+    public async Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (!scope.IsScoped)
+        var allowedDepoIds = await ResolveAllowedDepoIdsAsync(tesisId, cancellationToken);
+        if (allowedDepoIds is not null && allowedDepoIds.Count == 0)
         {
-            return await _repository.GetDepoStokBakiyeleriAsync(depoId, cancellationToken);
+            return [];
         }
 
-        var scopedDepoIds = await _depoRepository
-            .Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value))
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
-        var scopedDepoIdSet = scopedDepoIds.ToHashSet();
+        if (depoId.HasValue && depoId.Value > 0)
+        {
+            if (allowedDepoIds is not null && !allowedDepoIds.Contains(depoId.Value))
+            {
+                return [];
+            }
 
-        var result = await _repository.GetDepoStokBakiyeleriAsync(depoId, cancellationToken);
-        return result.Where(x => scopedDepoIdSet.Contains(x.DepoId)).ToList();
+            return await _repository.GetDepoStokBakiyeleriAsync(new[] { depoId.Value }, cancellationToken);
+        }
+
+        var result = await _repository.GetDepoStokBakiyeleriAsync(allowedDepoIds, cancellationToken);
+        return result;
     }
 
-    public async Task<List<StokKartOzetDto>> GetStokKartOzetAsync(int? depoId, CancellationToken cancellationToken = default)
+    public async Task<List<StokKartOzetDto>> GetStokKartOzetAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default)
+    {
+        var allowedDepoIds = await ResolveAllowedDepoIdsAsync(tesisId, cancellationToken);
+        if (allowedDepoIds is not null && allowedDepoIds.Count == 0)
+        {
+            return [];
+        }
+
+        if (depoId.HasValue && depoId.Value > 0)
+        {
+            if (allowedDepoIds is not null && !allowedDepoIds.Contains(depoId.Value))
+            {
+                return [];
+            }
+
+            return await _repository.GetStokKartOzetleriAsync(new[] { depoId.Value }, cancellationToken);
+        }
+
+        var result = await _repository.GetStokKartOzetleriAsync(allowedDepoIds, cancellationToken);
+        return result;
+    }
+
+    private async Task<HashSet<int>?> ResolveAllowedDepoIdsAsync(int? tesisId, CancellationToken cancellationToken)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (!scope.IsScoped)
+        if (!scope.IsScoped && (!tesisId.HasValue || tesisId.Value <= 0))
         {
-            return await _repository.GetStokKartOzetleriAsync(depoId, cancellationToken);
+            return null;
         }
 
-        if (!depoId.HasValue || depoId.Value <= 0)
+        var query = _depoRepository.Where(x => x.TesisId.HasValue);
+        if (scope.IsScoped)
         {
-            throw new BaseException("Scoped kullanicilar icin depo secimi zorunludur.", 400);
+            query = query.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value));
+        }
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            query = query.Where(x => x.TesisId == tesisId.Value);
         }
 
-        var scopedDepoIds = await _depoRepository
-            .Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value))
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
-
-        if (scopedDepoIds.Contains(depoId.Value))
-        {
-            return await _repository.GetStokKartOzetleriAsync(depoId, cancellationToken);
-        }
-
-        return [];
+        var depoIds = await query.Select(x => x.Id).ToListAsync(cancellationToken);
+        return depoIds.ToHashSet();
     }
 
     public override async Task<StokHareketDto?> GetByIdAsync(int id, Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include = null)

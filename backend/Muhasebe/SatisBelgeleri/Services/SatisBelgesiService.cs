@@ -1,14 +1,17 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Repositories;
+using STYS.Muhasebe.TasinirKartlari.Entities;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -19,15 +22,17 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly StysAppDbContext _db;
     private readonly ISatisBelgesiRepository _satisBelgesiRepository;
     private readonly IMuhasebeFisRepository _muhasebeFisRepository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ILogger<SatisBelgesiService> _logger;
 
-    /// <summary>Tevkifatlı satış satırları bu fazda desteklenmez.</summary>
+    /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
     [
         (int)KdvUygulamaTipi.Kdvli,
         (int)KdvUygulamaTipi.TamIstisna,
         (int)KdvUygulamaTipi.KismiIstisna,
-        (int)KdvUygulamaTipi.KdvKapsamDisi
+        (int)KdvUygulamaTipi.KdvKapsamDisi,
+        (int)KdvUygulamaTipi.Tevkifatli
     ];
 
     /// <summary>KDV hesaplaması yapılmayan uygulama tipleri.</summary>
@@ -36,6 +41,18 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         (int)KdvUygulamaTipi.TamIstisna,
         (int)KdvUygulamaTipi.KismiIstisna,
         (int)KdvUygulamaTipi.KdvKapsamDisi
+    ];
+
+    /// <summary>Desteklenen tevkifat oranları.</summary>
+    private static readonly HashSet<(int Pay, int Payda)> DesteklenenTevkifatOranlari =
+    [
+        (2, 10),
+        (3, 10),
+        (4, 10),
+        (5, 10),
+        (7, 10),
+        (9, 10),
+        (10, 10)
     ];
 
     /// <summary>Satır güncellenebilir durumlar.</summary>
@@ -56,12 +73,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         StysAppDbContext db,
         IMapper mapper,
         IMuhasebeFisRepository muhasebeFisRepository,
+        IUserAccessScopeService userAccessScopeService,
         ILogger<SatisBelgesiService> logger)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
         _db = db;
         _muhasebeFisRepository = muhasebeFisRepository;
+        _userAccessScopeService = userAccessScopeService;
         _logger = logger;
     }
 
@@ -258,6 +277,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     {
         // 1. Validasyonlar
         await ValidateCreateRequestAsync(request, cancellationToken);
+        request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken);
 
         // 2. Belge no üret (isteğe bağlı override)
         var belgeNo = request.BelgeNo ?? await GenerateBelgeNoAsync(request.BelgeTarihi, cancellationToken);
@@ -340,6 +360,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         {
             await ThrowIfBelgeNoDuplicateAsync(request.BelgeNo, excludeId: id, cancellationToken);
         }
+
+        request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken, belge.TesisId);
 
         // Ana alanları güncelle
         await ApplyBelgeUpdatesAsync(belge, request, cancellationToken);
@@ -523,13 +545,12 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     /// 3. GenelToplam > 0
     /// 4. Kurumsal müşteri → MusteriUnvan + MusteriVergiNo dolu
     /// 5. Bireysel müşteri → MusteriAdSoyad dolu
-    /// 6. Tevkifatlı satır kontrolü (bu fazda desteklenmez)
-    /// 7. KDV uygulama tipi geçerlilik kontrolü (her satırda)
-    /// 8. KDV'li satırda KdvOrani > 0
-    /// 9. KDV'siz satırda KdvIstisnaTanimId zorunlu
-    /// 10. Satır toplamları = Belge toplamları (tutarlılık)
-    /// 11. Kaynak duplicate kontrolü
-    /// 12. KDV istisna tanımı geçerlilik kontrolü
+    /// 6. KDV uygulama tipi geçerlilik kontrolü (her satırda)
+    /// 7. KDV'li satırda KdvOrani > 0
+    /// 8. KDV istisna / tevkifat ayrımı kontrolü
+    /// 9. Satır toplamları = Belge toplamları (tutarlılık)
+    /// 10. Kaynak duplicate kontrolü
+    /// 11. KDV istisna tanımı geçerlilik kontrolü
     /// </summary>
     private async Task ValidateBelgeOnayaGonderilebilir(
         SatisBelgesi belge,
@@ -566,31 +587,55 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         // 6-9. Her satır için KDV kontrolleri
         foreach (var satir in aktifSatirlar)
         {
-            // 6. Tevkifatlı kontrolü
-            if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Tevkifatli)
-                throw new BaseException(
-                    $"Tevkifatlı satış satırları bu aşamada desteklenmemektedir. (SıraNo: {satir.SiraNo})",
-                    errorCode: 400);
-
-            // 7. Desteklenen KDV uygulama tipi kontrolü
+            // 6. Desteklenen KDV uygulama tipi kontrolü
             if (!DesteklenenKdvUygulamaTipleri.Contains((int)satir.KdvUygulamaTipi))
                 throw new BaseException(
                     $"Geçersiz KDV uygulama tipi: {satir.KdvUygulamaTipi}. (SıraNo: {satir.SiraNo})",
                     errorCode: 400);
 
-            // 8. KDV'li satırda KdvOrani > 0
+            // 7. KDV'li satırda KdvOrani > 0
             if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Kdvli && satir.KdvOrani <= 0)
                 throw new BaseException(
                     $"KDV'li satırda KDV oranı sıfırdan büyük olmalıdır. (SıraNo: {satir.SiraNo})",
                     errorCode: 400);
 
-            // 9. KDV'siz satırda KdvIstisnaTanimId zorunlu
-            if (satir.KdvUygulamaTipi != KdvUygulamaTipi.Kdvli && !satir.KdvIstisnaTanimId.HasValue)
+            // 8. KDV istisna / tevkifat ayrımı kontrolü
+            if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Tevkifatli)
+            {
+                if (!satir.TevkifatPay.HasValue || !satir.TevkifatPayda.HasValue)
+                    throw new BaseException(
+                        $"Tevkifatlı satırda tevkifat oranı zorunludur. (SıraNo: {satir.SiraNo})",
+                        errorCode: 400);
+
+                if (!DesteklenenTevkifatOranlari.Contains((satir.TevkifatPay.Value, satir.TevkifatPayda.Value)))
+                    throw new BaseException(
+                        $"Geçersiz tevkifat oranı: {satir.TevkifatPay}/{satir.TevkifatPayda}. (SıraNo: {satir.SiraNo})",
+                        errorCode: 400);
+
+                if (satir.KdvOrani <= 0)
+                    throw new BaseException(
+                        $"Tevkifatlı satırda KDV oranı sıfırdan büyük olmalıdır. (SıraNo: {satir.SiraNo})",
+                        errorCode: 400);
+
+                if (satir.KdvIstisnaTanimId.HasValue)
+                    throw new BaseException(
+                        $"Tevkifatlı satırda KDV istisna tanımı seçilemez. (SıraNo: {satir.SiraNo})",
+                        errorCode: 400);
+            }
+            else if (satir.KdvUygulamaTipi != KdvUygulamaTipi.Kdvli && !satir.KdvIstisnaTanimId.HasValue)
+            {
                 throw new BaseException(
                     $"KDV'li olmayan satırda KDV istisna tanımı zorunludur. (SıraNo: {satir.SiraNo})",
                     errorCode: 400);
+            }
+            else if (satir.KdvUygulamaTipi == KdvUygulamaTipi.Kdvli && satir.KdvIstisnaTanimId.HasValue)
+            {
+                throw new BaseException(
+                    $"KDV'li satırda KDV istisna tanımı seçilemez. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+            }
 
-            // 12. KDV istisna tanımı geçerlilik kontrolü
+            // 11. KDV istisna tanımı geçerlilik kontrolü
             if (satir.KdvIstisnaTanimId.HasValue)
             {
                 await ValidateKdvIstisnaTanimAsync(
@@ -706,9 +751,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (request.BirimFiyat < 0)
             throw new BaseException($"Birim fiyat negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
 
-        // Tevkifatlı desteklenmez
-        if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli)
-            throw new BaseException("Tevkifatlı satış satırları bu aşamada desteklenmemektedir.", errorCode: 400);
+        if (request.IndirimTutari < 0)
+            throw new BaseException($"İndirim tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.KdvOrani < 0)
+            throw new BaseException($"KDV oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
 
         // Bilinmeyen KDV uygulama tipi
         if (!DesteklenenKdvUygulamaTipleri.Contains(request.KdvUygulamaTipi))
@@ -718,8 +765,27 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && request.KdvOrani <= 0)
             throw new BaseException($"KDV'li satırda KDV oranı sıfırdan büyük olmalıdır. (SıraNo: {request.SiraNo})", errorCode: 400);
 
-        // KDV'li olmayan tüm satırlarda KdvIstisnaTanimId zorunlu (KdvKapsamDisi dahil — bug fix)
-        if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Kdvli)
+        if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Kdvli && request.KdvIstisnaTanimId.HasValue)
+            throw new BaseException($"KDV'li satırda KDV istisna tanımı seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.TevkifatPay.HasValue || request.TevkifatPayda.HasValue)
+        {
+            if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Tevkifatli)
+                throw new BaseException($"Tevkifat oranı yalnızca tevkifatlı satırlarda kullanılabilir. (SıraNo: {request.SiraNo})", errorCode: 400);
+        }
+
+        if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli)
+        {
+            if (!request.TevkifatPay.HasValue || !request.TevkifatPayda.HasValue)
+                throw new BaseException($"Tevkifatlı satırda tevkifat oranı zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+            if (!DesteklenenTevkifatOranlari.Contains((request.TevkifatPay.Value, request.TevkifatPayda.Value)))
+                throw new BaseException($"Geçersiz tevkifat oranı: {request.TevkifatPay}/{request.TevkifatPayda}. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+            if (request.KdvIstisnaTanimId.HasValue)
+                throw new BaseException($"Tevkifatlı satırda KDV istisna tanımı seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
+        }
+        else if (request.KdvUygulamaTipi != (int)KdvUygulamaTipi.Kdvli)
         {
             if (!request.KdvIstisnaTanimId.HasValue)
                 throw new BaseException(
@@ -732,6 +798,55 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 belge.BelgeTarihi,
                 cancellationToken);
         }
+
+        if ((request.SatirTipi == SatisBelgesiSatirTipi.Urun || request.TasinirKartId.HasValue) && !request.DepoId.HasValue)
+        {
+            throw new BaseException($"Stok/ürün satırlarında depo seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
+        }
+
+        if (request.TasinirKartId.HasValue)
+        {
+            await ValidateTasinirKartAsync(request.TasinirKartId.Value, belge.TesisId, cancellationToken);
+        }
+
+        if (request.DepoId.HasValue)
+        {
+            await ValidateDepoAsync(request.DepoId.Value, belge.TesisId, cancellationToken);
+        }
+    }
+
+    private async Task ValidateTasinirKartAsync(
+        int tasinirKartId,
+        int? tesisId,
+        CancellationToken cancellationToken)
+    {
+        var kart = await _db.TasinirKartlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == tasinirKartId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException($"Taşınır kart bulunamadı. (Id: {tasinirKartId})", errorCode: 400);
+
+        if (!kart.AktifMi)
+            throw new BaseException($"Taşınır kart pasif durumda: '{kart.StokKodu} — {kart.Ad}'", errorCode: 400);
+
+        if (tesisId.HasValue && kart.TesisId.HasValue && kart.TesisId != tesisId)
+            throw new BaseException($"Taşınır kart seçili çalışma tesisiyle uyumlu değil: '{kart.StokKodu} — {kart.Ad}'", errorCode: 400);
+    }
+
+    private async Task ValidateDepoAsync(
+        int depoId,
+        int? tesisId,
+        CancellationToken cancellationToken)
+    {
+        var depo = await _db.Depolar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == depoId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException($"Depo bulunamadı. (Id: {depoId})", errorCode: 400);
+
+        if (!depo.AktifMi)
+            throw new BaseException($"Depo pasif durumda: '{depo.Kod} — {depo.Ad}'", errorCode: 400);
+
+        if (tesisId.HasValue && depo.TesisId.HasValue && depo.TesisId != tesisId)
+            throw new BaseException($"Depo seçili çalışma tesisiyle uyumlu değil: '{depo.Kod} — {depo.Ad}'", errorCode: 400);
     }
 
     private async Task ValidateKdvIstisnaTanimAsync(
@@ -857,13 +972,53 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         }
     }
 
+    private async Task<int?> ResolveWriteTesisIdAsync(
+        int? requestedTesisId,
+        CancellationToken cancellationToken,
+        int? existingTesisId = null)
+    {
+        _ = cancellationToken;
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var resolved = requestedTesisId ?? existingTesisId;
+
+        if (scope.IsScoped)
+        {
+            if (!resolved.HasValue)
+            {
+                if (scope.TesisIds.Count == 1)
+                {
+                    resolved = scope.TesisIds.First();
+                }
+                else
+                {
+                    throw new BaseException("Tesis seçimi zorunludur.", errorCode: 400);
+                }
+            }
+
+            if (!scope.TesisIds.Contains(resolved!.Value))
+            {
+                throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", errorCode: 403);
+            }
+        }
+
+        return resolved is > 0 ? resolved : null;
+    }
+
     // ──────────────────────────────────────────────
     //  Private — Satır Oluşturma ve Hesaplama
     // ──────────────────────────────────────────────
 
     private static SatisBelgesiSatiri CreateSatirFromRequest(CreateSatisBelgesiSatiriRequest request)
     {
-        var matrah = request.Miktar * request.BirimFiyat;
+        var indirimTutari = request.IndirimTutari;
+        var brutMatrah = request.Miktar * request.BirimFiyat;
+        if (indirimTutari > brutMatrah)
+        {
+            throw new BaseException("İndirim tutarı satır matrahını aşamaz.", errorCode: 400);
+        }
+
+        var matrah = brutMatrah - indirimTutari;
         var kdvOrani = request.KdvOrani;
 
         // İstisna / kapsam dışı → KDV hesaplanmaz
@@ -871,20 +1026,33 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             ? 0m
             : matrah * kdvOrani / 100m;
 
-        var satirToplami = matrah + kdvTutari;
+        var tevkifatTutari = 0m;
+        if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli && request.TevkifatPay.HasValue && request.TevkifatPayda.HasValue && request.TevkifatPayda.Value > 0)
+        {
+            tevkifatTutari = kdvTutari * request.TevkifatPay.Value / request.TevkifatPayda.Value;
+        }
+
+        var satirToplami = matrah + (kdvTutari - tevkifatTutari);
 
         return new SatisBelgesiSatiri
         {
             SiraNo = request.SiraNo,
             SatirTipi = request.SatirTipi,
             Aciklama = request.Aciklama,
+            TasinirKartId = request.TasinirKartId,
+            DepoId = request.DepoId,
+            Birim = string.IsNullOrWhiteSpace(request.Birim) ? "Adet" : request.Birim.Trim(),
             Miktar = request.Miktar,
             BirimFiyat = request.BirimFiyat,
+            IndirimTutari = indirimTutari,
             Matrah = matrah,
             KdvUygulamaTipi = (KdvUygulamaTipi)request.KdvUygulamaTipi,
             KdvIstisnaTanimId = request.KdvIstisnaTanimId,
             KdvOrani = kdvOrani,
             KdvTutari = kdvTutari,
+            TevkifatPay = request.TevkifatPay,
+            TevkifatPayda = request.TevkifatPayda,
+            TevkifatTutari = tevkifatTutari,
             SatirToplami = satirToplami,
             KaynakSatirId = request.KaynakSatirId
         };

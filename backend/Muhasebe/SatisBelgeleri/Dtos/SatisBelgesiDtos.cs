@@ -25,6 +25,8 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public bool KurumsalMi { get; set; }
     public decimal ToplamMatrah { get; set; }
     public decimal ToplamKdv { get; set; }
+    public decimal ToplamTevkifatTutari { get; set; }
+    public decimal ToplamNetKdv { get; set; }
     public decimal GenelToplam { get; set; }
     public string? Aciklama { get; set; }
     public string? RedNedeni { get; set; }
@@ -45,8 +47,12 @@ public class SatisBelgesiSatiriDto : BaseRdbmsDto<int>
     public int SiraNo { get; set; }
     public SatisBelgesiSatirTipi SatirTipi { get; set; }
     public string Aciklama { get; set; } = string.Empty;
+    public int? TasinirKartId { get; set; }
+    public int? DepoId { get; set; }
+    public string Birim { get; set; } = "Adet";
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
+    public decimal IndirimTutari { get; set; }
     public decimal Matrah { get; set; }
     public int KdvUygulamaTipi { get; set; }
     public int? KdvIstisnaTanimId { get; set; }
@@ -54,6 +60,10 @@ public class SatisBelgesiSatiriDto : BaseRdbmsDto<int>
     public string? KdvIstisnaAciklamasi { get; set; }
     public decimal KdvOrani { get; set; }
     public decimal KdvTutari { get; set; }
+    public int? TevkifatPay { get; set; }
+    public int? TevkifatPayda { get; set; }
+    public decimal TevkifatTutari { get; set; }
+    public decimal NetKdv { get; set; }
     public decimal SatirToplami { get; set; }
     public string? KaynakSatirId { get; set; }
 }
@@ -86,11 +96,17 @@ public class CreateSatisBelgesiSatiriRequest
     public int SiraNo { get; set; }
     public SatisBelgesiSatirTipi SatirTipi { get; set; } = SatisBelgesiSatirTipi.Diger;
     public string Aciklama { get; set; } = string.Empty;
+    public int? TasinirKartId { get; set; }
+    public int? DepoId { get; set; }
+    public string Birim { get; set; } = "Adet";
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
+    public decimal IndirimTutari { get; set; }
     public int KdvUygulamaTipi { get; set; } = 1; // Kdvli
     public int? KdvIstisnaTanimId { get; set; }
     public decimal KdvOrani { get; set; }
+    public int? TevkifatPay { get; set; }
+    public int? TevkifatPayda { get; set; }
     public string? KaynakSatirId { get; set; }
 }
 
@@ -120,11 +136,17 @@ public class UpdateSatisBelgesiSatiriRequest
     public int SiraNo { get; set; }
     public SatisBelgesiSatirTipi SatirTipi { get; set; } = SatisBelgesiSatirTipi.Diger;
     public string Aciklama { get; set; } = string.Empty;
+    public int? TasinirKartId { get; set; }
+    public int? DepoId { get; set; }
+    public string Birim { get; set; } = "Adet";
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
+    public decimal IndirimTutari { get; set; }
     public int KdvUygulamaTipi { get; set; } = 1;
     public int? KdvIstisnaTanimId { get; set; }
     public decimal KdvOrani { get; set; }
+    public int? TevkifatPay { get; set; }
+    public int? TevkifatPayda { get; set; }
     public string? KaynakSatirId { get; set; }
 }
 

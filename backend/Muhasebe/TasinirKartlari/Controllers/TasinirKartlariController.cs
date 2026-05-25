@@ -22,13 +22,13 @@ public class TasinirKartlariController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.TasinirKartYonetimi.View)]
-    public async Task<ActionResult<List<TasinirKartDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderBy(x => x.StokKodu).ThenBy(x => x.Id).ToList());
+    public async Task<ActionResult<List<TasinirKartDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok((await _service.GetAllAsync(tesisId)).OrderBy(x => x.StokKodu).ThenBy(x => x.Id).ToList());
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.TasinirKartYonetimi.View)]
-    public async Task<ActionResult<PagedResult<TasinirKartDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.StokKodu).ThenBy(x => x.Id)));
+    public async Task<ActionResult<PagedResult<TasinirKartDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(request, tesisId, orderBy: q => q.OrderBy(x => x.StokKodu).ThenBy(x => x.Id)));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.TasinirKartYonetimi.View)]

@@ -2294,6 +2294,10 @@ public class StysAppDbContext : DbContext
                 .HasMaxLength(500)
                 .IsRequired();
 
+            entity.Property(x => x.Birim)
+                .HasMaxLength(32)
+                .IsRequired();
+
             entity.Property(x => x.KdvIstisnaKodu)
                 .HasMaxLength(50);
 
@@ -2309,6 +2313,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.BirimFiyat)
                 .HasPrecision(18, 2);
 
+            entity.Property(x => x.IndirimTutari)
+                .HasPrecision(18, 2);
+
             entity.Property(x => x.Matrah)
                 .HasPrecision(18, 2);
 
@@ -2316,6 +2323,9 @@ public class StysAppDbContext : DbContext
                 .HasPrecision(18, 4);
 
             entity.Property(x => x.KdvTutari)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.TevkifatTutari)
                 .HasPrecision(18, 2);
 
             entity.Property(x => x.SatirToplami)
@@ -2331,9 +2341,21 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey(x => x.KdvIstisnaTanimId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Depo)
+                .WithMany()
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(x => x.SatisBelgesiId);
 
             entity.HasIndex(x => x.KdvIstisnaTanimId);
+            entity.HasIndex(x => x.TasinirKartId);
+            entity.HasIndex(x => x.DepoId);
         });
 
         modelBuilder.Entity<BildirimTercih>(entity =>

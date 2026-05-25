@@ -14,7 +14,11 @@ public class SatisBelgesiProfile : Profile
             .ForMember(dest => dest.Satirlar, opt => opt.MapFrom(src =>
                 src.Satirlar
                     .Where(s => !s.IsDeleted)
-                    .OrderBy(s => s.SiraNo)));
+                    .OrderBy(s => s.SiraNo)))
+            .ForMember(dest => dest.ToplamTevkifatTutari, opt => opt.MapFrom(src =>
+                src.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.TevkifatTutari)))
+            .ForMember(dest => dest.ToplamNetKdv, opt => opt.MapFrom(src =>
+                src.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.KdvTutari - s.TevkifatTutari)));
 
         CreateMap<SatisBelgesiDto, SatisBelgesi>()
             .ForMember(dest => dest.Satirlar, opt => opt.Ignore())
@@ -24,11 +28,14 @@ public class SatisBelgesiProfile : Profile
 
         // ── SatisBelgesiSatiri <-> SatisBelgesiSatiriDto ──
         CreateMap<SatisBelgesiSatiri, SatisBelgesiSatiriDto>()
-            .ForMember(dest => dest.KdvUygulamaTipi, opt => opt.MapFrom(src => (int)src.KdvUygulamaTipi));
+            .ForMember(dest => dest.KdvUygulamaTipi, opt => opt.MapFrom(src => (int)src.KdvUygulamaTipi))
+            .ForMember(dest => dest.NetKdv, opt => opt.MapFrom(src => src.KdvTutari - src.TevkifatTutari));
 
         CreateMap<SatisBelgesiSatiriDto, SatisBelgesiSatiri>()
             .ForMember(dest => dest.KdvUygulamaTipi, opt => opt.MapFrom(src => (KdvUygulamaTipi)src.KdvUygulamaTipi))
             .ForMember(dest => dest.SatisBelgesi, opt => opt.Ignore())
+            .ForMember(dest => dest.TasinirKart, opt => opt.Ignore())
+            .ForMember(dest => dest.Depo, opt => opt.Ignore())
             .ForMember(dest => dest.KdvIstisnaTanim, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())

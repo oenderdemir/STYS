@@ -4483,6 +4483,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("Birim")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<decimal>("BirimFiyat")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -4501,6 +4506,13 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<int?>("DepoId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("IndirimTutari")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("KaynakSatirId")
                         .HasMaxLength(100)
@@ -4536,6 +4548,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("TasinirKartId")
+                        .HasColumnType("int");
+
                     b.Property<int>("SatirTipi")
                         .HasColumnType("int");
 
@@ -4549,6 +4564,16 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int>("SiraNo")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TevkifatPay")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TevkifatPayda")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TevkifatTutari")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -4557,7 +4582,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DepoId");
+
                     b.HasIndex("KdvIstisnaTanimId");
+
+                    b.HasIndex("TasinirKartId");
 
                     b.HasIndex("SatisBelgesiId");
 
@@ -7749,9 +7778,19 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
             modelBuilder.Entity("STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesiSatiri", b =>
                 {
+                    b.HasOne("STYS.Muhasebe.Depolar.Entities.Depo", "Depo")
+                        .WithMany()
+                        .HasForeignKey("DepoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("STYS.Muhasebe.Kdv.Entities.KdvIstisnaTanim", "KdvIstisnaTanim")
                         .WithMany()
                         .HasForeignKey("KdvIstisnaTanimId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("STYS.Muhasebe.TasinirKartlari.Entities.TasinirKart", "TasinirKart")
+                        .WithMany()
+                        .HasForeignKey("TasinirKartId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi", "SatisBelgesi")
@@ -7760,7 +7799,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Depo");
+
                     b.Navigation("KdvIstisnaTanim");
+
+                    b.Navigation("TasinirKart");
 
                     b.Navigation("SatisBelgesi");
                 });

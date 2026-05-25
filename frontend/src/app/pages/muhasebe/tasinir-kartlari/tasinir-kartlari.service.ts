@@ -10,8 +10,12 @@ export class TasinirKartlariService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(): Observable<TasinirKartModel[]> {
-        return this.http.get<ApiResponse<TasinirKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari`).pipe(map(this.unwrap<TasinirKartModel[]>('Tasinir kartlar alinamadi.')));
+    getAll(tesisId?: number | null): Observable<TasinirKartModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+        return this.http.get<ApiResponse<TasinirKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tasinir-kartlari`, { params }).pipe(map(this.unwrap<TasinirKartModel[]>('Tasinir kartlar alinamadi.')));
     }
 
     getPaged(pageNumber: number, pageSize: number, tesisId?: number | null): Observable<PagedResponseDto<TasinirKartModel>> {

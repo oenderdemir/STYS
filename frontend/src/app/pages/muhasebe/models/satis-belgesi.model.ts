@@ -120,8 +120,12 @@ export interface SatisBelgesiSatiriDto {
     siraNo: number;
     satirTipi: SatisBelgesiSatirTipi;
     aciklama: string;
+    tasinirKartId?: number | null;
+    depoId?: number | null;
+    birim: string;
     miktar: number;
     birimFiyat: number;
+    indirimTutari: number;
     matrah: number;
     kdvUygulamaTipi: KdvUygulamaTipi;
     kdvIstisnaTanimId?: number | null;
@@ -129,6 +133,10 @@ export interface SatisBelgesiSatiriDto {
     kdvIstisnaAciklamasi?: string | null;
     kdvOrani: number;
     kdvTutari: number;
+    tevkifatPay?: number | null;
+    tevkifatPayda?: number | null;
+    tevkifatTutari: number;
+    netKdv: number;
     satirToplami: number;
     kaynakSatirId?: string | null;
 }
@@ -155,6 +163,8 @@ export interface SatisBelgesiDto {
     kurumsalMi: boolean;
     toplamMatrah: number;
     toplamKdv: number;
+    toplamTevkifatTutari: number;
+    toplamNetKdv: number;
     genelToplam: number;
     aciklama?: string | null;
     redNedeni?: string | null;
@@ -173,11 +183,17 @@ export interface CreateSatisBelgesiSatiriRequest {
     siraNo: number;
     satirTipi: SatisBelgesiSatirTipi;
     aciklama: string;
+    tasinirKartId?: number | null;
+    depoId?: number | null;
+    birim: string;
     miktar: number;
     birimFiyat: number;
+    indirimTutari: number;
     kdvUygulamaTipi: KdvUygulamaTipi;
     kdvIstisnaTanimId?: number | null;
     kdvOrani: number;
+    tevkifatPay?: number | null;
+    tevkifatPayda?: number | null;
     kaynakSatirId?: string | null;
 }
 
@@ -259,11 +275,17 @@ export function createEmptySatisBelgesiSatiri(): CreateSatisBelgesiSatiriRequest
         siraNo: 1,
         satirTipi: SatisBelgesiSatirTipi.Diger,
         aciklama: '',
+        tasinirKartId: null,
+        depoId: null,
+        birim: 'Adet',
         miktar: 1,
         birimFiyat: 0,
+        indirimTutari: 0,
         kdvUygulamaTipi: KdvUygulamaTipi.Kdvli,
         kdvIstisnaTanimId: null,
         kdvOrani: 20,
+        tevkifatPay: null,
+        tevkifatPayda: null,
         kaynakSatirId: null
     };
 }

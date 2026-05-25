@@ -10,8 +10,13 @@ export class CariKartlarService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(): Observable<CariKartModel[]> {
-        return this.http.get<ApiResponse<CariKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar`).pipe(
+    getAll(tesisId?: number | null): Observable<CariKartModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<CariKartModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;

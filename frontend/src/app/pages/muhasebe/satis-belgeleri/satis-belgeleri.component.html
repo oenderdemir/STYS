@@ -302,6 +302,9 @@
                             <div class="col-12 lg:col-6">
                                 <div class="form-card">
                                     <h5 class="mt-0 mb-3">👤 Cari / Müşteri Bilgileri</h5>
+                                    <p class="text-xs text-color-secondary mb-3">
+                                        <strong>Çalışma Tesisi:</strong> {{ tesisContext.seciliTesis()?.ad || '-' }}
+                                    </p>
 
                                     <!-- Cari Kart Seçim Alanı -->
                                     <div class="cari-selection-area">
@@ -324,23 +327,12 @@
                                             placeholder="Cari kart seçiniz (unvan, vergi no veya TCKN ile arayın)...">
                                             <ng-template let-cari pTemplate="item">
                                                 <div class="flex align-items-center gap-2">
-                                                    <span>{{ cari.cariTipi === 'KurumsalMusteri' ? '🏢' : '👤' }}</span>
-                                                    <span class="font-medium">{{ cari.unvanAdSoyad }}</span>
-                                                    @if (cari.vergiNoTckn) {
-                                                    <span class="text-sm text-color-secondary">{{ cari.vergiNoTckn }}</span>
-                                                    }
-                                                    @if (cari.cariKodu) {
-                                                    <span class="text-xs text-color-secondary">[{{ cari.cariKodu }}]</span>
-                                                    }
+                                                    <span class="font-medium">{{ formatCariDisplay(cari) }}</span>
                                                 </div>
                                             </ng-template>
                                             <ng-template let-cari pTemplate="selectedItem">
                                                 <div class="flex align-items-center gap-1">
-                                                    <span>{{ cari.cariTipi === 'KurumsalMusteri' ? '🏢' : '👤' }}</span>
-                                                    <span>{{ cari.unvanAdSoyad }}</span>
-                                                    @if (cari.vergiNoTckn) {
-                                                    <span class="text-sm text-color-secondary">— {{ cari.vergiNoTckn }}</span>
-                                                    }
+                                                    <span>{{ formatCariDisplay(cari) }}</span>
                                                 </div>
                                             </ng-template>
                                         </p-autoComplete>
@@ -419,7 +411,7 @@
                                         </div>
                                         <div class="col-12 field">
                                             <label>Adres</label>
-                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" readonly
+                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
                                                 placeholder="Cari karttan otomatik doldurulur">
                                             </p-textarea>
                                         </div>
@@ -433,6 +425,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriUnvan"
                                                 (ngModelChange)="updateFormField('musteriUnvan', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Şirket ünvanı" />
                                         </div>
                                         <div class="col-12 md:col-6 field">
@@ -440,6 +433,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriVergiNo"
                                                 (ngModelChange)="updateFormField('musteriVergiNo', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Vergi numarası" />
                                         </div>
                                         <div class="col-12 md:col-6 field">
@@ -447,6 +441,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriVergiDairesi"
                                                 (ngModelChange)="updateFormField('musteriVergiDairesi', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Vergi dairesi" />
                                         </div>
                                         } @else {
@@ -455,6 +450,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriAdSoyad"
                                                 (ngModelChange)="updateFormField('musteriAdSoyad', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Ad soyad" />
                                         </div>
                                         <div class="col-12 field">
@@ -462,6 +458,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriTcKimlikNo"
                                                 (ngModelChange)="updateFormField('musteriTcKimlikNo', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="TC Kimlik numarası" />
                                         </div>
                                         }
@@ -471,6 +468,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriEposta"
                                                 (ngModelChange)="updateFormField('musteriEposta', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="ornek@firma.com" />
                                         </div>
                                         <div class="col-12 md:col-6 field">
@@ -478,6 +476,7 @@
                                             <input pInputText class="w-full"
                                                 [ngModel]="formData().musteriTelefon"
                                                 (ngModelChange)="updateFormField('musteriTelefon', $event)"
+                                                [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="+90 5XX XXX XX XX" />
                                         </div>
                                         <div class="col-12 field">
@@ -485,6 +484,7 @@
                                             <p-textarea class="w-full" rows="2"
                                                 [ngModel]="formData().musteriAdres"
                                                 (ngModelChange)="updateFormField('musteriAdres', $event)"
+                                                [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
                                                 placeholder="Açık adres">
                                             </p-textarea>
                                         </div>
@@ -524,7 +524,6 @@
                                 </div>
 
                                 <div class="satir-grid">
-                                    <!-- Row 1: Satır Tipi + Açıklama -->
                                     <div class="field" style="grid-column: span 3;">
                                         <label>Satır Tipi</label>
                                         <p-select
@@ -535,44 +534,119 @@
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 9;">
-                                        <label>Açıklama</label>
-                                        <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması" />
+                                    <div class="field" style="grid-column: span 5;">
+                                        <label>Ürün / Hizmet</label>
+                                        <p-select
+                                            [options]="tasinirKartSecenekleri()"
+                                            [ngModel]="satir.tasinirKartId"
+                                            (ngModelChange)="onSatirTasinirKartChange(satir, $event)"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [filter]="true"
+                                            [showClear]="true"
+                                            [loading]="tasinirKartlarLoading()"
+                                            placeholder="Stok / taşınır kart seçiniz"
+                                            styleClass="w-full">
+                                        </p-select>
+                                    </div>
+                                    <div class="field" style="grid-column: span 4;">
+                                        <label>Depo</label>
+                                        <p-select
+                                            [options]="depoSecenekleri()"
+                                            [ngModel]="satir.depoId"
+                                            (ngModelChange)="satir.depoId = $event"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [filter]="true"
+                                            [showClear]="true"
+                                            [loading]="depolarLoading()"
+                                            placeholder="Depo seçiniz"
+                                            styleClass="w-full">
+                                        </p-select>
                                     </div>
 
-                                    <!-- Row 2: Miktar + Birim Fiyat + KDV Tipi + KDV Oranı -->
-                                    <div class="field" style="grid-column: span 3;">
+                                    <div class="field" style="grid-column: span 12;">
+                                        <label>Açıklama</label>
+                                        <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması / hizmet açıklaması" />
+                                    </div>
+
+                                    <div class="field" style="grid-column: span 2;">
+                                        <label>Birim</label>
+                                        <input pInputText class="w-full" [(ngModel)]="satir.birim" placeholder="Adet / Kg / Gün" />
+                                    </div>
+                                    <div class="field" style="grid-column: span 2;">
                                         <label>Miktar</label>
                                         <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
                                         </p-inputNumber>
                                     </div>
-                                    <div class="field" style="grid-column: span 3;">
+                                    <div class="field" style="grid-column: span 2;">
                                         <label>Birim Fiyat (₺)</label>
                                         <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
                                         </p-inputNumber>
                                     </div>
-                                    <div class="field" style="grid-column: span 3;">
+                                    <div class="field" style="grid-column: span 2;">
+                                        <label>İndirim (₺)</label>
+                                        <p-inputNumber [(ngModel)]="satir.indirimTutari" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
+                                        </p-inputNumber>
+                                    </div>
+                                    <div class="field" style="grid-column: span 2;">
                                         <label>KDV Tipi</label>
                                         <p-select
                                             [options]="kdvUygulamaTipiSecenekleri"
-                                            [(ngModel)]="satir.kdvUygulamaTipi"
+                                            [ngModel]="satir.kdvUygulamaTipi"
+                                            (ngModelChange)="onSatirKdvTipiChange(satir, $event)"
                                             optionLabel="label"
                                             optionValue="value"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 3;">
+                                    <div class="field" style="grid-column: span 2;">
                                         <label>KDV Oranı (%)</label>
                                         <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
                                             [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
                                         </p-inputNumber>
                                     </div>
+                                    @if (satir.kdvUygulamaTipi !== kdvEnum.Kdvli && satir.kdvUygulamaTipi !== kdvEnum.Tevkifatli) {
+                                    <div class="field" style="grid-column: span 6;">
+                                        <label>KDV İstisna Tanımı</label>
+                                        <p-select
+                                            [options]="getKdvIstisnaSecenekleri(satir)"
+                                            [ngModel]="satir.kdvIstisnaTanimId"
+                                            (ngModelChange)="satir.kdvIstisnaTanimId = $event"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [filter]="true"
+                                            [showClear]="true"
+                                            [loading]="kdvIstisnaTanimlariLoading()"
+                                            placeholder="İstisna tanımı seçiniz"
+                                            styleClass="w-full">
+                                        </p-select>
+                                    </div>
+                                    }
+                                    @if (satir.kdvUygulamaTipi === kdvEnum.Tevkifatli) {
+                                    <div class="field" style="grid-column: span 6;">
+                                        <label>Tevkifat Oranı</label>
+                                        <p-select
+                                            [options]="tevkifatSecenekleri"
+                                            [ngModel]="getTevkifatSecimi(satir)"
+                                            (ngModelChange)="setTevkifatSecimi(satir, $event)"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [showClear]="true"
+                                            placeholder="Tevkifat oranı seçiniz"
+                                            styleClass="w-full">
+                                        </p-select>
+                                    </div>
+                                    }
                                 </div>
 
                                 <!-- Satır Hesaplanan Özet -->
                                 <div class="satir-summary">
-                                    <span>Matrah: <strong>{{ satir.miktar * satir.birimFiyat | number: '1.2-2' }} ₺</strong></span>
+                                    <span>Matrah: <strong>{{ getSatirMatrah(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span>İndirim: <strong>{{ getSatirIndirimTutari(satir) | number: '1.2-2' }} ₺</strong></span>
                                     <span>KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span>Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span>Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
                                     <span class="summary-total">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
                                 </div>
                             </div>
@@ -603,12 +677,36 @@
 
                             <div class="ozet-panel">
                                 <div class="ozet-row">
-                                    <span class="ozet-label">Toplam Matrah</span>
+                                    <span class="ozet-label">Çalışma Tesisi</span>
+                                    <span class="ozet-value">{{ tesisContext.seciliTesis()?.ad || '-' }}</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Seçili Cari</span>
+                                    <span class="ozet-value">{{ getSelectedCariDisplay() }}</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Satır Adedi</span>
+                                    <span class="ozet-value">{{ formData().satirlar.length }}</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Ara Toplam</span>
                                     <span class="ozet-value">{{ previewToplamMatrah() | number: '1.2-2' }} ₺</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Toplam İndirim</span>
+                                    <span class="ozet-value">{{ previewToplamIndirimTutari() | number: '1.2-2' }} ₺</span>
                                 </div>
                                 <div class="ozet-row">
                                     <span class="ozet-label">Toplam KDV</span>
                                     <span class="ozet-value">{{ previewToplamKdv() | number: '1.2-2' }} ₺</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Tevkif Edilen KDV</span>
+                                    <span class="ozet-value">{{ previewToplamTevkifatTutari() | number: '1.2-2' }} ₺</span>
+                                </div>
+                                <div class="ozet-row">
+                                    <span class="ozet-label">Net KDV</span>
+                                    <span class="ozet-value">{{ previewToplamNetKdv() | number: '1.2-2' }} ₺</span>
                                 </div>
                                 <div class="ozet-genel-toplam">
                                     <span class="ozet-genel-label">Genel Toplam</span>
@@ -636,9 +734,9 @@
                                 <div class="col-12 lg:col-6">
                                     <div class="form-card">
                                         <h6 class="mt-0 mb-3">👤 Müşteri / Cari Bilgisi</h6>
-                                        <div class="text-sm">
+                                <div class="text-sm">
                                             @if (selectedCari(); as cari) {
-                                            <p class="mb-2"><strong>Cari Kart:</strong> {{ cari.unvanAdSoyad }} ({{ cari.cariKodu || cari.vergiNoTckn || '-' }})</p>
+                                            <p class="mb-2"><strong>Cari Kart:</strong> {{ formatCariDisplay(cari) }}</p>
                                             }
                                             <p class="mb-2"><strong>Tür:</strong> {{ formData().kurumsalMi ? 'Kurumsal' : 'Bireysel' }}</p>
                                             @if (formData().kurumsalMi) {
@@ -694,6 +792,7 @@
     @if (detayBelge(); as belge) {
     <div class="grid">
         <div class="col-6">
+            <p><strong>Çalışma Tesisi:</strong> {{ tesisContext.seciliTesis()?.ad || '-' }}</p>
             <p><strong>Belge No:</strong> {{ belge.belgeNo }}</p>
             <p><strong>Belge Tipi:</strong> {{ getBelgeTipiLabel(belge.belgeTipi) }}</p>
             <p><strong>Tarih:</strong> {{ belge.belgeTarihi | date: 'dd.MM.yyyy' }}</p>
@@ -719,7 +818,8 @@
             </p>
         </div>
         <div class="col-6">
-            <p><strong>Müşteri:</strong> {{ getMusteriDisplay(belge) }}</p>
+            <p><strong>Cari Kart:</strong> {{ selectedCari() ? formatCariDisplay(selectedCari()!) : getMusteriDisplay(belge) }}</p>
+            <p><strong>Müşteri Snapshot:</strong> {{ getMusteriDisplay(belge) }}</p>
             <p><strong>Kurumsal:</strong> {{ belge.kurumsalMi ? 'Evet' : 'Hayır' }}</p>
             @if (belge.kurumsalMi) {
             <p><strong>Vergi No:</strong> {{ belge.musteriVergiNo ?? '-' }}</p>
@@ -736,16 +836,22 @@
     </div>
 
     <h5 class="mt-3 mb-2">Satırlar</h5>
-    <p-table [value]="belge.satirlar" styleClass="p-datatable-sm">
+    <p-table [value]="belge.satirlar" styleClass="p-datatable-sm" [tableStyle]="{ 'min-width': '90rem' }">
         <ng-template pTemplate="header">
             <tr>
                 <th>#</th>
                 <th>Tip</th>
+                <th>Ürün / Hizmet</th>
+                <th>Depo</th>
                 <th>Açıklama</th>
+                <th>Birim</th>
                 <th class="text-right">Miktar</th>
                 <th class="text-right">Birim Fiyat</th>
+                <th class="text-right">İndirim</th>
                 <th class="text-right">Matrah</th>
                 <th class="text-right">KDV</th>
+                <th class="text-right">Tevkifat</th>
+                <th class="text-right">Net KDV</th>
                 <th class="text-right">Toplam</th>
             </tr>
         </ng-template>
@@ -753,11 +859,17 @@
             <tr>
                 <td>{{ satir.siraNo }}</td>
                 <td>{{ getSatirTipiLabel(satir.satirTipi) }}</td>
+                <td>{{ getTasinirKartLabel(satir.tasinirKartId) }}</td>
+                <td>{{ getDepoLabel(satir.depoId) }}</td>
                 <td>{{ satir.aciklama }}</td>
+                <td>{{ satir.birim }}</td>
                 <td class="text-right">{{ satir.miktar | number: '1.2-2' }}</td>
                 <td class="text-right">{{ satir.birimFiyat | number: '1.2-2' }}</td>
+                <td class="text-right">{{ satir.indirimTutari | number: '1.2-2' }}</td>
                 <td class="text-right">{{ satir.matrah | number: '1.2-2' }}</td>
                 <td class="text-right">{{ satir.kdvTutari | number: '1.2-2' }} (%{{ satir.kdvOrani }})</td>
+                <td class="text-right">{{ satir.tevkifatTutari | number: '1.2-2' }}</td>
+                <td class="text-right">{{ satir.netKdv | number: '1.2-2' }}</td>
                 <td class="text-right font-medium">{{ satir.satirToplami | number: '1.2-2' }}</td>
             </tr>
         </ng-template>
@@ -765,8 +877,10 @@
 
     <div class="flex justify-content-end mt-3 p-3 bg-blue-50 border-round">
         <div class="text-right">
-            <p class="mb-1">Toplam Matrah: <strong>{{ belge.toplamMatrah | number: '1.2-2' }} ₺</strong></p>
+            <p class="mb-1">Ara Toplam: <strong>{{ belge.toplamMatrah | number: '1.2-2' }} ₺</strong></p>
             <p class="mb-1">Toplam KDV: <strong>{{ belge.toplamKdv | number: '1.2-2' }} ₺</strong></p>
+            <p class="mb-1">Tevkif Edilen KDV: <strong>{{ belge.toplamTevkifatTutari | number: '1.2-2' }} ₺</strong></p>
+            <p class="mb-1">Net KDV: <strong>{{ belge.toplamNetKdv | number: '1.2-2' }} ₺</strong></p>
             <p class="text-lg font-bold text-blue-700">Genel Toplam: {{ belge.genelToplam | number: '1.2-2' }} ₺</p>
         </div>
     </div>

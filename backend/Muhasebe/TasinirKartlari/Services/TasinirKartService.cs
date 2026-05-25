@@ -129,6 +129,15 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         return await base.GetAllAsync(includeQuery);
     }
 
+    public async Task<IEnumerable<TasinirKartDto>> GetAllAsync(
+        int? tesisId,
+        Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
+        return await base.GetAllAsync(includeQuery);
+    }
+
     public override async Task<IEnumerable<TasinirKartDto>> WhereAsync(System.Linq.Expressions.Expression<Func<TasinirKart, bool>> predicate, Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
@@ -145,6 +154,17 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
+    public async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<TasinirKartDto>> GetPagedAsync(
+        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+        int? tesisId,
+        Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include = null,
+        Func<IQueryable<TasinirKart>, IOrderedQueryable<TasinirKart>>? orderBy = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
+        return await base.GetPagedAsync(request, null, includeQuery, orderBy);
     }
 
     private async Task NormalizeAndValidateAsync(TasinirKartDto dto, int? currentId)
@@ -229,7 +249,8 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
 
     private static Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>> BuildScopedIncludeQuery(
         DomainAccessScope scope,
-        Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include)
+        Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include,
+        int? tesisId = null)
     {
         return query =>
         {
@@ -237,6 +258,11 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             if (scope.IsScoped)
             {
                 result = result.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value));
+            }
+
+            if (tesisId.HasValue && tesisId.Value > 0)
+            {
+                result = result.Where(x => x.TesisId == tesisId.Value);
             }
 
             return result;

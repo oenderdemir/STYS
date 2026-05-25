@@ -207,6 +207,15 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         return await base.GetAllAsync(includeQuery);
     }
 
+    public async Task<IEnumerable<CariKartDto>> GetAllAsync(
+        int? tesisId,
+        Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
+        return await base.GetAllAsync(includeQuery);
+    }
+
     public override async Task<IEnumerable<CariKartDto>> WhereAsync(System.Linq.Expressions.Expression<Func<CariKart, bool>> predicate, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
@@ -223,6 +232,17 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
+    public async Task<PagedResult<CariKartDto>> GetPagedAsync(
+        PagedRequest request,
+        int? tesisId,
+        Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null,
+        Func<IQueryable<CariKart>, IOrderedQueryable<CariKart>>? orderBy = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
+        return await base.GetPagedAsync(request, null, includeQuery, orderBy);
     }
 
     private static string? ResolveAnaHesapKodu(string cariTipi)
@@ -335,7 +355,8 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
     private static Func<IQueryable<CariKart>, IQueryable<CariKart>> BuildScopedIncludeQuery(
         DomainAccessScope scope,
-        Func<IQueryable<CariKart>, IQueryable<CariKart>>? include)
+        Func<IQueryable<CariKart>, IQueryable<CariKart>>? include,
+        int? tesisId = null)
     {
         return query =>
         {
@@ -343,6 +364,11 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             if (scope.IsScoped)
             {
                 result = result.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value));
+            }
+
+            if (tesisId.HasValue && tesisId.Value > 0)
+            {
+                result = result.Where(x => x.TesisId == tesisId.Value);
             }
 
             return result;

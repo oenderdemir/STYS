@@ -1,6 +1,8 @@
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.Depolar.Entities;
+using STYS.Muhasebe.TasinirKartlari.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Entities;
@@ -16,8 +18,17 @@ public class SatisBelgesiSatiri : BaseEntity<int>
 
     public string Aciklama { get; set; } = string.Empty;
 
+    public int? TasinirKartId { get; set; }
+    public TasinirKart? TasinirKart { get; set; }
+
+    public int? DepoId { get; set; }
+    public Depo? Depo { get; set; }
+
+    public string Birim { get; set; } = "Adet";
+
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
+    public decimal IndirimTutari { get; set; }
     public decimal Matrah { get; set; }
 
     public KdvUygulamaTipi KdvUygulamaTipi { get; set; } = KdvUygulamaTipi.Kdvli;
@@ -30,6 +41,9 @@ public class SatisBelgesiSatiri : BaseEntity<int>
 
     public decimal KdvOrani { get; set; }
     public decimal KdvTutari { get; set; }
+    public int? TevkifatPay { get; set; }
+    public int? TevkifatPayda { get; set; }
+    public decimal TevkifatTutari { get; set; }
 
     public decimal SatirToplami { get; set; }
 

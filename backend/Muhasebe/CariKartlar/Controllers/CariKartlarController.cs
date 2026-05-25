@@ -22,13 +22,13 @@ public class CariKartlarController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.CariKartYonetimi.View)]
-    public async Task<ActionResult<List<CariKartDto>>> GetList(CancellationToken cancellationToken)
-        => Ok((await _service.GetAllAsync()).OrderBy(x => x.CariKodu).ThenBy(x => x.Id).ToList());
+    public async Task<ActionResult<List<CariKartDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok((await _service.GetAllAsync(tesisId)).OrderBy(x => x.CariKodu).ThenBy(x => x.Id).ToList());
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.CariKartYonetimi.View)]
-    public async Task<ActionResult<PagedResult<CariKartDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.CariKodu).ThenBy(x => x.Id)));
+    public async Task<ActionResult<PagedResult<CariKartDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(request, tesisId, orderBy: q => q.OrderBy(x => x.CariKodu).ThenBy(x => x.Id)));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.CariKartYonetimi.View)]

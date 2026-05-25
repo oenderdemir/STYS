@@ -215,6 +215,90 @@ Bu alt fazda Faz 69C ile bağlanan operasyon ekranlarının listeleme ve özet s
 - Bu alt faz sonunda hedeflenen operasyon ekranlarında listeleme ve özet akışları seçili çalışma tesisi ile uyumlu hale getirildi.
 - Seçenek listesi ve context bar davranışı Faz 69C'deki haliyle korunuyor.
 
+## Faz 69D — Regresyon Taraması ve Temizlik
+
+Bu fazda `frontend/src/app/pages/muhasebe` ağacı tarandı ve kalan eski tesis pattern'leri temizlendi veya doğrulandı.
+
+### Taranan anahtar kelimeler
+- `tesisSecenekleri`
+- `loadTesisler`
+- `selectedTesisId`
+- `selectedTesis`
+- `filter.tesisId`
+- `model.tesisId`
+- `tesisId:`
+- `tesisId =`
+- `Tesis`
+- `Tesis Seç`
+- `Tesis seçiniz`
+- `p-select`
+- `MuhasebeTesisContextService`
+- `MuhasebeTesisSecimDialogComponent`
+- `MuhasebeTesisContextBarComponent`
+
+### Taranan ekranlar
+- Satış Belgeleri
+- Muhasebe Fişleri
+- Fiş Oluştur
+- Yevmiye Defteri
+- Muavin Defter
+- Hızlı Mizan
+- Dashboard
+- KDV Hareket Raporu
+- KDV Özet Raporu
+- KDV Beyanname Hazırlık Kontrol
+- Dönem Kapanış Kontrol
+- Dönemler
+- Cari Kartlar
+- Cari Hareketler
+- Hesaplar
+- Kasa/Banka Hesapları
+- Kasa Hareketleri
+- Banka Hareketleri
+- Depolar
+- Stok Hareketleri
+- Taşınır Kartları
+- Taşınır Fiş Taslağı
+- Tahsilat/Ödeme Belgeleri
+- Paket Türleri
+- KDV İstisna Tanımları
+- Taşınır Kodları
+
+### Temizlenen eski pattern'ler
+- Kullanılmayan `getTesisler()` helper metotları kaldırıldı.
+- `MuhasebeDönemler` ekranının listeleme çağrısı seçili tesisle server-side çalışacak hale getirildi; tüm kayıtları çekip client-side tesis filtresi uygulayan son net liste örneği kapatıldı.
+- Eski tesis dropdown pattern'leri için yeni bir UI alanı eklenmedi.
+
+### Global ekranlar ve istisnalar
+- `Paket Türleri`, `KDV İstisna Tanımları` ve `Taşınır Kodları` global tanım ekranlarıdır.
+- Bu ekranlarda bağımsız tesis dropdown'u yoktur ve tesis context zorunlu değildir.
+- `MuhasebeTesisContextService` bu ekranlarda kullanılmaz; bu bilinçli bir istisnadır.
+
+### Yardımcı / dialog istisnaları
+- `MuhasebeTesisSecimDialogComponent` ve `MuhasebeTesisContextBarComponent` helper bileşenlerdir.
+- `getTesisler()` benzeri eski helper servis çağrıları kaldırıldı; tesis seçimi artık context servisinden yönetiliyor.
+
+### Servis çağrısı doğrulamaları
+- `Banka Hareketleri`, `Kasa Hareketleri`, `Cari Hareketler`, `Stok Hareketleri` ve `Tahsilat/Ödeme Belgeleri` listeleme/özet çağrılarında `tesisId` taşınıyor.
+- `Stok Hareketleri` özet uçları depo seçilmeden de seçili tesisle sınırlı çalışıyor.
+- `SatisBelgesi`, `MuhasebeFis`, `KDV` ve `DonemKapanis` akışlarındaki filtre DTO'ları seçili tesis ile uyumlu kaldı.
+
+### Backend doğrulamaları
+- `BankaHareketleri`, `KasaHareketleri`, `CariHareketler`, `StokHareketleri`, `TahsilatOdemeBelgeleri` controller'ları tesis filtresi alıyor ve uyguluyor.
+- `SatisBelgeleri`, `MuhasebeFisleri`, `KDV` ve `DonemKapanis` controller/service akışları yeniden kontrol edildi.
+- `MuhasebeDonemleri` controller'ı tesis filtresi almaya başladı; bu sayede dönem listesi artık seçili tesisle uyumlu geliyor.
+- Backend access scope güvenliği korunuyor.
+
+### Kalan bilinen sınırlamalar
+- Bazı yardımcı lookup servisleri `tesisId` parametresi almıyor ve seçenek listeleri frontend'de seçili tesisle daraltılıyor.
+- Bu durum özellikle `Cari Hareketler`, `Tahsilat/Ödeme Belgeleri`, `Banka/Kasa Hareketleri` ve `Stok Hareketleri` içindeki yardımcı seçim listelerinde bilinçli olarak korunuyor.
+- Tesis context backend yetkilendirme yerine geçmez.
+
+### Son durum
+- Muhasebe modülünde tesis değiştirme merkezi context bar üzerinden yapılır.
+- Zorunlu tesis seçimi dialog ile sağlanır.
+- Bağımsız tesis dropdown'ları kaldırılmıştır.
+
 ---
 
 ## Entegrasyon Rehberi (Kalan Ekranlar İçin)
@@ -362,5 +446,5 @@ Context servisi **yetkilendirme yapmaz**. Kullanıcının seçtiği tesise eriş
 
 - **Faz:** 69
 - **Oluşturma Tarihi:** 2026-05-25
-- **Güncelleme:** Faz 69B CRUD / tanım ekranları, Faz 69C operasyon ekranları ve Faz 69C-A servis filtre düzeltmeleri eklendi.
-- **Durum:** Kısmi — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C / 69C-A kapsamındaki ekranlar entegre edildi. Kalan diğer muhasebe ekranları sonraki fazlara bırakıldı.
+- **Güncelleme:** Faz 69B CRUD / tanım ekranları, Faz 69C operasyon ekranları, Faz 69C-A servis filtre düzeltmeleri ve Faz 69D regresyon temizliği eklendi.
+- **Durum:** Tamamlandı sayılır — core altyapı, Satış Belgeleri, Fişler, rapor ekranları ve Faz 69B / 69C / 69C-A / 69D kapsamındaki ekranlar entegre edildi. Kalan ekranlar global tanım ekranları veya bilinçli yardımcı istisnalar olarak not edildi.

@@ -23,8 +23,14 @@ public class MuhasebeDonemController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.MuhasebeDonemYonetimi.View)]
-    public async Task<ActionResult<IEnumerable<MuhasebeDonemDto>>> GetAll(CancellationToken cancellationToken)
-        => Ok(await _service.GetAllAsync());
+    public async Task<ActionResult<IEnumerable<MuhasebeDonemDto>>> GetAll([FromQuery] int? tesisId, CancellationToken cancellationToken)
+    {
+        var items = tesisId.HasValue && tesisId.Value > 0
+            ? await _service.WhereAsync(x => x.TesisId == tesisId.Value)
+            : await _service.GetAllAsync();
+
+        return Ok(items.OrderBy(x => x.TesisId).ThenByDescending(x => x.MaliYil).ThenByDescending(x => x.DonemNo).ToList());
+    }
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.MuhasebeDonemYonetimi.View)]

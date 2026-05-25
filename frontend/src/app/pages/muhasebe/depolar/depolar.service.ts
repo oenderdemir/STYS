@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateDepoRequest, DepoModel, MuhasebeHesapLookupModel, MuhasebeTesisModel, UpdateDepoRequest } from './depolar.dto';
+import { CreateDepoRequest, DepoModel, MuhasebeHesapLookupModel, UpdateDepoRequest } from './depolar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class DepolarService {
@@ -51,10 +51,6 @@ export class DepolarService {
             }
             throw new Error(tryReadApiMessage(envelope) ?? 'Depo silinemedi.');
         }));
-    }
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrap<MuhasebeTesisModel[]>('Tesis listesi alinamadi.')));
     }
 
     getMuhasebeKodlari(startsWith?: string): Observable<MuhasebeHesapLookupModel[]> {

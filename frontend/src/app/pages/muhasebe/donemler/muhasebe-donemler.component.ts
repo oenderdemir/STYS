@@ -135,8 +135,9 @@ export class MuhasebeDonemlerComponent implements OnInit {
     }
 
     loadDonemler(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
         this.loading = true;
-        this.service.getAll().pipe(finalize(() => {
+        this.service.getAll(tesisId).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({

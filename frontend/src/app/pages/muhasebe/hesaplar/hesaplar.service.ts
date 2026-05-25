@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateHesapRequest, HesapLookupModel, HesapModel, MuhasebeTesisModel, UpdateHesapRequest } from './hesaplar.dto';
+import { CreateHesapRequest, HesapLookupModel, HesapModel, UpdateHesapRequest } from './hesaplar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class HesaplarService {
@@ -55,10 +55,6 @@ export class HesaplarService {
     getMuhasebeKodlari(startsWith = ''): Observable<HesapLookupModel[]> {
         const params = startsWith ? new HttpParams().set('startsWith', startsWith) : undefined;
         return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/muhasebe-kodlari`, { params }).pipe(map(this.unwrapOne));
-    }
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrapOne));
     }
 
     private unwrapOne<T>(envelope: ApiResponse<T>): T {

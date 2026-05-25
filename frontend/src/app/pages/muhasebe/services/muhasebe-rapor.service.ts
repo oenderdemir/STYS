@@ -8,26 +8,10 @@ import { MuavinDefterFilterModel, MuavinDefterModel } from '../models/muavin-def
 import { MuhasebeFisFilterModel } from '../models/muhasebe-fis.model';
 import { YevmiyeDefteriModel } from '../models/yevmiye-defteri.model';
 
-export interface MuhasebeTesisModel {
-    id: number;
-    ad: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class MuhasebeRaporService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(
-            map((envelope) => {
-                if (envelope.success && envelope.data) {
-                    return envelope.data;
-                }
-                throw new Error(tryReadApiMessage(envelope) ?? 'Tesis listesi alinamadi.');
-            })
-        );
-    }
 
     getHizliMizan(filter: MizanFilterModel): Observable<MizanModel> {
         return this.http

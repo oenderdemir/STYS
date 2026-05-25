@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CariBakiyeModel, CariKartModel, CreateCariKartRequest, MuhasebeTesisModel, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CariBakiyeModel, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class CariKartlarService {
@@ -91,15 +91,5 @@ export class CariKartlarService {
         );
     }
 
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(
-            map((envelope) => {
-                if (envelope.success && envelope.data) {
-                    return envelope.data;
-                }
-                throw new Error(tryReadApiMessage(envelope) ?? 'Tesis listesi alinamadi.');
-            })
-        );
-    }
 }
 

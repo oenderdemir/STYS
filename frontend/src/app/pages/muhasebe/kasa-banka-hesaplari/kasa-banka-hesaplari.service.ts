@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, MuhasebeTesisModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KasaBankaHesaplariService {
@@ -43,10 +43,6 @@ export class KasaBankaHesaplariService {
 
             throw new Error(tryReadApiMessage(envelope) ?? 'Kayit silinemedi.');
         }));
-    }
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrapOne));
     }
 
     private unwrapList(envelope: ApiResponse<KasaBankaHesapModel[]>): KasaBankaHesapModel[] {

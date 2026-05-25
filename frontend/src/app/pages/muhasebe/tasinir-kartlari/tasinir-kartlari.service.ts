@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateTasinirKartRequest, MuhasebeTesisModel, PaketTuruOptionModel, TasinirKartModel, UpdateTasinirKartRequest } from './tasinir-kartlari.dto';
+import { CreateTasinirKartRequest, PaketTuruOptionModel, TasinirKartModel, UpdateTasinirKartRequest } from './tasinir-kartlari.dto';
 
 @Injectable({ providedIn: 'root' })
 export class TasinirKartlariService {
@@ -37,10 +37,6 @@ export class TasinirKartlariService {
             }
             throw new Error(tryReadApiMessage(envelope) ?? 'Tasinir kart silinemedi.');
         }));
-    }
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(map(this.unwrap<MuhasebeTesisModel[]>('Tesis listesi alinamadi.')));
     }
 
     getPaketTurleri(): Observable<PaketTuruOptionModel[]> {

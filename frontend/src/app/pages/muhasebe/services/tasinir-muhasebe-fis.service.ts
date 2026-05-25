@@ -8,26 +8,10 @@ import {
     TasinirMuhasebeFisiOlusturResultModel
 } from '../models/tasinir-muhasebe-fis.model';
 
-export interface MuhasebeTesisModel {
-    id: number;
-    ad: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class TasinirMuhasebeFisService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
-
-    getTesisler(): Observable<MuhasebeTesisModel[]> {
-        return this.http.get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`).pipe(
-            map((envelope) => {
-                if (envelope.success && envelope.data) {
-                    return envelope.data;
-                }
-                throw new Error(tryReadApiMessage(envelope) ?? 'Tesis listesi alinamadi.');
-            })
-        );
-    }
 
     createTasinirFisTaslagi(request: TasinirMuhasebeFisiOlusturRequestModel): Observable<TasinirMuhasebeFisiOlusturResultModel> {
         return this.http.post<TasinirMuhasebeFisiOlusturResultModel>(

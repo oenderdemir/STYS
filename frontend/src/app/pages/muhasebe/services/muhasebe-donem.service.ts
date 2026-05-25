@@ -9,9 +9,11 @@ export class MuhasebeDonemService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(): Observable<MuhasebeDonemDto[]> {
+    getAll(tesisId?: number | null): Observable<MuhasebeDonemDto[]> {
+        const params = tesisId && tesisId > 0 ? { tesisId: String(tesisId) } : undefined;
         return this.http.get<MuhasebeDonemDto[]>(
-            `${this.apiBaseUrl}/ui/muhasebe/donemler`
+            `${this.apiBaseUrl}/ui/muhasebe/donemler`,
+            { params }
         );
     }
 

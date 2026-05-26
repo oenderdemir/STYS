@@ -3,6 +3,8 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.CariHareketler.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
@@ -267,7 +269,10 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     await CreateAlisIadeStokCikisHareketleriAsync(belge, cancellationToken);
                 }
 
-                // ── 3g. Fiş no üret ──
+                // ── 3g. Cari hareket ──
+                await CreateCariHareketAsync(belge, cancellationToken);
+
+                // ── 3h. Fiş no üret ──
                 var fisNo = await GenerateFisNoAsync(
                     belgeOnOkuma.TesisId.Value,
                     maliYil,
@@ -275,7 +280,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     MuhasebeKaynakModulleri.SatisBelgesi,
                     cancellationToken);
 
-                // ── 3h. Muhasebe fişi oluştur ──
+                // ── 3i. Muhasebe fişi oluştur ──
                 var fis = new MuhasebeFis
                 {
                     TesisId = belgeOnOkuma.TesisId.Value,
@@ -297,7 +302,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
-                // ── 3i. Satış belgesine fiş bağlantısını yaz ──
+                // ── 3j. Satış belgesine fiş bağlantısını yaz ──
                 belge.MuhasebeFisId = fis.Id;
                 belge.MuhasebeFisOlusturmaTarihi = DateTime.UtcNow;
 
@@ -311,7 +316,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     "Satış belgesi {BelgeId} için muhasebe fişi oluşturuldu. Fiş ID: {FisId}, Fiş No: {FisNo}",
                     belge.Id, fis.Id, fisNo);
 
-                // ── 3j. Güncel DTO dön ──
+                // ── 3k. Güncel DTO dön ──
                 // Satırlarıyla birlikte yeniden oku (include navigation)
                 var guncelBelge = await _satisBelgesiRepository.GetByIdAsync(belge.Id);
                 if (guncelBelge is null)
@@ -877,6 +882,109 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         }
 
         await _dbContext.StokHareketleri.AddRangeAsync(hareketler, cancellationToken);
+    }
+
+    private async Task CreateCariHareketAsync(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken)
+    {
+        if (!belge.CariKartId.HasValue)
+            return;
+
+        var mevcutCariHareketVarMi = await _dbContext.CariHareketler
+            .AsNoTracking()
+            .AnyAsync(x =>
+                !x.IsDeleted &&
+                x.Durum == CariHareketDurumlari.Aktif &&
+                x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi &&
+                x.KaynakId == belge.Id &&
+                x.CariKartId == belge.CariKartId.Value,
+                cancellationToken);
+
+        if (mevcutCariHareketVarMi)
+            throw new BaseException("Bu belge için cari hareket daha önce oluşturulmuş.", 409);
+
+        var cari = await _dbContext.CariKartlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == belge.CariKartId.Value && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Cari kart bulunamadı.", 404);
+
+        if (!cari.AktifMi)
+            throw new BaseException("Cari kart pasif durumda.", 400);
+
+        if (cari.TesisId.HasValue && belge.TesisId.HasValue && cari.TesisId != belge.TesisId)
+            throw new BaseException("Seçilen cari kart belge tesisiyle uyumlu değil.", 400);
+
+        decimal borcTutari;
+        decimal alacakTutari;
+        string aciklamaPrefix;
+
+        switch (belge.BelgeTipi)
+        {
+            case SatisBelgesiTipi.SatisFaturasi:
+            case SatisBelgesiTipi.FaturaTaslagi:
+                if (!string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(cari.CariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BaseException("Satış belgelerinde müşteri tipli cari kart seçilmelidir.", 400);
+                }
+
+                borcTutari = belge.GenelToplam;
+                alacakTutari = 0m;
+                aciklamaPrefix = "Satış faturası cari hareketi";
+                break;
+
+            case SatisBelgesiTipi.SatisIadeFaturasi:
+                if (!string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(cari.CariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BaseException("Satış belgelerinde müşteri tipli cari kart seçilmelidir.", 400);
+                }
+
+                borcTutari = 0m;
+                alacakTutari = belge.GenelToplam;
+                aciklamaPrefix = "Satış iade faturası cari hareketi";
+                break;
+
+            case SatisBelgesiTipi.AlisFaturasi:
+                if (!string.Equals(cari.CariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
+                    throw new BaseException("Alış belgelerinde tedarikçi cari kart seçilmelidir.", 400);
+
+                borcTutari = 0m;
+                alacakTutari = belge.GenelToplam;
+                aciklamaPrefix = "Alış faturası cari hareketi";
+                break;
+
+            case SatisBelgesiTipi.AlisIadeFaturasi:
+                if (!string.Equals(cari.CariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
+                    throw new BaseException("Alış belgelerinde tedarikçi cari kart seçilmelidir.", 400);
+
+                borcTutari = belge.GenelToplam;
+                alacakTutari = 0m;
+                aciklamaPrefix = "Alış iade faturası cari hareketi";
+                break;
+
+            default:
+                return;
+        }
+
+        var cariHareket = new CariHareket
+        {
+            CariKartId = cari.Id,
+            HareketTarihi = belge.BelgeTarihi,
+            BelgeTuru = belge.BelgeTipi.ToString(),
+            BelgeNo = belge.BelgeNo,
+            Aciklama = $"{aciklamaPrefix} - {belge.BelgeNo}",
+            BorcTutari = borcTutari,
+            AlacakTutari = alacakTutari,
+            ParaBirimi = "TRY",
+            VadeTarihi = belge.VadeTarihi,
+            Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
+            KaynakId = belge.Id
+        };
+
+        await _dbContext.CariHareketler.AddAsync(cariHareket, cancellationToken);
     }
 
     private async Task<MuhasebeHesapPlani> GetHesapPlaniAsync(

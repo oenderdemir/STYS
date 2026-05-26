@@ -360,3 +360,12 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Satış belgelerinde müşteri tipli, alış belgelerinde tedarikçi tipli cari kart doğrulaması eklenmiştir.
 - Manuel müşteri/cari bilgisi modunda `CariKartId` boş kalabilir.
 - Ek migration gerekli oldu ve oluşturuldu.
+
+## Faz 80 — Cari Hareket Oluşturma
+
+- Muhasebe fişi oluşturulurken `CariKartId` dolu belgeler için cari hareket oluşturulur.
+- `CariKartId` boş manuel belgelerde cari hareket oluşturulmaz.
+- Satış, alış ve iade belge yönleri için borç/alacak yönü belge toplamına göre set edilir.
+- Aynı belge için duplicate cari hareket engellenir.
+- Tahsilat/ödeme kapama sonraki fazlara bırakılmıştır.
+- Migration yapılmamıştır.

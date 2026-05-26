@@ -452,3 +452,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Cari kapama hareketi iptal edilir.
 - Kasa/banka hareketi ve muhasebe fişi iptali bu fazın kapsamı dışındadır.
 - Migration yapılmadı.
+
+## Faz 87A — Kapama Geri Alma Transaction Düzeltmesi
+
+- Kapama geri alma işlemi transaction başlangıcından itibaren tek akışta yürütülür.
+- Belge, kapama hareketi ve ilişkili fatura hareketi transaction içinde işlenir.
+- Davranış değişmedi; yalnız transaction kapsamı düzeltildi.

@@ -156,109 +156,107 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
     public async Task GeriAlAsync(int tahsilatOdemeBelgesiId, CancellationToken cancellationToken = default)
     {
-        var belge = await _tahsilatOdemeBelgesiRepository.GetByIdAsync(
-            tahsilatOdemeBelgesiId,
-            q => q.Include(x => x.CariKart));
-
-        if (belge is null)
-        {
-            throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
-        }
-
-        if (belge.CariKartId <= 0)
-        {
-            throw new BaseException("Cari kart secimi zorunludur.", 400);
-        }
-
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped)
-        {
-            var tesisId = belge.CariKart?.TesisId;
-            if (!tesisId.HasValue || !scope.TesisIds.Contains(tesisId.Value))
-            {
-                throw new BaseException("Tahsilat/ödeme belgesi için yetkiniz bulunmuyor.", 403);
-            }
-        }
-
-        var kapamaHareket = await _dbContext.CariHareketler
-            .Include(x => x.CariKart)
-            .Include(x => x.IliskiliCariHareket)
-            .FirstOrDefaultAsync(x =>
-                !x.IsDeleted
-                && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
-                && x.KaynakId == belge.Id,
-                cancellationToken);
-
-        if (kapamaHareket is null)
-        {
-            throw new BaseException("Bu tahsilat/ödeme belgesi için geri alınacak cari hareket bulunamadi.", 404);
-        }
-
-        if (kapamaHareket.Durum != CariHareketDurumlari.Aktif)
-        {
-            throw new BaseException("Kapama hareketi zaten geri alinmis.", 400);
-        }
-
-        if (!kapamaHareket.IliskiliCariHareketId.HasValue)
-        {
-            throw new BaseException("Iliskili cari hareket bulunamadi.", 400);
-        }
-
-        var faturaHareket = kapamaHareket.IliskiliCariHareket;
-        if (faturaHareket is null)
-        {
-            faturaHareket = await _dbContext.CariHareketler
-                .Include(x => x.CariKart)
-                .FirstOrDefaultAsync(x => x.Id == kapamaHareket.IliskiliCariHareketId.Value, cancellationToken);
-        }
-
-        if (faturaHareket is null)
-        {
-            throw new BaseException("Ilişkili cari hareket bulunamadi.", 404);
-        }
-
-        if (faturaHareket.IsDeleted || faturaHareket.Durum != CariHareketDurumlari.Aktif)
-        {
-            throw new BaseException("Ilişkili cari hareket aktif degil.", 400);
-        }
-
-        if (faturaHareket.CariKartId != belge.CariKartId)
-        {
-            throw new BaseException("Ilişkili cari hareket secilen cari kart ile uyumlu degil.", 400);
-        }
-
-        if (scope.IsScoped)
-        {
-            var faturaTesisId = faturaHareket.CariKart?.TesisId;
-            if (!faturaTesisId.HasValue || !scope.TesisIds.Contains(faturaTesisId.Value))
-            {
-                throw new BaseException("Ilişkili cari hareket icin yetkiniz bulunmuyor.", 403);
-            }
-        }
-
-        var kapamaTutari = kapamaHareket.BorcTutari > 0m ? kapamaHareket.BorcTutari : kapamaHareket.AlacakTutari;
-        if (kapamaTutari <= 0m)
-        {
-            throw new BaseException("Kapama tutari gecersiz.", 400);
-        }
-
-        if (kapamaTutari > faturaHareket.KapananTutar + 0.01m)
-        {
-            throw new BaseException("Geri alma tutarı kapanan tutardan büyük olamaz.", 400);
-        }
-
-        var orijinalTutar = faturaHareket.BorcTutari > 0m ? faturaHareket.BorcTutari : faturaHareket.AlacakTutari;
-        faturaHareket.KapananTutar = Math.Max(0m, faturaHareket.KapananTutar - kapamaTutari);
-        faturaHareket.KalanTutar = Math.Min(orijinalTutar, Math.Max(0m, faturaHareket.KalanTutar + kapamaTutari));
-        faturaHareket.KapandiMi = faturaHareket.KalanTutar <= 0.01m;
-
-        kapamaHareket.Durum = CariHareketDurumlari.Iptal;
-
-        belge.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
-
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            var belge = await _tahsilatOdemeBelgesiRepository.GetByIdAsync(
+                tahsilatOdemeBelgesiId,
+                q => q.Include(x => x.CariKart));
+
+            if (belge is null)
+            {
+                throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+            }
+
+            if (belge.CariKartId <= 0)
+            {
+                throw new BaseException("Cari kart secimi zorunludur.", 400);
+            }
+
+            var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+            if (scope.IsScoped)
+            {
+                var tesisId = belge.CariKart?.TesisId;
+                if (!tesisId.HasValue || !scope.TesisIds.Contains(tesisId.Value))
+                {
+                    throw new BaseException("Tahsilat/ödeme belgesi için yetkiniz bulunmuyor.", 403);
+                }
+            }
+
+            var kapamaHareket = await _dbContext.CariHareketler
+                .Include(x => x.CariKart)
+                .Include(x => x.IliskiliCariHareket)
+                .FirstOrDefaultAsync(x =>
+                    !x.IsDeleted
+                    && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
+                    && x.KaynakId == belge.Id,
+                    cancellationToken);
+
+            if (kapamaHareket is null)
+            {
+                throw new BaseException("Bu tahsilat/ödeme belgesi için geri alınacak cari hareket bulunamadi.", 404);
+            }
+
+            if (kapamaHareket.Durum != CariHareketDurumlari.Aktif)
+            {
+                throw new BaseException("Kapama hareketi zaten geri alinmis.", 400);
+            }
+
+            if (!kapamaHareket.IliskiliCariHareketId.HasValue)
+            {
+                throw new BaseException("Iliskili cari hareket bulunamadi.", 400);
+            }
+
+            var faturaHareket = kapamaHareket.IliskiliCariHareket;
+            if (faturaHareket is null)
+            {
+                faturaHareket = await _dbContext.CariHareketler
+                    .Include(x => x.CariKart)
+                    .FirstOrDefaultAsync(x => x.Id == kapamaHareket.IliskiliCariHareketId.Value, cancellationToken);
+            }
+
+            if (faturaHareket is null)
+            {
+                throw new BaseException("Ilişkili cari hareket bulunamadi.", 404);
+            }
+
+            if (faturaHareket.IsDeleted || faturaHareket.Durum != CariHareketDurumlari.Aktif)
+            {
+                throw new BaseException("Ilişkili cari hareket aktif degil.", 400);
+            }
+
+            if (faturaHareket.CariKartId != belge.CariKartId)
+            {
+                throw new BaseException("Ilişkili cari hareket secilen cari kart ile uyumlu degil.", 400);
+            }
+
+            if (scope.IsScoped)
+            {
+                var faturaTesisId = faturaHareket.CariKart?.TesisId;
+                if (!faturaTesisId.HasValue || !scope.TesisIds.Contains(faturaTesisId.Value))
+                {
+                    throw new BaseException("Ilişkili cari hareket icin yetkiniz bulunmuyor.", 403);
+                }
+            }
+
+            var kapamaTutari = kapamaHareket.BorcTutari > 0m ? kapamaHareket.BorcTutari : kapamaHareket.AlacakTutari;
+            if (kapamaTutari <= 0m)
+            {
+                throw new BaseException("Kapama tutari gecersiz.", 400);
+            }
+
+            if (kapamaTutari > faturaHareket.KapananTutar + 0.01m)
+            {
+                throw new BaseException("Geri alma tutarı kapanan tutardan büyük olamaz.", 400);
+            }
+
+            var orijinalTutar = faturaHareket.BorcTutari > 0m ? faturaHareket.BorcTutari : faturaHareket.AlacakTutari;
+            faturaHareket.KapananTutar = Math.Max(0m, faturaHareket.KapananTutar - kapamaTutari);
+            faturaHareket.KalanTutar = Math.Min(orijinalTutar, Math.Max(0m, faturaHareket.KalanTutar + kapamaTutari));
+            faturaHareket.KapandiMi = faturaHareket.KalanTutar <= 0.01m;
+
+            kapamaHareket.Durum = CariHareketDurumlari.Iptal;
+            belge.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

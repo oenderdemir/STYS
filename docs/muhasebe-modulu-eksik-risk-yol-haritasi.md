@@ -17,7 +17,7 @@
 ### 2.1 Tahsilat/Ödeme Geri Alma
 - Kapama yapılmış tahsilat/ödeme belgesinin iptal/geri alma mekanizması eklendi.
 - Kapama hareketi iptal edilir, ilişkili fatura hareketinin kapanan tutarı geri alınır.
-- Faz 87 tamamlandı.
+- Faz 87 tamamlandı, Faz 87A ile transaction kapsamı düzeltildi.
 
 ### 2.2 Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
 - Fiş iptal/ters kayıt yapıldığında ilişkili stok/cari hareket etkisi net değil.

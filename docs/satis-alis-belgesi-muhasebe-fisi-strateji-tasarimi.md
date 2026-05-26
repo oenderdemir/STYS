@@ -1,0 +1,262 @@
+# Satış / Alış Belgesi Muhasebe Fişi Strateji Tasarımı
+
+## Amaç
+
+`SatisBelgesiMuhasebeFisService` içinde büyüyen satış/alış/iade kurallarını tek bir if/else bloğu içinde şişirmek yerine belge tipi bazlı stratejilere bölmek gerekir. Kısa vadede `SatisBelgesi` altyapısı korunur, ancak muhasebe fişi üretim sorumluluğu strateji tabanlı hale getirilir.
+
+Bu tasarım fazında kod değişikliği yapılmaz. Amaç, mevcut servis akışını inceleyip ileriki uygulama fazı için net bir mimari çerçeve çıkarmaktır.
+
+## Mevcut `SatisBelgesiMuhasebeFisService` analizi
+
+### Yaptığı işler
+
+- Belgeyi önce repository ile ön-okur, sonra transaction içinde tekrar DB’den yükler.
+- Belgenin silinmiş olup olmadığını, muhasebe onay durumunu ve `MuhasebeFisId` varlığını kontrol eder.
+- Toplam matrah, KDV ve genel toplam tutarlılığını doğrular.
+- Açık muhasebe dönemini `IMuhasebeDonemService` üzerinden bulur.
+- Aynı kaynak belge için aktif fiş olup olmadığını `MuhasebeFisler` tablosundan denetler.
+- Satır toplamlarını doğrular.
+- 120 / 600 / 391 hesaplarını hesap planı ve vergi-hesap eşleme üzerinden bulur.
+- Muhasebe fişi ana kaydını ve satırlarını `StysAppDbContext` üzerinden yazar.
+- Belgeye `MuhasebeFisId` ve oluşturma zamanını işler.
+- Transaction sonunda güncel belgeyi yeniden okuyup DTO döner.
+
+### Bağımlılıklar
+
+- `ISatisBelgesiRepository`
+- `StysAppDbContext`
+- `IMapper`
+- `IMuhasebeDonemService`
+- `ILogger<SatisBelgesiMuhasebeFisService>`
+
+### Satışa özel kalan alanlar
+
+- Belge tipi kontrolleri doğrudan satış merkezlidir.
+- Gelir hesabı olarak 600, alıcı hesabı olarak 120, KDV hesabı olarak 391 kurgusu sabittir.
+- Tevkifatlı belgeler açık hata ile reddedilmektedir.
+- Proforma ve iade tipleri muhasebe fişi üretiminde desteklenmemektedir.
+- Fiş açıklamaları ve kaynak modül kodları satış belgesine göre üretilmektedir.
+
+### Ortak altyapı olabilecek kısımlar
+
+- Belge yükleme ve varlık doğrulama
+- Muhasebe onay durumu kontrolü
+- Aynı kaynak belge için tek fiş kontrolü
+- Açık dönem kontrolü
+- Fiş numarası üretimi
+- Transaction başlatma / commit / rollback akışı
+- Fiş ana kaydı ve satırlarının kaydedilmesi
+- Belgeye `MuhasebeFisId` yazılması
+
+## Problem
+
+Satış, alış ve iade kuralları tek serviste if/else ile büyüdüğünde:
+
+- servis okunabilirliği düşer,
+- test kapsamı zorlaşır,
+- satış kuralları alış kurallarını gölgeler,
+- yeni belge tipleri eklendiğinde hata riski artar.
+
+## Önerilen mimari
+
+### Orchestrator
+
+`SatisBelgesiMuhasebeFisService` orkestratör olarak kalır:
+
+- belgeyi yükler,
+- ortak validasyonları yapar,
+- uygun stratejiyi seçer,
+- stratejiden satırları veya fiş bileşenlerini alır,
+- `MuhasebeFisService`/`DbContext` üzerinden fişi kaydeder,
+- belgeye `MuhasebeFisId` yazar,
+- belge durumunu günceller.
+
+### Strateji arayüzü
+
+Önerilen temel arayüz:
+
+```csharp
+public interface ISatisBelgesiMuhasebeFisStratejisi
+{
+    bool Destekler(SatisBelgesi belge);
+    Task<IReadOnlyList<CreateMuhasebeFisSatiriRequest>> SatirlariOlusturAsync(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken);
+}
+```
+
+Bu faz için en uygun ayrım, stratejinin yalnızca fiş satırlarını üretmesi ve orkestratörün:
+
+- belgeyi doğrulaması,
+- fiş numarasını üretmesi,
+- `MuhasebeFis` ana kaydını oluşturması,
+- transaction bütünlüğünü yönetmesi
+
+şeklindedir.
+
+### Neden sadece satır üretimi?
+
+- Muhasebe fişi ana kaydı orkestratörde tek noktadan tutulur.
+- Fiş numarası, kaynak modül, kaynak id ve audit akışı aynı yerde kalır.
+- Strateji sınıfı yalnızca belge tipine özgü muhasebe satırlarını üretir.
+- Birim testleri daha kolay olur.
+
+## Strateji sınıfları
+
+Önerilen sınıflar:
+
+- `SatisFaturasiMuhasebeFisStratejisi`
+- `AlisFaturasiMuhasebeFisStratejisi`
+- `SatisIadeFaturasiMuhasebeFisStratejisi`
+- `AlisIadeFaturasiMuhasebeFisStratejisi`
+
+Desteklenmeyen tipler:
+
+- `Proforma` açık hata döner.
+- `FaturaTaslagi` için karar ayrıca netleştirilmelidir; mevcut davranışta doğrudan fiş üretimi hedeflenmiyor.
+- Legacy `IadeFaturasi` yeni kayıt için tercih edilmemeli, varsa geriye dönük destek düşünülmelidir.
+
+## Orchestrator sorumlulukları
+
+Ortak validasyonlar orkestratörde kalmalıdır:
+
+- belge var mı,
+- belge silinmiş mi,
+- tesis erişimi var mı,
+- belge muhasebe onaylı mı,
+- `MuhasebeFisId` dolu mu,
+- toplamlar sıfırdan büyük mü,
+- satırlar var mı,
+- satır toplamları belge toplamlarıyla uyumlu mu,
+- belge tipi strateji tarafından destekleniyor mu,
+- aynı kaynak belge için aktif fiş var mı,
+- ters kayıt / iptal edilmiş fiş tutarlılığı mevcut mu.
+
+Bu kontrollerin ardından strateji seçimi yapılır.
+
+## Satış faturası stratejisi
+
+Mevcut satış davranışı korunmalıdır:
+
+- Borç: 120 Alıcılar / Cari
+- Alacak: 600 Satış gelirleri
+- Alacak: 391 Hesaplanan KDV
+
+### Beklenen kurallar
+
+- KDV istisna satırlarında 391 satırı oluşmamalıdır.
+- Tevkifatlı belgeler bu fazda desteklenmiyorsa açık ve kullanıcı dostu hata verilmelidir.
+- Kaynak modül ve belge numarası mevcut pattern ile korunmalıdır.
+
+## Alış faturası stratejisi
+
+Alış faturası için ayrı muhasebe mantığı gerekir:
+
+- Alacak: 320 Satıcılar
+- Borç: 191 İndirilecek KDV
+- Borç: 153 Ticari Mallar / 740 Hizmet Üretim Maliyeti / ilgili stok-gider hesabı
+
+### Hesap seçimi
+
+Satır bazında hesap seçimi şu kaynaklardan birine bağlanmalıdır:
+
+- taşınır kart üzerindeki hesap eşleşmesi,
+- taşınır kodu / kategori hesabı,
+- varsayılan stok / gider ana hesabı.
+
+Eğer hesap eşleşmesi bulunamazsa kullanıcıya açık hata verilmelidir.
+
+### Cari hesabı
+
+- Tedarikçi cari kart kullanılmalıdır.
+- Cari kart tipi `Tedarikci` değilse işlem reddedilmelidir.
+- 320 altında hesap eşleşmesi bulunamazsa fiş üretilmemelidir.
+
+## İade faturaları
+
+İade faturaları için muhasebe yaklaşımı satış ve alıştan ters yönlüdür:
+
+- satış iade: 120 ters, 600 ters, 391 düzeltme,
+- alış iade: 320 ters, 153/740 ters, 191 düzeltme.
+
+Bu fazda iade tipleri için otomatik üretim açılmamalı; ayrı karar ve test seti gerektirir.
+
+## Tevkifat yaklaşımı
+
+Tevkifat hem satış hem alışta farklı muhasebe etkileri doğurur.
+
+- Satışta tahsil edilecek KDV azalır.
+- Alışta 191 ve sorumlu vergi hesapları ayrışır.
+
+Bu nedenle tevkifat desteği tek bir küçük if ile eklenmemelidir.
+Bu konu ayrı bir fazda, kendi stratejileriyle ele alınmalıdır.
+
+Öneri:
+
+- Tevkifatlı belge desteklenmiyorsa açık hata ver.
+- Ayrı Faz 75: tevkifat muhasebesi stratejileri.
+
+## Stok hareketi ile ilişki
+
+Bu faz stok hareketi oluşturmaz. Yine de ilerideki akış için önerilen sıra:
+
+1. belge onaylanır,
+2. stok hareketi oluşturulur,
+3. muhasebe fişi oluşturulur,
+4. belge durumu güncellenir.
+
+İş kuralları gereği stok ve muhasebe fişinin aynı transaction içinde olması tercih edilir. Ancak bunun uygulama fazı ayrı planlanmalıdır.
+
+## Hata mesajları
+
+Önerilen kullanıcı mesajları:
+
+- `Belge tipi desteklenmiyor.`
+- `Alış faturası için tedarikçi cari bulunamadı.`
+- `Tedarikçi cari için 320 hesabı bulunamadı.`
+- `Satır için stok/gider hesabı bulunamadı.`
+- `KDV hesap eşleşmesi bulunamadı.`
+- `Tevkifatlı belgeler için muhasebe fişi henüz desteklenmiyor.`
+- `İade faturaları için muhasebe fişi henüz desteklenmiyor.`
+- `Belge zaten muhasebe fişine bağlı.`
+
+## BaseService / repository uyumu
+
+Bu servis cross-aggregate işlem yaptığı için mevcut yaklaşım uygundur:
+
+- belge repository üzerinden okunur,
+- satış belgesi ve muhasebe fişi aynı `DbContext` transaction’ında güncellenir,
+- `BaseRdbmsService` tek başına yeterli değildir.
+
+Strateji sınıfları bu yapıyı bozmaz; yalnızca satır üretim sorumluluğunu taşır.
+
+## Test stratejisi
+
+### Birim testleri
+
+- satış faturası stratejisi 120 / 600 / 391 üretir,
+- KDV istisna satırı 391 satırı üretmez,
+- alış faturası stratejisi 153 / 191 / 320 üretir,
+- hizmet alış satırı gider hesabı üretir,
+- tevkifat desteklenmiyorsa hata verir,
+- iade belge tipi desteklenmiyorsa hata verir,
+- belge zaten fişe bağlıysa hata verir.
+
+### Entegrasyon testleri
+
+- satış faturası fiş oluşturur,
+- alış faturası bu fazda kapalı kalır,
+- yetkisiz tesis işlemi engellenir,
+- aynı kaynak belge için ikinci fiş oluşturulamaz.
+
+## Önerilen sonraki fazlar
+
+- Faz 73B: satış stratejisinin dışarı alınması ve orkestratörün strateji seçimi.
+- Faz 73C: alış faturası muhasebe fişi stratejisi.
+- Faz 74: stok hareketi ile muhasebe fişi sıralaması.
+- Faz 75: tevkifat muhasebesi.
+- Faz 76: iade faturaları stratejileri.
+
+## Sonuç
+
+Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretimi belge tipi bazlı stratejilere bölünmelidir. En güvenli ayrım, orkestratörün ortak kontrol ve transaction sorumluluğunu taşıması; stratejilerin ise yalnızca belge tipi bazlı satır üretmesi olacaktır.

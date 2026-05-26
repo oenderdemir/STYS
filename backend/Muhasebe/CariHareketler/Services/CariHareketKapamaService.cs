@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Dtos;
 using STYS.Muhasebe.CariHareketler.Entities;
@@ -13,8 +14,6 @@ namespace STYS.Muhasebe.CariHareketler.Services;
 
 public class CariHareketKapamaService : ICariHareketKapamaService
 {
-    private const string KaynakModulAdi = "TahsilatOdemeBelgesi";
-
     private readonly StysAppDbContext _dbContext;
     private readonly ITahsilatOdemeBelgesiRepository _tahsilatOdemeBelgesiRepository;
     private readonly ICariHareketRepository _cariHareketRepository;
@@ -66,7 +65,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
         var duplicate = await _dbContext.CariHareketler.AnyAsync(x =>
             !x.IsDeleted
             && x.Durum == CariHareketDurumlari.Aktif
-            && x.KaynakModul == KaynakModulAdi
+            && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
             && x.KaynakId == belge.Id,
             cancellationToken);
 
@@ -131,7 +130,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
             ParaBirimi = belge.ParaBirimi,
             VadeTarihi = null,
             Durum = CariHareketDurumlari.Aktif,
-            KaynakModul = KaynakModulAdi,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi,
             KaynakId = belge.Id,
             IliskiliCariHareketId = kapatilacak.Id,
             KapandiMi = true

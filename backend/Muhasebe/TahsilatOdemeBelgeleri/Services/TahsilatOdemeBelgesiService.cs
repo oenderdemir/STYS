@@ -5,6 +5,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariHareketler.Services;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -254,7 +255,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         return await _dbContext.CariHareketler.AnyAsync(x =>
             !x.IsDeleted
             && x.Durum == CariHareketDurumlari.Aktif
-            && x.KaynakModul == "TahsilatOdemeBelgesi"
+            && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
             && x.KaynakId == tahsilatOdemeBelgesiId);
     }
 

@@ -393,3 +393,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Duplicate ve fazla kapama engellenir.
 - Update/delete geri alma sonraki faza bırakılmıştır.
 - Migration yapılmamıştır.
+
+## Faz 81B-A2 — Kaynak Modül Sabiti
+
+- `TahsilatOdemeBelgesi` kaynak modül kullanımı merkezi `MuhasebeKaynakModulleri` sabitine taşındı.
+- Cari kapama servisleri artık string literal yerine ortak sabiti kullanır.

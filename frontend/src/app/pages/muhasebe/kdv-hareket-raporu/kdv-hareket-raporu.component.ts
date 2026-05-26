@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
-import { Router } from '@angular/router';
-import { finalize } from 'rxjs';
+import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
+import { forkJoin, finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { ButtonModule } from 'primeng/button';
@@ -10,36 +11,20 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { MessageModule } from 'primeng/message';
 import { SelectModule } from 'primeng/select';
-import { FormsModule } from '@angular/forms';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { DatePickerModule } from 'primeng/datepicker';
-import { TooltipModule } from 'primeng/tooltip';
-import { HttpErrorResponse } from '@angular/common/http';
-import { KdvHareketRaporuService } from '../services/kdv-hareket-raporu.service';
-import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
-import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { DepolarService } from '../depolar/depolar.service';
-import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
-import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
-import { KdvIstisnaTanimDto, createDefaultKdvIstisnaTanimFilter } from '../models/kdv-istisna-tanim.model';
-import { DepoModel } from '../depolar/depolar.dto';
-import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
-import { STOK_HAREKET_TIPLERI } from '../stok-hareketleri/stok-hareketleri.dto';
+import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
+import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { KdvHareketRaporuService } from '../services/kdv-hareket-raporu.service';
 import {
-    KdvHareketRaporFilterModel,
+    BELGE_YONU_SECENEKLERI,
     KdvHareketRaporModel,
-    KdvHareketRaporOzetModel,
-    KdvHareketRaporSatirModel,
-    createDefaultKdvHareketRaporFilter,
-    KDV_UYGULAMA_TIPI_SECENEKLERI,
-    MUS_FIS_DURUMU_SECENEKLERI
+    KdvRaporFilterModel,
+    TevkifatHareketRaporModel,
+    createDefaultKdvRaporFilter
 } from '../models/kdv-hareket-raporu.model';
-
-interface Secenek<T = number> {
-    label: string;
-    value: T;
-}
 
 @Component({
     selector: 'app-kdv-hareket-raporu',
@@ -54,9 +39,9 @@ interface Secenek<T = number> {
         TagModule,
         MessageModule,
         SelectModule,
+        CheckboxModule,
         ProgressSpinnerModule,
         DatePickerModule,
-        TooltipModule,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
@@ -67,29 +52,16 @@ interface Secenek<T = number> {
 export class KdvHareketRaporuComponent implements OnInit {
     private readonly raporService = inject(KdvHareketRaporuService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
-    private readonly depolarService = inject(DepolarService);
-    private readonly tasinirKartService = inject(TasinirKartlariService);
-    private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
     private readonly messageService = inject(MessageService);
-    private readonly router = inject(Router);
     private readonly cdr = inject(ChangeDetectorRef);
 
-    filter: KdvHareketRaporFilterModel = createDefaultKdvHareketRaporFilter();
-    rapor: KdvHareketRaporModel | null = null;
+    filter: KdvRaporFilterModel = createDefaultKdvRaporFilter();
+    kdvRapor: KdvHareketRaporModel | null = null;
+    tevkifatRapor: TevkifatHareketRaporModel | null = null;
     loading = false;
-    exporting = false;
     loadingMessage = 'KDV hareket raporu yükleniyor...';
+    belgeYonuSecenekleri = BELGE_YONU_SECENEKLERI;
 
-    depoSecenekleri: Secenek<number>[] = [];
-    tasinirKartSecenekleri: Secenek<number>[] = [];
-    hareketTipiSecenekleri = STOK_HAREKET_TIPLERI;
-    istisnaTanimSecenekleri: Secenek<number>[] = [];
-
-    kdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI;
-    musFisDurumuSecenekleri = MUS_FIS_DURUMU_SECENEKLERI;
-
-    // Toplu fiş oluşturma
-    selectedRows: KdvHareketRaporSatirModel[] = [];
     private contextInitialized = false;
     private currentTesisId: number | null = null;
 
@@ -110,61 +82,14 @@ export class KdvHareketRaporuComponent implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.filter.tesisId = this.currentTesisId;
-                this.cdr.detectChanges();
+                this.cdr.markForCheck();
             },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
-        this.loadDepolar();
-        this.loadTasinirKartlar();
-        this.loadIstisnaTanimlari();
-    }
-
-    private loadDepolar(): void {
-        this.depolarService.getAll().subscribe({
-            next: (depolar) => {
-                this.depoSecenekleri = depolar.map(d => ({
-                    label: d.ad ?? d.kod ?? `Depo #${d.id}`,
-                    value: d.id!
-                }));
-            },
-            error: () => {
-                this.depoSecenekleri = [];
-            }
-        });
-    }
-
-    private loadTasinirKartlar(): void {
-        this.tasinirKartService.getAll().subscribe({
-            next: (kartlar) => {
-                this.tasinirKartSecenekleri = kartlar.map(k => ({
-                    label: `${k.stokKodu} - ${k.ad}`,
-                    value: k.id!
-                }));
-            },
-            error: () => {
-                this.tasinirKartSecenekleri = [];
-            }
-        });
-    }
-
-    private loadIstisnaTanimlari(): void {
-        this.kdvIstisnaTanimService.filter(createDefaultKdvIstisnaTanimFilter()).subscribe({
-            next: (tanimlar) => {
-                this.istisnaTanimSecenekleri = tanimlar.map(t => ({
-                    label: `${t.kod} - ${t.ad}`,
-                    value: t.id
-                }));
-            },
-            error: () => {
-                this.istisnaTanimSecenekleri = [];
-            }
+            error: (error: unknown) => this.showError(error)
         });
     }
 
     clearFilter(): void {
-        this.filter = createDefaultKdvHareketRaporFilter();
+        this.filter = createDefaultKdvRaporFilter();
         this.filter.tesisId = this.currentTesisId;
         this.clearResults();
     }
@@ -178,181 +103,82 @@ export class KdvHareketRaporuComponent implements OnInit {
         this.filter.tesisId = tesisId;
         this.loading = true;
         this.clearResults();
-        this.raporService.getRapor(this.filter).pipe(
-            finalize(() => (this.loading = false))
-        ).subscribe({
-            next: (data) => {
-                this.rapor = data;
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.rapor = null;
-            }
-        });
-    }
 
-    onFilterChange(): void {
-        this.loadRapor();
-    }
-
-    // Yardımcı metotlar
-    formatTarih(tarih: string): string {
-        if (!tarih) return '';
-        const date = new Date(tarih);
-        return new Intl.DateTimeFormat('tr-TR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        }).format(date);
-    }
-
-    formatTarihSaat(tarih: string): string {
-        if (!tarih) return '';
-        const date = new Date(tarih);
-        return new Intl.DateTimeFormat('tr-TR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        }).format(date);
-    }
-
-    formatPara(deger: number): string {
-        return new Intl.NumberFormat('tr-TR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(deger);
-    }
-
-    formatOran(orani: number): string {
-        return `%${new Intl.NumberFormat('tr-TR', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(orani)}`;
-    }
-
-    getHareketTipiLabel(tip: string): string {
-        switch (tip) {
-            case 'Giris': return 'Giriş';
-            case 'Cikis': return 'Çıkış';
-            case 'Transfer': return 'Transfer';
-            case 'Iade': return 'İade';
-            case 'Sarf': return 'Sarf';
-            case 'SayimFarki': return 'Sayım Farkı';
-            case 'Zimmet': return 'Zimmet';
-            default: return tip;
-        }
-    }
-
-    getHareketTipiSeverity(tip: string): 'success' | 'danger' | 'info' | 'warn' | 'secondary' {
-        switch (tip) {
-            case 'Giris':
-            case 'Iade':
-                return 'success';
-            case 'Cikis':
-            case 'Sarf':
-            case 'Zimmet':
-                return 'danger';
-            case 'Transfer':
-            case 'SayimFarki':
-                return 'info';
-            default: return 'secondary';
-        }
-    }
-
-    getKdvTipiSeverity(tip: number): 'info' | 'success' | 'warn' | 'danger' | 'secondary' {
-        switch (tip) {
-            case 1: return 'info';       // KDV'li
-            case 2: return 'warn';       // Tam İstisna
-            case 3: return 'warn';       // Kısmi İstisna
-            case 4: return 'secondary';  // KDV Kapsam Dışı
-            case 5: return 'danger';     // Tevkifatlı
-            default: return 'secondary';
-        }
-    }
-
-    getMusFisDurumuSeverity(durum: string | null | undefined): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
-        if (!durum) return 'secondary';
-        switch (durum) {
-            case 'Onayli': return 'success';
-            case 'Taslak': return 'warn';
-            case 'Iptal': return 'danger';
-            case 'TersKayit': return 'info';
-            default: return 'secondary';
-        }
-    }
-
-    getMusFisDurumuLabel(durum: string | null | undefined): string {
-        if (!durum) return '—';
-        switch (durum) {
-            case 'Taslak': return 'Taslak';
-            case 'Onayli': return 'Onaylı';
-            case 'Iptal': return 'İptal';
-            case 'TersKayit': return 'Ters Kayıt';
-            default: return durum;
-        }
-    }
-
-    exportExcel(): void {
-        const tesisId = this.tryGetSeciliTesisId();
-        if (tesisId === null) {
-            return;
-        }
-
-        this.filter.tesisId = tesisId;
-        this.exporting = true;
-        this.cdr.detectChanges();
-        this.raporService.exportExcel(this.filter).pipe(
+        forkJoin({
+            kdv: this.raporService.getRapor(this.filter),
+            tevkifat: this.raporService.getTevkifatRapor(this.filter)
+        }).pipe(
             finalize(() => {
-                this.exporting = false;
-                this.cdr.detectChanges();
+                this.loading = false;
+                this.cdr.markForCheck();
             })
         ).subscribe({
-            next: (blob) => {
-                this.downloadBlob(blob, this.getTimestamp());
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Başarılı',
-                    detail: 'KDV hareket raporu Excel olarak indirildi.',
-                    life: 4000
-                });
+            next: ({ kdv, tevkifat }) => {
+                this.kdvRapor = kdv;
+                this.tevkifatRapor = tevkifat;
             },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
+            error: (error: unknown) => this.showError(error)
         });
     }
 
-    private downloadBlob(blob: Blob, fileName: string): void {
-        const url = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = fileName;
-        anchor.click();
-        window.URL.revokeObjectURL(url);
-        anchor.remove();
+    formatPara(value: number): string {
+        return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
     }
 
-    private getTimestamp(): string {
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        return `kdv-hareket-raporu-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.xlsx`;
+    formatTarih(value: string): string {
+        if (!value) return '';
+        return new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
     }
 
-    navigateToFis(satir: KdvHareketRaporSatirModel): void {
-        if (!satir.musFisId) return;
-        this.router.navigate(['/muhasebe/fisler'], {
-            queryParams: {
-                id: satir.musFisId,
-                fisNo: satir.musFisNo
-            }
-        });
+    formatOran(value: number): string {
+        return `%${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value)}`;
+    }
+
+    getBelgeTipiLabel(value: string): string {
+        switch (value) {
+            case 'FaturaTaslagi': return 'Fatura Taslağı';
+            case 'SatisFaturasi': return 'Satış Faturası';
+            case 'AlisFaturasi': return 'Alış Faturası';
+            case 'SatisIadeFaturasi': return 'Satış İade Faturası';
+            case 'AlisIadeFaturasi': return 'Alış İade Faturası';
+            case 'IadeFaturasi': return 'Legacy İade';
+            case 'Proforma': return 'Proforma';
+            default: return value;
+        }
+    }
+
+    getBelgeYonuLabel(value: string): string {
+        switch (value) {
+            case 'Satis': return 'Satış';
+            case 'Alis': return 'Alış';
+            case 'Iade': return 'İade';
+            default: return value;
+        }
+    }
+
+    getBelgeYonuSeverity(value: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        switch (value) {
+            case 'Satis': return 'success';
+            case 'Alis': return 'danger';
+            case 'Iade': return 'warn';
+            default: return 'secondary';
+        }
+    }
+
+    getKdvTipiSeverity(value: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        switch (value) {
+            case 'KDV\'li': return 'info';
+            case 'Tam İstisna': return 'success';
+            case 'Kısmi İstisna': return 'warn';
+            case 'KDV Kapsam Dışı': return 'secondary';
+            case 'Tevkifatlı': return 'danger';
+            default: return 'secondary';
+        }
     }
 
     private clearResults(): void {
-        this.rapor = null;
-        this.selectedRows = [];
+        this.kdvRapor = null;
+        this.tevkifatRapor = null;
     }
 
     private tryGetSeciliTesisId(): number | null {
@@ -369,23 +195,22 @@ export class KdvHareketRaporuComponent implements OnInit {
     }
 
     private showError(error: unknown): void {
-        let mesaj = 'Beklenmeyen bir hata oluştu.';
+        let detail = 'Beklenmeyen bir hata oluştu.';
         if (error instanceof HttpErrorResponse) {
-            if (typeof error.error === 'string') {
-                mesaj = error.error;
+            if (typeof error.error === 'object' && error.error?.detail) {
+                detail = error.error.detail;
             } else if (error.error?.message) {
-                mesaj = error.error.message;
-            } else if (error.message) {
-                mesaj = error.message;
+                detail = error.error.message;
+            } else if (error.status === 403) {
+                detail = 'Bu işlem için yetkiniz bulunmamaktadır.';
             }
         } else if (error instanceof Error) {
-            mesaj = error.message;
+            detail = error.message;
         }
         this.messageService.add({
             severity: 'error',
             summary: 'Hata',
-            detail: mesaj,
-            life: 6000
+            detail
         });
     }
 }

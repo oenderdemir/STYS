@@ -412,3 +412,12 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Cari Hareketler ekranında bakiye özeti görünür hale getirildi.
 - Açık, kapanan ve ekstre hareketleri sekmeli olarak gösterilir.
 - Backend değişikliği yapılmadı, migration yapılmadı.
+
+## Faz 83 — KDV ve Tevkifat Raporları
+
+- Satış/alış/iade faturaları üzerinden KDV özet ve hareket raporları eklendi.
+- Satış/alış tevkifat özet ve hareket raporları eklendi.
+- KDV istisna ve kapsam dışı satırlar ayrı özetlenir.
+- Net KDV, satış iade ve alış iade etkileri düşülerek hesaplanır.
+- Beyanname, e-Fatura/e-Arşiv ve diğer dış entegrasyonlar kapsam dışı bırakıldı.
+- Migration yapılmadı.

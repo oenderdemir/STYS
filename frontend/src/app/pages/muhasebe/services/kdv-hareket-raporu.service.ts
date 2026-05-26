@@ -1,11 +1,12 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { map, Observable } from 'rxjs';
+import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { ApiResponse, tryReadApiMessage } from '../../../core/api/api-response.model';
 import {
     KdvHareketRaporFilterModel,
-    KdvHareketRaporModel
+    KdvHareketRaporModel,
+    TevkifatHareketRaporModel
 } from '../models/kdv-hareket-raporu.model';
 
 @Injectable({ providedIn: 'root' })
@@ -15,9 +16,9 @@ export class KdvHareketRaporuService {
 
     getRapor(filter: KdvHareketRaporFilterModel): Observable<KdvHareketRaporModel> {
         return this.http
-            .post<ApiResponse<KdvHareketRaporModel>>(
-                `${this.apiBaseUrl}/ui/muhasebe/kdv-hareket-raporu`,
-                filter
+            .get<ApiResponse<KdvHareketRaporModel>>(
+                `${this.apiBaseUrl}/ui/muhasebe/kdv-raporlari/hareketler`,
+                { params: this.toParams(filter) }
             )
             .pipe(
                 map((envelope) => {
@@ -29,11 +30,44 @@ export class KdvHareketRaporuService {
             );
     }
 
-    exportExcel(filter: KdvHareketRaporFilterModel): Observable<Blob> {
-        return this.http.post(
-            `${this.apiBaseUrl}/ui/muhasebe/kdv-hareket-raporu/export-excel`,
-            filter,
-            { responseType: 'blob' }
-        );
+    getTevkifatRapor(filter: KdvHareketRaporFilterModel): Observable<TevkifatHareketRaporModel> {
+        return this.http
+            .get<ApiResponse<TevkifatHareketRaporModel>>(
+                `${this.apiBaseUrl}/ui/muhasebe/kdv-raporlari/tevkifat-hareketler`,
+                { params: this.toParams(filter) }
+            )
+            .pipe(
+                map((envelope) => {
+                    if (envelope.success && envelope.data) {
+                        return envelope.data;
+                    }
+                    throw new Error(tryReadApiMessage(envelope) ?? 'Tevkifat hareket raporu alınamadı.');
+                })
+            );
+    }
+
+    private toParams(filter: KdvHareketRaporFilterModel): HttpParams {
+        let params = new HttpParams();
+
+        if (filter.tesisId != null) {
+            params = params.set('TesisId', filter.tesisId);
+        }
+        if (filter.baslangicTarihi) {
+            params = params.set('BaslangicTarihi', this.toIso(filter.baslangicTarihi));
+        }
+        if (filter.bitisTarihi) {
+            params = params.set('BitisTarihi', this.toIso(filter.bitisTarihi));
+        }
+        if (filter.belgeYonu) {
+            params = params.set('BelgeYonu', filter.belgeYonu);
+        }
+
+        params = params.set('IstisnalarDahilMi', String(filter.istisnalarDahilMi));
+        params = params.set('TevkifatDahilMi', String(filter.tevkifatDahilMi));
+        return params;
+    }
+
+    private toIso(value: Date | string): string {
+        return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
     }
 }

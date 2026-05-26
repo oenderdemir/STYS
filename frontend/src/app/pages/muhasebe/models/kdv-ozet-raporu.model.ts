@@ -1,33 +1,22 @@
-export interface KdvOzetRaporFilterModel {
-    maliYil?: number | null;
-    donem?: number | null;
-    baslangicTarihi?: string | null;
-    bitisTarihi?: string | null;
+export interface KdvRaporFilterModel {
     tesisId?: number | null;
-    depoId?: number | null;
-    tasinirKartId?: number | null;
-    hareketTipi?: string | null;
-    kdvUygulamaTipi?: number | null;
-    kdvIstisnaTanimId?: number | null;
-    kdvIstisnaKodu?: string | null;
-    musFisDurumu?: string | null;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
+    belgeYonu?: string | null;
+    istisnalarDahilMi: boolean;
+    tevkifatDahilMi: boolean;
 }
 
-export function createDefaultKdvOzetRaporFilter(): KdvOzetRaporFilterModel {
+export function createDefaultKdvRaporFilter(): KdvRaporFilterModel {
     const now = new Date();
+    const baslangic = new Date(now.getFullYear(), now.getMonth(), 1);
     return {
-        maliYil: now.getFullYear(),
-        donem: now.getMonth() + 1, // 1-12
-        baslangicTarihi: null,
-        bitisTarihi: null,
         tesisId: null,
-        depoId: null,
-        tasinirKartId: null,
-        hareketTipi: null,
-        kdvUygulamaTipi: null,
-        kdvIstisnaTanimId: null,
-        kdvIstisnaKodu: null,
-        musFisDurumu: null
+        baslangicTarihi: baslangic,
+        bitisTarihi: now,
+        belgeYonu: 'Hepsi',
+        istisnalarDahilMi: true,
+        tevkifatDahilMi: true
     };
 }
 
@@ -35,55 +24,61 @@ export interface KdvOzetRaporModel {
     baslangicTarihi: string;
     bitisTarihi: string;
     ozet: KdvOzetRaporOzetModel;
-    uygulamaTipiOzetleri: KdvUygulamaTipiOzetModel[];
-    istisnaKoduOzetleri: KdvIstisnaKoduOzetModel[];
-    uyarilar: KdvOzetRaporUyariModel[];
+    oranOzetleri: KdvOranOzetModel[];
+    istisnaOzetleri: KdvIstisnaOzetModel[];
 }
 
 export interface KdvOzetRaporOzetModel {
-    donemLabel: string;
-    // Satış (Hesaplanan KDV)
-    satisHareketSayisi: number;
-    satisMatrahi: number;
-    hesaplananKdvTutari: number;
-    // Alış (İndirilecek KDV)
-    alisHareketSayisi: number;
-    alisMatrahi: number;
-    indirilecekKdvTutari: number;
-    // Net KDV
-    netKdv: number;
-    // İstisna / Kapsam Dışı
-    istisnaMatrahi: number;
-    tamIstisnaMatrahi: number;
-    kismiIstisnaMatrahi: number;
-    kapsamDisiMatrah: number;
-    // Genel
     toplamKayitSayisi: number;
-    fisiOlanSayisi: number;
-    fisiOlmayanSayisi: number;
+    satisKayitSayisi: number;
+    alisKayitSayisi: number;
+    iadeKayitSayisi: number;
+    satisMatrahToplam: number;
+    hesaplananKdvToplam: number;
+    alisMatrahToplam: number;
+    indirilecekKdvToplam: number;
+    satisIadeMatrahToplam: number;
+    satisIadeKdvToplam: number;
+    alisIadeMatrahToplam: number;
+    alisIadeKdvToplam: number;
+    istisnaMatrahToplam: number;
+    tevkifatToplam: number;
+    netKdv: number;
 }
 
-export interface KdvUygulamaTipiOzetModel {
-    kdvUygulamaTipi: number;
-    kdvUygulamaTipiAd: string;
+export interface KdvOranOzetModel {
+    islemYonu: string;
+    kdvOrani: number;
     hareketSayisi: number;
     matrah: number;
     kdvTutari: number;
 }
 
-export interface KdvIstisnaKoduOzetModel {
+export interface KdvIstisnaOzetModel {
+    islemYonu: string;
     kdvIstisnaKodu?: string | null;
     kdvIstisnaAciklamasi?: string | null;
     hareketSayisi: number;
     matrah: number;
 }
 
-export interface KdvOzetRaporUyariModel {
-    uyariKodu: string;
-    uyariMesaji: string;
-    etkilenenKayitSayisi: number;
-    severity?: string | null;
-    route?: string | null;
+export interface TevkifatOzetRaporModel {
+    baslangicTarihi: string;
+    bitisTarihi: string;
+    satisTevkifatToplam: number;
+    alisTevkifatToplam: number;
+    netTevkifat: number;
+    toplamKayitSayisi: number;
+    oranOzetleri: TevkifatOranOzetModel[];
+}
+
+export interface TevkifatOranOzetModel {
+    islemYonu: string;
+    tevkifatPay: number;
+    tevkifatPayda: number;
+    hareketSayisi: number;
+    matrah: number;
+    tevkifatTutari: number;
 }
 
 export const DONEM_SECENEKLERI: Array<{ label: string; value: number }> = [
@@ -114,6 +109,13 @@ export function getMaliYilSecenekleri(): Array<{ label: string; value: number }>
     }
     return years;
 }
+
+export const BELGE_YONU_SECENEKLERI: Array<{ label: string; value: string }> = [
+    { label: 'Hepsi', value: 'Hepsi' },
+    { label: 'Satış', value: 'Satis' },
+    { label: 'Alış', value: 'Alis' },
+    { label: 'İade', value: 'Iade' }
+];
 
 export const UYARI_KODU_LABELLERI: Record<string, string> = {
     'MUHASEBE_FISI_EKSIK': 'Eksik Muhasebe Fişi',

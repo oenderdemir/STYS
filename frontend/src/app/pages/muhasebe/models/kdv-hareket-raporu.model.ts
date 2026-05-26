@@ -1,73 +1,73 @@
-export interface KdvHareketRaporFilterModel {
-    baslangicTarihi: string;
-    bitisTarihi: string;
-    tesisId?: number | null;
-    depoId?: number | null;
-    tasinirKartId?: number | null;
-    hareketTipi?: string | null;
-    kdvUygulamaTipi?: number | null;
-    kdvIstisnaTanimId?: number | null;
-    kdvIstisnaKodu?: string | null;
-    musFisDurumu?: string | null;
-}
+import { BELGE_YONU_SECENEKLERI, KdvRaporFilterModel } from './kdv-ozet-raporu.model';
 
-export function createDefaultKdvHareketRaporFilter(): KdvHareketRaporFilterModel {
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    return {
-        baslangicTarihi: startOfMonth.toISOString(),
-        bitisTarihi: today.toISOString(),
-        tesisId: null,
-        depoId: null,
-        tasinirKartId: null,
-        hareketTipi: null,
-        kdvUygulamaTipi: null,
-        kdvIstisnaTanimId: null,
-        kdvIstisnaKodu: null,
-        musFisDurumu: null
-    };
-}
+export type KdvHareketRaporFilterModel = KdvRaporFilterModel;
 
 export interface KdvHareketRaporModel {
-    satirlar: KdvHareketRaporSatirModel[];
-    ozet: KdvHareketRaporOzetModel;
+    baslangicTarihi: string;
+    bitisTarihi: string;
     toplamKayitSayisi: number;
-}
-
-export interface KdvHareketRaporSatirModel {
-    id: number;
-    hareketTarihi: string;
-    hareketTipi: string;
-    depoAdi: string;
-    tasinirKod: string;
-    tasinirAd: string;
-    miktar: number;
-    birimFiyat: number;
-    tutar: number;
-    kdvUygulamaTipi: number;
-    kdvUygulamaTipiAd: string;
-    kdvIstisnaKodu?: string | null;
-    kdvIstisnaAciklamasi?: string | null;
-    kdvOrani: number;
-    kdvTutari: number;
-    kdvliTutar: number;
-    musFisId?: number | null;
-    musFisNo?: string | null;
-    musFisDurumu?: string | null;
-    belgeNo?: string | null;
-    aciklama?: string | null;
+    ozet: KdvHareketRaporOzetModel;
+    satirlar: KdvHareketRaporSatirModel[];
 }
 
 export interface KdvHareketRaporOzetModel {
-    toplamKayitSayisi: number;
-    kdvliSayisi: number;
-    istisnaliSayisi: number;
-    kdvKapsamDisiSayisi: number;
-    tevkifatliSayisi: number;
-    fisiOlanSayisi: number;
-    fisiOlmayanSayisi: number;
+    satisKayitSayisi: number;
+    alisKayitSayisi: number;
+    iadeKayitSayisi: number;
+    istisnaKayitSayisi: number;
+    tevkifatKayitSayisi: number;
+    toplamMatrah: number;
     toplamKdvTutari: number;
-    toplamTutar: number;
+}
+
+export interface KdvHareketRaporSatirModel {
+    belgeId: number;
+    belgeNo: string;
+    belgeTarihi: string;
+    belgeTipi: string;
+    islemYonu: string;
+    satirId: number;
+    satirAciklama: string;
+    matrah: number;
+    kdvOrani: number;
+    kdvTutari: number;
+    kdvUygulamaTipi: string;
+    kdvIstisnaTanimId?: number | null;
+    kdvIstisnaKodu?: string | null;
+    kdvIstisnaAciklamasi?: string | null;
+    tevkifatPay?: number | null;
+    tevkifatPayda?: number | null;
+    tevkifatTutari: number;
+}
+
+export interface TevkifatHareketRaporModel {
+    baslangicTarihi: string;
+    bitisTarihi: string;
+    toplamKayitSayisi: number;
+    ozet: TevkifatHareketRaporOzetModel;
+    satirlar: TevkifatHareketRaporSatirModel[];
+}
+
+export interface TevkifatHareketRaporOzetModel {
+    satisKayitSayisi: number;
+    alisKayitSayisi: number;
+    toplamMatrah: number;
+    toplamTevkifatTutari: number;
+}
+
+export interface TevkifatHareketRaporSatirModel {
+    belgeId: number;
+    belgeNo: string;
+    belgeTarihi: string;
+    belgeTipi: string;
+    islemYonu: string;
+    satirId: number;
+    satirAciklama: string;
+    matrah: number;
+    kdvTutari: number;
+    tevkifatPay: number;
+    tevkifatPayda: number;
+    tevkifatTutari: number;
 }
 
 export const KDV_UYGULAMA_TIPI_SECENEKLERI: Array<{ label: string; value: number | null }> = [
@@ -84,3 +84,7 @@ export const MUS_FIS_DURUMU_SECENEKLERI: Array<{ label: string; value: string | 
     { label: 'Fişi Olan', value: 'FisiOlan' },
     { label: 'Fişi Olmayan', value: 'FisiOlmayan' }
 ];
+
+export { BELGE_YONU_SECENEKLERI };
+export type { KdvRaporFilterModel } from './kdv-ozet-raporu.model';
+export { createDefaultKdvRaporFilter } from './kdv-ozet-raporu.model';

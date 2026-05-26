@@ -346,3 +346,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Legacy `IadeFaturasi` kapalı kaldı.
 - Tevkifatlı iade hâlâ desteklenmiyor.
 - Migration yapılmamıştır.
+
+## Faz 78A — İade Akış Sırası
+
+- Strateji seçimi stok hareketinden önce doğrulanır.
+- Fiş satırları üretildikten sonra stok hareketi oluşturulur.
+- Transaction bütünlüğü korunur.

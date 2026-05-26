@@ -190,24 +190,6 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         $"Satır genel toplamı ({satirToplamGenel:N2}) belge genel toplamı ({belge.GenelToplam:N2}) ile uyumlu değil.",
                         400);
 
-                // ── 3c. Stok hareketleri ──
-                if (belge.BelgeTipi == SatisBelgesiTipi.AlisFaturasi)
-                {
-                    await CreateAlisStokGirisHareketleriAsync(belge, cancellationToken);
-                }
-                else if (belge.BelgeTipi is SatisBelgesiTipi.SatisFaturasi or SatisBelgesiTipi.FaturaTaslagi)
-                {
-                    await CreateSatisStokCikisHareketleriAsync(belge, cancellationToken);
-                }
-                else if (belge.BelgeTipi == SatisBelgesiTipi.SatisIadeFaturasi)
-                {
-                    await CreateSatisIadeStokGirisHareketleriAsync(belge, cancellationToken);
-                }
-                else if (belge.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
-                {
-                    await CreateAlisIadeStokCikisHareketleriAsync(belge, cancellationToken);
-                }
-
                 // ── 3c. Donem ve MaliYil belirle ──
                 var maliYil = aktifDonemDto.MaliYil;
                 var donemNo = aktifDonemDto.DonemNo;
@@ -267,7 +249,25 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         $"Borç: {toplamBorc:N2}, Alacak: {toplamAlacak:N2}",
                         400);
 
-                // ── 3f. Fiş no üret ──
+                // ── 3f. Stok hareketleri ──
+                if (belge.BelgeTipi == SatisBelgesiTipi.AlisFaturasi)
+                {
+                    await CreateAlisStokGirisHareketleriAsync(belge, cancellationToken);
+                }
+                else if (belge.BelgeTipi is SatisBelgesiTipi.SatisFaturasi or SatisBelgesiTipi.FaturaTaslagi)
+                {
+                    await CreateSatisStokCikisHareketleriAsync(belge, cancellationToken);
+                }
+                else if (belge.BelgeTipi == SatisBelgesiTipi.SatisIadeFaturasi)
+                {
+                    await CreateSatisIadeStokGirisHareketleriAsync(belge, cancellationToken);
+                }
+                else if (belge.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
+                {
+                    await CreateAlisIadeStokCikisHareketleriAsync(belge, cancellationToken);
+                }
+
+                // ── 3g. Fiş no üret ──
                 var fisNo = await GenerateFisNoAsync(
                     belgeOnOkuma.TesisId.Value,
                     maliYil,
@@ -275,7 +275,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     MuhasebeKaynakModulleri.SatisBelgesi,
                     cancellationToken);
 
-                // ── 3g. Muhasebe fişi oluştur ──
+                // ── 3h. Muhasebe fişi oluştur ──
                 var fis = new MuhasebeFis
                 {
                     TesisId = belgeOnOkuma.TesisId.Value,
@@ -297,7 +297,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
-                // ── 3h. Satış belgesine fiş bağlantısını yaz ──
+                // ── 3i. Satış belgesine fiş bağlantısını yaz ──
                 belge.MuhasebeFisId = fis.Id;
                 belge.MuhasebeFisOlusturmaTarihi = DateTime.UtcNow;
 
@@ -311,7 +311,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     "Satış belgesi {BelgeId} için muhasebe fişi oluşturuldu. Fiş ID: {FisId}, Fiş No: {FisNo}",
                     belge.Id, fis.Id, fisNo);
 
-                // ── 3i. Güncel DTO dön ──
+                // ── 3j. Güncel DTO dön ──
                 // Satırlarıyla birlikte yeniden oku (include navigation)
                 var guncelBelge = await _satisBelgesiRepository.GetByIdAsync(belge.Id);
                 if (guncelBelge is null)

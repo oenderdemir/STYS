@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
@@ -181,6 +182,9 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlar =>
         q => q.Include(x => x.Satirlar);
 
+    private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlarVeCariKart =>
+        q => q.Include(x => x.Satirlar).Include(x => x.CariKart);
+
     // ──────────────────────────────────────────────
     //  GetByIdAsync (ISatisBelgesiService) — nullable olmayan dönüş
     // ──────────────────────────────────────────────
@@ -189,7 +193,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         int id,
         CancellationToken cancellationToken = default)
     {
-        var entity = await Repository.GetByIdAsync(id, IncludeSatirlar);
+        var entity = await Repository.GetByIdAsync(id, IncludeSatirlarVeCariKart);
         if (entity is null)
             throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
@@ -205,8 +209,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>>? include)
     {
         var effectiveInclude = include is not null
-            ? CombineIncludes(IncludeSatirlar, include)
-            : IncludeSatirlar;
+            ? CombineIncludes(IncludeSatirlarVeCariKart, include)
+            : IncludeSatirlarVeCariKart;
         return base.GetByIdAsync(id, effectiveInclude);
     }
 
@@ -228,6 +232,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         var query = _db.SatisBelgeleri
             .AsNoTracking()
             .Include(x => x.Satirlar)
+            .Include(x => x.CariKart)
             .Where(x => !x.IsDeleted);
 
         if (filter.TesisId.HasValue)
@@ -278,9 +283,19 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         CreateSatisBelgesiRequest request,
         CancellationToken cancellationToken = default)
     {
+        request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken);
+        if (request.CariKartId.HasValue)
+        {
+            var cari = await ResolveAndValidateCariKartAsync(
+                request.CariKartId.Value,
+                request.TesisId,
+                request.BelgeTipi,
+                cancellationToken);
+            ApplyCariSnapshotToCreateRequest(request, cari);
+        }
+
         // 1. Validasyonlar
         await ValidateCreateRequestAsync(request, cancellationToken);
-        request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken);
 
         // 2. Belge no üret (isteğe bağlı override)
         var belgeNo = request.BelgeNo ?? await GenerateBelgeNoAsync(request.BelgeTarihi, cancellationToken);
@@ -295,6 +310,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             KaynakTipi = request.KaynakTipi,
             KaynakId = request.KaynakId,
             TesisId = request.TesisId,
+            CariKartId = request.CariKartId,
             BelgeTarihi = request.BelgeTarihi,
             VadeTarihi = request.VadeTarihi,
             MusteriUnvan = request.MusteriUnvan,
@@ -322,6 +338,10 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         await Repository.AddAsync(belge);
         await Repository.SaveChangesAsync(cancellationToken);
+        if (belge.CariKartId.HasValue)
+        {
+            await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
+        }
 
         return Mapper.Map<SatisBelgesiDto>(belge);
     }
@@ -366,6 +386,16 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken, belge.TesisId);
 
+        if (request.CariKartId.HasValue)
+        {
+            var cari = await ResolveAndValidateCariKartAsync(
+                request.CariKartId.Value,
+                request.TesisId,
+                request.BelgeTipi ?? belge.BelgeTipi,
+                cancellationToken);
+            ApplyCariSnapshotToUpdateRequest(request, cari);
+        }
+
         // Ana alanları güncelle
         await ApplyBelgeUpdatesAsync(belge, request, cancellationToken);
 
@@ -378,6 +408,10 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         HesaplaBelgeToplamlari(belge);
         _satisBelgesiRepository.Update(belge);
         await Repository.SaveChangesAsync(cancellationToken);
+        if (belge.CariKartId.HasValue)
+        {
+            await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
+        }
 
         return Mapper.Map<SatisBelgesiDto>(belge);
     }
@@ -741,6 +775,116 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         }
     }
 
+    private async Task<CariKart> ResolveAndValidateCariKartAsync(
+        int cariKartId,
+        int? tesisId,
+        SatisBelgesiTipi belgeTipi,
+        CancellationToken cancellationToken)
+    {
+        var cari = await _db.CariKartlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == cariKartId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Cari kart bulunamadı.", 404);
+
+        if (!cari.AktifMi)
+            throw new BaseException("Cari kart pasif durumda.", 400);
+
+        if (tesisId.HasValue && cari.TesisId.HasValue && cari.TesisId != tesisId)
+            throw new BaseException("Seçilen cari kart belge tesisiyle uyumlu değil.", 400);
+
+        if (belgeTipi.IsAlisBelgesi())
+        {
+            if (!string.Equals(cari.CariTipi, CariKartTipleri.Tedarikci, StringComparison.OrdinalIgnoreCase))
+                throw new BaseException("Alış belgelerinde tedarikçi cari kart seçilmelidir.", 400);
+        }
+        else
+        {
+            var uygunMusteriTipi =
+                string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(cari.CariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.OrdinalIgnoreCase);
+
+            if (!uygunMusteriTipi)
+                throw new BaseException("Satış belgelerinde müşteri tipli cari kart seçilmelidir.", 400);
+        }
+
+        return cari;
+    }
+
+    private static void ApplyCariSnapshotToCreateRequest(
+        CreateSatisBelgesiRequest request,
+        CariKart cari)
+    {
+        ApplyCariSnapshot(
+            () => request.CariKartId = cari.Id,
+            value => request.KurumsalMi = value,
+            value => request.MusteriUnvan = value,
+            value => request.MusteriAdSoyad = value,
+            value => request.MusteriVergiNo = value,
+            value => request.MusteriTcKimlikNo = value,
+            value => request.MusteriVergiDairesi = value,
+            value => request.MusteriAdres = value,
+            value => request.MusteriEposta = value,
+            value => request.MusteriTelefon = value,
+            cari);
+    }
+
+    private static void ApplyCariSnapshotToUpdateRequest(
+        UpdateSatisBelgesiRequest request,
+        CariKart cari)
+    {
+        ApplyCariSnapshot(
+            () => request.CariKartId = cari.Id,
+            value => request.KurumsalMi = value,
+            value => request.MusteriUnvan = value,
+            value => request.MusteriAdSoyad = value,
+            value => request.MusteriVergiNo = value,
+            value => request.MusteriTcKimlikNo = value,
+            value => request.MusteriVergiDairesi = value,
+            value => request.MusteriAdres = value,
+            value => request.MusteriEposta = value,
+            value => request.MusteriTelefon = value,
+            cari);
+    }
+
+    private static void ApplyCariSnapshot(
+        Action setCariKartId,
+        Action<bool> setKurumsalMi,
+        Action<string?> setMusteriUnvan,
+        Action<string?> setMusteriAdSoyad,
+        Action<string?> setMusteriVergiNo,
+        Action<string?> setMusteriTcKimlikNo,
+        Action<string?> setMusteriVergiDairesi,
+        Action<string?> setMusteriAdres,
+        Action<string?> setMusteriEposta,
+        Action<string?> setMusteriTelefon,
+        CariKart cari)
+    {
+        setCariKartId();
+
+        var kurumsalMi = !string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.OrdinalIgnoreCase);
+        setKurumsalMi(kurumsalMi);
+
+        if (kurumsalMi)
+        {
+            setMusteriUnvan(cari.UnvanAdSoyad);
+            setMusteriAdSoyad(null);
+            setMusteriVergiNo(cari.VergiNoTckn);
+            setMusteriTcKimlikNo(null);
+        }
+        else
+        {
+            setMusteriUnvan(null);
+            setMusteriAdSoyad(cari.UnvanAdSoyad);
+            setMusteriVergiNo(null);
+            setMusteriTcKimlikNo(cari.VergiNoTckn);
+        }
+
+        setMusteriVergiDairesi(cari.VergiDairesi);
+        setMusteriAdres(cari.Adres);
+        setMusteriEposta(cari.Eposta);
+        setMusteriTelefon(cari.Telefon);
+    }
+
     private async Task ValidateSatirRequestAsync(
         CreateSatisBelgesiSatiriRequest request,
         SatisBelgesi belge,
@@ -1085,6 +1229,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         if (request.TesisId.HasValue)
             belge.TesisId = request.TesisId;
+
+        belge.CariKartId = request.CariKartId;
 
         if (request.BelgeTarihi.HasValue)
             belge.BelgeTarihi = request.BelgeTarihi.Value;

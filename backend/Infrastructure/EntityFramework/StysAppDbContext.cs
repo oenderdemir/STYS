@@ -2283,6 +2283,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.EBelgeUuid)
                 .HasMaxLength(100);
 
+            entity.HasIndex(x => x.CariKartId)
+                .HasFilter("[IsDeleted] = 0 AND [CariKartId] IS NOT NULL");
+
             entity.Property(x => x.ToplamMatrah)
                 .HasPrecision(18, 2);
 
@@ -2305,6 +2308,11 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.Durum);
 
             entity.HasIndex(x => x.KaynakModul);
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany()
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.MuhasebeFis)
                 .WithMany()

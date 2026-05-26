@@ -500,8 +500,10 @@ export class SatisBelgeleriComponent implements OnInit {
 
         if (matched) {
             this.selectedCari.set(matched);
+            this.formData.update(f => ({ ...f, cariKartId: matched.id ?? null }));
         } else if (!this.manuelMusteriGirisi()) {
             this.selectedCari.set(null);
+            this.formData.update(f => ({ ...f, cariKartId: null }));
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Cari Kart Uyarısı',
@@ -512,14 +514,17 @@ export class SatisBelgeleriComponent implements OnInit {
 
     private syncSelectedCariFromBelge(belge: SatisBelgesiDto): void {
         const cariList = this.cariKartlar();
-        const matched = cariList.find(c =>
-            (belge.musteriVergiNo && c.vergiNoTckn === belge.musteriVergiNo) ||
-            (belge.musteriTcKimlikNo && c.vergiNoTckn === belge.musteriTcKimlikNo) ||
-            (belge.kurumsalMi && c.unvanAdSoyad === belge.musteriUnvan) ||
-            (!belge.kurumsalMi && c.unvanAdSoyad === belge.musteriAdSoyad)
-        );
+        const matched = belge.cariKartId
+            ? cariList.find(c => c.id === belge.cariKartId)
+            : cariList.find(c =>
+                (belge.musteriVergiNo && c.vergiNoTckn === belge.musteriVergiNo) ||
+                (belge.musteriTcKimlikNo && c.vergiNoTckn === belge.musteriTcKimlikNo) ||
+                (belge.kurumsalMi && c.unvanAdSoyad === belge.musteriUnvan) ||
+                (!belge.kurumsalMi && c.unvanAdSoyad === belge.musteriAdSoyad)
+            );
 
         this.selectedCari.set(matched ?? null);
+        this.formData.update(f => ({ ...f, cariKartId: matched?.id ?? belge.cariKartId ?? null }));
     }
 
     // ── Cari Kart AutoComplete ──
@@ -541,6 +546,7 @@ export class SatisBelgeleriComponent implements OnInit {
     onCariKartSecildi(cari: CariKartModel | null): void {
         if (!cari) {
             this.selectedCari.set(null);
+            this.formData.update(f => ({ ...f, cariKartId: null }));
             if (!this.manuelMusteriGirisi()) {
                 this.formData.update(f => ({
                     ...f,
@@ -567,6 +573,7 @@ export class SatisBelgeleriComponent implements OnInit {
                     : 'Satış belgelerinde yalnızca müşteri cari kartları seçilebilir.'
             });
             this.selectedCari.set(null);
+            this.formData.update(f => ({ ...f, cariKartId: null }));
             if (!this.manuelMusteriGirisi()) {
                 this.formData.update(f => ({
                     ...f,
@@ -585,6 +592,7 @@ export class SatisBelgeleriComponent implements OnInit {
         }
 
         this.selectedCari.set(cari);
+        this.formData.update(f => ({ ...f, cariKartId: cari.id ?? null }));
         // Satışta müşteri tipi, alışta tedarikçi snapshot'ı kurumsal varsayılır
         const kurumsalMi = this.isAlisMode() || cari.cariTipi === 'KurumsalMusteri';
 
@@ -667,6 +675,7 @@ export class SatisBelgeleriComponent implements OnInit {
             kaynakTipi: belge.kaynakTipi,
             kaynakId: belge.kaynakId,
             tesisId: belge.tesisId,
+            cariKartId: belge.cariKartId ?? null,
             belgeTarihi: belge.belgeTarihi?.split('T')[0] ?? new Date().toISOString().split('T')[0],
             vadeTarihi: belge.vadeTarihi?.split('T')[0] ?? null,
             musteriUnvan: belge.musteriUnvan,
@@ -735,6 +744,7 @@ export class SatisBelgeleriComponent implements OnInit {
                 belgeNo: payload.belgeNo,
                 belgeTipi: payload.belgeTipi,
                 tesisId: payload.tesisId,
+                cariKartId: payload.cariKartId,
                 belgeTarihi: payload.belgeTarihi,
                 vadeTarihi: payload.vadeTarihi,
                 musteriUnvan: payload.musteriUnvan,

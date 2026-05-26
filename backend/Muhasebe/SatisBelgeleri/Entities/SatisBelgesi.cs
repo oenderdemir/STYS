@@ -1,3 +1,4 @@
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using TOD.Platform.Persistence.Rdbms.Entities;
@@ -16,6 +17,8 @@ public class SatisBelgesi : BaseEntity<int>
     public string? KaynakId { get; set; }
 
     public int? TesisId { get; set; }
+    public int? CariKartId { get; set; }
+    public CariKart? CariKart { get; set; }
 
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }

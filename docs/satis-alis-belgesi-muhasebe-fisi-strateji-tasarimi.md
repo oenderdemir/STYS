@@ -352,3 +352,11 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Strateji seçimi stok hareketinden önce doğrulanır.
 - Fiş satırları üretildikten sonra stok hareketi oluşturulur.
 - Transaction bütünlüğü korunur.
+
+## Faz 79 — CariKart Bağlantısı
+
+- `SatisBelgesi` üzerinde nullable `CariKartId` alanı eklendi.
+- Snapshot alanları korunurken gerçek cari bağlantısı da taşınır.
+- Satış belgelerinde müşteri tipli, alış belgelerinde tedarikçi tipli cari kart doğrulaması eklenmiştir.
+- Manuel müşteri/cari bilgisi modunda `CariKartId` boş kalabilir.
+- Ek migration gerekli oldu ve oluşturuldu.

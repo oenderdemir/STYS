@@ -12,6 +12,11 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }
     public int? TesisId { get; set; }
+    public int? CariKartId { get; set; }
+    public string? CariKartKodu { get; set; }
+    public string? CariKartUnvanAdSoyad { get; set; }
+    public string? CariKartTipi { get; set; }
+    public string? CariKartVergiNoTckn { get; set; }
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
     public string? MusteriUnvan { get; set; }
@@ -75,6 +80,7 @@ public class CreateSatisBelgesiRequest
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }
     public int? TesisId { get; set; }
+    public int? CariKartId { get; set; }
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
     public string? MusteriUnvan { get; set; }
@@ -115,6 +121,7 @@ public class UpdateSatisBelgesiRequest
     public string? BelgeNo { get; set; }
     public SatisBelgesiTipi? BelgeTipi { get; set; }
     public int? TesisId { get; set; }
+    public int? CariKartId { get; set; }
     public DateTime? BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
     public string? MusteriUnvan { get; set; }

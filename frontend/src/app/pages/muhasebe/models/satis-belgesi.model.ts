@@ -169,6 +169,11 @@ export interface SatisBelgesiDto {
     kaynakTipi?: string | null;
     kaynakId?: string | null;
     tesisId?: number | null;
+    cariKartId?: number | null;
+    cariKartKodu?: string | null;
+    cariKartUnvanAdSoyad?: string | null;
+    cariKartTipi?: string | null;
+    cariKartVergiNoTckn?: string | null;
     belgeTarihi: string;
     vadeTarihi?: string | null;
     musteriUnvan?: string | null;
@@ -222,6 +227,7 @@ export interface CreateSatisBelgesiRequest {
     kaynakTipi?: string | null;
     kaynakId?: string | null;
     tesisId?: number | null;
+    cariKartId?: number | null;
     belgeTarihi: string;
     vadeTarihi?: string | null;
     musteriUnvan?: string | null;
@@ -242,6 +248,7 @@ export interface UpdateSatisBelgesiRequest {
     belgeNo?: string | null;
     belgeTipi?: SatisBelgesiTipi | null;
     tesisId?: number | null;
+    cariKartId?: number | null;
     belgeTarihi?: string | null;
     vadeTarihi?: string | null;
     musteriUnvan?: string | null;
@@ -318,6 +325,7 @@ export function createEmptyCreateSatisBelgesiRequest(): CreateSatisBelgesiReques
         kaynakTipi: null,
         kaynakId: null,
         tesisId: null,
+        cariKartId: null,
         belgeTarihi: new Date().toISOString().split('T')[0],
         vadeTarihi: null,
         musteriUnvan: null,

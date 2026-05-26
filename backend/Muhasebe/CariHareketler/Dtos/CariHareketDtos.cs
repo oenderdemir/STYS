@@ -51,3 +51,33 @@ public class CariEkstreDto
     public List<CariHareketDto> Hareketler { get; set; } = [];
 }
 
+public class CariBakiyeOzetDto
+{
+    public int CariKartId { get; set; }
+    public string CariKodu { get; set; } = string.Empty;
+    public string UnvanAdSoyad { get; set; } = string.Empty;
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+    public decimal Bakiye { get; set; }
+    public string BakiyeYonu { get; set; } = "Sifir";
+    public decimal ToplamAcikBorc { get; set; }
+    public decimal ToplamAcikAlacak { get; set; }
+    public int AcikHareketSayisi { get; set; }
+    public int KapananHareketSayisi { get; set; }
+}
+
+public class CariHareketDurumOzetDto
+{
+    public int CariHareketId { get; set; }
+    public DateTime HareketTarihi { get; set; }
+    public string BelgeTuru { get; set; } = string.Empty;
+    public string? BelgeNo { get; set; }
+    public decimal BorcTutari { get; set; }
+    public decimal AlacakTutari { get; set; }
+    public decimal KapananTutar { get; set; }
+    public decimal KalanTutar { get; set; }
+    public bool KapandiMi { get; set; }
+    public string? KaynakModul { get; set; }
+    public int? KaynakId { get; set; }
+}
+

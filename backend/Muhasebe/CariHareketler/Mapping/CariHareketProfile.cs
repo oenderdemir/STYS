@@ -9,6 +9,8 @@ public class CariHareketProfile : Profile
     public CariHareketProfile()
     {
         CreateMap<CariHareket, CariHareketDto>();
+        CreateMap<CariHareket, CariHareketDurumOzetDto>()
+            .ForMember(x => x.CariHareketId, opt => opt.MapFrom(src => src.Id));
         CreateMap<CariHareketDto, CariHareket>()
             .ForMember(x => x.KapananTutar, opt => opt.Ignore())
             .ForMember(x => x.KalanTutar, opt => opt.Ignore())

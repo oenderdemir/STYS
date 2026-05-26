@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { forkJoin, finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -18,7 +18,7 @@ import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
-import { CariHareketModel, CreateCariHareketRequest, HAREKET_DURUMLARI, UpdateCariHareketRequest } from './cari-hareketler.dto';
+import { CariBakiyeOzetModel, CariHareketDurumOzetModel, CariHareketModel, CreateCariHareketRequest, HAREKET_DURUMLARI, UpdateCariHareketRequest } from './cari-hareketler.dto';
 import { CariHareketlerService } from './cari-hareketler.service';
 
 @Component({
@@ -38,9 +38,13 @@ export class CariHareketlerPage implements OnInit {
     private currentTesisId: number | null = null;
 
     loading = false;
+    ozetLoading = false;
     saving = false;
     dialogVisible = false;
     records: CariHareketModel[] = [];
+    bakiyeOzet: CariBakiyeOzetModel | null = null;
+    acikHareketler: CariHareketDurumOzetModel[] = [];
+    kapananHareketler: CariHareketDurumOzetModel[] = [];
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -80,6 +84,16 @@ export class CariHareketlerPage implements OnInit {
             },
             error: (error: unknown) => this.showError(error)
         });
+    }
+
+    onCariFilterChange(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+        if (this.selectedCariKartId) {
+            this.loadCariOzeti();
+        } else {
+            this.clearCariOzet();
+        }
     }
 
     onLazyLoad(event: LazyLoadPayload): void {
@@ -169,6 +183,9 @@ export class CariHareketlerPage implements OnInit {
             next: () => {
                 this.dialogVisible = false;
                 this.load();
+                if (this.selectedCariKartId) {
+                    this.loadCariOzeti();
+                }
             },
             error: (error: unknown) => this.showError(error)
         });
@@ -180,7 +197,12 @@ export class CariHareketlerPage implements OnInit {
         }
 
         this.service.delete(item.id).subscribe({
-            next: () => this.load(),
+            next: () => {
+                this.load();
+                if (this.selectedCariKartId) {
+                    this.loadCariOzeti();
+                }
+            },
             error: (error: unknown) => this.showError(error)
         });
     }
@@ -201,11 +223,52 @@ export class CariHareketlerPage implements OnInit {
 
                 if (this.selectedCariKartId && !this.cariKartlar.some((x) => x.value === this.selectedCariKartId)) {
                     this.selectedCariKartId = null;
+                    this.clearCariOzet();
+                }
+
+                if (this.selectedCariKartId) {
+                    this.loadCariOzeti();
                 }
 
                 this.cdr.detectChanges();
             }
         });
+    }
+
+    private loadCariOzeti(): void {
+        const cariKartId = this.selectedCariKartId;
+        if (!cariKartId) {
+            this.clearCariOzet();
+            return;
+        }
+
+        this.ozetLoading = true;
+        forkJoin({
+            bakiye: this.service.getBakiyeOzet(cariKartId),
+            acik: this.service.getAcikHareketler(cariKartId),
+            kapanan: this.service.getKapananHareketler(cariKartId)
+        }).pipe(finalize(() => {
+            this.ozetLoading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (result) => {
+                this.bakiyeOzet = result.bakiye;
+                this.acikHareketler = result.acik;
+                this.kapananHareketler = result.kapanan;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+                this.clearCariOzet();
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private clearCariOzet(): void {
+        this.bakiyeOzet = null;
+        this.acikHareketler = [];
+        this.kapananHareketler = [];
     }
 
     private closeOpenDialogForTesisChange(): void {
@@ -243,8 +306,20 @@ export class CariHareketlerPage implements OnInit {
             vadeTarihi: null,
             durum: 'Aktif',
             kaynakModul: null,
-            kaynakId: null
+            kaynakId: null,
+            kapananTutar: 0,
+            kalanTutar: 0,
+            iliskiliCariHareketId: null,
+            kapandiMi: false
         };
+    }
+
+    hareketDurumu(item: CariHareketDurumOzetModel): string {
+        if (item.kapandiMi) {
+            return 'Kapalı';
+        }
+
+        return (item.kapananTutar ?? 0) > 0 ? 'Kısmi' : 'Açık';
     }
 
     private showError(error: unknown): void {

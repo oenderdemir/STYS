@@ -58,6 +58,26 @@ public class CariHareketlerController : UIController
     public async Task<ActionResult<CariEkstreDto>> GetEkstre(int cariKartId, [FromQuery] DateTime? baslangic, [FromQuery] DateTime? bitis, CancellationToken cancellationToken)
         => Ok(await _service.GetEkstreAsync(cariKartId, baslangic, bitis, cancellationToken));
 
+    [HttpGet("cari/{cariKartId:int}/bakiye-ozet")]
+    [Permission(StructurePermissions.CariHareketYonetimi.View)]
+    public async Task<ActionResult<CariBakiyeOzetDto>> GetBakiyeOzet(int cariKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetCariBakiyeOzetAsync(cariKartId, cancellationToken));
+
+    [HttpGet("cari/{cariKartId:int}/acik-hareketler")]
+    [Permission(StructurePermissions.CariHareketYonetimi.View)]
+    public async Task<ActionResult<List<CariHareketDurumOzetDto>>> GetAcikHareketler(int cariKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetCariAcikHareketlerAsync(cariKartId, cancellationToken));
+
+    [HttpGet("cari/{cariKartId:int}/kapanan-hareketler")]
+    [Permission(StructurePermissions.CariHareketYonetimi.View)]
+    public async Task<ActionResult<List<CariHareketDurumOzetDto>>> GetKapananHareketler(int cariKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetCariKapananHareketlerAsync(cariKartId, cancellationToken));
+
+    [HttpGet("cari/{cariKartId:int}/hareket-ekstre")]
+    [Permission(StructurePermissions.CariHareketYonetimi.View)]
+    public async Task<ActionResult<List<CariHareketDurumOzetDto>>> GetHareketEkstre(int cariKartId, [FromQuery] DateTime? baslangic, [FromQuery] DateTime? bitis, CancellationToken cancellationToken)
+        => Ok(await _service.GetCariHareketEkstreAsync(cariKartId, baslangic, bitis, cancellationToken));
+
     [HttpPost]
     [Permission(StructurePermissions.CariHareketYonetimi.Manage)]
     public async Task<ActionResult<CariHareketDto>> Create([FromBody] CreateCariHareketRequest request, CancellationToken cancellationToken)

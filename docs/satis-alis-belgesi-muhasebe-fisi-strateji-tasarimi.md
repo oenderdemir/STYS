@@ -398,3 +398,11 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - `TahsilatOdemeBelgesi` kaynak modül kullanımı merkezi `MuhasebeKaynakModulleri` sabitine taşındı.
 - Cari kapama servisleri artık string literal yerine ortak sabiti kullanır.
+
+## Faz 82 — Cari Bakiye ve Açık Hareket Takibi
+
+- Cari kart bazında bakiye özeti eklendi.
+- Açık ve kapanan cari hareket listeleri eklendi.
+- Kısmi kapanmış hareketler `KalanTutar` üzerinden izlenir.
+- Tesis yetki/scope kontrolü korundu.
+- Migration yapılmadı.

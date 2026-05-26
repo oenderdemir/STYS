@@ -26,13 +26,7 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
 
     public async Task<CariEkstreDto> GetEkstreAsync(int cariKartId, DateTime? baslangic, DateTime? bitis, CancellationToken cancellationToken = default)
     {
-        var cari = await _cariKartRepository.GetByIdAsync(cariKartId) ?? throw new BaseException("Cari kart bulunamadi.", 404);
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped && (!cari.TesisId.HasValue || !scope.TesisIds.Contains(cari.TesisId.Value)))
-        {
-            throw new BaseException("Bu kayit icin yetkiniz bulunmuyor.", 403);
-        }
-        var hareketler = await _repository.GetCariEkstresiAsync(cariKartId, baslangic, bitis, cancellationToken);
+        var (cari, hareketler) = await GetScopedCariHareketlerAsync(cariKartId, baslangic, bitis, cancellationToken);
         var dtoHareketler = Mapper.Map<List<CariHareketDto>>(hareketler);
         return new CariEkstreDto
         {
@@ -44,6 +38,61 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
             Bakiye = hareketler.Where(x => x.Durum == CariHareketDurumlari.Aktif).Sum(x => x.BorcTutari - x.AlacakTutari),
             Hareketler = dtoHareketler
         };
+    }
+
+    public async Task<CariBakiyeOzetDto> GetCariBakiyeOzetAsync(int cariKartId, CancellationToken cancellationToken = default)
+    {
+        var (cari, hareketler) = await GetScopedCariHareketlerAsync(cariKartId, null, null, cancellationToken);
+        var aktifHareketler = hareketler.Where(x => x.Durum == CariHareketDurumlari.Aktif).ToList();
+        var toplamBorc = aktifHareketler.Sum(x => x.BorcTutari);
+        var toplamAlacak = aktifHareketler.Sum(x => x.AlacakTutari);
+        var bakiye = toplamBorc - toplamAlacak;
+        var acikHareketler = aktifHareketler.Where(x => !x.KapandiMi && x.KalanTutar > 0m).ToList();
+
+        return new CariBakiyeOzetDto
+        {
+            CariKartId = cari.Id,
+            CariKodu = cari.CariKodu,
+            UnvanAdSoyad = cari.UnvanAdSoyad,
+            ToplamBorc = toplamBorc,
+            ToplamAlacak = toplamAlacak,
+            Bakiye = bakiye,
+            BakiyeYonu = bakiye > 0m ? "Borclu" : bakiye < 0m ? "Alacakli" : "Sifir",
+            ToplamAcikBorc = acikHareketler.Where(x => x.BorcTutari > 0m).Sum(x => x.KalanTutar),
+            ToplamAcikAlacak = acikHareketler.Where(x => x.AlacakTutari > 0m).Sum(x => x.KalanTutar),
+            AcikHareketSayisi = acikHareketler.Count,
+            KapananHareketSayisi = aktifHareketler.Count(x => x.KapandiMi)
+        };
+    }
+
+    public async Task<List<CariHareketDurumOzetDto>> GetCariAcikHareketlerAsync(int cariKartId, CancellationToken cancellationToken = default)
+    {
+        var (_, hareketler) = await GetScopedCariHareketlerAsync(cariKartId, null, null, cancellationToken);
+        return Mapper.Map<List<CariHareketDurumOzetDto>>(
+            hareketler.Where(x => x.Durum == CariHareketDurumlari.Aktif && !x.KapandiMi && x.KalanTutar > 0m)
+                .OrderByDescending(x => x.HareketTarihi)
+                .ThenByDescending(x => x.Id)
+                .ToList());
+    }
+
+    public async Task<List<CariHareketDurumOzetDto>> GetCariKapananHareketlerAsync(int cariKartId, CancellationToken cancellationToken = default)
+    {
+        var (_, hareketler) = await GetScopedCariHareketlerAsync(cariKartId, null, null, cancellationToken);
+        return Mapper.Map<List<CariHareketDurumOzetDto>>(
+            hareketler.Where(x => x.Durum == CariHareketDurumlari.Aktif && x.KapandiMi)
+                .OrderByDescending(x => x.HareketTarihi)
+                .ThenByDescending(x => x.Id)
+                .ToList());
+    }
+
+    public async Task<List<CariHareketDurumOzetDto>> GetCariHareketEkstreAsync(int cariKartId, DateTime? baslangic, DateTime? bitis, CancellationToken cancellationToken = default)
+    {
+        var (_, hareketler) = await GetScopedCariHareketlerAsync(cariKartId, baslangic, bitis, cancellationToken);
+        return Mapper.Map<List<CariHareketDurumOzetDto>>(
+            hareketler.Where(x => x.Durum == CariHareketDurumlari.Aktif)
+                .OrderByDescending(x => x.HareketTarihi)
+                .ThenByDescending(x => x.Id)
+                .ToList());
     }
 
     public override async Task<CariHareketDto> AddAsync(CariHareketDto dto)
@@ -140,6 +189,39 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         {
             throw new BaseException("Durum gecersiz.", 400);
         }
+    }
+
+    private async Task<(STYS.Muhasebe.CariKartlar.Entities.CariKart Cari, List<CariHareket> Hareketler)> GetScopedCariHareketlerAsync(
+        int cariKartId,
+        DateTime? baslangic,
+        DateTime? bitis,
+        CancellationToken cancellationToken)
+    {
+        var cari = await _cariKartRepository.GetByIdAsync(cariKartId) ?? throw new BaseException("Cari kart bulunamadi.", 404);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && (!cari.TesisId.HasValue || !scope.TesisIds.Contains(cari.TesisId.Value)))
+        {
+            throw new BaseException("Bu kayit icin yetkiniz bulunmuyor.", 403);
+        }
+
+        var query = _repository.Where(x => x.CariKartId == cariKartId && !x.IsDeleted);
+        if (baslangic.HasValue)
+        {
+            query = query.Where(x => x.HareketTarihi >= baslangic.Value.Date);
+        }
+
+        if (bitis.HasValue)
+        {
+            var bitisDate = bitis.Value.Date.AddDays(1);
+            query = query.Where(x => x.HareketTarihi < bitisDate);
+        }
+
+        var hareketler = await query
+            .OrderBy(x => x.HareketTarihi)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return (cari, hareketler);
     }
 
     private static Func<IQueryable<CariHareket>, IQueryable<CariHareket>> BuildScopedIncludeQuery(

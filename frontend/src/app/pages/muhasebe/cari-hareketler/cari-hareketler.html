@@ -8,9 +8,69 @@
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
     <ng-template #end>
-        <p-select [options]="cariKartlar" optionLabel="label" optionValue="value" [showClear]="true" placeholder="Cari filtre" [(ngModel)]="selectedCariKartId" (onChange)="load(1, pageSize)" appendTo="body" />
+        <p-select [options]="cariKartlar" optionLabel="label" optionValue="value" [showClear]="true" placeholder="Cari filtre" [(ngModel)]="selectedCariKartId" (onChange)="onCariFilterChange()" appendTo="body" />
     </ng-template>
 </p-toolbar>
+
+<ng-container *ngIf="selectedCariKartId && bakiyeOzet">
+    <div class="grid grid-cols-12 gap-3 mb-4">
+        <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
+            <div class="text-sm text-500">Toplam Borç</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.toplamBorc | number: '1.2-2' }}</div>
+        </div>
+        <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
+            <div class="text-sm text-500">Toplam Alacak</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.toplamAlacak | number: '1.2-2' }}</div>
+        </div>
+        <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
+            <div class="text-sm text-500">Bakiye</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.bakiye | number: '1.2-2' }} <span class="text-sm">({{ bakiyeOzet.bakiyeYonu }})</span></div>
+        </div>
+        <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
+            <div class="text-sm text-500">Açık / Kapanan</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.acikHareketSayisi }} / {{ bakiyeOzet.kapananHareketSayisi }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-12 gap-4 mb-4">
+        <div class="col-span-12 lg:col-span-6">
+            <p-table [value]="acikHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '36rem' }">
+                <ng-template #caption><h5 class="m-0">Açık / Kısmi Açık Hareketler</h5></ng-template>
+                <ng-template #header>
+                    <tr><th>Tarih</th><th>Belge</th><th>Borç</th><th>Alacak</th><th>Kalan</th><th>Durum</th></tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ item.belgeTuru }} {{ item.belgeNo || '' }}</td>
+                        <td>{{ item.borcTutari | number: '1.2-2' }}</td>
+                        <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
+                        <td>{{ item.kalanTutar | number: '1.2-2' }}</td>
+                        <td>{{ hareketDurumu(item) }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+        <div class="col-span-12 lg:col-span-6">
+            <p-table [value]="kapananHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '36rem' }">
+                <ng-template #caption><h5 class="m-0">Kapanan Hareketler</h5></ng-template>
+                <ng-template #header>
+                    <tr><th>Tarih</th><th>Belge</th><th>Borç</th><th>Alacak</th><th>Kapanan</th><th>Durum</th></tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ item.belgeTuru }} {{ item.belgeNo || '' }}</td>
+                        <td>{{ item.borcTutari | number: '1.2-2' }}</td>
+                        <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
+                        <td>{{ item.kapananTutar | number: '1.2-2' }}</td>
+                        <td>{{ hareketDurumu(item) }}</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </div>
+</ng-container>
 
 <p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '70rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
     <ng-template #caption><h5 class="m-0">Cari Hareketler</h5></ng-template>

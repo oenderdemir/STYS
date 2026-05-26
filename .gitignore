@@ -7,6 +7,8 @@
 # License keys - NEVER commit private keys
 license-private.key
 license-public.key
+backend/Data/.license-state
+backend/Data/.license-state.mirror
 
 # User-specific files
 *.rsuser

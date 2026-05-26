@@ -421,3 +421,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Net KDV, satış iade ve alış iade etkileri düşülerek hesaplanır.
 - Beyanname, e-Fatura/e-Arşiv ve diğer dış entegrasyonlar kapsam dışı bırakıldı.
 - Migration yapılmadı.
+
+## Faz 83A — Commit Temizlik ve Build Kontrolü
+
+- `backend/Data/.license-state` ve `.mirror` artefact dosyaları repo dışına alındı.
+- KDV rapor route bağlantıları `app.routes.ts` üzerinden korunuyor.
+- `KdvRaporService` DI kaydı aktif ve kullanılıyor.
+- Build kontrolü sonrası fazın teknik temizliği doğrulandı.

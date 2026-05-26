@@ -5,27 +5,31 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
 
-public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFisStratejisi
+public sealed class AlisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFisStratejisi
 {
     private readonly StysAppDbContext _dbContext;
     private readonly ITasinirKodMuhasebeHesapEslemeService _tasinirKodMuhasebeHesapEslemeService;
+    private readonly ITevkifatHesapEslemeService _tevkifatHesapEslemeService;
 
-    public AlisFaturasiMuhasebeFisStratejisi(
+    public AlisTevkifatliFaturaMuhasebeFisStratejisi(
         StysAppDbContext dbContext,
-        ITasinirKodMuhasebeHesapEslemeService tasinirKodMuhasebeHesapEslemeService)
+        ITasinirKodMuhasebeHesapEslemeService tasinirKodMuhasebeHesapEslemeService,
+        ITevkifatHesapEslemeService tevkifatHesapEslemeService)
     {
         _dbContext = dbContext;
         _tasinirKodMuhasebeHesapEslemeService = tasinirKodMuhasebeHesapEslemeService;
+        _tevkifatHesapEslemeService = tevkifatHesapEslemeService;
     }
 
     public bool Destekler(SatisBelgesi belge)
         => belge.BelgeTipi == SatisBelgesiTipi.AlisFaturasi
-           && !HasTevkifatliSatir(belge);
+           && HasTevkifatliSatir(belge);
 
     public async Task<IReadOnlyList<MuhasebeFisSatiriTaslak>> SatirlariOlusturAsync(
         SatisBelgesi belge,
@@ -37,12 +41,28 @@ public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFis
         if (belge.Satirlar.Count == 0)
             throw new BaseException("Alış belgesinde aktif satır bulunamadı.", 400);
 
+        var aktifSatirlar = belge.Satirlar
+            .Where(x => !x.IsDeleted)
+            .OrderBy(x => x.SiraNo)
+            .ToList();
+
+        var tevkifatliSatirlar = aktifSatirlar
+            .Where(x => x.KdvUygulamaTipi == KdvUygulamaTipi.Tevkifatli)
+            .ToList();
+
+        if (tevkifatliSatirlar.Count == 0)
+            throw new BaseException("Alış tevkifatlı belge satırı bulunamadı.", 400);
+
+        if (tevkifatliSatirlar.Any(s => s.TevkifatPay.GetValueOrDefault() <= 0 || s.TevkifatPayda.GetValueOrDefault() <= 0))
+            throw new BaseException("Geçersiz tevkifat oranı tespit edildi.", 400);
+
+        if (!context.KdvHesapPlaniId.HasValue)
+            throw new BaseException("Alış faturası için 191 İndirilecek KDV hesabı bulunamadı.", 400);
+
         var satirlar = new List<MuhasebeFisSatiriTaslak>();
         var siraNo = 1;
 
-        foreach (var belgeSatiri in belge.Satirlar
-                     .Where(x => !x.IsDeleted)
-                     .OrderBy(x => x.SiraNo))
+        foreach (var belgeSatiri in aktifSatirlar)
         {
             if (belgeSatiri.Matrah <= 0)
                 continue;
@@ -66,20 +86,59 @@ public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFis
             });
         }
 
-        if (belge.ToplamKdv > 0)
+        satirlar.Add(new MuhasebeFisSatiriTaslak
         {
-            if (!context.KdvHesapPlaniId.HasValue)
-                throw new BaseException("Alış faturası için 191 İndirilecek KDV hesabı bulunamadı.", 400);
+            MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
+            SiraNo = siraNo++,
+            Borc = belge.ToplamKdv,
+            Alacak = 0,
+            Aciklama = $"İndirilecek KDV - {belge.BelgeNo}"
+        });
+
+        var gruplanmisTevkifatlar = tevkifatliSatirlar
+            .GroupBy(s => new { Pay = s.TevkifatPay!.Value, Payda = s.TevkifatPayda!.Value })
+            .OrderBy(g => g.Key.Pay)
+            .ThenBy(g => g.Key.Payda)
+            .ToList();
+
+        var toplamTevkifatTutari = 0m;
+        foreach (var grup in gruplanmisTevkifatlar)
+        {
+            var esleme = await _tevkifatHesapEslemeService.GetAktifEslemeAsync(
+                context.TesisId,
+                TevkifatIslemYonleri.Alis,
+                grup.Key.Pay,
+                grup.Key.Payda,
+                cancellationToken);
+
+            if (esleme is null)
+            {
+                throw new BaseException(
+                    $"Alış tevkifatlı faturalar için {grup.Key.Pay}/{grup.Key.Payda} oranında aktif tevkifat hesabı bulunamadı.",
+                    400);
+            }
+
+            var grupTutari = grup.Sum(s => s.TevkifatTutari > 0
+                ? s.TevkifatTutari
+                : Math.Round((s.KdvTutari * grup.Key.Pay) / grup.Key.Payda, 2, MidpointRounding.AwayFromZero));
+
+            if (grupTutari <= 0)
+                throw new BaseException($"Alış tevkifat tutarı hesaplanamadı. Oran: {grup.Key.Pay}/{grup.Key.Payda}.", 400);
+
+            toplamTevkifatTutari += grupTutari;
 
             satirlar.Add(new MuhasebeFisSatiriTaslak
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
+                MuhasebeHesapPlaniId = esleme.MuhasebeHesapPlaniId,
                 SiraNo = siraNo++,
-                Borc = belge.ToplamKdv,
-                Alacak = 0,
-                Aciklama = $"İndirilecek KDV - {belge.BelgeNo}"
+                Borc = 0,
+                Alacak = grupTutari,
+                Aciklama = $"Tevkifat karşılığı {grup.Key.Pay}/{grup.Key.Payda} - {belge.BelgeNo}"
             });
         }
+
+        if (toplamTevkifatTutari <= 0)
+            throw new BaseException("Alış tevkifat tutarı hesaplanamadı.", 400);
 
         satirlar.Add(new MuhasebeFisSatiriTaslak
         {
@@ -89,6 +148,14 @@ public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFis
             Alacak = belge.GenelToplam,
             Aciklama = $"Tedarikçi borcu - {belge.BelgeNo}"
         });
+
+        var toplamBorc = satirlar.Sum(x => x.Borc);
+        var toplamAlacak = satirlar.Sum(x => x.Alacak);
+
+        if (Math.Abs(toplamBorc - toplamAlacak) > 0.01m)
+            throw new BaseException(
+                $"Alış tevkifatlı fiş borç/alacak dengesi sağlanamadı. Borç: {toplamBorc:N2}, Alacak: {toplamAlacak:N2}",
+                400);
 
         return satirlar;
     }

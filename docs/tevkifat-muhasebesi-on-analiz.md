@@ -91,3 +91,11 @@ Satış ve alış faturalarında tevkifatlı işlemlerin muhasebe etkisini belir
 - Tevkifat hesabı `TevkifatHesapEslemeService.GetAktifEslemeAsync` ile çözülüyor.
 - Alış tevkifatı ve iade belgeleri hâlâ kapalıdır.
 - Migration yapılmadı.
+
+## Faz 75D — Alış Tevkifatı Muhasebe Fişi
+
+- `AlisTevkifatliFaturaMuhasebeFisStratejisi` eklendi.
+- Tevkifatlı alış faturalarında 153/740/770 borç, 191 borç, 320 alacak, tevkifat karşı hesabı alacak kurgusu desteklendi.
+- Tevkifat hesabı `TevkifatHesapEslemeService.GetAktifEslemeAsync` ile `IslemYonu = Alis` üzerinden çözülüyor.
+- İade belgeleri ve tevkifat rapor etkileri hâlâ kapsam dışıdır.
+- Migration yapılmadı.

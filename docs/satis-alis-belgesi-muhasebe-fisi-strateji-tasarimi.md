@@ -314,3 +314,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Tevkifat karşı hesabı `TevkifatHesapEslemeService` üzerinden çözülüyor.
 - Normal satış stratejisi tevkifatlı belgeleri dışlıyor.
 - Alış tevkifatı, iade ve tevkifat rapor etkileri hâlâ kapsam dışıdır.
+
+## Faz 75D — Alış Tevkifatı Muhasebe Fişi
+
+- Tevkifatlı alış faturaları için ayrı strateji eklendi.
+- Tevkifat karşı hesabı `TevkifatHesapEslemeService` üzerinden `IslemYonu = Alis` ile çözülüyor.
+- Normal alış stratejisi tevkifatlı belgeleri dışlıyor.
+- İade ve rapor etkileri hâlâ kapsam dışıdır.

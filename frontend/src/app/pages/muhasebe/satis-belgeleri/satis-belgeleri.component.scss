@@ -1,230 +1,198 @@
 :host {
-    display: block;
+  display: block;
 
-    ::ng-deep {
-        .p-datatable .p-datatable-thead > tr > th {
-            white-space: nowrap;
-        }
+  ::ng-deep {
+    .p-datatable .p-datatable-thead > tr > th {
+      white-space: nowrap;
     }
 
-    .text-right {
-        text-align: right;
+    .satis-belgesi-dialog .p-dialog-content {
+      padding: 1rem 1.25rem;
+    }
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .belge-form {
+    width: 100%;
+
+    .belge-cari-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+
+      .form-card-panel {
+        min-width: 0;
+        height: 100%;
+      }
     }
 
-    // ── Dialog scroll management ──
-    .satis-belgesi-dialog-content {
-        max-height: 75vh;
-        overflow-y: auto;
-        width: 100%;
+    .field {
+      margin-bottom: 1rem;
+      min-width: 0;
 
-        // Subtle scrollbar
-        &::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        &::-webkit-scrollbar-thumb {
-            background-color: var(--surface-400);
-            border-radius: 3px;
-        }
-
-        &::-webkit-scrollbar-track {
-            background: transparent;
-        }
+      label {
+        display: block;
+        margin-bottom: .25rem;
+        font-size: .8125rem;
+        font-weight: 500;
+        color: var(--text-color-secondary);
+      }
     }
 
-    // ── Full-width tab panels ──
-    .belge-form {
-        width: 100%;
+    .form-card {
+      height: 100%;
+      padding: 1.1rem 1.15rem;
+      background: var(--surface-card);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--border-radius);
+    }
+
+    .cari-selection-area {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: var(--primary-50);
+      border: 1px solid var(--primary-200);
+      border-radius: var(--border-radius);
+    }
+
+    .satir-card {
+      width: 100%;
+      margin-bottom: .75rem;
+      padding: 1rem 1.25rem;
+      background: var(--surface-section);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--border-radius);
+      transition: box-shadow .15s;
+
+      &:hover {
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+      }
+
+      .satir-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: .75rem;
+        padding-bottom: .5rem;
+        border-bottom: 1px solid var(--surface-border);
+
+        .satir-title {
+          font-size: .9375rem;
+          font-weight: 600;
+          color: var(--primary-color);
+        }
+      }
+
+      .satir-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: .75rem;
 
         .field {
-            margin-bottom: 1rem;
-
-            label {
-                display: block;
-                font-size: 0.8125rem;
-                font-weight: 500;
-                margin-bottom: 0.25rem;
-                color: var(--text-color-secondary);
-            }
+          margin-bottom: 0;
         }
 
-        // Cards inside tabs
-        .form-card {
-            background: var(--surface-card);
-            border: 1px solid var(--surface-border);
-            border-radius: var(--border-radius);
-            padding: 1.25rem;
-            height: 100%;
-        }
+        .field-span-2 { grid-column: span 2; }
+        .field-span-3 { grid-column: span 3; }
+        .field-span-5 { grid-column: span 5; }
+        .field-span-6 { grid-column: span 6; }
+        .field-span-12 { grid-column: span 12; }
+      }
+    }
+  }
 
-        // Cari seçim alanı
-        .cari-selection-area {
-            background: var(--primary-50);
-            border: 1px solid var(--primary-200);
-            border-radius: var(--border-radius);
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
+  .ozet-panel {
+    padding: 1.5rem 2rem;
+    background: var(--surface-section);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--border-radius);
+
+    .ozet-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: .5rem 0;
+      font-size: .9375rem;
+      border-bottom: 1px solid var(--surface-border);
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      .ozet-label {
+        color: var(--text-color-secondary);
+      }
+
+      .ozet-value {
+        font-weight: 500;
+      }
     }
 
-    // ── Satır card styling ──
-    .satir-card {
-        background: var(--surface-section);
-        border: 1px solid var(--surface-border);
-        border-radius: var(--border-radius);
-        padding: 1rem 1.25rem;
-        margin-bottom: 0.75rem;
-        transition: box-shadow 0.15s;
-        width: 100%;
+    .ozet-genel-toplam {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-top: .75rem;
+      padding-top: .75rem;
+      border-top: 2px solid var(--primary-color);
+      color: var(--primary-color);
+      font-size: 1.125rem;
+      font-weight: 700;
 
-        &:hover {
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-        }
+      .ozet-genel-label {
+        color: var(--text-color);
+        font-size: 1rem;
+      }
+    }
+  }
 
-        .satir-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.75rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--surface-border);
+  .dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
 
-            .satir-title {
-                font-weight: 600;
-                font-size: 0.9375rem;
-                color: var(--primary-color);
-            }
-        }
+    .footer-right {
+      display: flex;
+      gap: .5rem;
+    }
+  }
 
-        .satir-grid {
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            gap: 0.75rem;
-        }
+  input[readonly],
+  textarea[readonly] {
+    cursor: default;
+    background-color: var(--surface-100);
+  }
 
-        .satir-summary {
-            display: flex;
-            justify-content: flex-end;
-            gap: 1.25rem;
-            margin-top: 0.75rem;
-            padding-top: 0.5rem;
-            border-top: 1px dashed var(--surface-border);
-            font-size: 0.8125rem;
-            color: var(--text-color-secondary);
-            flex-wrap: wrap;
-
-            span {
-                white-space: nowrap;
-            }
-
-            .summary-total {
-                font-weight: 600;
-                color: var(--text-color);
-            }
-        }
+  @media (max-width: 767px) {
+    .belge-form .belge-cari-grid {
+      grid-template-columns: 1fr;
     }
 
-    // ── Summary tab ──
+    .satir-card .satir-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+    }
+
+    .satir-card .satir-grid .field-span-2,
+    .satir-card .satir-grid .field-span-3,
+    .satir-card .satir-grid .field-span-5,
+    .satir-card .satir-grid .field-span-6,
+    .satir-card .satir-grid .field-span-12 {
+      grid-column: auto;
+    }
+
     .ozet-panel {
-        background: var(--surface-section);
-        border: 1px solid var(--surface-border);
-        border-radius: var(--border-radius);
-        padding: 1.5rem 2rem;
-
-        .ozet-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding: 0.5rem 0;
-            font-size: 0.9375rem;
-            border-bottom: 1px solid var(--surface-border);
-
-            &:last-child {
-                border-bottom: none;
-            }
-
-            .ozet-label {
-                color: var(--text-color-secondary);
-            }
-
-            .ozet-value {
-                font-weight: 500;
-            }
-        }
-
-        .ozet-genel-toplam {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-top: 0.75rem;
-            padding-top: 0.75rem;
-            border-top: 2px solid var(--primary-color);
-            font-size: 1.125rem;
-            font-weight: 700;
-            color: var(--primary-color);
-
-            .ozet-genel-label {
-                color: var(--text-color);
-                font-size: 1rem;
-            }
-        }
+      padding: 1rem;
     }
+  }
 
-    // ── Footer ──
-    .dialog-footer {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-
-        .footer-left {
-            font-size: 0.875rem;
-            color: var(--text-color);
-
-            strong {
-                color: var(--primary-color);
-                font-size: 1rem;
-            }
-        }
-
-        .footer-right {
-            display: flex;
-            gap: 0.5rem;
-        }
+  @media (max-width: 575px) {
+    .satir-card .satir-grid {
+      grid-template-columns: 1fr;
     }
-
-    // ── Readonly input styling ──
-    input[readonly] {
-        background-color: var(--surface-100);
-        cursor: default;
-    }
-
-    textarea[readonly] {
-        background-color: var(--surface-100);
-        cursor: default;
-    }
-
-    // ── Responsive ──
-    @media (max-width: 767px) {
-        .satir-card .satir-grid {
-            grid-template-columns: 1fr 1fr;
-            gap: 0.5rem;
-        }
-
-        .ozet-panel {
-            padding: 1rem;
-        }
-    }
-
-    @media (max-width: 575px) {
-        .satir-card .satir-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .satir-card .satir-summary {
-            flex-direction: column;
-            gap: 0.25rem;
-            align-items: flex-end;
-        }
-    }
+  }
 }

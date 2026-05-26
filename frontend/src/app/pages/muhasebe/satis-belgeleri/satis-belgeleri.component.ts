@@ -25,6 +25,8 @@ import { SatisBelgesiService } from '../services/satis-belgesi.service';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { PaketTurleriService } from '../paket-turleri/paket-turleri.service';
+import { PaketTuruModel } from '../paket-turleri/paket-turleri.dto';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { CariKartModel } from '../cari-kartlar/cari-kartlar.dto';
 import { DepolarService } from '../depolar/depolar.service';
@@ -92,6 +94,7 @@ import {
 export class SatisBelgeleriComponent implements OnInit {
     private readonly service = inject(SatisBelgesiService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
+    private readonly paketTurleriService = inject(PaketTurleriService);
     private readonly cariKartService = inject(CariKartlarService);
     private readonly depoService = inject(DepolarService);
     private readonly tasinirKartService = inject(TasinirKartlariService);
@@ -121,6 +124,9 @@ export class SatisBelgeleriComponent implements OnInit {
 
     depoSecenekleri = signal<Array<{ label: string; value: number }>>([]);
     depolarLoading = signal(false);
+    paketTurleri = signal<PaketTuruModel[]>([]);
+    paketTuruSecenekleri = signal<Array<{ label: string; value: string }>>([]);
+    paketTurleriLoading = signal(false);
     tasinirKartlar = signal<TasinirKartModel[]>([]);
     tasinirKartSecenekleri = signal<Array<{ label: string; value: number }>>([]);
     tasinirKartlarLoading = signal(false);
@@ -205,7 +211,10 @@ export class SatisBelgeleriComponent implements OnInit {
 
     ngOnInit(): void {
         this.tesisContext.initialize().subscribe({
-            next: () => this.tesisHazir.set(true),
+            next: () => {
+                this.loadPaketTurleri();
+                this.tesisHazir.set(true);
+            },
             error: (err) => {
                 this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Tesis listesi yüklenemedi: ' + err.message });
             }
@@ -240,6 +249,39 @@ export class SatisBelgeleriComponent implements OnInit {
         this.loadDepolar(tesisId);
         this.loadTasinirKartlar(tesisId);
         this.loadKdvIstisnaTanimlari();
+    }
+
+    loadPaketTurleri(): void {
+        this.paketTurleriLoading.set(true);
+        this.paketTurleriService.getAll().pipe(
+            finalize(() => this.paketTurleriLoading.set(false))
+        ).subscribe({
+            next: (data) => {
+                const aktifPaketTurleri = data
+                    .filter(t => t.aktifMi)
+                    .sort((a, b) => (a.kisaAd || a.ad || '').localeCompare(b.kisaAd || b.ad || ''));
+
+                const secenekler = aktifPaketTurleri.map(t => ({
+                    label: t.kisaAd ? `${t.kisaAd} - ${t.ad}` : t.ad,
+                    value: t.ad
+                }));
+                this.paketTurleri.set(aktifPaketTurleri);
+
+                if (secenekler.length === 0) {
+                    this.messageService.add({
+                        severity: 'warn',
+                        summary: 'Paket Türleri',
+                        detail: 'Aktif paket türü bulunamadı. Birim alanı varsayılan Adet ile devam edecek.'
+                    });
+                }
+
+                this.paketTuruSecenekleri.set(secenekler.length > 0 ? secenekler : [{ label: 'Adet', value: 'Adet' }]);
+            },
+            error: (err) => {
+                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Paket türleri yüklenemedi: ' + err.message });
+                this.paketTuruSecenekleri.set([{ label: 'Adet', value: 'Adet' }]);
+            }
+        });
     }
 
     loadCariKartlar(tesisId: number): void {
@@ -470,6 +512,9 @@ export class SatisBelgeleriComponent implements OnInit {
         this.editingBelge.set(null);
         const empty = createEmptyCreateSatisBelgesiRequest();
         empty.tesisId = tesisId;
+        empty.satirlar.forEach(satir => {
+            satir.birim = this.resolveDefaultBirim();
+        });
         this.formData.set(empty);
         this.selectedCari.set(null);
         this.manuelMusteriGirisi.set(false);
@@ -510,7 +555,7 @@ export class SatisBelgeleriComponent implements OnInit {
                 aciklama: s.aciklama,
                 tasinirKartId: s.tasinirKartId ?? null,
                 depoId: s.depoId ?? null,
-                birim: s.birim,
+                birim: s.birim || this.resolveDefaultBirim(),
                 miktar: s.miktar,
                 birimFiyat: s.birimFiyat,
                 indirimTutari: s.indirimTutari,
@@ -702,6 +747,7 @@ export class SatisBelgeleriComponent implements OnInit {
         const satirlar = [...this.formData().satirlar];
         const yeniSatir = createEmptySatisBelgesiSatiri();
         yeniSatir.siraNo = satirlar.length + 1;
+        yeniSatir.birim = this.resolveDefaultBirim();
         satirlar.push(yeniSatir);
         this.formData.update(f => ({ ...f, satirlar }));
     }
@@ -729,6 +775,38 @@ export class SatisBelgeleriComponent implements OnInit {
             });
             return null;
         }
+    }
+
+    private normalizeLookupValue(value?: string | null): string {
+        return (value ?? '').trim().toLocaleLowerCase('tr-TR');
+    }
+
+    resolveDefaultBirim(): string {
+        const secenekler = this.paketTuruSecenekleri();
+        if (secenekler.length === 0) {
+            return 'Adet';
+        }
+
+        const adet = secenekler.find(opt =>
+            this.normalizeLookupValue(opt.value) === 'adet' ||
+            this.normalizeLookupValue(opt.label) === 'adet');
+
+        return adet?.value ?? secenekler[0]?.value ?? 'Adet';
+    }
+
+    getBirimSecenekleri(satir?: CreateSatisBelgesiSatiriRequest): Array<{ label: string; value: string }> {
+        const secenekler = [...this.paketTuruSecenekleri()];
+        const currentValue = satir?.birim?.trim();
+
+        if (currentValue && !secenekler.some(opt => opt.value === currentValue)) {
+            secenekler.unshift({ label: currentValue, value: currentValue });
+        }
+
+        if (secenekler.length === 0) {
+            secenekler.push({ label: 'Adet', value: 'Adet' });
+        }
+
+        return secenekler;
     }
 
     getSatirIndirimTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -885,8 +963,10 @@ export class SatisBelgeleriComponent implements OnInit {
         }
 
         const kart = this.tasinirKartlar().find(k => k.id === value);
-        if (kart && (!satir.birim || satir.birim === 'Adet')) {
-            satir.birim = kart.birim;
+        if (kart && (!satir.birim || this.normalizeLookupValue(satir.birim) === 'adet')) {
+            satir.birim = this.getBirimSecenekleri().some(opt => opt.value === kart.birim)
+                ? kart.birim
+                : this.resolveDefaultBirim();
         }
     }
 

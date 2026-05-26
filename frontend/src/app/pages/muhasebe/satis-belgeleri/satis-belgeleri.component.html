@@ -20,7 +20,7 @@
     </p-toolbar>
 
     <!-- Filtre -->
-    <div class="grid mb-3">
+    <div class="satis-belgesi-filters grid mb-3 align-items-end">
         <div class="col-12 md:col-3">
             <label class="block text-sm mb-1">Durum</label>
             <p-select
@@ -207,7 +207,9 @@
     [(visible)]="dialogVisible"
     [header]="isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi'"
     [modal]="true"
-    [style]="{width: '90vw', 'max-width': '1280px'}"
+    styleClass="satis-belgesi-dialog"
+    [style]="{width: '92vw', 'max-width': '1400px'}"
+    [contentStyle]="{ 'max-height': '75vh', 'overflow': 'auto' }"
     [closable]="true"
     [draggable]="false">
 
@@ -223,9 +225,9 @@
                 <p-tabpanels>
                     <!-- ═══════ TAB 1: Belge & Cari Bilgileri ═══════ -->
                     <p-tabpanel value="0">
-                        <div class="grid mt-2">
+                        <div class="belge-cari-grid">
                             <!-- Belge Bilgileri Kartı (Sol) -->
-                            <div class="col-12 lg:col-6">
+                            <div class="form-card-panel">
                                 <div class="form-card">
                                     <h5 class="mt-0 mb-3">📋 Belge Bilgileri</h5>
 
@@ -238,6 +240,7 @@
                                                 (ngModelChange)="updateFormField('belgeTipi', $event)"
                                                 optionLabel="label"
                                                 optionValue="value"
+                                                appendTo="body"
                                                 styleClass="w-full">
                                             </p-select>
                                         </div>
@@ -282,6 +285,7 @@
                                                 (ngModelChange)="updateFormField('kaynakModul', $event)"
                                                 optionLabel="label"
                                                 optionValue="value"
+                                                appendTo="body"
                                                 styleClass="w-full">
                                             </p-select>
                                         </div>
@@ -299,7 +303,7 @@
                             </div>
 
                             <!-- Cari / Müşteri Bilgileri Kartı (Sağ) -->
-                            <div class="col-12 lg:col-6">
+                            <div class="form-card-panel">
                                 <div class="form-card">
                                     <h5 class="mt-0 mb-3">👤 Cari / Müşteri Bilgileri</h5>
                                     <p class="text-xs text-color-secondary mb-3">
@@ -524,17 +528,18 @@
                                 </div>
 
                                 <div class="satir-grid">
-                                    <div class="field" style="grid-column: span 3;">
+                                    <div class="field field-span-2">
                                         <label>Satır Tipi</label>
                                         <p-select
                                             [options]="satirTipiSecenekleri"
                                             [(ngModel)]="satir.satirTipi"
                                             optionLabel="label"
                                             optionValue="value"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 5;">
+                                    <div class="field field-span-5">
                                         <label>Ürün / Hizmet</label>
                                         <p-select
                                             [options]="tasinirKartSecenekleri()"
@@ -546,10 +551,11 @@
                                             [showClear]="true"
                                             [loading]="tasinirKartlarLoading()"
                                             placeholder="Stok / taşınır kart seçiniz"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 4;">
+                                    <div class="field field-span-5">
                                         <label>Depo</label>
                                         <p-select
                                             [options]="depoSecenekleri()"
@@ -561,35 +567,47 @@
                                             [showClear]="true"
                                             [loading]="depolarLoading()"
                                             placeholder="Depo seçiniz"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
 
-                                    <div class="field" style="grid-column: span 12;">
+                                    <div class="field field-span-12">
                                         <label>Açıklama</label>
                                         <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması / hizmet açıklaması" />
                                     </div>
 
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-3">
                                         <label>Birim</label>
-                                        <input pInputText class="w-full" [(ngModel)]="satir.birim" placeholder="Adet / Kg / Gün" />
+                                        <p-select
+                                            [options]="getBirimSecenekleri(satir)"
+                                            [(ngModel)]="satir.birim"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [filter]="true"
+                                            [showClear]="false"
+                                            [loading]="paketTurleriLoading()"
+                                            placeholder="Birim seçiniz"
+                                            appendTo="body"
+                                            styleClass="w-full">
+                                        </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-2">
                                         <label>Miktar</label>
                                         <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
                                         </p-inputNumber>
                                     </div>
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-2">
                                         <label>Birim Fiyat (₺)</label>
                                         <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
                                         </p-inputNumber>
                                     </div>
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-2">
                                         <label>İndirim (₺)</label>
                                         <p-inputNumber [(ngModel)]="satir.indirimTutari" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
                                         </p-inputNumber>
                                     </div>
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-3">
                                         <label>KDV Tipi</label>
                                         <p-select
                                             [options]="kdvUygulamaTipiSecenekleri"
@@ -597,17 +615,18 @@
                                             (ngModelChange)="onSatirKdvTipiChange(satir, $event)"
                                             optionLabel="label"
                                             optionValue="value"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
-                                    <div class="field" style="grid-column: span 2;">
+                                    <div class="field field-span-2">
                                         <label>KDV Oranı (%)</label>
                                         <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
                                             [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
                                         </p-inputNumber>
                                     </div>
                                     @if (satir.kdvUygulamaTipi !== kdvEnum.Kdvli && satir.kdvUygulamaTipi !== kdvEnum.Tevkifatli) {
-                                    <div class="field" style="grid-column: span 6;">
+                                    <div class="field field-span-6">
                                         <label>KDV İstisna Tanımı</label>
                                         <p-select
                                             [options]="getKdvIstisnaSecenekleri(satir)"
@@ -619,12 +638,13 @@
                                             [showClear]="true"
                                             [loading]="kdvIstisnaTanimlariLoading()"
                                             placeholder="İstisna tanımı seçiniz"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
                                     }
                                     @if (satir.kdvUygulamaTipi === kdvEnum.Tevkifatli) {
-                                    <div class="field" style="grid-column: span 6;">
+                                    <div class="field field-span-6">
                                         <label>Tevkifat Oranı</label>
                                         <p-select
                                             [options]="tevkifatSecenekleri"
@@ -634,6 +654,7 @@
                                             optionValue="value"
                                             [showClear]="true"
                                             placeholder="Tevkifat oranı seçiniz"
+                                            appendTo="body"
                                             styleClass="w-full">
                                         </p-select>
                                     </div>
@@ -641,13 +662,13 @@
                                 </div>
 
                                 <!-- Satır Hesaplanan Özet -->
-                                <div class="satir-summary">
-                                    <span>Matrah: <strong>{{ getSatirMatrah(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span>İndirim: <strong>{{ getSatirIndirimTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span>KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span>Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span>Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span class="summary-total">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                                <div class="satir-summary" style="display:flex;justify-content:space-between;gap:.75rem;margin-top:.9rem;padding:.75rem .9rem;border-top:1px dashed var(--surface-border);border-bottom:1px solid var(--surface-border);background:var(--surface-50);font-size:.8125rem;color:var(--text-color-secondary);flex-wrap:wrap;">
+                                    <span style="white-space:nowrap;">Matrah: <strong>{{ getSatirMatrah(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span style="white-space:nowrap;">İndirim: <strong>{{ getSatirIndirimTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span style="white-space:nowrap;">KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span style="white-space:nowrap;">Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span style="white-space:nowrap;">Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="summary-total" style="white-space:nowrap;font-weight:600;color:var(--text-color);">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
                                 </div>
                             </div>
                             }
@@ -659,12 +680,25 @@
                             </div>
                             }
 
-                            <!-- Alt toplam çubuğu -->
+                            <!-- Özet çubuğu -->
                             @if (formData().satirlar.length > 0) {
-                            <div class="flex justify-content-end mt-3 p-3 bg-primary-50 border-round">
-                                <span class="text-lg font-bold text-primary-700">
-                                    Genel Toplam: {{ previewGenelToplam() | number: '1.2-2' }} ₺
-                                </span>
+                            <div class="satir-ozet-bar mt-3" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;padding:.9rem 1rem;border:1px solid var(--surface-border);border-radius:var(--border-radius);background:var(--surface-section);">
+                                <div class="satir-ozet-item" style="display:flex;flex-direction:column;gap:.2rem;padding:.5rem .65rem;border-radius:.5rem;background:var(--surface-0);border:1px solid var(--surface-border);">
+                                    <span class="satir-ozet-label" style="font-size:.75rem;color:var(--text-color-secondary);">Ara Toplam</span>
+                                    <strong style="font-size:1rem;">{{ previewToplamMatrah() | number: '1.2-2' }} ₺</strong>
+                                </div>
+                                <div class="satir-ozet-item" style="display:flex;flex-direction:column;gap:.2rem;padding:.5rem .65rem;border-radius:.5rem;background:var(--surface-0);border:1px solid var(--surface-border);">
+                                    <span class="satir-ozet-label" style="font-size:.75rem;color:var(--text-color-secondary);">Toplam KDV</span>
+                                    <strong style="font-size:1rem;">{{ previewToplamKdv() | number: '1.2-2' }} ₺</strong>
+                                </div>
+                                <div class="satir-ozet-item" style="display:flex;flex-direction:column;gap:.2rem;padding:.5rem .65rem;border-radius:.5rem;background:var(--surface-0);border:1px solid var(--surface-border);">
+                                    <span class="satir-ozet-label" style="font-size:.75rem;color:var(--text-color-secondary);">Tevkifat</span>
+                                    <strong style="font-size:1rem;">{{ previewToplamTevkifatTutari() | number: '1.2-2' }} ₺</strong>
+                                </div>
+                                <div class="satir-ozet-item satir-ozet-item--total" style="display:flex;flex-direction:column;gap:.2rem;padding:.5rem .65rem;border-radius:.5rem;background:var(--primary-50);border:1px solid var(--primary-300);">
+                                    <span class="satir-ozet-label" style="font-size:.75rem;color:var(--text-color-secondary);">Genel Toplam</span>
+                                    <strong style="font-size:1rem;color:var(--primary-700);">{{ previewGenelToplam() | number: '1.2-2' }} ₺</strong>
+                                </div>
                             </div>
                             }
                         </div>
@@ -762,11 +796,6 @@
 
     <ng-template pTemplate="footer">
         <div class="dialog-footer">
-            <div class="footer-left">
-                @if (formData().satirlar.length > 0) {
-                <span>Genel Toplam: <strong>{{ previewGenelToplam() | number: '1.2-2' }} ₺</strong></span>
-                }
-            </div>
             <div class="footer-right">
                 <p-button label="İptal" severity="secondary" [outlined]="true" (click)="dialogVisible.set(false)"></p-button>
                 <p-button

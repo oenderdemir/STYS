@@ -458,3 +458,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Kapama geri alma işlemi transaction başlangıcından itibaren tek akışta yürütülür.
 - Belge, kapama hareketi ve ilişkili fatura hareketi transaction içinde işlenir.
 - Davranış değişmedi; yalnız transaction kapsamı düzeltildi.
+
+## Faz 88 — Muhasebe Fişi İptal / Ters Kayıt Etki Analizi
+
+- Muhasebe fişi iptali ve ters kayıt etkileri analiz edildi.
+- Stok, cari ve ticari belge etkilerinin birbirinden ayrılması önerildi.
+- Yeni migration gerekmedi; uygulama fazları sonraki adımlara bırakıldı.

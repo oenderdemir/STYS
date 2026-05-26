@@ -20,8 +20,9 @@
 - Faz 87 tamamlandı, Faz 87A ile transaction kapsamı düzeltildi.
 
 ### 2.2 Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
-- Fiş iptal/ters kayıt yapıldığında ilişkili stok/cari hareket etkisi net değil.
-- Önerilen faz: Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
+- Fiş iptal/ters kayıt yapıldığında ilişkili stok/cari hareket etkisi analiz edildi.
+- Faz 88 analizi tamamlandı.
+- Önerilen uygulama fazları: Faz 88B, Faz 88C, Faz 88D, Faz 88E
 
 ### 2.3 Stok Miktar Yeterlilik Kontrolü
 - Satış/alış iade çıkışlarında stok yeterlilik kontrolü net değil.
@@ -78,7 +79,10 @@
 - Stok hareketi ile muhasebe fişi tutar uyumu
 
 ## 5. Önerilen Sonraki Fazlar
-- Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
+- Faz 88B — Muhasebe Fişi İptal / Ters Kayıt Backend Güvenlik Kuralları
+- Faz 88C — Ticari Belge İptali Stok / Cari Etki Tasarımı
+- Faz 88D — Muhasebe Fişi Ters Kayıt UI İyileştirmesi
+- Faz 88E — Fiş İptali ve Belge Yeniden Fiş Oluşturma Akışı
 - Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
 - Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
 - Faz 91 — Ürün/Hizmet Muhasebe Hesap Eşleme İyileştirmesi
@@ -89,11 +93,11 @@
 - Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
 
 ## 6. Öncelik Önerisi
-1. Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
-2. Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
-3. Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
-4. Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
-5. Faz 93 — KDV/Tevkifat Rapor Çıktıları
+1. Faz 88B — Muhasebe Fişi İptal / Ters Kayıt Backend Güvenlik Kuralları
+2. Faz 88C — Ticari Belge İptali Stok / Cari Etki Tasarımı
+3. Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
+4. Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
+5. Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
 
 Gerekçe:
 - Önce veri bütünlüğünü bozan geri alma/iptal/stok negatifliği riskleri kapatılmalı.

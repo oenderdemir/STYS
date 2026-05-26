@@ -12,8 +12,13 @@
     </ng-template>
 </p-toolbar>
 
-<ng-container *ngIf="selectedCariKartId && bakiyeOzet">
+<ng-container *ngIf="selectedCariKartId && bakiyeOzet; else cariSecimBos">
     <div class="grid grid-cols-12 gap-3 mb-4">
+        <div class="col-span-12 md:col-span-6 p-3 border-round surface-card">
+            <div class="text-sm text-500">Cari Kart</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.cariKodu }}</div>
+            <div class="text-sm text-700">{{ bakiyeOzet.unvanAdSoyad }}</div>
+        </div>
         <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
             <div class="text-sm text-500">Toplam Borç</div>
             <div class="text-xl font-semibold">{{ bakiyeOzet.toplamBorc | number: '1.2-2' }}</div>
@@ -24,53 +29,119 @@
         </div>
         <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
             <div class="text-sm text-500">Bakiye</div>
-            <div class="text-xl font-semibold">{{ bakiyeOzet.bakiye | number: '1.2-2' }} <span class="text-sm">({{ bakiyeOzet.bakiyeYonu }})</span></div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.bakiye | number: '1.2-2' }}</div>
+            <p-tag [value]="bakiyeOzet.bakiyeYonu" [severity]="getBakiyeYonuSeverity(bakiyeOzet.bakiyeYonu)" styleClass="mt-2" />
         </div>
         <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
-            <div class="text-sm text-500">Açık / Kapanan</div>
-            <div class="text-xl font-semibold">{{ bakiyeOzet.acikHareketSayisi }} / {{ bakiyeOzet.kapananHareketSayisi }}</div>
+            <div class="text-sm text-500">Açık Hareket Sayısı</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.acikHareketSayisi }}</div>
+        </div>
+        <div class="col-span-12 md:col-span-3 p-3 border-round surface-card">
+            <div class="text-sm text-500">Kapanan Hareket Sayısı</div>
+            <div class="text-xl font-semibold">{{ bakiyeOzet.kapananHareketSayisi }}</div>
         </div>
     </div>
 
-    <div class="grid grid-cols-12 gap-4 mb-4">
-        <div class="col-span-12 lg:col-span-6">
-            <p-table [value]="acikHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '36rem' }">
-                <ng-template #caption><h5 class="m-0">Açık / Kısmi Açık Hareketler</h5></ng-template>
-                <ng-template #header>
-                    <tr><th>Tarih</th><th>Belge</th><th>Borç</th><th>Alacak</th><th>Kalan</th><th>Durum</th></tr>
-                </ng-template>
-                <ng-template #body let-item>
-                    <tr>
-                        <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy' }}</td>
-                        <td>{{ item.belgeTuru }} {{ item.belgeNo || '' }}</td>
-                        <td>{{ item.borcTutari | number: '1.2-2' }}</td>
-                        <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
-                        <td>{{ item.kalanTutar | number: '1.2-2' }}</td>
-                        <td>{{ hareketDurumu(item) }}</td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </div>
-        <div class="col-span-12 lg:col-span-6">
-            <p-table [value]="kapananHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '36rem' }">
-                <ng-template #caption><h5 class="m-0">Kapanan Hareketler</h5></ng-template>
-                <ng-template #header>
-                    <tr><th>Tarih</th><th>Belge</th><th>Borç</th><th>Alacak</th><th>Kapanan</th><th>Durum</th></tr>
-                </ng-template>
-                <ng-template #body let-item>
-                    <tr>
-                        <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy' }}</td>
-                        <td>{{ item.belgeTuru }} {{ item.belgeNo || '' }}</td>
-                        <td>{{ item.borcTutari | number: '1.2-2' }}</td>
-                        <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
-                        <td>{{ item.kapananTutar | number: '1.2-2' }}</td>
-                        <td>{{ hareketDurumu(item) }}</td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </div>
-    </div>
+    <p-tabs [value]="activeTab" (valueChange)="onTabChange($event)">
+        <p-tablist>
+            <p-tab value="acik">Açık Hareketler</p-tab>
+            <p-tab value="kapanan">Kapanan Hareketler</p-tab>
+            <p-tab value="ekstre">Ekstre</p-tab>
+        </p-tablist>
+        <p-tabpanels>
+            <p-tabpanel value="acik">
+                <p-table [value]="acikHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '78rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Belge Türü</th>
+                            <th>Belge No</th>
+                            <th>Borç</th>
+                            <th>Alacak</th>
+                            <th>Kapanan Tutar</th>
+                            <th>Kalan Tutar</th>
+                            <th>Kaynak Modül</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-item>
+                        <tr>
+                            <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                            <td>{{ item.belgeTuru }}</td>
+                            <td>{{ item.belgeNo || '-' }}</td>
+                            <td>{{ item.borcTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.kapananTutar | number: '1.2-2' }}</td>
+                            <td>{{ item.kalanTutar | number: '1.2-2' }}</td>
+                            <td>{{ item.kaynakModul || '-' }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </p-tabpanel>
+            <p-tabpanel value="kapanan">
+                <p-table [value]="kapananHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '76rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Belge Türü</th>
+                            <th>Belge No</th>
+                            <th>Borç</th>
+                            <th>Alacak</th>
+                            <th>Kapanan Tutar</th>
+                            <th>Kalan Tutar</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-item>
+                        <tr>
+                            <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                            <td>{{ item.belgeTuru }}</td>
+                            <td>{{ item.belgeNo || '-' }}</td>
+                            <td>{{ item.borcTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.kapananTutar | number: '1.2-2' }}</td>
+                            <td>{{ item.kalanTutar | number: '1.2-2' }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </p-tabpanel>
+            <p-tabpanel value="ekstre">
+                <p-table [value]="ekstreHareketler" [loading]="ozetLoading" dataKey="cariHareketId" [tableStyle]="{ 'min-width': '82rem' }">
+                    <ng-template #header>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Belge Türü</th>
+                            <th>Belge No</th>
+                            <th>Borç</th>
+                            <th>Alacak</th>
+                            <th>Kapanan Tutar</th>
+                            <th>Kalan Tutar</th>
+                            <th>Kapandı mı</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template #body let-item>
+                        <tr>
+                            <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                            <td>{{ item.belgeTuru }}</td>
+                            <td>{{ item.belgeNo || '-' }}</td>
+                            <td>{{ item.borcTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.alacakTutari | number: '1.2-2' }}</td>
+                            <td>{{ item.kapananTutar | number: '1.2-2' }}</td>
+                            <td>{{ item.kalanTutar | number: '1.2-2' }}</td>
+                            <td>
+                                <p-tag [value]="item.kapandiMi ? 'Evet' : 'Hayir'" [severity]="item.kapandiMi ? 'success' : 'warn'" />
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </p-tabpanel>
+        </p-tabpanels>
+    </p-tabs>
 </ng-container>
+
+<ng-template #cariSecimBos>
+    <div class="mb-4 p-4 border-round surface-card text-500">
+        Cari seçildiğinde bakiye özeti, açık/kapanan hareketler ve ekstre burada gösterilir.
+    </div>
+</ng-template>
 
 <p-table [value]="records" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '70rem' }" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [paginator]="true" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
     <ng-template #caption><h5 class="m-0">Cari Hareketler</h5></ng-template>

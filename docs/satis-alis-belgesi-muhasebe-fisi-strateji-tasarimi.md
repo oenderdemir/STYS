@@ -406,3 +406,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Kısmi kapanmış hareketler `KalanTutar` üzerinden izlenir.
 - Tesis yetki/scope kontrolü korundu.
 - Migration yapılmadı.
+
+## Faz 82A — Cari Bakiye Frontend Görünümü
+
+- Cari Hareketler ekranında bakiye özeti görünür hale getirildi.
+- Açık, kapanan ve ekstre hareketleri sekmeli olarak gösterilir.
+- Backend değişikliği yapılmadı, migration yapılmadı.

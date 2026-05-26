@@ -10,8 +10,10 @@ import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
+import { TabsModule } from 'primeng/tabs';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TagModule } from 'primeng/tag';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
@@ -24,7 +26,7 @@ import { CariHareketlerService } from './cari-hareketler.service';
 @Component({
     selector: 'app-cari-hareketler-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './cari-hareketler.html',
     providers: [MessageService]
 })
@@ -45,6 +47,8 @@ export class CariHareketlerPage implements OnInit {
     bakiyeOzet: CariBakiyeOzetModel | null = null;
     acikHareketler: CariHareketDurumOzetModel[] = [];
     kapananHareketler: CariHareketDurumOzetModel[] = [];
+    ekstreHareketler: CariHareketDurumOzetModel[] = [];
+    activeTab: 'acik' | 'kapanan' | 'ekstre' = 'acik';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -90,9 +94,16 @@ export class CariHareketlerPage implements OnInit {
         this.pageNumber = 1;
         this.load(1, this.pageSize);
         if (this.selectedCariKartId) {
+            this.activeTab = 'acik';
             this.loadCariOzeti();
         } else {
             this.clearCariOzet();
+        }
+    }
+
+    onTabChange(value: string | number | undefined): void {
+        if (value === 'acik' || value === 'kapanan' || value === 'ekstre') {
+            this.activeTab = value;
         }
     }
 
@@ -246,7 +257,8 @@ export class CariHareketlerPage implements OnInit {
         forkJoin({
             bakiye: this.service.getBakiyeOzet(cariKartId),
             acik: this.service.getAcikHareketler(cariKartId),
-            kapanan: this.service.getKapananHareketler(cariKartId)
+            kapanan: this.service.getKapananHareketler(cariKartId),
+            ekstre: this.service.getCariHareketEkstre(cariKartId)
         }).pipe(finalize(() => {
             this.ozetLoading = false;
             this.cdr.detectChanges();
@@ -255,6 +267,7 @@ export class CariHareketlerPage implements OnInit {
                 this.bakiyeOzet = result.bakiye;
                 this.acikHareketler = result.acik;
                 this.kapananHareketler = result.kapanan;
+                this.ekstreHareketler = result.ekstre;
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
@@ -269,6 +282,7 @@ export class CariHareketlerPage implements OnInit {
         this.bakiyeOzet = null;
         this.acikHareketler = [];
         this.kapananHareketler = [];
+        this.ekstreHareketler = [];
     }
 
     private closeOpenDialogForTesisChange(): void {
@@ -320,6 +334,17 @@ export class CariHareketlerPage implements OnInit {
         }
 
         return (item.kapananTutar ?? 0) > 0 ? 'Kısmi' : 'Açık';
+    }
+
+    getBakiyeYonuSeverity(yon?: string | null): 'success' | 'info' | 'warn' | 'secondary' {
+        switch (yon) {
+            case 'Borclu':
+                return 'warn';
+            case 'Alacakli':
+                return 'info';
+            default:
+                return 'secondary';
+        }
     }
 
     private showError(error: unknown): void {

@@ -77,16 +77,20 @@ export class CariHareketlerService {
         return this.http.get<ApiResponse<CariHareketDurumOzetModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/cari/${cariKartId}/kapanan-hareketler`).pipe(map((envelope) => this.unwrapList(envelope)));
     }
 
-    getHareketEkstre(cariKartId: number, baslangic?: string | null, bitis?: string | null): Observable<CariHareketDurumOzetModel[]> {
+    getCariHareketEkstre(cariKartId: number, baslangic?: Date | null, bitis?: Date | null): Observable<CariHareketDurumOzetModel[]> {
         let params = new HttpParams();
         if (baslangic) {
-            params = params.set('baslangic', baslangic);
+            params = params.set('baslangic', baslangic.toISOString());
         }
         if (bitis) {
-            params = params.set('bitis', bitis);
+            params = params.set('bitis', bitis.toISOString());
         }
 
         return this.http.get<ApiResponse<CariHareketDurumOzetModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/cari/${cariKartId}/hareket-ekstre`, { params }).pipe(map((envelope) => this.unwrapList(envelope)));
+    }
+
+    getHareketEkstre(cariKartId: number, baslangic?: Date | null, bitis?: Date | null): Observable<CariHareketDurumOzetModel[]> {
+        return this.getCariHareketEkstre(cariKartId, baslangic, bitis);
     }
 
     private unwrapList<T>(envelope: ApiResponse<T[]>): T[] {

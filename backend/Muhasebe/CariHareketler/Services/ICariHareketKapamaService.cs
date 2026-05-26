@@ -8,4 +8,8 @@ public interface ICariHareketKapamaService
     Task<CariHareketDto?> TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(
         int tahsilatOdemeBelgesiId,
         CancellationToken cancellationToken = default);
+
+    Task GeriAlAsync(
+        int tahsilatOdemeBelgesiId,
+        CancellationToken cancellationToken = default);
 }

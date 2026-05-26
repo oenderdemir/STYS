@@ -444,3 +444,11 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - Muhasebe modülündeki kalan eksikler, teknik riskler ve sonraki faz planı dokümante edildi.
 - Bu fazda kod değişikliği ve migration yapılmadı.
+
+## Faz 87 — Tahsilat/Ödeme Kapama Geri Alma
+
+- Tahsilat/ödeme kaynaklı cari hareket için kapama geri alma eklendi.
+- İlişkili fatura cari hareketinin `KapananTutar`, `KalanTutar` ve `KapandiMi` alanları geri alınır.
+- Cari kapama hareketi iptal edilir.
+- Kasa/banka hareketi ve muhasebe fişi iptali bu fazın kapsamı dışındadır.
+- Migration yapılmadı.

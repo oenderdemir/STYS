@@ -15,9 +15,9 @@
 ## 2. Kalan Fonksiyonel Eksikler
 
 ### 2.1 Tahsilat/Ödeme Geri Alma
-- Kapama yapılmış tahsilat/ödeme belgesi silinemiyor/güncellenemiyor.
-- İptal/geri alma mekanizması henüz yok.
-- Önerilen faz: Faz 87 — Tahsilat/Ödeme Kapama Geri Alma
+- Kapama yapılmış tahsilat/ödeme belgesinin iptal/geri alma mekanizması eklendi.
+- Kapama hareketi iptal edilir, ilişkili fatura hareketinin kapanan tutarı geri alınır.
+- Faz 87 tamamlandı.
 
 ### 2.2 Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
 - Fiş iptal/ters kayıt yapıldığında ilişkili stok/cari hareket etkisi net değil.
@@ -78,7 +78,6 @@
 - Stok hareketi ile muhasebe fişi tutar uyumu
 
 ## 5. Önerilen Sonraki Fazlar
-- Faz 87 — Tahsilat/Ödeme Kapama Geri Alma
 - Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
 - Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
 - Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
@@ -90,11 +89,11 @@
 - Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
 
 ## 6. Öncelik Önerisi
-1. Faz 87 — Tahsilat/Ödeme Kapama Geri Alma
-2. Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
-3. Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
-4. Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
-5. Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
+1. Faz 88 — Muhasebe Fişi İptal/Ters Kayıt Etki Analizi
+2. Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
+3. Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
+4. Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
+5. Faz 93 — KDV/Tevkifat Rapor Çıktıları
 
 Gerekçe:
 - Önce veri bütünlüğünü bozan geri alma/iptal/stok negatifliği riskleri kapatılmalı.

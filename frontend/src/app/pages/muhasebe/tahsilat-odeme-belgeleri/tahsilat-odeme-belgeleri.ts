@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -24,13 +25,14 @@ import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.servic
 @Component({
     selector: 'app-tahsilat-odeme-belgeleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './tahsilat-odeme-belgeleri.html',
-    providers: [MessageService]
+    providers: [ConfirmationService, MessageService]
 })
 export class TahsilatOdemeBelgeleriPage implements OnInit {
     private readonly service = inject(TahsilatOdemeBelgeleriService);
     private readonly cariKartService = inject(CariKartlarService);
+    private readonly confirmationService = inject(ConfirmationService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -241,6 +243,35 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
                 this.loadOzet();
             },
             error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    geriAl(item: TahsilatOdemeBelgesiModel): void {
+        if (!item.id) {
+            return;
+        }
+
+        this.confirmationService.confirm({
+            key: 'kapamaGeriAl',
+            header: 'Kapama Geri Al',
+            icon: 'pi pi-exclamation-triangle',
+            message: `${item.belgeNo} numaralı tahsilat/ödeme belgesinin kapamasını geri almak istiyor musunuz?`,
+            acceptLabel: 'Evet',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.service.kapamaGeriAl(item.id!).subscribe({
+                    next: () => {
+                        this.load();
+                        this.loadOzet();
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: 'Kapama geri alındı.'
+                        });
+                    },
+                    error: (error: unknown) => this.showError(error)
+                });
+            }
         });
     }
 

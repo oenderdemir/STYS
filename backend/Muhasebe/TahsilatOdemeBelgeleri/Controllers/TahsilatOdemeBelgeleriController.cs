@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
+using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -12,11 +13,16 @@ namespace STYS.Muhasebe.TahsilatOdemeBelgeleri.Controllers;
 public class TahsilatOdemeBelgeleriController : UIController
 {
     private readonly ITahsilatOdemeBelgesiService _service;
+    private readonly ICariHareketKapamaService _cariHareketKapamaService;
     private readonly IMapper _mapper;
 
-    public TahsilatOdemeBelgeleriController(ITahsilatOdemeBelgesiService service, IMapper mapper)
+    public TahsilatOdemeBelgeleriController(
+        ITahsilatOdemeBelgesiService service,
+        ICariHareketKapamaService cariHareketKapamaService,
+        IMapper mapper)
     {
         _service = service;
+        _cariHareketKapamaService = cariHareketKapamaService;
         _mapper = mapper;
     }
 
@@ -71,6 +77,14 @@ public class TahsilatOdemeBelgeleriController : UIController
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id);
+        return Ok();
+    }
+
+    [HttpPost("{id:int}/kapama-geri-al")]
+    [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.Manage)]
+    public async Task<IActionResult> KapamaGeriAl(int id, CancellationToken cancellationToken)
+    {
+        await _cariHareketKapamaService.GeriAlAsync(id, cancellationToken);
         return Ok();
     }
 }

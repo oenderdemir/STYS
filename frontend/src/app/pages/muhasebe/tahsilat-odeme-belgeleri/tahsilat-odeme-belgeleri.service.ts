@@ -39,6 +39,15 @@ export class TahsilatOdemeBelgeleriService {
         }));
     }
 
+    kapamaGeriAl(id: number): Observable<void> {
+        return this.http.post<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}/kapama-geri-al`, {}).pipe(map((envelope) => {
+            if (envelope.success) {
+                return;
+            }
+            throw new Error(tryReadApiMessage(envelope) ?? 'Kapama geri alinamadi.');
+        }));
+    }
+
     getGunlukOzet(gun?: string | null, tesisId?: number | null): Observable<TahsilatOdemeOzetModel> {
         let params = new HttpParams();
         if (gun) {

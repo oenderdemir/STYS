@@ -1,8 +1,10 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
+using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -17,12 +19,16 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     private readonly ITahsilatOdemeBelgesiRepository _repository;
     private readonly ICariKartRepository _cariKartRepository;
     private readonly ICariHareketRepository _cariHareketRepository;
+    private readonly ICariHareketKapamaService _cariHareketKapamaService;
+    private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
     public TahsilatOdemeBelgesiService(
         ITahsilatOdemeBelgesiRepository repository,
         ICariKartRepository cariKartRepository,
         ICariHareketRepository cariHareketRepository,
+        ICariHareketKapamaService cariHareketKapamaService,
+        StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(repository, mapper)
@@ -30,6 +36,8 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         _repository = repository;
         _cariKartRepository = cariKartRepository;
         _cariHareketRepository = cariHareketRepository;
+        _cariHareketKapamaService = cariHareketKapamaService;
+        _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -72,7 +80,27 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     {
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
         await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
-        return await base.AddAsync(dto);
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            var entity = Mapper.Map<TahsilatOdemeBelgesi>(dto);
+            await _repository.AddAsync(entity);
+            await _repository.SaveChangesAsync();
+
+            if (dto.KapatilacakCariHareketId.HasValue)
+            {
+                await _cariHareketKapamaService.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(entity.Id, CancellationToken.None);
+            }
+
+            await transaction.CommitAsync();
+            return Mapper.Map<TahsilatOdemeBelgesiDto>(entity);
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public override async Task<TahsilatOdemeBelgesiDto> UpdateAsync(TahsilatOdemeBelgesiDto dto)
@@ -84,7 +112,23 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
         await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
+
+        if (await HasCariHareketAsync(dto.Id.Value))
+        {
+            throw new BaseException("Cari kapama yapılmış tahsilat/ödeme belgesi güncellenemez.", 400);
+        }
+
         return await base.UpdateAsync(dto);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        if (await HasCariHareketAsync(id))
+        {
+            throw new BaseException("Cari kapama yapılmış tahsilat/ödeme belgesi silinemez.", 400);
+        }
+
+        await base.DeleteAsync(id);
     }
 
     public override async Task<TahsilatOdemeBelgesiDto?> GetByIdAsync(int id, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null)
@@ -203,6 +247,15 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
                 throw new BaseException("Kapatilacak cari hareket icin yetkiniz bulunmuyor.", 403);
             }
         }
+    }
+
+    private async Task<bool> HasCariHareketAsync(int tahsilatOdemeBelgesiId)
+    {
+        return await _dbContext.CariHareketler.AnyAsync(x =>
+            !x.IsDeleted
+            && x.Durum == CariHareketDurumlari.Aktif
+            && x.KaynakModul == "TahsilatOdemeBelgesi"
+            && x.KaynakId == tahsilatOdemeBelgesiId);
     }
 
     private static Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>> BuildScopedIncludeQuery(

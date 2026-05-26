@@ -385,3 +385,11 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - `TahsilatOdemeBelgesi` üzerine `KapatilacakCariHareketId` eklendi.
 - Kapama hesaplaması Faz 81B’ye bırakıldı.
+
+## Faz 81B — Tahsilat/Ödeme ile Cari Kapama
+
+- Tahsilat/ödeme belgesi oluşturulurken seçilen cari hareket kısmi veya tam kapatılır.
+- `KapananTutar`, `KalanTutar`, `KapandiMi` ve `IliskiliCariHareketId` güncellenir.
+- Duplicate ve fazla kapama engellenir.
+- Update/delete geri alma sonraki faza bırakılmıştır.
+- Migration yapılmamıştır.

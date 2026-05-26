@@ -17,6 +17,7 @@ using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Services;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Repositories;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
+using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.Kdv.Services;
@@ -116,6 +117,7 @@ builder.Services.AddScoped<ITasinirKodMuhasebeHesapEslemeService, TasinirKodMuha
 builder.Services.AddScoped<IMuhasebeVergiHesapEslemeService, MuhasebeVergiHesapEslemeService>();
 builder.Services.AddScoped<ITevkifatHesapEslemeRepository, TevkifatHesapEslemeRepository>();
 builder.Services.AddScoped<ITevkifatHesapEslemeService, TevkifatHesapEslemeService>();
+builder.Services.AddScoped<ICariHareketKapamaService, CariHareketKapamaService>();
 builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();

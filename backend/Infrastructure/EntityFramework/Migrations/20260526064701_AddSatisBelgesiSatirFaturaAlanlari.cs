@@ -1,11 +1,11 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     /// <inheritdoc />
-    public partial class Faz70SatisBelgesiSatiriAlanlari : Migration
+    public partial class AddSatisBelgesiSatirFaturaAlanlari : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -17,7 +17,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "Adet");
+                defaultValue: "");
 
             migrationBuilder.AddColumn<int>(
                 name: "DepoId",

@@ -328,3 +328,12 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Alış stok giriş hareketi davranışı doğrulandı.
 - Proforma ve iade belgeleri hâlâ kapalı.
 - Migration gerekmedi.
+
+## Faz 77 — Satış Stok Çıkış Hareketi
+
+- Satış faturasında taşınır/stok satırları için stok çıkış hareketi oluşturulur.
+- Hizmet satırları stok hareketi oluşturmaz.
+- Duplicate çıkış hareketi engellenir.
+- Alış stok giriş davranışı korunur.
+- İade belgeleri kapsam dışıdır.
+- Migration yapılmamıştır.

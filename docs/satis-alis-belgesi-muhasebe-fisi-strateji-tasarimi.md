@@ -281,3 +281,12 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Stok hareketi oluşturulmamıştır.
 - `SatisBelgesi` üzerinde `CariKartId` olmadığı için 320 tarafı ilk sürümde genel hesap üzerinden çalışır; bu sınırlama not edilmiştir.
 - Alış belgeleri ekranında `Muhasebe Fişi Oluştur` aksiyonu kontrollü şekilde görünür hale getirilmiştir.
+
+## Faz 73C-A — MuhasebeFisSatir Kaynak Alanları Doğrulaması
+
+- `MuhasebeFisSatir` entity’sinde `CariKartId`, `TasinirKartId`, `DepoId` ve `KasaBankaHesapId` alanları mevcut.
+- Aynı alanlar `StysAppDbContextModelSnapshot` içinde de yer alıyor.
+- `20260514221833_AddMuhasebeFisleri` başlangıç migration’ında `MuhasebeFisSatirlari` tablosu bu alanlarla oluşturulmuş durumda.
+- Bu nedenle Faz 73C için ek migration gerekmedi.
+- `AlisFaturasiMuhasebeFisStratejisi` ve orchestrator tarafındaki kaynak alan setlemeleri compile/runtime açısından güvenli kabul edildi.
+- Stok/depo bağlantısı için ayrıca kolon ekleme veya migration ihtiyacı oluşmadı; Faz 74 stok hareketi fazına bırakıldı.

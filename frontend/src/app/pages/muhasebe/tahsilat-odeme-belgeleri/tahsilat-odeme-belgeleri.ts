@@ -172,6 +172,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
             aciklama: this.model.aciklama || null,
             kaynakModul: this.model.kaynakModul || null,
             kaynakId: this.model.kaynakId ?? null,
+            kapatilacakCariHareketId: this.model.kapatilacakCariHareketId ?? null,
             durum: this.model.durum
         };
 
@@ -255,6 +256,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
             aciklama: null,
             kaynakModul: null,
             kaynakId: null,
+            kapatilacakCariHareketId: null,
             durum: 'Aktif'
         };
     }

@@ -10,6 +10,7 @@ export interface TahsilatOdemeBelgesiModel {
     aciklama?: string | null;
     kaynakModul?: string | null;
     kaynakId?: number | null;
+    kapatilacakCariHareketId?: number | null;
     durum: string;
 }
 

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -36,10 +37,14 @@ public class TahsilatOdemeBelgesi : BaseEntity<int>
 
     public int? KaynakId { get; set; }
 
+    public int? KapatilacakCariHareketId { get; set; }
+
     [Required]
     [MaxLength(16)]
     public string Durum { get; set; } = TahsilatOdemeBelgeDurumlari.Aktif;
 
     public CariKart? CariKart { get; set; }
+
+    public CariHareket? KapatilacakCariHareket { get; set; }
 }
 

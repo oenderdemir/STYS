@@ -1,6 +1,8 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Muhasebe.CariHareketler.Entities;
+using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -14,17 +16,20 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 {
     private readonly ITahsilatOdemeBelgesiRepository _repository;
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly ICariHareketRepository _cariHareketRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
     public TahsilatOdemeBelgesiService(
         ITahsilatOdemeBelgesiRepository repository,
         ICariKartRepository cariKartRepository,
+        ICariHareketRepository cariHareketRepository,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(repository, mapper)
     {
         _repository = repository;
         _cariKartRepository = cariKartRepository;
+        _cariHareketRepository = cariHareketRepository;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -66,6 +71,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     public override async Task<TahsilatOdemeBelgesiDto> AddAsync(TahsilatOdemeBelgesiDto dto)
     {
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
+        await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
         return await base.AddAsync(dto);
     }
 
@@ -77,6 +83,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         }
 
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
+        await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
         return await base.UpdateAsync(dto);
     }
 
@@ -152,6 +159,49 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         if (durum != TahsilatOdemeBelgeDurumlari.Aktif && durum != TahsilatOdemeBelgeDurumlari.Iptal)
         {
             throw new BaseException("Durum gecersiz.", 400);
+        }
+    }
+
+    private async Task ValidateKapatilacakCariHareketAsync(int cariKartId, int? kapatilacakCariHareketId)
+    {
+        if (!kapatilacakCariHareketId.HasValue)
+        {
+            return;
+        }
+
+        var hareket = await _cariHareketRepository
+            .Where(x => x.Id == kapatilacakCariHareketId.Value)
+            .Include(x => x.CariKart)
+            .FirstOrDefaultAsync();
+
+        if (hareket is null)
+        {
+            throw new BaseException("Kapatilacak cari hareket bulunamadi.", 400);
+        }
+
+        if (hareket.IsDeleted || hareket.Durum != CariHareketDurumlari.Aktif)
+        {
+            throw new BaseException("Kapatilacak cari hareket aktif degil.", 400);
+        }
+
+        if (hareket.KapandiMi || hareket.KalanTutar <= 0m)
+        {
+            throw new BaseException("Kapatilacak cari hareket kapali.", 400);
+        }
+
+        if (hareket.CariKartId != cariKartId)
+        {
+            throw new BaseException("Kapatilacak cari hareket secilen cari kart ile uyumlu degil.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (scope.IsScoped)
+        {
+            var cariTesisId = hareket.CariKart?.TesisId;
+            if (!cariTesisId.HasValue || !scope.TesisIds.Contains(cariTesisId.Value))
+            {
+                throw new BaseException("Kapatilacak cari hareket icin yetkiniz bulunmuyor.", 403);
+            }
         }
     }
 

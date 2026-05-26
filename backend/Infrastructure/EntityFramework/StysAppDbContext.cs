@@ -1753,10 +1753,16 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.CariKartId)
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.KapatilacakCariHareketId)
+                .HasFilter("[IsDeleted] = 0 AND [KapatilacakCariHareketId] IS NOT NULL");
 
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.TahsilatOdemeBelgeleri)
                 .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.KapatilacakCariHareket)
+                .WithMany()
+                .HasForeignKey(x => x.KapatilacakCariHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

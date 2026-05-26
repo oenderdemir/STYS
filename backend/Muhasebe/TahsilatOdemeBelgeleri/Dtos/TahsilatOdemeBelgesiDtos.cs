@@ -14,6 +14,7 @@ public class TahsilatOdemeBelgesiDto : BaseRdbmsDto<int>
     public string? Aciklama { get; set; }
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
+    public int? KapatilacakCariHareketId { get; set; }
     public string Durum { get; set; } = string.Empty;
 }
 
@@ -29,6 +30,7 @@ public class CreateTahsilatOdemeBelgesiRequest
     public string? Aciklama { get; set; }
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
+    public int? KapatilacakCariHareketId { get; set; }
     public string Durum { get; set; } = string.Empty;
 }
 

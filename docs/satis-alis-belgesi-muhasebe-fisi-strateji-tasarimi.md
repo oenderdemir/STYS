@@ -380,3 +380,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - `CreateCariHareketRequest` ve `UpdateCariHareketRequest` içinden kapama alanları kaldırıldı.
 - Kapama alanları sadece sistem tarafından yönetilir.
+
+## Faz 81B-A — Tahsilat/Ödeme Bağlantı Alanı
+
+- `TahsilatOdemeBelgesi` üzerine `KapatilacakCariHareketId` eklendi.
+- Kapama hesaplaması Faz 81B’ye bırakıldı.

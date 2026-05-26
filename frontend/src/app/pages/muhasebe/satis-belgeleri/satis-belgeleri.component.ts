@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -21,6 +21,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { finalize } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { SatisBelgesiService } from '../services/satis-belgesi.service';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
@@ -28,7 +29,7 @@ import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-c
 import { PaketTurleriService } from '../paket-turleri/paket-turleri.service';
 import { PaketTuruModel } from '../paket-turleri/paket-turleri.dto';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
-import { CariKartModel } from '../cari-kartlar/cari-kartlar.dto';
+import { CariKartModel, CARI_KART_TIPLERI } from '../cari-kartlar/cari-kartlar.dto';
 import { DepolarService } from '../depolar/depolar.service';
 import { DepoModel } from '../depolar/depolar.dto';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
@@ -106,6 +107,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
     private readonly route = inject(ActivatedRoute);
+    private readonly destroyRef = inject(DestroyRef);
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -215,7 +217,18 @@ export class SatisBelgeleriComponent implements OnInit {
     }, { allowSignalWrites: true });
 
     ngOnInit(): void {
-        this.applyBelgeModu(this.route.snapshot.data['belgeModu'] === 'alis' ? 'alis' : 'satis');
+        this.route.data
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(data => {
+                const nextMode = data['belgeModu'] === 'alis' ? 'alis' : 'satis';
+                const previousMode = this.belgeModu();
+                this.applyBelgeModu(nextMode);
+
+                if (previousMode !== nextMode && this.tesisHazir() && this.tesisContext.seciliTesis()?.id) {
+                    this.loadLookupLists(this.tesisContext.seciliTesis()!.id);
+                    this.loadBelgeler();
+                }
+            });
 
         this.tesisContext.initialize().subscribe({
             next: () => {
@@ -367,8 +380,8 @@ export class SatisBelgeleriComponent implements OnInit {
 
     getCariTipleriForMode(): string[] {
         return this.isAlisMode()
-            ? ['Tedarikci']
-            : ['Musteri', 'KurumsalMusteri'];
+            ? [CARI_KART_TIPLERI.Tedarikci]
+            : [CARI_KART_TIPLERI.Musteri, CARI_KART_TIPLERI.KurumsalMusteri];
     }
 
     loadCariKartlar(tesisId: number): void {

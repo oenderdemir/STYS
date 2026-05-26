@@ -86,3 +86,7 @@ Bu fazda satış ve alış belgeleri aynı altyapı üzerinde iki ayrı kullanı
 - Paket türleri global lookup olarak kalır.
 - Tesis context davranışı korunur.
 - Bu fazda stok hareketi üretimi eklenmedi.
+
+### Menü / yetki notu
+- `Alış Belgeleri` menü kaydı mevcut `MuhasebeFisYonetimi.View` yetkisini kullanır.
+- Bu eşleştirme operasyonel olarak yeterli bir ara çözümdür; daha semantik bir menü yetkisi ileride ayrı fazda ele alınacaktır.

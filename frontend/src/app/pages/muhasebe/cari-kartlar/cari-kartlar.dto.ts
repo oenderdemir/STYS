@@ -55,11 +55,28 @@ export interface MuhasebeTesisModel {
     ad: string;
 }
 
+export const CARI_KART_TIPLERI = {
+    Musteri: 'Musteri',
+    Tedarikci: 'Tedarikci',
+    KurumsalMusteri: 'KurumsalMusteri',
+    Personel: 'Personel',
+    Diger: 'Diger'
+} as const;
+
 export const CARI_TIPLERI: Array<{ label: string; value: string }> = [
-    { label: 'Musteri', value: 'Musteri' },
-    { label: 'Tedarikci', value: 'Tedarikci' },
-    { label: 'Kurumsal Musteri', value: 'KurumsalMusteri' },
-    { label: 'Personel', value: 'Personel' },
-    { label: 'Diger', value: 'Diger' }
+    { label: 'Musteri', value: CARI_KART_TIPLERI.Musteri },
+    { label: 'Tedarikci', value: CARI_KART_TIPLERI.Tedarikci },
+    { label: 'Kurumsal Musteri', value: CARI_KART_TIPLERI.KurumsalMusteri },
+    { label: 'Personel', value: CARI_KART_TIPLERI.Personel },
+    { label: 'Diger', value: CARI_KART_TIPLERI.Diger }
 ];
+
+export const SATIS_CARI_TIPLERI = [
+    CARI_KART_TIPLERI.Musteri,
+    CARI_KART_TIPLERI.KurumsalMusteri
+] as const;
+
+export const ALIS_CARI_TIPLERI = [
+    CARI_KART_TIPLERI.Tedarikci
+] as const;
 

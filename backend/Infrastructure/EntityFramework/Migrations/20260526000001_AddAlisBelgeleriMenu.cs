@@ -15,6 +15,8 @@ public partial class AddAlisBelgeleriMenu : Migration
             """
             DECLARE @Now datetime2 = SYSUTCDATETIME();
 
+            -- TODO: This currently reuses the MuhasebeFisYonetimi.View role.
+            -- When a more semantic menu permission is introduced, remap this seed accordingly.
             DECLARE @ViewRoleId uniqueidentifier;
             SELECT TOP (1) @ViewRoleId = [Id] FROM [TODBase].[Roles] WHERE [Domain] = N'MuhasebeFisYonetimi' AND [Name] = N'View';
 

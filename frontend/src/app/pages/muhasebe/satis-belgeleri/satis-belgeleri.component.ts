@@ -61,7 +61,6 @@ import {
     createEmptySatisBelgesiSatiri,
     createEmptyCreateSatisBelgesiRequest,
     getMusteriDisplayName,
-    isAlisBelgeTipi
 } from '../models/satis-belgesi.model';
 
 @Component({
@@ -1142,23 +1141,22 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     canFisOlustur(belge: SatisBelgesiDto): boolean {
-        if (!this.isSatisMode()) {
-            return false;
-        }
-
-        if (isAlisBelgeTipi(belge.belgeTipi)) {
-            return false;
-        }
-
         if (
+            belge.durum !== SatisBelgesiDurumu.MuhasebeOnaylandi ||
+            belge.muhasebeFisId ||
             belge.belgeTipi === SatisBelgesiTipi.Proforma ||
             belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi ||
-            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi
+            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi ||
+            belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi
         ) {
             return false;
         }
 
-        return belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi && !belge.muhasebeFisId;
+        if (this.isAlisMode()) {
+            return belge.belgeTipi === SatisBelgesiTipi.AlisFaturasi;
+        }
+
+        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi || belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi;
     }
 
     hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
@@ -1175,7 +1173,9 @@ export class SatisBelgeleriComponent implements OnInit {
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
         if (!this.canFisOlustur(belge)) {
             const detail = this.isAlisMode()
-                ? 'Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
+                ? belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi
+                    ? 'Alış iade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
+                    : 'Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
                 : belge.belgeTipi === SatisBelgesiTipi.Proforma
                     ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
                     : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.';

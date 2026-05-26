@@ -144,6 +144,13 @@ Bu nedenle alış faturası için muhasebe tarafında altyapı tamamen sıfırda
 - Ancak satış ve alış kuralları giderek ayrışacağı için uzun vadede `TicariBelge` adı daha doğru olacaktır.
 - Bu analizde en güvenli yaklaşım, altyapıyı tamamen yeniden yazmadan önce satış/alış muhasebe ve stok stratejilerini ayırmaktır.
 
+## Faz 73C Notu
+
+- Alış faturası için strateji katmanı eklendiğinde ilk sürümde tedarikçi tarafı `CariKartId` üzerinden değil, genel `320 Satıcılar` hesabı üzerinden işlenir.
+- Stok satırlarında taşınır kartın kendi muhasebe hesabı varsa o hesap kullanılır; yoksa taşınır kod varsayılan eşlemesi; o da yoksa `153 Ticari Mallar` fallback’i devreye girer.
+- Hizmet satırları için `740` öncelikli, `770` ikinci fallback olarak konumlandırılır.
+- Tevkifat ve iade muhasebe fişi üretimi bu fazda açılmamıştır.
+
 ## Faz 72 Notu
 
 - Kısa vadeli karar olarak mevcut `SatisBelgesi` altyapısı korunarak satış ve alış akışları route/UI seviyesinde ayrıldı.

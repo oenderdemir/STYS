@@ -18,10 +18,11 @@ using TOD.Platform.SharedKernel.Exceptions;
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
 /// <summary>
-/// Satış belgesinden muhasebe fişi oluşturma servisi.
-/// MuhasebeOnaylandi durumundaki satış belgesinden 120 / 600 / 391 hesap kurgusuyla
-/// muhasebe fişi taslağı oluşturur.
-///
+/// Satış / alış belgesinden muhasebe fişi oluşturma orkestratörü.
+/// MuhasebeOnaylandi durumundaki belge için ortak validasyon, transaction,
+/// fiş ana kaydı oluşturma ve belgeye MuhasebeFisId yazma akışını yönetir.
+/// Belge tipine özel muhasebe satırları strateji sınıflarında üretilir.
+/// 
 /// Neden BaseRdbmsService'ten türemiyor?
 /// Bu servis cross-aggregate işlem yapmaktadır (SatisBelgesi + MuhasebeFis).
 /// BaseRdbmsService tek entity tipi üzerinde çalışır. İki farklı entity'yi
@@ -90,10 +91,10 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.Proforma)
             throw new BaseException("Proforma belgeler için muhasebe fişi oluşturulamaz.", 400);
 
-        if (belgeOnOkuma.BelgeTipi.IsAlisBelgesi())
-            throw new BaseException("Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor. Faz 73 kapsamında eklenecektir.", 400);
+        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
+            throw new BaseException("Alış iade faturaları için muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
 
-        if (belgeOnOkuma.BelgeTipi.IsIadeBelgesi())
+        if (belgeOnOkuma.BelgeTipi is SatisBelgesiTipi.IadeFaturasi or SatisBelgesiTipi.SatisIadeFaturasi)
             throw new BaseException("İade faturaları için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
 
         // Toplam kontroller
@@ -168,7 +169,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 // Tevkifat kontrolü
                 if (aktifSatirlar.Any(s => s.KdvUygulamaTipi == STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Tevkifatli))
                     throw new BaseException(
-                        "Tevkifatlı satış belgeleri için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.",
+                        "Tevkifatlı belgeler için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.",
                         400);
 
                 // Satır toplamları belge toplamlarıyla uyumlu mu?
@@ -191,18 +192,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         $"Satır genel toplamı ({satirToplamGenel:N2}) belge genel toplamı ({belge.GenelToplam:N2}) ile uyumlu değil.",
                         400);
 
-                // ── 3c. Hesap planından 120, 600 ve 391 hesaplarını bul ──
-                var tesisId = belge.TesisId!.Value;
-                var hesap120 = await GetHesapPlaniAsync("120", tesisId, cancellationToken);
-                var hesap600 = await GetHesapPlaniAsync("600", tesisId, cancellationToken);
-
-                MuhasebeHesapPlani? hesap391 = null;
-                if (belge.ToplamKdv > 0)
-                {
-                    hesap391 = await GetKdvHesabiAsync(belge.TesisId.Value, "391", cancellationToken);
-                }
-
-                // ── 3d. Donem ve MaliYil belirle ──
+                // ── 3c. Donem ve MaliYil belirle ──
                 var maliYil = aktifDonemDto.MaliYil;
                 var donemNo = aktifDonemDto.DonemNo;
 
@@ -210,20 +200,25 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (strateji is null)
                     throw new BaseException("Bu belge tipi için muhasebe fişi üretimi desteklenmiyor.", 400);
 
-                var fisContext = new SatisBelgesiMuhasebeFisContext
+                var fisContext = belgeOnOkuma.BelgeTipi switch
                 {
-                    TesisId = tesisId,
-                    MaliYil = maliYil,
-                    Donem = donemNo,
-                    FisTarihi = belge.BelgeTarihi,
-                    FisNo = string.Empty,
-                    BelgeNo = belge.BelgeNo,
-                    CariHesapPlaniId = hesap120.Id,
-                    GelirHesapPlaniId = hesap600.Id,
-                    KdvHesapPlaniId = hesap391?.Id,
+                    SatisBelgesiTipi.AlisFaturasi => await BuildAlisFisContextAsync(
+                        belgeOnOkuma.TesisId!.Value,
+                        maliYil,
+                        donemNo,
+                        belgeOnOkuma.BelgeTarihi,
+                        belgeOnOkuma.BelgeNo,
+                        cancellationToken),
+                    _ => await BuildSatisFisContextAsync(
+                        belgeOnOkuma.TesisId!.Value,
+                        maliYil,
+                        donemNo,
+                        belgeOnOkuma.BelgeTarihi,
+                        belgeOnOkuma.BelgeNo,
+                        cancellationToken)
                 };
 
-                // ── 3e. Fiş satırlarını strateji ile oluştur ──
+                // ── 3d. Fiş satırlarını strateji ile oluştur ──
                 var satirTaslaklari = await strateji.SatirlariOlusturAsync(
                     belge,
                     fisContext,
@@ -238,11 +233,15 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         Alacak = taslak.Alacak,
                         ParaBirimi = "TRY",
                         Kur = 1,
+                        CariKartId = taslak.CariKartId,
+                        TasinirKartId = taslak.TasinirKartId,
+                        DepoId = taslak.DepoId,
+                        KasaBankaHesapId = taslak.KasaBankaHesapId,
                         Aciklama = taslak.Aciklama,
                     })
                     .ToList();
 
-                // ── 3f. Borç / alacak denge kontrolü ──
+                // ── 3e. Borç / alacak denge kontrolü ──
                 var toplamBorc = satirlar.Sum(s => s.Borc);
                 var toplamAlacak = satirlar.Sum(s => s.Alacak);
 
@@ -252,27 +251,27 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         $"Borç: {toplamBorc:N2}, Alacak: {toplamAlacak:N2}",
                         400);
 
-                // ── 3g. Fiş no üret ──
+                // ── 3f. Fiş no üret ──
                 var fisNo = await GenerateFisNoAsync(
-                    belge.TesisId.Value,
+                    belgeOnOkuma.TesisId.Value,
                     maliYil,
                     MuhasebeFisTipleri.Mahsup,
                     MuhasebeKaynakModulleri.SatisBelgesi,
                     cancellationToken);
 
-                // ── 3h. Muhasebe fişi oluştur ──
+                // ── 3g. Muhasebe fişi oluştur ──
                 var fis = new MuhasebeFis
                 {
-                    TesisId = belge.TesisId.Value,
+                    TesisId = belgeOnOkuma.TesisId.Value,
                     MaliYil = maliYil,
                     Donem = donemNo,
                     FisNo = fisNo,
-                    FisTarihi = belge.BelgeTarihi,
+                    FisTarihi = belgeOnOkuma.BelgeTarihi,
                     FisTipi = MuhasebeFisTipleri.Mahsup,
                     KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
-                    KaynakId = belge.Id,
+                    KaynakId = belgeOnOkuma.Id,
                     Durum = MuhasebeFisDurumlari.Taslak,
-                    Aciklama = $"Satış belgesi muhasebe fişi - {belge.BelgeNo}",
+                    Aciklama = $"Satış belgesi muhasebe fişi - {belgeOnOkuma.BelgeNo}",
                     ToplamBorc = toplamBorc,
                     ToplamAlacak = toplamAlacak,
                     Satirlar = satirlar,
@@ -282,7 +281,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
-                // ── 3i. Satış belgesine fiş bağlantısını yaz ──
+                // ── 3h. Satış belgesine fiş bağlantısını yaz ──
                 belge.MuhasebeFisId = fis.Id;
                 belge.MuhasebeFisOlusturmaTarihi = DateTime.UtcNow;
 
@@ -296,7 +295,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     "Satış belgesi {BelgeId} için muhasebe fişi oluşturuldu. Fiş ID: {FisId}, Fiş No: {FisNo}",
                     belge.Id, fis.Id, fisNo);
 
-                // ── 3j. Güncel DTO dön ──
+                // ── 3i. Güncel DTO dön ──
                 // Satırlarıyla birlikte yeniden oku (include navigation)
                 var guncelBelge = await _satisBelgesiRepository.GetByIdAsync(belge.Id);
                 if (guncelBelge is null)
@@ -431,36 +430,81 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     /// TamKod == anaKod öncelikli, yoksa TamKod.StartsWith(anaKod + ".") olan en küçük TamKod.
     /// Hesap aktif, hareket görebilir ve detay hesap olmalıdır.
     /// </summary>
+    private async Task<SatisBelgesiMuhasebeFisContext> BuildSatisFisContextAsync(
+        int tesisId,
+        int maliYil,
+        int donemNo,
+        DateTime fisTarihi,
+        string belgeNo,
+        CancellationToken cancellationToken)
+    {
+        var cari = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.CariMusteri, tesisId, cancellationToken);
+        var gelir = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.GelirSatis, tesisId, cancellationToken);
+        var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken);
+
+        return new SatisBelgesiMuhasebeFisContext
+        {
+            TesisId = tesisId,
+            MaliYil = maliYil,
+            Donem = donemNo,
+            FisTarihi = fisTarihi,
+            FisNo = string.Empty,
+            BelgeNo = belgeNo,
+            CariHesapPlaniId = cari.Id,
+            GelirHesapPlaniId = gelir.Id,
+            KdvHesapPlaniId = kdv.Id
+        };
+    }
+
+    private async Task<SatisBelgesiMuhasebeFisContext> BuildAlisFisContextAsync(
+        int tesisId,
+        int maliYil,
+        int donemNo,
+        DateTime fisTarihi,
+        string belgeNo,
+        CancellationToken cancellationToken)
+    {
+        var cari = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.CariTedarikci, tesisId, cancellationToken);
+        var stok = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.StokTicariMal, tesisId, cancellationToken);
+        var hizmet = await GetHesapPlaniFallbackAsync(
+            tesisId,
+            cancellationToken,
+            MuhasebeAnaHesapKodlari.GiderHizmetMaliyet,
+            MuhasebeAnaHesapKodlari.GiderGenelYonetim);
+        var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVIndirilecek, false, cancellationToken);
+
+        return new SatisBelgesiMuhasebeFisContext
+        {
+            TesisId = tesisId,
+            MaliYil = maliYil,
+            Donem = donemNo,
+            FisTarihi = fisTarihi,
+            FisNo = string.Empty,
+            BelgeNo = belgeNo,
+            CariHesapPlaniId = cari.Id,
+            GelirHesapPlaniId = 0,
+            KdvHesapPlaniId = kdv.Id,
+            StokHesapPlaniId = stok.Id,
+            HizmetGiderHesapPlaniId = hizmet.Id
+        };
+    }
+
     private async Task<MuhasebeHesapPlani> GetHesapPlaniAsync(
         string anaKod,
         int tesisId,
         CancellationToken cancellationToken)
     {
-        // Önce TamKod == anaKod olanları ara (tesis özel öncelikli)
         var hesap = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
-            .Where(x => x.TamKod == anaKod
-                        && !x.IsDeleted
+            .Where(x => !x.IsDeleted
                         && x.AktifMi
                         && x.HareketGorebilirMi
                         && x.DetayHesapMi
-                        && (x.TesisId == tesisId || x.TesisId == null))
-            .OrderByDescending(x => x.TesisId == tesisId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (hesap is not null)
-            return hesap;
-
-        // TamKod.StartsWith(anaKod + ".") olan en küçük TamKod'u ara
-        var prefix = anaKod + ".";
-        hesap = await _dbContext.MuhasebeHesapPlanlari
-            .AsNoTracking()
-            .Where(x => x.TamKod.StartsWith(prefix)
-                        && !x.IsDeleted
-                        && x.AktifMi
-                        && x.HareketGorebilirMi
-                        && x.DetayHesapMi
-                        && (x.TesisId == tesisId || x.TesisId == null))
+                        && (x.TesisId == tesisId || x.TesisId == null)
+                        && (x.TamKod == anaKod
+                            || x.Kod == anaKod
+                            || x.AnaHesapKodu == anaKod
+                            || x.TamKod.StartsWith(anaKod + ".")))
             .OrderByDescending(x => x.TesisId == tesisId)
             .ThenBy(x => x.TamKod)
             .FirstOrDefaultAsync(cancellationToken);
@@ -475,7 +519,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     }
 
     /// <summary>
-    /// Satış KDV hesabını (391) bulur.
+    /// KDV hesabını (191/391) bulur.
     ///
     /// Arama sırası:
     /// 1. MuhasebeVergiHesapEslemeleri tablosunda VergiTipi = "KDV" olan ve
@@ -490,9 +534,31 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     /// MuhasebeFisService.GetKdvHesabiAsync private olduğu için aynı pattern
     /// (VergiHesapEsleme tablosu ile zenginleştirilmiş) burada uygulanmıştır.
     /// </summary>
+    private async Task<MuhasebeHesapPlani> GetHesapPlaniFallbackAsync(
+        int tesisId,
+        CancellationToken cancellationToken,
+        params string[] anaKodlar)
+    {
+        BaseException? lastError = null;
+        foreach (var anaKod in anaKodlar)
+        {
+            try
+            {
+                return await GetHesapPlaniAsync(anaKod, tesisId, cancellationToken);
+            }
+            catch (BaseException ex)
+            {
+                lastError = ex;
+            }
+        }
+
+        throw lastError ?? new BaseException("Hesap planı bulunamadı.", 400);
+    }
+
     private async Task<MuhasebeHesapPlani> GetKdvHesabiAsync(
         int tesisId,
         string tamKod,
+        bool satisMi,
         CancellationToken cancellationToken)
     {
         // ── 1. Önce VergiHesapEsleme tablosunda satış KDV eşlemesi ara ──
@@ -507,10 +573,12 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 
         if (esleme is not null)
         {
-            // Eşlemedeki satış KDV hesabını doğrula: aktif, hareket görebilir, detay hesap
+            var hesapId = satisMi ? esleme.SatisKdvHesapId : esleme.AlisKdvHesapId;
+
+            // Eşlemedeki KDV hesabını doğrula: aktif, hareket görebilir, detay hesap
             var eslemeHesap = await _dbContext.MuhasebeHesapPlanlari
                 .AsNoTracking()
-                .Where(x => x.Id == esleme.SatisKdvHesapId
+                .Where(x => x.Id == hesapId
                             && !x.IsDeleted
                             && x.AktifMi
                             && x.HareketGorebilirMi
@@ -536,16 +604,18 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (kdvHesap is not null)
             return kdvHesap;
 
-        // ── 3. Son çare: TamKod "391." prefix ile başlayan detay hesap ara ──
-        var prefix = tamKod + ".";
+        // ── 3. Son çare: TamKod/Kod prefix ile başlayan detay hesap ara ──
         kdvHesap = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
-            .Where(x => x.TamKod.StartsWith(prefix)
-                        && !x.IsDeleted
+            .Where(x => !x.IsDeleted
                         && x.AktifMi
                         && x.HareketGorebilirMi
                         && x.DetayHesapMi
-                        && (x.TesisId == tesisId || x.TesisId == null))
+                        && (x.TesisId == tesisId || x.TesisId == null)
+                        && (x.TamKod == tamKod
+                            || x.Kod == tamKod
+                            || x.AnaHesapKodu == tamKod
+                            || x.TamKod.StartsWith(tamKod + ".")))
             .OrderByDescending(x => x.TesisId == tesisId)
             .ThenBy(x => x.TamKod)
             .FirstOrDefaultAsync(cancellationToken);
@@ -554,9 +624,9 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             return kdvHesap;
 
         throw new BaseException(
-            "Satış KDV hesabı (Hesaplanan KDV 391) bulunamadı. " +
-            "Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için satış KDV hesabı eşlemesi tanımlayın, " +
-            "veya hesap planında 391 kodlu aktif ve hareket görebilir bir detay hesap oluşturun.",
+            satisMi
+                ? "Satış KDV hesabı (Hesaplanan KDV 391) bulunamadı. Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için satış KDV hesabı eşlemesi tanımlayın, veya hesap planında 391 kodlu aktif ve hareket görebilir bir detay hesap oluşturun."
+                : "Alış KDV hesabı (İndirilecek KDV 191) bulunamadı. Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için alış KDV hesabı eşlemesi tanımlayın, veya hesap planında 191 kodlu aktif ve hareket görebilir bir detay hesap oluşturun.",
             400);
     }
 }

@@ -270,3 +270,14 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Alış / iade / tevkifat fişi üretimi hâlâ kapalıdır.
 - Migration yapılmamıştır.
 - Stok hareketi oluşturulmamıştır.
+
+## Faz 73C — Alış Faturası Muhasebe Fişi Stratejisi
+
+- `AlisFaturasiMuhasebeFisStratejisi` eklendi.
+- Alış faturası için 153 / 740 / 770 + 191 / 320 kurgusu desteklendi.
+- Stok satırlarında taşınır kartın kendi muhasebe hesabı, ardından taşınır kod varsayılan eşlemesi, ardından `153` fallback uygulanır.
+- Hizmet satırlarında `740` öncelikli, `770` ikinci fallback olarak kullanılır.
+- Tevkifat ve iade fiş üretimi hâlâ kapalıdır.
+- Stok hareketi oluşturulmamıştır.
+- `SatisBelgesi` üzerinde `CariKartId` olmadığı için 320 tarafı ilk sürümde genel hesap üzerinden çalışır; bu sınırlama not edilmiştir.
+- Alış belgeleri ekranında `Muhasebe Fişi Oluştur` aksiyonu kontrollü şekilde görünür hale getirilmiştir.

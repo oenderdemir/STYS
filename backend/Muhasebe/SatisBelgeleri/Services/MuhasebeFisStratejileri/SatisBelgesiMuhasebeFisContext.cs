@@ -11,4 +11,6 @@ public sealed class SatisBelgesiMuhasebeFisContext
     public int CariHesapPlaniId { get; init; }
     public int GelirHesapPlaniId { get; init; }
     public int? KdvHesapPlaniId { get; init; }
+    public int? StokHesapPlaniId { get; init; }
+    public int? HizmetGiderHesapPlaniId { get; init; }
 }

@@ -26,6 +26,7 @@ using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
+using STYS.Muhasebe.TevkifatHesapEslemeleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
@@ -151,6 +152,7 @@ public class StysAppDbContext : DbContext
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
+    public DbSet<TevkifatHesapEsleme> TevkifatHesapEslemeleri => Set<TevkifatHesapEsleme>();
     public DbSet<MuhasebeFis> MuhasebeFisler => Set<MuhasebeFis>();
     public DbSet<MuhasebeFisSatir> MuhasebeFisSatirlari => Set<MuhasebeFisSatir>();
     public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
@@ -1908,6 +1910,34 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.SatisKdvHesap)
                 .WithMany()
                 .HasForeignKey(x => x.SatisKdvHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TevkifatHesapEsleme>(entity =>
+        {
+            entity.ToTable("TevkifatHesapEslemeleri", muhasebeSchema);
+            entity.Property(x => x.IslemYonu).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.TevkifatPay).IsRequired();
+            entity.Property(x => x.TevkifatPayda).IsRequired();
+            entity.Property(x => x.AktifMi).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.TesisId);
+            entity.HasIndex(x => x.MuhasebeHesapPlaniId);
+            entity.HasIndex(x => new { x.TesisId, x.IslemYonu, x.TevkifatPay, x.TevkifatPayda })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [TesisId] IS NOT NULL");
+            entity.HasIndex(x => new { x.IslemYonu, x.TevkifatPay, x.TevkifatPayda })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [TesisId] IS NULL");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeHesapPlaniId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

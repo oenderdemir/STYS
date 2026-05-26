@@ -70,3 +70,10 @@ Satış ve alış faturalarında tevkifatlı işlemlerin muhasebe etkisini belir
 - Faz 75C: Satış tevkifatı muhasebe fişi
 - Faz 75D: Alış tevkifatı muhasebe fişi
 - Faz 75E: Tevkifat raporları ve KDV beyanname etkisi
+
+## Faz 75B — Tevkifat Hesap Eşleme Altyapısı
+
+- Tevkifat hesap eşleme entity/service/controller altyapısı eklendi.
+- Satış ve alış yönü ayrı tutuldu.
+- Tesis özel eşleme globalden öncelikli olacak şekilde modelendi.
+- Bu fazda tevkifatlı fiş üretimi açılmadı.

@@ -260,3 +260,13 @@ Strateji sınıfları bu yapıyı bozmaz; yalnızca satır üretim sorumluluğun
 ## Sonuç
 
 Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretimi belge tipi bazlı stratejilere bölünmelidir. En güvenli ayrım, orkestratörün ortak kontrol ve transaction sorumluluğunu taşıması; stratejilerin ise yalnızca belge tipi bazlı satır üretmesi olacaktır.
+
+## Faz 73B — Satış Faturası Stratejiye Taşıma
+
+- `ISatisBelgesiMuhasebeFisStratejisi` eklendi.
+- `SatisFaturasiMuhasebeFisStratejisi` eklendi.
+- Mevcut satış faturası 120 / 600 / 391 davranışı stratejiye taşındı.
+- `SatisBelgesiMuhasebeFisService` orkestratör olarak kaldı.
+- Alış / iade / tevkifat fişi üretimi hâlâ kapalıdır.
+- Migration yapılmamıştır.
+- Stok hareketi oluşturulmamıştır.

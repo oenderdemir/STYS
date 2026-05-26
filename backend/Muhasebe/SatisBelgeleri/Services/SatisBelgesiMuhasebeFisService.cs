@@ -12,6 +12,7 @@ using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Repositories;
+using STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
@@ -39,6 +40,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     private readonly StysAppDbContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
+    private readonly IReadOnlyList<ISatisBelgesiMuhasebeFisStratejisi> _stratejiler;
     private readonly ILogger<SatisBelgesiMuhasebeFisService> _logger;
 
     public SatisBelgesiMuhasebeFisService(
@@ -46,12 +48,14 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         StysAppDbContext dbContext,
         IMapper mapper,
         IMuhasebeDonemService muhasebeDonemService,
+        IEnumerable<ISatisBelgesiMuhasebeFisStratejisi> stratejiler,
         ILogger<SatisBelgesiMuhasebeFisService> logger)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
         _dbContext = dbContext;
         _mapper = mapper;
         _muhasebeDonemService = muhasebeDonemService;
+        _stratejiler = stratejiler.ToList();
         _logger = logger;
     }
 
@@ -202,48 +206,41 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 var maliYil = aktifDonemDto.MaliYil;
                 var donemNo = aktifDonemDto.DonemNo;
 
-                // ── 3e. Fiş satırlarını oluştur ──
-                var satirlar = new List<MuhasebeFisSatir>();
+                var strateji = _stratejiler.FirstOrDefault(s => s.Destekler(belge));
+                if (strateji is null)
+                    throw new BaseException("Bu belge tipi için muhasebe fişi üretimi desteklenmiyor.", 400);
 
-                // Satır 1: 120 Alıcılar BORÇ (KDV dahil genel toplam)
-                satirlar.Add(new MuhasebeFisSatir
+                var fisContext = new SatisBelgesiMuhasebeFisContext
                 {
-                    MuhasebeHesapPlaniId = hesap120.Id,
-                    SiraNo = 1,
-                    Borc = belge.GenelToplam,
-                    Alacak = 0,
-                    ParaBirimi = "TRY",
-                    Kur = 1,
-                    Aciklama = $"Satış belgesi alacağı - {belge.BelgeNo}",
-                });
+                    TesisId = tesisId,
+                    MaliYil = maliYil,
+                    Donem = donemNo,
+                    FisTarihi = belge.BelgeTarihi,
+                    FisNo = string.Empty,
+                    BelgeNo = belge.BelgeNo,
+                    CariHesapPlaniId = hesap120.Id,
+                    GelirHesapPlaniId = hesap600.Id,
+                    KdvHesapPlaniId = hesap391?.Id,
+                };
 
-                // Satır 2: 600 Yurtiçi Satışlar ALACAK (matrah)
-                satirlar.Add(new MuhasebeFisSatir
-                {
-                    MuhasebeHesapPlaniId = hesap600.Id,
-                    SiraNo = 2,
-                    Borc = 0,
-                    Alacak = belge.ToplamMatrah,
-                    ParaBirimi = "TRY",
-                    Kur = 1,
-                    Aciklama = $"Satış geliri - {belge.BelgeNo}",
-                });
+                // ── 3e. Fiş satırlarını strateji ile oluştur ──
+                var satirTaslaklari = await strateji.SatirlariOlusturAsync(
+                    belge,
+                    fisContext,
+                    cancellationToken);
 
-                // Satır 3: 391 Hesaplanan KDV ALACAK (sadece KDV > 0 ise)
-                int siraNo = 3;
-                if (hesap391 is not null && belge.ToplamKdv > 0)
-                {
-                    satirlar.Add(new MuhasebeFisSatir
+                var satirlar = satirTaslaklari
+                    .Select(taslak => new MuhasebeFisSatir
                     {
-                        MuhasebeHesapPlaniId = hesap391.Id,
-                        SiraNo = siraNo,
-                        Borc = 0,
-                        Alacak = belge.ToplamKdv,
+                        MuhasebeHesapPlaniId = taslak.MuhasebeHesapPlaniId,
+                        SiraNo = taslak.SiraNo,
+                        Borc = taslak.Borc,
+                        Alacak = taslak.Alacak,
                         ParaBirimi = "TRY",
                         Kur = 1,
-                        Aciklama = $"Hesaplanan KDV - {belge.BelgeNo}",
-                    });
-                }
+                        Aciklama = taslak.Aciklama,
+                    })
+                    .ToList();
 
                 // ── 3f. Borç / alacak denge kontrolü ──
                 var toplamBorc = satirlar.Sum(s => s.Borc);

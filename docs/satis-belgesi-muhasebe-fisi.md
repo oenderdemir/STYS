@@ -490,3 +490,6 @@ Frontend değişikliği yapılmamıştır (Seçenek A — güvenli tarafta kal).
 - e-Fatura/e-Arşiv iptali (Faz 70+)
 - Frontend `can*` helper'ları güncellemesi (güvenli tarafta kal)
 - `IptalEtAsync` sonrası `MuhasebeFisId` temizliği (Seçenek B uygulandı — referans korunur, helper izin verir)
+## Faz 73B Notu
+
+Satış faturası muhasebe fişi üretimi belge tipi bazlı strateji mimarisine taşınmıştır. Mevcut davranış korunmuştur; alış faturası, iade faturaları ve tevkifatlı belgeler için otomatik fiş üretimi bu fazda açılmamıştır.

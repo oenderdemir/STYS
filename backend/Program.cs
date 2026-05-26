@@ -20,6 +20,7 @@ using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Services;
+using STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
 using STYS.Muhasebe.DonemKapanis.Services;
@@ -126,6 +127,7 @@ builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTasl
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();
 builder.Services.AddScoped<IRestoranSatisBelgesiService, RestoranSatisBelgesiService>();
 builder.Services.AddScoped<IKampSatisBelgesiService, KampSatisBelgesiService>();
+builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, SatisFaturasiMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisService, SatisBelgesiMuhasebeFisService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();

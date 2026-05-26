@@ -63,3 +63,8 @@
 - Faz 88C-D — İptal Edilmiş Belge Regresyon Testleri
 - Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
 
+## Faz 88C-B Notu
+- Backend ticari belge iptal akışı eklendi.
+- Muhasebe fişi ters kayıtla iptal edilir.
+- Stok ve cari hareketler `Durum = Iptal` yapılır.
+- Kapalı/kısmi kapalı cari hareket varsa iptal engellenir.

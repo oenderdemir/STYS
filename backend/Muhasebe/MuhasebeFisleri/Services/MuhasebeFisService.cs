@@ -216,7 +216,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     public async Task<MuhasebeFisDto> IptalEtAsync(int id, string? aciklama = null, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
 
         try
         {
@@ -325,7 +328,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
 
             // Reload
             var reloaded = await _repository.GetByIdWithSatirlarAsync(orijinalFis.Id, cancellationToken)
@@ -334,8 +340,18 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             throw;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
     }
 

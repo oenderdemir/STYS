@@ -24,35 +24,40 @@
 - Faz 88 analizi tamamlandı.
 - Önerilen uygulama fazları: Faz 88B, Faz 88C, Faz 88D, Faz 88E
 
-### 2.3 Stok Miktar Yeterlilik Kontrolü
+### 2.3 Ticari Belge İptali Stok/Cari Etki Tasarımı
+- Ticari belge iptali tasarımı yapıldı.
+- Backend iptal akışı Faz 88C-B ile tamamlandı.
+- UI aksiyonu ve regresyon testleri sonraki alt fazlara bırakıldı.
+
+### 2.4 Stok Miktar Yeterlilik Kontrolü
 - Satış/alış iade çıkışlarında stok yeterlilik kontrolü net değil.
 - Önerilen faz: Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
 
-### 2.4 Cari Alt Hesap Entegrasyonu
+### 2.5 Cari Alt Hesap Entegrasyonu
 - Cari kart bazlı alt hesap kullanımı netleşmeli.
 - Önerilen faz: Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
 
-### 2.5 Ürün/Hizmet Hesap Eşlemesi
+### 2.6 Ürün/Hizmet Hesap Eşlemesi
 - Fallback hesap kullanımı yerine daha net eşleme yönetimi gerekebilir.
 - Önerilen faz: Faz 91 — Ürün/Hizmet Muhasebe Hesap Eşleme İyileştirmesi
 
-### 2.6 Tevkifatlı İade
+### 2.7 Tevkifatlı İade
 - Tevkifatlı iade faturaları kapalı.
 - Önerilen faz: Faz 92 — Tevkifatlı İade Muhasebe Analizi
 
-### 2.7 KDV/Tevkifat Beyanname Çıktısı
+### 2.8 KDV/Tevkifat Beyanname Çıktısı
 - Raporlar var, beyanname formatı yok.
 - Önerilen faz: Faz 93 — KDV/Tevkifat Rapor Çıktıları
 
-### 2.8 Yetki ve Tesis Güvenliği
+### 2.9 Yetki ve Tesis Güvenliği
 - Uçtan uca güvenlik testi ihtiyacı devam ediyor.
 - Önerilen faz: Faz 94 — Muhasebe Yetki/Tesis Güvenlik Testleri
 
-### 2.9 Performans ve Büyük Veri
+### 2.10 Performans ve Büyük Veri
 - Büyük veri altında rapor performansı ve export stratejisi eksik.
 - Önerilen faz: Faz 95 — Muhasebe Rapor Performans İyileştirmesi
 
-### 2.10 Kullanıcı Deneyimi
+### 2.11 Kullanıcı Deneyimi
 - Tahsilat/ödeme cari hareket seçimi daha anlaşılır hale getirilebilir.
 - Önerilen faz: Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
 
@@ -98,6 +103,11 @@
 3. Faz 89 — Stok Bakiye ve Negatif Stok Kontrolü
 4. Faz 90 — Cari Kart Muhasebe Alt Hesap Entegrasyonu
 5. Faz 96 — Tahsilat/Ödeme Cari Hareket Seçim UI
+
+## Faz 88C-B Notu
+- Ticari belge iptali backend akışı tamamlandı.
+- Muhasebe fişi ters kayıtla iptal edilir.
+- Stok ve cari hareketler `Durum = Iptal` olarak yönetilir.
 
 Gerekçe:
 - Önce veri bütünlüğünü bozan geri alma/iptal/stok negatifliği riskleri kapatılmalı.

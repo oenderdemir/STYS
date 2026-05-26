@@ -4,15 +4,18 @@ using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Repositories;
 using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -23,6 +26,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly StysAppDbContext _db;
     private readonly ISatisBelgesiRepository _satisBelgesiRepository;
     private readonly IMuhasebeFisRepository _muhasebeFisRepository;
+    private readonly IMuhasebeFisService _muhasebeFisService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ILogger<SatisBelgesiService> _logger;
 
@@ -74,6 +78,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         StysAppDbContext db,
         IMapper mapper,
         IMuhasebeFisRepository muhasebeFisRepository,
+        IMuhasebeFisService muhasebeFisService,
         IUserAccessScopeService userAccessScopeService,
         ILogger<SatisBelgesiService> logger)
         : base(satisBelgesiRepository, mapper)
@@ -81,6 +86,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         _satisBelgesiRepository = satisBelgesiRepository;
         _db = db;
         _muhasebeFisRepository = muhasebeFisRepository;
+        _muhasebeFisService = muhasebeFisService;
         _userAccessScopeService = userAccessScopeService;
         _logger = logger;
     }
@@ -544,30 +550,129 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted)
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var belge = await _db.SatisBelgeleri
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .Include(x => x.CariKart)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "iptal", cancellationToken);
+            await ValidateTicariBelgeIptalAsync(belge, cancellationToken);
 
+            if (belge.MuhasebeFisId.HasValue)
+            {
+                await ValidateVeIptalEtMuhasebeFisiAsync(belge, cancellationToken);
+            }
+
+            await IptalEtStokHareketleriAsync(belge, cancellationToken);
+            await IptalEtCariHareketleriAsync(belge, cancellationToken);
+
+            belge.Durum = SatisBelgesiDurumu.IptalEdildi;
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task ValidateTicariBelgeIptalAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
         if (belge.Durum == SatisBelgesiDurumu.IptalEdildi)
         {
-            throw new BaseException("Belge zaten iptal edilmiş durumda.", errorCode: 400);
+            throw new BaseException("Belge zaten iptal edilmiş.", 400);
         }
 
-        // İptal edilemez durumlar
         if (belge.Durum == SatisBelgesiDurumu.FaturaKesildi ||
             belge.Durum == SatisBelgesiDurumu.MusteriyeGonderildi)
         {
             throw new BaseException(
                 $"'{belge.Durum}' durumundaki bir belge iptal edilemez. " +
                 "Fatura kesilmiş veya müşteriye gönderilmiş belgeler iptal edilemez.",
-                errorCode: 400);
+                400);
         }
 
-        belge.Durum = SatisBelgesiDurumu.IptalEdildi;
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && (!belge.TesisId.HasValue || !scope.TesisIds.Contains(belge.TesisId.Value)))
+        {
+            throw new BaseException("Bu belge için yetkiniz bulunmuyor.", 403);
+        }
+    }
 
-        await Repository.SaveChangesAsync(cancellationToken);
+    private async Task ValidateVeIptalEtMuhasebeFisiAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
+        var fis = await _db.MuhasebeFisler
+            .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken);
+
+        if (fis is null)
+        {
+            throw new BaseException("Bağlı muhasebe fişi bulunamadı.", 404);
+        }
+
+        if (fis.Durum == MuhasebeFisDurumlari.Iptal)
+        {
+            return;
+        }
+
+        if (fis.Durum == MuhasebeFisDurumlari.TersKayit)
+        {
+            throw new BaseException("Ters kayıt fişi üzerinde iptal/ters kayıt yapılamaz.", 400);
+        }
+
+        if (fis.Durum != MuhasebeFisDurumlari.Onayli)
+        {
+            throw new BaseException("Bağlı taslak muhasebe fişi önce silinmelidir.", 400);
+        }
+
+        await _muhasebeFisService.IptalEtAsync(fis.Id, cancellationToken: cancellationToken);
+    }
+
+    private async Task IptalEtCariHareketleriAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
+        var hareketler = await _db.CariHareketler
+            .Where(x =>
+                !x.IsDeleted
+                && x.Durum == CariHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                && x.KaynakId == belge.Id)
+            .ToListAsync(cancellationToken);
+
+        var kapatilmisHareketVar = hareketler.Any(x =>
+        {
+            var toplam = x.BorcTutari > 0m ? x.BorcTutari : x.AlacakTutari;
+            return x.KapandiMi || x.KapananTutar > 0m || x.KalanTutar + 0.01m < toplam;
+        });
+
+        if (kapatilmisHareketVar)
+        {
+            throw new BaseException("Bu belgeye ait cari hareket kapatılmış/kısmi kapatılmış. Önce tahsilat/ödeme kapaması geri alınmalıdır.", 400);
+        }
+
+        foreach (var hareket in hareketler)
+        {
+            hareket.Durum = CariHareketDurumlari.Iptal;
+        }
+    }
+
+    private async Task IptalEtStokHareketleriAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
+        var hareketler = await _db.StokHareketleri
+            .Where(x =>
+                !x.IsDeleted
+                && x.Durum == StokHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                && x.KaynakId == belge.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var hareket in hareketler)
+        {
+            hareket.Durum = StokHareketDurumlari.Iptal;
+        }
     }
 
     // ──────────────────────────────────────────────

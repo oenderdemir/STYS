@@ -475,3 +475,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - Ticari belge iptali stok, cari ve muhasebe etkileri için ayrı fazda ele alınacak.
 - Bu fazda kod değişikliği ve migration yapılmadı.
+
+## Faz 88C-B — Ticari Belge İptali Backend Akışı
+
+- Ticari belge iptal backend akışı eklendi.
+- Muhasebe fişi ters kayıtla iptal edilir.
+- Belge kaynaklı stok ve cari hareketler `Durum = Iptal` yapılır.
+- Kapalı/kısmi kapalı cari hareket varsa iptal engellenir.

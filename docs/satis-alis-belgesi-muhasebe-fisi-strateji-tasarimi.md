@@ -290,3 +290,13 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Bu nedenle Faz 73C için ek migration gerekmedi.
 - `AlisFaturasiMuhasebeFisStratejisi` ve orchestrator tarafındaki kaynak alan setlemeleri compile/runtime açısından güvenli kabul edildi.
 - Stok/depo bağlantısı için ayrıca kolon ekleme veya migration ihtiyacı oluşmadı; Faz 74 stok hareketi fazına bırakıldı.
+
+## Faz 74 — Alış Faturası Stok Giriş Hareketi
+
+- Alış faturasında taşınır/stok satırları için stok giriş hareketi oluşturulur.
+- Hizmet satırları stok hareketi oluşturmaz.
+- `TasinirKartId` olan satırlarda `DepoId` zorunlu tutulur.
+- Stok hareketi ve muhasebe fişi aynı transaction içinde ele alınır.
+- Aynı kaynak alış faturası için duplicate stok giriş hareketi engellenir.
+- Satış stok çıkışı, iade ve tevkifat kapsam dışıdır.
+- Migration yapılmamıştır.

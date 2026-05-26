@@ -321,3 +321,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Tevkifat karşı hesabı `TevkifatHesapEslemeService` üzerinden `IslemYonu = Alis` ile çözülüyor.
 - Normal alış stratejisi tevkifatlı belgeleri dışlıyor.
 - İade ve rapor etkileri hâlâ kapsam dışıdır.
+
+## Faz 76 — Regresyon Kontrolü
+
+- Normal satış, satış tevkifat, normal alış ve alış tevkifat akışları kontrol edildi.
+- Alış stok giriş hareketi davranışı doğrulandı.
+- Proforma ve iade belgeleri hâlâ kapalı.
+- Migration gerekmedi.

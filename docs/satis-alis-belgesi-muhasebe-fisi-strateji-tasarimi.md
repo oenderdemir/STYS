@@ -428,3 +428,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - KDV rapor route bağlantıları `app.routes.ts` üzerinden korunuyor.
 - `KdvRaporService` DI kaydı aktif ve kullanılıyor.
 - Build kontrolü sonrası fazın teknik temizliği doğrulandı.
+
+## Faz 84 — Genel Regresyon Kontrolü
+
+- Satış, alış, iade, tevkifat, stok, cari ve KDV/tevkifat akışları build seviyesinde regresyon için kontrol edildi.
+- Pending model changes kontrolünde yeni migration ihtiyacı görünmedi.
+- Mevcut akışlarda büyük refactor veya yeni özellik eklenmedi.

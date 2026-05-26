@@ -439,3 +439,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 
 - Muhasebe modülü için uçtan uca kullanıcı kabul test senaryoları ve kontrol listesi hazırlandı.
 - Bu fazda kod değişikliği ve migration yapılmadı.
+
+## Faz 86 — Eksik Risk ve Yol Haritası
+
+- Muhasebe modülündeki kalan eksikler, teknik riskler ve sonraki faz planı dokümante edildi.
+- Bu fazda kod değişikliği ve migration yapılmadı.

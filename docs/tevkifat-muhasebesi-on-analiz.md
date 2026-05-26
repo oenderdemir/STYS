@@ -77,3 +77,9 @@ Satış ve alış faturalarında tevkifatlı işlemlerin muhasebe etkisini belir
 - Satış ve alış yönü ayrı tutuldu.
 - Tesis özel eşleme globalden öncelikli olacak şekilde modelendi.
 - Bu fazda tevkifatlı fiş üretimi açılmadı.
+
+## Faz 75B-A — Hesap / Tesis Uyum Kontrolü
+
+- Tevkifat eşlemesinde seçilen muhasebe hesabının tesis uyumu zorunlu hale getirildi.
+- Global eşlemede global hesap, tesis özel eşlemede global veya aynı tesis hesabı kabul ediliyor.
+- Migration gerektirmeyen validasyon düzeltmesi yapıldı.

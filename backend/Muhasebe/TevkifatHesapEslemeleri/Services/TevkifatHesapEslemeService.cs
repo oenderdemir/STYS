@@ -254,6 +254,18 @@ public class TevkifatHesapEslemeService
         if (!hesap.HareketGorebilirMi)
             throw new BaseException("Tevkifat hesap eşlemesi için hareket görebilir hesap seçilmelidir.", 400);
 
+        if (!dto.TesisId.HasValue)
+        {
+            if (hesap.TesisId.HasValue)
+            {
+                throw new BaseException("Global tevkifat eşlemesi için global hesap seçilmelidir.", 400);
+            }
+        }
+        else if (hesap.TesisId.HasValue && hesap.TesisId.Value != dto.TesisId.Value)
+        {
+            throw new BaseException("Seçilen muhasebe hesabı eşleme tesisiyle uyumlu değildir.", 400);
+        }
+
         if (hesap.TesisId.HasValue)
         {
             var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);

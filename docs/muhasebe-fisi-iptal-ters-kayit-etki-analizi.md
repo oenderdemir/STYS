@@ -62,3 +62,9 @@
 - Kapalı veya kısmi kapalı cari hareket bulunan kaynak satış belgelerinde fiş iptali engellenir.
 - Stok/cari hareket iptali ticari belge iptal fazına bırakıldı.
 - Migration yapılmadı.
+
+## Faz 88C — Ticari Belge İptali Etki Ayrımı
+
+- Ticari belge iptali, muhasebe fişi iptalinden ayrıştırıldı.
+- Stok ve cari iptali ayrı faza bırakıldı.
+- Bu fazda kod ve migration yapılmadı.

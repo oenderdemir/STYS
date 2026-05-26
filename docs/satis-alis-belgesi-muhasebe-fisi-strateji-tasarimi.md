@@ -470,3 +470,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - İptal edilmiş fiş, ters kayıt fişi ve daha önce ters kayıt oluşturulmuş fişler için tekrar işlem engeli eklendi.
 - Kapalı/kısmi kapalı cari hareket bulunan kaynak satış belgelerinde fiş iptali engellenir.
 - Stok ve cari tersleme ticari belge iptal fazına bırakıldı.
+
+## Faz 88C — Ticari Belge İptali Etki Tasarımı
+
+- Ticari belge iptali stok, cari ve muhasebe etkileri için ayrı fazda ele alınacak.
+- Bu fazda kod değişikliği ve migration yapılmadı.

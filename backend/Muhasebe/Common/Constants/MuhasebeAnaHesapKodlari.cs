@@ -22,6 +22,7 @@ public static class MuhasebeAnaHesapKodlari
     // Gelir tablosu
     public const string GelirSatis = "6.00.600";
     public const string IndirimIade = "6.10.610";
+    public const string SatisIade = "6.10.610";
 
     // Gider
     public const string GiderHizmetMaliyet = "7.40.740";

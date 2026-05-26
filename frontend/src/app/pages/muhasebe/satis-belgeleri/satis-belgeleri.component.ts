@@ -1145,18 +1145,18 @@ export class SatisBelgeleriComponent implements OnInit {
             belge.durum !== SatisBelgesiDurumu.MuhasebeOnaylandi ||
             belge.muhasebeFisId ||
             belge.belgeTipi === SatisBelgesiTipi.Proforma ||
-            belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi ||
-            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi ||
-            belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi
+            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi
         ) {
             return false;
         }
 
         if (this.isAlisMode()) {
-            return belge.belgeTipi === SatisBelgesiTipi.AlisFaturasi;
+            return belge.belgeTipi === SatisBelgesiTipi.AlisFaturasi || belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi;
         }
 
-        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi || belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi;
+        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi ||
+            belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi ||
+            belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi;
     }
 
     hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
@@ -1173,12 +1173,12 @@ export class SatisBelgeleriComponent implements OnInit {
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
         if (!this.canFisOlustur(belge)) {
             const detail = this.isAlisMode()
-                ? belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi
-                    ? 'Alış iade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
-                    : 'Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
-                : belge.belgeTipi === SatisBelgesiTipi.Proforma
+                ? (belge.belgeTipi === SatisBelgesiTipi.Proforma
                     ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
-                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.';
+                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.')
+                : (belge.belgeTipi === SatisBelgesiTipi.Proforma
+                    ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
+                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.');
 
             this.messageService.add({
                 severity: 'warn',

@@ -337,3 +337,12 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Alış stok giriş davranışı korunur.
 - İade belgeleri kapsam dışıdır.
 - Migration yapılmamıştır.
+
+## Faz 78 — Satış / Alış İade Faturaları
+
+- `SatisIadeFaturasiMuhasebeFisStratejisi` ve `AlisIadeFaturasiMuhasebeFisStratejisi` eklendi.
+- Satış iade için 610 / 391 / 120, alış iade için 320 / 153-740-770 / 191 kurgusu desteklendi.
+- Satış iade stok girişi, alış iade stok çıkışı eklendi.
+- Legacy `IadeFaturasi` kapalı kaldı.
+- Tevkifatlı iade hâlâ desteklenmiyor.
+- Migration yapılmamıştır.

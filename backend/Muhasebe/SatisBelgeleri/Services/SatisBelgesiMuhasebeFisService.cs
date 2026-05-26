@@ -92,10 +92,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.Proforma)
             throw new BaseException("Proforma belgeler için muhasebe fişi oluşturulamaz.", 400);
 
-        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
-            throw new BaseException("Alış iade faturaları için muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
-
-        if (belgeOnOkuma.BelgeTipi is SatisBelgesiTipi.IadeFaturasi or SatisBelgesiTipi.SatisIadeFaturasi)
+        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.IadeFaturasi)
             throw new BaseException("İade faturaları için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
 
         // Toplam kontroller
@@ -167,6 +164,12 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (aktifSatirlar.Count == 0)
                     throw new BaseException("Satış belgesinde aktif satır bulunamadı.", 400);
 
+                if (belge.BelgeTipi.IsIadeBelgesi() &&
+                    aktifSatirlar.Any(s => s.KdvUygulamaTipi == STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Tevkifatli))
+                {
+                    throw new BaseException("Tevkifatlı iade faturaları henüz desteklenmiyor.", 400);
+                }
+
                 // Satır toplamları belge toplamlarıyla uyumlu mu?
                 var satirToplamMatrah = aktifSatirlar.Sum(s => s.Matrah);
                 var satirToplamKdv = aktifSatirlar.Sum(s => s.KdvTutari);
@@ -196,6 +199,14 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 {
                     await CreateSatisStokCikisHareketleriAsync(belge, cancellationToken);
                 }
+                else if (belge.BelgeTipi == SatisBelgesiTipi.SatisIadeFaturasi)
+                {
+                    await CreateSatisIadeStokGirisHareketleriAsync(belge, cancellationToken);
+                }
+                else if (belge.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
+                {
+                    await CreateAlisIadeStokCikisHareketleriAsync(belge, cancellationToken);
+                }
 
                 // ── 3c. Donem ve MaliYil belirle ──
                 var maliYil = aktifDonemDto.MaliYil;
@@ -207,7 +218,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 
                 var fisContext = belgeOnOkuma.BelgeTipi switch
                 {
-                    SatisBelgesiTipi.AlisFaturasi => await BuildAlisFisContextAsync(
+                    SatisBelgesiTipi.AlisFaturasi or SatisBelgesiTipi.AlisIadeFaturasi => await BuildAlisFisContextAsync(
                         belgeOnOkuma.TesisId!.Value,
                         maliYil,
                         donemNo,
@@ -667,6 +678,192 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 BelgeNo = belge.BelgeNo,
                 BelgeTarihi = belge.BelgeTarihi,
                 Aciklama = $"Satış faturası stok çıkışı - {belge.BelgeNo}",
+                KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
+                KaynakId = belge.Id,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)satir.KdvUygulamaTipi,
+                KdvIstisnaTanimId = satir.KdvIstisnaTanimId,
+                KdvIstisnaKodu = satir.KdvIstisnaKodu,
+                KdvIstisnaAciklamasi = satir.KdvIstisnaAciklamasi,
+                KdvOrani = satir.KdvOrani,
+                KdvTutari = satir.KdvTutari
+            });
+        }
+
+        await _dbContext.StokHareketleri.AddRangeAsync(hareketler, cancellationToken);
+    }
+
+    private async Task CreateSatisIadeStokGirisHareketleriAsync(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken)
+    {
+        var stokSatirlari = belge.Satirlar
+            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .OrderBy(x => x.SiraNo)
+            .ToList();
+
+        if (stokSatirlari.Count == 0)
+        {
+            return;
+        }
+
+        var mevcutHareketVarMi = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                !x.IsDeleted &&
+                x.Durum == StokHareketDurumlari.Aktif &&
+                x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi &&
+                x.KaynakId == belge.Id &&
+                x.HareketTipi == StokHareketTipleri.Giris,
+                cancellationToken);
+
+        if (mevcutHareketVarMi)
+        {
+            throw new BaseException("Bu satış iade faturası için stok giriş hareketleri daha önce oluşturulmuş.", 409);
+        }
+
+        var hareketler = new List<StokHareket>(stokSatirlari.Count);
+
+        foreach (var satir in stokSatirlari)
+        {
+            if (!satir.DepoId.HasValue)
+            {
+                throw new BaseException($"Satış iade faturası stok satırı için depo seçilmelidir. Satır: {satir.SiraNo}", 400);
+            }
+
+            var depo = await _dbContext.Depolar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == satir.DepoId.Value &&
+                    !x.IsDeleted &&
+                    x.AktifMi &&
+                    x.TesisId == belge.TesisId,
+                    cancellationToken);
+
+            if (depo is null)
+            {
+                throw new BaseException($"Satış iade faturası stok satırı için seçilen depo bu tesisle uyumlu değil. Satır: {satir.SiraNo}", 400);
+            }
+
+            var tasinirKart = await _dbContext.TasinirKartlar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == satir.TasinirKartId!.Value &&
+                    !x.IsDeleted &&
+                    x.AktifMi &&
+                    x.TesisId == belge.TesisId,
+                    cancellationToken);
+
+            if (tasinirKart is null)
+            {
+                throw new BaseException($"Satış iade faturası stok satırı için seçilen taşınır kart bu tesisle uyumlu değil. Satır: {satir.SiraNo}", 400);
+            }
+
+            hareketler.Add(new StokHareket
+            {
+                DepoId = depo.Id,
+                TasinirKartId = tasinirKart.Id,
+                HareketTarihi = belge.BelgeTarihi,
+                HareketTipi = StokHareketTipleri.Giris,
+                Miktar = satir.Miktar,
+                BirimFiyat = satir.BirimFiyat,
+                Tutar = satir.Matrah,
+                BelgeNo = belge.BelgeNo,
+                BelgeTarihi = belge.BelgeTarihi,
+                Aciklama = $"Satış iade stok girişi - {belge.BelgeNo}",
+                KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
+                KaynakId = belge.Id,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)satir.KdvUygulamaTipi,
+                KdvIstisnaTanimId = satir.KdvIstisnaTanimId,
+                KdvIstisnaKodu = satir.KdvIstisnaKodu,
+                KdvIstisnaAciklamasi = satir.KdvIstisnaAciklamasi,
+                KdvOrani = satir.KdvOrani,
+                KdvTutari = satir.KdvTutari
+            });
+        }
+
+        await _dbContext.StokHareketleri.AddRangeAsync(hareketler, cancellationToken);
+    }
+
+    private async Task CreateAlisIadeStokCikisHareketleriAsync(
+        SatisBelgesi belge,
+        CancellationToken cancellationToken)
+    {
+        var stokSatirlari = belge.Satirlar
+            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .OrderBy(x => x.SiraNo)
+            .ToList();
+
+        if (stokSatirlari.Count == 0)
+        {
+            return;
+        }
+
+        var mevcutHareketVarMi = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                !x.IsDeleted &&
+                x.Durum == StokHareketDurumlari.Aktif &&
+                x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi &&
+                x.KaynakId == belge.Id &&
+                x.HareketTipi == StokHareketTipleri.Cikis,
+                cancellationToken);
+
+        if (mevcutHareketVarMi)
+        {
+            throw new BaseException("Bu alış iade faturası için stok çıkış hareketleri daha önce oluşturulmuş.", 409);
+        }
+
+        var hareketler = new List<StokHareket>(stokSatirlari.Count);
+
+        foreach (var satir in stokSatirlari)
+        {
+            if (!satir.DepoId.HasValue)
+            {
+                throw new BaseException($"Alış iade faturası stok satırı için depo seçilmelidir. Satır: {satir.SiraNo}", 400);
+            }
+
+            var depo = await _dbContext.Depolar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == satir.DepoId.Value &&
+                    !x.IsDeleted &&
+                    x.AktifMi &&
+                    x.TesisId == belge.TesisId,
+                    cancellationToken);
+
+            if (depo is null)
+            {
+                throw new BaseException($"Alış iade faturası stok satırı için seçilen depo bu tesisle uyumlu değil. Satır: {satir.SiraNo}", 400);
+            }
+
+            var tasinirKart = await _dbContext.TasinirKartlar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == satir.TasinirKartId!.Value &&
+                    !x.IsDeleted &&
+                    x.AktifMi &&
+                    x.TesisId == belge.TesisId,
+                    cancellationToken);
+
+            if (tasinirKart is null)
+            {
+                throw new BaseException($"Alış iade faturası stok satırı için seçilen taşınır kart bu tesisle uyumlu değil. Satır: {satir.SiraNo}", 400);
+            }
+
+            hareketler.Add(new StokHareket
+            {
+                DepoId = depo.Id,
+                TasinirKartId = tasinirKart.Id,
+                HareketTarihi = belge.BelgeTarihi,
+                HareketTipi = StokHareketTipleri.Cikis,
+                Miktar = satir.Miktar,
+                BirimFiyat = satir.BirimFiyat,
+                Tutar = satir.Matrah,
+                BelgeNo = belge.BelgeNo,
+                BelgeTarihi = belge.BelgeTarihi,
+                Aciklama = $"Alış iade stok çıkışı - {belge.BelgeNo}",
                 KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
                 KaynakId = belge.Id,
                 Durum = StokHareketDurumlari.Aktif,

@@ -369,3 +369,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Aynı belge için duplicate cari hareket engellenir.
 - Tahsilat/ödeme kapama sonraki fazlara bırakılmıştır.
 - Migration yapılmamıştır.
+
+## Faz 81A — Cari Hareket Kapama Alanları
+
+- `KapananTutar`, `KalanTutar`, `IliskiliCariHareketId`, `KapandiMi` alanları eklendi.
+- `KalanTutar` yeni kayıtlarda hareket tutarı kadar, eski kayıtlarda backfill ile başlatılır.
+- Kapama mantığı Faz 81B’ye bırakılmıştır.

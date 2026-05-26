@@ -11,11 +11,15 @@ public class CariHareketDto : BaseRdbmsDto<int>
     public string? Aciklama { get; set; }
     public decimal BorcTutari { get; set; }
     public decimal AlacakTutari { get; set; }
+    public decimal KapananTutar { get; set; }
+    public decimal KalanTutar { get; set; }
     public string ParaBirimi { get; set; } = "TRY";
     public DateTime? VadeTarihi { get; set; }
     public string Durum { get; set; } = string.Empty;
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
+    public int? IliskiliCariHareketId { get; set; }
+    public bool KapandiMi { get; set; }
 }
 
 public class CreateCariHareketRequest
@@ -27,11 +31,15 @@ public class CreateCariHareketRequest
     public string? Aciklama { get; set; }
     public decimal BorcTutari { get; set; }
     public decimal AlacakTutari { get; set; }
+    public decimal KapananTutar { get; set; }
+    public decimal KalanTutar { get; set; }
     public string ParaBirimi { get; set; } = "TRY";
     public DateTime? VadeTarihi { get; set; }
     public string Durum { get; set; } = string.Empty;
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
+    public int? IliskiliCariHareketId { get; set; }
+    public bool KapandiMi { get; set; }
 }
 
 public class UpdateCariHareketRequest : CreateCariHareketRequest;

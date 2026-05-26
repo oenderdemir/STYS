@@ -95,6 +95,20 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
+    protected override Task EnrichEntityAsync(CariHareketDto dto, CariHareket entity)
+    {
+        if (entity.KalanTutar <= 0m && entity.KapananTutar <= 0m)
+        {
+            var hareketTutari = entity.BorcTutari > 0 ? entity.BorcTutari : entity.AlacakTutari;
+            entity.KapananTutar = 0m;
+            entity.KalanTutar = hareketTutari;
+            entity.KapandiMi = false;
+            entity.IliskiliCariHareketId = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private async Task ValidateAsync(int cariKartId, string durum)
     {
         if (cariKartId <= 0)

@@ -24,6 +24,10 @@ public class CariHareket : BaseEntity<int>
 
     public decimal AlacakTutari { get; set; }
 
+    public decimal KapananTutar { get; set; }
+
+    public decimal KalanTutar { get; set; }
+
     [Required]
     [MaxLength(3)]
     public string ParaBirimi { get; set; } = "TRY";
@@ -39,6 +43,12 @@ public class CariHareket : BaseEntity<int>
 
     public int? KaynakId { get; set; }
 
+    public int? IliskiliCariHareketId { get; set; }
+
+    public bool KapandiMi { get; set; }
+
     public CariKart? CariKart { get; set; }
+
+    public CariHareket? IliskiliCariHareket { get; set; }
 }
 

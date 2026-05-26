@@ -1535,6 +1535,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.Property(x => x.BorcTutari).HasPrecision(18, 2);
             entity.Property(x => x.AlacakTutari).HasPrecision(18, 2);
+            entity.Property(x => x.KapananTutar).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(x => x.KalanTutar).HasPrecision(18, 2).HasDefaultValue(0m);
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.Property(x => x.KaynakModul).HasMaxLength(64);
@@ -1542,10 +1544,19 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.BelgeNo)
                 .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
+            entity.HasIndex(x => new { x.CariKartId, x.KapandiMi })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.IliskiliCariHareketId)
+                .HasFilter("[IsDeleted] = 0 AND [IliskiliCariHareketId] IS NOT NULL");
 
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.CariHareketler)
                 .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IliskiliCariHareket)
+                .WithMany()
+                .HasForeignKey(x => x.IliskiliCariHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

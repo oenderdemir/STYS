@@ -482,3 +482,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Muhasebe fişi ters kayıtla iptal edilir.
 - Belge kaynaklı stok ve cari hareketler `Durum = Iptal` yapılır.
 - Kapalı/kısmi kapalı cari hareket varsa iptal engellenir.
+
+## Faz 88C-C — Ticari Belge İptali UI Aksiyonu
+
+- Satış Belgeleri ekranına iptal aksiyonu eklendi.
+- İptal öncesi confirm dialog kullanılıyor.
+- Backend iptal endpointi UI üzerinden tetikleniyor.

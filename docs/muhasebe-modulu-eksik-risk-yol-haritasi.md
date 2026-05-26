@@ -27,7 +27,8 @@
 ### 2.3 Ticari Belge İptali Stok/Cari Etki Tasarımı
 - Ticari belge iptali tasarımı yapıldı.
 - Backend iptal akışı Faz 88C-B ile tamamlandı.
-- UI aksiyonu ve regresyon testleri sonraki alt fazlara bırakıldı.
+- UI aksiyonu Faz 88C-C ile eklendi.
+- Regresyon testleri sonraki alt fazlara bırakıldı.
 
 ### 2.4 Stok Miktar Yeterlilik Kontrolü
 - Satış/alış iade çıkışlarında stok yeterlilik kontrolü net değil.
@@ -108,6 +109,10 @@
 - Ticari belge iptali backend akışı tamamlandı.
 - Muhasebe fişi ters kayıtla iptal edilir.
 - Stok ve cari hareketler `Durum = Iptal` olarak yönetilir.
+
+## Faz 88C-C Notu
+- Satış Belgeleri ekranında iptal aksiyonu eklendi.
+- Confirm dialog ile kullanıcı bilgilendiriliyor.
 
 Gerekçe:
 - Önce veri bütünlüğünü bozan geri alma/iptal/stok negatifliği riskleri kapatılmalı.

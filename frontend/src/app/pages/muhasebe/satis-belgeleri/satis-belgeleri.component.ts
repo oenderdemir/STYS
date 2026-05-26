@@ -861,8 +861,12 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     iptalEt(belge: SatisBelgesiDto): void {
+        const message = belge.muhasebeFisId
+            ? `"${belge.belgeNo}" belgesi iptal edilecek. Bağlı muhasebe fişi ters kayıtla iptal edilecek, stok ve cari hareketler iptal durumuna alınacaktır. Devam etmek istiyor musunuz?`
+            : `"${belge.belgeNo}" belgesini iptal etmek istediğinize emin misiniz?`;
+
         this.confirmationService.confirm({
-            message: `"${belge.belgeNo}" belgesini iptal etmek istediğinize emin misiniz?`,
+            message,
             header: 'İptal Onayı',
             icon: 'pi pi-exclamation-triangle',
             accept: () => {
@@ -1144,7 +1148,6 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     canIptal(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
         return belge.durum !== SatisBelgesiDurumu.IptalEdildi &&
             belge.durum !== SatisBelgesiDurumu.FaturaKesildi &&
             belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;

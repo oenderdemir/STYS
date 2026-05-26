@@ -68,3 +68,9 @@
 - Muhasebe fişi ters kayıtla iptal edilir.
 - Stok ve cari hareketler `Durum = Iptal` yapılır.
 - Kapalı/kısmi kapalı cari hareket varsa iptal engellenir.
+
+## Faz 88C-C Notu
+- Satış Belgeleri ekranına iptal aksiyonu eklendi.
+- Confirm dialog ile kullanıcı onayı alınıyor.
+- Backend iptal endpointi kullanılıyor.
+- UI değişikliği dışında migration yapılmadı.

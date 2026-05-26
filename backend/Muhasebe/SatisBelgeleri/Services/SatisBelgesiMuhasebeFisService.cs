@@ -167,11 +167,13 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (aktifSatirlar.Count == 0)
                     throw new BaseException("Satış belgesinde aktif satır bulunamadı.", 400);
 
-                // Tevkifat kontrolü
-                if (aktifSatirlar.Any(s => s.KdvUygulamaTipi == STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Tevkifatli))
+                if (belge.BelgeTipi == SatisBelgesiTipi.AlisFaturasi &&
+                    aktifSatirlar.Any(s => s.KdvUygulamaTipi == STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Tevkifatli))
+                {
                     throw new BaseException(
-                        "Tevkifatlı belgeler için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.",
+                        "Alış tevkifatlı belgeler için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.",
                         400);
+                }
 
                 // Satır toplamları belge toplamlarıyla uyumlu mu?
                 var satirToplamMatrah = aktifSatirlar.Sum(s => s.Matrah);

@@ -83,3 +83,11 @@ Satış ve alış faturalarında tevkifatlı işlemlerin muhasebe etkisini belir
 - Tevkifat eşlemesinde seçilen muhasebe hesabının tesis uyumu zorunlu hale getirildi.
 - Global eşlemede global hesap, tesis özel eşlemede global veya aynı tesis hesabı kabul ediliyor.
 - Migration gerektirmeyen validasyon düzeltmesi yapıldı.
+
+## Faz 75C — Satış Tevkifatı Muhasebe Fişi
+
+- `SatisTevkifatliFaturaMuhasebeFisStratejisi` eklendi.
+- Tevkifatlı satış faturalarında 120 borç, tevkifat karşı hesabı borç, 600 alacak, 391 alacak kurgusu desteklendi.
+- Tevkifat hesabı `TevkifatHesapEslemeService.GetAktifEslemeAsync` ile çözülüyor.
+- Alış tevkifatı ve iade belgeleri hâlâ kapalıdır.
+- Migration yapılmadı.

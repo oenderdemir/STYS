@@ -131,6 +131,7 @@ builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTasl
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();
 builder.Services.AddScoped<IRestoranSatisBelgesiService, RestoranSatisBelgesiService>();
 builder.Services.AddScoped<IKampSatisBelgesiService, KampSatisBelgesiService>();
+builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, SatisTevkifatliFaturaMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, SatisFaturasiMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, AlisFaturasiMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisService, SatisBelgesiMuhasebeFisService>();

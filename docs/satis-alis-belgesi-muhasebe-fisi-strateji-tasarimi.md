@@ -307,3 +307,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Zorunlu alanlar: `DepoId`, `TasinirKartId`, `HareketTarihi`, `HareketTipi`, `Miktar`, `BirimFiyat`, `Tutar`, `Durum`, `KdvUygulamaTipi`, `KdvOrani`, `KdvTutari`.
 - Faz 74’te oluşturulan stok hareketinde bu alanlar set ediliyor.
 - Ek migration gerekmedi.
+
+## Faz 75C — Satış Tevkifatı Muhasebe Fişi
+
+- Tevkifatlı satış faturaları için ayrı strateji eklendi.
+- Tevkifat karşı hesabı `TevkifatHesapEslemeService` üzerinden çözülüyor.
+- Normal satış stratejisi tevkifatlı belgeleri dışlıyor.
+- Alış tevkifatı, iade ve tevkifat rapor etkileri hâlâ kapsam dışıdır.

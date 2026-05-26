@@ -1,12 +1,14 @@
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.Kdv.Enums;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
 
 public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFisStratejisi
 {
     public bool Destekler(SatisBelgesi belge)
-        => belge.BelgeTipi is SatisBelgesiTipi.FaturaTaslagi or SatisBelgesiTipi.SatisFaturasi;
+        => belge.BelgeTipi is SatisBelgesiTipi.FaturaTaslagi or SatisBelgesiTipi.SatisFaturasi
+           && !HasTevkifatliSatir(belge);
 
     public Task<IReadOnlyList<MuhasebeFisSatiriTaslak>> SatirlariOlusturAsync(
         SatisBelgesi belge,
@@ -49,4 +51,9 @@ public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFi
 
         return Task.FromResult<IReadOnlyList<MuhasebeFisSatiriTaslak>>(satirlar);
     }
+
+    private static bool HasTevkifatliSatir(SatisBelgesi belge)
+        => belge.Satirlar?.Any(s =>
+               !s.IsDeleted &&
+               s.KdvUygulamaTipi == KdvUygulamaTipi.Tevkifatli) == true;
 }

@@ -62,3 +62,27 @@ Bu fazda satış belgesi formunun görsel yerleşimi toparlandı ve satırdaki `
 - Muhasebe fişi üretim mantığına dokunulmadı.
 - Tevkifat için kalıcı backend muhasebe kaydı eklenmedi.
 - Cari, depo ve taşınır/stok seçimleri seçili çalışma tesisi bağlamında çalışmaya devam eder.
+
+## Faz 72 — Satış / Alış Belgesi Ayrımı
+
+Bu fazda satış ve alış belgeleri aynı altyapı üzerinde iki ayrı kullanıcı akışı olarak sunuldu.
+
+### Ekran ayrımı
+- `Satış Belgeleri` ekranı satış belge tipleriyle sınırlandı.
+- `Alış Belgeleri` ekranı aynı component/service altyapısını kullanarak alış belge tipleriyle açıldı.
+- Alış ekranında varsayılan belge tipi `AlisFaturasi` olarak ayarlandı.
+
+### Cari seçimi
+- Satış ekranında müşteri tipi cariler gösterilir.
+- Alış ekranında cari kart seçimi tedarikçi tipleriyle sınırlandırılır.
+- Alış ekranında manuel giriş açılsa bile akış tedarikçi snapshot mantığıyla çalışır.
+
+### Muhasebe fişi
+- Alış belgelerinde `Muhasebe Fişi Oluştur` aksiyonu gösterilmez.
+- Satış iade ve legacy iade tiplerinde de muhasebe fişi üretimi desteklenmez.
+- Bu fazda muhasebe fişi üretim algoritması genişletilmedi.
+
+### Kapsam
+- Paket türleri global lookup olarak kalır.
+- Tesis context davranışı korunur.
+- Bu fazda stok hareketi üretimi eklenmedi.

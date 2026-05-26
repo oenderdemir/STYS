@@ -5,5 +5,8 @@ public enum SatisBelgesiTipi
     FaturaTaslagi = 1,
     SatisFaturasi = 2,
     IadeFaturasi = 3,
-    Proforma = 4
+    Proforma = 4,
+    AlisFaturasi = 5,
+    SatisIadeFaturasi = 6,
+    AlisIadeFaturasi = 7
 }

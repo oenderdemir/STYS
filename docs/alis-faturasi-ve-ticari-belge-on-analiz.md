@@ -143,3 +143,10 @@ Bu nedenle alış faturası için muhasebe tarafında altyapı tamamen sıfırda
 - Kısa vadede mevcut yapı, küçük bir refactor ile alış faturası desteği verebilir.
 - Ancak satış ve alış kuralları giderek ayrışacağı için uzun vadede `TicariBelge` adı daha doğru olacaktır.
 - Bu analizde en güvenli yaklaşım, altyapıyı tamamen yeniden yazmadan önce satış/alış muhasebe ve stok stratejilerini ayırmaktır.
+
+## Faz 72 Notu
+
+- Kısa vadeli karar olarak mevcut `SatisBelgesi` altyapısı korunarak satış ve alış akışları route/UI seviyesinde ayrıldı.
+- `Satış Belgeleri` satış belge tipleriyle, `Alış Belgeleri` alış belge tipleriyle çalışır.
+- `Alış Belgeleri` için ayrı bir entity/muhasebe/stok altyapısı bu fazda oluşturulmadı.
+- Bu yaklaşım, ileride `TicariBelge` refactor'una geçiş için daha kontrollü bir ara adım sağladı.

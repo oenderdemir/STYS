@@ -153,6 +153,7 @@ public class UpdateSatisBelgesiSatiriRequest
 public class SatisBelgesiFilterDto
 {
     public int? TesisId { get; set; }
+    public List<SatisBelgesiTipi>? BelgeTipleri { get; set; }
     public SatisBelgesiDurumu? Durum { get; set; }
     public SatisKaynakModulu? KaynakModul { get; set; }
     public string? KaynakTipi { get; set; }

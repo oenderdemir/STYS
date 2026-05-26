@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { AutoCompleteModule } from 'primeng/autocomplete';
 import { ButtonModule } from 'primeng/button';
@@ -54,10 +54,13 @@ import {
     SATIS_BELGESI_SATIR_TIPI_LABELS,
     KDV_UYGULAMA_TIPI_LABELS,
     SATIS_BELGESI_DURUM_SECENEKLERI,
+    SATIS_BELGE_TIPLERI,
+    ALIS_BELGE_TIPLERI,
     createDefaultSatisBelgesiFilter,
     createEmptySatisBelgesiSatiri,
     createEmptyCreateSatisBelgesiRequest,
-    getMusteriDisplayName
+    getMusteriDisplayName,
+    isAlisBelgeTipi
 } from '../models/satis-belgesi.model';
 
 @Component({
@@ -102,6 +105,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
     private readonly router = inject(Router);
+    private readonly route = inject(ActivatedRoute);
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -145,6 +149,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
     // Tab navigation
     activeTab = signal('0');
+    belgeModu = signal<'satis' | 'alis'>('satis');
     tesisHazir = signal(false);
     private lastLoadedTesisId: number | null = null;
 
@@ -158,7 +163,7 @@ export class SatisBelgeleriComponent implements OnInit {
     kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
     kdvEnum = KdvUygulamaTipi;
 
-    belgeTipiSecenekleri = Object.entries(this.belgeTipiLabels).map(([k, v]) => ({ value: Number(k), label: v }));
+    belgeTipiSecenekleri: Array<{ value: number; label: string }> = [];
     kaynakModulSecenekleri = Object.entries(this.kaynakModulLabels).map(([k, v]) => ({ value: Number(k), label: v }));
     satirTipiSecenekleri = Object.entries(this.satirTipiLabels).map(([k, v]) => ({ value: Number(k), label: v }));
     kdvUygulamaTipiSecenekleri = Object.entries(this.kdvUygulamaTipiLabels)
@@ -210,6 +215,8 @@ export class SatisBelgeleriComponent implements OnInit {
     }, { allowSignalWrites: true });
 
     ngOnInit(): void {
+        this.applyBelgeModu(this.route.snapshot.data['belgeModu'] === 'alis' ? 'alis' : 'satis');
+
         this.tesisContext.initialize().subscribe({
             next: () => {
                 this.loadPaketTurleri();
@@ -231,7 +238,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
         this.loading.set(true);
         const currentFilter = this.filter();
-        const filterToSend = { ...currentFilter, tesisId };
+        const filterToSend = { ...currentFilter, tesisId, belgeTipleri: this.getBelgeTipleriForMode() };
         this.service.filter(filterToSend).subscribe({
             next: (data) => {
                 this.belgeler.set(data);
@@ -284,14 +291,95 @@ export class SatisBelgeleriComponent implements OnInit {
         });
     }
 
+    applyBelgeModu(mod: 'satis' | 'alis'): void {
+        this.belgeModu.set(mod);
+        this.belgeTipiSecenekleri = this.getBelgeTipiSecenekleri();
+    }
+
+    isAlisMode(): boolean {
+        return this.belgeModu() === 'alis';
+    }
+
+    isSatisMode(): boolean {
+        return this.belgeModu() === 'satis';
+    }
+
+    getBelgeTipiSecenekleri(): Array<{ value: number; label: string }> {
+        const tipler = this.isAlisMode() ? ALIS_BELGE_TIPLERI : SATIS_BELGE_TIPLERI;
+        return tipler.map(tip => ({ value: tip, label: this.getBelgeTipiLabel(tip) }));
+    }
+
+    getDefaultBelgeTipi(): SatisBelgesiTipi {
+        return this.isAlisMode() ? SatisBelgesiTipi.AlisFaturasi : SatisBelgesiTipi.FaturaTaslagi;
+    }
+
+    getBelgeTipleriForMode(): SatisBelgesiTipi[] {
+        return this.isAlisMode() ? ALIS_BELGE_TIPLERI : SATIS_BELGE_TIPLERI;
+    }
+
+    getScreenTitle(): string {
+        return this.isAlisMode() ? 'Alış Belgeleri / Satın Alma Faturaları' : 'Satış Belgeleri / Fatura Taslakları';
+    }
+
+    getNewBelgeButtonLabel(): string {
+        return this.isAlisMode() ? 'Yeni Alış Belgesi' : 'Yeni Belge';
+    }
+
+    getDialogHeader(): string {
+        return this.isAlisMode() ? (this.isEditing() ? 'Alış Belgesi Düzenle' : 'Yeni Alış Belgesi') : (this.isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi');
+    }
+
+    getCariPanelTitle(): string {
+        return this.isAlisMode() ? '👤 Cari / Tedarikçi Bilgileri' : '👤 Cari / Müşteri Bilgileri';
+    }
+
+    getCariSectionLabel(): string {
+        return this.isAlisMode() ? 'Tedarikçi Cari Kart' : 'Cari Kart';
+    }
+
+    getCariPlaceholder(): string {
+        return this.isAlisMode()
+            ? 'Tedarikçi cari seçiniz (unvan, vergi no veya TCKN ile arayın)...'
+            : 'Cari kart seçiniz (unvan, vergi no veya TCKN ile arayın)...';
+    }
+
+    getCariHelperText(): string {
+        return this.isAlisMode()
+            ? 'Tedarikçi seçtiğinizde bilgiler otomatik doldurulur.'
+            : 'Cari kart seçtiğinizde müşteri bilgileri otomatik doldurulur.';
+    }
+
+    getOtomatikCariTagValue(): string {
+        return this.isAlisMode() ? 'Tedarikçiden otomatik' : 'Cari\'den otomatik';
+    }
+
+    getCariOzetBasligi(): string {
+        return this.isAlisMode() ? 'Tedarikçi Snapshot' : 'Müşteri Snapshot';
+    }
+
+    getCariOzetPanelBasligi(): string {
+        return this.isAlisMode() ? '👤 Tedarikçi / Cari Bilgisi' : '👤 Müşteri / Cari Bilgisi';
+    }
+
+    getCariColumnBasligi(): string {
+        return this.isAlisMode() ? 'Tedarikçi' : 'Müşteri';
+    }
+
+    getCariTipleriForMode(): string[] {
+        return this.isAlisMode()
+            ? ['Tedarikci']
+            : ['Musteri', 'KurumsalMusteri'];
+    }
+
     loadCariKartlar(tesisId: number): void {
         this.cariKartlarLoading.set(true);
         this.cariKartService.getAll(tesisId).pipe(
             finalize(() => this.cariKartlarLoading.set(false))
         ).subscribe({
             next: (data) => {
+                const allowedTypes = this.getCariTipleriForMode();
                 const cariList = data
-                    .filter(c => c.aktifMi)
+                    .filter(c => c.aktifMi && allowedTypes.includes(c.cariTipi))
                     .sort((a, b) => (a.cariKodu ?? '').localeCompare(b.cariKodu ?? ''));
                 this.cariKartlar.set(cariList);
                 this.filteredCariKartlar = [...cariList];
@@ -350,13 +438,17 @@ export class SatisBelgeleriComponent implements OnInit {
         this.kdvIstisnaTanimlariLoading.set(true);
         const filter = createDefaultKdvIstisnaTanimFilter();
         filter.aktifMi = true;
-        filter.satisIslemlerindeKullanilirMi = true;
+        if (this.isAlisMode()) {
+            filter.alisIslemlerindeKullanilirMi = true;
+        } else {
+            filter.satisIslemlerindeKullanilirMi = true;
+        }
         this.kdvIstisnaTanimService.filter(filter).pipe(
             finalize(() => this.kdvIstisnaTanimlariLoading.set(false))
         ).subscribe({
             next: (data) => {
                 const list = data
-                    .filter(t => t.aktifMi && t.satisIslemlerindeKullanilirMi)
+                    .filter(t => t.aktifMi && (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi))
                     .sort((a, b) => `${a.kod} ${a.ad}`.localeCompare(`${b.kod} ${b.ad}`));
                 this.kdvIstisnaTanimlari.set(list);
             },
@@ -454,9 +546,35 @@ export class SatisBelgeleriComponent implements OnInit {
             return;
         }
 
+        if (!this.getCariTipleriForMode().includes(cari.cariTipi)) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Cari Tipi Uyuşmuyor',
+                detail: this.isAlisMode()
+                    ? 'Alış belgelerinde yalnızca tedarikçi cari kartları seçilebilir.'
+                    : 'Satış belgelerinde yalnızca müşteri cari kartları seçilebilir.'
+            });
+            this.selectedCari.set(null);
+            if (!this.manuelMusteriGirisi()) {
+                this.formData.update(f => ({
+                    ...f,
+                    kurumsalMi: false,
+                    musteriUnvan: null,
+                    musteriAdSoyad: null,
+                    musteriVergiNo: null,
+                    musteriTcKimlikNo: null,
+                    musteriVergiDairesi: null,
+                    musteriAdres: null,
+                    musteriEposta: null,
+                    musteriTelefon: null
+                }));
+            }
+            return;
+        }
+
         this.selectedCari.set(cari);
-        // Cari tipine göre kurumsal/bireysel belirle
-        const kurumsalMi = cari.cariTipi === 'KurumsalMusteri';
+        // Satışta müşteri tipi, alışta tedarikçi snapshot'ı kurumsal varsayılır
+        const kurumsalMi = this.isAlisMode() || cari.cariTipi === 'KurumsalMusteri';
 
         // Manuel müşteri girişi kapalıyken cari bilgilerini form alanlarına yaz
         if (!this.manuelMusteriGirisi()) {
@@ -511,6 +629,7 @@ export class SatisBelgeleriComponent implements OnInit {
         this.isEditing.set(false);
         this.editingBelge.set(null);
         const empty = createEmptyCreateSatisBelgesiRequest();
+        empty.belgeTipi = this.getDefaultBelgeTipi();
         empty.tesisId = tesisId;
         empty.satirlar.forEach(satir => {
             satir.birim = this.resolveDefaultBirim();
@@ -580,7 +699,9 @@ export class SatisBelgeleriComponent implements OnInit {
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Eksik Bilgi',
-                detail: 'Lütfen cari kart seçiniz veya "Manuel müşteri bilgisi gireceğim" seçeneğini açınız.'
+                detail: this.isAlisMode()
+                    ? 'Lütfen tedarikçi cari kart seçiniz veya "Manuel cari bilgisi gireceğim" seçeneğini açınız.'
+                    : 'Lütfen cari kart seçiniz veya "Manuel müşteri bilgisi gireceğim" seçeneğini açınız.'
             });
             return;
         }
@@ -908,7 +1029,10 @@ export class SatisBelgeleriComponent implements OnInit {
         }
 
         return this.kdvIstisnaTanimlari()
-            .filter(t => t.aktifMi && t.satisIslemlerindeKullanilirMi && (t.uygulamaTipi === satir.kdvUygulamaTipi))
+            .filter(t =>
+                t.aktifMi &&
+                (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi) &&
+                (t.uygulamaTipi === satir.kdvUygulamaTipi))
             .map(t => ({ label: `${t.kod} - ${t.ad}`, value: t.id }));
     }
 
@@ -1005,6 +1129,22 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     canFisOlustur(belge: SatisBelgesiDto): boolean {
+        if (!this.isSatisMode()) {
+            return false;
+        }
+
+        if (isAlisBelgeTipi(belge.belgeTipi)) {
+            return false;
+        }
+
+        if (
+            belge.belgeTipi === SatisBelgesiTipi.Proforma ||
+            belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi ||
+            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi
+        ) {
+            return false;
+        }
+
         return belge.durum === SatisBelgesiDurumu.MuhasebeOnaylandi && !belge.muhasebeFisId;
     }
 
@@ -1020,6 +1160,21 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
+        if (!this.canFisOlustur(belge)) {
+            const detail = this.isAlisMode()
+                ? 'Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
+                : belge.belgeTipi === SatisBelgesiTipi.Proforma
+                    ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
+                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.';
+
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'İşlem Desteklenmiyor',
+                detail
+            });
+            return;
+        }
+
         this.confirmationService.confirm({
             message: `"${belge.belgeNo}" için muhasebe fişi oluşturmak istediğinize emin misiniz?`,
             header: 'Fiş Oluşturma Onayı',

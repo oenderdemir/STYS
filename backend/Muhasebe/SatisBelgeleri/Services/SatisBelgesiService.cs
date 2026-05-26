@@ -233,6 +233,9 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (filter.TesisId.HasValue)
             query = query.Where(x => x.TesisId == filter.TesisId.Value);
 
+        if (filter.BelgeTipleri is { Count: > 0 })
+            query = query.Where(x => filter.BelgeTipleri.Contains(x.BelgeTipi));
+
         if (filter.Durum.HasValue)
             query = query.Where(x => x.Durum == filter.Durum.Value);
 

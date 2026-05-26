@@ -86,8 +86,11 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.Proforma)
             throw new BaseException("Proforma belgeler için muhasebe fişi oluşturulamaz.", 400);
 
-        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.IadeFaturasi)
-            throw new BaseException("İade faturası için otomatik muhasebe fişi üretimi bu fazda desteklenmemektedir.", 400);
+        if (belgeOnOkuma.BelgeTipi.IsAlisBelgesi())
+            throw new BaseException("Alış faturaları için muhasebe fişi oluşturma henüz desteklenmiyor. Faz 73 kapsamında eklenecektir.", 400);
+
+        if (belgeOnOkuma.BelgeTipi.IsIadeBelgesi())
+            throw new BaseException("İade faturaları için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
 
         // Toplam kontroller
         if (belgeOnOkuma.ToplamMatrah <= 0)

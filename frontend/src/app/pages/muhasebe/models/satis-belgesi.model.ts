@@ -18,7 +18,10 @@ export enum SatisBelgesiTipi {
     FaturaTaslagi = 1,
     SatisFaturasi = 2,
     IadeFaturasi = 3,
-    Proforma = 4
+    Proforma = 4,
+    AlisFaturasi = 5,
+    SatisIadeFaturasi = 6,
+    AlisIadeFaturasi = 7
 }
 
 export enum SatisKaynakModulu {
@@ -74,9 +77,25 @@ export const SATIS_BELGESI_DURUMU_SEVERITIES: Record<SatisBelgesiDurumu, string>
 export const SATIS_BELGESI_TIPI_LABELS: Record<SatisBelgesiTipi, string> = {
     [SatisBelgesiTipi.FaturaTaslagi]: 'Fatura Taslağı',
     [SatisBelgesiTipi.SatisFaturasi]: 'Satış Faturası',
-    [SatisBelgesiTipi.IadeFaturasi]: 'İade Faturası',
-    [SatisBelgesiTipi.Proforma]: 'Proforma'
+    [SatisBelgesiTipi.IadeFaturasi]: 'İade Faturası (Legacy)',
+    [SatisBelgesiTipi.Proforma]: 'Proforma',
+    [SatisBelgesiTipi.AlisFaturasi]: 'Alış Faturası',
+    [SatisBelgesiTipi.SatisIadeFaturasi]: 'Satış İade Faturası',
+    [SatisBelgesiTipi.AlisIadeFaturasi]: 'Alış İade Faturası'
 };
+
+export const SATIS_BELGE_TIPLERI: SatisBelgesiTipi[] = [
+    SatisBelgesiTipi.FaturaTaslagi,
+    SatisBelgesiTipi.SatisFaturasi,
+    SatisBelgesiTipi.SatisIadeFaturasi,
+    SatisBelgesiTipi.Proforma,
+    SatisBelgesiTipi.IadeFaturasi
+];
+
+export const ALIS_BELGE_TIPLERI: SatisBelgesiTipi[] = [
+    SatisBelgesiTipi.AlisFaturasi,
+    SatisBelgesiTipi.AlisIadeFaturasi
+];
 
 export const SATIS_KAYNAK_MODULU_LABELS: Record<SatisKaynakModulu, string> = {
     [SatisKaynakModulu.Manuel]: 'Manuel',
@@ -240,6 +259,7 @@ export interface UpdateSatisBelgesiRequest {
 
 export interface SatisBelgesiFilterDto {
     tesisId?: number | null;
+    belgeTipleri?: SatisBelgesiTipi[] | null;
     durum?: SatisBelgesiDurumu | null;
     kaynakModul?: SatisKaynakModulu | null;
     kaynakTipi?: string | null;
@@ -259,6 +279,7 @@ export interface SatisBelgesiRedRequest {
 export function createDefaultSatisBelgesiFilter(): SatisBelgesiFilterDto {
     return {
         tesisId: null,
+        belgeTipleri: null,
         durum: null,
         kaynakModul: null,
         kaynakTipi: null,
@@ -312,6 +333,14 @@ export function createEmptyCreateSatisBelgesiRequest(): CreateSatisBelgesiReques
         belgeNo: null,
         satirlar: [createEmptySatisBelgesiSatiri()]
     };
+}
+
+export function isAlisBelgeTipi(belgeTipi: SatisBelgesiTipi): boolean {
+    return ALIS_BELGE_TIPLERI.includes(belgeTipi);
+}
+
+export function isSatisBelgeTipi(belgeTipi: SatisBelgesiTipi): boolean {
+    return SATIS_BELGE_TIPLERI.includes(belgeTipi) || belgeTipi === SatisBelgesiTipi.IadeFaturasi;
 }
 
 // ── Helper: müşteri display adı ──

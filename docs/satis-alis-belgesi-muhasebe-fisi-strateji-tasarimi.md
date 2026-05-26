@@ -375,3 +375,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - `KapananTutar`, `KalanTutar`, `IliskiliCariHareketId`, `KapandiMi` alanları eklendi.
 - `KalanTutar` yeni kayıtlarda hareket tutarı kadar, eski kayıtlarda backfill ile başlatılır.
 - Kapama mantığı Faz 81B’ye bırakılmıştır.
+
+## Faz 81A-A — Request Model Temizliği
+
+- `CreateCariHareketRequest` ve `UpdateCariHareketRequest` içinden kapama alanları kaldırıldı.
+- Kapama alanları sadece sistem tarafından yönetilir.

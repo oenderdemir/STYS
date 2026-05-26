@@ -57,3 +57,8 @@
 - Faz 88D — Muhasebe Fişi Ters Kayıt UI İyileştirmesi
 - Faz 88E — Fiş İptali ve Belge Yeniden Fiş Oluşturma Akışı
 
+## Faz 88B — Backend Güvenlik Kuralları
+- İptal edilmiş ve ters kayıt fişlerinde tekrar işlem engeli eklendi.
+- Kapalı veya kısmi kapalı cari hareket bulunan kaynak satış belgelerinde fiş iptali engellenir.
+- Stok/cari hareket iptali ticari belge iptal fazına bırakıldı.
+- Migration yapılmadı.

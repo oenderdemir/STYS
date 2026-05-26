@@ -464,3 +464,9 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Muhasebe fişi iptali ve ters kayıt etkileri analiz edildi.
 - Stok, cari ve ticari belge etkilerinin birbirinden ayrılması önerildi.
 - Yeni migration gerekmedi; uygulama fazları sonraki adımlara bırakıldı.
+
+## Faz 88B — Muhasebe Fişi İptal / Ters Kayıt Güvenlik Kuralları
+
+- İptal edilmiş fiş, ters kayıt fişi ve daha önce ters kayıt oluşturulmuş fişler için tekrar işlem engeli eklendi.
+- Kapalı/kısmi kapalı cari hareket bulunan kaynak satış belgelerinde fiş iptali engellenir.
+- Stok ve cari tersleme ticari belge iptal fazına bırakıldı.

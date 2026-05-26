@@ -2,8 +2,10 @@ using AutoMapper;
 using ClosedXML.Excel;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Dtos;
@@ -27,19 +29,22 @@ public class MuhasebeFisService
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IMuhasebeHesapBakiyeGuncellemeService _muhasebeHesapBakiyeGuncellemeService;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
     public MuhasebeFisService(
         IMuhasebeFisRepository repository,
         IMapper mapper,
         StysAppDbContext dbContext,
         IMuhasebeDonemService muhasebeDonemService,
-        IMuhasebeHesapBakiyeGuncellemeService muhasebeHesapBakiyeGuncellemeService)
+        IMuhasebeHesapBakiyeGuncellemeService muhasebeHesapBakiyeGuncellemeService,
+        IUserAccessScopeService userAccessScopeService)
         : base(repository, mapper)
     {
         _repository = repository;
         _dbContext = dbContext;
         _muhasebeDonemService = muhasebeDonemService;
         _muhasebeHesapBakiyeGuncellemeService = muhasebeHesapBakiyeGuncellemeService;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default)
@@ -223,35 +228,21 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (orijinalFis is null)
                 throw new BaseException("Fiş bulunamadı.", 404);
 
-            // 2. Daha önce iptal edilmemiş olmalı
-            if (orijinalFis.Durum == MuhasebeFisDurumlari.Iptal)
-                throw new BaseException("Fiş zaten iptal edilmiş.", 400);
+            await ValidateFisIptalTersKayitAsync(orijinalFis, cancellationToken);
 
-            // 3. Ters kayıt fişi iptal edilemez
-            if (orijinalFis.Durum == MuhasebeFisDurumlari.TersKayit)
-                throw new BaseException("Ters kayıt fişi iptal edilemez.", 400);
-
-            // 4. Sadece Onayli fiş iptal edilebilir
-            if (orijinalFis.Durum != MuhasebeFisDurumlari.Onayli)
-                throw new BaseException("Yalnızca onaylı durumdaki fişler iptal edilebilir.", 400);
-
-            // 5. TersKayitFisId doluysa zaten iptal
-            if (orijinalFis.TersKayitFisId.HasValue)
-                throw new BaseException("Fiş zaten iptal edilmiş.", 400);
-
-            // 6. YevmiyeNo dolu olmalı
+            // 2. YevmiyeNo dolu olmalı
             if (!orijinalFis.YevmiyeNo.HasValue)
                 throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
 
-            // 7. Açık dönem kontrolü
+            // 3. Açık dönem kontrolü
             await ValidateOpenPeriodAsync(orijinalFis.TesisId, orijinalFis.FisTarihi, orijinalFis.MaliYil, orijinalFis.Donem, cancellationToken);
 
-            // 8. Aktif satırları al ve kontrol et
+            // 4. Aktif satırları al ve kontrol et
             var aktifSatirlar = orijinalFis.Satirlar.Where(s => !s.IsDeleted).ToList();
             if (aktifSatirlar.Count < 2)
                 throw new BaseException("İptal edilecek fiş en az iki satır içermelidir.", 400);
 
-            // 9. Ters kayıt fişini oluştur
+            // 5. Ters kayıt fişini oluştur
             var tersFis = new MuhasebeFis
             {
                 TesisId = orijinalFis.TesisId,
@@ -285,7 +276,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 }).ToList(),
             };
 
-            // 10. Ters kayıt borç/alacak dengesi kontrolü
+            // 6. Ters kayıt borç/alacak dengesi kontrolü
             var tersToplamBorc = tersFis.Satirlar.Sum(x => x.Borc);
             var tersToplamAlacak = tersFis.Satirlar.Sum(x => x.Alacak);
 
@@ -295,7 +286,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (tersToplamBorc <= 0)
                 throw new BaseException("Ters kayıt toplam borç tutarı sıfırdan büyük olmalıdır.", 400);
 
-            // 11. Ters kayıt satır hesaplarını doğrula
+            // 7. Ters kayıt satır hesaplarını doğrula
             foreach (var satir in tersFis.Satirlar)
             {
                 var hesap = await _dbContext.MuhasebeHesapPlanlari
@@ -313,21 +304,21 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                     throw new BaseException($"Satır {satir.SiraNo}: hareket görebilir detay hesap seçilmelidir.", 400);
             }
 
-            // 12. Ters kayıt fişine yevmiye no üret
+            // 8. Ters kayıt fişine yevmiye no üret
             var yevmiyeNo = await YevmiyeNoUretAsync(tersFis.TesisId, tersFis.MaliYil, cancellationToken);
             tersFis.YevmiyeNo = yevmiyeNo;
 
-            // 13. Ters kayıt fişini kaydet
+            // 9. Ters kayıt fişini kaydet
             await _dbContext.MuhasebeFisler.AddAsync(tersFis, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            // 14. Orijinal fişi iptal et ve TersKayitFisId ata
+            // 10. Orijinal fişi iptal et ve TersKayitFisId ata
             orijinalFis.Durum = MuhasebeFisDurumlari.Iptal;
             orijinalFis.TersKayitFisId = tersFis.Id;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            // 15. Ters kayıt fişi bakiyelerini güncelle
+            // 11. Ters kayıt fişi bakiyelerini güncelle
             await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(
                 tersFis,
                 cancellationToken);
@@ -346,6 +337,95 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    private async Task ValidateFisIptalTersKayitAsync(MuhasebeFis fis, CancellationToken cancellationToken)
+    {
+        ValidateFisDurumuAsync(fis);
+        await ValidateYetkiAsync(fis, cancellationToken);
+        await ValidateKaynakBelgeCariHareketEngelleriAsync(fis, cancellationToken);
+    }
+
+    private static void ValidateFisDurumuAsync(MuhasebeFis fis)
+    {
+        if (fis.Durum == MuhasebeFisDurumlari.Iptal)
+        {
+            throw new BaseException("İptal edilmiş fiş üzerinde işlem yapılamaz.", 400);
+        }
+
+        if (fis.Durum == MuhasebeFisDurumlari.TersKayit)
+        {
+            throw new BaseException("Ters kayıt fişi üzerinde iptal/ters kayıt yapılamaz.", 400);
+        }
+
+        if (fis.TersKayitFisId.HasValue)
+        {
+            throw new BaseException("Bu fiş için daha önce ters kayıt oluşturulmuş.", 400);
+        }
+
+        if (fis.IptalEdilenFisId.HasValue)
+        {
+            throw new BaseException("Ters kayıt fişi üzerinde iptal/ters kayıt yapılamaz.", 400);
+        }
+
+        if (fis.Durum != MuhasebeFisDurumlari.Onayli)
+        {
+            throw new BaseException("Yalnızca onaylı durumdaki fişler iptal edilebilir.", 400);
+        }
+    }
+
+    private async Task ValidateYetkiAsync(MuhasebeFis fis, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(fis.TesisId))
+        {
+            throw new BaseException("Bu fiş için yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private async Task ValidateKaynakBelgeCariHareketEngelleriAsync(MuhasebeFis fis, CancellationToken cancellationToken)
+    {
+        if (fis.KaynakModul != MuhasebeKaynakModulleri.SatisBelgesi || !fis.KaynakId.HasValue)
+        {
+            return;
+        }
+
+        var satisBelgesi = await _dbContext.SatisBelgeleri
+            .Include(x => x.CariKart)
+            .FirstOrDefaultAsync(x => x.Id == fis.KaynakId.Value && !x.IsDeleted, cancellationToken);
+
+        if (satisBelgesi is null)
+        {
+            throw new BaseException("Kaynak satış belgesi bulunamadı veya silinmiş.", 400);
+        }
+
+        if (satisBelgesi.MuhasebeFisId != fis.Id)
+        {
+            throw new BaseException("Kaynak satış belgesi ile fiş referansı uyuşmuyor.", 400);
+        }
+
+        var aktifCariHareketler = await _dbContext.CariHareketler
+            .Where(x =>
+                !x.IsDeleted
+                && x.Durum == CariHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                && x.KaynakId == satisBelgesi.Id)
+            .ToListAsync(cancellationToken);
+
+        var kapatilmisHareketVar = aktifCariHareketler.Any(x =>
+        {
+            var toplam = x.BorcTutari > 0m ? x.BorcTutari : x.AlacakTutari;
+            return x.KapandiMi
+                   || x.KapananTutar > 0m
+                   || x.KalanTutar + 0.01m < toplam;
+        });
+
+        if (kapatilmisHareketVar)
+        {
+            throw new BaseException("Bu belgeye ait cari hareket kapatılmış/kısmi kapatılmış. Önce tahsilat/ödeme kapaması geri alınmalıdır.", 400);
+        }
+
+        // TODO: Stok hareketlerine bağlı downstream işlem modeli eklendiğinde burada ek iptal güvenlik kontrolü uygulanacak.
     }
 
     public async Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)

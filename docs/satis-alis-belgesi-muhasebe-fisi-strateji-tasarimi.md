@@ -434,3 +434,8 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Satış, alış, iade, tevkifat, stok, cari ve KDV/tevkifat akışları build seviyesinde regresyon için kontrol edildi.
 - Pending model changes kontrolünde yeni migration ihtiyacı görünmedi.
 - Mevcut akışlarda büyük refactor veya yeni özellik eklenmedi.
+
+## Faz 85 — Kullanıcı Kabul Testleri
+
+- Muhasebe modülü için uçtan uca kullanıcı kabul test senaryoları ve kontrol listesi hazırlandı.
+- Bu fazda kod değişikliği ve migration yapılmadı.

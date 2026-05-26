@@ -300,3 +300,10 @@ Kısa vadede `SatisBelgesi` altyapısı korunmalı, ancak muhasebe fişi üretim
 - Aynı kaynak alış faturası için duplicate stok giriş hareketi engellenir.
 - Satış stok çıkışı, iade ve tevkifat kapsam dışıdır.
 - Migration yapılmamıştır.
+
+## Faz 74A — StokHareket Zorunlu Alan Kontrolü
+
+- `StokHareket` entity’sinde `TesisId` alanı yok.
+- Zorunlu alanlar: `DepoId`, `TasinirKartId`, `HareketTarihi`, `HareketTipi`, `Miktar`, `BirimFiyat`, `Tutar`, `Durum`, `KdvUygulamaTipi`, `KdvOrani`, `KdvTutari`.
+- Faz 74’te oluşturulan stok hareketinde bu alanlar set ediliyor.
+- Ek migration gerekmedi.

@@ -62,10 +62,24 @@ public class CariKart : BaseEntity<int>
     [MaxLength(1024)]
     public string? Aciklama { get; set; }
 
+    public DateTime? AcilisBakiyeTarihi { get; set; }
+
+    public decimal? AcilisBakiyeTutari { get; set; }
+
+    [MaxLength(16)]
+    public string? AcilisBakiyeYonu { get; set; }
+
+    [MaxLength(128)]
+    public string? BankaAdi { get; set; }
+
+    [MaxLength(34)]
+    public string? Iban { get; set; }
+
     public ICollection<CariHareket> CariHareketler { get; set; } = [];
     public ICollection<KasaHareket> KasaHareketler { get; set; } = [];
     public ICollection<BankaHareket> BankaHareketler { get; set; } = [];
     public ICollection<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri { get; set; } = [];
+    public ICollection<CariKartYetkiliKisi> YetkiliKisiler { get; set; } = [];
     public Tesis? Tesis { get; set; }
     public MuhasebeHesapPlani? MuhasebeHesapPlani { get; set; }
 }

@@ -134,6 +134,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RestoranSiparisKalemi> RestoranSiparisKalemleri => Set<RestoranSiparisKalemi>();
     public DbSet<RestoranOdeme> RestoranOdemeleri => Set<RestoranOdeme>();
     public DbSet<CariKart> CariKartlar => Set<CariKart>();
+    public DbSet<CariKartYetkiliKisi> CariKartYetkiliKisileri => Set<CariKartYetkiliKisi>();
     public DbSet<MuhasebeHesapKoduSayac> MuhasebeHesapKoduSayaclari => Set<MuhasebeHesapKoduSayac>();
     public DbSet<CariHareket> CariHareketler => Set<CariHareket>();
     public DbSet<KasaBankaHesap> KasaBankaHesaplari => Set<KasaBankaHesap>();
@@ -1486,6 +1487,11 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Il).HasMaxLength(128);
             entity.Property(x => x.Ilce).HasMaxLength(128);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.AcilisBakiyeTarihi);
+            entity.Property(x => x.AcilisBakiyeTutari).HasPrecision(18, 2);
+            entity.Property(x => x.AcilisBakiyeYonu).HasMaxLength(16);
+            entity.Property(x => x.BankaAdi).HasMaxLength(128);
+            entity.Property(x => x.Iban).HasMaxLength(34);
             entity.HasIndex(x => new { x.TesisId, x.CariKodu })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
@@ -1506,6 +1512,23 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.MuhasebeHesapPlani)
                 .WithMany()
                 .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CariKartYetkiliKisi>(entity =>
+        {
+            entity.ToTable("CariKartYetkiliKisileri", muhasebeSchema);
+            entity.Property(x => x.AdSoyad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.GorevUnvan).HasMaxLength(128);
+            entity.Property(x => x.Telefon).HasMaxLength(32);
+            entity.Property(x => x.Eposta).HasMaxLength(256);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => x.CariKartId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.YetkiliKisiler)
+                .HasForeignKey(x => x.CariKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

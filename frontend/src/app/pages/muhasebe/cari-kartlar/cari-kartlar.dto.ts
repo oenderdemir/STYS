@@ -18,6 +18,12 @@ export interface CariKartModel {
     eFaturaMukellefiMi: boolean;
     eArsivKapsamindaMi: boolean;
     aciklama?: string | null;
+    acilisBakiyeTarihi?: string | null;
+    acilisBakiyeTutari?: number | null;
+    acilisBakiyeYonu?: string | null;
+    bankaAdi?: string | null;
+    iban?: string | null;
+    yetkiliKisiler: CariKartYetkiliKisiModel[];
 }
 
 export interface CreateCariKartRequest {
@@ -36,9 +42,25 @@ export interface CreateCariKartRequest {
     eFaturaMukellefiMi: boolean;
     eArsivKapsamindaMi: boolean;
     aciklama?: string | null;
+    acilisBakiyeTarihi?: string | null;
+    acilisBakiyeTutari?: number | null;
+    acilisBakiyeYonu?: string | null;
+    bankaAdi?: string | null;
+    iban?: string | null;
+    yetkiliKisiler: CariKartYetkiliKisiModel[];
 }
 
 export interface UpdateCariKartRequest extends CreateCariKartRequest {}
+
+export interface CariKartYetkiliKisiModel {
+    id?: number | null;
+    cariKartId?: number | null;
+    adSoyad: string;
+    gorevUnvan?: string | null;
+    telefon?: string | null;
+    eposta?: string | null;
+    aciklama?: string | null;
+}
 
 export interface CariBakiyeModel {
     cariKartId: number;

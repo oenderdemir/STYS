@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Mail;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
@@ -46,6 +47,19 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         var toplamBorc = hareketler.Sum(x => x.BorcTutari);
         var toplamAlacak = hareketler.Sum(x => x.AlacakTutari);
+        var acilisTutar = cari.AcilisBakiyeTutari.GetValueOrDefault();
+        if (acilisTutar > 0m)
+        {
+            if (string.Equals(cari.AcilisBakiyeYonu, CariKartAcilisBakiyeYonleri.Borc, StringComparison.OrdinalIgnoreCase))
+            {
+                toplamBorc += acilisTutar;
+            }
+            else if (string.Equals(cari.AcilisBakiyeYonu, CariKartAcilisBakiyeYonleri.Alacak, StringComparison.OrdinalIgnoreCase))
+            {
+                toplamAlacak += acilisTutar;
+            }
+        }
+
         return new CariBakiyeDto
         {
             CariKartId = cariKartId,
@@ -62,49 +76,58 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         NormalizeCommonFields(dto);
+        NormalizeFinansFields(dto);
+        var yetkiliKisiler = NormalizeYetkiliKisiler(dto.YetkiliKisiler);
+        dto.YetkiliKisiler = [];
 
         var anaHesapKodu = ResolveAnaHesapKodu(dto.CariTipi);
-        if (anaHesapKodu is null)
-        {
-            if (string.IsNullOrWhiteSpace(dto.CariKodu))
-            {
-                throw new BaseException("Cari kodu zorunludur.", 400);
-            }
-
-            dto.CariKodu = dto.CariKodu.Trim().ToUpperInvariant();
-            var exists = await _repository.AnyAsync(x => x.CariKodu.ToUpper() == dto.CariKodu.ToUpper() && x.TesisId == dto.TesisId);
-            if (exists)
-            {
-                throw new BaseException("Cari kodu ayni tesis altinda benzersiz olmalidir.", 400);
-            }
-
-            return await base.AddAsync(dto);
-        }
-
-        if (!dto.TesisId.HasValue || dto.TesisId.Value <= 0)
-        {
-            throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
-        }
-
         await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
         try
         {
-            var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
-                dto.TesisId.Value,
-                anaHesapKodu,
-                "CariKart",
-                dto.UnvanAdSoyad,
-                null,
-                CancellationToken.None);
+            if (anaHesapKodu is null)
+            {
+                if (string.IsNullOrWhiteSpace(dto.CariKodu))
+                {
+                    throw new BaseException("Cari kodu zorunludur.", 400);
+                }
 
-            dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
-            dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
-            dto.MuhasebeHesapSiraNo = detay.SiraNo;
-            dto.CariKodu = detay.Kod;
+                dto.CariKodu = dto.CariKodu.Trim().ToUpperInvariant();
+                var exists = await _repository.AnyAsync(x => x.CariKodu.ToUpper() == dto.CariKodu.ToUpper() && x.TesisId == dto.TesisId);
+                if (exists)
+                {
+                    throw new BaseException("Cari kodu ayni tesis altinda benzersiz olmalidir.", 400);
+                }
+            }
+            else
+            {
+                if (!dto.TesisId.HasValue || dto.TesisId.Value <= 0)
+                {
+                    throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
+                }
+
+                var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+                    dto.TesisId.Value,
+                    anaHesapKodu,
+                    "CariKart",
+                    dto.UnvanAdSoyad,
+                    null,
+                    CancellationToken.None);
+
+                dto.MuhasebeHesapPlaniId = detay.MuhasebeHesapPlaniId;
+                dto.AnaMuhasebeHesapKodu = detay.AnaMuhasebeHesapKodu;
+                dto.MuhasebeHesapSiraNo = detay.SiraNo;
+                dto.CariKodu = detay.Kod;
+            }
 
             var result = await base.AddAsync(dto);
+            var resultId = result.Id ?? 0;
+            if (resultId > 0)
+            {
+                await SyncYetkiliKisileriAsync(resultId, yetkiliKisiler, CancellationToken.None);
+            }
+
             await tx.CommitAsync(CancellationToken.None);
-            return result;
+            return await GetByIdAsync(resultId) ?? result;
         }
         catch
         {
@@ -121,6 +144,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
 
         NormalizeCommonFields(dto);
+        NormalizeFinansFields(dto);
+        var yetkiliKisiler = NormalizeYetkiliKisiler(dto.YetkiliKisiler);
+        dto.YetkiliKisiler = [];
         var entity = await _dbContext.CariKartlar.FirstOrDefaultAsync(x => x.Id == dto.Id.Value)
             ?? throw new BaseException("Cari kart bulunamadi.", 404);
 
@@ -153,6 +179,11 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         entity.EFaturaMukellefiMi = dto.EFaturaMukellefiMi;
         entity.EArsivKapsamindaMi = dto.EArsivKapsamindaMi;
         entity.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+        entity.AcilisBakiyeTutari = NormalizeAcilisBakiyeTutari(dto.AcilisBakiyeTutari);
+        entity.AcilisBakiyeYonu = NormalizeAcilisBakiyeYonu(dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu);
+        entity.AcilisBakiyeTarihi = entity.AcilisBakiyeTutari.GetValueOrDefault() > 0m ? dto.AcilisBakiyeTarihi : null;
+        entity.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
+        entity.Iban = NormalizeIban(dto.Iban);
 
         if (entity.MuhasebeHesapPlaniId.HasValue)
         {
@@ -167,8 +198,25 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             }
         }
 
-        await _dbContext.SaveChangesAsync();
-        return Mapper.Map<CariKartDto>(entity);
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
+        try
+        {
+            var mevcutYetkililer = await _dbContext.CariKartYetkiliKisileri
+                .Where(x => x.CariKartId == entity.Id)
+                .ToListAsync(CancellationToken.None);
+            _dbContext.CariKartYetkiliKisileri.RemoveRange(mevcutYetkililer);
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+            await SyncYetkiliKisileriAsync(entity.Id, yetkiliKisiler, CancellationToken.None);
+
+            await tx.CommitAsync(CancellationToken.None);
+            return await GetByIdAsync(entity.Id) ?? Mapper.Map<CariKartDto>(entity);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public override async Task DeleteAsync(int id)
@@ -196,7 +244,10 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        Func<IQueryable<CariKart>, IQueryable<CariKart>> includeWithChildren = q => include is null
+            ? q.Include(x => x.YetkiliKisiler)
+            : include(q).Include(x => x.YetkiliKisiler);
+        var includeQuery = BuildScopedIncludeQuery(scope, includeWithChildren);
         return await base.GetByIdAsync(id, includeQuery);
     }
 
@@ -286,6 +337,39 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
     }
 
+    private static void NormalizeFinansFields(CariKartDto dto)
+    {
+        if (dto.AcilisBakiyeTutari.HasValue && dto.AcilisBakiyeTutari.Value < 0m)
+        {
+            throw new BaseException("Açılış bakiyesi negatif olamaz.", 400);
+        }
+
+        dto.AcilisBakiyeTutari = NormalizeAcilisBakiyeTutari(dto.AcilisBakiyeTutari);
+        dto.AcilisBakiyeYonu = NormalizeAcilisBakiyeYonu(dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu);
+        dto.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
+        dto.Iban = NormalizeIban(dto.Iban);
+
+        if (dto.AcilisBakiyeTutari.GetValueOrDefault() > 0m)
+        {
+            if (!dto.AcilisBakiyeTarihi.HasValue)
+            {
+                throw new BaseException("Açılış bakiyesi için tarih zorunludur.", 400);
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.AcilisBakiyeYonu))
+            {
+                throw new BaseException("Açılış bakiyesi için yön zorunludur.", 400);
+            }
+        }
+        else
+        {
+            dto.AcilisBakiyeTarihi = null;
+            dto.AcilisBakiyeYonu = null;
+        }
+
+        ValidateYetkiliKisiler(dto.YetkiliKisiler);
+    }
+
     private static string? NormalizeOptional(string? value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -295,6 +379,180 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         var trimmed = value.Trim();
         return trimmed.Length > maxLength ? trimmed[..maxLength] : trimmed;
+    }
+
+    private static decimal? NormalizeAcilisBakiyeTutari(decimal? value)
+        => value.GetValueOrDefault() > 0m ? value.GetValueOrDefault() : value;
+
+    private static string? NormalizeAcilisBakiyeYonu(decimal? tutar, string? value)
+    {
+        if (tutar.GetValueOrDefault() <= 0m)
+        {
+            return null;
+        }
+
+        return NormalizeAcilisBakiyeYonu(value);
+    }
+
+    private static string? NormalizeAcilisBakiyeYonu(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (string.Equals(normalized, CariKartAcilisBakiyeYonleri.Borc, StringComparison.OrdinalIgnoreCase))
+        {
+            return CariKartAcilisBakiyeYonleri.Borc;
+        }
+
+        if (string.Equals(normalized, CariKartAcilisBakiyeYonleri.Alacak, StringComparison.OrdinalIgnoreCase))
+        {
+            return CariKartAcilisBakiyeYonleri.Alacak;
+        }
+
+        throw new BaseException("Açılış bakiyesi yönü geçersiz.", 400);
+    }
+
+    private static string? NormalizeIban(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Replace(" ", string.Empty).Trim().ToUpperInvariant();
+        if (normalized.Length > 34)
+        {
+            throw new BaseException("IBAN uzunluğu geçersiz.", 400);
+        }
+
+        return normalized;
+    }
+
+    private static void ValidateYetkiliKisiler(IEnumerable<CariKartYetkiliKisiDto>? yetkiliKisiler)
+    {
+        if (yetkiliKisiler is null)
+        {
+            return;
+        }
+
+        foreach (var kisi in yetkiliKisiler)
+        {
+            if (kisi is null)
+            {
+                continue;
+            }
+
+            var hasValue = !string.IsNullOrWhiteSpace(kisi.AdSoyad)
+                || !string.IsNullOrWhiteSpace(kisi.GorevUnvan)
+                || !string.IsNullOrWhiteSpace(kisi.Telefon)
+                || !string.IsNullOrWhiteSpace(kisi.Eposta)
+                || !string.IsNullOrWhiteSpace(kisi.Aciklama);
+
+            if (!hasValue)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(kisi.AdSoyad))
+            {
+                throw new BaseException("Yetkili kişi için ad soyad zorunludur.", 400);
+            }
+
+            _ = NormalizeOptional(kisi.AdSoyad, 256);
+            _ = NormalizeOptional(kisi.GorevUnvan, 128);
+            _ = NormalizeOptional(kisi.Telefon, 32);
+            _ = NormalizeEmail(kisi.Eposta);
+            _ = NormalizeOptional(kisi.Aciklama, 1024);
+        }
+    }
+
+    private static List<CariKartYetkiliKisiDto> NormalizeYetkiliKisiler(IEnumerable<CariKartYetkiliKisiDto>? yetkiliKisiler)
+    {
+        var result = new List<CariKartYetkiliKisiDto>();
+        if (yetkiliKisiler is null)
+        {
+            return result;
+        }
+
+        foreach (var kisi in yetkiliKisiler)
+        {
+            if (kisi is null)
+            {
+                continue;
+            }
+
+            var hasValue = !string.IsNullOrWhiteSpace(kisi.AdSoyad)
+                || !string.IsNullOrWhiteSpace(kisi.GorevUnvan)
+                || !string.IsNullOrWhiteSpace(kisi.Telefon)
+                || !string.IsNullOrWhiteSpace(kisi.Eposta)
+                || !string.IsNullOrWhiteSpace(kisi.Aciklama);
+
+            if (!hasValue)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(kisi.AdSoyad))
+            {
+                throw new BaseException("Yetkili kişi için ad soyad zorunludur.", 400);
+            }
+
+            result.Add(new CariKartYetkiliKisiDto
+            {
+                Id = kisi.Id,
+                CariKartId = kisi.CariKartId,
+                AdSoyad = NormalizeOptional(kisi.AdSoyad, 256) ?? string.Empty,
+                GorevUnvan = NormalizeOptional(kisi.GorevUnvan, 128),
+                Telefon = NormalizeOptional(kisi.Telefon, 32),
+                Eposta = NormalizeEmail(kisi.Eposta),
+                Aciklama = NormalizeOptional(kisi.Aciklama, 1024)
+            });
+        }
+
+        return result;
+    }
+
+    private static string? NormalizeEmail(string? value)
+    {
+        var normalized = NormalizeOptional(value, 256);
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            _ = new MailAddress(normalized);
+            return normalized;
+        }
+        catch
+        {
+            throw new BaseException("Eposta formatı geçersiz.", 400);
+        }
+    }
+
+    private async Task SyncYetkiliKisileriAsync(int cariKartId, IEnumerable<CariKartYetkiliKisiDto> yetkiliKisiler, CancellationToken cancellationToken)
+    {
+        var entities = yetkiliKisiler.Select(kisi => new CariKartYetkiliKisi
+        {
+            CariKartId = cariKartId,
+            AdSoyad = kisi.AdSoyad,
+            GorevUnvan = kisi.GorevUnvan,
+            Telefon = kisi.Telefon,
+            Eposta = kisi.Eposta,
+            Aciklama = kisi.Aciklama
+        }).ToList();
+
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        await _dbContext.CariKartYetkiliKisileri.AddRangeAsync(entities, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)

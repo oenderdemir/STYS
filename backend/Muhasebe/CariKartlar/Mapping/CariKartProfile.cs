@@ -8,6 +8,7 @@ public class CariKartProfile : Profile
 {
     public CariKartProfile()
     {
+        CreateMap<CariKartYetkiliKisi, CariKartYetkiliKisiDto>().ReverseMap();
         CreateMap<CariKart, CariKartDto>().ReverseMap();
         CreateMap<CreateCariKartRequest, CariKartDto>();
         CreateMap<UpdateCariKartRequest, CariKartDto>();

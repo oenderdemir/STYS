@@ -22,6 +22,12 @@ public class CariKartDto : BaseRdbmsDto<int>
     public bool EFaturaMukellefiMi { get; set; }
     public bool EArsivKapsamindaMi { get; set; }
     public string? Aciklama { get; set; }
+    public DateTime? AcilisBakiyeTarihi { get; set; }
+    public decimal? AcilisBakiyeTutari { get; set; }
+    public string? AcilisBakiyeYonu { get; set; }
+    public string? BankaAdi { get; set; }
+    public string? Iban { get; set; }
+    public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }
 
 public class CreateCariKartRequest
@@ -41,9 +47,25 @@ public class CreateCariKartRequest
     public bool EFaturaMukellefiMi { get; set; }
     public bool EArsivKapsamindaMi { get; set; }
     public string? Aciklama { get; set; }
+    public DateTime? AcilisBakiyeTarihi { get; set; }
+    public decimal? AcilisBakiyeTutari { get; set; }
+    public string? AcilisBakiyeYonu { get; set; }
+    public string? BankaAdi { get; set; }
+    public string? Iban { get; set; }
+    public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }
 
 public class UpdateCariKartRequest : CreateCariKartRequest;
+
+public class CariKartYetkiliKisiDto : BaseRdbmsDto<int>
+{
+    public int? CariKartId { get; set; }
+    public string AdSoyad { get; set; } = string.Empty;
+    public string? GorevUnvan { get; set; }
+    public string? Telefon { get; set; }
+    public string? Eposta { get; set; }
+    public string? Aciklama { get; set; }
+}
 
 public class CariBakiyeDto
 {

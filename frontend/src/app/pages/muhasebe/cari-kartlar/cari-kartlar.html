@@ -92,6 +92,62 @@
             <label class="block font-medium mb-2">Ilce</label>
             <input pInputText class="w-full" [(ngModel)]="model.ilce" maxlength="128" />
         </div>
+        <div class="col-span-12">
+            <h6 class="m-0">Açılış Bakiyesi</h6>
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Açılış Bakiye Tarihi</label>
+            <input type="date" class="w-full" [(ngModel)]="model.acilisBakiyeTarihi" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Açılış Bakiye Tutarı</label>
+            <input pInputText class="w-full" type="number" min="0" step="0.01" [(ngModel)]="model.acilisBakiyeTutari" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block font-medium mb-2">Açılış Bakiye Yönü</label>
+            <p-select class="w-full" [options]="acilisBakiyeYonleri" optionLabel="label" optionValue="value" [(ngModel)]="model.acilisBakiyeYonu" appendTo="body" />
+        </div>
+        <div class="col-span-12">
+            <h6 class="m-0">Banka Bilgileri</h6>
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">Banka Adı</label>
+            <input pInputText class="w-full" [(ngModel)]="model.bankaAdi" maxlength="128" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label class="block font-medium mb-2">IBAN</label>
+            <input pInputText class="w-full" [(ngModel)]="model.iban" maxlength="34" />
+        </div>
+        <div class="col-span-12">
+            <div class="flex items-center justify-content-between mb-2">
+                <h6 class="m-0">Yetkili Kişiler</h6>
+                <p-button label="Yetkili Ekle" icon="pi pi-plus" severity="secondary" [outlined]="true" (onClick)="addYetkiliKisi()" />
+            </div>
+            <p-table [value]="model.yetkiliKisiler" [tableStyle]="{ 'min-width': '100%' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Ad Soyad</th>
+                        <th>Görev/Unvan</th>
+                        <th>Telefon</th>
+                        <th>Eposta</th>
+                        <th>Açıklama</th>
+                        <th style="width: 4rem"></th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item let-rowIndex="rowIndex">
+                    <tr>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.adSoyad" maxlength="256" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.gorevUnvan" maxlength="128" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.telefon" maxlength="32" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.eposta" maxlength="256" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.aciklama" maxlength="1024" /></td>
+                        <td>
+                            <p-button icon="pi pi-trash" severity="danger" [outlined]="true" size="small" (onClick)="removeYetkiliKisi(rowIndex)" />
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
         <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="aktifMi" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifMi">Aktif</label></div>
         <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eFatura" type="checkbox" [(ngModel)]="model.eFaturaMukellefiMi" /><label for="eFatura">E-Fatura</label></div>
         <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eArsiv" type="checkbox" [(ngModel)]="model.eArsivKapsamindaMi" /><label for="eArsiv">E-Arsiv</label></div>

@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CARI_TIPLERI, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CARI_TIPLERI, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 import { CariKartlarService } from './cari-kartlar.service';
 
 @Component({
@@ -50,6 +50,10 @@ export class CariKartlarPage implements OnInit {
     totalRecords = 0;
 
     readonly cariTipleri = CARI_TIPLERI;
+    readonly acilisBakiyeYonleri = [
+        { label: 'Borç', value: 'Borc' },
+        { label: 'Alacak', value: 'Alacak' }
+    ];
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -127,14 +131,32 @@ export class CariKartlarPage implements OnInit {
     }
 
     openEdit(item: CariKartModel): void {
+        if (!item.id) {
+            return;
+        }
+
         this.dialogMode = 'edit';
-        this.model = { ...item };
-        this.dialogVisible = true;
+        this.loading = true;
+        this.service.getById(item.id).pipe(finalize(() => {
+            this.loading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (detail) => {
+                this.model = this.mapToModel(detail);
+                this.dialogVisible = true;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     save(): void {
         if (!this.model.unvanAdSoyad?.trim()) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Unvan zorunludur.' });
+            return;
+        }
+
+        if (!this.validateAcilisBakiye()) {
             return;
         }
 
@@ -165,7 +187,13 @@ export class CariKartlarPage implements OnInit {
             aktifMi: this.model.aktifMi,
             eFaturaMukellefiMi: this.model.eFaturaMukellefiMi,
             eArsivKapsamindaMi: this.model.eArsivKapsamindaMi,
-            aciklama: this.model.aciklama?.trim() || null
+            aciklama: this.model.aciklama?.trim() || null,
+            acilisBakiyeTarihi: this.model.acilisBakiyeTarihi || null,
+            acilisBakiyeTutari: this.model.acilisBakiyeTutari ?? null,
+            acilisBakiyeYonu: this.model.acilisBakiyeYonu || null,
+            bankaAdi: this.model.bankaAdi?.trim() || null,
+            iban: this.normalizeIban(this.model.iban),
+            yetkiliKisiler: this.normalizeYetkiliKisiler(this.model.yetkiliKisiler)
         };
 
         this.saving = true;
@@ -225,8 +253,22 @@ export class CariKartlarPage implements OnInit {
             aktifMi: true,
             eFaturaMukellefiMi: false,
             eArsivKapsamindaMi: false,
-            aciklama: null
+            aciklama: null,
+            acilisBakiyeTarihi: null,
+            acilisBakiyeTutari: null,
+            acilisBakiyeYonu: null,
+            bankaAdi: null,
+            iban: null,
+            yetkiliKisiler: []
         };
+    }
+
+    addYetkiliKisi(): void {
+        this.model.yetkiliKisiler = [...(this.model.yetkiliKisiler ?? []), this.createEmptyYetkiliKisi()];
+    }
+
+    removeYetkiliKisi(index: number): void {
+        this.model.yetkiliKisiler = (this.model.yetkiliKisiler ?? []).filter((_, i) => i !== index);
     }
 
     isCariKoduReadOnly(): boolean {
@@ -252,6 +294,81 @@ export class CariKartlarPage implements OnInit {
 
         this.dialogVisible = false;
         this.model = this.createEmpty();
+    }
+
+    private mapToModel(item: CariKartModel): CariKartModel {
+        return {
+            ...item,
+            yetkiliKisiler: item.yetkiliKisiler ?? [],
+            acilisBakiyeTarihi: item.acilisBakiyeTarihi ? item.acilisBakiyeTarihi.slice(0, 10) : null,
+            acilisBakiyeTutari: item.acilisBakiyeTutari ?? null,
+            acilisBakiyeYonu: item.acilisBakiyeYonu ?? null,
+            bankaAdi: item.bankaAdi ?? null,
+            iban: item.iban ?? null
+        };
+    }
+
+    private createEmptyYetkiliKisi(): CariKartYetkiliKisiModel {
+        return {
+            id: null,
+            cariKartId: null,
+            adSoyad: '',
+            gorevUnvan: null,
+            telefon: null,
+            eposta: null,
+            aciklama: null
+        };
+    }
+
+    private validateAcilisBakiye(): boolean {
+        const tutar = this.model.acilisBakiyeTutari ?? null;
+        if (tutar !== null && tutar < 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Açılış bakiyesi negatif olamaz.' });
+            return false;
+        }
+
+        if ((tutar ?? 0) > 0) {
+            if (!this.model.acilisBakiyeTarihi) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Açılış bakiyesi tarihi zorunludur.' });
+                return false;
+            }
+
+            if (!this.model.acilisBakiyeYonu) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Açılış bakiyesi yönü zorunludur.' });
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private normalizeYetkiliKisiler(kisiler: CariKartYetkiliKisiModel[]): CariKartYetkiliKisiModel[] {
+        return (kisiler ?? [])
+            .filter((kisi) => !!kisi && (
+                !!kisi.adSoyad?.trim() ||
+                !!kisi.gorevUnvan?.trim() ||
+                !!kisi.telefon?.trim() ||
+                !!kisi.eposta?.trim() ||
+                !!kisi.aciklama?.trim()
+            ))
+            .map((kisi) => ({
+                ...kisi,
+                id: kisi.id ?? null,
+                cariKartId: kisi.cariKartId ?? null,
+                adSoyad: kisi.adSoyad?.trim() || '',
+                gorevUnvan: kisi.gorevUnvan?.trim() || null,
+                telefon: kisi.telefon?.trim() || null,
+                eposta: kisi.eposta?.trim() || null,
+                aciklama: kisi.aciklama?.trim() || null
+            }));
+    }
+
+    private normalizeIban(iban?: string | null): string | null {
+        if (!iban?.trim()) {
+            return null;
+        }
+
+        return iban.replace(/\s+/g, '').toUpperCase();
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

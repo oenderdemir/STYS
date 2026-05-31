@@ -14,4 +14,10 @@ public interface ICariKartService : IBaseRdbmsService<CariKartDto, CariKart, int
         Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null,
         Func<IQueryable<CariKart>, IOrderedQueryable<CariKart>>? orderBy = null);
     Task<CariBakiyeDto> GetBakiyeAsync(int cariKartId, CancellationToken cancellationToken = default);
+    Task<CariKartDto> CariKartAcilisBakiyesiDuzeltAsync(
+        int cariKartId,
+        decimal yeniTutar,
+        string? yeniYonu,
+        DateTime? duzeltmeTarihi = null,
+        CancellationToken cancellationToken = default);
 }

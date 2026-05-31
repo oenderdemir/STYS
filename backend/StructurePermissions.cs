@@ -177,6 +177,11 @@ public static class StructurePermissions
         public const string Manage = "KampBasvuruYonetimi.Manage";
     }
 
+    public static class KampBasvuru
+    {
+        public const string Menu = "KampBasvuru.Menu";
+    }
+
     public static class KampRezervasyonYonetimi
     {
         public const string Menu = "KampRezervasyonYonetimi.Menu";

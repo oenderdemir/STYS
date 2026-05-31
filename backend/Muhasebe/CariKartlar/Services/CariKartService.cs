@@ -60,6 +60,18 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         };
     }
 
+    public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
+    {
+        var item = await base.GetByIdAsync(id, include);
+        if (item is null)
+        {
+            return null;
+        }
+
+        await EnrichAcilisBakiyeDuzeltilebilirMiAsync([item], CancellationToken.None);
+        return item;
+    }
+
     public async Task<CariKartDto> CariKartAcilisBakiyesiDuzeltAsync(
         int cariKartId,
         decimal yeniTutar,
@@ -333,21 +345,13 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
     }
 
-    public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
-    {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        Func<IQueryable<CariKart>, IQueryable<CariKart>> includeWithChildren = q => include is null
-            ? q.Include(x => x.YetkiliKisiler)
-            : include(q).Include(x => x.YetkiliKisiler);
-        var includeQuery = BuildScopedIncludeQuery(scope, includeWithChildren);
-        return await base.GetByIdAsync(id, includeQuery);
-    }
-
     public override async Task<IEnumerable<CariKartDto>> GetAllAsync(Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include);
-        return await base.GetAllAsync(includeQuery);
+        var items = (await base.GetAllAsync(includeQuery)).ToList();
+        await EnrichAcilisBakiyeDuzeltilebilirMiAsync(items, CancellationToken.None);
+        return items;
     }
 
     public async Task<IEnumerable<CariKartDto>> GetAllAsync(
@@ -356,7 +360,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
-        return await base.GetAllAsync(includeQuery);
+        var items = (await base.GetAllAsync(includeQuery)).ToList();
+        await EnrichAcilisBakiyeDuzeltilebilirMiAsync(items, CancellationToken.None);
+        return items;
     }
 
     public override async Task<IEnumerable<CariKartDto>> WhereAsync(System.Linq.Expressions.Expression<Func<CariKart, bool>> predicate, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
@@ -374,7 +380,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include);
-        return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+        var paged = await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+        await EnrichAcilisBakiyeDuzeltilebilirMiAsync(paged.Items, CancellationToken.None);
+        return paged;
     }
 
     public async Task<PagedResult<CariKartDto>> GetPagedAsync(
@@ -385,7 +393,38 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include, tesisId);
-        return await base.GetPagedAsync(request, null, includeQuery, orderBy);
+        var paged = await base.GetPagedAsync(request, null, includeQuery, orderBy);
+        await EnrichAcilisBakiyeDuzeltilebilirMiAsync(paged.Items, CancellationToken.None);
+        return paged;
+    }
+
+    private async Task EnrichAcilisBakiyeDuzeltilebilirMiAsync(IEnumerable<CariKartDto> dtos, CancellationToken cancellationToken)
+    {
+        var items = dtos.Where(x => x.Id.HasValue).ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var ids = items.Select(x => x.Id!.Value).Distinct().ToList();
+        var hareketler = await _dbContext.CariHareketler
+            .Where(x =>
+                ids.Contains(x.CariKartId)
+                && !x.IsDeleted
+                && x.Durum == CariHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.CariKart
+                && x.BelgeTuru == MuhasebeFisTipleri.Acilis)
+            .ToListAsync(cancellationToken);
+
+        var kullanilmisIds = hareketler
+            .Where(IsAcilisHareketiKullanildi)
+            .Select(x => x.CariKartId)
+            .ToHashSet();
+
+        foreach (var dto in items)
+        {
+            dto.AcilisBakiyeDuzeltilebilirMi = dto.Id.HasValue && kullanilmisIds.Contains(dto.Id.Value);
+        }
     }
 
     private static string? ResolveAnaHesapKodu(string cariTipi)

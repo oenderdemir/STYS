@@ -23,6 +23,7 @@ export interface CariKartModel {
     acilisBakiyeYonu?: string | null;
     bankaAdi?: string | null;
     iban?: string | null;
+    acilisBakiyeDuzeltilebilirMi?: boolean;
     yetkiliKisiler: CariKartYetkiliKisiModel[];
 }
 

@@ -27,3 +27,5 @@
 - `POST /api/ui/muhasebe/cari-kartlar/{id}/acilis-bakiyesi-duzelt` endpointi eklendi.
 - Cari kartlar ekranında "Açılış Bakiyesi Düzelt" dialogu eklendi.
 - İşlem fark kadar yeni cari hareket oluşturur.
+- Düzeltme butonu sadece kullanılmış açılış bakiyesi varsa gösterilir.
+- Kullanılmamış açılış bakiyesi normal cari kart düzenleme ekranından değiştirilebilir.

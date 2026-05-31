@@ -361,7 +361,7 @@ export class CariKartlarPage implements OnInit {
     }
 
     canDuzeltAcilisBakiye(item: CariKartModel): boolean {
-        return (item.acilisBakiyeTutari ?? 0) > 0;
+        return item.acilisBakiyeDuzeltilebilirMi === true;
     }
 
     private createEmptyYetkiliKisi(): CariKartYetkiliKisiModel {

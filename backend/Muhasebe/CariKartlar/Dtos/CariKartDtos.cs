@@ -27,6 +27,7 @@ public class CariKartDto : BaseRdbmsDto<int>
     public string? AcilisBakiyeYonu { get; set; }
     public string? BankaAdi { get; set; }
     public string? Iban { get; set; }
+    public bool AcilisBakiyeDuzeltilebilirMi { get; set; }
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }
 

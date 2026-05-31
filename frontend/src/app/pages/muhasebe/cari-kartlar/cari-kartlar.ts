@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CARI_TIPLERI, CariKartAcilisBakiyesiDuzeltRequest, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CARI_TIPLERI, CariKartAcilisBakiyesiDuzeltRequest, CariKartBankaHesabiModel, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 import { CariKartlarService } from './cari-kartlar.service';
 
 @Component({
@@ -199,8 +199,9 @@ export class CariKartlarPage implements OnInit {
             acilisBakiyeTarihi: this.model.acilisBakiyeTarihi || null,
             acilisBakiyeTutari: this.model.acilisBakiyeTutari ?? null,
             acilisBakiyeYonu: this.model.acilisBakiyeYonu || null,
-            bankaAdi: this.model.bankaAdi?.trim() || null,
-            iban: this.normalizeIban(this.model.iban),
+            bankaAdi: null,
+            iban: null,
+            bankaHesaplari: this.normalizeBankaHesaplari(this.model.bankaHesaplari),
             yetkiliKisiler: this.normalizeYetkiliKisiler(this.model.yetkiliKisiler)
         };
 
@@ -311,8 +312,17 @@ export class CariKartlarPage implements OnInit {
             acilisBakiyeYonu: null,
             bankaAdi: null,
             iban: null,
+            bankaHesaplari: [],
             yetkiliKisiler: []
         };
+    }
+
+    addBankaHesabi(): void {
+        this.model.bankaHesaplari = [...(this.model.bankaHesaplari ?? []), this.createEmptyBankaHesabi()];
+    }
+
+    removeBankaHesabi(index: number): void {
+        this.model.bankaHesaplari = (this.model.bankaHesaplari ?? []).filter((_, i) => i !== index);
     }
 
     addYetkiliKisi(): void {
@@ -352,6 +362,25 @@ export class CariKartlarPage implements OnInit {
         return {
             ...item,
             yetkiliKisiler: item.yetkiliKisiler ?? [],
+            bankaHesaplari: item.bankaHesaplari?.length
+                ? item.bankaHesaplari.map((hesap) => ({
+                    id: hesap.id ?? null,
+                    cariKartId: hesap.cariKartId ?? item.id ?? null,
+                    bankaAdi: hesap.bankaAdi ?? null,
+                    subeAdi: hesap.subeAdi ?? null,
+                    hesapNo: hesap.hesapNo ?? null,
+                    iban: hesap.iban ?? null,
+                    aciklama: hesap.aciklama ?? null
+                }))
+                : ((item.bankaAdi || item.iban) ? [{
+                    id: null,
+                    cariKartId: item.id ?? null,
+                    bankaAdi: item.bankaAdi ?? null,
+                    subeAdi: null,
+                    hesapNo: null,
+                    iban: item.iban ?? null,
+                    aciklama: null
+                }] : []),
             acilisBakiyeTarihi: item.acilisBakiyeTarihi ? item.acilisBakiyeTarihi.slice(0, 10) : null,
             acilisBakiyeTutari: item.acilisBakiyeTutari ?? null,
             acilisBakiyeYonu: item.acilisBakiyeYonu ?? null,
@@ -362,6 +391,18 @@ export class CariKartlarPage implements OnInit {
 
     canDuzeltAcilisBakiye(item: CariKartModel): boolean {
         return item.acilisBakiyeDuzeltilebilirMi === true;
+    }
+
+    private createEmptyBankaHesabi(): CariKartBankaHesabiModel {
+        return {
+            id: null,
+            cariKartId: null,
+            bankaAdi: null,
+            subeAdi: null,
+            hesapNo: null,
+            iban: null,
+            aciklama: null
+        };
     }
 
     private createEmptyYetkiliKisi(): CariKartYetkiliKisiModel {
@@ -425,6 +466,26 @@ export class CariKartlarPage implements OnInit {
         }
 
         return iban.replace(/\s+/g, '').toUpperCase();
+    }
+
+    private normalizeBankaHesaplari(hesaplar: CariKartBankaHesabiModel[]): CariKartBankaHesabiModel[] {
+        return (hesaplar ?? [])
+            .filter((hesap) => !!hesap && (
+                !!hesap.bankaAdi?.trim() ||
+                !!hesap.subeAdi?.trim() ||
+                !!hesap.hesapNo?.trim() ||
+                !!hesap.iban?.trim() ||
+                !!hesap.aciklama?.trim()
+            ))
+            .map((hesap) => ({
+                id: hesap.id ?? null,
+                cariKartId: hesap.cariKartId ?? null,
+                bankaAdi: hesap.bankaAdi?.trim() || null,
+                subeAdi: hesap.subeAdi?.trim() || null,
+                hesapNo: hesap.hesapNo?.trim() || null,
+                iban: this.normalizeIban(hesap.iban),
+                aciklama: hesap.aciklama?.trim() || null
+            }));
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

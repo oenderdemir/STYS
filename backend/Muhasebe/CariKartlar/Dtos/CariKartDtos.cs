@@ -28,6 +28,7 @@ public class CariKartDto : BaseRdbmsDto<int>
     public string? BankaAdi { get; set; }
     public string? Iban { get; set; }
     public bool AcilisBakiyeDuzeltilebilirMi { get; set; }
+    public List<CariKartBankaHesabiDto> BankaHesaplari { get; set; } = [];
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }
 
@@ -53,10 +54,21 @@ public class CreateCariKartRequest
     public string? AcilisBakiyeYonu { get; set; }
     public string? BankaAdi { get; set; }
     public string? Iban { get; set; }
+    public List<CariKartBankaHesabiDto> BankaHesaplari { get; set; } = [];
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }
 
 public class UpdateCariKartRequest : CreateCariKartRequest;
+
+public class CariKartBankaHesabiDto : BaseRdbmsDto<int>
+{
+    public int? CariKartId { get; set; }
+    public string? BankaAdi { get; set; }
+    public string? SubeAdi { get; set; }
+    public string? HesapNo { get; set; }
+    public string? Iban { get; set; }
+    public string? Aciklama { get; set; }
+}
 
 public class CariKartAcilisBakiyesiDuzeltRequest
 {

@@ -22,3 +22,8 @@
 - Eski açılış hareketi korunur.
 - Geçmiş hareket izi bozulmaz.
 - Cari bakiye aktif hareketler üzerinden doğru hesaplanır.
+
+## API ve UI
+- `POST /api/ui/muhasebe/cari-kartlar/{id}/acilis-bakiyesi-duzelt` endpointi eklendi.
+- Cari kartlar ekranında "Açılış Bakiyesi Düzelt" dialogu eklendi.
+- İşlem fark kadar yeni cari hareket oluşturur.

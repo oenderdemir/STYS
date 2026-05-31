@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CariBakiyeModel, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CariBakiyeModel, CariKartAcilisBakiyesiDuzeltRequest, CariKartModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 
 @Injectable({ providedIn: 'root' })
 export class CariKartlarService {
@@ -92,6 +92,17 @@ export class CariKartlarService {
                     return envelope.data;
                 }
                 throw new Error(tryReadApiMessage(envelope) ?? 'Cari bakiye alinamadi.');
+            })
+        );
+    }
+
+    acilisBakiyesiDuzelt(cariKartId: number, request: CariKartAcilisBakiyesiDuzeltRequest): Observable<CariKartModel> {
+        return this.http.post<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/ui/muhasebe/cari-kartlar/${cariKartId}/acilis-bakiyesi-duzelt`, request).pipe(
+            map((envelope) => {
+                if (envelope.success && envelope.data) {
+                    return envelope.data;
+                }
+                throw new Error(tryReadApiMessage(envelope) ?? 'Açılış bakiyesi düzeltilemedi.');
             })
         );
     }

@@ -57,6 +57,13 @@ public class CreateCariKartRequest
 
 public class UpdateCariKartRequest : CreateCariKartRequest;
 
+public class CariKartAcilisBakiyesiDuzeltRequest
+{
+    public decimal YeniTutar { get; set; }
+    public string? YeniYonu { get; set; }
+    public DateTime? DuzeltmeTarihi { get; set; }
+}
+
 public class CariKartYetkiliKisiDto : BaseRdbmsDto<int>
 {
     public int? CariKartId { get; set; }

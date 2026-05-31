@@ -52,6 +52,12 @@ export interface CreateCariKartRequest {
 
 export interface UpdateCariKartRequest extends CreateCariKartRequest {}
 
+export interface CariKartAcilisBakiyesiDuzeltRequest {
+    yeniTutar: number;
+    yeniYonu?: string | null;
+    duzeltmeTarihi?: string | Date | null;
+}
+
 export interface CariKartYetkiliKisiModel {
     id?: number | null;
     cariKartId?: number | null;

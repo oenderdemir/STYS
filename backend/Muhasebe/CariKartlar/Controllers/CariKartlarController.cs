@@ -43,6 +43,19 @@ public class CariKartlarController : UIController
     public async Task<ActionResult<CariBakiyeDto>> GetBakiye(int cariKartId, CancellationToken cancellationToken)
         => Ok(await _service.GetBakiyeAsync(cariKartId, cancellationToken));
 
+    [HttpPost("{id:int}/acilis-bakiyesi-duzelt")]
+    [Permission(StructurePermissions.CariKartYonetimi.Manage)]
+    public async Task<ActionResult<CariKartDto>> AcilisBakiyesiDuzelt(
+        int id,
+        [FromBody] CariKartAcilisBakiyesiDuzeltRequest request,
+        CancellationToken cancellationToken)
+        => Ok(await _service.CariKartAcilisBakiyesiDuzeltAsync(
+            id,
+            request.YeniTutar,
+            request.YeniYonu,
+            request.DuzeltmeTarihi,
+            cancellationToken));
+
     [HttpPost]
     [Permission(StructurePermissions.CariKartYonetimi.Manage)]
     public async Task<ActionResult<CariKartDto>> Create([FromBody] CreateCariKartRequest request, CancellationToken cancellationToken)

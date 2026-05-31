@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CARI_TIPLERI, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CARI_TIPLERI, CariKartAcilisBakiyesiDuzeltRequest, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 import { CariKartlarService } from './cari-kartlar.service';
 
 @Component({
@@ -41,6 +41,14 @@ export class CariKartlarPage implements OnInit {
     saving = false;
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
+    duzeltmeDialogVisible = false;
+    duzeltmeSaving = false;
+    duzeltmeModel: CariKartAcilisBakiyesiDuzeltRequest = {
+        yeniTutar: 0,
+        yeniYonu: null,
+        duzeltmeTarihi: null
+    };
+    duzeltmeCariKart: CariKartModel | null = null;
 
     records: CariKartModel[] = [];
     filteredRecords: CariKartModel[] = [];
@@ -234,6 +242,50 @@ export class CariKartlarPage implements OnInit {
         });
     }
 
+    openAcilisBakiyesiDuzelt(item: CariKartModel): void {
+        if (!item.id) {
+            return;
+        }
+
+        this.duzeltmeCariKart = item;
+        this.duzeltmeModel = {
+            yeniTutar: item.acilisBakiyeTutari ?? 0,
+            yeniYonu: item.acilisBakiyeYonu ?? null,
+            duzeltmeTarihi: item.acilisBakiyeTarihi ?? null
+        };
+        this.duzeltmeDialogVisible = true;
+    }
+
+    saveAcilisBakiyesiDuzelt(): void {
+        if (!this.duzeltmeCariKart?.id) {
+            return;
+        }
+
+        if ((this.duzeltmeModel.yeniTutar ?? 0) < 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Yeni tutar negatif olamaz.' });
+            return;
+        }
+
+        if ((this.duzeltmeModel.yeniTutar ?? 0) > 0 && !this.duzeltmeModel.yeniYonu) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Yeni yön zorunludur.' });
+            return;
+        }
+
+        this.duzeltmeSaving = true;
+        this.service.acilisBakiyesiDuzelt(this.duzeltmeCariKart.id, this.duzeltmeModel).pipe(finalize(() => {
+            this.duzeltmeSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: () => {
+                this.duzeltmeDialogVisible = false;
+                this.duzeltmeCariKart = null;
+                this.load();
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Açılış bakiyesi düzeltildi.' });
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
     private createEmpty(): CariKartModel {
         return {
             tesisId: null,
@@ -306,6 +358,10 @@ export class CariKartlarPage implements OnInit {
             bankaAdi: item.bankaAdi ?? null,
             iban: item.iban ?? null
         };
+    }
+
+    canDuzeltAcilisBakiye(item: CariKartModel): boolean {
+        return (item.acilisBakiyeTutari ?? 0) > 0;
     }
 
     private createEmptyYetkiliKisi(): CariKartYetkiliKisiModel {

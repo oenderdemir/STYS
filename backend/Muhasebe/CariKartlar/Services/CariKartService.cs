@@ -62,7 +62,14 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
     public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
     {
-        var item = await base.GetByIdAsync(id, include);
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        Func<IQueryable<CariKart>, IQueryable<CariKart>> includeWithChildren = q =>
+            include is null
+                ? q.Include(x => x.YetkiliKisiler)
+                : include(q).Include(x => x.YetkiliKisiler);
+
+        var includeQuery = BuildScopedIncludeQuery(scope, includeWithChildren);
+        var item = await base.GetByIdAsync(id, includeQuery);
         if (item is null)
         {
             return null;

@@ -64,9 +64,12 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         Func<IQueryable<CariKart>, IQueryable<CariKart>> includeWithChildren = q =>
-            include is null
-                ? q.Include(x => x.YetkiliKisiler).Include(x => x.BankaHesaplari)
-                : include(q).Include(x => x.YetkiliKisiler).Include(x => x.BankaHesaplari);
+        {
+            var query = include is null ? q : include(q);
+            return query
+                .Include(x => x.YetkiliKisiler)
+                .Include(x => x.BankaHesaplari);
+        };
 
         var includeQuery = BuildScopedIncludeQuery(scope, includeWithChildren);
         var item = await base.GetByIdAsync(id, includeQuery);

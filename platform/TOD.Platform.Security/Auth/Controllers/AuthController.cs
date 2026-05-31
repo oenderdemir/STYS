@@ -125,6 +125,14 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
 
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<ActionResult<CurrentUserResponseDto>> Me(CancellationToken cancellationToken)
+    {
+        var response = await _authenticationService.GetCurrentUserAsync(cancellationToken);
+        return Ok(response);
+    }
+
     private void SetRefreshTokenCookie(string refreshToken, DateTime? expiresAtUtc)
     {
         if (string.IsNullOrWhiteSpace(refreshToken) || !expiresAtUtc.HasValue)

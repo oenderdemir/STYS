@@ -10,6 +10,8 @@ public interface IIdentityStore<TKey> where TKey : struct
 
     Task<IReadOnlyCollection<string>> GetPermissionsAsync(TKey userId, CancellationToken cancellationToken = default);
 
+    Task<string?> GetDefaultRouteAsync(TKey userId, CancellationToken cancellationToken = default);
+
     Task UpdatePasswordHashAsync(TKey userId, string newPasswordHash, CancellationToken cancellationToken = default);
 
     Task<IssuedRefreshToken> IssueRefreshTokenAsync(TKey userId, DateTime expiresAtUtc, CancellationToken cancellationToken = default);

@@ -12,5 +12,7 @@ public class LoginResponseDto
 
     public DateTime? RefreshTokenExpireDate { get; set; }
 
+    public string? DefaultRoute { get; set; }
+
     public string? UserStatus { get; set; }
 }

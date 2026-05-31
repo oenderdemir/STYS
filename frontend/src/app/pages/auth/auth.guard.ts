@@ -7,8 +7,19 @@ export const authGuard: CanActivateFn = (_route, state) => {
     const router = inject(Router);
 
     if (authService.isAuthenticated()) {
-        if (authService.mustChangePassword() && state.url !== '/') {
-            return router.createUrlTree(['/']);
+        if (authService.mustChangePassword()) {
+            if (state.url !== '/') {
+                return router.createUrlTree(['/']);
+            }
+
+            return true;
+        }
+
+        if (state.url === '/' || state.url === '') {
+            const defaultRoute = authService.getDefaultRoute();
+            if (defaultRoute) {
+                return router.createUrlTree([defaultRoute]);
+            }
         }
 
         return true;
@@ -26,8 +37,19 @@ export const authChildGuard: CanActivateChildFn = (_route, state) => {
     const router = inject(Router);
 
     if (authService.isAuthenticated()) {
-        if (authService.mustChangePassword() && state.url !== '/') {
-            return router.createUrlTree(['/']);
+        if (authService.mustChangePassword()) {
+            if (state.url !== '/') {
+                return router.createUrlTree(['/']);
+            }
+
+            return true;
+        }
+
+        if (state.url === '/' || state.url === '') {
+            const defaultRoute = authService.getDefaultRoute();
+            if (defaultRoute) {
+                return router.createUrlTree([defaultRoute]);
+            }
         }
 
         return true;

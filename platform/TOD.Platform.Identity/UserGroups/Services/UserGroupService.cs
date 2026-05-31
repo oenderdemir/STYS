@@ -21,6 +21,8 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
 
     public override async Task<UserGroupDto> AddAsync(UserGroupDto dto)
     {
+        NormalizeAndValidateDefaultRoute(dto);
+
         var userGroup = Mapper.Map<UserGroup>(dto);
         userGroup.UserGroupRoles = new List<UserGroupRole>();
 
@@ -52,6 +54,8 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
             throw new InvalidOperationException("Id cannot be empty.");
         }
 
+        NormalizeAndValidateDefaultRoute(dto);
+
         var userGroup = await Repository.GetByIdAsync(dto.Id.Value, q => q.IgnoreQueryFilters().Include(x => x.UserGroupRoles));
         if (userGroup is null)
         {
@@ -59,6 +63,7 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
         }
 
         userGroup.Name = dto.Name;
+        userGroup.DefaultRoute = dto.DefaultRoute;
 
         var desiredRoleIds = dto.Roles?
             .Select(x => x.Id)
@@ -96,5 +101,27 @@ public class UserGroupService : BaseRdbmsService<UserGroupDto, UserGroup>, IUser
         await Repository.SaveChangesAsync();
 
         return dto;
+    }
+
+    private static void NormalizeAndValidateDefaultRoute(UserGroupDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.DefaultRoute))
+        {
+            dto.DefaultRoute = null;
+            return;
+        }
+
+        var normalizedRoute = dto.DefaultRoute.Trim();
+        if (normalizedRoute.Length > 500)
+        {
+            throw new InvalidOperationException("Varsayilan sayfa en fazla 500 karakter olabilir.");
+        }
+
+        if (!normalizedRoute.StartsWith('/'))
+        {
+            throw new InvalidOperationException("Varsayilan sayfa '/' ile baslamalidir.");
+        }
+
+        dto.DefaultRoute = normalizedRoute;
     }
 }

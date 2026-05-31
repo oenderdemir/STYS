@@ -10,6 +10,9 @@ public class UserGroup : BaseEntity<Guid>
     [Required]
     public string Name { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? DefaultRoute { get; set; }
+
     public ICollection<UserGroupRole> UserGroupRoles { get; set; } = new List<UserGroupRole>();
 
     public ICollection<UserUserGroup> UserUserGroups { get; set; } = new List<UserUserGroup>();

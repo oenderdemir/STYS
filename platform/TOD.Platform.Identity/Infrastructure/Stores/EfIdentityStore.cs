@@ -46,6 +46,58 @@ public class EfIdentityStore : IIdentityStore<Guid>
         return permissions;
     }
 
+    public async Task<string?> GetDefaultRouteAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var candidates = await _dbContext.UserUserGroups
+            .Where(uug => uug.UserId == userId)
+            .Select(uug => new
+            {
+                uug.UserGroupId,
+                uug.UserGroup.Name,
+                uug.UserGroup.DefaultRoute
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.DefaultRoute))
+            .OrderBy(x => x.Name)
+            .ThenBy(x => x.UserGroupId)
+            .ToListAsync(cancellationToken);
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var permissionSet = (await GetPermissionsAsync(userId, cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var menuItems = await _dbContext.MenuItems
+            .Where(x => x.Route != null && x.Route != string.Empty)
+            .Include(x => x.MenuItemRoles)
+            .ThenInclude(x => x.Role)
+            .ToListAsync(cancellationToken);
+
+        foreach (var candidate in candidates)
+        {
+            var normalizedRoute = NormalizeRoute(candidate.DefaultRoute);
+            if (normalizedRoute is null)
+            {
+                continue;
+            }
+
+            var menuItem = menuItems.FirstOrDefault(x => string.Equals(NormalizeRoute(x.Route), normalizedRoute, StringComparison.OrdinalIgnoreCase));
+            if (menuItem is null)
+            {
+                continue;
+            }
+
+            if (menuItem.MenuItemRoles.Count == 0 || menuItem.MenuItemRoles.Any(mir => permissionSet.Contains($"{mir.Role.Domain}.{mir.Role.Name}")))
+            {
+                return normalizedRoute;
+            }
+        }
+
+        return null;
+    }
+
     public async Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default)
     {
         var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
@@ -256,5 +308,21 @@ public class EfIdentityStore : IIdentityStore<Guid>
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string? NormalizeRoute(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+        {
+            return null;
+        }
+
+        var normalizedRoute = route.Trim();
+        if (normalizedRoute.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || normalizedRoute.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return normalizedRoute.StartsWith('/') ? normalizedRoute : $"/{normalizedRoute}";
     }
 }

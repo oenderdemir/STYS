@@ -11,6 +11,8 @@ public interface IAuthenticationService<TKey> where TKey : struct
     Task<LoginResponseDto> RefreshAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default);
 
     Task<LoginResponseDto> LogoutAsync(CancellationToken cancellationToken = default);
+
+    Task<CurrentUserResponseDto> GetCurrentUserAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IAuthenticationService : IAuthenticationService<Guid>

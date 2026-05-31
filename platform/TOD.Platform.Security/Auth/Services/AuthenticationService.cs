@@ -137,6 +137,30 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
         return CreateUnauthorizedResponse();
     }
 
+    public async Task<CurrentUserResponseDto> GetCurrentUserAsync(CancellationToken cancellationToken = default)
+    {
+        var currentUserId = _currentUserAccessor.GetCurrentUserId();
+        if (!currentUserId.HasValue)
+        {
+            throw new UnauthorizedAccessException("Current user is not authenticated.");
+        }
+
+        var user = await _identityStore.FindByIdAsync((TKey)(object)currentUserId.Value, cancellationToken);
+        if (user is null)
+        {
+            throw new UnauthorizedAccessException("User not found.");
+        }
+
+        var defaultRoute = await _identityStore.GetDefaultRouteAsync((TKey)(object)currentUserId.Value, cancellationToken);
+
+        return new CurrentUserResponseDto
+        {
+            UserName = user.UserName,
+            UserStatus = user.Status,
+            DefaultRoute = defaultRoute
+        };
+    }
+
     private async Task<List<string>> GetValidatedPermissionsAsync(TKey userId, CancellationToken cancellationToken)
     {
         var permissions = await _identityStore.GetPermissionsAsync(userId, cancellationToken);
@@ -178,6 +202,8 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             TokenVersion = user.TokenVersion
         }, cancellationToken);
 
+        var defaultRoute = await _identityStore.GetDefaultRouteAsync(user.Id, cancellationToken);
+
         string refreshToken;
         DateTime? refreshTokenExpireDate;
 
@@ -204,6 +230,7 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             AccessTokenExpireDate = generatedToken.TokenExpireDate,
             RefreshToken = refreshToken,
             RefreshTokenExpireDate = refreshTokenExpireDate,
+            DefaultRoute = defaultRoute,
             UserStatus = user.Status
         };
     }
@@ -216,7 +243,8 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             AuthToken = string.Empty,
             AccessTokenExpireDate = DateTime.UtcNow,
             RefreshToken = string.Empty,
-            RefreshTokenExpireDate = null
+            RefreshTokenExpireDate = null,
+            DefaultRoute = null
         };
     }
 

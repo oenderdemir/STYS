@@ -130,10 +130,17 @@ export class Login implements OnInit {
             )
             .subscribe({
                 next: (response: LoginResponseDto) => {
-                    
- 
                     this.authService.storeSession(response);
-                    void this.router.navigateByUrl(this.getReturnUrl());
+                    const landingRoute = this.authService.getLandingRoute(this.getReturnUrl());
+                    void this.router.navigateByUrl(landingRoute)
+                        .then((navigated) => {
+                            if (!navigated) {
+                                void this.router.navigateByUrl(this.getReturnUrl());
+                            }
+                        })
+                        .catch(() => {
+                            void this.router.navigateByUrl(this.getReturnUrl());
+                        });
                 },
                 error: (error: unknown) => {
                     this.errorMessage = this.resolveErrorMessage(error);

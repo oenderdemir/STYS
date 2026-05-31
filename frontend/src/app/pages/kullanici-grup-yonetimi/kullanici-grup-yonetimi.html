@@ -19,7 +19,7 @@
     [rows]="10"
     [rowsPerPageOptions]="[10, 20, 50]"
     [tableStyle]="{ 'min-width': '60rem' }"
-    [globalFilterFields]="['name']"
+    [globalFilterFields]="['name', 'defaultRoute']"
     currentPageReportTemplate="{first} - {last} / {totalRecords}"
     [showCurrentPageReport]="true"
 >
@@ -36,6 +36,7 @@
     <ng-template #header>
         <tr>
             <th>Grup Adi</th>
+            <th>Varsayilan Sayfa</th>
             <th>Roller</th>
             <th style="width: 12rem">Islem</th>
         </tr>
@@ -44,6 +45,7 @@
     <ng-template #body let-group>
         <tr>
             <td>{{ group.name }}</td>
+            <td>{{ group.defaultRoute || '-' }}</td>
             <td>{{ getRoleText(group) }}</td>
             <td>
                 <div class="flex gap-2">
@@ -68,6 +70,18 @@
         <div class="col-span-12">
             <label for="name" class="block font-medium mb-2">Grup Adi</label>
             <input id="name" pInputText [(ngModel)]="selectedUserGroup.name" class="w-full" [disabled]="!canManage || saving" />
+        </div>
+        <div class="col-span-12">
+            <label for="defaultRoute" class="block font-medium mb-2">Varsayilan Sayfa</label>
+            <input
+                id="defaultRoute"
+                pInputText
+                [(ngModel)]="selectedUserGroup.defaultRoute"
+                class="w-full"
+                placeholder="/muhasebe/satis-belgeleri"
+                [disabled]="!canManage || saving"
+            />
+            <small class="text-muted-color block mt-1">Bos birakilirsa sistem varsayilan sayfasi acilir.</small>
         </div>
         <div class="col-span-12">
             <label for="roles" class="block font-medium mb-2">Roller</label>

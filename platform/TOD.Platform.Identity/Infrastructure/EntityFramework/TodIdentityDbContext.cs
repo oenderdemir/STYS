@@ -75,6 +75,7 @@ public class TodIdentityDbContext : DbContext
         {
             entity.HasIndex(x => x.Name).IsUnique();
             entity.Property(x => x.Name).HasMaxLength(128);
+            entity.Property(x => x.DefaultRoute).HasMaxLength(500);
         });
 
         modelBuilder.Entity<UserUserGroup>(entity =>

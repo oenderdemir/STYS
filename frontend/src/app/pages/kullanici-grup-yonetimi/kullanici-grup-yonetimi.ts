@@ -29,6 +29,7 @@ interface RoleOption {
 interface UserGroupEditModel {
     id?: string | null;
     name: string;
+    defaultRoute: string | null;
 }
 
 @Component({
@@ -85,7 +86,8 @@ export class KullaniciGrupYonetimi implements OnInit {
     openEdit(group: UserGroupResponseDto): void {
         this.selectedUserGroup = {
             id: group.id ?? null,
-            name: group.name
+            name: group.name,
+            defaultRoute: group.defaultRoute ?? null
         };
         this.selectedRoleIds = (group.roles ?? []).map((role) => role.id).filter((id): id is string => !!id);
         this.isEditMode = true;
@@ -107,9 +109,20 @@ export class KullaniciGrupYonetimi implements OnInit {
             return;
         }
 
+        const defaultRoute = this.selectedUserGroup.defaultRoute?.trim() ?? null;
+        if (defaultRoute && !defaultRoute.startsWith('/')) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Eksik Bilgi',
+                detail: 'Varsayilan sayfa "/" ile baslamalidir.'
+            });
+            return;
+        }
+
         const payload: UserGroupRequestDto = {
             id: this.selectedUserGroup.id ?? null,
             name,
+            defaultRoute,
             roles: this.selectedRoleIds.map((roleId) => ({ id: roleId } as RoleResponseDto))
         };
 
@@ -254,7 +267,8 @@ export class KullaniciGrupYonetimi implements OnInit {
     private getEmptyUserGroup(): UserGroupEditModel {
         return {
             id: null,
-            name: ''
+            name: '',
+            defaultRoute: null
         };
     }
 

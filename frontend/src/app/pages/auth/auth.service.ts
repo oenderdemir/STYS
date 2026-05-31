@@ -13,6 +13,7 @@ export class AuthService {
     private readonly tokenStorageKey = 'stys.auth.token';
     private readonly tokenExpiryStorageKey = 'stys.auth.token_expiry';
     private readonly userStatusStorageKey = 'stys.auth.user_status';
+    private readonly defaultRouteStorageKey = 'stys.auth.default_route';
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -87,6 +88,12 @@ export class AuthService {
     storeSession(response: LoginResponseDto): void {
         localStorage.setItem(this.tokenStorageKey, response.authToken);
         localStorage.setItem(this.tokenExpiryStorageKey, response.accessTokenExpireDate);
+        const defaultRoute = this.normalizeRoute(response.defaultRoute);
+        if (defaultRoute) {
+            localStorage.setItem(this.defaultRouteStorageKey, defaultRoute);
+        } else {
+            localStorage.removeItem(this.defaultRouteStorageKey);
+        }
         if (response.userStatus && response.userStatus.trim().length > 0) {
             localStorage.setItem(this.userStatusStorageKey, response.userStatus.trim());
         } else {
@@ -99,6 +106,7 @@ export class AuthService {
     clearSession(): void {
         localStorage.removeItem(this.tokenStorageKey);
         localStorage.removeItem(this.tokenExpiryStorageKey);
+        localStorage.removeItem(this.defaultRouteStorageKey);
         localStorage.removeItem(this.userStatusStorageKey);
         this.clearInactivityTimer();
         this.bumpSessionRevision();
@@ -142,6 +150,15 @@ export class AuthService {
         }
 
         return value.trim();
+    }
+
+    getDefaultRoute(): string | null {
+        const value = localStorage.getItem(this.defaultRouteStorageKey);
+        return this.normalizeRoute(value);
+    }
+
+    getLandingRoute(fallbackRoute: string = '/'): string {
+        return this.getDefaultRoute() ?? fallbackRoute;
     }
 
     mustChangePassword(): boolean {
@@ -322,6 +339,19 @@ export class AuthService {
 
         const normalizedValue = claimValue.trim();
         return normalizedValue.length > 0 ? normalizedValue : null;
+    }
+
+    private normalizeRoute(route: string | null | undefined): string | null {
+        if (!route || route.trim().length === 0) {
+            return null;
+        }
+
+        const normalizedRoute = route.trim();
+        if (!normalizedRoute.startsWith('/')) {
+            return null;
+        }
+
+        return normalizedRoute;
     }
 
     private bumpSessionRevision(): void {

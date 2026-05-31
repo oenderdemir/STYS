@@ -4,5 +4,6 @@ export interface LoginResponseDto {
     accessTokenExpireDate: string;
     refreshToken: string;
     refreshTokenExpireDate: string | null;
+    defaultRoute: string | null;
     userStatus: string | null;
 }

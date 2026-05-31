@@ -124,59 +124,26 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
             if (fark != 0m)
             {
-                var mevcutDuzeltmeHareketleri = acilisHareketleri
-                    .Where(x => x.KaynakModul == MuhasebeKaynakModulleri.CariKartAcilisDuzeltme
-                        && x.BelgeTuru == MuhasebeFisTipleri.AcilisDuzeltme)
-                    .ToList();
-
-                var aktifDuzeltmeHareketi = mevcutDuzeltmeHareketleri.LastOrDefault();
-                if (aktifDuzeltmeHareketi is not null && IsAcilisHareketiKullanildi(aktifDuzeltmeHareketi))
-                {
-                    throw new BaseException("Düzeltme hareketi kullanılmış. Yeni düzeltme için ayrı işlem gerekir.", 400);
-                }
-
                 var duzeltmeTarihiDegeri = duzeltmeTarihi ?? DateTime.UtcNow.Date;
-                if (aktifDuzeltmeHareketi is null)
+                await _dbContext.CariHareketler.AddAsync(new CariHareket
                 {
-                    aktifDuzeltmeHareketi = new CariHareket
-                    {
-                        CariKartId = cari.Id,
-                        HareketTarihi = duzeltmeTarihiDegeri,
-                        BelgeTuru = MuhasebeFisTipleri.AcilisDuzeltme,
-                        BelgeNo = $"ACI-DUZ-{cari.CariKodu}-{DateTime.UtcNow:yyyyMMddHHmmss}",
-                        Aciklama = $"Açılış bakiyesi düzeltme - {cari.CariKodu}",
-                        BorcTutari = fark > 0m ? fark : 0m,
-                        AlacakTutari = fark < 0m ? Math.Abs(fark) : 0m,
-                        KapananTutar = 0m,
-                        KalanTutar = Math.Abs(fark),
-                        ParaBirimi = "TRY",
-                        VadeTarihi = null,
-                        Durum = CariHareketDurumlari.Aktif,
-                        KaynakModul = MuhasebeKaynakModulleri.CariKartAcilisDuzeltme,
-                        KaynakId = cari.Id,
-                        KapandiMi = false,
-                        IliskiliCariHareketId = acilisHareketi.Id
-                    };
-                    await _dbContext.CariHareketler.AddAsync(aktifDuzeltmeHareketi, cancellationToken);
-                }
-                else
-                {
-                    aktifDuzeltmeHareketi.HareketTarihi = duzeltmeTarihiDegeri;
-                    aktifDuzeltmeHareketi.BelgeTuru = MuhasebeFisTipleri.AcilisDuzeltme;
-                    aktifDuzeltmeHareketi.BelgeNo = $"ACI-DUZ-{cari.CariKodu}-{DateTime.UtcNow:yyyyMMddHHmmss}";
-                    aktifDuzeltmeHareketi.Aciklama = $"Açılış bakiyesi düzeltme - {cari.CariKodu}";
-                    aktifDuzeltmeHareketi.BorcTutari = fark > 0m ? fark : 0m;
-                    aktifDuzeltmeHareketi.AlacakTutari = fark < 0m ? Math.Abs(fark) : 0m;
-                    aktifDuzeltmeHareketi.KapananTutar = 0m;
-                    aktifDuzeltmeHareketi.KalanTutar = Math.Abs(fark);
-                    aktifDuzeltmeHareketi.ParaBirimi = "TRY";
-                    aktifDuzeltmeHareketi.VadeTarihi = null;
-                    aktifDuzeltmeHareketi.Durum = CariHareketDurumlari.Aktif;
-                    aktifDuzeltmeHareketi.KaynakModul = MuhasebeKaynakModulleri.CariKartAcilisDuzeltme;
-                    aktifDuzeltmeHareketi.KaynakId = cari.Id;
-                    aktifDuzeltmeHareketi.KapandiMi = false;
-                    aktifDuzeltmeHareketi.IliskiliCariHareketId = acilisHareketi.Id;
-                }
+                    CariKartId = cari.Id,
+                    HareketTarihi = duzeltmeTarihiDegeri,
+                    BelgeTuru = MuhasebeFisTipleri.AcilisDuzeltme,
+                    BelgeNo = $"ACI-DUZ-{cari.CariKodu}-{DateTime.UtcNow:yyyyMMddHHmmss}",
+                    Aciklama = $"Açılış bakiyesi düzeltme - {cari.CariKodu}",
+                    BorcTutari = fark > 0m ? fark : 0m,
+                    AlacakTutari = fark < 0m ? Math.Abs(fark) : 0m,
+                    KapananTutar = 0m,
+                    KalanTutar = Math.Abs(fark),
+                    ParaBirimi = "TRY",
+                    VadeTarihi = null,
+                    Durum = CariHareketDurumlari.Aktif,
+                    KaynakModul = MuhasebeKaynakModulleri.CariKartAcilisDuzeltme,
+                    KaynakId = cari.Id,
+                    KapandiMi = false,
+                    IliskiliCariHareketId = acilisHareketi.Id
+                }, cancellationToken);
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);

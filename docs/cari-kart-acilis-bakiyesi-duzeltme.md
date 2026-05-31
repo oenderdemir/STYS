@@ -16,6 +16,7 @@
 - Fark > 0 ise borç hareketi oluşturulur.
 - Fark < 0 ise alacak hareketi oluşturulur.
 - Fark = 0 ise yeni hareket oluşturulmaz.
+- Her düzeltme işlemi yeni bir hareket üretir; eski düzeltme hareketleri güncellenmez.
 
 ## Etki
 - Eski açılış hareketi korunur.

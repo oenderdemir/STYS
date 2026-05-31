@@ -100,7 +100,7 @@ export class MuhasebeTesisContextService {
         this.tesislerError.set(null);
 
         return this.http
-            .get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/rezervasyon/tesisler`)
+            .get<ApiResponse<MuhasebeTesisModel[]>>(`${this.apiBaseUrl}/ui/tesisler`)
             .pipe(
                 map(envelope => {
                     if (envelope.success && envelope.data) {

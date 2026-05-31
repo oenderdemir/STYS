@@ -1551,7 +1551,7 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.BankaHesaplari)
                 .HasForeignKey(x => x.CariKartId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MuhasebeHesapKoduSayac>(entity =>

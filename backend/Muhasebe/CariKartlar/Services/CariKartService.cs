@@ -47,18 +47,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         var toplamBorc = hareketler.Sum(x => x.BorcTutari);
         var toplamAlacak = hareketler.Sum(x => x.AlacakTutari);
-        var acilisTutar = cari.AcilisBakiyeTutari.GetValueOrDefault();
-        if (acilisTutar > 0m)
-        {
-            if (string.Equals(cari.AcilisBakiyeYonu, CariKartAcilisBakiyeYonleri.Borc, StringComparison.OrdinalIgnoreCase))
-            {
-                toplamBorc += acilisTutar;
-            }
-            else if (string.Equals(cari.AcilisBakiyeYonu, CariKartAcilisBakiyeYonleri.Alacak, StringComparison.OrdinalIgnoreCase))
-            {
-                toplamAlacak += acilisTutar;
-            }
-        }
 
         return new CariBakiyeDto
         {
@@ -123,6 +111,7 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             var resultId = result.Id ?? 0;
             if (resultId > 0)
             {
+                await SyncAcilisCariHareketiAsync(resultId, result.CariKodu, dto.AcilisBakiyeTarihi, dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu, CancellationToken.None);
                 await SyncYetkiliKisileriAsync(resultId, yetkiliKisiler, CancellationToken.None);
             }
 
@@ -207,6 +196,7 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             _dbContext.CariKartYetkiliKisileri.RemoveRange(mevcutYetkililer);
             await _dbContext.SaveChangesAsync(CancellationToken.None);
 
+            await SyncAcilisCariHareketiAsync(entity.Id, entity.CariKodu, dto.AcilisBakiyeTarihi, dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu, CancellationToken.None);
             await SyncYetkiliKisileriAsync(entity.Id, yetkiliKisiler, CancellationToken.None);
 
             await tx.CommitAsync(CancellationToken.None);
@@ -467,6 +457,107 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             _ = NormalizeEmail(kisi.Eposta);
             _ = NormalizeOptional(kisi.Aciklama, 1024);
         }
+    }
+
+    private async Task SyncAcilisCariHareketiAsync(
+        int cariKartId,
+        string cariKodu,
+        DateTime? acilisTarihi,
+        decimal? acilisTutari,
+        string? acilisYonu,
+        CancellationToken cancellationToken)
+    {
+        var mevcutHareket = await _dbContext.CariHareketler.FirstOrDefaultAsync(x =>
+            x.CariKartId == cariKartId
+            && x.KaynakModul == MuhasebeKaynakModulleri.CariKart
+            && x.KaynakId == cariKartId
+            && x.BelgeTuru == MuhasebeFisTipleri.Acilis
+            && !x.IsDeleted, cancellationToken);
+
+        var tutar = acilisTutari.GetValueOrDefault();
+        var hareketTarihi = acilisTarihi ?? DateTime.UtcNow.Date;
+        var aciklama = $"Cari kart açılış bakiyesi - {cariKodu}";
+        var borcMu = string.Equals(acilisYonu, CariKartAcilisBakiyeYonleri.Borc, StringComparison.OrdinalIgnoreCase);
+
+        var hareketTutari = mevcutHareket?.BorcTutari > 0m ? mevcutHareket.BorcTutari : mevcutHareket?.AlacakTutari ?? 0m;
+        var hareketKullanildiMi = mevcutHareket is not null
+            && (mevcutHareket.KapananTutar > 0m
+                || mevcutHareket.KalanTutar < hareketTutari
+                || mevcutHareket.KapandiMi
+                || !string.Equals(mevcutHareket.Durum, CariHareketDurumlari.Aktif, StringComparison.OrdinalIgnoreCase));
+
+        if (tutar <= 0m)
+        {
+            if (mevcutHareket is not null)
+            {
+                if (hareketKullanildiMi)
+                {
+                    throw new BaseException("Açılış hareketi kullanıldıktan sonra kart üzerinden sıfırlanamaz. Düzeltme için ters kayıt gerekir.", 400);
+                }
+
+                mevcutHareket.Durum = CariHareketDurumlari.Iptal;
+                mevcutHareket.KapananTutar = 0m;
+                mevcutHareket.KalanTutar = 0m;
+                mevcutHareket.KapandiMi = true;
+                mevcutHareket.Aciklama = $"{aciklama} - iptal";
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(acilisYonu))
+        {
+            throw new BaseException("Açılış bakiyesi için yön zorunludur.", 400);
+        }
+
+        if (mevcutHareket is not null)
+        {
+            if (hareketKullanildiMi)
+            {
+                throw new BaseException("Açılış bakiyesi daha önce kullanılmış. Düzeltme için ayrı hareket gerekir.", 400);
+            }
+
+            mevcutHareket.HareketTarihi = hareketTarihi;
+            mevcutHareket.BelgeTuru = MuhasebeFisTipleri.Acilis;
+            mevcutHareket.BelgeNo = $"ACI-{cariKodu}";
+            mevcutHareket.Aciklama = aciklama;
+            mevcutHareket.BorcTutari = borcMu ? tutar : 0m;
+            mevcutHareket.AlacakTutari = borcMu ? 0m : tutar;
+            mevcutHareket.KapananTutar = 0m;
+            mevcutHareket.KalanTutar = tutar;
+            mevcutHareket.ParaBirimi = "TRY";
+            mevcutHareket.Durum = CariHareketDurumlari.Aktif;
+            mevcutHareket.KaynakModul = MuhasebeKaynakModulleri.CariKart;
+            mevcutHareket.KaynakId = cariKartId;
+            mevcutHareket.VadeTarihi = null;
+            mevcutHareket.KapandiMi = false;
+            mevcutHareket.IliskiliCariHareketId = null;
+        }
+        else
+        {
+            await _dbContext.CariHareketler.AddAsync(new CariHareket
+            {
+                CariKartId = cariKartId,
+                HareketTarihi = hareketTarihi,
+                BelgeTuru = MuhasebeFisTipleri.Acilis,
+                BelgeNo = $"ACI-{cariKodu}",
+                Aciklama = aciklama,
+                BorcTutari = borcMu ? tutar : 0m,
+                AlacakTutari = borcMu ? 0m : tutar,
+                KapananTutar = 0m,
+                KalanTutar = tutar,
+                ParaBirimi = "TRY",
+                VadeTarihi = null,
+                Durum = CariHareketDurumlari.Aktif,
+                KaynakModul = MuhasebeKaynakModulleri.CariKart,
+                KaynakId = cariKartId,
+                IliskiliCariHareketId = null,
+                KapandiMi = false
+            }, cancellationToken);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static List<CariKartYetkiliKisiDto> NormalizeYetkiliKisiler(IEnumerable<CariKartYetkiliKisiDto>? yetkiliKisiler)

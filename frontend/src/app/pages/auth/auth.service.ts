@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, finalize, map, Observable, of, shareReplay, tap } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl, getSessionInactivityTimeoutMs } from '../../core/config';
+import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import { ChangePasswordRequestDto, LoginRequestDto, LoginResponseDto } from './dto';
 
 @Injectable({ providedIn: 'root' })
@@ -18,6 +19,7 @@ export class AuthService {
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
     private refreshInFlight$: Observable<LoginResponseDto> | null = null;
+    private readonly muhasebeTesisContext = inject(MuhasebeTesisContextService);
     readonly sessionRevision = signal(0);
 
     constructor() {
@@ -108,6 +110,7 @@ export class AuthService {
         localStorage.removeItem(this.tokenExpiryStorageKey);
         localStorage.removeItem(this.defaultRouteStorageKey);
         localStorage.removeItem(this.userStatusStorageKey);
+        this.muhasebeTesisContext.clearPersistedTesis();
         this.clearInactivityTimer();
         this.bumpSessionRevision();
     }

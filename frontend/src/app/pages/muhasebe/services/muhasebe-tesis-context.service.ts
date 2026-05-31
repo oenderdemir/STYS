@@ -150,6 +150,11 @@ export class MuhasebeTesisContextService {
         persistTesis(null);
     }
 
+    /** Logout sırasında kalıcı çalışma tesisi seçimini temizle. */
+    clearPersistedTesis(): void {
+        this.clearTesis();
+    }
+
     /**
      * Seçili tesisi döndürür. Eğer seçili tesis yoksa hata fırlatır —
      * çağıran taraf önce `seciliTesis` sinyalini kontrol etmelidir.

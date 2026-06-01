@@ -1,4 +1,4 @@
-# Muhasebe Regresyon Testleri - Faz B-2
+# Muhasebe Regresyon Testleri - Faz B-3
 
 ## Test Edilen Senaryolar
 - Cari kart oluşturma ve açılış bakiyesi cari hareketi akışı.
@@ -10,21 +10,24 @@
 - Cari hareket kapama koruması ve açılış bakiyesi düzeltme akışı.
 - Yevmiye, muavin, mizan, cari bakiye ve export kontrolleri.
 - Tesis / yetki scope ve hesaplar ekranı tesis filtresi.
+- İndirim / ÖTV / ÖİV / Konaklama Vergisi alanlarının belge ve fiş etkisi.
 
 ## Bulunan Hatalar
 - Kritik regresyon hatası bulunmadı.
+- Ek vergi alanları belgede saklanıyor, ancak muhasebe fişi stratejileri bunları ayrı hesap satırı olarak kullanmıyor.
 
 ## Yapılan Düzeltmeler
 - Düzeltme yapılmadı.
 
 ## Eksik Kalan İş Kuralları
-- ÖTV / ÖİV / Konaklama Vergisi satır bilgileri belgede korunuyor; muhasebe fişi toplam etkisi ayrı iş kuralı olarak ele alınmalıysa sonraki faz gerekir.
+- ÖTV / ÖİV / Konaklama Vergisi satır bilgileri belgede korunuyor; muhasebe fişi toplam etkisi için ayrı hesap satırı gereksinimi varsa sonraki faz gerekir.
+- İndirim oranı/tutarı belge matrahını etkiliyor; mevcut iş kuralı oran/tutar tek satır için normalize edilerek devam ediyor.
 
 ## Backend
-- Kod değişikliği yapılmadı.
+- Kod değişikliği yapılmadı; mevcut muhasebe fişi stratejileri yalnız ToplamMatrah, ToplamKdv ve tevkifat akışını kullanıyor.
 
 ## Frontend
-- Kod değişikliği yapılmadı.
+- Kod değişikliği yapılmadı; satış belgesi satırında parametre blokları zaten mevcut.
 
 ## Migration
 - Gerekmedi.
@@ -39,4 +42,4 @@
 - Manuel runtime test yapılmadı.
 
 ## Commit
-- Bu fazda kod değişikliği yapılmadı; bu yüzden commit oluşturulmadı.
+- Doküman güncellendi; commit oluşturulacak.

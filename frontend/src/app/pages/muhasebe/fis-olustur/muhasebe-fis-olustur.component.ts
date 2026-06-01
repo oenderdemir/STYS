@@ -182,6 +182,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     constructor() {
         this.resetToDefaults();
+        this.satirlar = [this.createEmptySatir(1)];
     }
 
     ngOnInit(): void {

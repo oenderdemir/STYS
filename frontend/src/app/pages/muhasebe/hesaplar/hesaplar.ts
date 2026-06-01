@@ -96,6 +96,10 @@ export class HesaplarPage implements OnInit {
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
         if (!tesisId) {
+            this.records = [];
+            this.filteredRecords = [];
+            this.totalRecords = 0;
+            this.cdr.detectChanges();
             return;
         }
 

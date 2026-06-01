@@ -27,8 +27,8 @@ public class HesaplarController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.HesapYonetimi.View)]
-    public async Task<ActionResult<PagedResult<HesapDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.Ad).ThenBy(x => x.Id)));
+    public async Task<ActionResult<PagedResult<HesapDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(request, tesisId, cancellationToken));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.HesapYonetimi.View)]

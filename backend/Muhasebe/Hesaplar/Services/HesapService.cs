@@ -9,6 +9,7 @@ using STYS.Muhasebe.Hesaplar.Repositories;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Repositories;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Repositories;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -49,6 +50,33 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
             items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
         }
         return items.Select(MapDetailDto).ToList();
+    }
+
+    public async Task<PagedResult<HesapDto>> GetPagedAsync(
+        PagedRequest request,
+        int? tesisId,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var items = await _hesapRepository.GetAllWithDetailsAsync(cancellationToken);
+
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value).ToList();
+        }
+
+        if (scope.IsScoped)
+        {
+            items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
+        }
+
+        var ordered = items.OrderBy(x => x.Ad).ThenBy(x => x.Id).ToList();
+        var pageNumber = request.PageNumber <= 0 ? 1 : request.PageNumber;
+        var pageSize = request.PageSize <= 0 ? 10 : request.PageSize;
+        var totalCount = ordered.Count;
+        var pagedItems = ordered.Skip((pageNumber - 1) * pageSize).Take(pageSize).Select(MapDetailDto).ToList();
+
+        return new PagedResult<HesapDto>(pagedItems, pageNumber, pageSize, totalCount);
     }
 
     public async Task<HesapDto?> GetDetailByIdAsync(int id, CancellationToken cancellationToken = default)

@@ -43,3 +43,45 @@
 
 ## Commit
 - Doküman güncellendi; commit oluşturulacak.
+
+---
+
+## Faz C - Muhasebe Dönem Kapatma / Kilitleme Kontrolü
+
+### Test Edilen Senaryolar
+- Açık döneme fiş oluşturma.
+- Kapalı döneme fiş oluşturma/güncelleme/onaylama.
+- Kapalı döneme ait satış belgesi muhasebeleştirme.
+- Kapalı döneme ters kayıt oluşturacak iptal.
+- Açık dönemde aynı akışların çalışmaya devam etmesi.
+
+### Tespit
+- Fiş oluşturma ve satış belgesi muhasebeleştirme akışlarında açık dönem kontrolü mevcut.
+- Muhasebe fişi create/update/onay/iptal akışları açık dönem olmadan ilerlemiyor.
+- Dönem servisinde kapalı dönemde dönem güncelleme/silme kısıtları mevcut.
+
+### Bulunan Hatalar
+- Kritik dönem kilitleme hatası bulunmadı.
+
+### Yapılan Düzeltmeler
+- Düzeltme yapılmadı.
+
+### Eksik Kalan İş Kuralları
+- Ayrı stok/cari hareket oluşturma akışları için bağımsız dönem kontrolü ihtiyacı raporlanmadı; mevcut tasarım fiş üretim akışına bağlı çalışıyor.
+
+### Backend
+- Değişiklik yok.
+
+### Frontend
+- Değişiklik yok.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+
+### Test
+- Kod incelemesi ve build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.

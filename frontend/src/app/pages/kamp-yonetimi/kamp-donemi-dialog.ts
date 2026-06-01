@@ -3,6 +3,7 @@ import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
@@ -12,7 +13,7 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
 @Component({
     selector: 'app-kamp-donemi-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, CheckboxModule, SelectModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, DatePickerModule, InputTextModule, CheckboxModule, SelectModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -43,19 +44,19 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="basvuruBaslangic" class="block font-medium mb-2">Basvuru Baslangic</label>
-                    <input id="basvuruBaslangic" pInputText type="date" class="w-full" [(ngModel)]="workingModel.basvuruBaslangicTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="basvuruBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="basvuruBitis" class="block font-medium mb-2">Basvuru Bitis</label>
-                    <input id="basvuruBitis" pInputText type="date" class="w-full" [(ngModel)]="workingModel.basvuruBitisTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="basvuruBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="konaklamaBaslangic" class="block font-medium mb-2">Konaklama Baslangic</label>
-                    <input id="konaklamaBaslangic" pInputText type="date" class="w-full" [(ngModel)]="workingModel.konaklamaBaslangicTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="konaklamaBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="konaklamaBitis" class="block font-medium mb-2">Konaklama Bitis</label>
-                    <input id="konaklamaBitis" pInputText type="date" class="w-full" [(ngModel)]="workingModel.konaklamaBitisTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="konaklamaBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="minimumGece" class="block font-medium mb-2">Minimum Gece</label>
@@ -67,7 +68,7 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="iptalSonGun" class="block font-medium mb-2">Iptal Son Gun</label>
-                    <input id="iptalSonGun" pInputText type="date" class="w-full" [(ngModel)]="workingModel.iptalSonGun" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="iptalSonGun" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.iptalSonGun" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-3 flex items-center">
                     <p-checkbox inputId="onayGerektirirMi" [(ngModel)]="workingModel.onayGerektirirMi" [binary]="true" [disabled]="isReadOnly || saving" />

@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
 import { InputTextModule } from 'primeng/inputtext';
@@ -24,7 +25,7 @@ import { CariKartlarService } from './cari-kartlar.service';
 @Component({
     selector: 'app-cari-kartlar-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DatePickerModule, DialogModule, SelectModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './cari-kartlar.html',
     providers: [MessageService, ConfirmationService]
 })

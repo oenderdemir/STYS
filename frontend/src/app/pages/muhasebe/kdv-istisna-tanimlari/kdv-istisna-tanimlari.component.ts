@@ -10,6 +10,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { TextareaModule } from 'primeng/textarea';
@@ -43,6 +44,7 @@ import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
         ButtonModule,
         CheckboxModule,
         ConfirmDialogModule,
+        DatePickerModule,
         DialogModule,
         InputTextModule,
         MuhasebeTesisContextBarComponent,

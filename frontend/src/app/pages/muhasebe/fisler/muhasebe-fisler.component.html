@@ -3,7 +3,7 @@
 <app-muhasebe-tesis-secim-dialog />
 <app-muhasebe-tesis-context-bar />
 
-<div class="grid grid-cols-12 gap-3 mb-4">
+<div class="grid grid-cols-12 gap-3 mb-4 items-end">
   <!-- Mali Yıl -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
@@ -31,19 +31,29 @@
   <!-- Başlangıç Tarihi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Başlangıç Tarihi</label>
-    <input
-      type="date"
+    <p-datepicker
       [(ngModel)]="filter.baslangicTarihi"
-      class="w-full p-inputtext p-component p-element" />
+      dateFormat="dd.mm.yy"
+      [showIcon]="true"
+      [showButtonBar]="true"
+      [firstDayOfWeek]="1"
+      styleClass="w-full"
+      inputStyleClass="w-full"
+      appendTo="body" />
   </div>
 
   <!-- Bitiş Tarihi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Bitiş Tarihi</label>
-    <input
-      type="date"
+    <p-datepicker
       [(ngModel)]="filter.bitisTarihi"
-      class="w-full p-inputtext p-component p-element" />
+      dateFormat="dd.mm.yy"
+      [showIcon]="true"
+      [showButtonBar]="true"
+      [firstDayOfWeek]="1"
+      styleClass="w-full"
+      inputStyleClass="w-full"
+      appendTo="body" />
   </div>
 </div>
 
@@ -403,7 +413,15 @@
       <!-- Fiş Tarihi -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block mb-1 text-sm font-medium">Fiş Tarihi</label>
-        <input type="date" [(ngModel)]="duzenleFis.fisTarihi" class="w-full p-inputtext p-component p-element" />
+        <p-datepicker
+          [(ngModel)]="duzenleFis.fisTarihi"
+          dateFormat="dd.mm.yy"
+          [showIcon]="true"
+          [showButtonBar]="true"
+          [firstDayOfWeek]="1"
+          styleClass="w-full"
+          inputStyleClass="w-full"
+          appendTo="body" />
       </div>
       <!-- Mali Yıl -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">

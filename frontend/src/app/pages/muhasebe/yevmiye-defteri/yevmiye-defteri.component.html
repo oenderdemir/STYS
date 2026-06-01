@@ -38,17 +38,29 @@
     </div>
     <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block text-sm font-medium mb-1">Başlangıç Tarihi</label>
-        <input
-            type="date"
+        <p-datepicker
             [(ngModel)]="filter.baslangicTarihi"
-            class="w-full p-inputtext p-component" />
+            dateFormat="dd.mm.yy"
+            dataType="string"
+            [showIcon]="true"
+            [showButtonBar]="true"
+            [firstDayOfWeek]="1"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+            appendTo="body" />
     </div>
     <div class="col-span-12 md:col-span-6 lg:col-span-3">
         <label class="block text-sm font-medium mb-1">Bitiş Tarihi</label>
-        <input
-            type="date"
+        <p-datepicker
             [(ngModel)]="filter.bitisTarihi"
-            class="w-full p-inputtext p-component" />
+            dateFormat="dd.mm.yy"
+            dataType="string"
+            [showIcon]="true"
+            [showButtonBar]="true"
+            [firstDayOfWeek]="1"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+            appendTo="body" />
     </div>
 </div>
 

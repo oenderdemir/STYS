@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -63,6 +64,7 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
         FormsModule,
         ButtonModule,
         CheckboxModule,
+        DatePickerModule,
         SelectModule,
         TableModule,
         TagModule,

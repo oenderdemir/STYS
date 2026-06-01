@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
@@ -54,6 +55,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
         DatePipe,
         ButtonModule,
         ConfirmDialogModule,
+        DatePickerModule,
         DialogModule,
         InputNumberModule,
         InputTextModule,

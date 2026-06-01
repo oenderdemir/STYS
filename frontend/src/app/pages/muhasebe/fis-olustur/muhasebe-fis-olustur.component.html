@@ -17,11 +17,16 @@
   <!-- Fiş Tarihi -->
   <div class="col-span-12 md:col-span-6 lg:col-span-5">
     <label class="block text-sm font-medium mb-1">Fiş Tarihi <span class="text-red-500">*</span></label>
-    <input
-      type="date"
+    <p-datepicker
       [(ngModel)]="fisTarihi"
-      class="w-full p-inputtext"
-      placeholder="gg.aa.yyyy" />
+      dateFormat="dd.mm.yy"
+      [showIcon]="true"
+      [showButtonBar]="true"
+      [firstDayOfWeek]="1"
+      class="w-full"
+      styleClass="w-full"
+      inputStyleClass="w-full"
+      appendTo="body" />
   </div>
 
   <!-- Mali Yıl -->

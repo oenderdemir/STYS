@@ -2,8 +2,8 @@ export interface MuhasebeFisFilterModel {
     tesisId: number | null;
     maliYil: number | null;
     donem: number | null;
-    baslangicTarihi: string | null;
-    bitisTarihi: string | null;
+    baslangicTarihi: string | Date | null;
+    bitisTarihi: string | Date | null;
     fisTipi: string | null;
     durum: string | null;
     kaynakModul: string | null;
@@ -18,7 +18,6 @@ export interface MuhasebeFisFilterModel {
 export function createDefaultFisFilter(): MuhasebeFisFilterModel {
     const today = new Date();
     const year = today.getFullYear();
-    const month = today.getMonth() + 1;
     const baslangic = new Date(year, 0, 1);
     const bitis = new Date(year, 11, 31);
 
@@ -26,8 +25,8 @@ export function createDefaultFisFilter(): MuhasebeFisFilterModel {
         tesisId: null,
         maliYil: year,
         donem: null,
-        baslangicTarihi: baslangic.toISOString().split('T')[0],
-        bitisTarihi: bitis.toISOString().split('T')[0],
+        baslangicTarihi: baslangic,
+        bitisTarihi: bitis,
         fisTipi: null,
         durum: null,
         kaynakModul: null,
@@ -45,8 +44,8 @@ export function normalizeFisFilter(filter: MuhasebeFisFilterModel): MuhasebeFisF
         tesisId: filter.tesisId ?? null,
         maliYil: filter.maliYil ?? null,
         donem: filter.donem ?? null,
-        baslangicTarihi: filter.baslangicTarihi || null,
-        bitisTarihi: filter.bitisTarihi || null,
+        baslangicTarihi: formatDateForApi(filter.baslangicTarihi),
+        bitisTarihi: formatDateForApi(filter.bitisTarihi),
         fisTipi: filter.fisTipi || null,
         durum: filter.durum || null,
         kaynakModul: filter.kaynakModul || null,
@@ -58,6 +57,68 @@ export function normalizeFisFilter(filter: MuhasebeFisFilterModel): MuhasebeFisF
         pageSize: filter.pageSize < 1 ? 50 : filter.pageSize > 500 ? 500 : filter.pageSize
     };
     return normalized;
+}
+
+export function parseApiDate(value: string | Date | null | undefined): Date | null {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const dottedParts = trimmed.split('.');
+    if (dottedParts.length === 3) {
+        const day = Number(dottedParts[0]);
+        const month = Number(dottedParts[1]);
+        const year = Number(dottedParts[2]);
+        if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year)) {
+            return new Date(year, month - 1, day);
+        }
+    }
+
+    const slashParts = trimmed.split('/');
+    if (slashParts.length === 3) {
+        const day = Number(slashParts[0]);
+        const month = Number(slashParts[1]);
+        const year = Number(slashParts[2]);
+        if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year)) {
+            return new Date(year, month - 1, day);
+        }
+    }
+
+    const parts = trimmed.split('-');
+    if (parts.length !== 3) {
+        const parsed = new Date(trimmed);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const day = Number(parts[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+        return null;
+    }
+
+    return new Date(year, month - 1, day);
+}
+
+export function formatDateForApi(value: string | Date | null | undefined): string | null {
+    const date = parseApiDate(value);
+    if (!date) {
+        return null;
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 export const MuhasebeFisDurumlari = {

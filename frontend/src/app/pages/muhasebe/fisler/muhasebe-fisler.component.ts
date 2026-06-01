@@ -8,6 +8,7 @@ import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -23,6 +24,7 @@ import {
     MuhasebeFisFilterModel,
     MuhasebeFisModel,
     MuhasebeFisSatirModel,
+    formatDateForApi,
     UpdateMuhasebeFisSatirRequestModel,
     createDefaultFisFilter,
     normalizeFisFilter
@@ -97,6 +99,7 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         ButtonModule,
         ConfirmDialogModule,
         DialogModule,
+        DatePickerModule,
         InputNumberModule,
         InputTextModule,
         SelectModule,
@@ -467,7 +470,7 @@ export class MuhasebeFislerComponent implements OnInit {
 
         const request = {
             tesisId: this.duzenleFis.tesisId,
-            fisTarihi: this.duzenleFis.fisTarihi,
+            fisTarihi: formatDateForApi(this.duzenleFis.fisTarihi) ?? this.duzenleFis.fisTarihi,
             maliYil: this.duzenleFis.maliYil,
             donem: this.duzenleFis.donem,
             fisTipi: this.duzenleFis.fisTipi,

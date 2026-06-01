@@ -98,7 +98,17 @@
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Açılış Bakiye Tarihi</label>
-            <input type="date" class="w-full" [(ngModel)]="model.acilisBakiyeTarihi" />
+            <p-datepicker
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [(ngModel)]="model.acilisBakiyeTarihi"
+                dateFormat="dd.mm.yy"
+                [firstDayOfWeek]="1"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                appendTo="body"
+                dataType="string" />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Açılış Bakiye Tutarı</label>
@@ -193,7 +203,17 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Düzeltme Tarihi</label>
-            <input type="date" class="w-full" [(ngModel)]="duzeltmeModel.duzeltmeTarihi" />
+            <p-datepicker
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [(ngModel)]="duzeltmeModel.duzeltmeTarihi"
+                dateFormat="dd.mm.yy"
+                [firstDayOfWeek]="1"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                appendTo="body"
+                dataType="string" />
         </div>
     </div>
 

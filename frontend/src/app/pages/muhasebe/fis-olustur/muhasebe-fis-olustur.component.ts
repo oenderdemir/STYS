@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
@@ -20,7 +21,8 @@ import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-c
 import {
     CreateMuhasebeFisRequestModel,
     CreateMuhasebeFisSatirRequestModel,
-    MuhasebeFisTipleri
+    MuhasebeFisTipleri,
+    formatDateForApi
 } from '../models/muhasebe-fis.model';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
@@ -88,6 +90,7 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
         FormsModule,
         DecimalPipe,
         ButtonModule,
+        DatePickerModule,
         DialogModule,
         InputNumberModule,
         InputTextModule,
@@ -115,7 +118,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     // Form
     tesisId: number | null = null;
-    fisTarihi: string = '';
+    fisTarihi: string | Date = '';
     maliYil: number = 0;
     donem: number = 1;
     fisTipi: string = MuhasebeFisTipleri.Mahsup;
@@ -385,7 +388,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
             tesisId: seciliTesisId,
             maliYil: this.maliYil,
             donem: this.donem,
-            fisTarihi: this.fisTarihi,
+            fisTarihi: formatDateForApi(this.fisTarihi) ?? '',
             fisTipi: this.fisTipi,
             kaynakModul: this.kaynakModul || null,
             kaynakId: this.kaynakId || null,
@@ -431,7 +434,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     private resetToDefaults(): void {
         const today = new Date();
         this.tesisId = null;
-        this.fisTarihi = today.toISOString().split('T')[0];
+        this.fisTarihi = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         this.maliYil = today.getFullYear();
         this.donem = today.getMonth() + 1;
         this.fisTipi = MuhasebeFisTipleri.Mahsup;

@@ -20,6 +20,7 @@ import {
 } from '../models/muhasebe-fis.model';
 import { YevmiyeDefteriModel, YevmiyeDefteriSatirModel } from '../models/yevmiye-defteri.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
+import { Toolbar } from "primeng/toolbar";
 
 interface DonemSecenek {
     label: string;
@@ -84,16 +85,17 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
     selector: 'app-yevmiye-defteri',
     standalone: true,
     imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    CommonModule,
+    FormsModule,
+    ButtonModule,
+    SelectModule,
+    TableModule,
+    TagModule,
+    ToastModule,
+    MuhasebeTesisSecimDialogComponent,
+    MuhasebeTesisContextBarComponent,
+    Toolbar
+],
     providers: [MessageService],
     templateUrl: './yevmiye-defteri.component.html',
     styleUrls: ['./yevmiye-defteri.component.scss']

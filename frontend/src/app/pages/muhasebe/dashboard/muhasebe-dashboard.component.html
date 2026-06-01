@@ -1,9 +1,9 @@
 <p-toast />
 <app-muhasebe-tesis-secim-dialog />
 <app-muhasebe-tesis-context-bar />
-
+<p-toolbar Class="mb-4">
 <!-- Filtre Alanı -->
-<div class="grid grid-cols-12 gap-3 mb-4">
+<div class="grid grid-cols-12 gap-3 mb-4  w-full">
   <div class="col-span-12 md:col-span-6 lg:col-span-2">
     <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
     <p-select
@@ -27,7 +27,8 @@
       optionValue="value"
       styleClass="w-full" />
   </div>
-
+    <div class="col-span-12 md:col-span-4">
+    </div>
   <div class="col-span-12 md:col-span-6 lg:col-span-3 lg:col-start-10 flex items-end justify-end gap-2">
     <p-button
       label="Yenile"
@@ -38,7 +39,7 @@
       (onClick)="loadDashboard()" />
   </div>
 </div>
-
+</p-toolbar>
 <!-- Loading State -->
 <ng-container *ngIf="loading && !dashboard">
   <div class="flex flex-column align-items-center justify-content-center py-8">

@@ -29,6 +29,7 @@ import {
 } from '../models/muhasebe-fis.model';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
+import { ToolbarModule } from "primeng/toolbar";
 
 interface TesisSecenek {
     label: string;
@@ -90,23 +91,24 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
     selector: 'app-muhasebe-fisler',
     standalone: true,
     imports: [
-        CommonModule,
-        FormsModule,
-        DatePipe,
-        DecimalPipe,
-        ButtonModule,
-        ConfirmDialogModule,
-        DialogModule,
-        InputNumberModule,
-        InputTextModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        TooltipModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    CommonModule,
+    FormsModule,
+    DatePipe,
+    DecimalPipe,
+    ButtonModule,
+    ConfirmDialogModule,
+    DialogModule,
+    InputNumberModule,
+    InputTextModule,
+    SelectModule,
+    TableModule,
+    TagModule,
+    ToastModule,
+    TooltipModule,
+    MuhasebeTesisSecimDialogComponent,
+    MuhasebeTesisContextBarComponent,
+    ToolbarModule
+],
     templateUrl: './muhasebe-fisler.component.html',
     styleUrls: ['./muhasebe-fisler.component.scss'],
     providers: [MessageService, ConfirmationService]

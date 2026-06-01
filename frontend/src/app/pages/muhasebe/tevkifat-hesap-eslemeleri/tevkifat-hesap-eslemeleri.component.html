@@ -2,14 +2,14 @@
 
 <p-toast />
 
-<p-toolbar styleClass="mb-4">
+<p-toolbar Class="mb-4">
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
     </ng-template>
 </p-toolbar>
-
-<div class="grid grid-cols-12 gap-3 mb-3">
+<p-toolbar Class="mb-4">
+<div class="grid grid-cols-12 gap-3 mb-3 w-full">
     <div class="col-span-12 md:col-span-4">
         <label class="block mb-2">Tesis</label>
         <p-select
@@ -47,7 +47,7 @@
         <p-button label="Temizle" icon="pi pi-filter-slash" severity="secondary" [outlined]="true" (onClick)="clearFilter()" />
     </div>
 </div>
-
+</p-toolbar>
 <p-table
     [value]="records"
     [loading]="loading"

@@ -23,6 +23,7 @@ import {
     MuhasebeDashboardModel,
     createDefaultDashboardFilter
 } from '../models/muhasebe-dashboard.model';
+import { Toolbar } from "primeng/toolbar";
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const suankiYil = new Date().getFullYear();
@@ -37,21 +38,22 @@ const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (()
     selector: 'app-muhasebe-dashboard',
     standalone: true,
     imports: [
-        CommonModule,
-        FormsModule,
-        RouterModule,
-        ToastModule,
-        ButtonModule,
-        CardModule,
-        TableModule,
-        TagModule,
-        MessageModule,
-        SelectModule,
-        ProgressSpinnerModule,
-        SkeletonModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    ToastModule,
+    ButtonModule,
+    CardModule,
+    TableModule,
+    TagModule,
+    MessageModule,
+    SelectModule,
+    ProgressSpinnerModule,
+    SkeletonModule,
+    MuhasebeTesisSecimDialogComponent,
+    MuhasebeTesisContextBarComponent,
+    Toolbar
+],
     providers: [MessageService],
     templateUrl: './muhasebe-dashboard.component.html',
     styleUrl: './muhasebe-dashboard.component.scss'

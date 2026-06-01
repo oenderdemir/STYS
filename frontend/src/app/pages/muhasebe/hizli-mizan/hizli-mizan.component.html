@@ -1,7 +1,7 @@
 <p-toast />
 <app-muhasebe-tesis-secim-dialog />
 <app-muhasebe-tesis-context-bar />
-
+<p-toolbar Class="mb-8">
 <div class="grid grid-cols-12 gap-3 mb-4">
   <!-- Bilgi metni -->
   <div class="col-span-12">
@@ -73,7 +73,7 @@
     <label for="chkAltHesaplar" class="cursor-pointer">Alt hesapları dahil et</label>
   </div>
 </div>
-
+</p-toolbar>
 <!-- Genel toplam kartlari -->
 <div *ngIf="result" class="grid grid-cols-12 gap-3 mb-4">
   <div class="col-span-12 md:col-span-6 lg:col-span-3">

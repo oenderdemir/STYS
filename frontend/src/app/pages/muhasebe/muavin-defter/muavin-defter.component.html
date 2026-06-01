@@ -11,9 +11,9 @@
         </div>
     </div>
 </div>
-
+<p-toolbar Class="mb-4">
 <!-- Filtre Satırı 1 -->
-<div class="grid grid-cols-12 gap-3 mb-4">
+<div class="grid grid-cols-12 gap-3 mb-4 w-full">
     <div class="col-span-12 md:col-span-6 lg:col-span-2">
         <label class="block text-sm font-medium mb-1">Mali Yıl</label>
         <p-select
@@ -53,7 +53,7 @@
 </div>
 
 <!-- Filtre Satırı 2 -->
-<div class="grid grid-cols-12 gap-3 mb-4">
+<div class="grid grid-cols-12 gap-3 mb-4 w-full">
     <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block text-sm font-medium mb-1">Hesap Kodu</label>
         <input
@@ -73,7 +73,7 @@
             <label for="altHesaplar" class="text-sm">Alt hesapları dahil et</label>
         </div>
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-4 flex align-items-end gap-2">
+    <div class="col-span-12 md:col-span-6 lg:col-span-4 flex align-items-end justify-content-end gap-2"></div>
         <p-button
             label="Ara"
             icon="pi pi-search"
@@ -98,7 +98,7 @@
         </p-button>
     </div>
 </div>
-
+</p-toolbar>
 <!-- Başlık / Özet -->
 <div *ngIf="result" class="grid grid-cols-12 gap-3 mb-4">
     <div class="col-span-12">

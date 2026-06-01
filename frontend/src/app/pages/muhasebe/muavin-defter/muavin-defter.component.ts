@@ -24,6 +24,7 @@ import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
+import { Toolbar } from "primeng/toolbar";
 
 interface DonemSecenek {
     label: string;
@@ -59,17 +60,18 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
     selector: 'app-muavin-defter',
     standalone: true,
     imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        CheckboxModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    CommonModule,
+    FormsModule,
+    ButtonModule,
+    CheckboxModule,
+    SelectModule,
+    TableModule,
+    TagModule,
+    ToastModule,
+    MuhasebeTesisSecimDialogComponent,
+    MuhasebeTesisContextBarComponent,
+    Toolbar
+],
     providers: [MessageService],
     templateUrl: './muavin-defter.component.html',
     styleUrls: ['./muavin-defter.component.scss']

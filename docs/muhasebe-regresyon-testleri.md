@@ -134,3 +134,51 @@
 
 ### Faz C-1 Notu
 - Stok hareketinde varsayılan tarih ataması, dönem kontrolünden önce çalışacak şekilde düzeltildi.
+
+---
+
+## Faz D - Cari Kapama Geri Alma / Tahsilat-Ödeme İptal Akışı
+
+### Test Edilen Senaryolar
+- Tahsilat/ödeme ile kısmi kapama.
+- Kapama geri alma.
+- Tahsilat/ödeme iptali.
+- Kapalı dönemde iptal engeli.
+- Tam kapama geri alma.
+
+### Tespit
+- Kapama geri alma metodu vardı; iptal davranışı tek yerde toplanmadı.
+- Tahsilat/ödeme silme akışı fiziksel delete yerine iptal davranışına çevrildi.
+
+### Bulunan Hatalar
+- Geri alma akışında açık dönem ve belge iptal kontrolü eksikti.
+- Bazı hata mesajları istenen standart metinlerle uyumsuzdu.
+
+### Yapılan Düzeltmeler
+- Tahsilat/ödeme iptali güvenli akışa alındı.
+- Kapama geri alma işlemine açık dönem ve ilişki doğrulaması eklendi.
+- `/ui/muhasebe/tahsilat-odeme-belgeleri/{id}/iptal` endpointi eklendi.
+
+### Eksik Kalan İş Kuralları
+- UI’da ayrı iptal butonu yok; mevcut delete aksiyonu iptal davranışını kullanıyor.
+
+### Backend
+- `CariHareketKapamaService` ve `TahsilatOdemeBelgesiService` güncellendi.
+- `ITahsilatOdemeBelgesiService` iptal metodu eklendi.
+
+### Frontend
+- Değişiklik yok.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` çalıştırılmadı; frontend değişikliği yok.
+
+### Test
+- Kod incelemesi ve backend build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- Bu fazda kod değişikliği yapıldı; commit oluşturulacak.

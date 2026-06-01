@@ -120,6 +120,11 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
 
+        if (existing.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+        {
+            throw new BaseException("Tahsilat/ödeme belgesi zaten iptal edilmiş.", 400);
+        }
+
         await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, CancellationToken.None);
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
         await EnsureOpenPeriodAsync(dto.CariKartId, dto.BelgeTarihi, CancellationToken.None);
@@ -135,17 +140,38 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public override async Task DeleteAsync(int id)
     {
-        var existing = await _repository.GetByIdAsync(id)
-            ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+        await IptalEtAsync(id, CancellationToken.None);
+    }
 
-        await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, CancellationToken.None);
-
-        if (await HasCariHareketAsync(id))
+    public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException("Cari kapama yapılmış tahsilat/ödeme belgesi silinemez.", 400);
-        }
+            var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
+                ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
 
-        await base.DeleteAsync(id);
+            if (existing.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+            {
+                throw new BaseException("Tahsilat/ödeme belgesi zaten iptal edilmiş.", 400);
+            }
+
+            await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, cancellationToken);
+
+            if (await HasCariHareketAsync(id))
+            {
+                await _cariHareketKapamaService.GeriAlAsync(id, cancellationToken);
+            }
+
+            existing.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public override async Task<TahsilatOdemeBelgesiDto?> GetByIdAsync(int id, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null)

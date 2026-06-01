@@ -274,17 +274,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     satirEkle(): void {
         const siraNo = this.satirlar.length + 1;
-        this.satirlar.push({
-            siraNo,
-            muhasebeHesapPlaniId: null,
-            hesapKodu: '',
-            hesapAdi: '',
-            borc: 0,
-            alacak: 0,
-            paraBirimi: 'TRY',
-            kur: 1,
-            aciklama: null
-        });
+        this.satirlar.push(this.createEmptySatir(siraNo));
     }
 
     satirSil(index: number): void {
@@ -445,8 +435,22 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     private ensureInitialRows(): void {
         if (this.satirlar.length === 0) {
-            this.satirEkle();
+            this.satirlar.push(this.createEmptySatir(1));
         }
+    }
+
+    private createEmptySatir(siraNo: number): SatirRow {
+        return {
+            siraNo,
+            muhasebeHesapPlaniId: null,
+            hesapKodu: '',
+            hesapAdi: '',
+            borc: 0,
+            alacak: 0,
+            paraBirimi: 'TRY',
+            kur: 1,
+            aciklama: null
+        };
     }
 
     private resetFormForTesisChange(tesisId: number): void {

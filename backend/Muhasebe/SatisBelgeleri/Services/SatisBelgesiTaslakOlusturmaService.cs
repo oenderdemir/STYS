@@ -213,9 +213,17 @@ public class SatisBelgesiTaslakOlusturmaService : ISatisBelgesiTaslakOlusturmaSe
                 Aciklama = src.Aciklama,
                 Miktar = src.Miktar,
                 BirimFiyat = src.BirimFiyat,
+                IndirimOrani = src.IndirimOrani,
+                IndirimTutari = src.IndirimTutari,
                 KdvUygulamaTipi = (int)src.KdvUygulamaTipi,
                 KdvOrani = src.KdvOrani,
                 KdvIstisnaTanimId = src.KdvIstisnaTanimId,
+                OtvOrani = src.OtvOrani,
+                OtvTutari = src.OtvTutari,
+                OivOrani = src.OivOrani,
+                OivTutari = src.OivTutari,
+                KonaklamaVergisiOrani = src.KonaklamaVergisiOrani,
+                KonaklamaVergisiTutari = src.KonaklamaVergisiTutari,
                 KaynakSatirId = src.KaynakSatirId
             });
         }

@@ -144,6 +144,7 @@ export interface SatisBelgesiSatiriDto {
     birim: string;
     miktar: number;
     birimFiyat: number;
+    indirimOrani: number;
     indirimTutari: number;
     matrah: number;
     kdvUygulamaTipi: KdvUygulamaTipi;
@@ -155,6 +156,12 @@ export interface SatisBelgesiSatiriDto {
     tevkifatPay?: number | null;
     tevkifatPayda?: number | null;
     tevkifatTutari: number;
+    otvOrani: number;
+    otvTutari: number;
+    oivOrani: number;
+    oivTutari: number;
+    konaklamaVergisiOrani: number;
+    konaklamaVergisiTutari: number;
     netKdv: number;
     satirToplami: number;
     kaynakSatirId?: string | null;
@@ -212,12 +219,19 @@ export interface CreateSatisBelgesiSatiriRequest {
     birim: string;
     miktar: number;
     birimFiyat: number;
+    indirimOrani: number;
     indirimTutari: number;
     kdvUygulamaTipi: KdvUygulamaTipi;
     kdvIstisnaTanimId?: number | null;
     kdvOrani: number;
     tevkifatPay?: number | null;
     tevkifatPayda?: number | null;
+    otvOrani: number;
+    otvTutari: number;
+    oivOrani: number;
+    oivTutari: number;
+    konaklamaVergisiOrani: number;
+    konaklamaVergisiTutari: number;
     kaynakSatirId?: string | null;
 }
 
@@ -308,12 +322,19 @@ export function createEmptySatisBelgesiSatiri(): CreateSatisBelgesiSatiriRequest
         birim: 'Adet',
         miktar: 1,
         birimFiyat: 0,
+        indirimOrani: 0,
         indirimTutari: 0,
         kdvUygulamaTipi: KdvUygulamaTipi.Kdvli,
         kdvIstisnaTanimId: null,
         kdvOrani: 20,
         tevkifatPay: null,
         tevkifatPayda: null,
+        otvOrani: 0,
+        otvTutari: 0,
+        oivOrani: 0,
+        oivTutari: 0,
+        konaklamaVergisiOrani: 0,
+        konaklamaVergisiTutari: 0,
         kaynakSatirId: null
     };
 }

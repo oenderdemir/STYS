@@ -28,6 +28,7 @@ public class SatisBelgesiSatiri : BaseEntity<int>
 
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
+    public decimal IndirimOrani { get; set; }
     public decimal IndirimTutari { get; set; }
     public decimal Matrah { get; set; }
 
@@ -44,6 +45,12 @@ public class SatisBelgesiSatiri : BaseEntity<int>
     public int? TevkifatPay { get; set; }
     public int? TevkifatPayda { get; set; }
     public decimal TevkifatTutari { get; set; }
+    public decimal OtvOrani { get; set; }
+    public decimal OtvTutari { get; set; }
+    public decimal OivOrani { get; set; }
+    public decimal OivTutari { get; set; }
+    public decimal KonaklamaVergisiOrani { get; set; }
+    public decimal KonaklamaVergisiTutari { get; set; }
 
     public decimal SatirToplami { get; set; }
 

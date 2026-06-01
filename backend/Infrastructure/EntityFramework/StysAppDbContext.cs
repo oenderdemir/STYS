@@ -2413,6 +2413,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.BirimFiyat)
                 .HasPrecision(18, 2);
 
+            entity.Property(x => x.IndirimOrani)
+                .HasPrecision(5, 2);
+
             entity.Property(x => x.IndirimTutari)
                 .HasPrecision(18, 2);
 
@@ -2426,6 +2429,24 @@ public class StysAppDbContext : DbContext
                 .HasPrecision(18, 2);
 
             entity.Property(x => x.TevkifatTutari)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.OtvOrani)
+                .HasPrecision(5, 2);
+
+            entity.Property(x => x.OtvTutari)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.OivOrani)
+                .HasPrecision(5, 2);
+
+            entity.Property(x => x.OivTutari)
+                .HasPrecision(18, 2);
+
+            entity.Property(x => x.KonaklamaVergisiOrani)
+                .HasPrecision(5, 2);
+
+            entity.Property(x => x.KonaklamaVergisiTutari)
                 .HasPrecision(18, 2);
 
             entity.Property(x => x.SatirToplami)

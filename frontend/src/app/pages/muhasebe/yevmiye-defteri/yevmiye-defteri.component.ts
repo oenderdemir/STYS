@@ -4,6 +4,7 @@ import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/c
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -85,17 +86,17 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
     selector: 'app-yevmiye-defteri',
     standalone: true,
     imports: [
-    CommonModule,
-    FormsModule,
-    ButtonModule,
-    SelectModule,
-    TableModule,
-    TagModule,
-    ToastModule,
-    MuhasebeTesisSecimDialogComponent,
-    MuhasebeTesisContextBarComponent,
-    Toolbar
-],
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        DatePickerModule,
+        SelectModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     providers: [MessageService],
     templateUrl: './yevmiye-defteri.component.html',
     styleUrls: ['./yevmiye-defteri.component.scss']
@@ -151,7 +152,6 @@ export class YevmiyeDefteriComponent implements OnInit {
 
         this.filter.tesisId = tesisId;
         const normalized = normalizeFisFilter(this.filter);
-        this.filter = normalized;
         this.result = null;
         this.loading = true;
 

@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -60,18 +61,18 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
     selector: 'app-muavin-defter',
     standalone: true,
     imports: [
-    CommonModule,
-    FormsModule,
-    ButtonModule,
-    CheckboxModule,
-    SelectModule,
-    TableModule,
-    TagModule,
-    ToastModule,
-    MuhasebeTesisSecimDialogComponent,
-    MuhasebeTesisContextBarComponent,
-    Toolbar
-],
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        CheckboxModule,
+        DatePickerModule,
+        SelectModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     providers: [MessageService],
     templateUrl: './muavin-defter.component.html',
     styleUrls: ['./muavin-defter.component.scss']

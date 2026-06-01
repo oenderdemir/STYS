@@ -1,12 +1,15 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Repositories;
 using STYS.Muhasebe.CariKartlar.Repositories;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaHareketleri.Dtos;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.KasaHareketleri.Repositories;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -14,15 +17,25 @@ namespace STYS.Muhasebe.KasaHareketleri.Services;
 
 public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, int>, IKasaHareketService
 {
+    private readonly IKasaHareketRepository _repository;
     private readonly ICariKartRepository _cariKartRepository;
     private readonly IKasaBankaHesapRepository _kasaBankaHesapRepository;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public KasaHareketService(IKasaHareketRepository repository, ICariKartRepository cariKartRepository, IKasaBankaHesapRepository kasaBankaHesapRepository, IUserAccessScopeService userAccessScopeService, IMapper mapper)
+    public KasaHareketService(
+        IKasaHareketRepository repository,
+        ICariKartRepository cariKartRepository,
+        IKasaBankaHesapRepository kasaBankaHesapRepository,
+        IMuhasebeDonemService muhasebeDonemService,
+        IUserAccessScopeService userAccessScopeService,
+        IMapper mapper)
         : base(repository, mapper)
     {
+        _repository = repository;
         _cariKartRepository = cariKartRepository;
         _kasaBankaHesapRepository = kasaBankaHesapRepository;
+        _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -38,6 +51,10 @@ public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, 
         {
             throw new BaseException("Kasa hareketi id zorunludur.", 400);
         }
+
+        var existing = await _repository.GetByIdAsync(dto.Id.Value)
+            ?? throw new BaseException("Kasa hareketi bulunamadı.", 404);
+        await EnsureOpenPeriodAsync(await ResolveTesisIdAsync(existing.KasaBankaHesapId, existing.CariKartId), existing.HareketTarihi, CancellationToken.None);
 
         await ValidateAsync(dto);
         return await base.UpdateAsync(dto);
@@ -138,6 +155,8 @@ public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, 
                 throw new BaseException("Secilen kasa hesabi icin yetkiniz bulunmuyor.", 403);
             }
         }
+
+        await EnsureOpenPeriodAsync(await ResolveTesisIdAsync(dto.KasaBankaHesapId, dto.CariKartId), dto.HareketTarihi, CancellationToken.None);
     }
 
     private static Func<IQueryable<KasaHareket>, IQueryable<KasaHareket>> BuildScopedIncludeQuery(
@@ -157,5 +176,25 @@ public class KasaHareketService : BaseRdbmsService<KasaHareketDto, KasaHareket, 
 
             return result;
         };
+    }
+
+    private async Task<int?> ResolveTesisIdAsync(int? kasaBankaHesapId, int? cariKartId)
+    {
+        if (kasaBankaHesapId.HasValue && kasaBankaHesapId.Value > 0)
+        {
+            return await _kasaBankaHesapRepository.Where(x => x.Id == kasaBankaHesapId.Value).Select(x => x.TesisId).FirstOrDefaultAsync();
+        }
+
+        if (cariKartId.HasValue && cariKartId.Value > 0)
+        {
+            return await _cariKartRepository.Where(x => x.Id == cariKartId.Value).Select(x => x.TesisId).FirstOrDefaultAsync();
+        }
+
+        return null;
+    }
+
+    private async Task EnsureOpenPeriodAsync(int? tesisId, DateTime tarih, CancellationToken cancellationToken)
+    {
+        await MuhasebeDonemKontrolHelper.EnsureOpenPeriodAsync(_muhasebeDonemService, tesisId, tarih, cancellationToken);
     }
 }

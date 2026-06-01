@@ -6,7 +6,9 @@ using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.CariKartlar.Repositories;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
@@ -22,6 +24,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     private readonly ICariHareketRepository _cariHareketRepository;
     private readonly ICariHareketKapamaService _cariHareketKapamaService;
     private readonly StysAppDbContext _dbContext;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
     public TahsilatOdemeBelgesiService(
@@ -30,6 +33,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         ICariHareketRepository cariHareketRepository,
         ICariHareketKapamaService cariHareketKapamaService,
         StysAppDbContext dbContext,
+        IMuhasebeDonemService muhasebeDonemService,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
         : base(repository, mapper)
@@ -39,6 +43,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         _cariHareketRepository = cariHareketRepository;
         _cariHareketKapamaService = cariHareketKapamaService;
         _dbContext = dbContext;
+        _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -80,6 +85,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     public override async Task<TahsilatOdemeBelgesiDto> AddAsync(TahsilatOdemeBelgesiDto dto)
     {
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
+        await EnsureOpenPeriodAsync(dto.CariKartId, dto.BelgeTarihi, CancellationToken.None);
         await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
@@ -111,7 +117,12 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             throw new BaseException("Tahsilat/odeme belgesi id zorunludur.", 400);
         }
 
+        var existing = await _repository.GetByIdAsync(dto.Id.Value)
+            ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+
+        await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, CancellationToken.None);
         await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
+        await EnsureOpenPeriodAsync(dto.CariKartId, dto.BelgeTarihi, CancellationToken.None);
         await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
 
         if (await HasCariHareketAsync(dto.Id.Value))
@@ -124,6 +135,11 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public override async Task DeleteAsync(int id)
     {
+        var existing = await _repository.GetByIdAsync(id)
+            ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+
+        await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, CancellationToken.None);
+
         if (await HasCariHareketAsync(id))
         {
             throw new BaseException("Cari kapama yapılmış tahsilat/ödeme belgesi silinemez.", 400);
@@ -205,6 +221,17 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         {
             throw new BaseException("Durum gecersiz.", 400);
         }
+    }
+
+    private async Task EnsureOpenPeriodAsync(int cariKartId, DateTime belgeTarihi, CancellationToken cancellationToken)
+    {
+        var cari = await _cariKartRepository.GetByIdAsync(cariKartId);
+        if (cari is null)
+        {
+            throw new BaseException("Cari kart bulunamadi.", 400);
+        }
+
+        await MuhasebeDonemKontrolHelper.EnsureOpenPeriodAsync(_muhasebeDonemService, cari.TesisId, belgeTarihi, cancellationToken);
     }
 
     private async Task ValidateKapatilacakCariHareketAsync(int cariKartId, int? kapatilacakCariHareketId)

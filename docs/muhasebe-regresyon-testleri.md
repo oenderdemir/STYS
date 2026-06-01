@@ -85,3 +85,49 @@
 ### Test
 - Kod incelemesi ve build doğrulaması yapıldı.
 - Manuel runtime test yapılmadı.
+
+---
+
+## Faz C-1 - Bağımsız Hareketlerde Dönem Kontrolü
+
+### Test Edilen Senaryolar
+- Cari hareket oluşturma/güncelleme.
+- Stok hareketi oluşturma/güncelleme.
+- Tahsilat/ödeme belgesi oluşturma/güncelleme/silme.
+- Kasa hareketi oluşturma/güncelleme.
+- Banka hareketi oluşturma/güncelleme.
+
+### Tespit
+- Bağımsız hareket servislerinde dönem kontrol boşluğu vardı.
+- Kapalı dönem için `İşlem tarihi kapalı muhasebe dönemindedir.` mesajı ile merkezi guard eklendi.
+
+### Bulunan Hatalar
+- Kritik regresyon hatası bulunmadı; dönem kontrol boşluğu kapatıldı.
+
+### Yapılan Düzeltmeler
+- Cari, stok, tahsilat/ödeme, kasa ve banka hareketlerinde open-period guard eklendi.
+- Kapalı dönemde güncelleme ve ilgili silme akışı engellendi.
+
+### Eksik Kalan İş Kuralları
+- Ayrı kasa/banka hareketi iptal akışları için ek ters kayıt kuralı gerekirse sonraki fazda ele alınmalı.
+
+### Backend
+- `MuhasebeDonemKontrolHelper` eklendi.
+- İlgili hareket servisleri açık dönem kontrolü kullanır hale getirildi.
+
+### Frontend
+- Değişiklik yok.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` çalıştırılmadı; frontend değişikliği yok.
+
+### Test
+- Kod incelemesi ve build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- Doküman güncellendi; commit oluşturulacak.

@@ -214,7 +214,7 @@ export class TasinirKartlariPage implements OnInit {
         this.model.tasinirKodId = this.selectedTasinirKodOption?.value ?? this.model.tasinirKodId;
 
         if (!this.model.ad?.trim() || !this.model.tasinirKodId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad ve tasinir kod secimi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Taşınır kodu listeden seçilmelidir.' });
             return;
         }
 

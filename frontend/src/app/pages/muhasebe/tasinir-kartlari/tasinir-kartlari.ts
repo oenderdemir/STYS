@@ -200,6 +200,13 @@ export class TasinirKartlariPage implements OnInit {
     onTasinirKodModelChange(value: unknown): void {
         if (typeof value === 'string') {
             this.model.tasinirKodId = 0;
+            this.selectedTasinirKodOption = null;
+        }
+    }
+
+    onTasinirKodBlur(): void {
+        if (!this.selectedTasinirKodOption?.value) {
+            this.model.tasinirKodId = 0;
         }
     }
 

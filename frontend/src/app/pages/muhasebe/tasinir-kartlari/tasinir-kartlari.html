@@ -61,10 +61,11 @@
                 [suggestions]="tasinirKodSearchResults"
                 (completeMethod)="searchTasinirKod($event)"
                 (onSelect)="onTasinirKodSelect()"
+                (onBlur)="onTasinirKodBlur()"
                 [dropdown]="true"
                 [delay]="0"
                 [minLength]="2"
-                [forceSelection]="false"
+                [forceSelection]="true"
                 optionLabel="label"
                 placeholder="Orn. 150.01.01.08.0* veya ad ile ara"
                 appendTo="body" />

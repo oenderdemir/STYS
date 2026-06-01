@@ -261,7 +261,7 @@ export class StokHareketleriPage implements OnInit {
         }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
-        this.hareketTarihiDate = this.startOfToday();
+        this.hareketTarihiDate = this.startOfNow();
         if (this.selectedDepoId && this.selectedDepoId > 0) {
             this.model.depoId = this.selectedDepoId;
         }
@@ -319,7 +319,7 @@ export class StokHareketleriPage implements OnInit {
         const payload = {
             depoId: this.model.depoId,
             tasinirKartId: this.model.tasinirKartId,
-            hareketTarihi: formatDateForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
+            hareketTarihi: this.formatDateTimeForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
             hareketTipi: this.model.hareketTipi,
             miktar: this.model.miktar,
             birimFiyat: this.model.birimFiyat,
@@ -527,11 +527,11 @@ export class StokHareketleriPage implements OnInit {
     // ──────────────────────────────────────────
 
     private createEmpty(): StokHareketModel {
-        const today = this.startOfToday();
+        const now = this.startOfNow();
         return {
             depoId: 0,
             tasinirKartId: 0,
-            hareketTarihi: formatDateForApi(today) ?? '',
+            hareketTarihi: this.formatDateTimeForApi(now) ?? '',
             hareketTipi: 'Giriş',
             miktar: 1,
             birimFiyat: 0,
@@ -552,9 +552,23 @@ export class StokHareketleriPage implements OnInit {
         };
     }
 
-    private startOfToday(): Date {
-        const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    private startOfNow(): Date {
+        return new Date();
+    }
+
+    private formatDateTimeForApi(value: Date | string | null | undefined): string | null {
+        const date = value instanceof Date ? value : parseApiDate(value);
+        if (!date) {
+            return null;
+        }
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hour = String(date.getHours()).padStart(2, '0');
+        const minute = String(date.getMinutes()).padStart(2, '0');
+        const second = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

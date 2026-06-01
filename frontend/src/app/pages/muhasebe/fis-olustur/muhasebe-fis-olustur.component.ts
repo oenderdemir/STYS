@@ -288,11 +288,11 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     }
 
     satirSil(index: number): void {
-        if (this.satirlar.length <= 2) {
+        if (this.satirlar.length <= 1) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Uyarı',
-                detail: 'En az 2 fiş satırı bulunmalıdır.',
+                detail: 'En az 1 fiş satırı bulunmalıdır.',
                 life: 4000
             });
             return;
@@ -445,7 +445,6 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     private ensureInitialRows(): void {
         if (this.satirlar.length === 0) {
-            this.satirEkle();
             this.satirEkle();
         }
     }

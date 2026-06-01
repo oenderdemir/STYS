@@ -142,17 +142,20 @@ export class MuhasebeDonemlerComponent implements OnInit {
             this.cdr.detectChanges();
         })).subscribe({
             next: (records) => {
-                this.allRecords = records;
+                this.allRecords = Array.isArray(records) ? records : [];
                 this.applyFilter();
             },
             error: (error: unknown) => {
+                this.allRecords = [];
+                this.filteredRecords = [];
                 this.showError(error);
             }
         });
     }
 
     applyFilter(): void {
-        let result = [...this.allRecords];
+        const source = Array.isArray(this.allRecords) ? this.allRecords : [];
+        let result = [...source];
 
         if (this.filter.tesisId != null) {
             result = result.filter(r => r.tesisId === this.filter.tesisId);

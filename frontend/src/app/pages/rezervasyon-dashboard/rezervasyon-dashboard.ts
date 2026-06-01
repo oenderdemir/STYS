@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
@@ -27,7 +28,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
 @Component({
     selector: 'app-rezervasyon-dashboard',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DatePickerModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
     styleUrl: './rezervasyon-dashboard.scss',
     providers: [MessageService]

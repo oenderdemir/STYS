@@ -28,7 +28,19 @@
         </div>
         <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="dashTarih" class="block font-medium mb-2">Tarih</label>
-            <input pInputText id="dashTarih" class="w-full" type="date" [(ngModel)]="selectedTarih" [disabled]="loadingReferences || loadingDashboard" (change)="onTarihChange()" />
+            <p-datepicker
+                inputId="dashTarih"
+                class="w-full"
+                [(ngModel)]="selectedTarih"
+                dateFormat="yy-mm-dd"
+                dataType="string"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                [firstDayOfWeek]="1"
+                appendTo="body"
+                [disabled]="loadingReferences || loadingDashboard"
+                (ngModelChange)="onTarihChange()"
+            />
         </div>
         <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="kpiDonemi" class="block font-medium mb-2">KPI Donemi</label>
@@ -50,26 +62,34 @@
         <div class="grid grid-cols-12 gap-4 mt-3">
             <div class="col-span-12 md:col-span-6">
                 <label for="kpiBaslangic" class="block font-medium mb-2">KPI Baslangic</label>
-                <input
-                    pInputText
-                    id="kpiBaslangic"
+                <p-datepicker
+                    inputId="kpiBaslangic"
                     class="w-full"
-                    type="date"
                     [(ngModel)]="kpiBaslangicTarihi"
+                    dateFormat="yy-mm-dd"
+                    dataType="string"
+                    [showIcon]="true"
+                    [showButtonBar]="true"
+                    [firstDayOfWeek]="1"
+                    appendTo="body"
                     [disabled]="loadingReferences || loadingDashboard"
-                    (change)="onKpiRangeChange()"
+                    (ngModelChange)="onKpiRangeChange()"
                 />
             </div>
             <div class="col-span-12 md:col-span-6">
                 <label for="kpiBitis" class="block font-medium mb-2">KPI Bitis</label>
-                <input
-                    pInputText
-                    id="kpiBitis"
+                <p-datepicker
+                    inputId="kpiBitis"
                     class="w-full"
-                    type="date"
                     [(ngModel)]="kpiBitisTarihi"
+                    dateFormat="yy-mm-dd"
+                    dataType="string"
+                    [showIcon]="true"
+                    [showButtonBar]="true"
+                    [firstDayOfWeek]="1"
+                    appendTo="body"
                     [disabled]="loadingReferences || loadingDashboard"
-                    (change)="onKpiRangeChange()"
+                    (ngModelChange)="onKpiRangeChange()"
                 />
             </div>
         </div>
@@ -98,11 +118,33 @@
         </div>
         <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="reportBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
-            <input pInputText id="reportBaslangic" class="w-full" type="date" [(ngModel)]="reportBaslangicTarihi" [disabled]="exportingExcel || exportingPdf" />
+            <p-datepicker
+                inputId="reportBaslangic"
+                class="w-full"
+                [(ngModel)]="reportBaslangicTarihi"
+                dateFormat="yy-mm-dd"
+                dataType="string"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                [firstDayOfWeek]="1"
+                appendTo="body"
+                [disabled]="exportingExcel || exportingPdf"
+            />
         </div>
         <div class="col-span-12 md:col-span-6 lg:col-span-2">
             <label for="reportBitis" class="block font-medium mb-2">Bitis Tarihi</label>
-            <input pInputText id="reportBitis" class="w-full" type="date" [(ngModel)]="reportBitisTarihi" [disabled]="exportingExcel || exportingPdf" />
+            <p-datepicker
+                inputId="reportBitis"
+                class="w-full"
+                [(ngModel)]="reportBitisTarihi"
+                dateFormat="yy-mm-dd"
+                dataType="string"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                [firstDayOfWeek]="1"
+                appendTo="body"
+                [disabled]="exportingExcel || exportingPdf"
+            />
         </div>
         <div class="col-span-12 lg:col-span-2 flex items-end gap-2">
             <p-button

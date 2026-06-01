@@ -187,8 +187,6 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Seçilen deponun muhasebe hesap planı bağlantısı bulunmuyor.", 400);
         }
 
-        await EnsureOpenPeriodAsync(depo.TesisId, dto.HareketTarihi, CancellationToken.None);
-
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         if (scope.IsScoped)
         {
@@ -246,6 +244,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             dto.HareketTarihi = DateTime.UtcNow;
         }
+
+        await EnsureOpenPeriodAsync(depo.TesisId, dto.HareketTarihi, CancellationToken.None);
     }
 
     private async Task EnsureOpenPeriodAsync(int? tesisId, DateTime tarih, CancellationToken cancellationToken)

@@ -131,3 +131,6 @@
 
 ### Commit
 - Doküman güncellendi; commit oluşturulacak.
+
+### Faz C-1 Notu
+- Stok hareketinde varsayılan tarih ataması, dönem kontrolünden önce çalışacak şekilde düzeltildi.

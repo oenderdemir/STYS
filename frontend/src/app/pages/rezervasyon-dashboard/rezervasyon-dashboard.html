@@ -9,7 +9,7 @@
 
 <div class="card mb-4 dash-hero">
     <h5 class="m-0 mb-3">Rezervasyon Dashboard</h5>
-    <div class="grid grid-cols-12 gap-4">
+    <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="dashTesis" class="block font-medium mb-2">Tesis</label>
             <p-select
@@ -29,14 +29,15 @@
         <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label for="dashTarih" class="block font-medium mb-2">Tarih</label>
             <p-datepicker
-                inputId="dashTarih"
                 class="w-full"
-                [(ngModel)]="selectedTarih"
-                dateFormat="yy-mm-dd"
-                dataType="string"
+                inputId="dashTarih"
+                [(ngModel)]="selectedTarihDate"
+                dateFormat="dd.mm.yy"
                 [showIcon]="true"
                 [showButtonBar]="true"
                 [firstDayOfWeek]="1"
+                styleClass="w-full"
+                inputStyleClass="w-full"
                 appendTo="body"
                 [disabled]="loadingReferences || loadingDashboard"
                 (ngModelChange)="onTarihChange()"
@@ -59,18 +60,19 @@
     </div>
 
     @if (selectedKpiDonemi === 'custom') {
-        <div class="grid grid-cols-12 gap-4 mt-3">
+        <div class="grid grid-cols-12 gap-3 mt-3">
             <div class="col-span-12 md:col-span-6">
                 <label for="kpiBaslangic" class="block font-medium mb-2">KPI Baslangic</label>
                 <p-datepicker
-                    inputId="kpiBaslangic"
                     class="w-full"
-                    [(ngModel)]="kpiBaslangicTarihi"
-                    dateFormat="yy-mm-dd"
-                    dataType="string"
+                    inputId="kpiBaslangic"
+                    [(ngModel)]="kpiBaslangicDate"
+                    dateFormat="dd.mm.yy"
                     [showIcon]="true"
                     [showButtonBar]="true"
                     [firstDayOfWeek]="1"
+                    styleClass="w-full"
+                    inputStyleClass="w-full"
                     appendTo="body"
                     [disabled]="loadingReferences || loadingDashboard"
                     (ngModelChange)="onKpiRangeChange()"
@@ -79,14 +81,15 @@
             <div class="col-span-12 md:col-span-6">
                 <label for="kpiBitis" class="block font-medium mb-2">KPI Bitis</label>
                 <p-datepicker
-                    inputId="kpiBitis"
                     class="w-full"
-                    [(ngModel)]="kpiBitisTarihi"
-                    dateFormat="yy-mm-dd"
-                    dataType="string"
+                    inputId="kpiBitis"
+                    [(ngModel)]="kpiBitisDate"
+                    dateFormat="dd.mm.yy"
                     [showIcon]="true"
                     [showButtonBar]="true"
                     [firstDayOfWeek]="1"
+                    styleClass="w-full"
+                    inputStyleClass="w-full"
                     appendTo="body"
                     [disabled]="loadingReferences || loadingDashboard"
                     (ngModelChange)="onKpiRangeChange()"
@@ -98,7 +101,7 @@
 
 <div class="card mb-4">
     <h5 class="m-0 mb-3">Odeme Raporu Export</h5>
-    <div class="grid grid-cols-12 gap-4">
+    <div class="grid grid-cols-12 gap-3 items-end">
         <div class="col-span-12 lg:col-span-5">
             <label for="reportTesisler" class="block font-medium mb-2">Tesisler</label>
             <p-multiSelect
@@ -119,14 +122,15 @@
         <div class="col-span-12 md:col-span-6 lg:col-span-3">
             <label for="reportBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
             <p-datepicker
-                inputId="reportBaslangic"
                 class="w-full"
-                [(ngModel)]="reportBaslangicTarihi"
-                dateFormat="yy-mm-dd"
-                dataType="string"
+                inputId="reportBaslangic"
+                [(ngModel)]="reportBaslangicDate"
+                dateFormat="dd.mm.yy"
                 [showIcon]="true"
                 [showButtonBar]="true"
                 [firstDayOfWeek]="1"
+                styleClass="w-full"
+                inputStyleClass="w-full"
                 appendTo="body"
                 [disabled]="exportingExcel || exportingPdf"
             />
@@ -134,14 +138,15 @@
         <div class="col-span-12 md:col-span-6 lg:col-span-2">
             <label for="reportBitis" class="block font-medium mb-2">Bitis Tarihi</label>
             <p-datepicker
-                inputId="reportBitis"
                 class="w-full"
-                [(ngModel)]="reportBitisTarihi"
-                dateFormat="yy-mm-dd"
-                dataType="string"
+                inputId="reportBitis"
+                [(ngModel)]="reportBitisDate"
+                dateFormat="dd.mm.yy"
                 [showIcon]="true"
                 [showButtonBar]="true"
                 [firstDayOfWeek]="1"
+                styleClass="w-full"
+                inputStyleClass="w-full"
                 appendTo="body"
                 [disabled]="exportingExcel || exportingPdf"
             />

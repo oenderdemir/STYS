@@ -149,6 +149,7 @@
 ### Tespit
 - Kapama geri alma metodu vardı; iptal davranışı tek yerde toplanmadı.
 - Tahsilat/ödeme silme akışı fiziksel delete yerine iptal davranışına çevrildi.
+- İptal edilen kapama hareketinin aktif ilişki alanı temizlenmediği için rapor/ekstre yorumlarında yanlış pozitif risk vardı.
 
 ### Bulunan Hatalar
 - Geri alma akışında açık dönem ve belge iptal kontrolü eksikti.
@@ -157,10 +158,12 @@
 ### Yapılan Düzeltmeler
 - Tahsilat/ödeme iptali güvenli akışa alındı.
 - Kapama geri alma işlemine açık dönem ve ilişki doğrulaması eklendi.
+- `CariHareketKapamaService.GeriAlAsync` içinde kapama hareketi `Durum=Iptal`, `KapananTutar=0`, `KalanTutar=0`, `KapandiMi=true`, `IliskiliCariHareketId=null` olacak şekilde temizleniyor.
 - `/ui/muhasebe/tahsilat-odeme-belgeleri/{id}/iptal` endpointi eklendi.
 
 ### Eksik Kalan İş Kuralları
 - UI’da ayrı iptal butonu yok; mevcut delete aksiyonu iptal davranışını kullanıyor.
+- `HasCariHareketAsync` aktif hareketleri sayıyor; iptal edilmiş kapama hareketleri sorgu dışı kalıyor.
 
 ### Backend
 - `CariHareketKapamaService` ve `TahsilatOdemeBelgesiService` güncellendi.

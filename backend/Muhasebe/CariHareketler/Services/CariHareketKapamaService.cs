@@ -275,6 +275,11 @@ public class CariHareketKapamaService : ICariHareketKapamaService
             faturaHareket.KapandiMi = faturaHareket.KalanTutar <= 0.01m;
 
             kapamaHareket.Durum = CariHareketDurumlari.Iptal;
+            kapamaHareket.KapananTutar = 0m;
+            kapamaHareket.KalanTutar = 0m;
+            kapamaHareket.KapandiMi = true;
+            kapamaHareket.IliskiliCariHareketId = null;
+            kapamaHareket.IliskiliCariHareket = null;
             belge.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
             await _dbContext.SaveChangesAsync(cancellationToken);
 

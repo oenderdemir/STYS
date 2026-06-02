@@ -602,4 +602,4 @@
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `acc82b5`
+- Commit oluşturuldu: `3680304`

@@ -80,6 +80,12 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("Tasinir kart id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Tasinir kart bulunamadi.", 404);
+        }
+
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id);
         await NormalizeAndValidateAsync(dto, dto.Id);
         EnsureTesisRequired(dto.TesisId);
@@ -113,6 +119,17 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         }
 
         return result;
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Tasinir kart bulunamadi.", 404);
+        }
+
+        await base.DeleteAsync(id);
     }
 
     public override async Task<TasinirKartDto?> GetByIdAsync(int id, Func<IQueryable<TasinirKart>, IQueryable<TasinirKart>>? include = null)

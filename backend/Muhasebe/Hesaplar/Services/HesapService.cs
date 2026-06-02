@@ -127,6 +127,12 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
             throw new BaseException("Hesap id zorunludur.", 400);
         }
 
+        var visible = await GetDetailByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Hesap bulunamadi.", 404);
+        }
+
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
         await ValidateAndNormalizeAsync(dto, dto.Id.Value);
         var updated = await base.UpdateAsync(dto);

@@ -61,6 +61,12 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Stok hareket id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Stok hareket bulunamadı.", 404);
+        }
+
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
@@ -69,6 +75,21 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
         return await base.UpdateAsync(dto);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Stok hareket bulunamadı.", 404);
+        }
+
+        var existing = await _repository.GetByIdAsync(id)
+            ?? throw new BaseException("Stok hareket bulunamadı.", 404);
+
+        await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
+        await base.DeleteAsync(id);
     }
 
     public async Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default)

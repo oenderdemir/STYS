@@ -53,12 +53,33 @@ public class BankaHareketService : BaseRdbmsService<BankaHareketDto, BankaHareke
             throw new BaseException("Banka hareketi id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Banka hareketi bulunamadı.", 404);
+        }
+
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Banka hareketi bulunamadı.", 404);
         await EnsureOpenPeriodAsync(await ResolveTesisIdAsync(existing.KasaBankaHesapId, existing.CariKartId), existing.HareketTarihi, CancellationToken.None);
 
         await ValidateAsync(dto);
         return await base.UpdateAsync(dto);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Banka hareketi bulunamadı.", 404);
+        }
+
+        var existing = await _repository.GetByIdAsync(id)
+            ?? throw new BaseException("Banka hareketi bulunamadı.", 404);
+
+        await EnsureOpenPeriodAsync(await ResolveTesisIdAsync(existing.KasaBankaHesapId, existing.CariKartId), existing.HareketTarihi, CancellationToken.None);
+        await base.DeleteAsync(id);
     }
 
     public override async Task<BankaHareketDto?> GetByIdAsync(int id, Func<IQueryable<BankaHareket>, IQueryable<BankaHareket>>? include = null)

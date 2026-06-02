@@ -276,3 +276,58 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: 5ab2f84
+
+---
+
+## Faz F - Tesis / Yetki Scope Genel Audit Taraması
+
+### Tespit
+- Muhasebe modülü genelinde liste, detay, lookup, create/update/delete/iptal ve rapor akışları tarandı.
+- Kayıt seviyesinde yetki boşluğu bulunan yerler update/delete/iptal akışlarında toplandı.
+- Kritik veri sızıntısı riski bulunan birkaç servis için mevcut kaydın tesis erişimi ayrıca zorunlu hale getirildi.
+
+### İş Kuralı Kararı
+- Kullanıcının scope'u varsa yalnız yetkili olduğu tesis kayıtlarına erişebilmeli.
+- Mevcut kaydın tesis yetkisi doğrulanmadan update/delete/iptal yapılmamalı.
+- Global referans kayıtlar yalnız gerçekten tesis bağımsız kabul edilen alanlarda serbest kalmalı.
+
+### Yapılan Değişiklikler
+- `CariHareketService`, `KasaHareketService`, `BankaHareketService` ve `StokHareketService` update/delete akışlarına mevcut kayıt scope kontrolü eklendi.
+- `TahsilatOdemeBelgesiService` update ve iptal akışlarına mevcut kayıt scope kontrolü eklendi.
+- `DepoService` ve `TasinirKartService` update/delete akışlarına mevcut kayıt scope kontrolü eklendi.
+- `HesapService` update akışına mevcut kayıt scope kontrolü eklendi.
+- `MuhasebeFisService` update/delete akışlarında fişin tesis yetkisi tekrar doğrulandı.
+
+### Eksik Kalan İş Kuralları
+- Tesis bağımsız global referans veriler için yeni bir ortak helper çıkarılmadı.
+- `MuhasebeHesapPlanlari` gibi gerçekten global kabul edilen lookup alanlarına dokunulmadı.
+- Büyük refactor yapılmadı; sadece eksik scope guard'ları kapatıldı.
+
+### Backend
+- [`backend/Muhasebe/CariHareketler/Services/CariHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/CariHareketler/Services/CariHareketService.cs)
+- [`backend/Muhasebe/KasaHareketleri/Services/KasaHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/KasaHareketleri/Services/KasaHareketService.cs)
+- [`backend/Muhasebe/BankaHareketleri/Services/BankaHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/BankaHareketleri/Services/BankaHareketService.cs)
+- [`backend/Muhasebe/StokHareketleri/Services/StokHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/StokHareketleri/Services/StokHareketService.cs)
+- [`backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs)
+- [`backend/Muhasebe/Depolar/Services/DepoService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/Depolar/Services/DepoService.cs)
+- [`backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs)
+- [`backend/Muhasebe/Hesaplar/Services/HesapService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/Hesaplar/Services/HesapService.cs)
+- [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs)
+
+### Frontend
+- Değişiklik yapılmadı.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` çalıştırılmadı; frontend değişikliği yok.
+- Build sırasında 1 warning var, hata yok.
+
+### Test
+- Kod incelemesi ve backend build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- `git commit -m "Faz F: Muhasebe tesis yetki scope audit"` ile commit oluşturulacak.

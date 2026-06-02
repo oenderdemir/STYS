@@ -84,6 +84,12 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
             throw new BaseException("Depo id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Depo kaydi bulunamadi.", 404);
+        }
+
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, dto.Id.Value);
         await NormalizeAndValidateAsync(dto, dto.Id.Value);
         EnsureTesisRequired(dto.TesisId);
@@ -179,6 +185,12 @@ public class DepoService : BaseRdbmsService<DepoDto, Depo, int>, IDepoService
 
     public override async Task DeleteAsync(int id)
     {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Depo bulunamadi.", 404);
+        }
+
         var depo = await _dbContext.Depolar.FirstOrDefaultAsync(x => x.Id == id);
         if (depo is null)
         {

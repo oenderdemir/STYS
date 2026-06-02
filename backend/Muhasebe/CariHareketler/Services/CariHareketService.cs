@@ -118,12 +118,33 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
             throw new BaseException("Cari hareket id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Cari hareket bulunamadı.", 404);
+        }
+
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Cari hareket bulunamadı.", 404);
 
         await EnsureOpenPeriodAsync(existing.CariKartId, existing.HareketTarihi, CancellationToken.None);
         await ValidateAsync(dto.CariKartId, dto.Durum, dto.HareketTarihi);
         return await base.UpdateAsync(dto);
+    }
+
+    public override async Task DeleteAsync(int id)
+    {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Cari hareket bulunamadı.", 404);
+        }
+
+        var existing = await _repository.GetByIdAsync(id)
+            ?? throw new BaseException("Cari hareket bulunamadı.", 404);
+
+        await EnsureOpenPeriodAsync(existing.CariKartId, existing.HareketTarihi, CancellationToken.None);
+        await base.DeleteAsync(id);
     }
 
     public override async Task<CariHareketDto?> GetByIdAsync(int id, Func<IQueryable<CariHareket>, IQueryable<CariHareket>>? include = null)

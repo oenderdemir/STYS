@@ -1489,6 +1489,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             if (existing is null)
                 throw new BaseException("Fiş bulunamadı.", 404);
 
+            await ValidateYetkiAsync(existing, CancellationToken.None);
+
             // 2. Sadece Taslak fişler güncellenebilir
             if (existing.Durum != MuhasebeFisDurumlari.Taslak)
                 throw new BaseException("Yalnızca taslak durumundaki fişler güncellenebilir.", 400);
@@ -1567,6 +1569,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             if (fis is null)
                 throw new BaseException("Fiş bulunamadı.", 404);
+
+            await ValidateYetkiAsync(fis, CancellationToken.None);
 
             // 2. Sadece Taslak fiş silinebilir
             if (fis.Durum != MuhasebeFisDurumlari.Taslak)

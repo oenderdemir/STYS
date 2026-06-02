@@ -117,6 +117,12 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             throw new BaseException("Tahsilat/odeme belgesi id zorunludur.", 400);
         }
 
+        var visible = await GetByIdAsync(dto.Id.Value);
+        if (visible is null)
+        {
+            throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+        }
+
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
 
@@ -148,6 +154,12 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            var visible = await GetByIdAsync(id);
+            if (visible is null)
+            {
+                throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            }
+
             var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
                 ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
 

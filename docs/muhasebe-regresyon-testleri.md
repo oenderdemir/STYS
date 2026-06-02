@@ -341,6 +341,7 @@
 - Tahsilat/ödeme ekranında sil aksiyonu iptal davranışıyla eşleşmiyordu.
 - Satış belgesi iptal akışı ve muhasebe fişi taslak/iptal aksiyonları doğru bulundu.
 - Cari, stok, kasa ve banka hareketlerinde fiziksel silme davranışıyla uyumlu sil butonları korunabildi.
+- Tahsilat/ödeme sayfasında default `p-confirmDialog` eksikti; eklendi.
 
 ### İş Kuralı Kararı
 - İptal/ters kayıt yapan aksiyonlar kullanıcıya "Sil" olarak gösterilmemeli.
@@ -357,6 +358,7 @@
 - Cari, stok, kasa ve banka hareketleri için mevcut fiziksel silme davranışı korundu.
 - Ayrı bir ortak UI aksiyon helper'ı çıkarılmadı.
 - Backend tarafında ek işlem yapılmadı.
+- Mevcut Angular build hataları için ayrı Faz G-1 açılacak.
 
 ### Backend
 - Değişiklik yapılmadı.
@@ -371,12 +373,13 @@
 
 ### Build
 - `npm run build` başarısız.
-- Hata bizim değişikliklerden bağımsız mevcut Angular sorunlarından geldi: `muavin-defter`, `fisler` ve `yevmiye-defteri` bileşenlerinde derleme hataları var.
+- Hata bizim değişikliklerden bağımsız mevcut Angular sorunlarından geldi: `frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.html`, `frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.ts`, `frontend/src/app/pages/muhasebe/muavin-defter/muavin-defter.component.html`, `frontend/src/app/pages/muhasebe/yevmiye-defteri/yevmiye-defteri.component.html`.
 
 ### Test
 - Satış belgesi ve muhasebe fişi aksiyon metinleri incelendi.
-- Tahsilat/ödeme iptal akışı için frontend build denendi; mevcut repo hataları nedeniyle tamamlanamadı.
+- Tahsilat/ödeme iptal akışı için frontend build tekrar denendi; mevcut repo hataları nedeniyle tamamlanamadı.
+- Bu build hataları için Faz G-1 açılacak şekilde not düşüldü.
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: 822cbf7
+- Commit oluşturuldu: 900d6e3

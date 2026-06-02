@@ -603,3 +603,250 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `3680304`
+
+---
+
+## Faz J - Canlı Öncesi Smoke Test Senaryoları
+
+### Amaç
+Canlıya geçmeden önce muhasebe modülündeki minimum kritik akışları hızlı ve uygulanabilir şekilde doğrulamak.
+
+### Test Ortamı Varsayımları
+- En az 1 aktif tesis olmalı.
+- En az 1 açık muhasebe dönemi olmalı.
+- En az 1 yetkili muhasebe kullanıcısı olmalı.
+- Test için kullanılacak cari kart, hesap ve depo verileri hazır olmalı.
+- Test verileri canlı veriyle karıştırılmamalı.
+
+### Kapsam Dışı
+- `#13 Taşınır Kartları` ana geliştirmesi bu smoke setin dışındadır.
+
+### Senaryolar
+
+#### J-01 Kullanıcı giriş / tesis seçimi
+Ön koşul:
+- Kullanıcı muhasebe yetkisine sahip.
+
+Adımlar:
+1. Uygulamaya giriş yap.
+2. Muhasebe modülüne gir.
+3. Çalışma tesisini seç.
+4. Sayfayı yenile.
+
+Beklenen sonuç:
+- Seçili tesis korunur.
+- Muhasebe ekranları seçili tesisle açılır.
+
+Kritik kontrol:
+- Başka tesis verisi görünmez.
+
+#### J-02 Cari kart oluşturma
+Ön koşul:
+- Yetkili kullanıcı ve boş olmayan cari kart numarası var.
+
+Adımlar:
+1. Yeni cari kart oluştur.
+2. Zorunlu alanları doldur.
+3. Kaydet.
+
+Beklenen sonuç:
+- Cari kart kaydedilir.
+- Listeye doğru bilgilerle düşer.
+
+Kritik kontrol:
+- Aynı kodla ikinci kayıt engellenir.
+
+#### J-03 Cari kart banka hesabı ve yetkili kişi ekleme
+Ön koşul:
+- Oluşturulmuş bir cari kart var.
+
+Adımlar:
+1. Cari kartı aç.
+2. Banka hesabı ve yetkili kişi ekle.
+3. Kaydet.
+
+Beklenen sonuç:
+- Banka hesabı ve yetkili kişi kayıtları saklanır.
+
+Kritik kontrol:
+- Kayıtlar sayfa yenilense de korunur.
+
+#### J-04 Açılış bakiyesi oluşturma
+Ön koşul:
+- Açık dönem ve ilgili cari kart hazır.
+
+Adımlar:
+1. Cari açılış bakiyesi gir.
+2. Kaydet.
+3. Cari hareket ekranında kontrol et.
+
+Beklenen sonuç:
+- Açılış bakiyesi hareketi oluşur.
+
+Kritik kontrol:
+- Bakiye ve kapanan/kalan tutar alanları tutarlı görünür.
+
+#### J-05 Satış belgesi oluşturma
+Ön koşul:
+- Aktif müşteri ve stok/hizmet satırı hazır.
+
+Adımlar:
+1. Yeni satış belgesi oluştur.
+2. Satırları ve vergi alanlarını gir.
+3. Kaydet.
+
+Beklenen sonuç:
+- Belge kaydedilir.
+- Satır parametreleri korunur.
+
+Kritik kontrol:
+- İndirim/KDV/ÖTV/ÖİV alanları bozulmaz.
+
+#### J-06 Satış belgesinden muhasebe fişi oluşturma
+Ön koşul:
+- Onaya uygun satış belgesi var.
+
+Adımlar:
+1. Belgeden fiş oluştur.
+2. Oluşan fişi aç.
+
+Beklenen sonuç:
+- Muhasebe fişi oluşur.
+- Belge-fiş bağı kurulur.
+
+Kritik kontrol:
+- Aynı belge için duplicate fiş oluşmaz.
+
+#### J-07 Muhasebe fişi onaylama
+Ön koşul:
+- Taslak fiş var.
+
+Adımlar:
+1. Taslak fişi aç.
+2. Onayla.
+3. Listeyi yenile.
+
+Beklenen sonuç:
+- Fiş onaylı duruma geçer.
+
+Kritik kontrol:
+- Borç/alacak eşitliği korunur.
+
+#### J-08 Belge iptal / ters kayıt kontrolü
+Ön koşul:
+- İptale uygun belge var.
+
+Adımlar:
+1. Belgeyi iptal et.
+2. Oluşan ters/iptal kayıtları kontrol et.
+
+Beklenen sonuç:
+- İptal akışı tamamlanır.
+- İlgili ters/iptal kayıtları oluşur.
+
+Kritik kontrol:
+- İptal edilen kayıtlar aktif toplamları etkilemez.
+
+#### J-09 Tahsilat/ödeme oluşturma
+Ön koşul:
+- Cari kart ve açık dönem hazır.
+
+Adımlar:
+1. Tahsilat/ödeme belgesi oluştur.
+2. Kaydet.
+
+Beklenen sonuç:
+- Belge kaydedilir.
+- Aktif durum görünür.
+
+Kritik kontrol:
+- Listeye doğru tesis ile düşer.
+
+#### J-10 Tahsilat/ödeme iptal ve kapama geri alma
+Ön koşul:
+- Aktif tahsilat/ödeme ve bağlı kapama var.
+
+Adımlar:
+1. Belge üzerinde `İptal Et` aksiyonunu çalıştır.
+2. Onayı ver.
+3. Cari kapamayı kontrol et.
+
+Beklenen sonuç:
+- Belge iptal edilir.
+- Varsa cari kapama geri alınır.
+
+Kritik kontrol:
+- İptal edilmiş belge tekrar iptal edilemez.
+
+#### J-11 Kapalı dönem kontrolü
+Ön koşul:
+- Kapalı bir muhasebe dönemi var.
+
+Adımlar:
+1. Kapalı döneme fiş veya belge oluşturmayı dene.
+2. Aynı dönemde iptal/ters kayıt dene.
+
+Beklenen sonuç:
+- Engelleme mesajı gösterilir.
+
+Kritik kontrol:
+- Kapalı dönemde kayıt oluşmaz.
+
+#### J-12 Yevmiye defteri kontrolü
+Ön koşul:
+- En az 1 onaylı fiş var.
+
+Adımlar:
+1. Yevmiye defterini aç.
+2. Tesis ve tarih filtrelerini uygula.
+3. Export varsa çalıştır.
+
+Beklenen sonuç:
+- Kayıtlar listelenir.
+- Filtreler doğru çalışır.
+
+Kritik kontrol:
+- Yetkisiz tesis verisi görünmez.
+
+#### J-13 Muavin defter kontrolü
+Ön koşul:
+- En az 1 hesap ve buna bağlı hareket var.
+
+Adımlar:
+1. Muavin defterini aç.
+2. Hesap kodu gir.
+3. Ara ve export al.
+
+Beklenen sonuç:
+- Hesap/tesis uyumlu sonuçlar gelir.
+
+Kritik kontrol:
+- Yanlış tesis hesabı kabul edilmez.
+
+#### J-14 Mizan kontrolü
+Ön koşul:
+- Muhasebe hareketleri mevcut.
+
+Adımlar:
+1. Mizan ekranını aç.
+2. Tesis filtresiyle çalıştır.
+
+Beklenen sonuç:
+- Tesis bazlı mizan alınır.
+
+Kritik kontrol:
+- Toplamlar dengeli görünür.
+
+#### J-15 Yetkisiz tesis veri görünürlüğü kontrolü
+Ön koşul:
+- Kullanıcının erişemediği en az 1 tesis var.
+
+Adımlar:
+1. Yetkisiz tesisle ilişkili liste/detay ekranını aç.
+2. Scope dışı kaydı doğrudan ID ile dene.
+
+Beklenen sonuç:
+- Veri görünmez veya erişim engellenir.
+
+Kritik kontrol:
+- Başka tesis verisi sızmaz.

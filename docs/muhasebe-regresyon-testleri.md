@@ -185,3 +185,44 @@
 
 ### Commit
 - Bu fazda kod değişikliği yapıldı; commit oluşturulacak.
+
+---
+
+## Faz E - Rapor / Defter / Export / Toplam Doğrulaması
+
+### Tespit
+- Yevmiye, muavin ve mizan rapor akışlarında filtreler ve export davranışı mevcut.
+- Report endpointleri tesis filtresini bekliyor; backend tarafında yetki kapsamı kontrolü eksikti.
+- Muavin raporunda seçilen hesap için tesis uyumluluğu ayrıca doğrulanmıyordu.
+
+### İş Kuralı Kararı
+- Raporlar yalnızca geçerli tesis ile ve mevcut access scope içinde çalışmalı.
+- Muavin raporu, rapor tesisine uymayan hesapla oluşturulmamalı.
+
+### Yapılan Değişiklikler
+- Yevmiye, muavin, mizan ve hızlı mizan raporlarında tesis access scope kontrolü eklendi.
+- Muavin raporunda seçilen muhasebe hesabı ile çalışma tesisi uyumu doğrulandı.
+- Küçük rapor tasarımı değişikliği yapılmadı.
+
+### Eksik Kalan İş Kuralları
+- Büyük export altyapısı değişikliği yapılmadı.
+- Yeni muhasebe hesap planı tasarımı yapılmadı.
+- Migration gerekmedi.
+
+### Backend
+- `MuhasebeFisService` içinde rapor tesis yetki kontrolü eklendi.
+
+### Frontend
+- Değişiklik yapılmadı.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- Henüz çalıştırılmadı.
+
+### Test
+- Kod incelemesi yapıldı.
+
+### Commit
+- Oluşturulmadı.

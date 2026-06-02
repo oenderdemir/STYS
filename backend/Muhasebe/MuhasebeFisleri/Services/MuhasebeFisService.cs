@@ -460,6 +460,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
     public async Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)
     {
         filter.Normalize();
+        await EnsureCanAccessReportTesisAsync(filter.TesisId, cancellationToken);
 
         var fisler = await _repository.GetYevmiyeDefteriAsync(filter, cancellationToken);
 
@@ -713,6 +714,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         if (filter.TesisId <= 0)
             throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
 
+        await EnsureCanAccessReportTesisAsync(filter.TesisId, cancellationToken);
+
         if (filter.MuhasebeHesapPlaniId <= 0)
             throw new BaseException("Geçerli bir muhasebe hesabı seçilmelidir.", 400);
 
@@ -725,6 +728,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
         if (hesap is null)
             throw new BaseException("Seçilen muhasebe hesabı bulunamadı.", 404);
+
+        if (hesap.TesisId.HasValue && hesap.TesisId.Value != filter.TesisId)
+            throw new BaseException("Seçilen muhasebe hesabı çalışma tesisi ile uyumlu değil.", 403);
 
         var hesapKoduPrefix = hesap.TamKod!;
 
@@ -802,6 +808,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
     {
         // 1. Normalize
         filter.Normalize();
+        await EnsureCanAccessReportTesisAsync(filter.TesisId, cancellationToken);
 
         // 2. Validasyon
         if (filter.TesisId <= 0)
@@ -1013,6 +1020,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
     {
         // 1. Normalize
         filter.Normalize();
+        await EnsureCanAccessReportTesisAsync(filter.TesisId, cancellationToken);
 
         // 2. Validasyon
         if (filter.TesisId <= 0)
@@ -1360,6 +1368,20 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         satir.AlacakBakiye = net < 0 ? Math.Abs(net) : 0;
         satir.Bakiye = Math.Abs(net);
         satir.BakiyeTipi = net > 0 ? "Borc" : net < 0 ? "Alacak" : "Sifir";
+    }
+
+    private async Task EnsureCanAccessReportTesisAsync(int? tesisId, CancellationToken cancellationToken)
+    {
+        if (!tesisId.HasValue || tesisId.Value <= 0)
+        {
+            throw new BaseException("Geçerli bir tesis seçilmelidir.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId.Value))
+        {
+            throw new BaseException("Bu tesis için yetkiniz bulunmuyor.", 403);
+        }
     }
 
     /// <summary>

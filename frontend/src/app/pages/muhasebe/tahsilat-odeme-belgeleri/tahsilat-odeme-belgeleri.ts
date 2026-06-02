@@ -233,16 +233,34 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
     }
 
     delete(item: TahsilatOdemeBelgesiModel): void {
+        this.iptalEt(item);
+    }
+
+    iptalEt(item: TahsilatOdemeBelgesiModel): void {
         if (!item.id) {
             return;
         }
 
-        this.service.delete(item.id).subscribe({
-            next: () => {
-                this.load();
-                this.loadOzet();
-            },
-            error: (error: unknown) => this.showError(error)
+        this.confirmationService.confirm({
+            message: 'Bu tahsilat/ödeme belgesi iptal edilecek. Varsa cari kapama geri alınacaktır. Devam etmek istiyor musunuz?',
+            header: 'İptal Onayı',
+            icon: 'pi pi-exclamation-triangle',
+            acceptLabel: 'İptal Et',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.service.iptalEt(item.id!).subscribe({
+                    next: () => {
+                        this.load();
+                        this.loadOzet();
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: 'Belge iptal edildi.'
+                        });
+                    },
+                    error: (error: unknown) => this.showError(error)
+                });
+            }
         });
     }
 

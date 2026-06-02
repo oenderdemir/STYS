@@ -31,11 +31,15 @@ export class TahsilatOdemeBelgeleriService {
     }
 
     delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}`).pipe(map((envelope) => {
+        return this.iptalEt(id);
+    }
+
+    iptalEt(id: number): Observable<void> {
+        return this.http.post<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}/iptal`, {}).pipe(map((envelope) => {
             if (envelope.success) {
                 return;
             }
-            throw new Error(tryReadApiMessage(envelope) ?? 'Kayit silinemedi.');
+            throw new Error(tryReadApiMessage(envelope) ?? 'Belge iptal edilemedi.');
         }));
     }
 

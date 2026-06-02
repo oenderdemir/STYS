@@ -34,7 +34,9 @@
                     @if (item.kapatilacakCariHareketId && item.durum === 'Aktif') {
                     <p-button icon="pi pi-undo" size="small" severity="secondary" [outlined]="true" (onClick)="geriAl(item)" />
                     }
-                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
+                    @if (item.durum === 'Aktif') {
+                    <p-button label="İptal Et" icon="pi pi-ban" size="small" severity="danger" [outlined]="true" (onClick)="iptalEt(item)" />
+                    }
                 </div>
             </td>
         </tr>

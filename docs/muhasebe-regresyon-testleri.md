@@ -332,3 +332,51 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: 9f062b0
+
+---
+
+## Faz G - Muhasebe UI/UX Aksiyon İsimleri ve Kritik İşlem Onayları
+
+### Tespit
+- Tahsilat/ödeme ekranında sil aksiyonu iptal davranışıyla eşleşmiyordu.
+- Satış belgesi iptal akışı ve muhasebe fişi taslak/iptal aksiyonları doğru bulundu.
+- Cari, stok, kasa ve banka hareketlerinde fiziksel silme davranışıyla uyumlu sil butonları korunabildi.
+
+### İş Kuralı Kararı
+- İptal/ters kayıt yapan aksiyonlar kullanıcıya "Sil" olarak gösterilmemeli.
+- Fiziksel silme ile işlemsel iptal birbirinden ayrılmalı.
+- İptal edilmiş kayıtlarda iptal aksiyonu görünmemeli.
+
+### Yapılan Değişiklikler
+- Tahsilat/ödeme ekranında sil aksiyonu "İptal Et" olarak güncellendi.
+- Tahsilat/ödeme iptal aksiyonu `pi-ban` ikonu ve iptal onay metniyle uyumlu hale getirildi.
+- Tahsilat/ödeme hizmeti iptal endpointine yönlendirildi.
+- Satış belgesi ve muhasebe fişi aksiyonları kontrol edildi; mevcut metinler doğru bulunduğu için değişiklik yapılmadı.
+
+### Eksik Kalan İş Kuralları
+- Cari, stok, kasa ve banka hareketleri için mevcut fiziksel silme davranışı korundu.
+- Ayrı bir ortak UI aksiyon helper'ı çıkarılmadı.
+- Backend tarafında ek işlem yapılmadı.
+
+### Backend
+- Değişiklik yapılmadı.
+
+### Frontend
+- frontend/src/app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri.ts
+- frontend/src/app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri.html
+- frontend/src/app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri.service.ts
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `npm run build` başarısız.
+- Hata bizim değişikliklerden bağımsız mevcut Angular sorunlarından geldi: `muavin-defter`, `fisler` ve `yevmiye-defteri` bileşenlerinde derleme hataları var.
+
+### Test
+- Satış belgesi ve muhasebe fişi aksiyon metinleri incelendi.
+- Tahsilat/ödeme iptal akışı için frontend build denendi; mevcut repo hataları nedeniyle tamamlanamadı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: 822cbf7

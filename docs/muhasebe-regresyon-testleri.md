@@ -963,4 +963,4 @@ Kritik kontrol:
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `7b2495c`
+- Commit oluşturuldu: `2fb78b4`

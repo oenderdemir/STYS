@@ -485,4 +485,4 @@
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `c8806bc`
+- Commit oluşturuldu: `7628014`

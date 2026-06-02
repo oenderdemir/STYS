@@ -274,4 +274,5 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- `957bd7a` sonrası bu doküman güncellemesi için yeni commit oluşturulacak.
+- Doküman güncellendi.
+- Commit oluşturuldu: 5ab2f84

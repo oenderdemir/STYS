@@ -440,3 +440,49 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `2efe3a8`
+
+---
+
+## Faz H - Muhasebe Teknik Borç / Kod Standartları Temizliği
+
+### Tespit
+- Son fazlarda eklenen dönem kontrolü, tesis scope kontrolü, tarih helperı ve UI aksiyon metinlerinde küçük tutarsızlıklar gözden geçirildi.
+- `muhasebe-fis.model.ts` içinde varsayılan tarih üretiminde `toISOString()` kalıntısı vardı.
+- Kod tabanında build’i bozan yeni bir muhasebe iş kuralı tespit edilmedi.
+
+### Yapılan Değişiklikler
+- `muhasebe-fis.model.ts` içindeki tarih helper’ı local tarih parçalarıyla `yyyy-MM-dd` üretir hale getirildi.
+- `createDefaultFisFilter()` varsayılan tarihleri aynı local helper üzerinden üretir hale getirildi.
+- Faz G-1 dokümanındaki commit bilgisi `2efe3a8` olarak doğrulandı.
+- Yeni iş kuralı eklenmedi; yalnızca küçük ve güvenli standartlaştırma yapıldı.
+
+### Eksik Kalan İş Kuralları
+- Büyük refactor yapılmadı.
+- Mimari değişiklik yapılmadı.
+- Yeni ortak helper çıkarılmadı.
+- Migration gerekmedi.
+
+### Backend
+- Değişiklik yapılmadı.
+
+### Frontend
+- `frontend/src/app/pages/muhasebe/models/muhasebe-fis.model.ts`
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Mevcut warning'ler var, hata yok:
+  - `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs(610,47)` için `CS8629` warning'i var.
+  - initial bundle budget aşıldı.
+  - `kamp-basvuru.scss`, `garson-servis.scss`, `satis-belgeleri.component.scss` için budget warning'leri var.
+
+### Test
+- Backend ve frontend build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `c8806bc`

@@ -15,6 +15,13 @@ export interface MuhasebeFisFilterModel {
     pageSize: number;
 }
 
+function formatLocalDate(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 export function createDefaultFisFilter(): MuhasebeFisFilterModel {
     const today = new Date();
     const year = today.getFullYear();
@@ -26,8 +33,8 @@ export function createDefaultFisFilter(): MuhasebeFisFilterModel {
         tesisId: null,
         maliYil: year,
         donem: null,
-        baslangicTarihi: baslangic.toISOString().split('T')[0],
-        bitisTarihi: bitis.toISOString().split('T')[0],
+        baslangicTarihi: formatLocalDate(baslangic),
+        bitisTarihi: formatLocalDate(bitis),
         fisTipi: null,
         durum: null,
         kaynakModul: null,
@@ -70,10 +77,7 @@ export function formatDateForApi(value: string | Date | null | undefined): strin
             return null;
         }
 
-        const year = value.getFullYear();
-        const month = String(value.getMonth() + 1).padStart(2, '0');
-        const day = String(value.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return formatLocalDate(value);
     }
 
     const normalized = value.trim();
@@ -96,10 +100,7 @@ export function formatDateForApi(value: string | Date | null | undefined): strin
         return normalized;
     }
 
-    const year = parsed.getFullYear();
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return formatLocalDate(parsed);
 }
 
 export const MuhasebeFisDurumlari = {

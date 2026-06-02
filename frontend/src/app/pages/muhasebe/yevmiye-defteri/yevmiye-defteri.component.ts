@@ -10,6 +10,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
+import { ToolbarModule } from 'primeng/toolbar';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
@@ -21,8 +22,6 @@ import {
 } from '../models/muhasebe-fis.model';
 import { YevmiyeDefteriModel, YevmiyeDefteriSatirModel } from '../models/yevmiye-defteri.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
-import { Toolbar } from "primeng/toolbar";
-
 interface DonemSecenek {
     label: string;
     value: number | null;
@@ -94,6 +93,7 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
         TableModule,
         TagModule,
         ToastModule,
+        ToolbarModule,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],

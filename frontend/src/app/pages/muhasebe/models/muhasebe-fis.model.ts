@@ -60,6 +60,28 @@ export function normalizeFisFilter(filter: MuhasebeFisFilterModel): MuhasebeFisF
     return normalized;
 }
 
+export function formatDateForApi(value: string | Date | null | undefined): string | null {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return isNaN(value.getTime()) ? null : value.toISOString().split('T')[0];
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+        return normalized;
+    }
+
+    const parsed = new Date(normalized);
+    return isNaN(parsed.getTime()) ? normalized : parsed.toISOString().split('T')[0];
+}
+
 export const MuhasebeFisDurumlari = {
     Taslak: 'Taslak',
     Onayli: 'Onayli',

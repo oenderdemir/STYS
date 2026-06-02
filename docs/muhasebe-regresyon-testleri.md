@@ -383,3 +383,60 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: 900d6e3
+
+---
+
+## Faz G-1 - Angular Build Hatalarının Düzeltimi
+
+### Tespit
+- `npm run build` sırasında Faz G değişikliklerinden bağımsız mevcut Angular derleme hataları vardı.
+- Hatalar `muhasebe-fisler`, `muavin-defter` ve `yevmiye-defteri` ekranlarındaki PrimeNG toolbar kullanımı, eksik import ve template kapanış hatalarından kaynaklanıyordu.
+- `muhasebe-fisler` ekranında ayrıca `formatDateForApi` export eksikti.
+
+### Hata Nedeni
+- `p-toolbar` kullanan standalone componentlerde `ToolbarModule` importu eksikti.
+- Bazı template'lerde `Class` attribute kullanımı ve kırık HTML blokları Angular parser hatası üretiyordu.
+- `muhasebe-fis.model.ts` içinde kullanılan `formatDateForApi` yardımcı fonksiyonu export edilmemişti.
+
+### Yapılan Değişiklikler
+- `muhasebe-fis.model.ts` içine `formatDateForApi` export'u eklendi.
+- `muhasebe-fisler.component.ts` içinde `ToolbarModule` importu ve standalone imports listesi düzeltildi.
+- `muhasebe-fisler.component.html` içinde `p-toolbar` `styleClass` kullanacak şekilde düzeltildi.
+- `muavin-defter.component.ts` içinde `ToolbarModule` importu eklendi.
+- `muavin-defter.component.html` içinde kırık toolbar HTML yapısı ve `Class` kullanımı düzeltildi.
+- `yevmiye-defteri.component.ts` içinde `ToolbarModule` importu eklendi.
+- `yevmiye-defteri.component.html` içinde `p-toolbar` `styleClass` kullanacak şekilde düzeltildi.
+
+### Eksik Kalan İş Kuralları
+- Muhasebe iş kurallarında değişiklik yapılmadı.
+- Backend tarafında değişiklik yapılmadı.
+- Migration gerekmedi.
+
+### Backend
+- Değişiklik yapılmadı.
+
+### Frontend
+- `frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.ts`
+- `frontend/src/app/pages/muhasebe/fisler/muhasebe-fisler.component.html`
+- `frontend/src/app/pages/muhasebe/models/muhasebe-fis.model.ts`
+- `frontend/src/app/pages/muhasebe/muavin-defter/muavin-defter.component.ts`
+- `frontend/src/app/pages/muhasebe/muavin-defter/muavin-defter.component.html`
+- `frontend/src/app/pages/muhasebe/yevmiye-defteri/yevmiye-defteri.component.ts`
+- `frontend/src/app/pages/muhasebe/yevmiye-defteri/yevmiye-defteri.component.html`
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `npm run build` başarılı.
+- Mevcut warning'ler var, hata yok:
+  - initial bundle budget aşıldı.
+  - `kamp-basvuru.scss`, `garson-servis.scss`, `satis-belgeleri.component.scss` için budget warning'leri var.
+
+### Test
+- Frontend build tekrar çalıştırıldı ve başarıyla tamamlandı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `80b340d`

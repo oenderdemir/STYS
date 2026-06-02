@@ -18,6 +18,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
+import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import {
@@ -31,7 +32,6 @@ import {
 } from '../models/muhasebe-fis.model';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
-import { ToolbarModule } from "primeng/toolbar";
 
 interface TesisSecenek {
     label: string;
@@ -108,6 +108,7 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         TagModule,
         ToastModule,
         TooltipModule,
+        ToolbarModule,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],

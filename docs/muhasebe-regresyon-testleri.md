@@ -230,3 +230,48 @@
 
 ### Commit
 - `957bd7a` commit'i oluşturuldu ve pushlandı.
+
+---
+
+## Faz E-2 - Cari / Tahsilat / Kasa / Banka / Stok Rapor Scope Doğrulaması
+
+### Tespit
+- Cari ekstre/bakiye, tahsilat-ödeme, kasa, banka ve stok rapor akışlarında tesis scope ve aktif kayıt filtresi davranışı mevcut.
+- Faz E-2 kapsamı bu raporların scope kontrolleri ile sınırlıydı.
+- Kritik regresyon hatası bulunmadı.
+
+### İş Kuralı Kararı
+- Raporlar yalnızca kullanıcının erişebildiği tesis ve aktif kayıtlar üzerinden çalışmalı.
+- Cari ekstre/bakiye, tahsilat-ödeme, kasa/banka ve stok özetleri tesis filtresi dışında sonuç üretmemeli.
+- Faz E-2, yevmiye/muavin/mizan dışındaki bu rapor kontrollerini kapsar.
+
+### Yapılan Değişiklikler
+- Kod değişikliği yapılmadı; mevcut servis ve ekran davranışları dokümante edildi.
+- Faz E-2 kapsam notu ve dışarıda bırakılan kontroller açık yazıldı.
+- Faz E-1 ile karışmaması için bölüm başlığı ayrı tutuldu.
+
+### Eksik Kalan İş Kuralları
+- Büyük export altyapısı değişikliği yapılmadı.
+- Yeni muhasebe hesap planı tasarımı yapılmadı.
+- Faz E-1 kapsamı dışındaki raporların ek UI/servis refaktörü gerekirse sonraki fazda ele alınacak.
+
+### Backend
+- Değişiklik yapılmadı.
+
+### Frontend
+- Değişiklik yapılmadı.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` çalıştırılmadı; frontend değişikliği yok.
+- Build sırasında 1 warning var, hata yok.
+
+### Test
+- Kod incelemesi ve backend build doğrulaması yapıldı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- `957bd7a` sonrası bu doküman güncellemesi için yeni commit oluşturulacak.

@@ -2,10 +2,12 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Dtos;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -17,6 +19,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
     private readonly StysAppDbContext _dbContext;
     private readonly ITahsilatOdemeBelgesiRepository _tahsilatOdemeBelgesiRepository;
     private readonly ICariHareketRepository _cariHareketRepository;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IMapper _mapper;
 
@@ -24,12 +27,14 @@ public class CariHareketKapamaService : ICariHareketKapamaService
         StysAppDbContext dbContext,
         ITahsilatOdemeBelgesiRepository tahsilatOdemeBelgesiRepository,
         ICariHareketRepository cariHareketRepository,
+        IMuhasebeDonemService muhasebeDonemService,
         IUserAccessScopeService userAccessScopeService,
         IMapper mapper)
     {
         _dbContext = dbContext;
         _tahsilatOdemeBelgesiRepository = tahsilatOdemeBelgesiRepository;
         _cariHareketRepository = cariHareketRepository;
+        _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
         _mapper = mapper;
     }
@@ -44,7 +49,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
         if (belge is null)
         {
-            throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+            throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
         }
 
         if (belge.CariKartId <= 0)
@@ -80,7 +85,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
         if (kapatilacak is null)
         {
-            throw new BaseException("Kapatilacak cari hareket bulunamadi.", 400);
+            throw new BaseException("Kapama ilişkisi bulunamadı.", 400);
         }
 
         if (kapatilacak.IsDeleted || kapatilacak.Durum != CariHareketDurumlari.Aktif)
@@ -110,7 +115,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
         if (belge.Tutar > kapatilacak.KalanTutar + 0.01m)
         {
-            throw new BaseException("Kapama tutarı kalan tutardan büyük olamaz.", 400);
+            throw new BaseException("Kapama geri alma tutarı cari hareketle uyumsuz.", 400);
         }
 
         var kapamaTutari = Math.Min(belge.Tutar, kapatilacak.KalanTutar);
@@ -156,7 +161,10 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
     public async Task GeriAlAsync(int tahsilatOdemeBelgesiId, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         try
         {
             var belge = await _tahsilatOdemeBelgesiRepository.GetByIdAsync(
@@ -165,13 +173,24 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
             if (belge is null)
             {
-                throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+                throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            }
+
+            if (belge.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+            {
+                throw new BaseException("Tahsilat/ödeme belgesi zaten iptal edilmiş.", 400);
             }
 
             if (belge.CariKartId <= 0)
             {
                 throw new BaseException("Cari kart secimi zorunludur.", 400);
             }
+
+            await MuhasebeDonemKontrolHelper.EnsureOpenPeriodAsync(
+                _muhasebeDonemService,
+                belge.CariKart?.TesisId,
+                belge.BelgeTarihi,
+                cancellationToken);
 
             var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
             if (scope.IsScoped)
@@ -204,7 +223,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
             if (!kapamaHareket.IliskiliCariHareketId.HasValue)
             {
-                throw new BaseException("Iliskili cari hareket bulunamadi.", 400);
+                throw new BaseException("Kapama ilişkisi bulunamadı.", 400);
             }
 
             var faturaHareket = kapamaHareket.IliskiliCariHareket;
@@ -217,7 +236,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
             if (faturaHareket is null)
             {
-                throw new BaseException("Ilişkili cari hareket bulunamadi.", 404);
+                throw new BaseException("Kapama ilişkisi bulunamadı.", 404);
             }
 
             if (faturaHareket.IsDeleted || faturaHareket.Durum != CariHareketDurumlari.Aktif)
@@ -247,7 +266,7 @@ public class CariHareketKapamaService : ICariHareketKapamaService
 
             if (kapamaTutari > faturaHareket.KapananTutar + 0.01m)
             {
-                throw new BaseException("Geri alma tutarı kapanan tutardan büyük olamaz.", 400);
+                throw new BaseException("Kapama geri alma tutarı cari hareketle uyumsuz.", 400);
             }
 
             var orijinalTutar = faturaHareket.BorcTutari > 0m ? faturaHareket.BorcTutari : faturaHareket.AlacakTutari;
@@ -256,13 +275,25 @@ public class CariHareketKapamaService : ICariHareketKapamaService
             faturaHareket.KapandiMi = faturaHareket.KalanTutar <= 0.01m;
 
             kapamaHareket.Durum = CariHareketDurumlari.Iptal;
+            kapamaHareket.KapananTutar = 0m;
+            kapamaHareket.KalanTutar = 0m;
+            kapamaHareket.KapandiMi = true;
+            kapamaHareket.IliskiliCariHareketId = null;
+            kapamaHareket.IliskiliCariHareket = null;
             belge.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             throw;
         }
     }

@@ -1,10 +1,13 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariHareketler.Dtos;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariKartlar.Repositories;
+using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -14,13 +17,20 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
 {
     private readonly ICariHareketRepository _repository;
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public CariHareketService(ICariHareketRepository repository, ICariKartRepository cariKartRepository, IUserAccessScopeService userAccessScopeService, IMapper mapper)
+    public CariHareketService(
+        ICariHareketRepository repository,
+        ICariKartRepository cariKartRepository,
+        IMuhasebeDonemService muhasebeDonemService,
+        IUserAccessScopeService userAccessScopeService,
+        IMapper mapper)
         : base(repository, mapper)
     {
         _repository = repository;
         _cariKartRepository = cariKartRepository;
+        _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
     }
 
@@ -97,7 +107,7 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
 
     public override async Task<CariHareketDto> AddAsync(CariHareketDto dto)
     {
-        await ValidateAsync(dto.CariKartId, dto.Durum);
+        await ValidateAsync(dto.CariKartId, dto.Durum, dto.HareketTarihi);
         return await base.AddAsync(dto);
     }
 
@@ -108,7 +118,11 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
             throw new BaseException("Cari hareket id zorunludur.", 400);
         }
 
-        await ValidateAsync(dto.CariKartId, dto.Durum);
+        var existing = await _repository.GetByIdAsync(dto.Id.Value)
+            ?? throw new BaseException("Cari hareket bulunamadı.", 404);
+
+        await EnsureOpenPeriodAsync(existing.CariKartId, existing.HareketTarihi, CancellationToken.None);
+        await ValidateAsync(dto.CariKartId, dto.Durum, dto.HareketTarihi);
         return await base.UpdateAsync(dto);
     }
 
@@ -158,7 +172,7 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         return Task.CompletedTask;
     }
 
-    private async Task ValidateAsync(int cariKartId, string durum)
+    private async Task ValidateAsync(int cariKartId, string durum, DateTime hareketTarihi)
     {
         if (cariKartId <= 0)
         {
@@ -189,6 +203,13 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         {
             throw new BaseException("Durum gecersiz.", 400);
         }
+
+        await EnsureOpenPeriodAsync(cari.TesisId, hareketTarihi, CancellationToken.None);
+    }
+
+    private async Task EnsureOpenPeriodAsync(int? tesisId, DateTime tarih, CancellationToken cancellationToken)
+    {
+        await MuhasebeDonemKontrolHelper.EnsureOpenPeriodAsync(_muhasebeDonemService, tesisId, tarih, cancellationToken);
     }
 
     private async Task<(STYS.Muhasebe.CariKartlar.Entities.CariKart Cari, List<CariHareket> Hareketler)> GetScopedCariHareketlerAsync(

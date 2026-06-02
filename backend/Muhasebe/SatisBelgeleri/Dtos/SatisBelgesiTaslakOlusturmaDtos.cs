@@ -48,9 +48,17 @@ public class SatisBelgesiTaslakSatirRequest
     public decimal BirimFiyat { get; set; }
 
     public KdvUygulamaTipi KdvUygulamaTipi { get; set; } = KdvUygulamaTipi.Kdvli;
+    public decimal IndirimOrani { get; set; }
+    public decimal IndirimTutari { get; set; }
     public decimal KdvOrani { get; set; }
 
     public int? KdvIstisnaTanimId { get; set; }
+    public decimal OtvOrani { get; set; }
+    public decimal OtvTutari { get; set; }
+    public decimal OivOrani { get; set; }
+    public decimal OivTutari { get; set; }
+    public decimal KonaklamaVergisiOrani { get; set; }
+    public decimal KonaklamaVergisiTutari { get; set; }
 
     public string? KaynakSatirId { get; set; }
 }

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { AutoCompleteModule } from 'primeng/autocomplete';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -11,6 +11,7 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { MenuModule } from 'primeng/menu';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TabsModule } from 'primeng/tabs';
@@ -63,6 +64,16 @@ import {
     getMusteriDisplayName,
 } from '../models/satis-belgesi.model';
 
+type SatirParametreKey = 'indirim' | 'tevkifat' | 'otv' | 'oiv' | 'konaklamaVergisi';
+
+interface SatirParametreDurumu {
+    indirim: boolean;
+    tevkifat: boolean;
+    otv: boolean;
+    oiv: boolean;
+    konaklamaVergisi: boolean;
+}
+
 @Component({
     selector: 'app-satis-belgeleri',
     standalone: true,
@@ -78,6 +89,7 @@ import {
         DialogModule,
         InputNumberModule,
         InputTextModule,
+        MenuModule,
         SelectModule,
         TableModule,
         TabsModule,
@@ -107,6 +119,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly router = inject(Router);
     private readonly route = inject(ActivatedRoute);
     private readonly destroyRef = inject(DestroyRef);
+    private readonly satirParametreDurumlari = new WeakMap<CreateSatisBelgesiSatiriRequest, SatirParametreDurumu>();
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -655,6 +668,7 @@ export class SatisBelgeleriComponent implements OnInit {
             satir.birim = this.resolveDefaultBirim();
         });
         this.formData.set(empty);
+        this.initializeSatirParametreDurumlari(empty.satirlar);
         this.selectedCari.set(null);
         this.manuelMusteriGirisi.set(false);
         this.filteredCariKartlar = [...this.cariKartlar()];
@@ -689,7 +703,7 @@ export class SatisBelgeleriComponent implements OnInit {
             kurumsalMi: belge.kurumsalMi,
             aciklama: belge.aciklama,
             belgeNo: belge.belgeNo,
-            satirlar: belge.satirlar.map(s => ({
+                satirlar: belge.satirlar.map(s => ({
                 siraNo: s.siraNo,
                 satirTipi: s.satirTipi,
                 aciklama: s.aciklama,
@@ -698,18 +712,26 @@ export class SatisBelgeleriComponent implements OnInit {
                 birim: s.birim || this.resolveDefaultBirim(),
                 miktar: s.miktar,
                 birimFiyat: s.birimFiyat,
+                indirimOrani: s.indirimOrani,
                 indirimTutari: s.indirimTutari,
                 kdvUygulamaTipi: s.kdvUygulamaTipi,
                 kdvIstisnaTanimId: s.kdvIstisnaTanimId,
                 kdvOrani: s.kdvOrani,
                 tevkifatPay: s.tevkifatPay ?? null,
                 tevkifatPayda: s.tevkifatPayda ?? null,
+                otvOrani: s.otvOrani,
+                otvTutari: s.otvTutari,
+                oivOrani: s.oivOrani,
+                oivTutari: s.oivTutari,
+                konaklamaVergisiOrani: s.konaklamaVergisiOrani,
+                konaklamaVergisiTutari: s.konaklamaVergisiTutari,
                 kaynakSatirId: s.kaynakSatirId
             }))
         });
         this.syncSelectedCariFromBelge(belge);
         this.manuelMusteriGirisi.set(false);
         this.filteredCariKartlar = [...this.cariKartlar()];
+        this.initializeSatirParametreDurumlari(this.formData().satirlar);
         this.activeTab.set('0');
         this.dialogVisible.set(true);
     }
@@ -738,7 +760,7 @@ export class SatisBelgeleriComponent implements OnInit {
             const payload = {
                 ...this.formData(),
                 tesisId,
-                satirlar: this.formData().satirlar.map(s => ({ ...s }))
+                satirlar: this.formData().satirlar.map(s => this.mapSatirToRequest(s))
             };
             const updateReq: UpdateSatisBelgesiRequest = {
                 belgeNo: payload.belgeNo,
@@ -775,7 +797,7 @@ export class SatisBelgeleriComponent implements OnInit {
             const payload = {
                 ...this.formData(),
                 tesisId,
-                satirlar: this.formData().satirlar.map(s => ({ ...s }))
+                satirlar: this.formData().satirlar.map(s => this.mapSatirToRequest(s))
             };
             this.service.create(payload).subscribe({
                 next: () => {
@@ -895,6 +917,7 @@ export class SatisBelgeleriComponent implements OnInit {
         const yeniSatir = createEmptySatisBelgesiSatiri();
         yeniSatir.siraNo = satirlar.length + 1;
         yeniSatir.birim = this.resolveDefaultBirim();
+        this.initializeSatirParametreDurumlari([yeniSatir]);
         satirlar.push(yeniSatir);
         this.formData.update(f => ({ ...f, satirlar }));
     }
@@ -924,8 +947,152 @@ export class SatisBelgeleriComponent implements OnInit {
         }
     }
 
+    private initializeSatirParametreDurumlari(satirlar: CreateSatisBelgesiSatiriRequest[]): void {
+        satirlar.forEach(satir => this.getSatirParametreDurumu(satir));
+    }
+
+    private getSatirParametreDurumu(satir: CreateSatisBelgesiSatiriRequest): SatirParametreDurumu {
+        const mevcut = this.satirParametreDurumlari.get(satir);
+        if (mevcut) {
+            return mevcut;
+        }
+
+        const yeniDurum: SatirParametreDurumu = {
+            indirim: this.getSatirIndirimOrani(satir) > 0 || this.getSatirIndirimTutari(satir) > 0,
+            tevkifat: satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli ||
+                this.getSatirTevkifatTutari(satir) > 0 ||
+                this.hasTevkifatliParametre(satir),
+            otv: this.getSatirOtvOrani(satir) > 0 || this.getSatirOtvTutari(satir) > 0,
+            oiv: this.getSatirOivOrani(satir) > 0 || this.getSatirOivTutari(satir) > 0,
+            konaklamaVergisi: this.getSatirKonaklamaVergisiOrani(satir) > 0 || this.getSatirKonaklamaVergisiTutari(satir) > 0
+        };
+
+        this.satirParametreDurumlari.set(satir, yeniDurum);
+        return yeniDurum;
+    }
+
+    private hasTevkifatliParametre(satir: CreateSatisBelgesiSatiriRequest): boolean {
+        return (satir.tevkifatPay ?? 0) > 0 && (satir.tevkifatPayda ?? 0) > 0;
+    }
+
+    private setSatirParametreGorunurlugu(
+        satir: CreateSatisBelgesiSatiriRequest,
+        parametre: SatirParametreKey,
+        visible: boolean): void {
+        const durum = this.getSatirParametreDurumu(satir);
+        durum[parametre] = visible;
+
+        if (!visible) {
+            this.clearSatirParametre(satir, parametre);
+        } else if (parametre === 'tevkifat') {
+            if (satir.kdvUygulamaTipi !== KdvUygulamaTipi.Tevkifatli) {
+                this.onSatirKdvTipiChange(satir, KdvUygulamaTipi.Tevkifatli);
+            }
+        }
+    }
+
+    private clearSatirParametre(satir: CreateSatisBelgesiSatiriRequest, parametre: SatirParametreKey): void {
+        switch (parametre) {
+            case 'indirim':
+                satir.indirimOrani = 0;
+                satir.indirimTutari = 0;
+                break;
+            case 'tevkifat':
+                satir.tevkifatPay = null;
+                satir.tevkifatPayda = null;
+                if (satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli) {
+                    this.onSatirKdvTipiChange(satir, KdvUygulamaTipi.Kdvli);
+                }
+                break;
+            case 'otv':
+                satir.otvOrani = 0;
+                satir.otvTutari = 0;
+                break;
+            case 'oiv':
+                satir.oivOrani = 0;
+                satir.oivTutari = 0;
+                break;
+            case 'konaklamaVergisi':
+                satir.konaklamaVergisiOrani = 0;
+                satir.konaklamaVergisiTutari = 0;
+                break;
+        }
+    }
+
+    private mapSatirToRequest(satir: CreateSatisBelgesiSatiriRequest): CreateSatisBelgesiSatiriRequest {
+        const brut = this.getSatirBrutTutar(satir);
+        const indirimOrani = this.getSatirIndirimOrani(satir);
+        const indirimTutari = this.calculateRateBasedAmount(brut, indirimOrani, satir.indirimTutari);
+        const matrah = Math.max(0, brut - indirimTutari);
+        const otvOrani = this.getSatirOtvOrani(satir);
+        const otvTutari = this.calculateRateBasedAmount(matrah, otvOrani, satir.otvTutari);
+        const oivOrani = this.getSatirOivOrani(satir);
+        const oivTutari = this.calculateRateBasedAmount(matrah, oivOrani, satir.oivTutari);
+        const konaklamaVergisiOrani = this.getSatirKonaklamaVergisiOrani(satir);
+        const konaklamaVergisiTutari = this.calculateRateBasedAmount(matrah, konaklamaVergisiOrani, satir.konaklamaVergisiTutari);
+
+        return {
+            ...satir,
+            indirimOrani,
+            indirimTutari,
+            otvOrani,
+            otvTutari,
+            oivOrani,
+            oivTutari,
+            konaklamaVergisiOrani,
+            konaklamaVergisiTutari
+        };
+    }
+
+    isSatirParametreGorunur(satir: CreateSatisBelgesiSatiriRequest, parametre: SatirParametreKey): boolean {
+        return this.getSatirParametreDurumu(satir)[parametre];
+    }
+
+    hasSatirParametreleri(satir: CreateSatisBelgesiSatiriRequest): boolean {
+        const durum = this.getSatirParametreDurumu(satir);
+        return durum.indirim || durum.tevkifat || durum.otv || durum.oiv || durum.konaklamaVergisi;
+    }
+
+    toggleSatirParametre(satir: CreateSatisBelgesiSatiriRequest, parametre: SatirParametreKey): void {
+        const durum = this.getSatirParametreDurumu(satir);
+        this.setSatirParametreGorunurlugu(satir, parametre, !durum[parametre]);
+    }
+
+    getSatirParametreMenuItems(satir: CreateSatisBelgesiSatiriRequest): MenuItem[] {
+        const buildItem = (parametre: SatirParametreKey, label: string): MenuItem => ({
+            label: this.isSatirParametreGorunur(satir, parametre) ? `${label} Kaldır` : `${label} Ekle`,
+            icon: this.isSatirParametreGorunur(satir, parametre) ? 'pi pi-times' : 'pi pi-plus',
+            command: () => this.toggleSatirParametre(satir, parametre)
+        });
+
+        return [
+            buildItem('indirim', 'İndirim'),
+            buildItem('tevkifat', 'Tevkifat Oranı'),
+            buildItem('otv', 'ÖTV'),
+            buildItem('oiv', 'ÖİV'),
+            buildItem('konaklamaVergisi', 'Konaklama Vergisi')
+        ];
+    }
+
     private normalizeLookupValue(value?: string | null): string {
         return (value ?? '').trim().toLocaleLowerCase('tr-TR');
+    }
+
+    private normalizeRate(rate?: number | null): number {
+        return Math.max(0, rate ?? 0);
+    }
+
+    private calculateRateBasedAmount(baseAmount: number, rate?: number | null, fallbackAmount?: number | null): number {
+        const normalizedRate = this.normalizeRate(rate);
+        if (normalizedRate > 0) {
+            return Math.max(0, Math.round(baseAmount * normalizedRate / 100 * 100) / 100);
+        }
+
+        return Math.max(0, fallbackAmount ?? 0);
+    }
+
+    getSatirBrutTutar(satir: CreateSatisBelgesiSatiriRequest): number {
+        return Math.max(0, (satir.miktar ?? 0) * (satir.birimFiyat ?? 0));
     }
 
     resolveDefaultBirim(): string {
@@ -956,12 +1123,27 @@ export class SatisBelgeleriComponent implements OnInit {
         return secenekler;
     }
 
+    getSatirIndirimOrani(satir: CreateSatisBelgesiSatiriRequest): number {
+        const direct = this.normalizeRate(satir.indirimOrani);
+        if (direct > 0) {
+            return direct;
+        }
+
+        const brut = this.getSatirBrutTutar(satir);
+        if (brut <= 0 || this.getSatirIndirimTutari(satir) <= 0) {
+            return 0;
+        }
+
+        return Math.max(0, Math.round((this.getSatirIndirimTutari(satir) * 100 / brut) * 10000) / 10000);
+    }
+
     getSatirIndirimTutari(satir: CreateSatisBelgesiSatiriRequest): number {
-        return Math.max(0, satir.indirimTutari ?? 0);
+        const brut = this.getSatirBrutTutar(satir);
+        return this.calculateRateBasedAmount(brut, satir.indirimOrani, satir.indirimTutari);
     }
 
     getSatirMatrah(satir: CreateSatisBelgesiSatiriRequest): number {
-        const brut = (satir.miktar ?? 0) * (satir.birimFiyat ?? 0);
+        const brut = this.getSatirBrutTutar(satir);
         const indirim = this.getSatirIndirimTutari(satir);
         return Math.max(0, brut - indirim);
     }
@@ -999,6 +1181,63 @@ export class SatisBelgeleriComponent implements OnInit {
         return this.getSatirBrutKdvTutari(satir);
     }
 
+    getSatirOtvOrani(satir: CreateSatisBelgesiSatiriRequest): number {
+        const direct = this.normalizeRate(satir.otvOrani);
+        if (direct > 0) {
+            return direct;
+        }
+
+        const tutar = this.getSatirOtvTutari(satir);
+        const matrah = this.getSatirMatrah(satir);
+        if (matrah <= 0 || tutar <= 0) {
+            return 0;
+        }
+
+        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+    }
+
+    getSatirOtvTutari(satir: CreateSatisBelgesiSatiriRequest): number {
+        return this.calculateRateBasedAmount(this.getSatirMatrah(satir), satir.otvOrani, satir.otvTutari);
+    }
+
+    getSatirOivOrani(satir: CreateSatisBelgesiSatiriRequest): number {
+        const direct = this.normalizeRate(satir.oivOrani);
+        if (direct > 0) {
+            return direct;
+        }
+
+        const tutar = this.getSatirOivTutari(satir);
+        const matrah = this.getSatirMatrah(satir);
+        if (matrah <= 0 || tutar <= 0) {
+            return 0;
+        }
+
+        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+    }
+
+    getSatirOivTutari(satir: CreateSatisBelgesiSatiriRequest): number {
+        return this.calculateRateBasedAmount(this.getSatirMatrah(satir), satir.oivOrani, satir.oivTutari);
+    }
+
+    getSatirKonaklamaVergisiOrani(satir: CreateSatisBelgesiSatiriRequest): number {
+        const direct = this.normalizeRate(satir.konaklamaVergisiOrani);
+        if (direct > 0) {
+            return direct;
+        }
+
+        const tutar = this.getSatirKonaklamaVergisiTutari(satir);
+        const matrah = this.getSatirMatrah(satir);
+        if (matrah <= 0 || tutar <= 0) {
+            return 0;
+        }
+
+        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+    }
+
+    getSatirKonaklamaVergisiTutari(satir: CreateSatisBelgesiSatiriRequest): number {
+        return this.calculateRateBasedAmount(this.getSatirMatrah(satir), satir.konaklamaVergisiOrani, satir.konaklamaVergisiTutari);
+    }
+
     previewSatirToplami(satir: CreateSatisBelgesiSatiriRequest): number {
         return this.getSatirMatrah(satir) + this.previewNetKdvTutari(satir);
     }
@@ -1021,6 +1260,18 @@ export class SatisBelgeleriComponent implements OnInit {
 
     previewToplamNetKdv(): number {
         return this.previewToplamKdv() - this.previewToplamTevkifatTutari();
+    }
+
+    previewToplamOtvTutari(): number {
+        return this.formData().satirlar.reduce((sum, s) => sum + this.getSatirOtvTutari(s), 0);
+    }
+
+    previewToplamOivTutari(): number {
+        return this.formData().satirlar.reduce((sum, s) => sum + this.getSatirOivTutari(s), 0);
+    }
+
+    previewToplamKonaklamaVergisiTutari(): number {
+        return this.formData().satirlar.reduce((sum, s) => sum + this.getSatirKonaklamaVergisiTutari(s), 0);
     }
 
     previewGenelToplam(): number {
@@ -1088,11 +1339,13 @@ export class SatisBelgeleriComponent implements OnInit {
             if (!satir.kdvOrani || satir.kdvOrani <= 0) {
                 satir.kdvOrani = 20;
             }
+            this.setSatirParametreGorunurlugu(satir, 'tevkifat', true);
             return;
         }
 
         satir.tevkifatPay = null;
         satir.tevkifatPayda = null;
+        this.setSatirParametreGorunurlugu(satir, 'tevkifat', false);
 
         if (value === KdvUygulamaTipi.Kdvli) {
             satir.kdvIstisnaTanimId = null;

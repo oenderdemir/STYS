@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using STYS.Infrastructure.EntityFramework;
 
@@ -11,9 +12,11 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    partial class StysAppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260601182315_AddSatisBelgesiSatirEkParametreleri")]
+    partial class AddSatisBelgesiSatirEkParametreleri
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3000,6 +3003,72 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("CariKartlar", "muhasebe");
+                });
+
+            modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKartBankaHesabi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("BankaAdi")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("CariKartId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("HesapNo")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Iban")
+                        .HasMaxLength(34)
+                        .HasColumnType("nvarchar(34)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("SubeAdi")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CariKartId")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("Iban")
+                        .HasFilter("[IsDeleted] = 0 AND [Iban] IS NOT NULL");
+
+                    b.HasIndex("CariKartId", "BankaAdi", "SubeAdi", "HesapNo")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("CariKartBankaHesaplari", "muhasebe");
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKartYetkiliKisi", b =>
@@ -7742,6 +7811,17 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Navigation("Tesis");
                 });
 
+            modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKartBankaHesabi", b =>
+                {
+                    b.HasOne("STYS.Muhasebe.CariKartlar.Entities.CariKart", "CariKart")
+                        .WithMany("BankaHesaplari")
+                        .HasForeignKey("CariKartId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CariKart");
+                });
+
             modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKartYetkiliKisi", b =>
                 {
                     b.HasOne("STYS.Muhasebe.CariKartlar.Entities.CariKart", "CariKart")
@@ -8697,6 +8777,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
             modelBuilder.Entity("STYS.Muhasebe.CariKartlar.Entities.CariKart", b =>
                 {
                     b.Navigation("BankaHareketler");
+
+                    b.Navigation("BankaHesaplari");
 
                     b.Navigation("CariHareketler");
 

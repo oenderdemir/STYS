@@ -50,14 +50,6 @@
       border-radius: var(--border-radius);
     }
 
-    .cari-selection-area {
-      margin-bottom: 1rem;
-      padding: 1rem;
-      background: var(--primary-50);
-      border: 1px solid var(--primary-200);
-      border-radius: var(--border-radius);
-    }
-
     .satir-card {
       width: 100%;
       margin-bottom: .75rem;
@@ -101,6 +93,7 @@
         .field-span-6 { grid-column: span 6; }
         .field-span-12 { grid-column: span 12; }
       }
+
     }
   }
 
@@ -149,18 +142,6 @@
     }
   }
 
-  .dialog-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    width: 100%;
-
-    .footer-right {
-      display: flex;
-      gap: .5rem;
-    }
-  }
-
   input[readonly],
   textarea[readonly] {
     cursor: default;
@@ -175,6 +156,10 @@
     .satir-card .satir-grid {
       grid-template-columns: 1fr 1fr;
       gap: .5rem;
+    }
+
+    .satir-card .satir-parametre-panel .satir-parametre-grid {
+      grid-template-columns: 1fr;
     }
 
     .satir-card .satir-grid .field-span-2,

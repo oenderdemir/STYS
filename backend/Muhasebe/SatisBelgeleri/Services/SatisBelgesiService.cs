@@ -1006,8 +1006,29 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (request.IndirimTutari < 0)
             throw new BaseException($"İndirim tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
 
+        if (request.IndirimOrani < 0)
+            throw new BaseException($"İndirim oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
         if (request.KdvOrani < 0)
             throw new BaseException($"KDV oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.OtvOrani < 0)
+            throw new BaseException($"ÖTV oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.OtvTutari < 0)
+            throw new BaseException($"ÖTV tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.OivOrani < 0)
+            throw new BaseException($"ÖİV oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.OivTutari < 0)
+            throw new BaseException($"ÖİV tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.KonaklamaVergisiOrani < 0)
+            throw new BaseException($"Konaklama vergisi oranı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+        if (request.KonaklamaVergisiTutari < 0)
+            throw new BaseException($"Konaklama vergisi tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
 
         // Bilinmeyen KDV uygulama tipi
         if (!DesteklenenKdvUygulamaTipleri.Contains(request.KdvUygulamaTipi))
@@ -1261,10 +1282,33 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     //  Private — Satır Oluşturma ve Hesaplama
     // ──────────────────────────────────────────────
 
+    private static decimal ResolveRateBasedAmount(decimal baseAmount, decimal rate, decimal fallbackAmount)
+    {
+        if (rate > 0)
+        {
+            return Math.Round(baseAmount * rate / 100m, 2, MidpointRounding.AwayFromZero);
+        }
+
+        return Math.Max(0m, fallbackAmount);
+    }
+
+    private static decimal ResolveLineRate(decimal amount, decimal baseAmount)
+    {
+        if (amount <= 0 || baseAmount <= 0)
+        {
+            return 0m;
+        }
+
+        return Math.Round(amount * 100m / baseAmount, 4, MidpointRounding.AwayFromZero);
+    }
+
     private static SatisBelgesiSatiri CreateSatirFromRequest(CreateSatisBelgesiSatiriRequest request)
     {
-        var indirimTutari = request.IndirimTutari;
         var brutMatrah = request.Miktar * request.BirimFiyat;
+        var indirimOrani = request.IndirimOrani > 0
+            ? request.IndirimOrani
+            : ResolveLineRate(request.IndirimTutari, brutMatrah);
+        var indirimTutari = ResolveRateBasedAmount(brutMatrah, indirimOrani, request.IndirimTutari);
         if (indirimTutari > brutMatrah)
         {
             throw new BaseException("İndirim tutarı satır matrahını aşamaz.", errorCode: 400);
@@ -1284,6 +1328,21 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             tevkifatTutari = kdvTutari * request.TevkifatPay.Value / request.TevkifatPayda.Value;
         }
 
+        var otvOrani = request.OtvOrani > 0
+            ? request.OtvOrani
+            : ResolveLineRate(request.OtvTutari, matrah);
+        var otvTutari = ResolveRateBasedAmount(matrah, otvOrani, request.OtvTutari);
+
+        var oivOrani = request.OivOrani > 0
+            ? request.OivOrani
+            : ResolveLineRate(request.OivTutari, matrah);
+        var oivTutari = ResolveRateBasedAmount(matrah, oivOrani, request.OivTutari);
+
+        var konaklamaVergisiOrani = request.KonaklamaVergisiOrani > 0
+            ? request.KonaklamaVergisiOrani
+            : ResolveLineRate(request.KonaklamaVergisiTutari, matrah);
+        var konaklamaVergisiTutari = ResolveRateBasedAmount(matrah, konaklamaVergisiOrani, request.KonaklamaVergisiTutari);
+
         var satirToplami = matrah + (kdvTutari - tevkifatTutari);
 
         return new SatisBelgesiSatiri
@@ -1296,6 +1355,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             Birim = string.IsNullOrWhiteSpace(request.Birim) ? "Adet" : request.Birim.Trim(),
             Miktar = request.Miktar,
             BirimFiyat = request.BirimFiyat,
+            IndirimOrani = indirimOrani,
             IndirimTutari = indirimTutari,
             Matrah = matrah,
             KdvUygulamaTipi = (KdvUygulamaTipi)request.KdvUygulamaTipi,
@@ -1305,6 +1365,12 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             TevkifatPay = request.TevkifatPay,
             TevkifatPayda = request.TevkifatPayda,
             TevkifatTutari = tevkifatTutari,
+            OtvOrani = otvOrani,
+            OtvTutari = otvTutari,
+            OivOrani = oivOrani,
+            OivTutari = oivTutari,
+            KonaklamaVergisiOrani = konaklamaVergisiOrani,
+            KonaklamaVergisiTutari = konaklamaVergisiTutari,
             SatirToplami = satirToplami,
             KaynakSatirId = request.KaynakSatirId
         };

@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Depolar.Repositories;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.Kdv.Services;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Repositories;
@@ -20,6 +22,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private readonly IDepoRepository _depoRepository;
     private readonly ITasinirKartRepository _tasinirKartRepository;
     private readonly ICariKartRepository _cariKartRepository;
+    private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IKdvUygulamaService _kdvUygulamaService;
 
@@ -28,6 +31,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         IDepoRepository depoRepository,
         ITasinirKartRepository tasinirKartRepository,
         ICariKartRepository cariKartRepository,
+        IMuhasebeDonemService muhasebeDonemService,
         IUserAccessScopeService userAccessScopeService,
         IKdvUygulamaService kdvUygulamaService,
         IMapper mapper)
@@ -37,6 +41,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         _depoRepository = depoRepository;
         _tasinirKartRepository = tasinirKartRepository;
         _cariKartRepository = cariKartRepository;
+        _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
         _kdvUygulamaService = kdvUygulamaService;
     }
@@ -56,6 +61,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Stok hareket id zorunludur.", 400);
         }
 
+        var existing = await _repository.GetByIdAsync(dto.Id.Value)
+            ?? throw new BaseException("Stok hareket bulunamadı.", 404);
+
+        await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
         await NormalizeAndValidateAsync(dto, dto.Id);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
@@ -235,6 +244,13 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             dto.HareketTarihi = DateTime.UtcNow;
         }
+
+        await EnsureOpenPeriodAsync(depo.TesisId, dto.HareketTarihi, CancellationToken.None);
+    }
+
+    private async Task EnsureOpenPeriodAsync(int? tesisId, DateTime tarih, CancellationToken cancellationToken)
+    {
+        await MuhasebeDonemKontrolHelper.EnsureOpenPeriodAsync(_muhasebeDonemService, tesisId, tarih, cancellationToken);
     }
 
     private async Task ApplyKdvAsync(StokHareketDto dto)

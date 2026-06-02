@@ -901,4 +901,4 @@ Kritik kontrol:
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `bc9ee9a`
+- Commit oluşturuldu: `a551018`

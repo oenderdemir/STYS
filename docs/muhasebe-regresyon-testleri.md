@@ -902,3 +902,65 @@ Kritik kontrol:
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `a551018`
+
+---
+
+## Faz L - Muhasebe Redundant Entity / DTO / Service Audit
+
+### Tespit
+- `backend/Muhasebe` ve `frontend/src/app/pages/muhasebe` altındaki entity, DTO, service, helper ve model yüzeyi tarandı.
+- Sınıf seviyesinde güvenle silinebilecek redundant yapı doğrulanmadı; benzer görünen çoğu sınıf farklı API/ekran/rapor sözleşmesi taşıyor.
+- Tek güvenli temizlik olarak `frontend/src/app/pages/muhasebe/models/muhasebe-fis.model.ts` içindeki kullanılmayan `month` değişkeni kaldırıldı.
+- `toISOString`, `Class="`, `from "primeng/toolbar"`, `import { Toolbar }`, `dateFormat="yy-mm-dd"` ve `type="date"` kalıntıları bulunmadı.
+- `EnsureOpenPeriodAsync`, `EnsureCanAccessTesisAsync` ve `EnsureCanAccessReportTesisAsync` isimli guard kalıpları tekrar ediyor; ancak bağlamları farklı olduğu için şu aşamada birleştirilmedi.
+
+### Redundant Adaylar
+- Kesin kaldırılabilir aday: `frontend/src/app/pages/muhasebe/models/muhasebe-fis.model.ts` içindeki kullanılmayan `month` değişkeni.
+- Güvenli aksiyon: kaldırıldı.
+- Sınıf/dosya seviyesinde doğrulanmış redundant entity/DTO/service bulunmadı.
+
+### Benzer Ama Korunacak Sınıflar
+- `backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiDtos.cs` ve `backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiTaslakOlusturmaDtos.cs` benzer alanlar taşıyor, fakat request/response sözleşmeleri farklı.
+- `backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs` içindeki `YevmiyeDefteriDto`, `MuavinDefterDto`, `MizanDto` ve frontend report modelleri benzer filtre alanları içeriyor, ama farklı rapor bağlamlarında kullanılıyor.
+- `backend/Muhasebe/CariKartlar/Dtos/CariKartDtos.cs` ile `CariKartYetkiliKisiDto` birlikte kalmalı; `BankaAdi`/`Iban` alanları tekil açılış bilgisi olarak halen kullanılıyor.
+- `backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri` ve `backend/Muhasebe/MuhasebeVergiHesapEslemeleri` benzer adlandırma taşısa da işlevsel olarak farklı eşleme alanları.
+
+### İsimlendirme Karışıklıkları
+- `SatisBelgesi` / `Fatura` / `Belge` adları aynı iş akışında karışabiliyor; UI ve DTO sözleşmelerinde `SatisBelgesi` standardı korunmalı.
+- `delete` / `iptalEt` / `GeriAl` aksiyon adları işlemsel olarak farklı; özellikle tahsilat/ödeme akışında `delete` yerine `iptalEt` tercih edilmeli.
+- `Hesap`, `KasaBankaHesap`, `CariKart` ve `CariHareket` isimleri birbirine yakın ama farklı varlıklar; servis ve DTO isimleri buna göre ayrık tutulmalı.
+
+### Güvenli Temizlik Önerileri
+- Kullanılmayan local değişkenler ve importlar sadece derleyici uyarısı üretmiyorsa kaldırılmalı.
+- Tekrarlayan tarih helperları için ortak isimlendirme korunabilir, fakat davranış değiştirilecekse ayrı faz açılmalı.
+- Doküman referansları ve commit hash'leri canlıda yanlış yönlendirme yapmayacak şekilde güncel tutulmalı.
+
+### Riskli Refactor Önerileri
+- `SatisBelgesiDtos.cs` içindeki request/response sınıflarını tek modelde birleştirmek API contract ve AutoMapper etkisi nedeniyle risklidir.
+- `CariKart` içindeki tekil banka bilgilerini çoklu banka ilişkisine dönüştürmek migration gerektirir; bu fazda yapılmamalı.
+- `Normalize*Filter` kalıplarını tek yardımcıya toplamak frontend ve backend rapor davranışını etkileyebilir; ayrı faz gerektirir.
+
+### Backend
+- Yeni iş kuralı veya migration yok.
+- Guard helper tekrarları ve rapor DTO farklılıkları analiz edildi.
+
+### Frontend
+- Muhasebe model/service/dto yüzeyi tarandı.
+- `formatDateForApi` tekil yardımcı olarak kaldı; duplicate tarih helper bulunmadı.
+
+### Migration
+- Migration gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Warning'ler mevcut ve kabul edilmiş durumda.
+
+### Test
+- Build doğrulaması yapıldı.
+- `toISOString`, eski PrimeNG toolbar kullanımı ve yanlış `Class` attribute kalıntıları için tarama yapıldı; kalıntı bulunmadı.
+- Manuel runtime test yapılmadı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `7b2495c`

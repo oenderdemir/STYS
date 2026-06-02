@@ -25,7 +25,6 @@ function formatLocalDate(value: Date): string {
 export function createDefaultFisFilter(): MuhasebeFisFilterModel {
     const today = new Date();
     const year = today.getFullYear();
-    const month = today.getMonth() + 1;
     const baslangic = new Date(year, 0, 1);
     const bitis = new Date(year, 11, 31);
 

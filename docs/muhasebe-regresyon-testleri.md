@@ -439,4 +439,4 @@
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `80b340d`
+- Commit oluşturuldu: `2efe3a8`

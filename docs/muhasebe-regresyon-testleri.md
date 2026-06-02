@@ -188,16 +188,17 @@
 
 ---
 
-## Faz E - Rapor / Defter / Export / Toplam Doğrulaması
+## Faz E-1 - Yevmiye / Muavin / Mizan Scope Doğrulaması
 
 ### Tespit
 - Yevmiye, muavin ve mizan rapor akışlarında filtreler ve export davranışı mevcut.
-- Report endpointleri tesis filtresini bekliyor; backend tarafında yetki kapsamı kontrolü eksikti.
-- Muavin raporunda seçilen hesap için tesis uyumluluğu ayrıca doğrulanmıyordu.
+- Faz E-1 kapsamı yevmiye/muavin/mizan tesis scope kontrolü ile sınırlıydı.
+- Cari ekstre/bakiye, tahsilat-ödeme, kasa/banka/stok rapor kontrolleri Faz E-2'ye bırakıldı.
 
 ### İş Kuralı Kararı
 - Raporlar yalnızca geçerli tesis ile ve mevcut access scope içinde çalışmalı.
 - Muavin raporu, rapor tesisine uymayan hesapla oluşturulmamalı.
+- Faz E-1 sadece yevmiye, muavin ve mizan scope doğrulamasını kapsar.
 
 ### Yapılan Değişiklikler
 - Yevmiye, muavin, mizan ve hızlı mizan raporlarında tesis access scope kontrolü eklendi.
@@ -205,6 +206,7 @@
 - Küçük rapor tasarımı değişikliği yapılmadı.
 
 ### Eksik Kalan İş Kuralları
+- Cari ekstre/bakiye, tahsilat-ödeme, kasa/banka/stok rapor kontrolleri Faz E-2'de ele alınacak.
 - Büyük export altyapısı değişikliği yapılmadı.
 - Yeni muhasebe hesap planı tasarımı yapılmadı.
 - Migration gerekmedi.
@@ -219,10 +221,12 @@
 - Gerekmedi.
 
 ### Build
-- Henüz çalıştırılmadı.
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` çalıştırılmadı; frontend değişikliği yok.
+- Build sırasında 1 warning var, hata yok.
 
 ### Test
 - Kod incelemesi yapıldı.
 
 ### Commit
-- Oluşturulmadı.
+- `957bd7a` commit'i oluşturuldu ve pushlandı.

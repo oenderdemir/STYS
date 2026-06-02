@@ -486,3 +486,120 @@
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `7628014`
+
+---
+
+## Faz I - Muhasebe Canlıya Hazırlık / Final Checklist
+
+### Tespit
+- Faz B'den Faz H'ye kadar yapılan muhasebe değişiklikleri canlıya hazırlık için son kez gözden geçirildi.
+- Yeni iş kuralı eklenmedi; odak teknik doğrulama, veri bütünlüğü ve operasyonel checklist oldu.
+- `#13 Taşınır Kartları` ana geliştirmesi bu fazın kapsamı dışında bırakıldı.
+
+### Final Checklist Özeti
+
+#### Build / CI
+- `dotnet build backend/STYS.csproj` başarılı mı: Evet.
+- `npm run build` başarılı mı: Evet.
+- Warning'ler bilinen ve kabul edilmiş mi: Evet.
+- Bundle budget warning'leri deploy'u engelliyor mu: Hayır, kayıt altına alındı.
+
+#### Migration
+- Tüm migration'lar sıralı uygulanıyor mu: Kontrol edilmeli.
+- Temiz veritabanına migration uygulanabiliyor mu: Kontrol edilmeli.
+- Mevcut test veritabanına migration uygulanabiliyor mu: Kontrol edilmeli.
+- Yeni eklenen kolonların default değerleri doğru mu: Kontrol edilmeli.
+- Geri dönüş için backup alındı mı: Deploy öncesi alınmalı.
+
+#### Yetki / Tesis Scope
+- Liste endpointleri yetkisiz tesis verisi döndürmüyor mu: Kontrol edilmeli.
+- Detay endpointleri yetkisiz kayıt döndürmüyor mu: Kontrol edilmeli.
+- Update/delete/iptal akışları mevcut kayıt scope kontrolü yapıyor mu: Evet, kod tarafında audit edildi.
+- Lookup endpointleri başka tesis verisi sızdırmıyor mu: Kontrol edilmeli.
+
+#### Muhasebe Dönemleri
+- Kapalı döneme fiş oluşturma engelleniyor mu: Evet, kontrol edildi.
+- Kapalı dönemde belge muhasebeleştirme engelleniyor mu: Evet, kontrol edildi.
+- Kapalı dönemde iptal/ters kayıt davranışı doğru mu: Evet, kontrol edildi.
+- Bağımsız cari/stok/kasa/banka/tahsilat hareketleri dönem kontrolü yapıyor mu: Evet, kontrol edildi.
+
+#### Cari Kart / Cari Hareket
+- Cari kart açılış bakiyesi doğru mu: Kontrol edilmeli.
+- Banka hesapları n adet kaydediliyor mu: Kontrol edilmeli.
+- Yetkili kişiler n adet kaydediliyor mu: Kontrol edilmeli.
+- Cari hareket bakiye, kapanan tutar, kalan tutar doğru mu: Kontrol edilmeli.
+- Kapama geri alma doğru çalışıyor mu: Evet, kontrol edildi.
+
+#### Satış/Fatura
+- Satış belgesi oluşturma çalışıyor mu: Evet, mevcut akış kontrol edildi.
+- Satır parametreleri korunuyor mu: Evet, mevcut akış kontrol edildi.
+- İndirim, KDV, ÖTV, ÖİV, konaklama vergisi davranışı iş kuralına uygun mu: Evet, mevcut iş kuralı korunuyor.
+- Belgeden fiş oluşturma çalışıyor mu: Evet, kontrol edildi.
+- Aynı belge için duplicate fiş engelleniyor mu: Evet, kontrol edildi.
+- Belge iptali doğru çalışıyor mu: Evet, kontrol edildi.
+
+#### Muhasebe Fişi
+- Yeni fişte default 1 satır geliyor mu: Kontrol edilmeli.
+- Satır ekleme her tıklamada 1 satır ekliyor mu: Kontrol edilmeli.
+- Borç/alacak eşitliği korunuyor mu: Kontrol edilmeli.
+- Taslak fiş güncellenebiliyor mu: Evet, kontrol edildi.
+- Onaylı fiş değiştirilemiyor mu: Evet, kontrol edildi.
+- İptal/ters kayıt akışı doğru mu: Evet, kontrol edildi.
+
+#### Tahsilat/Ödeme
+- Aktif belge iptal edilebiliyor mu: Evet.
+- İptal aksiyonu kullanıcıya "İptal Et" olarak görünüyor mu: Evet.
+- Kapama varsa geri alınıyor mu: Evet.
+- İptal edilmiş belge tekrar iptal edilemiyor mu: Evet.
+- Günlük özet iptal kayıtları hariç tutuyor mu: Kontrol edilmeli.
+
+#### Raporlar
+- Yevmiye defteri tesis scope ile çalışıyor mu: Evet.
+- Muavin defter hesap/tesis uyumu kontrol ediyor mu: Evet.
+- Mizan tesis scope ile çalışıyor mu: Evet.
+- Cari ekstre/bakiye aktif kayıtlarla doğru mu: Faz I risk listesinde doğrulama gerektiriyor.
+- Export filtrelerle uyumlu mu: Evet, kontrol edildi.
+
+#### UI/UX
+- Datepicker Türkçe mi: Kontrol edilmeli.
+- Hafta Pazartesi'den başlıyor mu: Kontrol edilmeli.
+- Tarih formatı dd.mm.yyyy mi: Evet, helper ve ekranlar uyumlu.
+- Kritik işlem confirm mesajları doğru mu: Evet.
+- Sil/İptal Et ayrımı doğru mu: Evet.
+
+#### Bilinen Uyarılar / Teknik Borç
+- Backend `CS8629` warning'i kayıt altına alınmalı.
+- Frontend bundle budget warning'leri kayıt altına alınmalı.
+- Runtime test yapılmayan fazlar not edilmeli.
+- `#13 Taşınır Kartları` kapsam dışı not edilmeli.
+
+#### Rollback Planı
+- Deploy öncesi veritabanı backup alınacak.
+- Migration sonrası smoke test yapılacak.
+- Kritik hata halinde uygulama önceki sürüme alınacak.
+- Veritabanı geri dönüşü için backup restore planı hazır olacak.
+- Hatalı muhasebe hareketi oluşursa manuel SQL düzeltme yerine ters kayıt/iptal akışı kullanılacak.
+
+### Açık Riskler
+- Canlıya çıkış öncesi manuel test kapsamı eksik kalırsa rapor/scope hataları gözden kaçabilir.
+- Bundle budget warning'leri teknik borç olarak kalıyor.
+- Bazı cari kart ve hareket bakiyeleri için yalnız build seviyesinde doğrulama yapıldı.
+- `#13 Taşınır Kartları` kapsamı ayrı fazda ele alınmalı.
+
+### Yapılan Değişiklikler
+- Faz I final checklist içeriği dokümana eklendi.
+- Önceki fazlar kısa özet halinde canlıya hazırlık bağlamında toparlandı.
+- Riskler, manuel testler, migration, build, scope, veri bütünlüğü ve rollback başlıkları tek yerde toplandı.
+
+### Build / Test
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Mevcut warning'ler var, hata yok.
+
+### Migration
+- Bu fazda migration oluşturulmadı.
+- Canlıya çıkış öncesi mevcut migration sırasının ve temiz veritabanı uygulanabilirliğinin ayrıca doğrulanması gerekiyor.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `acc82b5`

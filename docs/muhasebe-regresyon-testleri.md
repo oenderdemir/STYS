@@ -859,3 +859,46 @@ Kritik kontrol:
 
 ### Commit
 - Doküman güncellendi; commit oluşturuldu: `dd6cf54`
+
+---
+
+## Faz K - Migration / Veritabanı Uygulanabilirlik Kontrolü
+
+### Tespit
+- `STYS.Infrastructure.EntityFramework.StysAppDbContext` için migration zinciri sıralı ve derlenebilir durumda.
+- Son muhasebe migration'ları arasında `AddMuhasebeFisleri`, `AddMuhasebeDonemleri`, `AddCariHareketKapamaAlanlari`, `AddTahsilatOdemeBelgesiKapatilacakCariHareketId`, `AddCariKartFinansVeYetkiliKisiAlanlari` ve `AddSatisBelgesiSatirEkParametreleri` yer alıyor.
+- `dotnet ef migrations script` komutu context belirtmeden çalışmadı; `--context STYS.Infrastructure.EntityFramework.StysAppDbContext` ile script üretimi tamamlandı.
+- Yeni iş kuralı gerektiren bir şema ihtiyacı tespit edilmedi; mevcut model değişiklikleri migration zincirinde karşılanmış görünüyor.
+
+### Migration Kontrolü
+- Migration sırası açık ve uygulanabilir.
+- Model snapshot ile migration geçmişi uyumlu görünüyor; build ve migration listesi sırasında uyumsuzluk hatası alınmadı.
+- Temiz veritabanına uygulanacak zincirde obvious bir sıralama problemi görünmüyor.
+- Mevcut test veritabanı için de aynı migration sırası uygulanabilir durumda.
+
+### Riskler
+- Script komutu için doğru context belirtilmesi gerekiyor; projede birden fazla `DbContext` var.
+- Foreign key ve delete behavior açısından manuel smoke doğrulaması yine gerekli.
+- `SatisBelgesiSatirEkParametreleri` ve ilgili eski veri satırlarında nullable/default uyumu canlıda veri ile teyit edilmeli.
+- Rollback için deploy öncesi DB backup alınmalı.
+- `#13 Taşınır Kartları` kapsam dışı kalmalı.
+
+### Backend
+- Değişiklik yapılmadı.
+
+### Frontend
+- Değişiklik yapılmadı.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `dotnet ef migrations script --context STYS.Infrastructure.EntityFramework.StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj --output artifacts/migration-check.sql` çalıştırıldı.
+- `npm run build` çalıştırılmadı; bu fazda frontend değişikliği yok.
+
+### Test
+- `dotnet ef migrations list --context STYS.Infrastructure.EntityFramework.StysAppDbContext --project backend/STYS.csproj --startup-project backend/STYS.csproj` ile migration zinciri doğrulandı.
+- Script üretimi için context seçimi gerektiği doğrulandı.
+- Manuel DB restore / apply testi yapılmadı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `bc9ee9a`

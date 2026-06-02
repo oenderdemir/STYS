@@ -304,15 +304,15 @@
 - Büyük refactor yapılmadı; sadece eksik scope guard'ları kapatıldı.
 
 ### Backend
-- [`backend/Muhasebe/CariHareketler/Services/CariHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/CariHareketler/Services/CariHareketService.cs)
-- [`backend/Muhasebe/KasaHareketleri/Services/KasaHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/KasaHareketleri/Services/KasaHareketService.cs)
-- [`backend/Muhasebe/BankaHareketleri/Services/BankaHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/BankaHareketleri/Services/BankaHareketService.cs)
-- [`backend/Muhasebe/StokHareketleri/Services/StokHareketService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/StokHareketleri/Services/StokHareketService.cs)
-- [`backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs)
-- [`backend/Muhasebe/Depolar/Services/DepoService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/Depolar/Services/DepoService.cs)
-- [`backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs)
-- [`backend/Muhasebe/Hesaplar/Services/HesapService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/Hesaplar/Services/HesapService.cs)
-- [`backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs`](C:/Users/cuce/source/repos/STYS/backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs)
+- backend/Muhasebe/CariHareketler/Services/CariHareketService.cs
+- backend/Muhasebe/KasaHareketleri/Services/KasaHareketService.cs
+- backend/Muhasebe/BankaHareketleri/Services/BankaHareketService.cs
+- backend/Muhasebe/StokHareketleri/Services/StokHareketService.cs
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs
+- backend/Muhasebe/Depolar/Services/DepoService.cs
+- backend/Muhasebe/TasinirKartlari/Services/TasinirKartService.cs
+- backend/Muhasebe/Hesaplar/Services/HesapService.cs
+- backend/Muhasebe/MuhasebeFisleri/Services/MuhasebeFisService.cs
 
 ### Frontend
 - Değişiklik yapılmadı.
@@ -330,4 +330,5 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- `git commit -m "Faz F: Muhasebe tesis yetki scope audit"` ile commit oluşturulacak.
+- Doküman güncellendi.
+- Commit oluşturuldu: 9f062b0

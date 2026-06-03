@@ -1145,4 +1145,4 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `71d3732`
+- Doküman güncellendi; commit oluşturuldu: `666569f`

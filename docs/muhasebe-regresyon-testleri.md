@@ -1013,3 +1013,64 @@ Kritik kontrol:
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `4a3dc10`
+
+---
+
+## Faz N - Runtime Smoke Test Sonuçları
+
+### Test Ortamı
+- Tarih: 2026-06-03
+- Branch/Commit: `main` / `41f06f7`
+- Backend build: Başarılı
+- Frontend build: Başarılı
+- Kullanılan tesis: Hazırlanamadı
+- Kullanılan test kullanıcısı: Hazırlanamadı
+- Açık muhasebe dönemi: Hazırlanamadı
+- Kapalı muhasebe dönemi: Hazırlanamadı
+
+### Sonuç Tablosu
+
+| Senaryo | Durum | Not |
+|---------|-------|-----|
+| J-01 | Test Edilemedi | Gerçek UI oturumu ve test kullanıcısı bu çalışma ortamında hazırlanamadı. |
+| J-02 | Test Edilemedi | Tesis / veri seti olmadan canlı uygulama üzerinde doğrulanamadı. |
+| J-03 | Test Edilemedi | Cari kart banka/yetkili kişi verisi hazırlanamadı. |
+| J-04 | Test Edilemedi | Açılış bakiyesi için kontrollü test verisi gereklidir. |
+| J-05 | Test Edilemedi | Satış belgesi için canlı UI etkileşimi ve test verisi yok. |
+| J-06 | Test Edilemedi | Belgeden fiş oluşturma akışı runtime ortamında çalıştırılamadı. |
+| J-07 | Test Edilemedi | Onay akışı canlı uygulamada denenemedi. |
+| J-08 | Test Edilemedi | İptal / ters kayıt akışı runtime ortamında çalıştırılamadı. |
+| J-09 | Test Edilemedi | Tahsilat/ödeme belgesi için test verisi ve UI oturumu yok. |
+| J-10 | Test Edilemedi | İptal ve kapama geri alma akışı canlı uygulamada çalıştırılamadı. |
+| J-11 | Test Edilemedi | Kapalı dönem senaryosu için ayrı veri kurulumuna ihtiyaç var. |
+| J-12 | Test Edilemedi | Yevmiye defteri UI akışı runtime ortamında açılmadı. |
+| J-13 | Test Edilemedi | Muavin defter UI akışı runtime ortamında açılmadı. |
+| J-14 | Test Edilemedi | Mizan UI akışı runtime ortamında açılmadı. |
+| J-15 | Test Edilemedi | Yetkisiz tesis senaryosu için çok kullanıcılı test ortamı kurulamadı. |
+
+### Bulunan Hatalar
+- Runtime smoke test sırasında yeni bir işlevsel hata doğrulanamadı.
+- Hazırlık sırasında backend `CS8629` warning'i ve `satis-belgeleri.component.scss` budget taşması tespit edildi.
+
+### Yapılan Düzeltmeler
+- `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs` içinde güvenli nullable guard eklendi.
+- `frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.scss` içinde küçük CSS sadeleştirmesi yapıldı.
+
+### Test Edilemeyenler
+- J-01 ile J-15 arasındaki smoke testlerin tamamı gerçek UI oturumu / test verisi olmadığı için çalıştırılamadı.
+
+### Açık Riskler
+- Smoke testlerin tamamı canlı uygulama üzerinde tekrar koşulmalı.
+- Initial bundle budget warning'i devam ediyor.
+- `kamp-basvuru.scss`, `garson-servis.scss` ve `satis-belgeleri.component.scss` için budget uyarıları kayıt altında kalmalı.
+- `#13 Taşınır Kartları` kapsam dışı bırakılmalı.
+
+### Build
+- `dotnet build backend/STYS.csproj`: Başarılı.
+- `npm run build`: Başarılı.
+
+### Migration
+- Gerekmedi.
+
+### Commit
+- Doküman güncellendi; commit oluşturuldu: `41f06f7`

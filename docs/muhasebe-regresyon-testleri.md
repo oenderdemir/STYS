@@ -1073,4 +1073,4 @@ Kritik kontrol:
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `41f06f7`
+- Doküman güncellendi; commit oluşturuldu: `529cb8d`

@@ -1012,4 +1012,4 @@ Kritik kontrol:
 
 ### Commit
 - Doküman güncellendi.
-- Commit oluşturuldu: `3ca92f1`
+- Commit oluşturuldu: `4a3dc10`

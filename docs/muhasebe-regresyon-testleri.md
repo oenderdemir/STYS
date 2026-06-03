@@ -964,3 +964,52 @@ Kritik kontrol:
 ### Commit
 - Doküman güncellendi.
 - Commit oluşturuldu: `2fb78b4`
+
+---
+
+## Faz M - Warning / Budget / Build Borçları
+
+### Tespit
+- `dotnet build` sırasında tek backend warning vardı: `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs(610,47)` `CS8629`.
+- `npm run build` sırasında initial bundle budget warning'i ve üç SCSS budget warning'i vardı.
+- Muhasebe ile doğrudan ilgili olan `satis-belgeleri.component.scss` warning'i küçük bir taşma olarak kaldı.
+- `kamp-basvuru.scss` ve `garson-servis.scss` muhasebe dışı olduğu için dokunulmadı.
+
+### Yapılan Değişiklikler
+- `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs` içinde bağlı muhasebe fişi için nullable guard eklendi.
+- `frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.scss` içinde yerel `.text-right` kuralı ve iki gereksiz `width: 100%` bildirimi kaldırıldı.
+- `satis-belgeleri.component.scss` budget taşması azaltıldı, ancak tamamen sıfırlanmadı.
+
+### Bilerek Dokunulmayanlar
+- Initial bundle budget warning'i için büyük chunk split / lazy loading optimizasyonu yapılmadı.
+- `kamp-basvuru.scss` ve `garson-servis.scss` muhasebe dışı olduğu için değişiklik yapılmadı.
+- İş kuralı ve migration davranışı değişmedi.
+
+### Backend
+- `CS8629` warning'i giderildi.
+- Backend build warning sayısı 0'a düştü.
+
+### Frontend
+- `frontend/src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.scss`
+- `satis-belgeleri.component.scss` warning'i azaldı, fakat budget eşiğinin altında değil.
+- Diğer budget warning'leri raporlandı ve sonraki faza bırakıldı.
+
+### Migration
+- Gerekmedi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı, 0 warning.
+- `npm run build` başarılı.
+- Kalan frontend warning'ler:
+  - initial bundle budget exceeded
+  - `src/app/pages/kamp-yonetimi/kamp-basvuru.scss`
+  - `src/app/pages/restoran-yonetimi/garson-servis.scss`
+  - `src/app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component.scss`
+
+### Test
+- Backend ve frontend build doğrulaması yapıldı.
+- Warning listesinin tamamı okunup sınıflandırıldı.
+
+### Commit
+- Doküman güncellendi.
+- Commit oluşturuldu: `3ca92f1`

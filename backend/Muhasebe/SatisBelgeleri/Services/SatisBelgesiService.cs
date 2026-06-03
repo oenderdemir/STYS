@@ -606,8 +606,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     private async Task ValidateVeIptalEtMuhasebeFisiAsync(SatisBelgesi belge, CancellationToken cancellationToken)
     {
+        var muhasebeFisId = belge.MuhasebeFisId
+            ?? throw new BaseException("Bağlı muhasebe fişi bulunamadı.", 404);
+
         var fis = await _db.MuhasebeFisler
-            .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == muhasebeFisId && !x.IsDeleted, cancellationToken);
 
         if (fis is null)
         {

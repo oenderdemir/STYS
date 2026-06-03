@@ -11,13 +11,7 @@
     }
   }
 
-  .text-right {
-    text-align: right;
-  }
-
   .belge-form {
-    width: 100%;
-
     .belge-cari-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -51,7 +45,6 @@
     }
 
     .satir-card {
-      width: 100%;
       margin-bottom: .75rem;
       padding: 1rem 1.25rem;
       background: var(--surface-section);

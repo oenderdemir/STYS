@@ -20,6 +20,7 @@ using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
 using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
+using STYS.Muhasebe.DevTools.Services;
 using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.KdvRaporlari.Services;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
@@ -122,6 +123,7 @@ builder.Services.AddScoped<ICariHareketKapamaService, CariHareketKapamaService>(
 builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
+builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();
@@ -231,6 +233,19 @@ app.MapControllers();
 app.MapHub<BildirimHub>(BildirimHub.HubRoute)
     .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
 
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Test"))
+{
+    var muhasebeDevTools = app.MapGroup("/ui/muhasebe/dev-tools")
+        .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
+
+    muhasebeDevTools.MapPost("/seed-smoke-test-data", async (
+        IMuhasebeSmokeTestSeedService seedService,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await seedService.SeedAsync(cancellationToken);
+        return Results.Ok(result);
+    });
+}
 
 
 app.Run();

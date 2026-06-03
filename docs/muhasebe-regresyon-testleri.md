@@ -1290,3 +1290,34 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 ### Commit
 - Bu faz için commit oluşturuldu.
 - Commit hash’i Git geçmişinden takip edilecek.
+## Faz Q - Smoke Seed Altyapısı
+
+### Tespit
+- J-01 – J-15 smoke testleri için kontrollü test verisini hazırlayan dev/test-only seed altyapısına ihtiyaç vardı.
+
+### Yapılan Değişiklikler
+- `backend/Muhasebe/DevTools/Services/MuhasebeSmokeTestSeedService.cs` eklendi.
+- `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` endpointi yalnızca development/test ortamlarında map edildi.
+- `docs/muhasebe-smoke-test-seed-rehberi.md` oluşturuldu ve seed akışı dokümante edildi.
+
+### Bilerek Yapılmayanlar
+- Production otomatik seed eklenmedi.
+- Migration oluşturulmadı.
+- Büyük iş akışı refactor yapılmadı.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Frontend warning'leri mevcut: initial bundle budget, `kamp-basvuru.scss`, `satis-belgeleri.component.scss`, `garson-servis.scss`.
+
+### Migration
+- Gerekmedi.
+
+### Test
+- `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` yalnızca development/test ortamında map edildi.
+- Seed akışı idempotent ve production-safe olarak tasarlandı.
+- Runtime smoke testler bu fazda koşturulmadı.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.

@@ -108,3 +108,41 @@ En az aşağıdaki hesapları hazırla:
 ## Not
 
 Bu rehber, otomatik seed mekanizması yerine manuel ve kontrollü hazırlık için tasarlanmıştır. Script ihtiyacı sonraki fazda ayrıca ele alınabilir.
+## Faz Q - Development/Test Smoke Seed Rehberi
+
+BU SCRIPT SADECE DEVELOPMENT/TEST ORTAMI İÇİNDİR.
+
+### Amaç
+- Muhasebe smoke testleri için gerekli minimum test verisini güvenli ve idempotent şekilde hazırlamak.
+- Production ortamında otomatik seed çalıştırmamak.
+
+### Seed Noktası
+- `POST /ui/muhasebe/dev-tools/seed-smoke-test-data`
+- Endpoint yalnızca `Development` ve `Test` ortamlarında aktif.
+- `TEST_` ve `TEST MUHASEBE` önekleriyle çalışan kayıtlar oluşturur veya yeniden kullanır.
+
+### Hazırlanan Veriler
+- `TEST MUHASEBE TESISI`
+- `TEST MUHASEBE YETKISIZ TESISI`
+- `muhasebe-admin` veya `admin` hesabı için tesis scope ataması
+- Açık ve kapalı muhasebe dönemi
+- `TEST-` önekli muhasebe hesap planları
+- `TEST_CARI_MUSTERI` ve `TEST_CARI_TEDARIKCI`
+- Cari yetkili kişi kayıtları
+- Kasa ve banka hesapları
+- Açık cari hareket
+- Onaylı muhasebe fişi
+- Yevmiye sayacı ve muhasebe bakiye satırları
+
+### Test/Dev Kullanım Notu
+- Önce identity ortamında `muhasebe-admin` veya `admin` hesabı bulunmalı.
+- Aynı seed tekrar çalıştırıldığında duplicate oluşturmadan mevcut kayıtları yeniden kullanır.
+- Production'da endpoint map edilmez.
+
+### Manuel Smoke Tamamlama
+- Satış belgesi ve tahsilat/ödeme UI akışları hazırlanan test verisi üzerinde çalıştırılmalıdır.
+- Yetkisiz tesis görünürlüğü ikinci test tesis üzerinde doğrulanmalıdır.
+
+### Rollback Notu
+- Seed script destructive değildir.
+- Geri almak için test/dev veritabanı silme yerine ilgili test kayıtları temizlenmelidir.

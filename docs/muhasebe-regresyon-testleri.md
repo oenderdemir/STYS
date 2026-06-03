@@ -1180,3 +1180,24 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 
 ### Commit
 - Doküman güncellendi; commit oluşturuldu: `96c1176`
+
+---
+
+## Faz N-3 - Smoke Test Sonuç Formu
+
+### Tespit
+- Smoke testlerin gerçek ortamda uygulanması için standart bir sonuç formuna ihtiyaç vardı.
+
+### Yapılan Değişiklikler
+- `docs/muhasebe-smoke-test-sonuc-formu.md` oluşturuldu.
+- J-01 – J-15 için doldurulabilir sonuç tablosu eklendi.
+- Hatalı senaryolar için issue açma formatı eklendi.
+
+### Build
+- Kod değişikliği yapılmadı; build çalıştırılmadı.
+
+### Migration
+- Gerekmedi.
+
+### Commit
+- Doküman güncellendi; commit oluşturuldu: `pending`

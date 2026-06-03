@@ -1146,3 +1146,37 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 
 ### Commit
 - Doküman güncellendi; commit oluşturuldu: `666569f`
+
+---
+
+## Faz N-2 - Smoke Test Seed Rehberi / Manuel Hazırlık
+
+### Tespit
+- Faz N-1 için gerekli minimum test verisi tanımlıydı, ancak production-safe ve tekrar çalıştırılabilir hazırlık akışı dokümante edilmemişti.
+- Doğrudan SQL seed yerine manuel hazırlık rehberi tercih edildi.
+
+### Seed Rehberi
+- `docs/muhasebe-smoke-test-seed-rehberi.md` oluşturuldu.
+- Rehber test/dev ortamı için yazıldı; production’da otomatik seed yok.
+- `TEST_` / `TEST MUHASEBE` prefix kullanımı ve destructive olmayan hazırlık adımları belirtildi.
+
+### Production Güvenliği
+- Otomatik seed production’da çalışmayacak.
+- Rehber ekran bazlı manuel hazırlık içeriyor.
+- Geri alma için iptal / ters kayıt yaklaşımı not edildi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Frontend tarafında mevcut budget warning’leri hata seviyesinde değil.
+
+### Test
+- Test veri ihtiyaçları tablo ve adım bazında netleştirildi.
+- SQL script yerine manuel hazırlık yaklaşımı seçildi.
+- `#13 Taşınır Kartları` kapsam dışı bırakıldı.
+
+### Migration
+- Gerekmedi.
+
+### Commit
+- Doküman güncellendi; commit oluşturuldu: `pending`

@@ -42,7 +42,8 @@
 - Manuel runtime test yapılmadı.
 
 ## Commit
-- Doküman güncellendi; commit oluşturulacak.
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -130,7 +131,30 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi; commit oluşturulacak.
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
+## Faz O - Dokümantasyon Temizliği / Commit Hash Standardı
+
+### Tespit
+- Faz dokümanlarında commit hash bilgisi commit öncesi bilinmediği için ikinci düzeltme commit’leri oluşuyordu.
+
+### Yapılan Değişiklikler
+- Fazlardaki commit bölümleri hash içermeyecek şekilde standartlaştırıldı.
+- Geçici commit notları temizlendi.
+- Commit hash takibi Git geçmişine bırakıldı.
+
+### Build
+- Kod değişikliği yapılmadı; build çalıştırılmadı.
+
+### Migration
+- Gerekmedi.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ### Faz C-1 Notu
 - Stok hareketinde varsayılan tarih ataması, dönem kontrolünden önce çalışacak şekilde düzeltildi.
@@ -184,7 +208,8 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Bu fazda kod değişikliği yapıldı; commit oluşturulacak.
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -229,7 +254,8 @@
 - Kod incelemesi yapıldı.
 
 ### Commit
-- `957bd7a` commit'i oluşturuldu ve pushlandı.
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -274,8 +300,8 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: 5ab2f84
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -330,8 +356,8 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: 9f062b0
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -381,8 +407,8 @@
 - Bu build hataları için Faz G-1 açılacak şekilde not düşüldü.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: 900d6e3
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -438,8 +464,8 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `2efe3a8`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -484,8 +510,8 @@
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `7628014`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -601,8 +627,8 @@
 - Canlıya çıkış öncesi mevcut migration sırasının ve temiz veritabanı uygulanabilirliğinin ayrıca doğrulanması gerekiyor.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `3680304`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -858,7 +884,8 @@ Kritik kontrol:
 - Migration gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `dd6cf54`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -900,8 +927,8 @@ Kritik kontrol:
 - Manuel DB restore / apply testi yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `a551018`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -962,8 +989,8 @@ Kritik kontrol:
 - Manuel runtime test yapılmadı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `2fb78b4`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -1011,8 +1038,8 @@ Kritik kontrol:
 - Warning listesinin tamamı okunup sınıflandırıldı.
 
 ### Commit
-- Doküman güncellendi.
-- Commit oluşturuldu: `4a3dc10`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -1073,7 +1100,8 @@ Kritik kontrol:
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `529cb8d`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -1145,7 +1173,8 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `666569f`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -1179,7 +1208,8 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `96c1176`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
 
 ---
 
@@ -1200,4 +1230,5 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Gerekmedi.
 
 ### Commit
-- Doküman güncellendi; commit oluşturuldu: `7022412`
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.

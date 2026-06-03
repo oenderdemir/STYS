@@ -1074,3 +1074,75 @@ Kritik kontrol:
 
 ### Commit
 - Doküman güncellendi; commit oluşturuldu: `529cb8d`
+
+---
+
+## Faz N-1 - Runtime Test Ortamı ve Seed Veri Hazırlığı
+
+### Amaç
+Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test ortamını ve kontrollü seed/veri hazırlıklarını tanımlamak.
+
+### Minimum Veri Seti
+| Veri | Durum | Not |
+|------|-------|-----|
+| Test tesisi | Hazırlanmalı | Adı `TEST MUHASEBE TESISI` olmalı ve yetkili kullanıcıya scope içinde atanmalı. |
+| Test kullanıcısı | Hazırlanmalı | Muhasebe yetkileri olmalı; test tesisi scope içinde olmalı. |
+| Açık muhasebe dönemi | Hazırlanmalı | Bugünün tarihini kapsayan `Açık/Aktif` dönem gerekli. |
+| Kapalı muhasebe dönemi | Hazırlanmalı | Geçmiş tarihli `Kapalı/Kilitli` dönem gerekli. |
+| Kasa/Banka hesabı | Hazırlanmalı | En az 1 hareket alabilecek hesap gerekli. |
+| Alıcı/Satıcı cari hesap | Hazırlanmalı | `TEST CARI MUSTERI` ve gerekiyorsa `TEST CARI TEDARIKCI`. |
+| Gelir/KDV/Stok-Hizmet hesapları | Hazırlanmalı | Fiş ve satış akışı için minimum hesap seti gerekli. |
+| Cari kart banka hesabı | Hazırlanmalı | Banka adı + IBAN içermeli. |
+| Cari kart yetkili kişi | Hazırlanmalı | En az 1 yetkili kişi kaydı gerekli. |
+| Satış belgesi verisi | Hazırlanmalı | En az 1 belge, 1 satır, KDV/indirim alanları dolu. |
+| Tahsilat/ödeme verisi | Hazırlanmalı | Kapama yapılacak açık cari hareket ile birlikte. |
+| Onaylı muhasebe fişi | Hazırlanmalı | Yevmiye/muavin/mizan raporlarında görünmeli. |
+| Yetkisiz tesis kaydı | Hazırlanmalı | Scope dışı veri görünürlüğü testi için gerekli. |
+
+### Test Kullanıcısı
+- Muhasebe yetkilerine sahip olmalı.
+- `TEST MUHASEBE TESISI` scope içinde olmalı.
+- Yetkisiz tesis testi için başka bir tesis veya scope dışı kayıt görünür olmamalı.
+
+### Test Tesisi
+- Ad: `TEST MUHASEBE TESISI`
+- Kullanıcı bu tesise erişebilmelidir.
+
+### Açık/Kapalı Dönem
+- Açık dönem: Bugünün tarihini kapsayan aktif dönem.
+- Kapalı dönem: Geçmiş tarih aralığında kilitli dönem.
+
+### Hazırlanması Gereken Kayıtlar
+- Test cari müşteri ve gerekiyorsa tedarikçi kartı.
+- Banka hesabı ve yetkili kişi içeren cari kart.
+- En az 1 satış belgesi ve buna bağlı muhasebe fişi.
+- En az 1 tahsilat/ödeme belgesi ve kapama ilişkisi.
+- Yevmiye/muavin/mizan raporlarında görülecek onaylı fiş.
+- Yetkisiz tesis için görünmemesi gereken kayıt.
+
+### Seed Stratejisi
+- Production’da otomatik seed çalıştırılmayacak.
+- Mevcut seed/migration yapısı incelendi; muhasebe dışı örneklerde migration tabanlı seed kullanımı mevcut.
+- Bu faz için tercihen manuel SQL script veya admin ekranı üzerinden kontrollü hazırlık önerilir.
+- Gerekirse sadece development/test ortamında çalışan environment guard'lı seed mekanizması kullanılmalı.
+- Otomatik seed üretilecekse `Development`/`Test` ortam kontrolü zorunlu olmalı.
+
+### Açık Riskler
+- Gerçek UI smoke koşusu için ortam yine ayrıca hazırlanmalı.
+- Kontrollü test verisi canlı veriyle karıştırılmamalı.
+- Yeni migration açılması gerekirse önce ayrı gerekçe yazılmalı.
+- `#13 Taşınır Kartları` kapsam dışı bırakılmalı.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+
+### Test
+- Seed/migration yapısı tarandı; mevcut yaklaşımın production-safe olması için environment guard önerildi.
+- Smoke testlerin çalıştırılması bu fazın amacı değildir; ortam hazırlığı odaktır.
+
+### Migration
+- Gerekmedi.
+
+### Commit
+- Doküman güncellendi; commit oluşturuldu: `71d3732`

@@ -471,3 +471,5 @@ frontend/src/assets/.git
 .DS_Store
 Thumbs.db
 
+/backend/Data/license.json
+/backend/Data/license-stys-tod-01.json

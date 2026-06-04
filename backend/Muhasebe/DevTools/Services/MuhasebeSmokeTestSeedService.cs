@@ -257,53 +257,38 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
         string aciklama,
         CancellationToken cancellationToken)
     {
-        var entityType = _db.Model.FindEntityType(typeof(CariKart));
-        var supportsBankaAdi = entityType?.FindProperty("BankaAdi") is not null;
-        var supportsSube = entityType?.FindProperty("Sube") is not null;
-        var supportsHesapNo = entityType?.FindProperty("HesapNo") is not null;
-        var supportsIban = entityType?.FindProperty("Iban") is not null;
-        var supportsAciklama = entityType?.FindProperty("Aciklama") is not null;
+        var normalizedBankaAdi = NormalizeOptionalText(bankaAdi, 128);
+        var normalizedSubeAdi = NormalizeOptionalText(sube, 128);
+        var normalizedHesapNo = NormalizeOptionalText(hesapNo, 64);
+        var normalizedIban = NormalizeIban(iban);
+        var normalizedAciklama = NormalizeOptionalText(aciklama, 512);
 
-        var cariKart = await _db.Set<CariKart>().FirstAsync(x => x.Id == cariKartId, cancellationToken);
-
-        var exists = await _db.Set<CariKart>().AnyAsync(
-            x => x.Id == cariKartId &&
-                 (!supportsBankaAdi || EF.Property<string?>(x, "BankaAdi") == bankaAdi) &&
-                 (!supportsSube || EF.Property<string?>(x, "Sube") == sube) &&
-                 (!supportsHesapNo || EF.Property<string?>(x, "HesapNo") == hesapNo) &&
-                 (!supportsIban || EF.Property<string?>(x, "Iban") == iban),
+        var existing = await _db.CariKartBankaHesaplari.FirstOrDefaultAsync(x =>
+                x.CariKartId == cariKartId
+                && (
+                    (!string.IsNullOrWhiteSpace(normalizedIban) && x.Iban == normalizedIban)
+                    || (!string.IsNullOrWhiteSpace(normalizedHesapNo) && x.HesapNo == normalizedHesapNo)),
             cancellationToken);
 
-        if (exists)
+        if (existing is not null)
         {
+            existing.BankaAdi = normalizedBankaAdi;
+            existing.SubeAdi = normalizedSubeAdi;
+            existing.HesapNo = normalizedHesapNo;
+            existing.Iban = normalizedIban;
+            existing.Aciklama = normalizedAciklama;
             return;
         }
 
-        var entry = _db.Entry(cariKart);
-        if (supportsBankaAdi)
+        _db.CariKartBankaHesaplari.Add(new CariKartBankaHesabi
         {
-            entry.Property("BankaAdi").CurrentValue = bankaAdi;
-        }
-
-        if (supportsSube)
-        {
-            entry.Property("Sube").CurrentValue = sube;
-        }
-
-        if (supportsHesapNo)
-        {
-            entry.Property("HesapNo").CurrentValue = hesapNo;
-        }
-
-        if (supportsIban)
-        {
-            entry.Property("Iban").CurrentValue = iban;
-        }
-
-        if (supportsAciklama)
-        {
-            entry.Property("Aciklama").CurrentValue = aciklama;
-        }
+            CariKartId = cariKartId,
+            BankaAdi = normalizedBankaAdi,
+            SubeAdi = normalizedSubeAdi,
+            HesapNo = normalizedHesapNo,
+            Iban = normalizedIban,
+            Aciklama = normalizedAciklama
+        });
     }
 
     private async Task<MuhasebeDonem> EnsureDonemAsync(
@@ -387,6 +372,28 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
         _db.Set<MuhasebeHesapPlani>().Add(hesap);
         await _db.SaveChangesAsync(cancellationToken);
         return hesap;
+    }
+
+    private static string? NormalizeOptionalText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private static string? NormalizeIban(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().Replace(" ", string.Empty).ToUpperInvariant();
+        return normalized.Length <= 34 ? normalized : normalized[..34];
     }
 
     private async Task<CariKart> EnsureCariKartAsync(

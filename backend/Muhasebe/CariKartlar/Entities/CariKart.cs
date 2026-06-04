@@ -75,6 +75,7 @@ public class CariKart : BaseEntity<int>
     [MaxLength(34)]
     public string? Iban { get; set; }
 
+    public ICollection<CariKartBankaHesabi> BankaHesaplari { get; set; } = [];
     public ICollection<CariHareket> CariHareketler { get; set; } = [];
     public ICollection<KasaHareket> KasaHareketler { get; set; } = [];
     public ICollection<BankaHareket> BankaHareketler { get; set; } = [];

@@ -1299,11 +1299,10 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - `backend/Muhasebe/DevTools/Services/MuhasebeSmokeTestSeedService.cs` eklendi.
 - `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` endpointi yalnızca development/test ortamlarında map edildi.
 - `docs/muhasebe-smoke-test-seed-rehberi.md` oluşturuldu ve seed akışı dokümante edildi.
-- Faz Q seed düzeltmesi ile `KullaniciTesisSahiplik` kontrolü `UserId + TesisId` bazlı hale getirildi ve `TEST CARI MUSTERI` / `TEST CARI TEDARIKCI` için banka hesabı seed edildi.
+- Faz Q seed düzeltmesi ile `KullaniciTesisSahiplik` kontrolü `UserId + TesisId` bazlı hale getirildi ve `TEST CARI MUSTERI` / `TEST CARI TEDARIKCI` için banka hesabı artık `CariKartBankaHesabi` entity’si üzerinden seed ediliyor.
 
 ### Bilerek Yapılmayanlar
 - Production otomatik seed eklenmedi.
-- Migration oluşturulmadı.
 - Büyük iş akışı refactor yapılmadı.
 
 ### Build
@@ -1312,7 +1311,8 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Frontend warning'leri mevcut: initial bundle budget, `kamp-basvuru.scss`, `satis-belgeleri.component.scss`, `garson-servis.scss`.
 
 ### Migration
-- Gerekmedi.
+- `backend/Infrastructure/EntityFramework/Migrations/20260604183000_FazQ_CariKartBankaHesabiEntitySeed.cs` eklendi.
+- Migration no-op; mevcut schema zaten `CariKartBankaHesaplari` tablosunu içeriyor.
 
 ### Test
 - `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` yalnızca development/test ortamında map edildi.

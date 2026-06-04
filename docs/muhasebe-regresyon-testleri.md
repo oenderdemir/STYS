@@ -1361,8 +1361,9 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - Duplicate kontrolü `CariKartId + IBAN` veya `CariKartId + HesapNo` mantığına göre korunuyor.
 
 ### Migration
-- `FazQ1_CariKartCokluBankaHesabiModeli` migration'ı eklendi.
+- `FazQ1_CariKartCokluBankaHesabiModeli` migration'ı no-op olarak bırakıldı.
 - Model snapshot güncellendi.
+- Mevcut veritabanında `CariKartBankaHesaplari` tablosu zaten bulunduğu için bu migration tablo oluşturma işlemi yapmıyor.
 
 ### Build
 - `dotnet build backend/STYS.csproj` başarılı.

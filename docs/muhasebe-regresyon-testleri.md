@@ -1007,7 +1007,7 @@ Kritik kontrol:
 ### Benzer Ama Korunacak Sınıflar
 - `backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiDtos.cs` ve `backend/Muhasebe/SatisBelgeleri/Dtos/SatisBelgesiTaslakOlusturmaDtos.cs` benzer alanlar taşıyor, fakat request/response sözleşmeleri farklı.
 - `backend/Muhasebe/MuhasebeFisleri/Dtos/MuhasebeFisDtos.cs` içindeki `YevmiyeDefteriDto`, `MuavinDefterDto`, `MizanDto` ve frontend report modelleri benzer filtre alanları içeriyor, ama farklı rapor bağlamlarında kullanılıyor.
-- `backend/Muhasebe/CariKartlar/Dtos/CariKartDtos.cs` ile `CariKartYetkiliKisiDto` birlikte kalmalı; `BankaAdi`/`Iban` alanları tekil açılış bilgisi olarak halen kullanılıyor.
+- `backend/Muhasebe/CariKartlar/Dtos/CariKartDtos.cs` ile `CariKartYetkiliKisiDto` birlikte kalmalı; ana cari kart üzerindeki legacy `BankaAdi`/`Iban` alanları kaldırıldı ve çoklu banka hesabı entity'si tek kaynak olarak kullanılıyor.
 - `backend/Muhasebe/TasinirKodMuhasebeHesapEslemeleri` ve `backend/Muhasebe/MuhasebeVergiHesapEslemeleri` benzer adlandırma taşısa da işlevsel olarak farklı eşleme alanları.
 
 ### İsimlendirme Karışıklıkları
@@ -1335,7 +1335,7 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 ### Yapılan Değişiklikler
 - `CariKartDto`, `CreateCariKartRequest` ve frontend model/request yapıları çoklu `BankaHesaplari` listesi alacak şekilde güncellendi.
 - `CariKartService` create/update/get akışları gerçek `CariKartBankaHesabi` ilişkisini okuyup yazacak şekilde refactor edildi.
-- Legacy tekil `BankaAdi` / `Iban` alanları bu fazda yeni veri kaynağı olarak kullanılmadı.
+- Legacy tekil `BankaAdi` / `Iban` alanları ana cari karttan kaldırıldı; yeni veri kaynağı yalnızca `BankaHesaplari` listesidir.
 - Cari kart formu frontend tarafında çoklu banka hesabı tablosu ile güncellendi.
 - `CariKartBankaHesabi` ilişki silme davranışı `Restrict` olarak korundu ve migration ile kayda geçirildi.
 

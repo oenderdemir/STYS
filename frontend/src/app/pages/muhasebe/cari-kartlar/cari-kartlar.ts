@@ -57,7 +57,11 @@ export class CariKartlarPage implements OnInit {
     pageSize = 10;
     totalRecords = 0;
 
-    readonly cariTipleri = CARI_TIPLERI;
+    readonly cariTipleri = [
+        { label: 'Müşteri', value: CARI_TIPLERI.Musteri },
+        { label: 'Tedarikçi', value: CARI_TIPLERI.Tedarikci },
+        { label: 'Kurumsal Müşteri', value: CARI_TIPLERI.KurumsalMusteri }
+    ];
     readonly acilisBakiyeYonleri = [
         { label: 'Borç', value: 'Borc' },
         { label: 'Alacak', value: 'Alacak' }
@@ -320,8 +324,6 @@ export class CariKartlarPage implements OnInit {
             acilisBakiyeTarihi: null,
             acilisBakiyeTutari: null,
             acilisBakiyeYonu: null,
-            bankaAdi: null,
-            iban: null,
             bankaHesaplari: [],
             yetkiliKisiler: []
         };
@@ -361,18 +363,14 @@ export class CariKartlarPage implements OnInit {
     }
 
     private mapToModel(item: CariKartModel): CariKartModel {
-        const bankaHesaplari = this.normalizeBankaHesaplari(item.bankaHesaplari?.length
-            ? item.bankaHesaplari
-            : this.buildLegacyBankaHesabiRows(item));
+        const bankaHesaplari = this.normalizeBankaHesaplari(item.bankaHesaplari ?? []);
         return {
             ...item,
             yetkiliKisiler: item.yetkiliKisiler ?? [],
             bankaHesaplari,
             acilisBakiyeTarihi: item.acilisBakiyeTarihi ? item.acilisBakiyeTarihi.slice(0, 10) : null,
             acilisBakiyeTutari: item.acilisBakiyeTutari ?? null,
-            acilisBakiyeYonu: item.acilisBakiyeYonu ?? null,
-            bankaAdi: item.bankaAdi ?? null,
-            iban: item.iban ?? null
+            acilisBakiyeYonu: item.acilisBakiyeYonu ?? null
         };
     }
 
@@ -490,22 +488,6 @@ export class CariKartlarPage implements OnInit {
         return iban.replace(/\s+/g, '').toUpperCase();
     }
 
-    private buildLegacyBankaHesabiRows(item: CariKartModel): CariKartBankaHesabiModel[] {
-        if (!item.bankaAdi?.trim() && !item.iban?.trim()) {
-            return [];
-        }
-
-        return [{
-            id: null,
-            cariKartId: item.id ?? null,
-            bankaAdi: item.bankaAdi?.trim() || null,
-            subeAdi: null,
-            hesapNo: null,
-            iban: this.normalizeIban(item.iban),
-            aciklama: null
-        }];
-    }
-
     private createEmptyBankaHesabi(): CariKartBankaHesabiModel {
         return {
             id: null,
@@ -544,4 +526,3 @@ export class CariKartlarPage implements OnInit {
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }
-

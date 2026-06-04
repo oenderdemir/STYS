@@ -77,7 +77,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
 
         await EnrichAcilisBakiyeDuzeltilebilirMiAsync([item], CancellationToken.None);
-        HydrateLegacyBankaHesaplari(item);
         return item;
     }
 
@@ -310,14 +309,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             }
         }
 
-        var legacyBankaFieldsUsed = bankaHesaplari.Count == 0
-            && (!string.IsNullOrWhiteSpace(dto.BankaAdi) || !string.IsNullOrWhiteSpace(dto.Iban));
-        if (legacyBankaFieldsUsed)
-        {
-            entity.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
-            entity.Iban = NormalizeIban(dto.Iban);
-        }
-
         await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
         try
         {
@@ -498,8 +489,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         dto.AcilisBakiyeTutari = NormalizeAcilisBakiyeTutari(dto.AcilisBakiyeTutari);
         dto.AcilisBakiyeYonu = NormalizeAcilisBakiyeYonu(dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu);
-        dto.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
-        dto.Iban = NormalizeIban(dto.Iban);
 
         if (dto.AcilisBakiyeTutari.GetValueOrDefault() > 0m)
         {
@@ -733,29 +722,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
 
         return $"KOMBO:{NormalizeOptional(bankaAdi, 128) ?? string.Empty}|{NormalizeOptional(subeAdi, 128) ?? string.Empty}|{NormalizeOptional(hesapNo, 64) ?? string.Empty}";
-    }
-
-    private static void HydrateLegacyBankaHesaplari(CariKartDto dto)
-    {
-        if (dto.BankaHesaplari.Count > 0)
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.BankaAdi) && string.IsNullOrWhiteSpace(dto.Iban))
-        {
-            return;
-        }
-
-        dto.BankaHesaplari =
-        [
-            new CariKartBankaHesabiDto
-            {
-                CariKartId = dto.Id ?? 0,
-                BankaAdi = dto.BankaAdi,
-                Iban = dto.Iban
-            }
-        ];
     }
 
     private static void ValidateYetkiliKisiler(IEnumerable<CariKartYetkiliKisiDto>? yetkiliKisiler)

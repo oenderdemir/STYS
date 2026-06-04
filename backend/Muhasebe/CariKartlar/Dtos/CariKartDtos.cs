@@ -25,8 +25,6 @@ public class CariKartDto : BaseRdbmsDto<int>
     public DateTime? AcilisBakiyeTarihi { get; set; }
     public decimal? AcilisBakiyeTutari { get; set; }
     public string? AcilisBakiyeYonu { get; set; }
-    public string? BankaAdi { get; set; }
-    public string? Iban { get; set; }
     public bool AcilisBakiyeDuzeltilebilirMi { get; set; }
     public List<CariKartBankaHesabiDto> BankaHesaplari { get; set; } = [];
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
@@ -52,8 +50,6 @@ public class CreateCariKartRequest
     public DateTime? AcilisBakiyeTarihi { get; set; }
     public decimal? AcilisBakiyeTutari { get; set; }
     public string? AcilisBakiyeYonu { get; set; }
-    public string? BankaAdi { get; set; }
-    public string? Iban { get; set; }
     public List<CariKartBankaHesabiDto> BankaHesaplari { get; set; } = [];
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }

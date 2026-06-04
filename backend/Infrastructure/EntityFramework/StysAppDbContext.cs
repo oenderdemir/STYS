@@ -1491,8 +1491,6 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AcilisBakiyeTarihi);
             entity.Property(x => x.AcilisBakiyeTutari).HasPrecision(18, 2);
             entity.Property(x => x.AcilisBakiyeYonu).HasMaxLength(16);
-            entity.Property(x => x.BankaAdi).HasMaxLength(128);
-            entity.Property(x => x.Iban).HasMaxLength(34);
             entity.HasIndex(x => new { x.TesisId, x.CariKodu })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");

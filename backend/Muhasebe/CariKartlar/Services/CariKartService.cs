@@ -62,13 +62,22 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
     public override async Task<CariKartDto?> GetByIdAsync(int id, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null)
     {
-        var item = await base.GetByIdAsync(id, include);
+        Func<IQueryable<CariKart>, IQueryable<CariKart>> includeQuery = query =>
+        {
+            var result = include is null ? query : include(query);
+            return result
+                .Include(x => x.BankaHesaplari.Where(b => !b.IsDeleted))
+                .Include(x => x.YetkiliKisiler);
+        };
+
+        var item = await base.GetByIdAsync(id, includeQuery);
         if (item is null)
         {
             return null;
         }
 
         await EnrichAcilisBakiyeDuzeltilebilirMiAsync([item], CancellationToken.None);
+        HydrateLegacyBankaHesaplari(item);
         return item;
     }
 
@@ -175,7 +184,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
         NormalizeCommonFields(dto);
         NormalizeFinansFields(dto);
+        var bankaHesaplari = NormalizeBankaHesaplari(dto.BankaHesaplari);
         var yetkiliKisiler = NormalizeYetkiliKisiler(dto.YetkiliKisiler);
+        dto.BankaHesaplari = [];
         dto.YetkiliKisiler = [];
 
         var anaHesapKodu = ResolveAnaHesapKodu(dto.CariTipi);
@@ -218,11 +229,12 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             }
 
             var result = await base.AddAsync(dto);
-        var resultId = result.Id ?? 0;
+            var resultId = result.Id ?? 0;
             if (resultId > 0)
             {
                 await SyncAcilisCariHareketiAsync(resultId, result.CariKodu, dto.AcilisBakiyeTarihi, dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu, CancellationToken.None);
                 await SyncYetkiliKisileriAsync(resultId, yetkiliKisiler, CancellationToken.None);
+                await SyncBankaHesaplariAsync(resultId, bankaHesaplari, CancellationToken.None);
             }
 
             await tx.CommitAsync(CancellationToken.None);
@@ -244,7 +256,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
         NormalizeCommonFields(dto);
         NormalizeFinansFields(dto);
+        var bankaHesaplari = NormalizeBankaHesaplari(dto.BankaHesaplari);
         var yetkiliKisiler = NormalizeYetkiliKisiler(dto.YetkiliKisiler);
+        dto.BankaHesaplari = [];
         dto.YetkiliKisiler = [];
         var entity = await _dbContext.CariKartlar.FirstOrDefaultAsync(x => x.Id == dto.Id.Value)
             ?? throw new BaseException("Cari kart bulunamadi.", 404);
@@ -282,8 +296,6 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         entity.AcilisBakiyeTutari = NormalizeAcilisBakiyeTutari(dto.AcilisBakiyeTutari);
         entity.AcilisBakiyeYonu = NormalizeAcilisBakiyeYonu(dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu);
         entity.AcilisBakiyeTarihi = entity.AcilisBakiyeTutari.GetValueOrDefault() > 0m ? dto.AcilisBakiyeTarihi : null;
-        entity.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
-        entity.Iban = NormalizeIban(dto.Iban);
 
         if (entity.MuhasebeHesapPlaniId.HasValue)
         {
@@ -296,6 +308,14 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
                     hesap.AktifMi = false;
                 }
             }
+        }
+
+        var legacyBankaFieldsUsed = bankaHesaplari.Count == 0
+            && (!string.IsNullOrWhiteSpace(dto.BankaAdi) || !string.IsNullOrWhiteSpace(dto.Iban));
+        if (legacyBankaFieldsUsed)
+        {
+            entity.BankaAdi = NormalizeOptional(dto.BankaAdi, 128);
+            entity.Iban = NormalizeIban(dto.Iban);
         }
 
         await using var tx = await _dbContext.Database.BeginTransactionAsync(CancellationToken.None);
@@ -312,6 +332,7 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
                 await SyncAcilisCariHareketiAsync(entity.Id, entity.CariKodu, dto.AcilisBakiyeTarihi, dto.AcilisBakiyeTutari, dto.AcilisBakiyeYonu, CancellationToken.None);
             }
             await SyncYetkiliKisileriAsync(entity.Id, yetkiliKisiler, CancellationToken.None);
+            await SyncBankaHesaplariAsync(entity.Id, bankaHesaplari, CancellationToken.None);
 
             await tx.CommitAsync(CancellationToken.None);
             return await GetByIdAsync(entity.Id) ?? Mapper.Map<CariKartDto>(entity);
@@ -501,6 +522,63 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         ValidateYetkiliKisiler(dto.YetkiliKisiler);
     }
 
+    private static List<CariKartBankaHesabiDto> NormalizeBankaHesaplari(IEnumerable<CariKartBankaHesabiDto>? bankaHesaplari)
+    {
+        var result = new Dictionary<string, CariKartBankaHesabiDto>(StringComparer.OrdinalIgnoreCase);
+        if (bankaHesaplari is null)
+        {
+            return [];
+        }
+
+        foreach (var hesap in bankaHesaplari)
+        {
+            if (hesap is null)
+            {
+                continue;
+            }
+
+            var bankaAdi = NormalizeOptional(hesap.BankaAdi, 128);
+            var subeAdi = NormalizeOptional(hesap.SubeAdi, 128);
+            var hesapNo = NormalizeOptional(hesap.HesapNo, 64);
+            var iban = NormalizeIban(hesap.Iban);
+            var aciklama = NormalizeOptional(hesap.Aciklama, 512);
+
+            var hasAnyValue = !string.IsNullOrWhiteSpace(bankaAdi)
+                || !string.IsNullOrWhiteSpace(subeAdi)
+                || !string.IsNullOrWhiteSpace(hesapNo)
+                || !string.IsNullOrWhiteSpace(iban)
+                || !string.IsNullOrWhiteSpace(aciklama);
+
+            if (!hasAnyValue)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(iban)
+                && (string.IsNullOrWhiteSpace(bankaAdi)
+                    || string.IsNullOrWhiteSpace(subeAdi)
+                    || string.IsNullOrWhiteSpace(hesapNo)))
+            {
+                throw new BaseException("IBAN yoksa banka adı, şube adı ve hesap no zorunludur.", 400);
+            }
+
+            var normalized = new CariKartBankaHesabiDto
+            {
+                Id = hesap.Id,
+                CariKartId = hesap.CariKartId,
+                BankaAdi = bankaAdi,
+                SubeAdi = subeAdi,
+                HesapNo = hesapNo,
+                Iban = iban,
+                Aciklama = aciklama
+            };
+
+            result[BuildBankaHesabiKey(normalized)] = normalized;
+        }
+
+        return result.Values.ToList();
+    }
+
     private static string? NormalizeOptional(string? value, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -560,6 +638,124 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         }
 
         return normalized;
+    }
+
+    private async Task SyncBankaHesaplariAsync(
+        int cariKartId,
+        IReadOnlyCollection<CariKartBankaHesabiDto> bankaHesaplari,
+        CancellationToken cancellationToken)
+    {
+        var mevcutHesaplar = await _dbContext.CariKartBankaHesaplari
+            .Where(x => x.CariKartId == cariKartId && !x.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var mevcutGruplar = mevcutHesaplar
+            .GroupBy(BuildBankaHesabiKey)
+            .ToDictionary(x => x.Key, x => x.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var gelenGruplar = bankaHesaplari
+            .GroupBy(BuildBankaHesabiKey)
+            .ToDictionary(x => x.Key, x => x.Last(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mevcutGrup in mevcutGruplar)
+        {
+            if (!gelenGruplar.TryGetValue(mevcutGrup.Key, out var gelenHesap))
+            {
+                foreach (var silinecek in mevcutGrup.Value)
+                {
+                    SoftDeleteBankaHesabi(silinecek);
+                }
+
+                continue;
+            }
+
+            var hedef = mevcutGrup.Value[0];
+            ApplyBankaHesabi(hedef, cariKartId, gelenHesap);
+
+            for (var i = 1; i < mevcutGrup.Value.Count; i++)
+            {
+                SoftDeleteBankaHesabi(mevcutGrup.Value[i]);
+            }
+        }
+
+        foreach (var gelen in gelenGruplar)
+        {
+            if (mevcutGruplar.ContainsKey(gelen.Key))
+            {
+                continue;
+            }
+
+            _dbContext.CariKartBankaHesaplari.Add(new CariKartBankaHesabi
+            {
+                CariKartId = cariKartId,
+                BankaAdi = gelen.Value.BankaAdi,
+                SubeAdi = gelen.Value.SubeAdi,
+                HesapNo = gelen.Value.HesapNo,
+                Iban = gelen.Value.Iban,
+                Aciklama = gelen.Value.Aciklama
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void ApplyBankaHesabi(CariKartBankaHesabi entity, int cariKartId, CariKartBankaHesabiDto dto)
+    {
+        entity.CariKartId = cariKartId;
+        entity.BankaAdi = dto.BankaAdi;
+        entity.SubeAdi = dto.SubeAdi;
+        entity.HesapNo = dto.HesapNo;
+        entity.Iban = dto.Iban;
+        entity.Aciklama = dto.Aciklama;
+        entity.IsDeleted = false;
+        entity.DeletedAt = null;
+        entity.DeletedBy = null;
+    }
+
+    private static void SoftDeleteBankaHesabi(CariKartBankaHesabi entity)
+    {
+        entity.IsDeleted = true;
+        entity.DeletedAt = DateTime.UtcNow;
+        entity.DeletedBy = null;
+    }
+
+    private static string BuildBankaHesabiKey(CariKartBankaHesabiDto dto)
+        => BuildBankaHesabiKey(dto.Iban, dto.BankaAdi, dto.SubeAdi, dto.HesapNo);
+
+    private static string BuildBankaHesabiKey(CariKartBankaHesabi entity)
+        => BuildBankaHesabiKey(entity.Iban, entity.BankaAdi, entity.SubeAdi, entity.HesapNo);
+
+    private static string BuildBankaHesabiKey(string? iban, string? bankaAdi, string? subeAdi, string? hesapNo)
+    {
+        if (!string.IsNullOrWhiteSpace(iban))
+        {
+            return $"IBAN:{iban.Trim().ToUpperInvariant()}";
+        }
+
+        return $"KOMBO:{NormalizeOptional(bankaAdi, 128) ?? string.Empty}|{NormalizeOptional(subeAdi, 128) ?? string.Empty}|{NormalizeOptional(hesapNo, 64) ?? string.Empty}";
+    }
+
+    private static void HydrateLegacyBankaHesaplari(CariKartDto dto)
+    {
+        if (dto.BankaHesaplari.Count > 0)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.BankaAdi) && string.IsNullOrWhiteSpace(dto.Iban))
+        {
+            return;
+        }
+
+        dto.BankaHesaplari =
+        [
+            new CariKartBankaHesabiDto
+            {
+                CariKartId = dto.Id ?? 0,
+                BankaAdi = dto.BankaAdi,
+                Iban = dto.Iban
+            }
+        ];
     }
 
     private static void ValidateYetkiliKisiler(IEnumerable<CariKartYetkiliKisiDto>? yetkiliKisiler)

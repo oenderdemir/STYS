@@ -1322,3 +1322,57 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 ### Commit
 - Bu faz için commit oluşturuldu.
 - Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
+## Faz Q-1 - CariKart Çoklu Banka Hesabı Modeli
+
+### Tespit
+- Cari kart ekranında tekil legacy banka alanları ile çoklu banka hesabı kullanımının birlikte yaşaması veri tutarlılığı riski oluşturuyordu.
+- Smoke test seed tarafında gerçek `CariKartBankaHesabi` entity kaydı oluşsa da, kullanıcı ekranı ve servis katmanı tekil model ile sınırlı kalıyordu.
+- Yeni modelin ana kaynak olarak `CariKartBankaHesabi` listesini kullanması gerekiyordu.
+
+### Yapılan Değişiklikler
+- `CariKartDto`, `CreateCariKartRequest` ve frontend model/request yapıları çoklu `BankaHesaplari` listesi alacak şekilde güncellendi.
+- `CariKartService` create/update/get akışları gerçek `CariKartBankaHesabi` ilişkisini okuyup yazacak şekilde refactor edildi.
+- Legacy tekil `BankaAdi` / `Iban` alanları bu fazda yeni veri kaynağı olarak kullanılmadı.
+- Cari kart formu frontend tarafında çoklu banka hesabı tablosu ile güncellendi.
+- `CariKartBankaHesabi` ilişki silme davranışı `Restrict` olarak korundu ve migration ile kayda geçirildi.
+
+### Eksik Kalan İş Kuralları
+- Legacy tekil banka alanları sadece geriye dönük okuma uyumluluğu için kullanılmalı; yeni kayıt girişi çoklu liste üzerinden olmalı.
+- İptal/soft delete edilmiş banka hesapları aktif liste sorgularında görünmemeli.
+
+### Backend
+- `backend/Muhasebe/CariKartlar/Dtos/CariKartDtos.cs`
+- `backend/Muhasebe/CariKartlar/Mapping/CariKartProfile.cs`
+- `backend/Muhasebe/CariKartlar/Services/CariKartService.cs`
+- `backend/Infrastructure/EntityFramework/StysAppDbContext.cs`
+- `backend/Infrastructure/EntityFramework/Migrations/20260604212020_FazQ1_CariKartCokluBankaHesabiModeli.cs`
+- `backend/Infrastructure/EntityFramework/Migrations/20260604212020_FazQ1_CariKartCokluBankaHesabiModeli.Designer.cs`
+
+### Frontend
+- `frontend/src/app/pages/muhasebe/cari-kartlar/cari-kartlar.dto.ts`
+- `frontend/src/app/pages/muhasebe/cari-kartlar/cari-kartlar.ts`
+- `frontend/src/app/pages/muhasebe/cari-kartlar/cari-kartlar.html`
+
+### Seed
+- `TEST CARI MUSTERI` ve `TEST CARI TEDARIKCI` seed akışında banka hesabı artık çoklu banka hesabı entity listesi ile uyumlu şekilde taşınıyor.
+- Duplicate kontrolü `CariKartId + IBAN` veya `CariKartId + HesapNo` mantığına göre korunuyor.
+
+### Migration
+- `FazQ1_CariKartCokluBankaHesabiModeli` migration'ı eklendi.
+- Model snapshot güncellendi.
+
+### Build
+- `dotnet build backend/STYS.csproj` başarılı.
+- `npm run build` başarılı.
+- Kalan frontend warning'leri hata seviyesinde değil.
+
+### Test
+- Build doğrulaması yapıldı.
+- Manuel runtime smoke test bu fazda koşturulmadı.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.

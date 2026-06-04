@@ -24,6 +24,7 @@ export interface CariKartModel {
     bankaAdi?: string | null;
     iban?: string | null;
     acilisBakiyeDuzeltilebilirMi?: boolean;
+    bankaHesaplari: CariKartBankaHesabiModel[];
     yetkiliKisiler: CariKartYetkiliKisiModel[];
 }
 
@@ -48,6 +49,7 @@ export interface CreateCariKartRequest {
     acilisBakiyeYonu?: string | null;
     bankaAdi?: string | null;
     iban?: string | null;
+    bankaHesaplari: CariKartBankaHesabiModel[];
     yetkiliKisiler: CariKartYetkiliKisiModel[];
 }
 
@@ -66,6 +68,16 @@ export interface CariKartYetkiliKisiModel {
     gorevUnvan?: string | null;
     telefon?: string | null;
     eposta?: string | null;
+    aciklama?: string | null;
+}
+
+export interface CariKartBankaHesabiModel {
+    id?: number | null;
+    cariKartId?: number | null;
+    bankaAdi?: string | null;
+    subeAdi?: string | null;
+    hesapNo?: string | null;
+    iban?: string | null;
     aciklama?: string | null;
 }
 

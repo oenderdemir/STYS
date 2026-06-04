@@ -47,7 +47,7 @@
     </ng-template>
 </p-table>
 
-<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Cari Kart Duzenle' : 'Yeni Cari Kart'" [style]="{ width: '46rem', 'max-width': '95vw' }">
+<p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Cari Kart Duzenle' : 'Yeni Cari Kart'" [style]="{ width: '68rem', 'max-width': '98vw' }">
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Çalışma Tesisi</label>
@@ -109,15 +109,34 @@
             <p-select class="w-full" [options]="acilisBakiyeYonleri" optionLabel="label" optionValue="value" [(ngModel)]="model.acilisBakiyeYonu" appendTo="body" />
         </div>
         <div class="col-span-12">
-            <h6 class="m-0">Banka Bilgileri</h6>
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Banka Adı</label>
-            <input pInputText class="w-full" [(ngModel)]="model.bankaAdi" maxlength="128" />
-        </div>
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">IBAN</label>
-            <input pInputText class="w-full" [(ngModel)]="model.iban" maxlength="34" />
+            <div class="flex items-center justify-content-between mb-2">
+                <h6 class="m-0">Banka Hesapları</h6>
+                <p-button label="Banka Hesabı Ekle" icon="pi pi-plus" severity="secondary" [outlined]="true" (onClick)="addBankaHesabi()" />
+            </div>
+            <p-table [value]="model.bankaHesaplari" [tableStyle]="{ 'min-width': '100%' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Banka Adı</th>
+                        <th>Şube Adı</th>
+                        <th>Hesap No</th>
+                        <th>IBAN</th>
+                        <th>Açıklama</th>
+                        <th style="width: 4rem"></th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item let-rowIndex="rowIndex">
+                    <tr>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.bankaAdi" maxlength="128" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.subeAdi" maxlength="128" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.hesapNo" maxlength="64" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.iban" maxlength="34" /></td>
+                        <td><input pInputText class="w-full" [(ngModel)]="item.aciklama" maxlength="512" /></td>
+                        <td>
+                            <p-button icon="pi pi-trash" severity="danger" [outlined]="true" size="small" (onClick)="removeBankaHesabi(rowIndex)" />
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
         </div>
         <div class="col-span-12">
             <div class="flex items-center justify-content-between mb-2">

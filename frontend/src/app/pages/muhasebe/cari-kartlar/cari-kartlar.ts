@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CARI_TIPLERI, CariKartAcilisBakiyesiDuzeltRequest, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
+import { CARI_TIPLERI, CariKartAcilisBakiyesiDuzeltRequest, CariKartBankaHesabiModel, CariKartModel, CariKartYetkiliKisiModel, CreateCariKartRequest, UpdateCariKartRequest } from './cari-kartlar.dto';
 import { CariKartlarService } from './cari-kartlar.service';
 
 @Component({
@@ -180,6 +180,18 @@ export class CariKartlarPage implements OnInit {
             return;
         }
 
+        let bankaHesaplari: CariKartBankaHesabiModel[];
+        try {
+            bankaHesaplari = this.normalizeBankaHesaplari(this.model.bankaHesaplari);
+        } catch (error: unknown) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Eksik Bilgi',
+                detail: error instanceof Error ? error.message : 'Banka hesabı bilgileri geçersiz.'
+            });
+            return;
+        }
+
         const payload: CreateCariKartRequest | UpdateCariKartRequest = {
             tesisId,
             cariTipi: this.model.cariTipi,
@@ -199,8 +211,7 @@ export class CariKartlarPage implements OnInit {
             acilisBakiyeTarihi: this.model.acilisBakiyeTarihi || null,
             acilisBakiyeTutari: this.model.acilisBakiyeTutari ?? null,
             acilisBakiyeYonu: this.model.acilisBakiyeYonu || null,
-            bankaAdi: this.model.bankaAdi?.trim() || null,
-            iban: this.normalizeIban(this.model.iban),
+            bankaHesaplari,
             yetkiliKisiler: this.normalizeYetkiliKisiler(this.model.yetkiliKisiler)
         };
 
@@ -311,6 +322,7 @@ export class CariKartlarPage implements OnInit {
             acilisBakiyeYonu: null,
             bankaAdi: null,
             iban: null,
+            bankaHesaplari: [],
             yetkiliKisiler: []
         };
     }
@@ -349,15 +361,27 @@ export class CariKartlarPage implements OnInit {
     }
 
     private mapToModel(item: CariKartModel): CariKartModel {
+        const bankaHesaplari = this.normalizeBankaHesaplari(item.bankaHesaplari?.length
+            ? item.bankaHesaplari
+            : this.buildLegacyBankaHesabiRows(item));
         return {
             ...item,
             yetkiliKisiler: item.yetkiliKisiler ?? [],
+            bankaHesaplari,
             acilisBakiyeTarihi: item.acilisBakiyeTarihi ? item.acilisBakiyeTarihi.slice(0, 10) : null,
             acilisBakiyeTutari: item.acilisBakiyeTutari ?? null,
             acilisBakiyeYonu: item.acilisBakiyeYonu ?? null,
             bankaAdi: item.bankaAdi ?? null,
             iban: item.iban ?? null
         };
+    }
+
+    addBankaHesabi(): void {
+        this.model.bankaHesaplari = [...(this.model.bankaHesaplari ?? []), this.createEmptyBankaHesabi()];
+    }
+
+    removeBankaHesabi(index: number): void {
+        this.model.bankaHesaplari = (this.model.bankaHesaplari ?? []).filter((_, i) => i !== index);
     }
 
     canDuzeltAcilisBakiye(item: CariKartModel): boolean {
@@ -419,12 +443,87 @@ export class CariKartlarPage implements OnInit {
             }));
     }
 
+    private normalizeBankaHesaplari(hesaplar: CariKartBankaHesabiModel[]): CariKartBankaHesabiModel[] {
+        const result = new Map<string, CariKartBankaHesabiModel>();
+
+        for (const hesap of hesaplar ?? []) {
+            if (!hesap) {
+                continue;
+            }
+
+            const bankaAdi = hesap.bankaAdi?.trim() || null;
+            const subeAdi = hesap.subeAdi?.trim() || null;
+            const hesapNo = hesap.hesapNo?.trim() || null;
+            const iban = this.normalizeIban(hesap.iban);
+            const aciklama = hesap.aciklama?.trim() || null;
+
+            const hasAnyValue = !!bankaAdi || !!subeAdi || !!hesapNo || !!iban || !!aciklama;
+            if (!hasAnyValue) {
+                continue;
+            }
+
+            if (!iban && (!bankaAdi || !subeAdi || !hesapNo)) {
+                throw new Error('IBAN yoksa banka adı, şube adı ve hesap no zorunludur.');
+            }
+
+            const normalized: CariKartBankaHesabiModel = {
+                id: hesap.id ?? null,
+                cariKartId: hesap.cariKartId ?? null,
+                bankaAdi,
+                subeAdi,
+                hesapNo,
+                iban,
+                aciklama
+            };
+
+            result.set(this.bankaHesabiKey(normalized), normalized);
+        }
+
+        return [...result.values()];
+    }
+
     private normalizeIban(iban?: string | null): string | null {
         if (!iban?.trim()) {
             return null;
         }
 
         return iban.replace(/\s+/g, '').toUpperCase();
+    }
+
+    private buildLegacyBankaHesabiRows(item: CariKartModel): CariKartBankaHesabiModel[] {
+        if (!item.bankaAdi?.trim() && !item.iban?.trim()) {
+            return [];
+        }
+
+        return [{
+            id: null,
+            cariKartId: item.id ?? null,
+            bankaAdi: item.bankaAdi?.trim() || null,
+            subeAdi: null,
+            hesapNo: null,
+            iban: this.normalizeIban(item.iban),
+            aciklama: null
+        }];
+    }
+
+    private createEmptyBankaHesabi(): CariKartBankaHesabiModel {
+        return {
+            id: null,
+            cariKartId: null,
+            bankaAdi: null,
+            subeAdi: null,
+            hesapNo: null,
+            iban: null,
+            aciklama: null
+        };
+    }
+
+    private bankaHesabiKey(hesap: CariKartBankaHesabiModel): string {
+        if (hesap.iban?.trim()) {
+            return `IBAN:${hesap.iban.trim().toUpperCase()}`;
+        }
+
+        return `KOMBO:${(hesap.bankaAdi ?? '').trim().toUpperCase()}|${(hesap.subeAdi ?? '').trim().toUpperCase()}|${(hesap.hesapNo ?? '').trim().toUpperCase()}`;
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

@@ -112,6 +112,14 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
             "TEST CARI MUSTERI",
             cancellationToken);
         await EnsureCariKartYetkiliKisiAsync(cariMusteri.Id, "TEST YETKILI KISI 1", cancellationToken);
+        await EnsureCariKartBankaHesabiAsync(
+            cariMusteri.Id,
+            "TEST BANKA",
+            "TEST SUBE",
+            "TEST-0001",
+            "TR000000000000000000000000",
+            "TEST smoke cari banka hesabi",
+            cancellationToken);
 
         var cariTedarikci = await EnsureCariKartAsync(
             testTesis.Id,
@@ -121,6 +129,14 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
             "TEST CARI TEDARIKCI",
             cancellationToken);
         await EnsureCariKartYetkiliKisiAsync(cariTedarikci.Id, "TEST YETKILI KISI 2", cancellationToken);
+        await EnsureCariKartBankaHesabiAsync(
+            cariTedarikci.Id,
+            "TEST BANKA",
+            "TEST SUBE",
+            "TEST-0002",
+            "TR000000000000000000000000",
+            "TEST smoke cari banka hesabi",
+            cancellationToken);
 
         await EnsureKasaBankaHesapAsync(
             testTesis.Id,
@@ -172,6 +188,7 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
                 "Test tesisi ve yetkisiz tesis oluşturuldu veya yeniden kullanıldı.",
                 "Açık ve kapalı muhasebe dönemleri hazırlandı.",
                 "TEST_ önekli cari kartlar, banka/kasa hesapları ve muhasebe hesap planı hazırlandı.",
+                "Cari kart banka hesapları hazırlandı.",
                 "Açık cari hareket, onaylı muhasebe fişi ve yevmiye sayaç/bakiye satırları hazırlandı.",
                 "Satış belgesi ve tahsilat/ödeme smoke testleri için ön koşullar hazırlandı; son belge adımları UI smoke akışında tamamlanacak."
             ]
@@ -219,7 +236,8 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
     private async Task EnsureKullaniciTesisSahiplikAsync(object tesisId, object userId, CancellationToken cancellationToken)
     {
         var exists = await _db.Set<KullaniciTesisSahiplik>().AnyAsync(
-            x => EF.Property<object>(x, "UserId")!.Equals(userId),
+            x => EF.Property<object>(x, "UserId")!.Equals(userId) &&
+                 EF.Property<object>(x, "TesisId")!.Equals(tesisId),
             cancellationToken);
         if (!exists)
         {
@@ -227,6 +245,64 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
             _db.Set<KullaniciTesisSahiplik>().Add(kullaniciTesisSahiplik);
             _db.Entry(kullaniciTesisSahiplik).Property("TesisId").CurrentValue = tesisId;
             _db.Entry(kullaniciTesisSahiplik).Property("UserId").CurrentValue = userId;
+        }
+    }
+
+    private async Task EnsureCariKartBankaHesabiAsync(
+        int cariKartId,
+        string bankaAdi,
+        string sube,
+        string hesapNo,
+        string iban,
+        string aciklama,
+        CancellationToken cancellationToken)
+    {
+        var entityType = _db.Model.FindEntityType(typeof(CariKart));
+        var supportsBankaAdi = entityType?.FindProperty("BankaAdi") is not null;
+        var supportsSube = entityType?.FindProperty("Sube") is not null;
+        var supportsHesapNo = entityType?.FindProperty("HesapNo") is not null;
+        var supportsIban = entityType?.FindProperty("Iban") is not null;
+        var supportsAciklama = entityType?.FindProperty("Aciklama") is not null;
+
+        var cariKart = await _db.Set<CariKart>().FirstAsync(x => x.Id == cariKartId, cancellationToken);
+
+        var exists = await _db.Set<CariKart>().AnyAsync(
+            x => x.Id == cariKartId &&
+                 (!supportsBankaAdi || EF.Property<string?>(x, "BankaAdi") == bankaAdi) &&
+                 (!supportsSube || EF.Property<string?>(x, "Sube") == sube) &&
+                 (!supportsHesapNo || EF.Property<string?>(x, "HesapNo") == hesapNo) &&
+                 (!supportsIban || EF.Property<string?>(x, "Iban") == iban),
+            cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        var entry = _db.Entry(cariKart);
+        if (supportsBankaAdi)
+        {
+            entry.Property("BankaAdi").CurrentValue = bankaAdi;
+        }
+
+        if (supportsSube)
+        {
+            entry.Property("Sube").CurrentValue = sube;
+        }
+
+        if (supportsHesapNo)
+        {
+            entry.Property("HesapNo").CurrentValue = hesapNo;
+        }
+
+        if (supportsIban)
+        {
+            entry.Property("Iban").CurrentValue = iban;
+        }
+
+        if (supportsAciklama)
+        {
+            entry.Property("Aciklama").CurrentValue = aciklama;
         }
     }
 

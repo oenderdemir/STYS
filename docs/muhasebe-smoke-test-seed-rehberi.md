@@ -129,6 +129,7 @@ BU SCRIPT SADECE DEVELOPMENT/TEST ORTAMI İÇİNDİR.
 - `TEST-` önekli muhasebe hesap planları
 - `TEST_CARI_MUSTERI` ve `TEST_CARI_TEDARIKCI`
 - Cari yetkili kişi kayıtları
+- Cari kart banka hesapları
 - Kasa ve banka hesapları
 - Açık cari hareket
 - Onaylı muhasebe fişi

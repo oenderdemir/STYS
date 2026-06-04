@@ -1299,6 +1299,7 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - `backend/Muhasebe/DevTools/Services/MuhasebeSmokeTestSeedService.cs` eklendi.
 - `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` endpointi yalnızca development/test ortamlarında map edildi.
 - `docs/muhasebe-smoke-test-seed-rehberi.md` oluşturuldu ve seed akışı dokümante edildi.
+- Faz Q seed düzeltmesi ile `KullaniciTesisSahiplik` kontrolü `UserId + TesisId` bazlı hale getirildi ve `TEST CARI MUSTERI` / `TEST CARI TEDARIKCI` için banka hesabı seed edildi.
 
 ### Bilerek Yapılmayanlar
 - Production otomatik seed eklenmedi.

@@ -1364,6 +1364,7 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 - `FazQ1_CariKartCokluBankaHesabiModeli` migration'ı no-op olarak bırakıldı.
 - Model snapshot güncellendi.
 - Mevcut veritabanında `CariKartBankaHesaplari` tablosu zaten bulunduğu için bu migration tablo oluşturma işlemi yapmıyor.
+- Legacy `CariKart.BankaAdi` / `CariKart.Iban` verileri drop öncesi `CariKartBankaHesaplari` tablosuna taşındı; yeni kayıt oluşmamış cari kartlarda veri kaybı riski bırakılmadı.
 
 ### Build
 - `dotnet build backend/STYS.csproj` başarılı.

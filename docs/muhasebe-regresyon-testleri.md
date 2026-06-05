@@ -1459,6 +1459,98 @@ Faz J smoke testlerinin gerçekten çalıştırılabilmesi için minimum test or
 
 ---
 
+## Faz T - Local/Test Runtime Doğrulama Ortamı
+
+### Ortam Keşfi
+- `backend/appsettings.json` ve `backend/appsettings.Development.json` içinde DB bağlantısı `Server=localhost,14333;Database=STYSDB;User Id=sa;Password=Strong!Pass1;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True` olarak tanımlı.
+- `docker-compose.yml` içinde `mssql` ve `redis` servisleri mevcut.
+- `docker compose ps` çıktısında `stys-mssql` ve `stys-redis` servisleri healthy durumda göründü.
+- `backend/Program.cs` içinde seed endpoint yalnızca `Development` ve `Test` ortamlarında map ediliyor.
+- Seed endpoint route’u doğrulandı: `POST /ui/muhasebe/dev-tools/seed-smoke-test-data`.
+- `backend/Properties/launchSettings.json` içinde development profili `http://localhost:5049` adresini kullanıyor.
+
+### DB Bağlantısı
+- Development ortamında SQL Server bağlantısı kurulabildi.
+- Local SQL Server container aktif ve erişilebilir durumda.
+- Bağlantı problemi yoktu; connection string, kullanıcı/şifre ve veritabanı ayakta.
+
+### Migration Apply
+- Komut: `dotnet ef database update --project backend/STYS.csproj --startup-project backend/STYS.csproj --context STYS.Infrastructure.EntityFramework.StysAppDbContext`
+- Sonuç: başarılı.
+- Backend startup sırasında da `TodIdentityDbContext` ve `StysAppDbContext` migration’ları uygulandı.
+
+### Backend Runtime
+- Komut: `dotnet run --project backend/STYS.csproj --launch-profile http`
+- Backend `http://localhost:5049` üzerinde ayağa kalktı.
+- Swagger erişimi doğrulandı: `http://localhost:5049/swagger/index.html` -> `200`.
+- Root `GET /health` endpoint’i `404` döndü; bu projede genel health route’u root altında map edilmemiş.
+- Backend process hata vermeden çalıştı ve startup lisans doğrulamasını geçti.
+
+### Seed Endpoint
+- Login ile JWT alındı.
+- Başarılı kullanıcı: `admin / 1`.
+- `POST /ui/muhasebe/dev-tools/seed-smoke-test-data` çağrısı `200` döndü.
+- Dönen seed özeti:
+  - `TEST MUHASEBE TESISI`
+  - `TEST MUHASEBE YETKISIZ TESISI`
+  - açık/kapalı dönemler
+  - cari kartlar
+  - cari kart banka hesapları
+  - açık cari hareket
+  - onaylı muhasebe fişi
+- `muhasebe-admin / 1` ile aynı anda atılan paralel çağrıda duplicate key görüldü; bu durum eşzamanlı çağrı yarışıydı.
+
+### Seed Idempotency
+- Aynı seed endpoint ikinci kez `admin / 1` tokenı ile çağrıldı.
+- İkinci çağrı da `200` döndü.
+- SQL count kontrolleri duplicate oluşmadığını doğruladı.
+
+### DB Verification
+| Kontrol | Durum | Not |
+|--------|-------|-----|
+| `TEST MUHASEBE TESISI` | OK | 1 kayıt |
+| `TEST MUHASEBE YETKISIZ TESISI` | OK | 1 kayıt |
+| `TEST CARI MUSTERI` | OK | `CariKodu=TEST-CARI-MUSTERI`, 1 kayıt |
+| `TEST CARI TEDARIKCI` | OK | `CariKodu=TEST-CARI-TEDARIKCI`, 1 kayıt |
+| `CariKartBankaHesaplari` | OK | `TEST-0001` ve `TEST-0002`, her biri 1 kayıt |
+| `CariKartYetkiliKisileri` | OK | `TEST YETKILI KISI 1` ve `TEST YETKILI KISI 2`, her biri 1 kayıt |
+| `MuhasebeDonemler` | OK | 1 açık, 1 kapalı dönem |
+| `MuhasebeFisler` | OK | `TEST-FIS-0001`, 1 kayıt |
+| `CariHareketler` | OK | `TEST-CARI-HAREKET-0001`, 1 kayıt |
+
+### Minimal API Smoke
+- JWT ile `GET /ui/muhasebe/cari-kartlar/paged?PageNumber=1&PageSize=20&tesisId=5` çağrıldı.
+- Liste endpoint’i 2 cari kart döndürdü.
+- Liste response’unda `bankaHesaplari` alanı boş geldi; bu endpoint shallow projection kullanıyor.
+- `GET /ui/muhasebe/cari-kartlar/7` ve `GET /ui/muhasebe/cari-kartlar/8` çağrılarında `bankaHesaplari` dolu geldi.
+- Detay response’larında müşteri ve tedarikçi için birer banka hesabı doğrulandı.
+
+### Blokajlar
+- Root `GET /health` endpoint’i map edilmemiş.
+- Seed endpoint için JWT gerekiyor; auth/login olmadan smoke tamamlanamıyor.
+- `muhasebe-admin` ile aynı anda paralel seed çağrısı yapıldığında unique constraint yarışı oluşabiliyor; sequential çağrıda sorun yok.
+
+### Yapılan Düzeltmeler
+- Kod değişikliği yapılmadı.
+- Runtime ortam ayağa kaldırıldı ve DB bağlantısı doğrulandı.
+- Migration zinciri gerçek SQL Server üzerinde uygulandı.
+- Seed akışı gerçek JWT ile çalıştırıldı.
+
+### Build
+- `dotnet build backend/STYS.csproj`: başarılı.
+- `npm run build`: başarılı.
+
+### Go-Live Etkisi
+- Runtime ortam blokajı kalktı.
+- `J-01 – J-15` smoke testleri için backend, DB, migration, seed ve token akışı hazır.
+- Uçtan uca iş akışı smoke testlerine geçilebilir.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
 ## Faz Q-1 - CariKart Çoklu Banka Hesabı Modeli
 
 ### Tespit

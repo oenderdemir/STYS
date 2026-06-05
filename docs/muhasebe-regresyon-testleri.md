@@ -136,6 +136,96 @@
 
 ---
 
+## Faz S - Canlı Öncesi Runtime Smoke Doğrulaması ve Go-Live Checklist Kapanışı
+
+### Test Ortamı
+- Ortam: Hazırlanamadı. Bu çalışma ortamında gerçek dev/test runtime oturumu yok.
+- Branch: `main`
+- Test kullanıcısı: Hazırlanamadı.
+- Test tesisi: Hazırlanamadı.
+- Açık dönem: Koddan doğrulandı, runtime ortamında çalıştırılamadı.
+- Kapalı dönem: Koddan doğrulandı, runtime ortamında çalıştırılamadı.
+- Seed çalıştırıldı mı: Hayır. Endpoint kodda mevcut, gerçek runtime çağrısı yapılamadı.
+- Seed ikinci kez çalıştırıldı mı: Hayır. Runtime doğrulama yapılamadı.
+- Migration durumu: `dotnet ef migrations list` ile zincir doğrulandı; test DB apply kontrolü yapılamadı.
+
+### Seed Doğrulaması
+| Kontrol | Durum | Not |
+|--------|-------|-----|
+| TEST MUHASEBE TESISI | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| TEST MUHASEBE YETKISIZ TESISI | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Test kullanıcısı TEST MUHASEBE TESISI scope’una sahip mi? | Test Edilemedi | Gerçek oturum olmadığı için doğrulanamadı. |
+| Açık dönem oluşmuş mu? | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Kapalı dönem oluşmuş mu? | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| TEST CARI MUSTERI | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| TEST CARI TEDARIKCI | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Cari banka hesapları | Test Edilemedi | Kodda çoklu `bankaHesaplari` seed akışı mevcut, runtime doğrulanamadı. |
+| Cari kart yetkili kişileri | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Kasa/banka hesapları | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Açık cari hareket | Test Edilemedi | Runtime seed çalıştırılamadı. |
+| Onaylı muhasebe fişi | Test Edilemedi | Runtime seed çalıştırılamadı. |
+
+### Migration Doğrulaması
+| Kontrol | Durum | Not |
+|--------|-------|-----|
+| `CariKartBankaHesaplari` tablosu var | Başarılı | Model/migration zincirinde mevcut. |
+| `CariKartlar.BankaAdi` / `CariKartlar.Iban` kolonları kaldırılmış | Başarılı | `FazQ1_RemoveCariKartLegacyBankaFields` migration’ı ile drop ediliyor. |
+| Legacy veriler drop öncesi yeni tabloya taşındı | Başarılı | Migration’a idempotent taşıma SQL’i eklendi. |
+| FK delete behavior Restrict | Başarılı | DbContext mapping’de `Restrict` korunuyor. |
+| Mevcut test DB üzerinde apply kontrolü | Test Edilemedi | Test DB runtime/bağlantı yok; gerçek apply çalıştırılamadı. |
+| Temiz DB için obvious hata var mı | Başarılı | `dotnet ef migrations list` ile zincir sıralı görünüyor. |
+
+### Smoke Test Sonuçları
+| Senaryo | Durum | Not |
+|---------|-------|-----|
+| J-01 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-02 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-03 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-04 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-05 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-06 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-07 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-08 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-09 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-10 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-11 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-12 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-13 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-14 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+| J-15 | Test Edilemedi | Gerçek runtime oturumu hazırlanamadı. |
+
+### Bulunan Hatalar
+- Runtime smoke testler bu ortamda koşturulamadı.
+- Test kullanıcı, test tesisi ve gerçek test DB oturumu hazırlanamadığı için uçtan uca doğrulama tamamlanamadı.
+
+### Yapılan Düzeltmeler
+- Kod değişikliği yapılmadı.
+- Faz S kapsamında sadece kod ve doküman incelemesi ile build/migration zinciri doğrulandı.
+
+### Açık Riskler
+- J-01 – J-15 smoke testleri gerçek ortamda koşulmadığı için canlı öncesi kabul riski devam ediyor.
+- Mevcut test DB apply doğrulaması yapılamadığı için migration uyumluluğu saha ortamında ayrıca teyit edilmeli.
+- Legacy veri taşıma SQL’i kodda idempotent olsa da, gerçek veri seti üzerinde duplicate davranışı ayrıca kontrol edilmeli.
+- Frontend budget warning’leri hata değil, ancak teknik borç olarak izlenmeli.
+
+### Go-Live Kararı
+- Uygun değil
+
+### Build
+- `dotnet build backend/STYS.csproj`: Başarılı.
+- `npm run build`: Başarılı.
+
+### Migration
+- Yeni migration oluşturulmadı.
+- Mevcut migration zinciri `dotnet ef migrations list` ile doğrulandı.
+- Test DB apply kontrolü yapılamadı.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
 ## Faz R - Muhasebe Eksik Özellik / Gap Analysis
 
 ### Tespit

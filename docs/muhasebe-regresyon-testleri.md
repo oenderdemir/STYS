@@ -136,6 +136,52 @@
 
 ---
 
+## Faz V - J-06 Satış Belgesi Muhasebe Onay ve J-15 Scoped Yetki İzolasyonu
+
+### Test Ortamı
+- Tarih: 2026-06-06.
+- Backend runtime: `http://localhost:5049`.
+- Scoped smoke kullanıcısı: `muhasebe-scope-test / 1`.
+- Dev/test seed endpoint'i çalıştırıldı ve idempotent şekilde başarıyla döndü.
+
+### J-06 Sonucu
+- `POST /ui/muhasebe/satis-belgeleri` ile satış belgesi oluşturuldu.
+- `POST /ui/muhasebe/satis-belgeleri/{id}/muhasebe-onayina-gonder` başarılı oldu.
+- `POST /ui/muhasebe/satis-belgeleri/{id}/muhasebe-onayla` başarılı oldu.
+- İlk muhasebe fişi üretim denemesinde seed eksikliği nedeniyle blokaj oluştu:
+  - `6.00.600` gelir detayı yoktu.
+  - `3.91.391` satış KDV detayı yoktu.
+- `MuhasebeSmokeTestSeedService` bu iki test hesabını da üretecek şekilde güncellendi.
+- Son durumda `POST /ui/muhasebe/satis-belgeleri/{id}/muhasebe-fisi-olustur` `200` döndü ve belgeye `MuhasebeFisId=4` bağlandı.
+
+### J-15 Sonucu
+- Scoped kullanıcıyla tesis 5 erişimi doğrulandı.
+- `GET /ui/muhasebe/cari-kartlar/paged?PageNumber=1&PageSize=20&tesisId=5` `200` döndü.
+- `GET /ui/muhasebe/cari-kartlar/7` `200` döndü.
+- `GET /ui/muhasebe/cari-kartlar/paged?PageNumber=1&PageSize=20&tesisId=6` `200` döndü ve liste boş geldi.
+- `GET /ui/Tesis/6` `404` döndü.
+- `POST /ui/muhasebe/fisler/yevmiye-defteri` ile tesis 6 üzerinde `403` döndü.
+- `POST /ui/muhasebe/fisler/yevmiye-defteri`, `muavin-defter` ve `mizan` tesis 5 üzerinde `200` döndü.
+
+### Yapılan Düzeltmeler
+- `MuhasebeSmokeTestSeedService` içine `6.00.600` ve `3.91.391` test hesapları eklendi.
+- Geçici smoke scripti repodan kaldırıldı.
+
+### Build
+- `dotnet build backend/STYS.csproj`: başarılı.
+- `npm run build`: başarılı.
+
+### Go-Live Etkisi
+- J-06 runtime blokajı seed/veri eksikliği nedeniyle kalktı.
+- J-15 scoped yetki izolasyonu doğrulandı.
+- Muhasebe smoke akışı bu iki kritik senaryo için hazır.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
 ## Faz U - J-01 - J-15 Runtime Smoke Testleri
 
 ### Test Ortami

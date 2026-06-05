@@ -330,6 +330,8 @@ public sealed class MuhasebeSmokeTestSeedService : IMuhasebeSmokeTestSeedService
         var customerAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-120-CARI-MUSTERI", "TEST MUHASEBE CARI MUSTERI HESABI", cancellationToken);
         var supplierAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-320-CARI-TEDARIKCI", "TEST MUHASEBE CARI TEDARIKCI HESABI", cancellationToken);
         var revenueAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-600-GELIR", "TEST MUHASEBE GELIR HESABI", cancellationToken);
+        _ = await EnsureMuhasebeHesapPlaniAsync(tesisId, "6.00.600", "TEST MUHASEBE SATIS GELIR DETAY HESABI", cancellationToken);
+        _ = await EnsureMuhasebeHesapPlaniAsync(tesisId, "3.91.391", "TEST MUHASEBE SATIS KDV HESABI", cancellationToken);
         var vatAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-191-KDV", "TEST MUHASEBE KDV HESABI", cancellationToken);
         var discountAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-780-INDIRIM", "TEST MUHASEBE INDIRIM HESABI", cancellationToken);
         var stockAccount = await EnsureMuhasebeHesapPlaniAsync(tesisId, "TEST-153-STOK", "TEST MUHASEBE STOK HESABI", cancellationToken);

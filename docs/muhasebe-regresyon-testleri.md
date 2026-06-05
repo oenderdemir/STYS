@@ -136,6 +136,85 @@
 
 ---
 
+## Faz U - J-01 - J-15 Runtime Smoke Testleri
+
+### Test Ortami
+- Tarih: 2026-06-05.
+- Backend runtime: `http://localhost:5049`.
+- Swagger: `GET /swagger/index.html` 200 döndü.
+- DB: Docker SQL Server `localhost,14333`, `STYSDB`.
+- Auth: `admin / 1` ile JWT alındı.
+- Seed endpoint: `POST /ui/muhasebe/dev-tools/seed-smoke-test-data`.
+- Seed endpoint iki kez ardışık çağrıldı ve iki çağrı da 200 döndü.
+- Seed duplicate kontrolü: `TEST MUHASEBE TESISI`, `TEST MUHASEBE YETKISIZ TESISI`, `TEST CARI MUSTERI`, `TEST CARI TEDARIKCI`, `TEST-0001`, `TEST-0002` kayıtları birer adet kaldı.
+
+### Basarili Senaryolar
+| Senaryo | Durum | Not |
+|--------|-------|-----|
+| J-01 Auth / tesis / aktif dönem | OK | Login, tesis detail ve aktif dönem endpointleri 200 döndü. |
+| J-02 Cari kart create/detail | OK | Yeni cari kart oluşturuldu ve detay endpointinden okundu. |
+| J-03 Cari kart çoklu banka/yetkili | OK | Aynı cari kartta 2 banka hesabı ve 1 yetkili kişi detail response içinde doğrulandı. |
+| J-04 Açılış bakiyesi | OK | Açılış bakiyeli cari kart oluşturuldu. |
+| J-05 Satış belgesi oluşturma | OK | Taslak satış belgesi oluşturuldu. |
+| J-07 Manuel muhasebe fişi | OK | Dengeli fiş oluşturuldu, onaylandı, onay sonrası update 400 ile engellendi. |
+| J-08 Muhasebe fişi iptal | OK | Onaylı fiş iptal edildi, ters kayıt oluştu ve fiş durumu `Iptal` oldu. |
+| J-09 Tahsilat/ödeme kısmi kapama | OK | Taze aktif cari hareket üzerinde tahsilat oluşturuldu; hedef hareket `KapananTutar=100`, `KalanTutar=400` oldu. |
+| J-10 Kapama geri alma | OK | Tahsilat iptalinde hedef hareket `KapananTutar=0`, `KalanTutar=500` oldu; iptal kapama hareketi `Durum=Iptal`, `KapananTutar=0`, `KalanTutar=0`, `KapandiMi=1`, `IliskiliCariHareketId=NULL` olarak doğrulandı. İkinci iptal çağrısı 400 ve "zaten iptal edilmiş" mesajı döndü. |
+| J-11 Kapalı dönem engeli | OK | 2026-05 kapalı dönemine fiş oluşturma 400 ile reddedildi. |
+| J-12 Yevmiye defteri | OK | Açık dönem yevmiye defteri 200 döndü. |
+| J-13 Muavin defter | OK | `TEST-120-CARI-MUSTERI` hesap planı için muavin defter 200 döndü. |
+| J-14 Mizan | OK | Mizan 200 döndü; genel borç ve alacak toplamları eşit doğrulandı. |
+
+### Kismen Basarili / Hatali Senaryolar
+| Senaryo | Durum | Not |
+|--------|-------|-----|
+| J-06 Satış belgesi muhasebe fişi | Kısmi | Satış belgesi oluşturuldu. `muhasebe-fisi-olustur` çağrısı, belge `MuhasebeOnaylandı` durumunda olmadığı için 400 döndü. Bu runtime hata değil; smoke akışında önce muhasebe onay adımı koşulmalı. |
+
+### Test Edilemeyenler
+| Senaryo | Durum | Not |
+|--------|-------|-----|
+| J-15 Yetkisiz tesis izolasyonu | Test edilemedi | Kullanılan `admin` token global yetkili olduğu için `TEST MUHASEBE YETKISIZ TESISI` 200 döndü. Bu senaryo için scoped non-admin test kullanıcısı/tokenı gerekiyor. |
+
+### DB Verification
+| Kontrol | Durum | Not |
+|--------|-------|-----|
+| `TEST MUHASEBE TESISI` | OK | 1 kayıt |
+| `TEST MUHASEBE YETKISIZ TESISI` | OK | 1 kayıt |
+| `TEST CARI MUSTERI` | OK | 1 kayıt |
+| `TEST CARI TEDARIKCI` | OK | 1 kayıt |
+| `CariKartBankaHesaplari` | OK | `TEST-0001` ve `TEST-0002`, toplam 2 kayıt |
+| `CariKartYetkiliKisileri` | OK | Seed cari kartları için toplam 2 kayıt |
+| `MuhasebeDonemler` | OK | `DonemNo=5` kapalı, `DonemNo=6` açık |
+| `MuhasebeFisler TEST-FIS-0001` | OK | 1 kayıt |
+| `CariHareketler TEST-CARI-HAREKET-0001` | OK | 1 kayıt |
+
+### Yapilan Duzeltmeler
+- Kod değişikliği yapılmadı.
+- Migration oluşturulmadı.
+- Production seed açılmadı.
+- Sadece gerçek runtime smoke sonucu dokümante edildi.
+
+### Acik Riskler
+- J-06 için satış belgesi muhasebe onay sırası ayrıca smoke akışına eklenmeli.
+- J-15 için global admin yerine tesis kapsamı sınırlı non-admin test kullanıcısı gerekiyor.
+- Seed endpoint ardışık çağrıda idempotent; paralel çağrı yarışı Faz T'de açık risk olarak kalmaya devam ediyor.
+
+### Go-Live Karari
+- J-01 - J-05 ve J-07 - J-14 runtime ortamında doğrulandı.
+- J-06 iş akışı sırası tamamlanmadan go-live onayı için yeterli kabul edilmemeli.
+- J-15 yetki izolasyonu scoped non-admin token ile doğrulanmadan go-live için hazır kabul edilmemeli.
+- Önerilen sonraki faz: satış belgesi muhasebe onay uçtan uca smoke ve scoped auth/tesis izolasyon smoke fazı.
+
+### Build
+- `dotnet build backend/STYS.csproj`: ilk deneme çalışan `STYS` process'i DLL lock tuttuğu için başarısız oldu; process durdurulduktan sonra başarılı.
+- `npm run build`: başarılı. Mevcut bundle/style budget warning'leri devam ediyor.
+
+### Commit
+- Bu faz için commit oluşturuldu.
+- Commit hash’i Git geçmişinden takip edilecek.
+
+---
+
 ## Faz S - Canlı Öncesi Runtime Smoke Doğrulaması ve Go-Live Checklist Kapanışı
 
 ### Test Ortamı

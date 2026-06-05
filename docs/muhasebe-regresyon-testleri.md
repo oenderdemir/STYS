@@ -136,6 +136,50 @@
 
 ---
 
+## Faz R - Muhasebe Eksik Özellik / Gap Analysis
+
+### Tespit
+- Muhasebe modülünde ana iş akışları kod seviyesinde büyük ölçüde tamamlandı; ancak canlıya çıkış öncesi runtime doğrulama borcu hala var.
+- Faz Q ve Faz Q-1 ile seed, çoklu banka hesabı modeli ve legacy veri taşıma tarafı toparlandı; buna rağmen gerçek kullanıcı, gerçek scope ve gerçek veriyle son kabul testi yapılmadı.
+- Bu fazın amacı yeni kod yazmak değil, canlı öncesi zorunlu doğrulamalar ile canlı sonrası ürün geliştirmelerini ayırmaktır.
+
+### 1. Canlı Öncesi Zorunlu Eksikler
+- P0: J-01 ile J-15 arasındaki smoke testler gerçek ortamda tamamlanmalı.
+- P0: Seed edilen test verisi ile çoklu banka hesabı, yetkili kişi, açılış bakiyesi, tahsilat/ödeme ve belge iptal akışları uçtan uca doğrulanmalı.
+- P0: Legacy `CariKart.BankaAdi` / `CariKart.Iban` verilerinin `CariKartBankaHesaplari` tablosuna taşınması gerçek veri üzerinde kontrol edilmeli.
+- P0: Migration zinciri temiz veritabanında ve mevcut veritabanında uygulanabilir olarak doğrulanmalı.
+- P0: Scope / yetki sızıntısı testleri gerçek oturumda list, detay, rapor ve lookup ekranlarında doğrulanmalı.
+- P0: Dönem kilidi, belge iptali ve kapama geri alma akışları gerçek veri ile tekrar kontrol edilmeli.
+- P1: Cari ekstre, bakiye, yevmiye, muavin ve mizan çıktıları rapor verisiyle karşılaştırılmalı.
+- P1: İptal edilmiş kayıtların raporlara aktif veri gibi yansımadığı son kez teyit edilmeli.
+
+### 2. Canlı Sonrası Geliştirilebilir Özellikler
+- P2: Cari kartta birincil banka hesabı işaretleme ve hesap sıralama desteği.
+- P2: Çoklu banka hesabı satırları için daha güçlü satır içi validasyon ve kopyalama desteği.
+- P2: Smoke test seed akışı için otomatik sonuç toplama ve raporlama ekranı.
+- P2: Muhasebe raporlarında gelişmiş filtre, daha iyi export ve kullanıcıya dönük iyileştirmeler.
+- P2: Banka hesabı ve cari kart değişiklikleri için daha ayrıntılı audit / geçmiş görüntüleme.
+- P2: Frontend bundle ve style budget borçlarının ürün deneyimini iyileştirecek şekilde teknik borç olarak azaltılması.
+
+### 3. Kapsam Dışı Bırakılanlar
+- `#13 Taşınır Kartları` kapsam dışı kalmaya devam ediyor.
+- Muhasebe dışı ekranlardaki budget warning'ler bu fazın konusu değil.
+- Ürün kapsamını değiştirecek büyük yeniden tasarım veya muhasebe çekirdeği refaktörü bu fazın dışında.
+- Production'da otomatik seed çalıştırma yaklaşımı kapsam dışı.
+
+### 4. Riskler
+- Veri taşıma ve drop migration'ları yanlış sırayla uygulanırsa veri kaybı veya uyumsuzluk riski oluşur.
+- Runtime smoke testler yapılmadan canlıya çıkış, rapor ve scope davranışlarında gizli regresyon bırakabilir.
+- Legacy veriler farklı kayıt şekilleri içeriyorsa taşıma SQL'i beklenmeyen duplicate üretimini gizleyebilir; bu yüzden gerçek veri ile doğrulama şarttır.
+- Frontend build uyarıları hata değil, ancak ürün kararlılığı için teknik borç olarak izlenmeli.
+
+### 5. Önerilen Sonraki Faz
+- Faz S: Canlı öncesi runtime smoke doğrulaması ve go-live checklist kapanışı.
+- Bu fazda gerçek test kullanıcısı, test tesisi, açık/kapalı dönem ve migration uygulanmış test veritabanı ile J-01 ile J-15 senaryoları çalıştırılmalı.
+- Başarılı sonuçlar, canlıya çıkış kararının son kapısı olarak kayda alınmalı.
+
+---
+
 ## Faz P - Muhasebe Final Durum Özeti / Go-No-Go
 
 ### Genel Durum

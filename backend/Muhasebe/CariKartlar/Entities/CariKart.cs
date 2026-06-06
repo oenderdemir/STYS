@@ -74,7 +74,6 @@ public class CariKart : BaseEntity<int>
     public ICollection<KasaHareket> KasaHareketler { get; set; } = [];
     public ICollection<BankaHareket> BankaHareketler { get; set; } = [];
     public ICollection<TahsilatOdemeBelgesi> TahsilatOdemeBelgeleri { get; set; } = [];
-    public ICollection<CariKartBankaHesabi> BankaHesaplari { get; set; } = [];
     public ICollection<CariKartYetkiliKisi> YetkiliKisiler { get; set; } = [];
     public Tesis? Tesis { get; set; }
     public MuhasebeHesapPlani? MuhasebeHesapPlani { get; set; }

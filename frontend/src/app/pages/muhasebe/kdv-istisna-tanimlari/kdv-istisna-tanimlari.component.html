@@ -261,17 +261,31 @@
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-sm font-medium mb-1">Geçerlilik Başlangıç</label>
-                    <input
-                        type="date"
+                    <p-datepicker
                         formControlName="gecerlilikBaslangicTarihi"
-                        class="w-full p-inputtext p-component" />
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                        dataType="string" />
                 </div>
                 <div>
                     <label class="block text-sm font-medium mb-1">Geçerlilik Bitiş</label>
-                    <input
-                        type="date"
+                    <p-datepicker
                         formControlName="gecerlilikBitisTarihi"
-                        class="w-full p-inputtext p-component" />
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                        dataType="string" />
                 </div>
             </div>
 

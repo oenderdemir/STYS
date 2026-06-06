@@ -143,7 +143,17 @@
                                 </label>
                                 <label>
                                     <span>Dogum Tarihi</span>
-                                    <input type="date" formControlName="dogumTarihi" />
+                                    <p-datepicker
+                                        formControlName="dogumTarihi"
+                                        class="w-full"
+                                        styleClass="w-full"
+                                        inputStyleClass="w-full"
+                                        dateFormat="dd.mm.yy"
+                                        [firstDayOfWeek]="1"
+                                        [showIcon]="true"
+                                        [showButtonBar]="true"
+                                        appendTo="body"
+                                        dataType="string" />
                                 </label>
                                 <label>
                                     <span>Katilimci Tipi</span>

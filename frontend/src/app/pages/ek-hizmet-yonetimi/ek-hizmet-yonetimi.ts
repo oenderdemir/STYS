@@ -7,6 +7,7 @@ import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
@@ -22,7 +23,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 @Component({
     selector: 'app-ek-hizmet-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DatePickerModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-yonetimi.html',
     styleUrl: './ek-hizmet-yonetimi.scss',
     providers: [MessageService]

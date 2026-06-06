@@ -194,7 +194,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
 
         if (dto.TasinirKodId <= 0 || !await _tasinirKodRepository.AnyAsync(x => x.Id == dto.TasinirKodId))
         {
-            throw new BaseException("Gecerli bir tasinir kod secilmelidir.", 400);
+            throw new BaseException("Geçerli bir taşınır kodu seçilmelidir.", 400);
         }
 
         if (string.IsNullOrWhiteSpace(dto.Ad))

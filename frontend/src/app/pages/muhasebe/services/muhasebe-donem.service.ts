@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { getApiBaseUrl } from '../../../core/config';
 import { CreateMuhasebeDonemRequest, MuhasebeDonemDto, UpdateMuhasebeDonemRequest } from '../models/muhasebe-donem.model';
 
@@ -11,10 +11,10 @@ export class MuhasebeDonemService {
 
     getAll(tesisId?: number | null): Observable<MuhasebeDonemDto[]> {
         const params = tesisId && tesisId > 0 ? { tesisId: String(tesisId) } : undefined;
-        return this.http.get<MuhasebeDonemDto[]>(
+        return this.http.get<unknown>(
             `${this.apiBaseUrl}/ui/muhasebe/donemler`,
             { params }
-        );
+        ).pipe(map((response) => this.normalizeList(response)));
     }
 
     getById(id: number): Observable<MuhasebeDonemDto> {
@@ -66,5 +66,30 @@ export class MuhasebeDonemService {
             `${this.apiBaseUrl}/ui/muhasebe/donemler/${id}/ac`,
             {}
         );
+    }
+
+    private normalizeList(response: unknown): MuhasebeDonemDto[] {
+        if (Array.isArray(response)) {
+            return response as MuhasebeDonemDto[];
+        }
+
+        const anyResponse = response as {
+            data?: unknown;
+            items?: unknown;
+        } | null | undefined;
+
+        if (Array.isArray(anyResponse?.data)) {
+            return anyResponse.data as MuhasebeDonemDto[];
+        }
+
+        if (Array.isArray((anyResponse?.data as { items?: unknown } | undefined)?.items)) {
+            return (anyResponse?.data as { items?: MuhasebeDonemDto[] }).items ?? [];
+        }
+
+        if (Array.isArray(anyResponse?.items)) {
+            return anyResponse.items as MuhasebeDonemDto[];
+        }
+
+        return [];
     }
 }

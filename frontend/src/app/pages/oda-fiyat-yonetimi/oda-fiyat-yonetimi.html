@@ -152,10 +152,34 @@
                     <input pInputText maxlength="3" class="w-full" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
                 </td>
                 <td>
-                    <input pInputText type="date" class="w-full" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
+                    <p-datepicker
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="row.baslangicTarihi"
+                        [disabled]="!canManage || saving"
+                        (ngModelChange)="clearNewOzelKullanimBadge(row)"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                        dataType="string" />
                 </td>
                 <td>
-                    <input pInputText type="date" class="w-full" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />
+                    <p-datepicker
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="row.bitisTarihi"
+                        [disabled]="!canManage || saving"
+                        (ngModelChange)="clearNewOzelKullanimBadge(row)"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                        dataType="string" />
                 </td>
                 <td>
                     <p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || saving" (ngModelChange)="clearNewOzelKullanimBadge(row)" />

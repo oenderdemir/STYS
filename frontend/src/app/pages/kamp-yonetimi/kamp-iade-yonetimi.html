@@ -95,9 +95,20 @@
 
                 <div class="kamp-iade-form">
                     <label>
-                        <span>Vazgecme Tarihi</span>
-                        <input type="date" [(ngModel)]="vazgecmeTarihi" [disabled]="hesapliyor || detayLoading" />
-                    </label>
+                    <span>Vazgecme Tarihi</span>
+                    <p-datepicker
+                        [(ngModel)]="vazgecmeTarihi"
+                        [disabled]="hesapliyor || detayLoading"
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                        dataType="string" />
+                </label>
 
                     <label>
                         <span>Odenen Toplam Tutar</span>

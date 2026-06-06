@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { DialogService, DynamicDialogModule, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -23,7 +24,7 @@ import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { DepolarService } from '../depolar/depolar.service';
-import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
+import { formatDateForApi, MuhasebeFisDurumlari, parseApiDate } from '../models/muhasebe-fis.model';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
@@ -41,6 +42,7 @@ import { StokHareketleriService } from './stok-hareketleri.service';
         FormsModule,
         ButtonModule,
         ConfirmDialogModule,
+        DatePickerModule,
         DialogModule,
         DynamicDialogModule,
         InputNumberModule,
@@ -76,6 +78,7 @@ export class StokHareketleriPage implements OnInit {
     saving = false;
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
+    hareketTarihiDate: Date | null = null;
 
     selectedDepoId?: number;
 
@@ -258,6 +261,7 @@ export class StokHareketleriPage implements OnInit {
         }
         this.dialogMode = 'create';
         this.model = this.createEmpty();
+        this.hareketTarihiDate = this.startOfNow();
         if (this.selectedDepoId && this.selectedDepoId > 0) {
             this.model.depoId = this.selectedDepoId;
         }
@@ -271,6 +275,7 @@ export class StokHareketleriPage implements OnInit {
         }
         this.dialogMode = 'edit';
         this.model = { ...item };
+        this.hareketTarihiDate = parseApiDate(item.hareketTarihi);
         this.applyIstisnaFilter();
         this.dialogVisible = true;
     }
@@ -314,7 +319,7 @@ export class StokHareketleriPage implements OnInit {
         const payload = {
             depoId: this.model.depoId,
             tasinirKartId: this.model.tasinirKartId,
-            hareketTarihi: this.model.hareketTarihi,
+            hareketTarihi: this.formatDateTimeForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
             hareketTipi: this.model.hareketTipi,
             miktar: this.model.miktar,
             birimFiyat: this.model.birimFiyat,
@@ -522,10 +527,11 @@ export class StokHareketleriPage implements OnInit {
     // ──────────────────────────────────────────
 
     private createEmpty(): StokHareketModel {
+        const now = this.startOfNow();
         return {
             depoId: 0,
             tasinirKartId: 0,
-            hareketTarihi: new Date().toISOString(),
+            hareketTarihi: this.formatDateTimeForApi(now) ?? '',
             hareketTipi: 'Giriş',
             miktar: 1,
             birimFiyat: 0,
@@ -544,6 +550,25 @@ export class StokHareketleriPage implements OnInit {
             kdvOrani: 20,
             kdvTutari: 0
         };
+    }
+
+    private startOfNow(): Date {
+        return new Date();
+    }
+
+    private formatDateTimeForApi(value: Date | string | null | undefined): string | null {
+        const date = value instanceof Date ? value : parseApiDate(value);
+        if (!date) {
+            return null;
+        }
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hour = String(date.getHours()).padStart(2, '0');
+        const minute = String(date.getMinutes()).padStart(2, '0');
+        const second = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

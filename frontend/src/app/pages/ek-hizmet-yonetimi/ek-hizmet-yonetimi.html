@@ -55,8 +55,34 @@
                     </td>
                     <td><input pInputText class="cell-input" type="number" min="0" step="0.01" [(ngModel)]="row.birimFiyat" [disabled]="!canManage || savingTarifeler" /></td>
                     <td><input pInputText class="cell-input" maxlength="3" [(ngModel)]="row.paraBirimi" [disabled]="!canManage || savingTarifeler" /></td>
-                    <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.baslangicTarihi" [disabled]="!canManage || savingTarifeler" /></td>
-                    <td><input pInputText class="cell-input" type="date" [(ngModel)]="row.bitisTarihi" [disabled]="!canManage || savingTarifeler" /></td>
+                    <td>
+                        <p-datepicker
+                            class="w-full"
+                            styleClass="w-full"
+                            inputStyleClass="w-full"
+                            [(ngModel)]="row.baslangicTarihi"
+                            [disabled]="!canManage || savingTarifeler"
+                            dateFormat="dd.mm.yy"
+                            [firstDayOfWeek]="1"
+                            [showIcon]="true"
+                            [showButtonBar]="true"
+                            appendTo="body"
+                            dataType="string" />
+                    </td>
+                    <td>
+                        <p-datepicker
+                            class="w-full"
+                            styleClass="w-full"
+                            inputStyleClass="w-full"
+                            [(ngModel)]="row.bitisTarihi"
+                            [disabled]="!canManage || savingTarifeler"
+                            dateFormat="dd.mm.yy"
+                            [firstDayOfWeek]="1"
+                            [showIcon]="true"
+                            [showButtonBar]="true"
+                            appendTo="body"
+                            dataType="string" />
+                    </td>
                     <td class="text-center"><p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingTarifeler" /></td>
                     <td class="text-center"><p-button icon="pi pi-trash" severity="danger" [text]="true" [disabled]="!canManage || savingTarifeler" (onClick)="removeTarifeRow(rowIndex)" /></td>
                 </tr>

@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
@@ -54,6 +55,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
         DatePipe,
         ButtonModule,
         ConfirmDialogModule,
+        DatePickerModule,
         DialogModule,
         InputNumberModule,
         InputTextModule,
@@ -142,17 +144,20 @@ export class MuhasebeDonemlerComponent implements OnInit {
             this.cdr.detectChanges();
         })).subscribe({
             next: (records) => {
-                this.allRecords = records;
+                this.allRecords = Array.isArray(records) ? records : [];
                 this.applyFilter();
             },
             error: (error: unknown) => {
+                this.allRecords = [];
+                this.filteredRecords = [];
                 this.showError(error);
             }
         });
     }
 
     applyFilter(): void {
-        let result = [...this.allRecords];
+        const source = Array.isArray(this.allRecords) ? this.allRecords : [];
+        let result = [...source];
 
         if (this.filter.tesisId != null) {
             result = result.filter(r => r.tesisId === this.filter.tesisId);

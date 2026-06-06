@@ -16,7 +16,6 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { Toolbar } from 'primeng/toolbar';
 import {
     MizanFilterModel,
     MizanKarsilastirmaModel,
@@ -65,7 +64,6 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
         TableModule,
         TagModule,
         ToastModule,
-        Toolbar,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],

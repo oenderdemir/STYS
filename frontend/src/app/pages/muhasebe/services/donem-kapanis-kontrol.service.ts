@@ -6,10 +6,11 @@ import {
     DonemKapanisKontrolFilterModel,
     DonemKapanisKontrolModel
 } from '../models/donem-kapanis-kontrol.model';
+import { getApiBaseUrl } from '@/app/core/config/app-runtime.config';
 
 @Injectable({ providedIn: 'root' })
 export class DonemKapanisKontrolService {
-    private readonly apiBaseUrl = '';
+    private readonly apiBaseUrl =getApiBaseUrl();;
 
     constructor(private readonly http: HttpClient) { }
 

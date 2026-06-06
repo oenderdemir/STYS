@@ -6,6 +6,7 @@ import { finalize, forkJoin } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
@@ -23,7 +24,7 @@ import { OdaFiyatYonetimiService } from './oda-fiyat-yonetimi.service';
 @Component({
     selector: 'app-oda-fiyat-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TagModule, TableModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DatePickerModule, InputTextModule, SelectModule, TagModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './oda-fiyat-yonetimi.html',
     providers: [MessageService]
 })

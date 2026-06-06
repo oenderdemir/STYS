@@ -4,6 +4,7 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToolbarModule } from 'primeng/toolbar';
@@ -14,7 +15,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
 @Component({
     selector: 'app-kamp-iade-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, TableModule, TagModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DatePickerModule, TableModule, TagModule, ToolbarModule],
     templateUrl: './kamp-iade-yonetimi.html',
     styleUrl: './kamp-iade-yonetimi.scss'
 })

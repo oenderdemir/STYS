@@ -3,6 +3,7 @@ import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
@@ -17,7 +18,7 @@ interface SelectOption<T = string | number> {
 @Component({
     selector: 'app-sezon-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, CheckboxModule, SelectModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, DatePickerModule, InputTextModule, CheckboxModule, SelectModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -48,11 +49,11 @@ interface SelectOption<T = string | number> {
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic</label>
-                    <input id="baslangicTarihi" pInputText type="date" class="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="bitisTarihi" class="block font-medium mb-2">Bitis</label>
-                    <input id="bitisTarihi" pInputText type="date" class="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" />
+                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="minimumGece" class="block font-medium mb-2">Minimum Gece</label>

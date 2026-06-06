@@ -196,21 +196,35 @@
     <!-- Başlangıç Tarihi -->
     <div>
       <label class="block mb-1 text-sm font-medium">Başlangıç Tarihi <span class="text-red-500">*</span></label>
-      <input
-        type="date"
+      <p-datepicker
         [(ngModel)]="model.baslangicTarihi"
-        class="w-full p-inputtext p-component p-element"
-        [disabled]="dialogMode === 'edit' && model.kapaliMi" />
+        class="w-full"
+        styleClass="w-full"
+        inputStyleClass="w-full"
+        [disabled]="dialogMode === 'edit' && model.kapaliMi"
+        dateFormat="dd.mm.yy"
+        [firstDayOfWeek]="1"
+        [showIcon]="true"
+        [showButtonBar]="true"
+        appendTo="body"
+        dataType="string" />
     </div>
 
     <!-- Bitiş Tarihi -->
     <div>
       <label class="block mb-1 text-sm font-medium">Bitiş Tarihi <span class="text-red-500">*</span></label>
-      <input
-        type="date"
+      <p-datepicker
         [(ngModel)]="model.bitisTarihi"
-        class="w-full p-inputtext p-component p-element"
-        [disabled]="dialogMode === 'edit' && model.kapaliMi" />
+        class="w-full"
+        styleClass="w-full"
+        inputStyleClass="w-full"
+        [disabled]="dialogMode === 'edit' && model.kapaliMi"
+        dateFormat="dd.mm.yy"
+        [firstDayOfWeek]="1"
+        [showIcon]="true"
+        [showButtonBar]="true"
+        appendTo="body"
+        dataType="string" />
     </div>
 
     <!-- Açıklama -->

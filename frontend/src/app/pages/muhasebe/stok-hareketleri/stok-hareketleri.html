@@ -152,7 +152,18 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Hareket Tarihi</label>
-            <input pInputText class="w-full" type="datetime-local" [(ngModel)]="model.hareketTarihi" />
+            <p-datepicker
+                [(ngModel)]="hareketTarihiDate"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                dateFormat="dd.mm.yy"
+                [showTime]="true"
+                hourFormat="24"
+                [firstDayOfWeek]="1"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                appendTo="body" />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">KDV Uygulama Tipi</label>

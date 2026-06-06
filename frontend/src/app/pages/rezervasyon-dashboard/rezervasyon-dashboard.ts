@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
@@ -27,7 +28,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
 @Component({
     selector: 'app-rezervasyon-dashboard',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DatePickerModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
     styleUrl: './rezervasyon-dashboard.scss',
     providers: [MessageService]
@@ -40,9 +41,9 @@ export class RezervasyonDashboard implements OnInit {
 
     tesisler: RezervasyonTesisDto[] = [];
     selectedTesisId: number | null = null;
-    selectedTarih = this.todayInput();
-    kpiBaslangicTarihi = this.firstDayOfMonthInput();
-    kpiBitisTarihi = this.todayInput();
+    selectedTarihDate = this.todayDate();
+    kpiBaslangicDate = this.firstDayOfMonthDate();
+    kpiBitisDate = this.todayDate();
     selectedKpiDonemi: 'thisMonth' | 'last7' | 'last30' | 'custom' = 'thisMonth';
     readonly kpiDonemleri = [
         { label: 'Bu Ay', value: 'thisMonth' },
@@ -51,8 +52,8 @@ export class RezervasyonDashboard implements OnInit {
         { label: 'Ozel Aralik', value: 'custom' }
     ];
     reportSelectedTesisIds: number[] = [];
-    reportBaslangicTarihi = this.firstDayOfMonthInput();
-    reportBitisTarihi = this.todayInput();
+    reportBaslangicDate = this.firstDayOfMonthDate();
+    reportBitisDate = this.todayDate();
     dashboard: RezervasyonDashboardDto | null = null;
 
     loadingReferences = false;
@@ -323,7 +324,7 @@ export class RezervasyonDashboard implements OnInit {
                         this.reportSelectedTesisIds = [this.selectedTesisId];
                     }
 
-                    if (this.selectedTarih && this.selectedTarih.trim().length > 0) {
+                    if (this.selectedTarihDate) {
                         this.applyKpiDonemiPreset();
                     }
 
@@ -385,9 +386,9 @@ export class RezervasyonDashboard implements OnInit {
         this.service
             .getGunlukDashboard(
                 this.selectedTesisId,
-                this.selectedTarih,
-                this.kpiBaslangicTarihi,
-                this.kpiBitisTarihi)
+                this.formatDateForApi(this.selectedTarihDate),
+                this.formatDateForApi(this.kpiBaslangicDate),
+                this.formatDateForApi(this.kpiBitisDate))
             .pipe(
                 finalize(() => {
                     this.loadingDashboard = false;
@@ -407,55 +408,44 @@ export class RezervasyonDashboard implements OnInit {
             });
     }
 
-    private todayInput(): string {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+    private todayDate(): Date {
+        return new Date();
     }
 
-    private firstDayOfMonthInput(): string {
+    private firstDayOfMonthDate(): Date {
         const date = new Date();
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        return `${year}-${month}-01`;
+        return new Date(date.getFullYear(), date.getMonth(), 1);
     }
 
     private applyKpiDonemiPreset(): void {
-        const selectedDate = this.parseDateInputOrToday(this.selectedTarih);
+        const selectedDate = this.selectedTarihDate ?? this.todayDate();
         if (this.selectedKpiDonemi === 'thisMonth') {
-            this.kpiBaslangicTarihi = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-01`;
-            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+            this.kpiBaslangicDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+            this.kpiBitisDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
             return;
         }
 
         if (this.selectedKpiDonemi === 'last7') {
             const start = new Date(selectedDate);
             start.setDate(start.getDate() - 6);
-            this.kpiBaslangicTarihi = this.toInputDate(start);
-            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+            this.kpiBaslangicDate = start;
+            this.kpiBitisDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
             return;
         }
 
         if (this.selectedKpiDonemi === 'last30') {
             const start = new Date(selectedDate);
             start.setDate(start.getDate() - 29);
-            this.kpiBaslangicTarihi = this.toInputDate(start);
-            this.kpiBitisTarihi = this.toInputDate(selectedDate);
+            this.kpiBaslangicDate = start;
+            this.kpiBitisDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
         }
     }
 
-    private parseDateInputOrToday(value: string): Date {
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) {
-            return new Date();
+    private formatDateForApi(date: Date | null | undefined): string | undefined {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return undefined;
         }
 
-        return parsed;
-    }
-
-    private toInputDate(date: Date): string {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
@@ -472,7 +462,7 @@ export class RezervasyonDashboard implements OnInit {
             return;
         }
 
-        if (!this.reportBaslangicTarihi || !this.reportBitisTarihi || this.reportBaslangicTarihi > this.reportBitisTarihi) {
+        if (!this.reportBaslangicDate || !this.reportBitisDate || this.reportBaslangicDate > this.reportBitisDate) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Gecerli bir tarih araligi seciniz.' });
             return;
         }
@@ -484,8 +474,8 @@ export class RezervasyonDashboard implements OnInit {
         }
 
         const export$ = format === 'excel'
-            ? this.service.exportOdemeRaporuExcel(this.reportSelectedTesisIds, this.reportBaslangicTarihi, this.reportBitisTarihi)
-            : this.service.exportOdemeRaporuPdf(this.reportSelectedTesisIds, this.reportBaslangicTarihi, this.reportBitisTarihi);
+            ? this.service.exportOdemeRaporuExcel(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!)
+            : this.service.exportOdemeRaporuPdf(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!);
 
         export$
             .pipe(
@@ -498,7 +488,7 @@ export class RezervasyonDashboard implements OnInit {
             .subscribe({
                 next: (blob) => {
                     const extension = format === 'excel' ? 'xls' : 'pdf';
-                    const fileName = `odeme-raporu-${this.reportBaslangicTarihi}-${this.reportBitisTarihi}.${extension}`;
+                    const fileName = `odeme-raporu-${this.formatDateForApi(this.reportBaslangicDate)}-${this.formatDateForApi(this.reportBitisDate)}.${extension}`;
                     this.downloadBlob(blob, fileName);
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Rapor indirildi.' });
                 },

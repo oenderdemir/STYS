@@ -200,14 +200,26 @@ export class TasinirKartlariPage implements OnInit {
     onTasinirKodModelChange(value: unknown): void {
         if (typeof value === 'string') {
             this.model.tasinirKodId = 0;
+            this.selectedTasinirKodOption = null;
+        }
+    }
+
+    onTasinirKodBlur(): void {
+        if (!this.selectedTasinirKodOption?.value) {
+            this.model.tasinirKodId = 0;
         }
     }
 
     save(): void {
         this.model.tasinirKodId = this.selectedTasinirKodOption?.value ?? this.model.tasinirKodId;
 
-        if (!this.model.ad?.trim() || !this.model.tasinirKodId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad ve tasinir kod secimi zorunludur.' });
+        if (!this.model.ad?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad zorunludur.' });
+            return;
+        }
+
+        if (!this.model.tasinirKodId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Taşınır kodu listeden seçilmelidir.' });
             return;
         }
 

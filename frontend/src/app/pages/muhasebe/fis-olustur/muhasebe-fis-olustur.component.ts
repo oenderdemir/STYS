@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
@@ -20,7 +21,8 @@ import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-c
 import {
     CreateMuhasebeFisRequestModel,
     CreateMuhasebeFisSatirRequestModel,
-    MuhasebeFisTipleri
+    MuhasebeFisTipleri,
+    formatDateForApi
 } from '../models/muhasebe-fis.model';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
@@ -88,6 +90,7 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
         FormsModule,
         DecimalPipe,
         ButtonModule,
+        DatePickerModule,
         DialogModule,
         InputNumberModule,
         InputTextModule,
@@ -115,7 +118,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     // Form
     tesisId: number | null = null;
-    fisTarihi: string = '';
+    fisTarihi: string | Date = '';
     maliYil: number = 0;
     donem: number = 1;
     fisTipi: string = MuhasebeFisTipleri.Mahsup;
@@ -179,6 +182,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     constructor() {
         this.resetToDefaults();
+        this.satirlar = [this.createEmptySatir(1)];
     }
 
     ngOnInit(): void {
@@ -271,25 +275,15 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     satirEkle(): void {
         const siraNo = this.satirlar.length + 1;
-        this.satirlar.push({
-            siraNo,
-            muhasebeHesapPlaniId: null,
-            hesapKodu: '',
-            hesapAdi: '',
-            borc: 0,
-            alacak: 0,
-            paraBirimi: 'TRY',
-            kur: 1,
-            aciklama: null
-        });
+        this.satirlar.push(this.createEmptySatir(siraNo));
     }
 
     satirSil(index: number): void {
-        if (this.satirlar.length <= 2) {
+        if (this.satirlar.length <= 1) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Uyarı',
-                detail: 'En az 2 fiş satırı bulunmalıdır.',
+                detail: 'En az 1 fiş satırı bulunmalıdır.',
                 life: 4000
             });
             return;
@@ -385,7 +379,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
             tesisId: seciliTesisId,
             maliYil: this.maliYil,
             donem: this.donem,
-            fisTarihi: this.fisTarihi,
+            fisTarihi: formatDateForApi(this.fisTarihi) ?? '',
             fisTipi: this.fisTipi,
             kaynakModul: this.kaynakModul || null,
             kaynakId: this.kaynakId || null,
@@ -431,7 +425,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     private resetToDefaults(): void {
         const today = new Date();
         this.tesisId = null;
-        this.fisTarihi = today.toISOString().split('T')[0];
+        this.fisTarihi = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         this.maliYil = today.getFullYear();
         this.donem = today.getMonth() + 1;
         this.fisTipi = MuhasebeFisTipleri.Mahsup;
@@ -442,9 +436,22 @@ export class MuhasebeFisOlusturComponent implements OnInit {
 
     private ensureInitialRows(): void {
         if (this.satirlar.length === 0) {
-            this.satirEkle();
-            this.satirEkle();
+            this.satirlar.push(this.createEmptySatir(1));
         }
+    }
+
+    private createEmptySatir(siraNo: number): SatirRow {
+        return {
+            siraNo,
+            muhasebeHesapPlaniId: null,
+            hesapKodu: '',
+            hesapAdi: '',
+            borc: 0,
+            alacak: 0,
+            paraBirimi: 'TRY',
+            kur: 1,
+            aciklama: null
+        };
     }
 
     private resetFormForTesisChange(tesisId: number): void {

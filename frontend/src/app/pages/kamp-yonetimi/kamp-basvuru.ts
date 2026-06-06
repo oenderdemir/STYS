@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { debounceTime, Subject, takeUntil } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
+import { DatePickerModule } from 'primeng/datepicker';
 import { AuthService } from '../auth';
 import {
     KampAkrabalikTipiSecenekDto,
@@ -32,7 +33,7 @@ interface KampTercihSatiri {
 @Component({
     selector: 'app-kamp-basvuru',
     standalone: true,
-    imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, ButtonModule],
+    imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, ButtonModule, DatePickerModule],
     templateUrl: './kamp-basvuru.html',
     styleUrl: './kamp-basvuru.scss'
 })

@@ -102,6 +102,24 @@ export function formatDateForApi(value: string | Date | null | undefined): strin
     return formatLocalDate(parsed);
 }
 
+export function parseApiDate(value: string | Date | null | undefined): Date | null {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return isNaN(value.getTime()) ? null : value;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+
+    const parsed = new Date(normalized);
+    return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export const MuhasebeFisDurumlari = {
     Taslak: 'Taslak',
     Onayli: 'Onayli',

@@ -1552,6 +1552,27 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<CariKartBankaHesabi>(entity =>
+        {
+            entity.ToTable("CariKartBankaHesaplari", muhasebeSchema);
+            entity.Property(x => x.BankaAdi).HasMaxLength(128);
+            entity.Property(x => x.SubeAdi).HasMaxLength(128);
+            entity.Property(x => x.HesapNo).HasMaxLength(64);
+            entity.Property(x => x.Iban).HasMaxLength(34);
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => x.CariKartId)
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.Iban)
+                .HasFilter("[IsDeleted] = 0 AND [Iban] IS NOT NULL");
+            entity.HasIndex(x => new { x.CariKartId, x.BankaAdi, x.SubeAdi, x.HesapNo })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.CariKart)
+                .WithMany(x => x.BankaHesaplari)
+                .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<MuhasebeHesapKoduSayac>(entity =>
         {
             entity.ToTable("MuhasebeHesapKoduSayaclari", muhasebeSchema);

@@ -374,6 +374,18 @@ export class SatisBelgeleriComponent implements OnInit {
             : 'Cari kart seçtiğinizde müşteri bilgileri otomatik doldurulur.';
     }
 
+    getCariEmptyStateTitle(): string {
+        return this.isAlisMode()
+            ? 'Tedarikçi bilgisi bekleniyor'
+            : 'Cari bilgisi bekleniyor';
+    }
+
+    getCariEmptyStateMessage(): string {
+        return this.isAlisMode()
+            ? 'Tedarikçi cari kart seçiniz veya manuel cari bilgisi girişi seçeneğini açınız.'
+            : 'Cari kart seçiniz veya manuel müşteri bilgisi girişi seçeneğini açınız.';
+    }
+
     getOtomatikCariTagValue(): string {
         return this.isAlisMode() ? 'Tedarikçiden otomatik' : 'Cari\'den otomatik';
     }
@@ -384,6 +396,18 @@ export class SatisBelgeleriComponent implements OnInit {
 
     getCariOzetPanelBasligi(): string {
         return this.isAlisMode() ? '👤 Tedarikçi / Cari Bilgisi' : '👤 Müşteri / Cari Bilgisi';
+    }
+
+    showCariSnapshot(): boolean {
+        return !this.manuelMusteriGirisi() && !!this.selectedCari();
+    }
+
+    showCariManualForm(): boolean {
+        return this.manuelMusteriGirisi();
+    }
+
+    showCariEmptyState(): boolean {
+        return !this.manuelMusteriGirisi() && !this.selectedCari();
     }
 
     getCariColumnBasligi(): string {
@@ -604,6 +628,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return;
         }
 
+        this.manuelMusteriGirisi.set(false);
         this.selectedCari.set(cari);
         this.formData.update(f => ({ ...f, cariKartId: cari.id ?? null }));
         // Satışta müşteri tipi, alışta tedarikçi snapshot'ı kurumsal varsayılır
@@ -629,8 +654,8 @@ export class SatisBelgeleriComponent implements OnInit {
     onManuelMusteriGirisiChange(value: boolean): void {
         this.manuelMusteriGirisi.set(value);
         if (value) {
-            // Manuel mod açıldı — form alanlarını temizleme, kullanıcı kendi girer
-            // Cari seçimi hala referans olarak kalabilir
+            this.selectedCari.set(null);
+            this.formData.update(f => ({ ...f, cariKartId: null }));
         } else if (this.selectedCari()) {
             // Manuel mod kapandı — seçili cari varsa bilgileri tekrar doldur
             this.onCariKartSecildi(this.selectedCari());

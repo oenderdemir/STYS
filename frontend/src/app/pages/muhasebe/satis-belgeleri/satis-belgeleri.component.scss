@@ -25,11 +25,27 @@
     }
   }
 
+  .satis-belgesi-dialog-content {
+    min-height: 0;
+  }
+
+  .dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .footer-right {
+    display: flex;
+    gap: .5rem;
+  }
+
   .belge-form {
     .belge-cari-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 1rem;
+      align-items: start;
 
       .form-card-panel {
         min-width: 0;
@@ -38,114 +54,82 @@
     }
 
     .field {
-      margin-bottom: 1rem;
+      margin-bottom: .75rem;
       min-width: 0;
 
       label {
         display: block;
-        margin-bottom: .25rem;
+        margin-bottom: .3rem;
         font-size: .8125rem;
         font-weight: 500;
         color: var(--text-color-secondary);
       }
     }
 
+    .compact-form-grid {
+      row-gap: .75rem;
+    }
+
     .form-card {
       height: 100%;
-      padding: 1.1rem 1.15rem;
+      padding: 1rem;
       background: var(--surface-card);
       border: 1px solid var(--surface-border);
       border-radius: var(--border-radius);
     }
 
-    .satir-card {
-      margin-bottom: .75rem;
-      padding: 1rem 1.25rem;
-      background: var(--surface-section);
+    .form-textarea {
+      width: 100%;
+      min-height: 5rem;
+      resize: vertical;
+    }
+
+    .cari-selection-area {
+      margin-bottom: 1rem;
+      padding: .85rem 1rem;
+      background: var(--surface-50);
       border: 1px solid var(--surface-border);
       border-radius: var(--border-radius);
-      transition: box-shadow .15s;
-
-      &:hover {
-        box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
-      }
-
-      .satir-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: .75rem;
-        padding-bottom: .5rem;
-        border-bottom: 1px solid var(--surface-border);
-
-        .satir-title {
-          font-size: .9375rem;
-          font-weight: 600;
-          color: var(--primary-color);
-        }
-      }
-
-      .satir-grid {
-        display: grid;
-        grid-template-columns: repeat(12, minmax(0, 1fr));
-        gap: .75rem;
-
-        .field {
-          margin-bottom: 0;
-        }
-
-        .field-span-2 { grid-column: span 2; }
-        .field-span-3 { grid-column: span 3; }
-        .field-span-5 { grid-column: span 5; }
-        .field-span-6 { grid-column: span 6; }
-        .field-span-12 { grid-column: span 12; }
-      }
-
-    }
-  }
-
-  .ozet-panel {
-    padding: 1.5rem 2rem;
-    background: var(--surface-section);
-    border: 1px solid var(--surface-border);
-    border-radius: var(--border-radius);
-
-    .ozet-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      padding: .5rem 0;
-      font-size: .9375rem;
-      border-bottom: 1px solid var(--surface-border);
-
-      &:last-child {
-        border-bottom: none;
-      }
-
-      .ozet-label {
-        color: var(--text-color-secondary);
-      }
-
-      .ozet-value {
-        font-weight: 500;
-      }
     }
 
-    .ozet-genel-toplam {
+    .cari-toggle-row {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
-      margin-top: .75rem;
-      padding-top: .75rem;
-      border-top: 2px solid var(--primary-color);
+      gap: .75rem;
+      margin-bottom: .75rem;
+      flex-wrap: wrap;
+    }
+
+    .cari-toggle-row--start {
+      justify-content: flex-start;
+    }
+
+    .cari-empty-state-panel {
+      display: flex;
+      align-items: flex-start;
+      gap: .75rem;
+      margin-top: .25rem;
+      padding: .9rem 1rem;
+      background: var(--surface-50);
+      border: 1px dashed var(--primary-300);
+      border-radius: var(--border-radius);
+      color: var(--text-color-secondary);
+      flex-wrap: wrap;
+    }
+
+    .cari-empty-state-icon {
+      flex: 0 0 auto;
+      margin-top: .1rem;
       color: var(--primary-color);
-      font-size: 1.125rem;
-      font-weight: 700;
+      font-size: 1rem;
+    }
 
-      .ozet-genel-label {
-        color: var(--text-color);
-        font-size: 1rem;
-      }
+    .cari-empty-state-copy {
+      display: flex;
+      flex-direction: column;
+      gap: .25rem;
+      min-width: 0;
     }
   }
 
@@ -157,33 +141,6 @@
 
   @media (max-width: 767px) {
     .belge-form .belge-cari-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .satir-card .satir-grid {
-      grid-template-columns: 1fr 1fr;
-      gap: .5rem;
-    }
-
-    .satir-card .satir-parametre-panel .satir-parametre-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .satir-card .satir-grid .field-span-2,
-    .satir-card .satir-grid .field-span-3,
-    .satir-card .satir-grid .field-span-5,
-    .satir-card .satir-grid .field-span-6,
-    .satir-card .satir-grid .field-span-12 {
-      grid-column: auto;
-    }
-
-    .ozet-panel {
-      padding: 1rem;
-    }
-  }
-
-  @media (max-width: 575px) {
-    .satir-card .satir-grid {
       grid-template-columns: 1fr;
     }
   }

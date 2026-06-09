@@ -231,7 +231,7 @@
                                 <div class="form-card">
                                     <h5 class="mt-0 mb-3">📋 Belge Bilgileri</h5>
 
-                                    <div class="grid form-grid">
+                                    <div class="grid compact-form-grid">
                                         <div class="col-12 md:col-6 field">
                                             <label>Belge Tipi</label>
                                             <p-select
@@ -261,7 +261,10 @@
                                                 [ngModel]="formData().belgeTarihi"
                                                 (ngModelChange)="updateFormField('belgeTarihi', $event)"
                                                 [showIcon]="true"
+                                                [showButtonBar]="true"
+                                                [firstDayOfWeek]="1"
                                                 dateFormat="dd.mm.yy"
+                                                appendTo="body"
                                                 styleClass="w-full"
                                                 inputStyleClass="w-full">
                                             </p-datepicker>
@@ -273,7 +276,10 @@
                                                 [ngModel]="formData().vadeTarihi"
                                                 (ngModelChange)="updateFormField('vadeTarihi', $event)"
                                                 [showIcon]="true"
+                                                [showButtonBar]="true"
+                                                [firstDayOfWeek]="1"
                                                 dateFormat="dd.mm.yy"
+                                                appendTo="body"
                                                 styleClass="w-full"
                                                 inputStyleClass="w-full">
                                             </p-datepicker>
@@ -316,7 +322,7 @@
                                     </p>
 
                                     <!-- Cari Kart Seçim Alanı -->
-                                    <div class="cari-selection-area" style="margin-bottom:1rem;padding:1rem;background:var(--primary-50);border:1px solid var(--primary-200);border-radius:var(--border-radius);">
+                                    <div class="cari-selection-area">
                                         <label class="block text-sm font-medium mb-2">
                                             {{ getCariSectionLabel() }}
                                             @if (cariKartlarLoading()) {
@@ -325,6 +331,7 @@
                                         </label>
                                         <p-autoComplete
                                             styleClass="w-full"
+                                            inputStyleClass="w-full"
                                             [ngModel]="selectedCari()"
                                             (ngModelChange)="onCariKartSecildi($event)"
                                             [suggestions]="filteredCariKartlar"
@@ -347,7 +354,7 @@
                                         </p-autoComplete>
                                     </div>
 
-                                    <div class="cari-toggle-row" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.9rem;flex-wrap:wrap;">
+                                    <div class="cari-toggle-row">
                                         <div class="flex align-items-center gap-2">
                                             <p-toggleSwitch
                                                 [ngModel]="manuelMusteriGirisi()"
@@ -364,7 +371,7 @@
                                     </div>
 
                                     <!-- Kurumsal / Bireysel Toggle -->
-                                    <div class="cari-toggle-row" style="display:flex;align-items:center;justify-content:flex-start;gap:.75rem;margin-bottom:.9rem;flex-wrap:wrap;">
+                                    <div class="cari-toggle-row cari-toggle-row--start">
                                         <p-toggleSwitch
                                             [ngModel]="formData().kurumsalMi"
                                             (ngModelChange)="updateFormField('kurumsalMi', $event)"
@@ -375,7 +382,7 @@
                                     </div>
 
                                     @if (showCariManualForm()) {
-                                    <div class="grid form-grid">
+                                    <div class="grid compact-form-grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
                                             <label>Ünvan *</label>
@@ -464,7 +471,7 @@
                                         </div>
                                     </div>
                                     } @else if (showCariSnapshot()) {
-                                    <div class="grid form-grid">
+                                    <div class="grid compact-form-grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
                                             <label>Ünvan</label>
@@ -507,9 +514,9 @@
                                         </div>
                                     </div>
                                     } @else if (showCariEmptyState()) {
-                                    <div class="cari-empty-state-panel" style="display:flex;align-items:flex-start;gap:.75rem;margin-top:.25rem;padding:.9rem 1rem;background:var(--surface-50);border:1px dashed var(--primary-300);border-radius:var(--border-radius);color:var(--text-color-secondary);flex-wrap:wrap;">
-                                        <i class="pi pi-info-circle cari-empty-state-icon" style="flex:0 0 auto;margin-top:.1rem;color:var(--primary-color);font-size:1rem;"></i>
-                                        <div class="cari-empty-state-copy" style="display:flex;flex-direction:column;gap:.25rem;min-width:0;">
+                                    <div class="cari-empty-state-panel">
+                                        <i class="pi pi-info-circle cari-empty-state-icon"></i>
+                                        <div class="cari-empty-state-copy">
                                             <strong>{{ getCariEmptyStateTitle() }}</strong>
                                             <span>{{ getCariEmptyStateMessage() }}</span>
                                         </div>
@@ -1063,8 +1070,8 @@
     </ng-template>
 
     <ng-template pTemplate="footer">
-        <div class="dialog-footer" style="display:flex;align-items:center;justify-content:flex-end;width:100%;">
-            <div class="footer-right" style="display:flex;gap:.5rem;">
+        <div class="dialog-footer">
+            <div class="footer-right">
                 <p-button label="İptal" severity="secondary" [outlined]="true" (click)="dialogVisible.set(false)"></p-button>
                 <p-button
                     label="Kaydet"

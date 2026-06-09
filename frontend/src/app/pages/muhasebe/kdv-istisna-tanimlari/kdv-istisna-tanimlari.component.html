@@ -1,17 +1,22 @@
 <p-toast />
 <app-muhasebe-tesis-context-bar />
 
-<div class="flex align-items-center justify-content-between mb-4">
-    <h2 class="text-xl font-semibold m-0">KDV İstisna Tanımları</h2>
-    <p-button
-        label="Yeni Tanım"
-        icon="pi pi-plus"
-        severity="primary"
-        (onClick)="openCreate()" />
+<div class="flex align-items-center mb-4">
+    <h3 class="text-xl font-semibold m-0">
+        KDV İstisna Tanımları
+    </h3>
+
+    <div class="ml-auto">
+        <p-button
+            label="Yeni Tanım"
+            icon="pi pi-plus"
+            severity="primary"
+            (onClick)="openCreate()" />
+    </div>
 </div>
 
 <!-- Filter Row -->
-<div class="grid grid-cols-12 gap-3 mb-4" [formGroup]="filterForm">
+<div class="grid grid-cols-12 gap-3 card mb-4" [formGroup]="filterForm">
     <div class="col-span-12 md:col-span-6 lg:col-span-2">
         <label class="block text-sm font-medium mb-1">Kod</label>
         <input
@@ -42,7 +47,7 @@
             styleClass="w-full"
             [filter]="false" />
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-2">
+    <div class="col-span-12 md:col-span-6 lg:col-span-1">
         <label class="block text-sm font-medium mb-1">Aktif / Pasif</label>
         <p-select
             formControlName="aktifMi"
@@ -62,7 +67,7 @@
             styleClass="w-full"
             [filter]="false" />
     </div>
-    <div class="col-span-12 md:col-span-6 lg:col-span-1">
+    <div class="col-span-12 md:col-span-6 lg:col-span-2">
         <label class="block text-sm font-medium mb-1">Alış Kullanım</label>
         <p-select
             formControlName="alisIslemlerindeKullanilirMi"
@@ -72,7 +77,8 @@
             styleClass="w-full"
             [filter]="false" />
     </div>
-    <div class="col-span-12 flex items-end gap-2">
+    
+    <div class="col-span-12 flex items-end justify-end  gap-2">
         <p-button
             label="Ara"
             icon="pi pi-search"

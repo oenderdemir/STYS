@@ -104,7 +104,7 @@ public class TasinirKodService : BaseRdbmsService<TasinirKodDto, TasinirKod, int
 
         var normalizedQuery = query?.Trim() ?? string.Empty;
         var allItems = await GetAllForLookupCachedAsync(cancellationToken);
-        var filtered = ApplyLookupFilter(allItems, normalizedQuery);
+        var filtered = ApplyLookupFilter(allItems.Where(x => x.AktifMi).ToList(), normalizedQuery);
         var totalCount = filtered.Count;
         var items = filtered
             .Skip((pageNumber - 1) * pageSize)

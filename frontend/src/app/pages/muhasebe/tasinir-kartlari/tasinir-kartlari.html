@@ -60,14 +60,18 @@
                 (ngModelChange)="onTasinirKodModelChange($event)"
                 [suggestions]="tasinirKodSearchResults"
                 (completeMethod)="searchTasinirKod($event)"
-                (onSelect)="onTasinirKodSelect()"
+                (onSelect)="onTasinirKodSelect($event)"
                 (onBlur)="onTasinirKodBlur()"
                 [dropdown]="true"
-                [delay]="0"
-                [minLength]="2"
+                [delay]="150"
+                [minLength]="0"
                 [forceSelection]="true"
+                [showEmptyMessage]="true"
+                emptyMessage="Taşınır kodu bulunamadı"
+                [completeOnFocus]="true"
+                [autoHighlight]="true"
                 optionLabel="label"
-                placeholder="Orn. 150.01.01.08.0* veya ad ile ara"
+                placeholder="Örn. 150.01.01.08.0 veya ad ile ara"
                 appendTo="body" />
             <small class="text-color-secondary">Kod veya ad yazarak secim yapin.</small>
         </div>

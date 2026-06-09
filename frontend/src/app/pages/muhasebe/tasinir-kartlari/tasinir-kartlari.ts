@@ -46,6 +46,7 @@ export class TasinirKartlariPage implements OnInit {
     saving = false;
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
+    tasinirKodLoading = false;
 
     records: TasinirKartModel[] = [];
     filteredRecords: TasinirKartModel[] = [];
@@ -134,6 +135,7 @@ export class TasinirKartlariPage implements OnInit {
         this.model.tesisId = tesisId;
         this.selectedTasinirKodOption = null;
         this.tasinirKodSearchResults = [];
+        this.tasinirKodLoading = false;
         this.dialogVisible = true;
     }
 
@@ -142,6 +144,7 @@ export class TasinirKartlariPage implements OnInit {
         this.model = { ...item };
         this.selectedTasinirKodOption = null;
         this.tasinirKodSearchResults = [];
+        this.tasinirKodLoading = false;
 
         if (this.model.tasinirKodId > 0) {
             this.tasinirKodService.getById(this.model.tasinirKodId).subscribe({
@@ -162,16 +165,16 @@ export class TasinirKartlariPage implements OnInit {
     }
 
     searchTasinirKod(event: { query: string }): void {
-        const query = event.query ?? '';
+        const query = (event.query ?? '').trim();
         const requestSeq = ++this.tasinirKodSearchSeq;
+        this.tasinirKodLoading = true;
 
-        if (query.trim().length < 2) {
-            this.tasinirKodSearchResults = [];
-            this.cdr.detectChanges();
-            return;
-        }
-
-        this.tasinirKodService.searchPaged(1, 30, query).subscribe({
+        this.tasinirKodService.searchPaged(1, 30, query).pipe(finalize(() => {
+            if (requestSeq === this.tasinirKodSearchSeq) {
+                this.tasinirKodLoading = false;
+                this.cdr.detectChanges();
+            }
+        })).subscribe({
             next: (paged) => {
                 if (requestSeq !== this.tasinirKodSearchSeq) {
                     return;
@@ -187,20 +190,36 @@ export class TasinirKartlariPage implements OnInit {
                     return;
                 }
 
+                this.tasinirKodSearchResults = [];
                 this.showError(error);
                 this.cdr.detectChanges();
             }
         });
     }
 
-    onTasinirKodSelect(): void {
-        this.model.tasinirKodId = this.selectedTasinirKodOption?.value ?? 0;
+    onTasinirKodSelect(event?: { value?: { label: string; value: number } }): void {
+        const selected = event?.value ?? this.selectedTasinirKodOption;
+        this.selectedTasinirKodOption = selected ?? null;
+        this.model.tasinirKodId = selected?.value ?? 0;
     }
 
     onTasinirKodModelChange(value: unknown): void {
         if (typeof value === 'string') {
             this.model.tasinirKodId = 0;
             this.selectedTasinirKodOption = null;
+            return;
+        }
+
+        if (!value) {
+            this.model.tasinirKodId = 0;
+            this.selectedTasinirKodOption = null;
+            return;
+        }
+
+        if (typeof value === 'object' && 'value' in value) {
+            const option = value as { label?: string; value?: number };
+            this.selectedTasinirKodOption = option.value ? { label: option.label ?? '', value: option.value } : null;
+            this.model.tasinirKodId = option.value ?? 0;
         }
     }
 

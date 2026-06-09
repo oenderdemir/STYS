@@ -210,6 +210,32 @@
   flex-shrink: 0;
 }
 
+.satis-belgesi-dialog .belge-form .document-line-collapsed-summary {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .6rem .75rem;
+  margin-top: .75rem;
+  background: rgba(255, 255, 255, .55);
+  border: 1px dashed var(--surface-border);
+  border-radius: .65rem;
+  color: var(--text-color-secondary);
+  font-size: .875rem;
+  line-height: 1.35;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-collapsed-summary i {
+  color: var(--primary-color);
+  flex: 0 0 auto;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-collapsed-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .satis-belgesi-dialog .belge-form .document-line-body {
   display: flex;
   flex-direction: column;
@@ -218,6 +244,10 @@
 
 .satis-belgesi-dialog .belge-form .document-line-card--collapsed {
   gap: .7rem;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--collapsed .document-line-collapsed-summary {
+  margin-top: .6rem;
 }
 
 .satis-belgesi-dialog .belge-form .document-line-card--collapsed .document-line-body {

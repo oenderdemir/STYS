@@ -1585,4 +1585,29 @@ export class SatisBelgeleriComponent implements OnInit {
     getSatirTipiLabel(tip: SatisBelgesiSatirTipi): string {
         return this.satirTipiLabels[tip] ?? String(tip);
     }
+
+    getSatirCollapsedSummary(satir: CreateSatisBelgesiSatiriRequest): string {
+        const parts: string[] = [];
+        const satirTipiLabel = this.getSatirTipiLabel(satir.satirTipi);
+        const tasinirLabel = this.getTasinirKartLabel(satir.tasinirKartId);
+        const birim = (satir.birim ?? '').trim();
+        const miktar = this.normalizeRate(satir.miktar);
+        const toplam = this.previewSatirToplami(satir);
+
+        if (satirTipiLabel) {
+            parts.push(satirTipiLabel);
+        }
+
+        if (tasinirLabel && tasinirLabel !== '-') {
+            parts.push(tasinirLabel);
+        }
+
+        if (miktar > 0) {
+            parts.push(`${miktar.toLocaleString('tr-TR')} ${birim || ''}`.trim());
+        }
+
+        parts.push(`${toplam.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺`);
+
+        return parts.join(' · ');
+    }
 }

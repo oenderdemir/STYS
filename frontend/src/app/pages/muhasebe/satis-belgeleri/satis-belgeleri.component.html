@@ -574,6 +574,10 @@
                                         </p-button>
                                     </div>
                                 </div>
+                                <div class="document-line-collapsed-summary" [hidden]="isSatirExpanded(satir)">
+                                    <i class="pi pi-info-circle"></i>
+                                    <span>{{ getSatirCollapsedSummary(satir) }}</span>
+                                </div>
 
                                 <div class="document-line-body" [hidden]="!isSatirExpanded(satir)">
                                 <div class="document-line-section">

@@ -66,23 +66,20 @@
       }
     }
 
-    .compact-form-grid {
-      row-gap: .75rem;
-    }
-
-    .customer-form-grid {
+    .document-form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: .85rem 1rem;
       align-items: start;
     }
 
-    .customer-form-grid--corporate {
+    .document-form-grid .field { margin-bottom: 0; min-width: 0; }
+    .document-form-grid .field-full { grid-column: 1 / -1; }
+    .customer-form-grid {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .customer-form-grid--corporate .field-full {
-      grid-column: 1 / -1;
+      gap: .85rem 1rem;
+      align-items: start;
     }
 
     .customer-form-grid .field {
@@ -191,6 +188,14 @@
   @media (max-width: 767px) {
     .belge-form .belge-cari-grid {
       grid-template-columns: 1fr;
+    }
+
+    .belge-form .document-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .belge-form .document-form-grid .field-full {
+      grid-column: auto;
     }
 
     .belge-form .customer-form-grid {

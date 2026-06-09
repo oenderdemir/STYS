@@ -268,6 +268,76 @@ export class YevmiyeDefteriComponent implements OnInit {
         this.result = null;
     }
 
+    parseDateOnly(value: string | Date | null | undefined): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return isNaN(value.getTime()) ? null : value;
+        }
+
+        const normalized = value.trim();
+        if (!normalized) {
+            return null;
+        }
+
+        const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoMatch) {
+            const [, year, month, day] = isoMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day));
+        }
+
+        const trMatch = normalized.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (trMatch) {
+            const [, day, month, year] = trMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day));
+        }
+
+        const parsed = new Date(normalized);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    formatDateOnly(value: Date | string | null | undefined): string | null {
+        if (!value) {
+            return null;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (isoMatch) {
+                return trimmed;
+            }
+
+            const trMatch = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            if (trMatch) {
+                const [, day, month, year] = trMatch;
+                return `${year}-${month}-${day}`;
+            }
+
+            const parsed = new Date(trimmed);
+            if (isNaN(parsed.getTime())) {
+                return trimmed;
+            }
+
+            return this.formatDateOnly(parsed);
+        }
+
+        if (isNaN(value.getTime())) {
+            return null;
+        }
+
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     private tryGetSeciliTesisId(): number | null {
         try {
             return this.tesisContext.requireSeciliTesisId();

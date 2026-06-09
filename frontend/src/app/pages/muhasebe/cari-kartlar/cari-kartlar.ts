@@ -7,6 +7,7 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { SelectModule } from 'primeng/select';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
@@ -24,7 +25,7 @@ import { CariKartlarService } from './cari-kartlar.service';
 @Component({
     selector: 'app-cari-kartlar-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, DatePickerModule, SelectModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './cari-kartlar.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -506,6 +507,76 @@ export class CariKartlarPage implements OnInit {
         }
 
         return `KOMBO:${(hesap.bankaAdi ?? '').trim().toUpperCase()}|${(hesap.subeAdi ?? '').trim().toUpperCase()}|${(hesap.hesapNo ?? '').trim().toUpperCase()}`;
+    }
+
+    parseDateOnly(value: string | Date | null | undefined): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return isNaN(value.getTime()) ? null : value;
+        }
+
+        const normalized = value.trim();
+        if (!normalized) {
+            return null;
+        }
+
+        const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoMatch) {
+            const [, year, month, day] = isoMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day));
+        }
+
+        const trMatch = normalized.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (trMatch) {
+            const [, day, month, year] = trMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day));
+        }
+
+        const parsed = new Date(normalized);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    formatDateOnly(value: Date | string | null | undefined): string | null {
+        if (!value) {
+            return null;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (isoMatch) {
+                return trimmed;
+            }
+
+            const trMatch = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            if (trMatch) {
+                const [, day, month, year] = trMatch;
+                return `${year}-${month}-${day}`;
+            }
+
+            const parsed = new Date(trimmed);
+            if (isNaN(parsed.getTime())) {
+                return trimmed;
+            }
+
+            return this.formatDateOnly(parsed);
+        }
+
+        if (isNaN(value.getTime())) {
+            return null;
+        }
+
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

@@ -38,17 +38,33 @@
     </div>
     <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block text-sm font-medium mb-1">Başlangıç Tarihi</label>
-        <input
-            type="date"
-            [(ngModel)]="filter.baslangicTarihi"
-            class="w-full p-inputtext p-component" />
+        <p-datepicker
+            class="w-full"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+            [ngModel]="parseDateOnly(filter.baslangicTarihi)"
+            (ngModelChange)="filter.baslangicTarihi = formatDateOnly($event)"
+            appendTo="body"
+            [showIcon]="true"
+            [showButtonBar]="true"
+            [firstDayOfWeek]="1"
+            dateFormat="dd.mm.yy">
+        </p-datepicker>
     </div>
     <div class="col-span-12 md:col-span-6 lg:col-span-3">
         <label class="block text-sm font-medium mb-1">Bitiş Tarihi</label>
-        <input
-            type="date"
-            [(ngModel)]="filter.bitisTarihi"
-            class="w-full p-inputtext p-component" />
+        <p-datepicker
+            class="w-full"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+            [ngModel]="parseDateOnly(filter.bitisTarihi)"
+            (ngModelChange)="filter.bitisTarihi = formatDateOnly($event)"
+            appendTo="body"
+            [showIcon]="true"
+            [showButtonBar]="true"
+            [firstDayOfWeek]="1"
+            dateFormat="dd.mm.yy">
+        </p-datepicker>
     </div>
 </div>
 

@@ -542,9 +542,12 @@
                             </div>
 
                             @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
-                            <div class="satir-card">
-                                <div class="satir-header">
-                                    <span class="satir-title">Satır {{ satir.siraNo }}</span>
+                            <div class="document-line-card">
+                                <div class="document-line-header">
+                                    <div class="flex align-items-center gap-2 flex-wrap">
+                                        <span class="document-line-title">Satır {{ satir.siraNo }}</span>
+                                        <span class="line-summary-pill">{{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                                    </div>
                                     <p-button
                                         icon="pi pi-trash"
                                         severity="danger"
@@ -556,382 +559,404 @@
                                     </p-button>
                                 </div>
 
-                                <div class="satir-grid">
-                                    <div class="field field-span-2">
-                                        <label>Satır Tipi</label>
-                                        <p-select
-                                            [options]="satirTipiSecenekleri"
-                                            [(ngModel)]="satir.satirTipi"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-                                    <div class="field field-span-5">
-                                        <label>Ürün / Hizmet</label>
-                                        <p-select
-                                            [options]="tasinirKartSecenekleri()"
-                                            [ngModel]="satir.tasinirKartId"
-                                            (ngModelChange)="onSatirTasinirKartChange(satir, $event)"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            [filter]="true"
-                                            [showClear]="true"
-                                            [loading]="tasinirKartlarLoading()"
-                                            placeholder="Stok / taşınır kart seçiniz"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-                                    <div class="field field-span-5">
-                                        <label>Depo</label>
-                                        <p-select
-                                            [options]="depoSecenekleri()"
-                                            [ngModel]="satir.depoId"
-                                            (ngModelChange)="satir.depoId = $event"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            [filter]="true"
-                                            [showClear]="true"
-                                            [loading]="depolarLoading()"
-                                            placeholder="Depo seçiniz"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-
-                                    <div class="field field-span-12">
-                                        <label>Açıklama</label>
-                                        <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması / hizmet açıklaması" />
-                                    </div>
-
-                                    <div class="field field-span-3">
-                                        <label>Birim</label>
-                                        <p-select
-                                            [options]="getBirimSecenekleri(satir)"
-                                            [(ngModel)]="satir.birim"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            [filter]="true"
-                                            [showClear]="false"
-                                            [loading]="paketTurleriLoading()"
-                                            placeholder="Birim seçiniz"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-                                    <div class="field field-span-2">
-                                        <label>Miktar</label>
-                                        <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" [min]="0" [showButtons]="true">
-                                        </p-inputNumber>
-                                    </div>
-                                    <div class="field field-span-2">
-                                        <label>Birim Fiyat (₺)</label>
-                                        <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
-                                        </p-inputNumber>
-                                    </div>
-                                    <div class="field field-span-3">
-                                        <label>KDV Tipi</label>
-                                        <p-select
-                                            [options]="kdvUygulamaTipiSecenekleri"
-                                            [ngModel]="satir.kdvUygulamaTipi"
-                                            (ngModelChange)="onSatirKdvTipiChange(satir, $event)"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-                                    <div class="field field-span-2">
-                                        <label>KDV Oranı (%)</label>
-                                        <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" [min]="0" [max]="100"
-                                            [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
-                                        </p-inputNumber>
-                                    </div>
-                                    @if (satir.kdvUygulamaTipi !== kdvEnum.Kdvli && satir.kdvUygulamaTipi !== kdvEnum.Tevkifatli) {
-                                    <div class="field field-span-6">
-                                        <label>KDV İstisna Tanımı</label>
-                                        <p-select
-                                            [options]="getKdvIstisnaSecenekleri(satir)"
-                                            [ngModel]="satir.kdvIstisnaTanimId"
-                                            (ngModelChange)="satir.kdvIstisnaTanimId = $event"
-                                            optionLabel="label"
-                                            optionValue="value"
-                                            [filter]="true"
-                                            [showClear]="true"
-                                            [loading]="kdvIstisnaTanimlariLoading()"
-                                            placeholder="İstisna tanımı seçiniz"
-                                            appendTo="body"
-                                            styleClass="w-full">
-                                        </p-select>
-                                    </div>
-                                    }
-                                    <div class="field field-span-12 satir-parametre-panel" style="padding:.85rem .9rem;background:var(--surface-50);border:1px dashed var(--surface-border);border-radius:.75rem;">
-                                        <div class="flex align-items-center justify-content-between gap-2 mb-2">
-                                            <div class="flex flex-column gap-1">
-                                                <span style="font-size:.875rem;font-weight:600;color:var(--text-color);">Satır Parametreleri</span>
-                                                <small class="text-color-secondary">Ek indirim ve vergi bloklarını buradan açıp kapatın.</small>
-                                            </div>
-                                            <div class="flex align-items-center gap-2">
-                                                <p-button
-                                                    label="Parametre Ekle"
-                                                    icon="pi pi-sliders-h"
-                                                    severity="secondary"
-                                                    [outlined]="true"
-                                                    size="small"
-                                                    type="button"
-                                                    (click)="satirParametreMenu.toggle($event)">
-                                                </p-button>
-                                                <p-menu
-                                                    #satirParametreMenu
-                                                    [popup]="true"
-                                                    [model]="getSatirParametreMenuItems(satir)"
-                                                    [appendTo]="'body'">
-                                                </p-menu>
-                                            </div>
+                                <div class="document-line-section">
+                                    <div class="line-section-title">Ürün Bilgisi</div>
+                                    <div class="line-product-grid">
+                                        <div class="field">
+                                            <label>Satır Tipi</label>
+                                            <p-select
+                                                [options]="satirTipiSecenekleri"
+                                                [(ngModel)]="satir.satirTipi"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
                                         </div>
-
-                                        @if (hasSatirParametreleri(satir)) {
-                                        <div class="satir-parametre-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;">
-                                            @if (isSatirParametreGorunur(satir, 'indirim')) {
-                                            <div class="satir-parametre-block" style="padding:.75rem .8rem;background:var(--surface-card);border:1px solid var(--surface-border);border-radius:.65rem;">
-                                                <div class="satir-parametre-block-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;font-size:.875rem;font-weight:600;color:var(--primary-color);">
-                                                    <span>İndirim</span>
-                                                    <p-button
-                                                        icon="pi pi-times"
-                                                        severity="secondary"
-                                                        [text]="true"
-                                                        [rounded]="true"
-                                                        size="small"
-                                                        type="button"
-                                                        pTooltip="Kaldır"
-                                                        (click)="toggleSatirParametre(satir, 'indirim')">
-                                                    </p-button>
-                                                </div>
-                                                <div class="grid">
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>İndirim Oranı (%)</label>
-                                                        <p-inputNumber
-                                                            [(ngModel)]="satir.indirimOrani"
-                                                            styleClass="w-full"
-                                                            [min]="0"
-                                                            [max]="100"
-                                                            [showButtons]="true"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="0"
-                                                            [maxFractionDigits]="4">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>İndirim Tutarı (₺)</label>
-                                                        <p-inputNumber
-                                                            [ngModel]="getSatirIndirimTutari(satir)"
-                                                            [readonly]="true"
-                                                            styleClass="w-full"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="2"
-                                                            [maxFractionDigits]="2">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            }
-
-                                            @if (isSatirParametreGorunur(satir, 'tevkifat')) {
-                                            <div class="satir-parametre-block" style="padding:.75rem .8rem;background:var(--surface-card);border:1px solid var(--surface-border);border-radius:.65rem;">
-                                                <div class="satir-parametre-block-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;font-size:.875rem;font-weight:600;color:var(--primary-color);">
-                                                    <span>Tevkifat</span>
-                                                    <p-button
-                                                        icon="pi pi-times"
-                                                        severity="secondary"
-                                                        [text]="true"
-                                                        [rounded]="true"
-                                                        size="small"
-                                                        type="button"
-                                                        pTooltip="Kaldır"
-                                                        (click)="toggleSatirParametre(satir, 'tevkifat')">
-                                                    </p-button>
-                                                </div>
-                                                <div class="grid">
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>Tevkifat Oranı</label>
-                                                        <p-select
-                                                            [options]="tevkifatSecenekleri"
-                                                            [ngModel]="getTevkifatSecimi(satir)"
-                                                            (ngModelChange)="setTevkifatSecimi(satir, $event)"
-                                                            optionLabel="label"
-                                                            optionValue="value"
-                                                            [showClear]="true"
-                                                            placeholder="Tevkifat oranı seçiniz"
-                                                            appendTo="body"
-                                                            styleClass="w-full">
-                                                        </p-select>
-                                                    </div>
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>Tevkifat Tutarı (₺)</label>
-                                                        <p-inputNumber
-                                                            [ngModel]="getSatirTevkifatTutari(satir)"
-                                                            [readonly]="true"
-                                                            styleClass="w-full"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="2"
-                                                            [maxFractionDigits]="2">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            }
-
-                                            @if (isSatirParametreGorunur(satir, 'otv')) {
-                                            <div class="satir-parametre-block" style="padding:.75rem .8rem;background:var(--surface-card);border:1px solid var(--surface-border);border-radius:.65rem;">
-                                                <div class="satir-parametre-block-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;font-size:.875rem;font-weight:600;color:var(--primary-color);">
-                                                    <span>ÖTV</span>
-                                                    <p-button
-                                                        icon="pi pi-times"
-                                                        severity="secondary"
-                                                        [text]="true"
-                                                        [rounded]="true"
-                                                        size="small"
-                                                        type="button"
-                                                        pTooltip="Kaldır"
-                                                        (click)="toggleSatirParametre(satir, 'otv')">
-                                                    </p-button>
-                                                </div>
-                                                <div class="grid">
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>ÖTV Oranı (%)</label>
-                                                        <p-inputNumber
-                                                            [(ngModel)]="satir.otvOrani"
-                                                            styleClass="w-full"
-                                                            [min]="0"
-                                                            [max]="100"
-                                                            [showButtons]="true"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="0"
-                                                            [maxFractionDigits]="4">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>ÖTV Tutarı (₺)</label>
-                                                        <p-inputNumber
-                                                            [ngModel]="getSatirOtvTutari(satir)"
-                                                            [readonly]="true"
-                                                            styleClass="w-full"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="2"
-                                                            [maxFractionDigits]="2">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            }
-
-                                            @if (isSatirParametreGorunur(satir, 'oiv')) {
-                                            <div class="satir-parametre-block" style="padding:.75rem .8rem;background:var(--surface-card);border:1px solid var(--surface-border);border-radius:.65rem;">
-                                                <div class="satir-parametre-block-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;font-size:.875rem;font-weight:600;color:var(--primary-color);">
-                                                    <span>ÖİV</span>
-                                                    <p-button
-                                                        icon="pi pi-times"
-                                                        severity="secondary"
-                                                        [text]="true"
-                                                        [rounded]="true"
-                                                        size="small"
-                                                        type="button"
-                                                        pTooltip="Kaldır"
-                                                        (click)="toggleSatirParametre(satir, 'oiv')">
-                                                    </p-button>
-                                                </div>
-                                                <div class="grid">
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>ÖİV Oranı (%)</label>
-                                                        <p-inputNumber
-                                                            [(ngModel)]="satir.oivOrani"
-                                                            styleClass="w-full"
-                                                            [min]="0"
-                                                            [max]="100"
-                                                            [showButtons]="true"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="0"
-                                                            [maxFractionDigits]="4">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>ÖİV Tutarı (₺)</label>
-                                                        <p-inputNumber
-                                                            [ngModel]="getSatirOivTutari(satir)"
-                                                            [readonly]="true"
-                                                            styleClass="w-full"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="2"
-                                                            [maxFractionDigits]="2">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            }
-
-                                            @if (isSatirParametreGorunur(satir, 'konaklamaVergisi')) {
-                                            <div class="satir-parametre-block" style="padding:.75rem .8rem;background:var(--surface-card);border:1px solid var(--surface-border);border-radius:.65rem;">
-                                                <div class="satir-parametre-block-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;font-size:.875rem;font-weight:600;color:var(--primary-color);">
-                                                    <span>Konaklama Vergisi</span>
-                                                    <p-button
-                                                        icon="pi pi-times"
-                                                        severity="secondary"
-                                                        [text]="true"
-                                                        [rounded]="true"
-                                                        size="small"
-                                                        type="button"
-                                                        pTooltip="Kaldır"
-                                                        (click)="toggleSatirParametre(satir, 'konaklamaVergisi')">
-                                                    </p-button>
-                                                </div>
-                                                <div class="grid">
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>Konaklama Vergisi Oranı (%)</label>
-                                                        <p-inputNumber
-                                                            [(ngModel)]="satir.konaklamaVergisiOrani"
-                                                            styleClass="w-full"
-                                                            [min]="0"
-                                                            [max]="100"
-                                                            [showButtons]="true"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="0"
-                                                            [maxFractionDigits]="4">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                    <div class="col-12 md:col-6 field">
-                                                        <label>Konaklama Vergisi Tutarı (₺)</label>
-                                                        <p-inputNumber
-                                                            [ngModel]="getSatirKonaklamaVergisiTutari(satir)"
-                                                            [readonly]="true"
-                                                            styleClass="w-full"
-                                                            mode="decimal"
-                                                            [minFractionDigits]="2"
-                                                            [maxFractionDigits]="2">
-                                                        </p-inputNumber>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            }
+                                        <div class="field">
+                                            <label>Ürün / Hizmet</label>
+                                            <p-select
+                                                [options]="tasinirKartSecenekleri()"
+                                                [ngModel]="satir.tasinirKartId"
+                                                (ngModelChange)="onSatirTasinirKartChange(satir, $event)"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                [filter]="true"
+                                                [showClear]="true"
+                                                [loading]="tasinirKartlarLoading()"
+                                                placeholder="Stok / taşınır kart seçiniz"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
                                         </div>
-                                        } @else {
-                                        <small class="text-color-secondary block">Ek parametre eklemek için Parametre Ekle butonunu kullanın.</small>
-                                        }
+                                        <div class="field">
+                                            <label>Depo</label>
+                                            <p-select
+                                                [options]="depoSecenekleri()"
+                                                [ngModel]="satir.depoId"
+                                                (ngModelChange)="satir.depoId = $event"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                [filter]="true"
+                                                [showClear]="true"
+                                                [loading]="depolarLoading()"
+                                                placeholder="Depo seçiniz"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
+                                        <div class="field field-full">
+                                            <label>Açıklama</label>
+                                            <input pInputText class="w-full" [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması / hizmet açıklaması" />
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- Satır Hesaplanan Özet -->
-                                <div class="satir-summary" style="display:flex;justify-content:space-between;gap:.75rem;margin-top:.9rem;padding:.75rem .9rem;border-top:1px dashed var(--surface-border);border-bottom:1px solid var(--surface-border);background:var(--surface-50);font-size:.8125rem;color:var(--text-color-secondary);flex-wrap:wrap;">
-                                    <span style="white-space:nowrap;">Matrah: <strong>{{ getSatirMatrah(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">İndirim: <strong>{{ getSatirIndirimTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">ÖTV: <strong>{{ getSatirOtvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">ÖİV: <strong>{{ getSatirOivTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">Konaklama: <strong>{{ getSatirKonaklamaVergisiTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span style="white-space:nowrap;">Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
-                                    <span class="summary-total" style="white-space:nowrap;font-weight:600;color:var(--text-color);">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                                <div class="document-line-section">
+                                    <div class="line-section-title">Miktar / Fiyat</div>
+                                    <div class="line-price-grid">
+                                        <div class="field">
+                                            <label>Birim</label>
+                                            <p-select
+                                                [options]="getBirimSecenekleri(satir)"
+                                                [(ngModel)]="satir.birim"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                [filter]="true"
+                                                [showClear]="false"
+                                                [loading]="paketTurleriLoading()"
+                                                placeholder="Birim seçiniz"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
+                                        <div class="field">
+                                            <label>Miktar</label>
+                                            <p-inputNumber [(ngModel)]="satir.miktar" styleClass="w-full" inputStyleClass="w-full" [min]="0" [showButtons]="true">
+                                            </p-inputNumber>
+                                        </div>
+                                        <div class="field">
+                                            <label>Birim Fiyat (₺)</label>
+                                            <p-inputNumber [(ngModel)]="satir.birimFiyat" styleClass="w-full" inputStyleClass="w-full" [min]="0" [showButtons]="true" mode="decimal" [minFractionDigits]="2">
+                                            </p-inputNumber>
+                                        </div>
+                                        <div class="field">
+                                            <label>Satır Toplamı</label>
+                                            <p-inputNumber
+                                                [ngModel]="previewSatirToplami(satir)"
+                                                [readonly]="true"
+                                                styleClass="w-full"
+                                                inputStyleClass="w-full"
+                                                mode="decimal"
+                                                [minFractionDigits]="2"
+                                                [maxFractionDigits]="2">
+                                            </p-inputNumber>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="document-line-section">
+                                    <div class="line-section-title-row">
+                                        <span>Vergi</span>
+                                        <p-button
+                                            label="Parametre Ekle"
+                                            icon="pi pi-sliders-h"
+                                            severity="secondary"
+                                            [outlined]="true"
+                                            size="small"
+                                            type="button"
+                                            (click)="satirParametreMenu.toggle($event)">
+                                        </p-button>
+                                    </div>
+                                    <p-menu
+                                        #satirParametreMenu
+                                        [popup]="true"
+                                        [model]="getSatirParametreMenuItems(satir)"
+                                        [appendTo]="'body'">
+                                    </p-menu>
+                                    <div class="line-tax-grid">
+                                        <div class="field">
+                                            <label>KDV Tipi</label>
+                                            <p-select
+                                                [options]="kdvUygulamaTipiSecenekleri"
+                                                [ngModel]="satir.kdvUygulamaTipi"
+                                                (ngModelChange)="onSatirKdvTipiChange(satir, $event)"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
+                                        <div class="field">
+                                            <label>KDV Oranı (%)</label>
+                                            <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" inputStyleClass="w-full" [min]="0" [max]="100"
+                                                [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
+                                            </p-inputNumber>
+                                        </div>
+                                        @if (satir.kdvUygulamaTipi !== kdvEnum.Kdvli && satir.kdvUygulamaTipi !== kdvEnum.Tevkifatli) {
+                                        <div class="field">
+                                            <label>KDV İstisna Tanımı</label>
+                                            <p-select
+                                                [options]="getKdvIstisnaSecenekleri(satir)"
+                                                [ngModel]="satir.kdvIstisnaTanimId"
+                                                (ngModelChange)="satir.kdvIstisnaTanimId = $event"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                [filter]="true"
+                                                [showClear]="true"
+                                                [loading]="kdvIstisnaTanimlariLoading()"
+                                                placeholder="İstisna tanımı seçiniz"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
+                                        </div>
+                                        }
+                                    </div>
+
+                                    @if (hasSatirParametreleri(satir)) {
+                                    <div class="line-parameters-grid">
+                                        @if (isSatirParametreGorunur(satir, 'indirim')) {
+                                        <div class="satir-parametre-block">
+                                            <div class="satir-parametre-block-header">
+                                                <span>İndirim</span>
+                                                <p-button
+                                                    icon="pi pi-times"
+                                                    severity="secondary"
+                                                    [text]="true"
+                                                    [rounded]="true"
+                                                    size="small"
+                                                    type="button"
+                                                    pTooltip="Kaldır"
+                                                    (click)="toggleSatirParametre(satir, 'indirim')">
+                                                </p-button>
+                                            </div>
+                                            <div class="line-parameter-inner-grid">
+                                                <div class="field">
+                                                    <label>İndirim Oranı (%)</label>
+                                                    <p-inputNumber
+                                                        [(ngModel)]="satir.indirimOrani"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        [min]="0"
+                                                        [max]="100"
+                                                        [showButtons]="true"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="0"
+                                                        [maxFractionDigits]="4">
+                                                    </p-inputNumber>
+                                                </div>
+                                                <div class="field">
+                                                    <label>İndirim Tutarı (₺)</label>
+                                                    <p-inputNumber
+                                                        [ngModel]="getSatirIndirimTutari(satir)"
+                                                        [readonly]="true"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="2"
+                                                        [maxFractionDigits]="2">
+                                                    </p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        }
+
+                                        @if (isSatirParametreGorunur(satir, 'tevkifat')) {
+                                        <div class="satir-parametre-block">
+                                            <div class="satir-parametre-block-header">
+                                                <span>Tevkifat</span>
+                                                <p-button
+                                                    icon="pi pi-times"
+                                                    severity="secondary"
+                                                    [text]="true"
+                                                    [rounded]="true"
+                                                    size="small"
+                                                    type="button"
+                                                    pTooltip="Kaldır"
+                                                    (click)="toggleSatirParametre(satir, 'tevkifat')">
+                                                </p-button>
+                                            </div>
+                                            <div class="line-parameter-inner-grid">
+                                                <div class="field">
+                                                    <label>Tevkifat Oranı</label>
+                                                    <p-select
+                                                        [options]="tevkifatSecenekleri"
+                                                        [ngModel]="getTevkifatSecimi(satir)"
+                                                        (ngModelChange)="setTevkifatSecimi(satir, $event)"
+                                                        optionLabel="label"
+                                                        optionValue="value"
+                                                        [showClear]="true"
+                                                        placeholder="Tevkifat oranı seçiniz"
+                                                        appendTo="body"
+                                                        styleClass="w-full">
+                                                    </p-select>
+                                                </div>
+                                                <div class="field">
+                                                    <label>Tevkifat Tutarı (₺)</label>
+                                                    <p-inputNumber
+                                                        [ngModel]="getSatirTevkifatTutari(satir)"
+                                                        [readonly]="true"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="2"
+                                                        [maxFractionDigits]="2">
+                                                    </p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        }
+
+                                        @if (isSatirParametreGorunur(satir, 'otv')) {
+                                        <div class="satir-parametre-block">
+                                            <div class="satir-parametre-block-header">
+                                                <span>ÖTV</span>
+                                                <p-button
+                                                    icon="pi pi-times"
+                                                    severity="secondary"
+                                                    [text]="true"
+                                                    [rounded]="true"
+                                                    size="small"
+                                                    type="button"
+                                                    pTooltip="Kaldır"
+                                                    (click)="toggleSatirParametre(satir, 'otv')">
+                                                </p-button>
+                                            </div>
+                                            <div class="line-parameter-inner-grid">
+                                                <div class="field">
+                                                    <label>ÖTV Oranı (%)</label>
+                                                    <p-inputNumber
+                                                        [(ngModel)]="satir.otvOrani"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        [min]="0"
+                                                        [max]="100"
+                                                        [showButtons]="true"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="0"
+                                                        [maxFractionDigits]="4">
+                                                    </p-inputNumber>
+                                                </div>
+                                                <div class="field">
+                                                    <label>ÖTV Tutarı (₺)</label>
+                                                    <p-inputNumber
+                                                        [ngModel]="getSatirOtvTutari(satir)"
+                                                        [readonly]="true"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="2"
+                                                        [maxFractionDigits]="2">
+                                                    </p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        }
+
+                                        @if (isSatirParametreGorunur(satir, 'oiv')) {
+                                        <div class="satir-parametre-block">
+                                            <div class="satir-parametre-block-header">
+                                                <span>ÖİV</span>
+                                                <p-button
+                                                    icon="pi pi-times"
+                                                    severity="secondary"
+                                                    [text]="true"
+                                                    [rounded]="true"
+                                                    size="small"
+                                                    type="button"
+                                                    pTooltip="Kaldır"
+                                                    (click)="toggleSatirParametre(satir, 'oiv')">
+                                                </p-button>
+                                            </div>
+                                            <div class="line-parameter-inner-grid">
+                                                <div class="field">
+                                                    <label>ÖİV Oranı (%)</label>
+                                                    <p-inputNumber
+                                                        [(ngModel)]="satir.oivOrani"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        [min]="0"
+                                                        [max]="100"
+                                                        [showButtons]="true"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="0"
+                                                        [maxFractionDigits]="4">
+                                                    </p-inputNumber>
+                                                </div>
+                                                <div class="field">
+                                                    <label>ÖİV Tutarı (₺)</label>
+                                                    <p-inputNumber
+                                                        [ngModel]="getSatirOivTutari(satir)"
+                                                        [readonly]="true"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="2"
+                                                        [maxFractionDigits]="2">
+                                                    </p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        }
+
+                                        @if (isSatirParametreGorunur(satir, 'konaklamaVergisi')) {
+                                        <div class="satir-parametre-block">
+                                            <div class="satir-parametre-block-header">
+                                                <span>Konaklama Vergisi</span>
+                                                <p-button
+                                                    icon="pi pi-times"
+                                                    severity="secondary"
+                                                    [text]="true"
+                                                    [rounded]="true"
+                                                    size="small"
+                                                    type="button"
+                                                    pTooltip="Kaldır"
+                                                    (click)="toggleSatirParametre(satir, 'konaklamaVergisi')">
+                                                </p-button>
+                                            </div>
+                                            <div class="line-parameter-inner-grid">
+                                                <div class="field">
+                                                    <label>Konaklama Vergisi Oranı (%)</label>
+                                                    <p-inputNumber
+                                                        [(ngModel)]="satir.konaklamaVergisiOrani"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        [min]="0"
+                                                        [max]="100"
+                                                        [showButtons]="true"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="0"
+                                                        [maxFractionDigits]="4">
+                                                    </p-inputNumber>
+                                                </div>
+                                                <div class="field">
+                                                    <label>Konaklama Vergisi Tutarı (₺)</label>
+                                                    <p-inputNumber
+                                                        [ngModel]="getSatirKonaklamaVergisiTutari(satir)"
+                                                        [readonly]="true"
+                                                        styleClass="w-full"
+                                                        inputStyleClass="w-full"
+                                                        mode="decimal"
+                                                        [minFractionDigits]="2"
+                                                        [maxFractionDigits]="2">
+                                                    </p-inputNumber>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        }
+                                    </div>
+                                    } @else {
+                                    <small class="text-color-secondary block">Ek parametre eklemek için Parametre Ekle butonunu kullanın.</small>
+                                    }
+                                </div>
+
+                                <div class="line-summary-bar">
+                                    <span class="line-summary-item">Matrah: <strong>{{ getSatirMatrah(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="line-summary-item">İndirim: <strong>{{ getSatirIndirimTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="line-summary-item">KDV: <strong>{{ previewKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="line-summary-item">Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="line-summary-item">Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
+                                    <span class="line-summary-total">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
                                 </div>
                             </div>
                             }

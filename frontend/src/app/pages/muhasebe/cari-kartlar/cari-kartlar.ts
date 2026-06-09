@@ -44,6 +44,8 @@ export class CariKartlarPage implements OnInit {
     dialogMode: 'create' | 'edit' = 'create';
     duzeltmeDialogVisible = false;
     duzeltmeSaving = false;
+    acilisBakiyeTarihiDate: Date | null = null;
+    duzeltmeTarihiDate: Date | null = null;
     duzeltmeModel: CariKartAcilisBakiyesiDuzeltRequest = {
         yeniTutar: 0,
         yeniYonu: null,
@@ -140,6 +142,7 @@ export class CariKartlarPage implements OnInit {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         this.model.tesisId = tesisId;
+        this.syncDateFieldsFromModel();
         this.dialogVisible = true;
     }
 
@@ -156,6 +159,7 @@ export class CariKartlarPage implements OnInit {
         })).subscribe({
             next: (detail) => {
                 this.model = this.mapToModel(detail);
+                this.syncDateFieldsFromModel();
                 this.dialogVisible = true;
                 this.cdr.detectChanges();
             },
@@ -269,6 +273,7 @@ export class CariKartlarPage implements OnInit {
             yeniYonu: item.acilisBakiyeYonu ?? null,
             duzeltmeTarihi: item.acilisBakiyeTarihi ?? null
         };
+        this.duzeltmeTarihiDate = this.parseDateOnly(this.duzeltmeModel.duzeltmeTarihi);
         this.duzeltmeDialogVisible = true;
     }
 
@@ -287,6 +292,7 @@ export class CariKartlarPage implements OnInit {
             return;
         }
 
+        this.syncModelDatesFromUi();
         this.duzeltmeSaving = true;
         this.service.acilisBakiyesiDuzelt(this.duzeltmeCariKart.id, this.duzeltmeModel).pipe(finalize(() => {
             this.duzeltmeSaving = false;
@@ -328,6 +334,16 @@ export class CariKartlarPage implements OnInit {
             bankaHesaplari: [],
             yetkiliKisiler: []
         };
+    }
+
+    private syncDateFieldsFromModel(): void {
+        this.acilisBakiyeTarihiDate = this.parseDateOnly(this.model.acilisBakiyeTarihi);
+        this.duzeltmeTarihiDate = this.parseDateOnly(this.duzeltmeModel.duzeltmeTarihi);
+    }
+
+    private syncModelDatesFromUi(): void {
+        this.model.acilisBakiyeTarihi = this.formatDateOnly(this.acilisBakiyeTarihiDate);
+        this.duzeltmeModel.duzeltmeTarihi = this.formatDateOnly(this.duzeltmeTarihiDate);
     }
 
     addYetkiliKisi(): void {
@@ -509,7 +525,7 @@ export class CariKartlarPage implements OnInit {
         return `KOMBO:${(hesap.bankaAdi ?? '').trim().toUpperCase()}|${(hesap.subeAdi ?? '').trim().toUpperCase()}|${(hesap.hesapNo ?? '').trim().toUpperCase()}`;
     }
 
-    parseDateOnly(value: string | Date | null | undefined): Date | null {
+    private parseDateOnly(value: string | Date | null | undefined): Date | null {
         if (!value) {
             return null;
         }
@@ -539,7 +555,7 @@ export class CariKartlarPage implements OnInit {
         return isNaN(parsed.getTime()) ? null : parsed;
     }
 
-    formatDateOnly(value: Date | string | null | undefined): string | null {
+    private formatDateOnly(value: Date | string | null | undefined): string | null {
         if (!value) {
             return null;
         }

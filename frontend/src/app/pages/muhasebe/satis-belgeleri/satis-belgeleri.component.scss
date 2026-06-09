@@ -101,6 +101,10 @@
       flex-wrap: wrap;
     }
 
+    .cari-toggle-row--compact {
+      justify-content: flex-start;
+    }
+
     .cari-toggle-row--start {
       justify-content: flex-start;
     }

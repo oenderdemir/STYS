@@ -354,20 +354,20 @@
                                         </p-autoComplete>
                                     </div>
 
-                                    <div class="cari-toggle-row">
-                                        <div class="flex align-items-center gap-2">
+                                    <div class="cari-toggle-row cari-toggle-row--compact">
+                                        <div class="flex align-items-center gap-2 flex-wrap">
                                             <p-toggleSwitch
                                                 [ngModel]="manuelMusteriGirisi()"
                                                 (ngModelChange)="onManuelMusteriGirisiChange($event)"
                                                 styleClass="mr-1">
                                             </p-toggleSwitch>
                                             <label class="text-sm cursor-pointer">{{ isAlisMode() ? 'Manuel cari bilgisi gireceğim' : 'Manuel müşteri bilgisi gireceğim' }}</label>
+                                            @if (!manuelMusteriGirisi()) {
+                                            <p-tag [value]="getOtomatikCariTagValue()" severity="info" styleClass="text-xs"></p-tag>
+                                            } @else {
+                                            <p-tag value="Manuel Giriş" severity="warn" styleClass="text-xs"></p-tag>
+                                            }
                                         </div>
-                                        @if (!manuelMusteriGirisi()) {
-                                        <p-tag [value]="getOtomatikCariTagValue()" severity="info" styleClass="text-xs"></p-tag>
-                                        } @else {
-                                        <p-tag value="Manuel Giriş" severity="warn" styleClass="text-xs"></p-tag>
-                                        }
                                     </div>
 
                                     <!-- Kurumsal / Bireysel Toggle -->
@@ -415,7 +415,7 @@
                                                 placeholder="Vergi dairesi" />
                                         </div>
                                         } @else {
-                                        <div class="col-12 field">
+                                        <div class="col-12 md:col-6 field">
                                             <label>Ad Soyad *</label>
                                             <input
                                                 pInputText
@@ -487,7 +487,7 @@
                                             <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
                                         </div>
                                         } @else {
-                                        <div class="col-12 field">
+                                        <div class="col-12 md:col-6 field">
                                             <label>Ad Soyad</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
                                                 placeholder="Cari karttan otomatik doldurulur" />

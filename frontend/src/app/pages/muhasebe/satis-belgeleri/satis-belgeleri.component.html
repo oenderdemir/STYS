@@ -231,7 +231,7 @@
                                 <div class="form-card">
                                     <h5 class="mt-0 mb-3">📋 Belge Bilgileri</h5>
 
-                                    <div class="grid">
+                                    <div class="grid form-grid">
                                         <div class="col-12 md:col-6 field">
                                             <label>Belge Tipi</label>
                                             <p-select
@@ -262,7 +262,8 @@
                                                 (ngModelChange)="updateFormField('belgeTarihi', $event)"
                                                 [showIcon]="true"
                                                 dateFormat="dd.mm.yy"
-                                                styleClass="w-full">
+                                                styleClass="w-full"
+                                                inputStyleClass="w-full">
                                             </p-datepicker>
                                         </div>
 
@@ -273,7 +274,8 @@
                                                 (ngModelChange)="updateFormField('vadeTarihi', $event)"
                                                 [showIcon]="true"
                                                 dateFormat="dd.mm.yy"
-                                                styleClass="w-full">
+                                                styleClass="w-full"
+                                                inputStyleClass="w-full">
                                             </p-datepicker>
                                         </div>
 
@@ -292,7 +294,9 @@
 
                                         <div class="col-12 field">
                                             <label>Açıklama</label>
-                                            <p-textarea class="w-full" rows="3"
+                                            <p-textarea
+                                                styleClass="w-full form-textarea"
+                                                rows="3"
                                                 [ngModel]="formData().aciklama"
                                                 (ngModelChange)="updateFormField('aciklama', $event)"
                                                 placeholder="Belgeye ilişkin açıklama...">
@@ -319,7 +323,7 @@
                                             }
                                         </label>
                                         <p-autoComplete
-                                            class="w-full"
+                                            styleClass="w-full"
                                             [ngModel]="selectedCari()"
                                             (ngModelChange)="onCariKartSecildi($event)"
                                             [suggestions]="filteredCariKartlar"
@@ -342,8 +346,7 @@
                                         </p-autoComplete>
                                     </div>
 
-                                    <!-- Manuel Giriş Toggle -->
-                                    <div class="flex align-items-center justify-content-between mb-3">
+                                    <div class="cari-toggle-row" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.9rem;flex-wrap:wrap;">
                                         <div class="flex align-items-center gap-2">
                                             <p-toggleSwitch
                                                 [ngModel]="manuelMusteriGirisi()"
@@ -360,7 +363,7 @@
                                     </div>
 
                                     <!-- Kurumsal / Bireysel Toggle -->
-                                    <div class="flex align-items-center gap-2 mb-3">
+                                    <div class="cari-toggle-row" style="display:flex;align-items:center;justify-content:flex-start;gap:.75rem;margin-bottom:.9rem;flex-wrap:wrap;">
                                         <p-toggleSwitch
                                             [ngModel]="formData().kurumsalMi"
                                             (ngModelChange)="updateFormField('kurumsalMi', $event)"
@@ -371,12 +374,13 @@
                                     </div>
 
                                     @if (showCariManualForm()) {
-                                    <!-- Manuel giriş alanları -->
-                                    <div class="grid">
+                                    <div class="grid form-grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
                                             <label>Ünvan *</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriUnvan"
                                                 (ngModelChange)="updateFormField('musteriUnvan', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -384,7 +388,9 @@
                                         </div>
                                         <div class="col-12 md:col-6 field">
                                             <label>Vergi No *</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriVergiNo"
                                                 (ngModelChange)="updateFormField('musteriVergiNo', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -392,7 +398,9 @@
                                         </div>
                                         <div class="col-12 md:col-6 field">
                                             <label>Vergi Dairesi</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriVergiDairesi"
                                                 (ngModelChange)="updateFormField('musteriVergiDairesi', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -401,15 +409,19 @@
                                         } @else {
                                         <div class="col-12 field">
                                             <label>Ad Soyad *</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriAdSoyad"
                                                 (ngModelChange)="updateFormField('musteriAdSoyad', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Ad soyad" />
                                         </div>
-                                        <div class="col-12 field">
+                                        <div class="col-12 md:col-6 field">
                                             <label>TC Kimlik No</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriTcKimlikNo"
                                                 (ngModelChange)="updateFormField('musteriTcKimlikNo', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -419,7 +431,9 @@
 
                                         <div class="col-12 md:col-6 field">
                                             <label>E-posta</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriEposta"
                                                 (ngModelChange)="updateFormField('musteriEposta', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -427,7 +441,9 @@
                                         </div>
                                         <div class="col-12 md:col-6 field">
                                             <label>Telefon</label>
-                                            <input pInputText class="w-full"
+                                            <input
+                                                pInputText
+                                                class="w-full"
                                                 [ngModel]="formData().musteriTelefon"
                                                 (ngModelChange)="updateFormField('musteriTelefon', $event)"
                                                 [readonly]="!manuelMusteriGirisi()"
@@ -435,7 +451,9 @@
                                         </div>
                                         <div class="col-12 field">
                                             <label>Adres</label>
-                                            <p-textarea class="w-full" rows="2"
+                                            <p-textarea
+                                                styleClass="w-full form-textarea"
+                                                rows="2"
                                                 [ngModel]="formData().musteriAdres"
                                                 (ngModelChange)="updateFormField('musteriAdres', $event)"
                                                 [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
@@ -444,8 +462,7 @@
                                         </div>
                                     </div>
                                     } @else if (showCariSnapshot()) {
-                                    <!-- Cari seçiliyse otomatik doldurulmuş readonly alanlar -->
-                                    <div class="grid">
+                                    <div class="grid form-grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
                                             <label>Ünvan</label>
@@ -466,7 +483,7 @@
                                             <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
                                                 placeholder="Cari karttan otomatik doldurulur" />
                                         </div>
-                                        <div class="col-12 field">
+                                        <div class="col-12 md:col-6 field">
                                             <label>TC Kimlik No</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriTcKimlikNo" readonly />
                                         </div>
@@ -482,7 +499,7 @@
                                         </div>
                                         <div class="col-12 field">
                                             <label>Adres</label>
-                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
+                                            <p-textarea styleClass="w-full form-textarea" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
                                                 placeholder="Cari karttan otomatik doldurulur">
                                             </p-textarea>
                                         </div>
@@ -1176,7 +1193,7 @@
         <div class="field">
             <label class="block text-sm mb-2">Ret Nedeni *</label>
             <p-textarea
-                class="w-full"
+                styleClass="w-full"
                 rows="3"
                 [(ngModel)]="redNedeni"
                 placeholder="Reddetme nedenini açıklayınız...">

@@ -9,6 +9,20 @@
     .satis-belgesi-dialog .p-dialog-content {
       padding: 1rem 1.25rem;
     }
+
+    .satis-belgesi-dialog .p-datepicker,
+    .satis-belgesi-dialog .p-autocomplete,
+    .satis-belgesi-dialog .p-select,
+    .satis-belgesi-dialog .p-textarea {
+      width: 100%;
+    }
+
+    .satis-belgesi-dialog .p-datepicker .p-inputtext,
+    .satis-belgesi-dialog .p-autocomplete .p-inputtext,
+    .satis-belgesi-dialog .p-select .p-select-label,
+    .satis-belgesi-dialog .p-textarea textarea {
+      width: 100%;
+    }
   }
 
   .belge-form {

@@ -382,7 +382,7 @@
                                     </div>
 
                                     @if (showCariManualForm()) {
-                                    <div class="customer-form-grid">
+                                    <div class="customer-form-grid customer-form-grid--corporate">
                                         @if (formData().kurumsalMi) {
                                         <div class="field field-full">
                                             <label>Ünvan *</label>
@@ -471,7 +471,7 @@
                                         </div>
                                     </div>
                                     } @else if (showCariSnapshot()) {
-                                    <div class="customer-form-grid">
+                                    <div class="customer-form-grid customer-form-grid--corporate">
                                         @if (formData().kurumsalMi) {
                                         <div class="field field-full">
                                             <label>Ünvan</label>
@@ -482,7 +482,7 @@
                                             <label>Vergi No</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriVergiNo" readonly />
                                         </div>
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Vergi Dairesi</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
                                         </div>

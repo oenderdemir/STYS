@@ -354,7 +354,7 @@
                                         </p-autoComplete>
                                     </div>
 
-                                    <div class="cari-toggle-row cari-toggle-row--compact">
+                                    <div class="manual-toggle-row">
                                         <div class="flex align-items-center gap-2 flex-wrap">
                                             <p-toggleSwitch
                                                 [ngModel]="manuelMusteriGirisi()"
@@ -382,9 +382,9 @@
                                     </div>
 
                                     @if (showCariManualForm()) {
-                                    <div class="grid compact-form-grid">
+                                    <div class="customer-form-grid">
                                         @if (formData().kurumsalMi) {
-                                        <div class="col-12 field">
+                                        <div class="field field-full">
                                             <label>Ünvan *</label>
                                             <input
                                                 pInputText
@@ -415,7 +415,7 @@
                                                 placeholder="Vergi dairesi" />
                                         </div>
                                         } @else {
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Ad Soyad *</label>
                                             <input
                                                 pInputText
@@ -425,7 +425,7 @@
                                                 [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="Ad soyad" />
                                         </div>
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>TC Kimlik No</label>
                                             <input
                                                 pInputText
@@ -437,7 +437,7 @@
                                         </div>
                                         }
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>E-posta</label>
                                             <input
                                                 pInputText
@@ -447,7 +447,7 @@
                                                 [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="ornek@firma.com" />
                                         </div>
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Telefon</label>
                                             <input
                                                 pInputText
@@ -457,7 +457,7 @@
                                                 [readonly]="!manuelMusteriGirisi()"
                                                 placeholder="+90 5XX XXX XX XX" />
                                         </div>
-                                        <div class="col-12 field">
+                                        <div class="field field-full">
                                             <label>Adres</label>
                                             <textarea
                                                 pTextarea
@@ -471,14 +471,14 @@
                                         </div>
                                     </div>
                                     } @else if (showCariSnapshot()) {
-                                    <div class="grid compact-form-grid">
+                                    <div class="customer-form-grid">
                                         @if (formData().kurumsalMi) {
-                                        <div class="col-12 field">
+                                        <div class="field field-full">
                                             <label>Ünvan</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriUnvan" readonly
                                                 placeholder="Cari karttan otomatik doldurulur" />
                                         </div>
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Vergi No</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriVergiNo" readonly />
                                         </div>
@@ -487,18 +487,18 @@
                                             <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
                                         </div>
                                         } @else {
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Ad Soyad</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
                                                 placeholder="Cari karttan otomatik doldurulur" />
                                         </div>
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>TC Kimlik No</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriTcKimlikNo" readonly />
                                         </div>
                                         }
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>E-posta</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriEposta" readonly />
                                         </div>
@@ -506,7 +506,7 @@
                                             <label>Telefon</label>
                                             <input pInputText class="w-full" [ngModel]="formData().musteriTelefon" readonly />
                                         </div>
-                                        <div class="col-12 field">
+                                        <div class="field field-full">
                                             <label>Adres</label>
                                             <textarea pTextarea class="w-full form-textarea" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
                                                 placeholder="Cari karttan otomatik doldurulur">

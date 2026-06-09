@@ -90,37 +90,74 @@ public class HesapService : BaseRdbmsService<HesapDto, Hesap, int>, IHesapServic
         return item is null ? null : MapDetailDto(item);
     }
 
-    public async Task<List<HesapLookupDto>> GetKasaHesapLookupsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<HesapLookupDto>> GetKasaHesapLookupsAsync(int? tesisId, CancellationToken cancellationToken = default)
     {
         var items = await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.NakitKasa, true, cancellationToken);
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value).ToList();
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (scope.IsScoped)
         {
             items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
         }
-        return items.Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
+
+        return items
+            .Where(x => x.AktifMi)
+            .GroupBy(x => x.Id)
+            .Select(g => g.First())
+            .OrderBy(x => x.Kod)
+            .ThenBy(x => x.Ad)
+            .Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad })
+            .ToList();
     }
 
-    public async Task<List<HesapLookupDto>> GetBankaHesapLookupsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<HesapLookupDto>> GetBankaHesapLookupsAsync(int? tesisId, CancellationToken cancellationToken = default)
     {
         var items = await _kasaBankaHesapRepository.GetByTipAsync(KasaBankaHesapTipleri.Banka, true, cancellationToken);
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value).ToList();
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (scope.IsScoped)
         {
             items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
         }
-        return items.Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
+
+        return items
+            .Where(x => x.AktifMi)
+            .GroupBy(x => x.Id)
+            .Select(g => g.First())
+            .OrderBy(x => x.Kod)
+            .ThenBy(x => x.Ad)
+            .Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad })
+            .ToList();
     }
 
-    public async Task<List<HesapLookupDto>> GetDepoLookupsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<HesapLookupDto>> GetDepoLookupsAsync(int? tesisId, CancellationToken cancellationToken = default)
     {
         var items = await _depoRepository.GetAllAsync();
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            items = items.Where(x => x.TesisId == tesisId.Value).ToList();
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (scope.IsScoped)
         {
             items = items.Where(x => x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)).ToList();
         }
-        return items.Where(x => x.AktifMi).OrderBy(x => x.Kod).ThenBy(x => x.Ad)
+
+        return items
+            .Where(x => x.AktifMi)
+            .GroupBy(x => x.Id)
+            .Select(g => g.First())
+            .OrderBy(x => x.Kod)
+            .ThenBy(x => x.Ad)
             .Select(x => new HesapLookupDto { Id = x.Id, Kod = x.Kod, Ad = x.Ad }).ToList();
     }
 

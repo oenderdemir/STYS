@@ -64,13 +64,15 @@ export class HesaplarPage implements OnInit {
         if (tesisId) {
             this.pageNumber = 1;
             this.closeOpenDialogForTesisChange();
-            this.loadLookups();
+            this.loadLookups(tesisId);
             this.load(1, this.pageSize);
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Çalışma Tesisi Değişti',
                 detail: 'Çalışma tesisi değiştiği için hesap listesi yenilendi.'
             });
+        } else {
+            this.clearLookupLists();
         }
     });
 
@@ -79,7 +81,7 @@ export class HesaplarPage implements OnInit {
             next: () => {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
-                this.loadLookups();
+                this.loadLookups(this.currentTesisId);
                 this.load(1, this.pageSize);
             },
             error: (error: unknown) => this.showError(error)
@@ -215,7 +217,7 @@ export class HesaplarPage implements OnInit {
         return this.tesisContext.seciliTesis()?.ad ?? (tesisId ? `#${tesisId}` : '-');
     }
 
-    private loadLookups(): void {
+    private loadLookups(tesisId: number | null = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null): void {
         this.service.getMuhasebeKodlari('6').subscribe({
             next: (items) => {
                 this.muhasebeKodlari = this.mapLookup(items);
@@ -223,13 +225,74 @@ export class HesaplarPage implements OnInit {
             }
         });
 
-        this.service.getKasaHesaplari().subscribe({ next: (items) => { this.kasaHesaplari = this.mapLookup(items); this.cdr.detectChanges(); } });
-        this.service.getBankaHesaplari().subscribe({ next: (items) => { this.bankaHesaplari = this.mapLookup(items); this.cdr.detectChanges(); } });
-        this.service.getDepolar().subscribe({ next: (items) => { this.depolar = this.mapLookup(items); this.cdr.detectChanges(); } });
+        if (!tesisId) {
+            this.clearLookupLists();
+            return;
+        }
+
+        this.service.getKasaHesaplari(tesisId).subscribe({
+            next: (items) => {
+                this.kasaHesaplari = this.uniqueLookupByValue(this.mapLookup(items));
+                this.syncSelectedLookupValues('kasa');
+                this.cdr.detectChanges();
+            }
+        });
+        this.service.getBankaHesaplari(tesisId).subscribe({
+            next: (items) => {
+                this.bankaHesaplari = this.uniqueLookupByValue(this.mapLookup(items));
+                this.syncSelectedLookupValues('banka');
+                this.cdr.detectChanges();
+            }
+        });
+        this.service.getDepolar(tesisId).subscribe({
+            next: (items) => {
+                this.depolar = this.uniqueLookupByValue(this.mapLookup(items));
+                this.syncSelectedLookupValues('depo');
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     private mapLookup(items: HesapLookupModel[]): Array<{ label: string; value: number }> {
         return items.map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id }));
+    }
+
+    private uniqueLookupByValue(items: Array<{ label: string; value: number }>): Array<{ label: string; value: number }> {
+        const seen = new Set<number>();
+        return items.filter(item => {
+            if (seen.has(item.value)) {
+                return false;
+            }
+            seen.add(item.value);
+            return true;
+        });
+    }
+
+    private clearLookupLists(): void {
+        this.kasaHesaplari = [];
+        this.bankaHesaplari = [];
+        this.depolar = [];
+        this.model.kasaHesapIds = [];
+        this.model.bankaHesapIds = [];
+        this.model.depoIds = [];
+        this.cdr.detectChanges();
+    }
+
+    private syncSelectedLookupValues(kind: 'kasa' | 'banka' | 'depo'): void {
+        if (kind === 'kasa') {
+            const kasaIds = new Set(this.kasaHesaplari.map(x => x.value));
+            this.model.kasaHesapIds = (this.model.kasaHesapIds ?? []).filter(id => kasaIds.has(id));
+        }
+
+        if (kind === 'banka') {
+            const bankaIds = new Set(this.bankaHesaplari.map(x => x.value));
+            this.model.bankaHesapIds = (this.model.bankaHesapIds ?? []).filter(id => bankaIds.has(id));
+        }
+
+        if (kind === 'depo') {
+            const depoIds = new Set(this.depolar.map(x => x.value));
+            this.model.depoIds = (this.model.depoIds ?? []).filter(id => depoIds.has(id));
+        }
     }
 
     private createEmpty(): HesapModel {

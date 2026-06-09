@@ -40,18 +40,18 @@ public class HesaplarController : UIController
 
     [HttpGet("lookups/kasa-hesaplari")]
     [Permission(StructurePermissions.HesapYonetimi.View)]
-    public async Task<ActionResult<List<HesapLookupDto>>> GetKasaHesaplari(CancellationToken cancellationToken)
-        => Ok(await _service.GetKasaHesapLookupsAsync(cancellationToken));
+    public async Task<ActionResult<List<HesapLookupDto>>> GetKasaHesaplari([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetKasaHesapLookupsAsync(tesisId, cancellationToken));
 
     [HttpGet("lookups/banka-hesaplari")]
     [Permission(StructurePermissions.HesapYonetimi.View)]
-    public async Task<ActionResult<List<HesapLookupDto>>> GetBankaHesaplari(CancellationToken cancellationToken)
-        => Ok(await _service.GetBankaHesapLookupsAsync(cancellationToken));
+    public async Task<ActionResult<List<HesapLookupDto>>> GetBankaHesaplari([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetBankaHesapLookupsAsync(tesisId, cancellationToken));
 
     [HttpGet("lookups/depolar")]
     [Permission(StructurePermissions.HesapYonetimi.View)]
-    public async Task<ActionResult<List<HesapLookupDto>>> GetDepolar(CancellationToken cancellationToken)
-        => Ok(await _service.GetDepoLookupsAsync(cancellationToken));
+    public async Task<ActionResult<List<HesapLookupDto>>> GetDepolar([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetDepoLookupsAsync(tesisId, cancellationToken));
 
     [HttpGet("lookups/muhasebe-kodlari")]
     [Permission(StructurePermissions.HesapYonetimi.View)]

@@ -40,16 +40,28 @@ export class HesaplarService {
         }));
     }
 
-    getKasaHesaplari(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/kasa-hesaplari`).pipe(map(this.unwrapOne));
+    getKasaHesaplari(tesisId?: number | null): Observable<HesapLookupModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/kasa-hesaplari`, { params }).pipe(map(this.unwrapOne));
     }
 
-    getBankaHesaplari(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/banka-hesaplari`).pipe(map(this.unwrapOne));
+    getBankaHesaplari(tesisId?: number | null): Observable<HesapLookupModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/banka-hesaplari`, { params }).pipe(map(this.unwrapOne));
     }
 
-    getDepolar(): Observable<HesapLookupModel[]> {
-        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/depolar`).pipe(map(this.unwrapOne));
+    getDepolar(tesisId?: number | null): Observable<HesapLookupModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+        return this.http.get<ApiResponse<HesapLookupModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesaplar/lookups/depolar`, { params }).pipe(map(this.unwrapOne));
     }
 
     getMuhasebeKodlari(startsWith = ''): Observable<HesapLookupModel[]> {

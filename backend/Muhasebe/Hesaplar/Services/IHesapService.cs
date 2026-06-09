@@ -13,8 +13,8 @@ public interface IHesapService : IBaseRdbmsService<HesapDto, Hesap, int>
         int? tesisId,
         CancellationToken cancellationToken = default);
     Task<HesapDto?> GetDetailByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<List<HesapLookupDto>> GetKasaHesapLookupsAsync(CancellationToken cancellationToken = default);
-    Task<List<HesapLookupDto>> GetBankaHesapLookupsAsync(CancellationToken cancellationToken = default);
-    Task<List<HesapLookupDto>> GetDepoLookupsAsync(CancellationToken cancellationToken = default);
+    Task<List<HesapLookupDto>> GetKasaHesapLookupsAsync(int? tesisId, CancellationToken cancellationToken = default);
+    Task<List<HesapLookupDto>> GetBankaHesapLookupsAsync(int? tesisId, CancellationToken cancellationToken = default);
+    Task<List<HesapLookupDto>> GetDepoLookupsAsync(int? tesisId, CancellationToken cancellationToken = default);
     Task<List<HesapLookupDto>> GetMuhasebeKodLookupsAsync(string? startsWith, CancellationToken cancellationToken = default);
 }

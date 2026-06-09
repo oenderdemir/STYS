@@ -689,9 +689,14 @@
                                         </div>
                                         <div class="field">
                                             <label>KDV Oranı (%)</label>
-                                            <p-inputNumber [(ngModel)]="satir.kdvOrani" styleClass="w-full" inputStyleClass="w-full" [min]="0" [max]="100"
-                                                [showButtons]="true" mode="decimal" [minFractionDigits]="0" [maxFractionDigits]="4">
-                                            </p-inputNumber>
+                                            <p-select
+                                                [options]="getKdvOraniSecenekleri(satir.kdvOrani)"
+                                                [(ngModel)]="satir.kdvOrani"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                appendTo="body"
+                                                styleClass="w-full">
+                                            </p-select>
                                         </div>
                                         @if (satir.kdvUygulamaTipi !== kdvEnum.Kdvli && satir.kdvUygulamaTipi !== kdvEnum.Tevkifatli) {
                                         <div class="field">

@@ -175,7 +175,7 @@
         </div>
         <div class="col-span-12 md:col-span-4" *ngIf="model.kdvUygulamaTipi === 1">
             <label class="block font-medium mb-2">KDV Orani (%)</label>
-            <p-inputnumber [(ngModel)]="model.kdvOrani" [min]="0" [max]="100" [maxFractionDigits]="2" class="w-full" inputStyleClass="w-full" />
+            <p-select class="w-full" [options]="getKdvOraniSecenekleri(model.kdvOrani)" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvOrani" appendTo="body" />
         </div>
     </div>
 

@@ -184,6 +184,14 @@ export class SatisBelgeleriComponent implements OnInit {
     satirTipiSecenekleri = Object.entries(this.satirTipiLabels).map(([k, v]) => ({ value: Number(k), label: v }));
     kdvUygulamaTipiSecenekleri = Object.entries(this.kdvUygulamaTipiLabels)
         .map(([k, v]) => ({ value: Number(k), label: v }));
+    readonly kdvOraniSecenekleri = [
+        { label: '%0', value: 0 },
+        { label: '%1', value: 1 },
+        { label: '%8', value: 8 },
+        { label: '%10', value: 10 },
+        { label: '%18', value: 18 },
+        { label: '%20', value: 20 }
+    ];
     tevkifatSecenekleri = [
         { label: '2/10', value: '2/10' },
         { label: '3/10', value: '3/10' },
@@ -1338,6 +1346,14 @@ export class SatisBelgeleriComponent implements OnInit {
                 (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi) &&
                 (t.uygulamaTipi === satir.kdvUygulamaTipi))
             .map(t => ({ label: `${t.kod} - ${t.ad}`, value: t.id }));
+    }
+
+    getKdvOraniSecenekleri(currentValue?: number | null): Array<{ label: string; value: number }> {
+        const base = [...this.kdvOraniSecenekleri];
+        if (currentValue !== null && currentValue !== undefined && !base.some(x => x.value === currentValue)) {
+            base.push({ label: `%${currentValue}`, value: currentValue });
+        }
+        return base;
     }
 
     getTevkifatSecimi(satir: CreateSatisBelgesiSatiriRequest): string | null {

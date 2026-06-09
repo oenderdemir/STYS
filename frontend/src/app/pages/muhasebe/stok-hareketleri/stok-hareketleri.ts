@@ -99,6 +99,14 @@ export class StokHareketleriPage implements OnInit {
     filteredKdvIstisnaTanimOptions: Array<{ label: string; value: number }> = [];
     /** Tevkifatlı hariç KDV uygulama tipi seçenekleri. */
     filteredKdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI.filter(s => s.value !== 5);
+    readonly kdvOraniSecenekleri = [
+        { label: '%0', value: 0 },
+        { label: '%1', value: 1 },
+        { label: '%8', value: 8 },
+        { label: '%10', value: 10 },
+        { label: '%18', value: 18 },
+        { label: '%20', value: 20 }
+    ];
 
     /** Full TasinirKart models indexed by id for O(1) lookups of tesisId and stokKodu. */
     private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
@@ -617,6 +625,14 @@ export class StokHareketleriPage implements OnInit {
             this.model.kdvTutari = 0;
         }
         this.applyIstisnaFilter();
+    }
+
+    getKdvOraniSecenekleri(currentValue?: number | null): Array<{ label: string; value: number }> {
+        const base = [...this.kdvOraniSecenekleri];
+        if (currentValue !== null && currentValue !== undefined && !base.some(x => x.value === currentValue)) {
+            base.push({ label: `%${currentValue}`, value: currentValue });
+        }
+        return base;
     }
 
     /**

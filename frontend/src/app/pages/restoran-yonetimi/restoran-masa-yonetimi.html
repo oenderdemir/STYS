@@ -8,6 +8,19 @@
         }
         <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" />
     </ng-template>
+            <div class="col-span-12 md:col-span-6 lg:col-span-4">
+            <label class="block font-medium mb-2">Restoran</label>
+            <p-select
+                class="w-full"
+                [options]="restoranlar"
+                optionLabel="ad"
+                optionValue="id"
+                [(ngModel)]="selectedRestoranId"
+                [showClear]="true"
+                placeholder="Tum Restoranlar"
+                [appendTo]="'body'"
+                (onChange)="onRestoranChange()" />
+        </div>
 </p-toolbar>
 
 <div class="card mb-4">

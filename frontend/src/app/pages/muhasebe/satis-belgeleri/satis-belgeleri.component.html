@@ -232,7 +232,7 @@
                                     <h5 class="mt-0 mb-3">📋 Belge Bilgileri</h5>
 
                                     <div class="document-form-grid">
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Belge Tipi</label>
                                             <p-select
                                                 [options]="belgeTipiSecenekleri"
@@ -245,7 +245,7 @@
                                             </p-select>
                                         </div>
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Belge No <span class="text-xs text-color-secondary">(Boş = otomatik)</span></label>
                                             <input
                                                 pInputText
@@ -255,7 +255,7 @@
                                                 placeholder="ST-20260525-000001" />
                                         </div>
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Belge Tarihi *</label>
                                             <p-datepicker
                                                 [ngModel]="formData().belgeTarihi"
@@ -270,7 +270,7 @@
                                             </p-datepicker>
                                         </div>
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Vade Tarihi</label>
                                             <p-datepicker
                                                 [ngModel]="formData().vadeTarihi"
@@ -285,7 +285,7 @@
                                             </p-datepicker>
                                         </div>
 
-                                        <div class="col-12 md:col-6 field">
+                                        <div class="field">
                                             <label>Kaynak Modül</label>
                                             <p-select
                                                 [options]="kaynakModulSecenekleri"

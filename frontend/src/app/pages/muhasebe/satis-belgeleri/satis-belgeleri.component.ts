@@ -122,7 +122,9 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly route = inject(ActivatedRoute);
     private readonly destroyRef = inject(DestroyRef);
     private readonly satirParametreDurumlari = new WeakMap<CreateSatisBelgesiSatiriRequest, SatirParametreDurumu>();
-    private readonly collapsedSatirlar = new WeakMap<CreateSatisBelgesiSatiriRequest, boolean>();
+    private readonly satirUiIds = new WeakMap<CreateSatisBelgesiSatiriRequest, number>();
+    private readonly collapsedSatirUiIds = signal<number[]>([]);
+    private nextSatirUiId = 1;
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -971,17 +973,31 @@ export class SatisBelgeleriComponent implements OnInit {
             this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'En az bir satır olmalıdır.' });
             return;
         }
+        const removedSatir = this.formData().satirlar[index] ?? null;
+        const removedSatirUiId = removedSatir ? this.getSatirUiId(removedSatir) : null;
         const satirlar = this.formData().satirlar.filter((_, i) => i !== index);
         satirlar.forEach((s, i) => s.siraNo = i + 1);
         this.formData.update(f => ({ ...f, satirlar }));
+        if (removedSatirUiId !== null) {
+            this.collapsedSatirUiIds.update(ids => ids.filter(id => id !== removedSatirUiId));
+        }
     }
 
     isSatirExpanded(satir: CreateSatisBelgesiSatiriRequest): boolean {
-        return this.collapsedSatirlar.get(satir) !== true;
+        return !this.collapsedSatirUiIds().includes(this.getSatirUiId(satir));
     }
 
     toggleSatirExpanded(satir: CreateSatisBelgesiSatiriRequest): void {
-        this.collapsedSatirlar.set(satir, !this.isSatirExpanded(satir));
+        const satirUiId = this.getSatirUiId(satir);
+        this.collapsedSatirUiIds.update(ids => {
+            const next = new Set(ids);
+            if (next.has(satirUiId)) {
+                next.delete(satirUiId);
+            } else {
+                next.add(satirUiId);
+            }
+            return [...next];
+        });
     }
 
     getSatirKartRenkClass(index: number): string {
@@ -1004,7 +1020,21 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     private initializeSatirParametreDurumlari(satirlar: CreateSatisBelgesiSatiriRequest[]): void {
-        satirlar.forEach(satir => this.getSatirParametreDurumu(satir));
+        satirlar.forEach(satir => {
+            this.getSatirParametreDurumu(satir);
+            this.getSatirUiId(satir);
+        });
+    }
+
+    private getSatirUiId(satir: CreateSatisBelgesiSatiriRequest): number {
+        const mevcut = this.satirUiIds.get(satir);
+        if (mevcut !== undefined) {
+            return mevcut;
+        }
+
+        const yeniId = this.nextSatirUiId++;
+        this.satirUiIds.set(satir, yeniId);
+        return yeniId;
     }
 
     private getSatirParametreDurumu(satir: CreateSatisBelgesiSatiriRequest): SatirParametreDurumu {

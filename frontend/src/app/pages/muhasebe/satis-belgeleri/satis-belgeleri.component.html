@@ -340,11 +340,6 @@
                                                 </div>
                                             </ng-template>
                                         </p-autoComplete>
-                                        @if (!selectedCari() && !manuelMusteriGirisi()) {
-                                        <small class="text-color-secondary mt-1 block">
-                                            💡 {{ getCariHelperText() }}
-                                        </small>
-                                        }
                                     </div>
 
                                     <!-- Manuel Giriş Toggle -->
@@ -375,53 +370,8 @@
                                         <label class="text-sm">Kurumsal</label>
                                     </div>
 
-                                    <!-- Seçili cari varsa bilgi gösterimi; yoksa manuel alanlar -->
-                                    @if (!manuelMusteriGirisi() && selectedCari(); as cari) {
-                                    <!-- Otomatik doldurulmuş readonly alanlar -->
-                                    <div class="grid">
-                                        @if (formData().kurumsalMi) {
-                                        <div class="col-12 field">
-                                            <label>Ünvan</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriUnvan" readonly
-                                                placeholder="Cari karttan otomatik doldurulur" />
-                                        </div>
-                                        <div class="col-12 md:col-6 field">
-                                            <label>Vergi No</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiNo" readonly />
-                                        </div>
-                                        <div class="col-12 md:col-6 field">
-                                            <label>Vergi Dairesi</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
-                                        </div>
-                                        } @else {
-                                        <div class="col-12 field">
-                                            <label>Ad Soyad</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
-                                                placeholder="Cari karttan otomatik doldurulur" />
-                                        </div>
-                                        <div class="col-12 field">
-                                            <label>TC Kimlik No</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriTcKimlikNo" readonly />
-                                        </div>
-                                        }
-
-                                        <div class="col-12 md:col-6 field">
-                                            <label>E-posta</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriEposta" readonly />
-                                        </div>
-                                        <div class="col-12 md:col-6 field">
-                                            <label>Telefon</label>
-                                            <input pInputText class="w-full" [ngModel]="formData().musteriTelefon" readonly />
-                                        </div>
-                                        <div class="col-12 field">
-                                            <label>Adres</label>
-                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
-                                                placeholder="Cari karttan otomatik doldurulur">
-                                            </p-textarea>
-                                        </div>
-                                    </div>
-                                    } @else {
-                                    <!-- Manuel giriş veya cari seçilmedi -->
+                                    @if (showCariManualForm()) {
+                                    <!-- Manuel giriş alanları -->
                                     <div class="grid">
                                         @if (formData().kurumsalMi) {
                                         <div class="col-12 field">
@@ -491,6 +441,58 @@
                                                 [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
                                                 placeholder="Açık adres">
                                             </p-textarea>
+                                        </div>
+                                    </div>
+                                    } @else if (showCariSnapshot()) {
+                                    <!-- Cari seçiliyse otomatik doldurulmuş readonly alanlar -->
+                                    <div class="grid">
+                                        @if (formData().kurumsalMi) {
+                                        <div class="col-12 field">
+                                            <label>Ünvan</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriUnvan" readonly
+                                                placeholder="Cari karttan otomatik doldurulur" />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi No</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiNo" readonly />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Vergi Dairesi</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriVergiDairesi" readonly />
+                                        </div>
+                                        } @else {
+                                        <div class="col-12 field">
+                                            <label>Ad Soyad</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriAdSoyad" readonly
+                                                placeholder="Cari karttan otomatik doldurulur" />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>TC Kimlik No</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriTcKimlikNo" readonly />
+                                        </div>
+                                        }
+
+                                        <div class="col-12 md:col-6 field">
+                                            <label>E-posta</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriEposta" readonly />
+                                        </div>
+                                        <div class="col-12 md:col-6 field">
+                                            <label>Telefon</label>
+                                            <input pInputText class="w-full" [ngModel]="formData().musteriTelefon" readonly />
+                                        </div>
+                                        <div class="col-12 field">
+                                            <label>Adres</label>
+                                            <p-textarea class="w-full" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
+                                                placeholder="Cari karttan otomatik doldurulur">
+                                            </p-textarea>
+                                        </div>
+                                    </div>
+                                    } @else if (showCariEmptyState()) {
+                                    <div class="cari-empty-state-panel" style="display:flex;align-items:flex-start;gap:.75rem;margin-top:.25rem;padding:.9rem 1rem;background:var(--surface-50);border:1px dashed var(--primary-300);border-radius:var(--border-radius);color:var(--text-color-secondary);flex-wrap:wrap;">
+                                        <i class="pi pi-info-circle cari-empty-state-icon" style="flex:0 0 auto;margin-top:.1rem;color:var(--primary-color);font-size:1rem;"></i>
+                                        <div class="cari-empty-state-copy" style="display:flex;flex-direction:column;gap:.25rem;min-width:0;">
+                                            <strong>{{ getCariEmptyStateTitle() }}</strong>
+                                            <span>{{ getCariEmptyStateMessage() }}</span>
                                         </div>
                                     </div>
                                     }

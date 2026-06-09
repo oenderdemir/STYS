@@ -21,9 +21,17 @@ export function tryReadApiMessage(payload: unknown): string | null {
         return null;
     }
 
-    const message = payload['message'];
-    if (typeof message === 'string' && message.trim().length > 0) {
-        return message;
+    const directKeys = ['message', 'detail', 'title', 'error'];
+    for (const key of directKeys) {
+        const value = payload[key];
+        if (typeof value === 'string' && value.trim().length > 0) {
+            return value.trim();
+        }
+
+        const nestedValue = tryReadApiMessage(value);
+        if (nestedValue) {
+            return nestedValue;
+        }
     }
 
     const errors = payload['errors'];
@@ -36,9 +44,17 @@ export function tryReadApiMessage(payload: unknown): string | null {
             continue;
         }
 
-        const detail = errorItem['detail'];
-        if (typeof detail === 'string' && detail.trim().length > 0) {
-            return detail;
+        const nestedKeys = ['detail', 'message', 'title', 'error'];
+        for (const key of nestedKeys) {
+            const value = errorItem[key];
+            if (typeof value === 'string' && value.trim().length > 0) {
+                return value.trim();
+            }
+
+            const nestedValue = tryReadApiMessage(value);
+            if (nestedValue) {
+                return nestedValue;
+            }
         }
     }
 

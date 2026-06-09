@@ -112,6 +112,8 @@ export class YevmiyeDefteriComponent implements OnInit {
     loading = false;
     exporting = false;
 
+    baslangicTarihiDate: Date | null = null;
+    bitisTarihiDate: Date | null = null;
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     donemSecenekleri = DONEM_SECENEKLERI;
     fisTipiSecenekleri = FIS_TIPI_SECENEKLERI;
@@ -136,6 +138,7 @@ export class YevmiyeDefteriComponent implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.filter.tesisId = this.currentTesisId;
+                this.syncDateFieldsFromFilter();
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
@@ -151,6 +154,7 @@ export class YevmiyeDefteriComponent implements OnInit {
         }
 
         this.filter.tesisId = tesisId;
+        this.syncFilterDatesFromUi();
         const normalized = normalizeFisFilter(this.filter);
         this.result = null;
         this.loading = true;
@@ -171,6 +175,7 @@ export class YevmiyeDefteriComponent implements OnInit {
     temizle(): void {
         this.filter = createDefaultFisFilter();
         this.filter.tesisId = this.currentTesisId;
+        this.syncDateFieldsFromFilter();
         this.clearResults();
     }
 
@@ -226,6 +231,7 @@ export class YevmiyeDefteriComponent implements OnInit {
         }
 
         this.filter.tesisId = tesisId;
+        this.syncFilterDatesFromUi();
         const normalized = normalizeFisFilter(this.filter);
         this.exporting = true;
 
@@ -268,7 +274,17 @@ export class YevmiyeDefteriComponent implements OnInit {
         this.result = null;
     }
 
-    parseDateOnly(value: string | Date | null | undefined): Date | null {
+    private syncDateFieldsFromFilter(): void {
+        this.baslangicTarihiDate = this.parseDateOnly(this.filter.baslangicTarihi);
+        this.bitisTarihiDate = this.parseDateOnly(this.filter.bitisTarihi);
+    }
+
+    private syncFilterDatesFromUi(): void {
+        this.filter.baslangicTarihi = this.formatDateOnly(this.baslangicTarihiDate);
+        this.filter.bitisTarihi = this.formatDateOnly(this.bitisTarihiDate);
+    }
+
+    private parseDateOnly(value: string | Date | null | undefined): Date | null {
         if (!value) {
             return null;
         }
@@ -298,7 +314,7 @@ export class YevmiyeDefteriComponent implements OnInit {
         return isNaN(parsed.getTime()) ? null : parsed;
     }
 
-    formatDateOnly(value: Date | string | null | undefined): string | null {
+    private formatDateOnly(value: Date | string | null | undefined): string | null {
         if (!value) {
             return null;
         }

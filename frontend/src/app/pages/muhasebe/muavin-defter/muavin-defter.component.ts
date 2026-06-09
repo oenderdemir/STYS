@@ -89,6 +89,8 @@ export class MuavinDefterComponent implements OnInit {
     loading = false;
     exporting = false;
 
+    baslangicTarihiDate: Date | null = null;
+    bitisTarihiDate: Date | null = null;
     hesapKoduInput: string | null = null;
 
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
@@ -117,6 +119,7 @@ export class MuavinDefterComponent implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.filter.tesisId = this.currentTesisId;
+                this.syncDateFieldsFromFilter();
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
@@ -186,6 +189,7 @@ export class MuavinDefterComponent implements OnInit {
             return null;
         }
         this.filter.tesisId = tesisId;
+        this.syncFilterDatesFromUi();
 
         const hesapKodu = (this.hesapKoduInput || '').trim();
         if (!hesapKodu) {
@@ -277,6 +281,7 @@ export class MuavinDefterComponent implements OnInit {
     temizle(): void {
         this.filter = createDefaultMuavinDefterFilter();
         this.filter.tesisId = this.currentTesisId;
+        this.syncDateFieldsFromFilter();
         this.hesapKoduInput = null;
         this.clearResults();
     }
@@ -394,7 +399,17 @@ export class MuavinDefterComponent implements OnInit {
         return anyNode.children ?? anyNode.items ?? anyNode.altHesaplar ?? anyNode.childNodes ?? undefined;
     }
 
-    parseDateOnly(value: string | Date | null | undefined): Date | null {
+    private syncDateFieldsFromFilter(): void {
+        this.baslangicTarihiDate = this.parseDateOnly(this.filter.baslangicTarihi);
+        this.bitisTarihiDate = this.parseDateOnly(this.filter.bitisTarihi);
+    }
+
+    private syncFilterDatesFromUi(): void {
+        this.filter.baslangicTarihi = this.formatDateOnly(this.baslangicTarihiDate);
+        this.filter.bitisTarihi = this.formatDateOnly(this.bitisTarihiDate);
+    }
+
+    private parseDateOnly(value: string | Date | null | undefined): Date | null {
         if (!value) {
             return null;
         }
@@ -424,7 +439,7 @@ export class MuavinDefterComponent implements OnInit {
         return isNaN(parsed.getTime()) ? null : parsed;
     }
 
-    formatDateOnly(value: Date | string | null | undefined): string | null {
+    private formatDateOnly(value: Date | string | null | undefined): string | null {
         if (!value) {
             return null;
         }

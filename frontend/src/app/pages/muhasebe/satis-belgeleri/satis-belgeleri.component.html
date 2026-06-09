@@ -542,7 +542,10 @@
                             </div>
 
                             @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
-                            <div class="document-line-card" [ngClass]="[getSatirKartRenkClass(si), { 'document-line-card--collapsed': !isSatirExpanded(satir) }]">
+                            <div
+                                class="document-line-card"
+                                [ngClass]="getSatirKartRenkClass(si)"
+                                [class.document-line-card--collapsed]="!isSatirExpanded(satir)">
                                 <div class="document-line-header">
                                     <div class="flex align-items-center gap-2 flex-wrap">
                                         <span class="document-line-title">Satır {{ satir.siraNo }}</span>

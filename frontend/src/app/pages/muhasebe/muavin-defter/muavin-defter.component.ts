@@ -96,6 +96,7 @@ export class MuavinDefterComponent implements OnInit {
 
     private hesapPlaniTree: MuhasebeHesapPlaniModel[] = [];
     private hesapPlaniLoaded = false;
+    private hesapPlaniLoadPromise: Promise<void> | null = null;
     private contextInitialized = false;
     private currentTesisId: number | null = null;
 
@@ -119,38 +120,67 @@ export class MuavinDefterComponent implements OnInit {
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
-                this.showError(error);
+                void this.showError(error);
             }
         });
     }
 
-    private ensureHesapPlaniLoaded(): void {
-        if (this.hesapPlaniLoaded) return;
+    private ensureHesapPlaniLoaded(): Promise<void> {
+        if (this.hesapPlaniLoaded) {
+            return Promise.resolve();
+        }
 
-        this.hesapPlaniService.getTree().subscribe({
-            next: (tree) => {
-                this.hesapPlaniTree = tree;
-                this.hesapPlaniLoaded = true;
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
+        if (this.hesapPlaniLoadPromise) {
+            return this.hesapPlaniLoadPromise;
+        }
+
+        this.hesapPlaniLoadPromise = new Promise<void>((resolve, reject) => {
+            this.hesapPlaniService.getTree().pipe(
+                finalize(() => {
+                    this.hesapPlaniLoadPromise = null;
+                    this.cdr.detectChanges();
+                })
+            ).subscribe({
+                next: (tree) => {
+                    this.hesapPlaniTree = tree;
+                    this.hesapPlaniLoaded = true;
+                    resolve();
+                },
+                error: (error: unknown) => {
+                    void this.showError(error);
+                    reject(error);
+                }
+            });
         });
+
+        return this.hesapPlaniLoadPromise;
     }
 
     private findHesapPlaniByKod(kod: string): MuhasebeHesapPlaniModel | undefined {
-        const searchInTree = (nodes: MuhasebeHesapPlaniModel[]): MuhasebeHesapPlaniModel | undefined => {
+        const normalizedKod = this.normalizeHesapKodu(kod);
+        const searchInTree = (nodes: MuhasebeHesapPlaniModel[] | undefined): MuhasebeHesapPlaniModel | undefined => {
+            if (!nodes?.length) {
+                return undefined;
+            }
+
             for (const node of nodes) {
-                if (node.tamKod === kod) {
+                if (this.normalizeHesapKodu(node.tamKod) === normalizedKod) {
                     return node;
+                }
+
+                const childNodes = this.getHesapPlaniChildren(node);
+                const found = searchInTree(childNodes);
+                if (found) {
+                    return found;
                 }
             }
             return undefined;
         };
+
         return searchInTree(this.hesapPlaniTree);
     }
 
-    private validateAndBuildFilter(): MuavinDefterFilterModel | null {
+    private async validateAndBuildFilter(): Promise<MuavinDefterFilterModel | null> {
         const tesisId = this.tryGetSeciliTesisId();
         if (tesisId === null) {
             return null;
@@ -164,9 +194,11 @@ export class MuavinDefterComponent implements OnInit {
         }
 
         if (!this.hesapPlaniLoaded) {
-            this.ensureHesapPlaniLoaded();
-            this.messageService.add({ severity: 'info', summary: 'Bilgi', detail: 'Hesap planı yükleniyor, lütfen tekrar "Ara" butonuna tıklayınız.' });
-            return null;
+            try {
+                await this.ensureHesapPlaniLoaded();
+            } catch {
+                return null;
+            }
         }
 
         const hesapPlani = this.findHesapPlaniByKod(hesapKodu);
@@ -180,8 +212,8 @@ export class MuavinDefterComponent implements OnInit {
         return normalized;
     }
 
-    ara(): void {
-        const normalized = this.validateAndBuildFilter();
+    async ara(): Promise<void> {
+        const normalized = await this.validateAndBuildFilter();
         if (!normalized) return;
 
         this.filter = normalized;
@@ -196,13 +228,13 @@ export class MuavinDefterComponent implements OnInit {
                 this.result = data;
             },
             error: (error: unknown) => {
-                this.showError(error);
+                void this.showError(error);
             }
         });
     }
 
-    exportExcel(): void {
-        const normalized = this.validateAndBuildFilter();
+    async exportExcel(): Promise<void> {
+        const normalized = await this.validateAndBuildFilter();
         if (!normalized) return;
 
         this.exporting = true;
@@ -216,7 +248,7 @@ export class MuavinDefterComponent implements OnInit {
                 this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muavin defter Excel dosyası indiriliyor.' });
             },
             error: (error: unknown) => {
-                this.showError(error);
+                void this.showError(error);
             }
         });
     }
@@ -347,13 +379,117 @@ export class MuavinDefterComponent implements OnInit {
         }
     }
 
-    private showError(error: unknown): void {
+    private normalizeHesapKodu(kod: string): string {
+        return kod.trim().toLocaleLowerCase('tr-TR');
+    }
+
+    private getHesapPlaniChildren(node: MuhasebeHesapPlaniModel): MuhasebeHesapPlaniModel[] | undefined {
+        const anyNode = node as MuhasebeHesapPlaniModel & {
+            children?: MuhasebeHesapPlaniModel[];
+            items?: MuhasebeHesapPlaniModel[];
+            altHesaplar?: MuhasebeHesapPlaniModel[];
+            childNodes?: MuhasebeHesapPlaniModel[];
+        };
+
+        return anyNode.children ?? anyNode.items ?? anyNode.altHesaplar ?? anyNode.childNodes ?? undefined;
+    }
+
+    private async showError(error: unknown): Promise<void> {
+        const detail = await this.resolveErrorMessage(error);
+        this.messageService.add({ severity: 'error', summary: 'Hata', detail });
+    }
+
+    private async resolveErrorMessage(error: unknown): Promise<string> {
         if (error instanceof HttpErrorResponse) {
-            this.messageService.add({ severity: 'error', summary: 'Hata', detail: error.message });
-        } else if (error instanceof Error) {
-            this.messageService.add({ severity: 'error', summary: 'Hata', detail: error.message });
-        } else {
-            this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Bir hata oluştu.' });
+            const parsed = await this.readHttpErrorMessage(error);
+            if (parsed) {
+                return parsed;
+            }
+
+            if (error.status === 0) {
+                return 'Sunucuya ulaşılamadı.';
+            }
+
+            if (error.status) {
+                return error.statusText?.trim().length
+                    ? `HTTP ${error.status}: ${error.statusText}`
+                    : `HTTP ${error.status}`;
+            }
         }
+
+        if (error instanceof Error && error.message.trim().length > 0) {
+            return error.message.trim();
+        }
+
+        if (typeof error === 'string' && error.trim().length > 0) {
+            return error.trim();
+        }
+
+        return 'Bir hata oluştu.';
+    }
+
+    private async readHttpErrorMessage(error: HttpErrorResponse): Promise<string | null> {
+        const payload = error.error;
+        if (payload instanceof Blob) {
+            try {
+                const text = await payload.text();
+                const parsed = this.tryReadStructuredMessage(text);
+                if (parsed) {
+                    return parsed;
+                }
+            } catch {
+                return null;
+            }
+        }
+
+        return this.tryReadStructuredMessage(payload) ?? (typeof error.message === 'string' ? error.message : null);
+    }
+
+    private tryReadStructuredMessage(payload: unknown): string | null {
+        if (typeof payload === 'string') {
+            const trimmed = payload.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            try {
+                return this.tryReadStructuredMessage(JSON.parse(trimmed)) ?? trimmed;
+            } catch {
+                return trimmed;
+            }
+        }
+
+        if (!this.isRecord(payload)) {
+            return null;
+        }
+
+        const directKeys = ['message', 'detail', 'title', 'error'];
+        for (const key of directKeys) {
+            const value = payload[key];
+            if (typeof value === 'string' && value.trim().length > 0) {
+                return value.trim();
+            }
+
+            const nested = this.tryReadStructuredMessage(value);
+            if (nested) {
+                return nested;
+            }
+        }
+
+        const errors = payload['errors'];
+        if (Array.isArray(errors)) {
+            for (const item of errors) {
+                const nested = this.tryReadStructuredMessage(item);
+                if (nested) {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null;
     }
 }

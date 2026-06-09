@@ -542,23 +542,37 @@
                             </div>
 
                             @for (satir of formData().satirlar; track satir.siraNo; let si = $index) {
-                            <div class="document-line-card">
+                            <div class="document-line-card" [ngClass]="[getSatirKartRenkClass(si), { 'document-line-card--collapsed': !isSatirExpanded(satir) }]">
                                 <div class="document-line-header">
                                     <div class="flex align-items-center gap-2 flex-wrap">
                                         <span class="document-line-title">Satır {{ satir.siraNo }}</span>
                                         <span class="line-summary-pill">{{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
                                     </div>
-                                    <p-button
-                                        icon="pi pi-trash"
-                                        severity="danger"
-                                        size="small"
-                                        [rounded]="true"
-                                        [text]="true"
-                                        pTooltip="Satırı Sil"
-                                        (click)="removeSatir(si)">
-                                    </p-button>
+                                    <div class="line-card-actions">
+                                        <p-button
+                                            [icon]="isSatirExpanded(satir) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                                            severity="secondary"
+                                            size="small"
+                                            [rounded]="true"
+                                            [text]="true"
+                                            [pTooltip]="isSatirExpanded(satir) ? 'Satırı Daralt' : 'Satırı Genişlet'"
+                                            type="button"
+                                            (click)="toggleSatirExpanded(satir)">
+                                        </p-button>
+                                        <p-button
+                                            icon="pi pi-trash"
+                                            severity="danger"
+                                            size="small"
+                                            [rounded]="true"
+                                            [text]="true"
+                                            pTooltip="Satırı Sil"
+                                            type="button"
+                                            (click)="removeSatir(si)">
+                                        </p-button>
+                                    </div>
                                 </div>
 
+                                <div class="document-line-body" [hidden]="!isSatirExpanded(satir)">
                                 <div class="document-line-section">
                                     <div class="line-section-title">Ürün Bilgisi</div>
                                     <div class="line-product-grid">
@@ -962,6 +976,7 @@
                                     <span class="line-summary-item">Tevkifat: <strong>{{ getSatirTevkifatTutari(satir) | number: '1.2-2' }} ₺</strong></span>
                                     <span class="line-summary-item">Net KDV: <strong>{{ previewNetKdvTutari(satir) | number: '1.2-2' }} ₺</strong></span>
                                     <span class="line-summary-total">Satır Toplam: {{ previewSatirToplami(satir) | number: '1.2-2' }} ₺</span>
+                                </div>
                                 </div>
                             </div>
                             }

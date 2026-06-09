@@ -181,6 +181,7 @@
   border-radius: calc(var(--border-radius) + .15rem);
   box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
   position: relative;
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease, background .2s ease;
 }
 
 .satis-belgesi-dialog .belge-form .document-line-card::before {
@@ -199,6 +200,32 @@
   justify-content: space-between;
   gap: .75rem;
   flex-wrap: wrap;
+}
+
+.satis-belgesi-dialog .belge-form .line-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--collapsed {
+  gap: .7rem;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--collapsed .document-line-body {
+  display: none;
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--collapsed .document-line-header {
+  margin-bottom: 0;
 }
 
 .satis-belgesi-dialog .belge-form .document-line-title {
@@ -237,6 +264,36 @@
   border-color: var(--primary-300);
   box-shadow: 0 10px 28px rgba(15, 23, 42, .12);
   background: linear-gradient(180deg, var(--primary-50) 0%, var(--surface-card) 30%, var(--surface-50) 100%);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-1 {
+  background: linear-gradient(180deg, rgba(59, 130, 246, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(59, 130, 246);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-2 {
+  background: linear-gradient(180deg, rgba(16, 185, 129, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(16, 185, 129);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-3 {
+  background: linear-gradient(180deg, rgba(245, 158, 11, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(245, 158, 11);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-4 {
+  background: linear-gradient(180deg, rgba(139, 92, 246, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(139, 92, 246);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-5 {
+  background: linear-gradient(180deg, rgba(236, 72, 153, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(236, 72, 153);
+}
+
+.satis-belgesi-dialog .belge-form .document-line-card--tone-6 {
+  background: linear-gradient(180deg, rgba(14, 165, 233, .12) 0%, var(--surface-card) 35%, var(--surface-50) 100%);
+  border-left-color: rgb(14, 165, 233);
 }
 
 .satis-belgesi-dialog .belge-form .line-section-title {

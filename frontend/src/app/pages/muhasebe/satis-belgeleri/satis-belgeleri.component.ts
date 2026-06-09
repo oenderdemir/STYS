@@ -122,6 +122,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private readonly route = inject(ActivatedRoute);
     private readonly destroyRef = inject(DestroyRef);
     private readonly satirParametreDurumlari = new WeakMap<CreateSatisBelgesiSatiriRequest, SatirParametreDurumu>();
+    private readonly collapsedSatirlar = new WeakMap<CreateSatisBelgesiSatiriRequest, boolean>();
 
     // ── State ──
     belgeler = signal<SatisBelgesiDto[]>([]);
@@ -191,6 +192,14 @@ export class SatisBelgeleriComponent implements OnInit {
         { label: '%10', value: 10 },
         { label: '%18', value: 18 },
         { label: '%20', value: 20 }
+    ];
+    readonly satirKartRenkSiniflari = [
+        'document-line-card--tone-1',
+        'document-line-card--tone-2',
+        'document-line-card--tone-3',
+        'document-line-card--tone-4',
+        'document-line-card--tone-5',
+        'document-line-card--tone-6'
     ];
     tevkifatSecenekleri = [
         { label: '2/10', value: '2/10' },
@@ -965,6 +974,18 @@ export class SatisBelgeleriComponent implements OnInit {
         const satirlar = this.formData().satirlar.filter((_, i) => i !== index);
         satirlar.forEach((s, i) => s.siraNo = i + 1);
         this.formData.update(f => ({ ...f, satirlar }));
+    }
+
+    isSatirExpanded(satir: CreateSatisBelgesiSatiriRequest): boolean {
+        return this.collapsedSatirlar.get(satir) !== true;
+    }
+
+    toggleSatirExpanded(satir: CreateSatisBelgesiSatiriRequest): void {
+        this.collapsedSatirlar.set(satir, !this.isSatirExpanded(satir));
+    }
+
+    getSatirKartRenkClass(index: number): string {
+        return this.satirKartRenkSiniflari[index % this.satirKartRenkSiniflari.length];
     }
 
     // ── Helpers ──

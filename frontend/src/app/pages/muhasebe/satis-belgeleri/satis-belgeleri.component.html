@@ -294,13 +294,14 @@
 
                                         <div class="col-12 field">
                                             <label>Açıklama</label>
-                                            <p-textarea
-                                                styleClass="w-full form-textarea"
+                                            <textarea
+                                                pTextarea
+                                                class="w-full form-textarea"
                                                 rows="3"
                                                 [ngModel]="formData().aciklama"
                                                 (ngModelChange)="updateFormField('aciklama', $event)"
                                                 placeholder="Belgeye ilişkin açıklama...">
-                                            </p-textarea>
+                                            </textarea>
                                         </div>
                                     </div>
                                 </div>
@@ -451,14 +452,15 @@
                                         </div>
                                         <div class="col-12 field">
                                             <label>Adres</label>
-                                            <p-textarea
-                                                styleClass="w-full form-textarea"
+                                            <textarea
+                                                pTextarea
+                                                class="w-full form-textarea"
                                                 rows="2"
                                                 [ngModel]="formData().musteriAdres"
                                                 (ngModelChange)="updateFormField('musteriAdres', $event)"
                                                 [attr.readonly]="!manuelMusteriGirisi() ? '' : null"
                                                 placeholder="Açık adres">
-                                            </p-textarea>
+                                            </textarea>
                                         </div>
                                     </div>
                                     } @else if (showCariSnapshot()) {
@@ -499,9 +501,9 @@
                                         </div>
                                         <div class="col-12 field">
                                             <label>Adres</label>
-                                            <p-textarea styleClass="w-full form-textarea" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
+                                            <textarea pTextarea class="w-full form-textarea" rows="2" [ngModel]="formData().musteriAdres" [attr.readonly]="''"
                                                 placeholder="Cari karttan otomatik doldurulur">
-                                            </p-textarea>
+                                            </textarea>
                                         </div>
                                     </div>
                                     } @else if (showCariEmptyState()) {
@@ -1192,12 +1194,13 @@
     <ng-template pTemplate="content">
         <div class="field">
             <label class="block text-sm mb-2">Ret Nedeni *</label>
-            <p-textarea
-                styleClass="w-full"
+            <textarea
+                pTextarea
+                class="w-full"
                 rows="3"
                 [(ngModel)]="redNedeni"
                 placeholder="Reddetme nedenini açıklayınız...">
-            </p-textarea>
+            </textarea>
         </div>
     </ng-template>
     <ng-template pTemplate="footer">

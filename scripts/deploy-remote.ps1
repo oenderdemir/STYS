@@ -1,70 +1,40 @@
 param(
-    [switch]$WithLogin,
-    [string]$RegistryServer = "",
-    [string]$Username = "",
-    [string]$Password = "",
-    [switch]$SkipDatabaseBootstrap
+    [string]$VpsHost = "185.229.12.39",
+    [string]$VpsUser = "root",
+    [string]$SshKeyPath = "id_ed25519",
+    [string]$RemoteDir = "/root/stys",
+    [string]$Tag = "latest"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectRoot = Split-Path -Parent $scriptDirectory
-Set-Location $projectRoot
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
 
-if ($WithLogin) {
-    if ([string]::IsNullOrWhiteSpace($RegistryServer)) {
-        throw "WithLogin kullaniliyorsa RegistryServer vermen gerekiyor."
-    }
-
-    if ([string]::IsNullOrWhiteSpace($Username) -or [string]::IsNullOrWhiteSpace($Password)) {
-        throw "WithLogin kullaniliyorsa Username ve Password vermen gerekiyor."
-    }
-
-    Write-Host "Registry login yapiliyor: $RegistryServer"
-    $Password | docker login $RegistryServer --username $Username --password-stdin
-}
-
-if (-not $SkipDatabaseBootstrap) {
-    $mssqlPsOutput = docker compose ps mssql --format json 2>$null
-    $mssqlContainerItems = @()
-
-    if ($LASTEXITCODE -eq 0) {
-        $mssqlPsText = ($mssqlPsOutput | Out-String).Trim()
-
-        if (-not [string]::IsNullOrWhiteSpace($mssqlPsText)) {
-            try {
-                $mssqlContainerItems = @(($mssqlPsText | ConvertFrom-Json))
-            }
-            catch {
-                $mssqlContainerItems = @()
-            }
-        }
-    }
-
-    if ($mssqlContainerItems.Count -eq 0) {
-        Write-Host "mssql container bulunamadi. Ilk kurulum icin mssql ayaga kaldiriliyor..."
-        docker compose up -d mssql
-    }
-    elseif ($mssqlContainerItems[0].State -ne "running") {
-        Write-Host "mssql container calismiyor. Tekrar baslatiliyor..."
-        docker compose up -d mssql
-    }
-    else {
-        Write-Host "mssql zaten calisiyor. Dokunulmuyor."
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FilePath failed with exit code $LASTEXITCODE"
     }
 }
 
-Write-Host "Remote image'lar cekiliyor: backend, frontend"
-docker compose pull backend frontend
+$remoteTarget = "$VpsUser@$VpsHost"
+$remoteCommand = @"
+cd '$RemoteDir' &&
+docker load -i images/backend.tar &&
+docker load -i images/frontend.tar &&
+STYS_IMAGE_TAG='$Tag' docker compose up -d
+"@
 
-Write-Host "Container'lar yeniden olusturuluyor: backend, frontend"
-docker compose up -d --no-deps backend frontend
+Write-Host "VPS deploy basliyor: $remoteTarget"
+Invoke-NativeCommand ssh @('-i', $SshKeyPath, $remoteTarget, $remoteCommand)
 
 Write-Host ""
 Write-Host "Deploy tamamlandi."
 Write-Host "Kontrol icin:"
-Write-Host " - docker compose ps"
-Write-Host " - docker compose logs --tail 200 backend"
-Write-Host " - docker compose logs --tail 200 frontend"
+Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose ps'"
+Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 backend'"
+Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 frontend'"

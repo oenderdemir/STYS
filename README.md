@@ -63,101 +63,69 @@ Notlar:
 - Backend loglari hostta `./Data/logs/backend` klasorune yazilir.
 - Nginx access/error loglari hostta `./Data/logs/frontend` klasorune yazilir.
 
-## Docker Image Push
+## VPS Image Transfer
 
-ACR veya baska bir OCI registry'ye backend ve frontend image'larini push etmek icin:
+Backend ve frontend image'larini VPS'ye kopyalamak icin:
 
 ```powershell
-.\scripts\push-images.ps1 -RegistryName todregistry
+.\scripts\push-images.ps1 -SshKeyPath .\id_ed25519
+```
+
+Linux / macOS:
+
+```bash
+chmod +x ./scripts/push-images.sh
+./scripts/push-images.sh --key ./id_ed25519
 ```
 
 Bu komut:
 
-- `az acr login --name todregistry`
 - `docker compose build backend frontend`
-- `docker compose push backend frontend`
+- `docker save` ile `stys/backend:latest` ve `stys/frontend:latest` image'larini arsivler
+- `docker-compose.yml` dosyasini VPS'ye kopyalar
+- image arşivlerini `/root/stys/images` altina yollar
 
-akisini calistirir.
+Varsayilan hedef:
 
-Varsayilan image isimleri:
+- host: `185.229.12.39`
+- user: `root`
+- remote directory: `/root/stys`
+- ssh key: `id_ed25519`
 
-- backend: `todregistry.azurecr.io/stys/backend:<tag>`
-- frontend: `todregistry.azurecr.io/stys/frontend:<tag>`
-
-Varsayilan tag:
-
-- calisma zamani damgasi (`yyyyMMddHHmmss`)
-
-Istersen tag'i elle verebilirsin:
+Tag'i elle vermek istersen:
 
 ```powershell
-.\scripts\push-images.ps1 -RegistryName todregistry -Tag v1.0.0
+.\scripts\push-images.ps1 -SshKeyPath .\id_ed25519 -Tag v1.0.0
 ```
 
-Registry server'i dogrudan vermek istersen:
+## VPS Deploy
 
-```powershell
-.\scripts\push-images.ps1 -RegistryServer todregistry.azurecr.io -Tag test-20260401 -SkipLogin
-```
-
-Compose image referanslari `.env` ile de override edilebilir:
-
-- `STYS_BACKEND_IMAGE`
-- `STYS_FRONTEND_IMAGE`
-- `STYS_IMAGE_TAG`
-
-## Remote Deploy
-
-Test veya hedef sunucuda, `mssql` container'ina dokunmadan sadece `backend` ve `frontend` image'larini registry'den cekip guncellemek icin:
-Ilk kurulumda `mssql` yoksa script onu bir kez ayaga kaldirir. `mssql` zaten calisiyorsa dokunmaz.
+Image'lar VPS'ye kopyalandiktan sonra konteynerleri ayağa kaldirmak icin:
 
 Windows:
 
 ```powershell
-.\scripts\deploy-remote.ps1
+.\scripts\deploy-remote.ps1 -SshKeyPath .\id_ed25519
 ```
 
 Linux:
 
 ```bash
 chmod +x ./scripts/deploy-remote.sh
-./scripts/deploy-remote.sh
+./scripts/deploy-remote.sh --key ./id_ed25519
 ```
 
 Bu komut sunlari yapar:
 
-- `mssql` yoksa veya calismiyorsa `docker compose up -d mssql`
-- `docker compose pull backend frontend`
-- `docker compose up -d --no-deps backend frontend`
-
-Eger deploy server'da docker login yoksa:
-
-Windows:
-
-```powershell
-.\scripts\deploy-remote.ps1 `
-  -WithLogin `
-  -RegistryServer todregistry.azurecr.io `
-  -Username todregistry `
-  -Password "<registry-password>"
-```
-
-Linux:
-
-```bash
-chmod +x ./scripts/deploy-remote.sh
-./scripts/deploy-remote.sh \
-  --with-login \
-  --registry-server todregistry.azurecr.io \
-  --username todregistry \
-  --password "<registry-password>"
-```
+- VPS'de `/root/stys` klasorune gider
+- `images/backend.tar` ve `images/frontend.tar` dosyalarini `docker load` ile yukler
+- `STYS_IMAGE_TAG` ile `docker compose up -d` calistirir
 
 Bu akista:
 
-- `mssql` varsa korunur
-- `mssql` sadece yoksa veya durmussa ayağa kaldirilir
-- sadece uygulama katmani guncellenir
+- backend ve frontend image'lari yerelden VPS'ye tasinir
+- `docker-compose.yml` VPS uzerinde kullanilir
+- `mssql` ve `redis` compose ile birlikte calistirilir
 
 ## Proje Yapisi
 

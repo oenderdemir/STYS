@@ -28,6 +28,16 @@ else
     exit 1
 fi
 
+PYTHON_BIN=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+else
+    echo "JSON ayristirma icin python3 veya python bulunamadi." >&2
+    exit 1
+fi
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --host)
@@ -76,22 +86,65 @@ if [ ! -f "$COMPOSE_FILE_PATH" ]; then
     exit 1
 fi
 
+read_compose_image() {
+    service_name="$1"
+    compose config --format json | "$PYTHON_BIN" -c 'import json,sys; data=json.load(sys.stdin); print(data["services"][sys.argv[1]]["image"])' "$service_name"
+}
+
+split_image_reference() {
+    image_ref="$1"
+    repo="${image_ref%:*}"
+    tag="${image_ref##*:}"
+
+    case "$image_ref" in
+        *:*)
+            printf '%s\n%s\n' "$repo" "$tag"
+            ;;
+        *)
+            printf '%s\n%s\n' "$image_ref" "latest"
+            ;;
+    esac
+}
+
+BACKEND_IMAGE_REF="$(read_compose_image backend)"
+FRONTEND_IMAGE_REF="$(read_compose_image frontend)"
+BACKEND_IMAGE_INFO="$(split_image_reference "$BACKEND_IMAGE_REF")"
+FRONTEND_IMAGE_INFO="$(split_image_reference "$FRONTEND_IMAGE_REF")"
+BACKEND_IMAGE_REPO="$(printf '%s\n' "$BACKEND_IMAGE_INFO" | sed -n '1p')"
+BACKEND_IMAGE_TAG="$(printf '%s\n' "$BACKEND_IMAGE_INFO" | sed -n '2p')"
+FRONTEND_IMAGE_REPO="$(printf '%s\n' "$FRONTEND_IMAGE_INFO" | sed -n '1p')"
+FRONTEND_IMAGE_TAG="$(printf '%s\n' "$FRONTEND_IMAGE_INFO" | sed -n '2p')"
+
+if [ "$BACKEND_IMAGE_TAG" != "$FRONTEND_IMAGE_TAG" ]; then
+    echo "Backend ve frontend image tag'leri farkli: $BACKEND_IMAGE_TAG / $FRONTEND_IMAGE_TAG" >&2
+    exit 1
+fi
+
+TAG="$BACKEND_IMAGE_TAG"
 ARTIFACT_DIR="$PROJECT_ROOT/artifacts/deploy/$TAG"
 mkdir -p "$ARTIFACT_DIR"
 
 BACKEND_TAR="$ARTIFACT_DIR/backend.tar"
 FRONTEND_TAR="$ARTIFACT_DIR/frontend.tar"
+IMAGE_ENV_FILE="$ARTIFACT_DIR/stys-image.env"
 
 STYS_IMAGE_TAG="$TAG" compose build backend frontend
-docker save -o "$BACKEND_TAR" "stys/backend:$TAG"
-docker save -o "$FRONTEND_TAR" "stys/frontend:$TAG"
+docker save -o "$BACKEND_TAR" "$BACKEND_IMAGE_REF"
+docker save -o "$FRONTEND_TAR" "$FRONTEND_IMAGE_REF"
+
+cat > "$IMAGE_ENV_FILE" <<EOF
+export STYS_BACKEND_IMAGE=$BACKEND_IMAGE_REPO
+export STYS_FRONTEND_IMAGE=$FRONTEND_IMAGE_REPO
+export STYS_IMAGE_TAG=$TAG
+EOF
 
 REMOTE_TARGET="$VPS_USER@$VPS_HOST"
 ssh -i "$SSH_KEY_PATH" "$REMOTE_TARGET" "mkdir -p '$REMOTE_DIR/images'"
 scp -i "$SSH_KEY_PATH" "$COMPOSE_FILE_PATH" "$REMOTE_TARGET:$REMOTE_DIR/docker-compose.yml"
-scp -i "$SSH_KEY_PATH" "$BACKEND_TAR" "$FRONTEND_TAR" "$REMOTE_TARGET:$REMOTE_DIR/images/"
+scp -i "$SSH_KEY_PATH" "$BACKEND_TAR" "$FRONTEND_TAR" "$IMAGE_ENV_FILE" "$REMOTE_TARGET:$REMOTE_DIR/images/"
 
 printf '\nKopyalama tamamlandi:\n'
 printf ' - %s:%s/docker-compose.yml\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/backend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/frontend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
+printf ' - %s:%s/images/stys-image.env\n' "$REMOTE_TARGET" "$REMOTE_DIR"

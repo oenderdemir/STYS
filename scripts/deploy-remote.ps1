@@ -24,9 +24,10 @@ function Invoke-NativeCommand {
 $remoteTarget = "$VpsUser@$VpsHost"
 $remoteCommand = @"
 cd '$RemoteDir' &&
+. images/stys-image.env &&
 docker load -i images/backend.tar &&
 docker load -i images/frontend.tar &&
-STYS_IMAGE_TAG='$Tag' docker compose up -d
+docker compose up -d
 "@
 
 Write-Host "VPS deploy basliyor: $remoteTarget"

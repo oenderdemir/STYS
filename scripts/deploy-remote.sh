@@ -55,9 +55,10 @@ REMOTE_TARGET="$VPS_USER@$VPS_HOST"
 
 ssh -i "$SSH_KEY_PATH" "$REMOTE_TARGET" "
 cd '$REMOTE_DIR' &&
+ . images/stys-image.env &&
 docker load -i images/backend.tar &&
 docker load -i images/frontend.tar &&
-STYS_IMAGE_TAG='$TAG' docker compose up -d
+docker compose up -d
 "
 
 printf '\nDeploy tamamlandi.\n'

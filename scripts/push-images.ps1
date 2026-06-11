@@ -26,39 +26,87 @@ function Invoke-NativeCommand {
     }
 }
 
+function Get-ComposeConfig {
+    $configJson = & docker compose config --format json
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose config failed with exit code $LASTEXITCODE"
+    }
+
+    return ($configJson | Out-String | ConvertFrom-Json)
+}
+
+function Split-ImageReference {
+    param(
+        [Parameter(Mandatory = $true)][string]$ImageReference
+    )
+
+    $lastSlashIndex = $ImageReference.LastIndexOf('/')
+    $lastColonIndex = $ImageReference.LastIndexOf(':')
+
+    if ($lastColonIndex -gt $lastSlashIndex) {
+        return [pscustomobject]@{
+            Repository = $ImageReference.Substring(0, $lastColonIndex)
+            Tag = $ImageReference.Substring($lastColonIndex + 1)
+        }
+    }
+
+    return [pscustomobject]@{
+        Repository = $ImageReference
+        Tag = "latest"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $ComposeFilePath)) {
     throw "Compose dosyasi bulunamadi: $ComposeFilePath"
 }
 
+$composeConfig = Get-ComposeConfig
+$backendImageReference = $composeConfig.services.backend.image
+$frontendImageReference = $composeConfig.services.frontend.image
+$backendImageInfo = Split-ImageReference $backendImageReference
+$frontendImageInfo = Split-ImageReference $frontendImageReference
+
+if ($backendImageInfo.Tag -ne $frontendImageInfo.Tag) {
+    throw "Backend ve frontend image tag'leri farkli: $($backendImageInfo.Tag) / $($frontendImageInfo.Tag)"
+}
+
+$Tag = $backendImageInfo.Tag
 $artifactDir = Join-Path $projectRoot "artifacts\deploy\$Tag"
 New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-$backendImage = "stys/backend"
-$frontendImage = "stys/frontend"
 $backendTar = Join-Path $artifactDir "backend.tar"
 $frontendTar = Join-Path $artifactDir "frontend.tar"
+$imageEnvFile = Join-Path $artifactDir "stys-image.env"
 
-$env:STYS_IMAGE_TAG = $Tag
+$env:STYS_IMAGE_TAG = $backendImageInfo.Tag
 
 Write-Host "Image build basliyor..."
 Invoke-NativeCommand docker @('compose', 'build', 'backend', 'frontend')
 
 Write-Host "Image archive olusturuluyor..."
-Invoke-NativeCommand docker @('save', '-o', $backendTar, "$backendImage`:$Tag")
-Invoke-NativeCommand docker @('save', '-o', $frontendTar, "$frontendImage`:$Tag")
+Invoke-NativeCommand docker @('save', '-o', $backendTar, $backendImageReference)
+Invoke-NativeCommand docker @('save', '-o', $frontendTar, $frontendImageReference)
+
+@"
+export STYS_BACKEND_IMAGE=$($backendImageInfo.Repository)
+export STYS_FRONTEND_IMAGE=$($frontendImageInfo.Repository)
+export STYS_IMAGE_TAG=$($backendImageInfo.Tag)
+"@ | Set-Content -Encoding Ascii $imageEnvFile
 
 Write-Host "VPS'ye kopyalanacak dosyalar hazir:"
 Write-Host " - $backendTar"
 Write-Host " - $frontendTar"
+Write-Host " - $imageEnvFile"
 
 Write-Host "Compose dosyasi ve image archive'lari VPS'ye kopyalaniyor..."
 $remoteTarget = "$VpsUser@$VpsHost"
 Invoke-NativeCommand ssh @('-i', $SshKeyPath, $remoteTarget, "mkdir -p '$RemoteDir/images'")
 Invoke-NativeCommand scp @('-i', $SshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
-Invoke-NativeCommand scp @('-i', $SshKeyPath, $backendTar, $frontendTar, "${remoteTarget}:$RemoteDir/images/")
+Invoke-NativeCommand scp @('-i', $SshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"
 Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.yml"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"
+Write-Host " - ${remoteTarget}:$RemoteDir/images/stys-image.env"

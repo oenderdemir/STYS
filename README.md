@@ -81,9 +81,10 @@ chmod +x ./scripts/push-images.sh
 Bu komut:
 
 - `docker compose build backend frontend`
-- `docker save` ile `stys/backend:latest` ve `stys/frontend:latest` image'larini arsivler
+- `docker compose config` ile gercek backend/frontend image ref'lerini okur
+- `docker save` ile bu image'lari arsivler
 - `docker-compose.yml` dosyasini VPS'ye kopyalar
-- image arşivlerini `/root/stys/images` altina yollar
+- image arsivlerini ve `stys-image.env` dosyasini `/root/stys/images` altina yollar
 
 Varsayilan hedef:
 
@@ -102,6 +103,23 @@ Tag'i elle vermek istersen:
 
 Image'lar VPS'ye kopyalandiktan sonra konteynerleri ayağa kaldirmak icin:
 
+Tek komutla kopyala + deploy:
+
+Windows:
+
+```powershell
+.\scripts\deploy-all.ps1 -SshKeyPath .\id_ed25519
+```
+
+Linux:
+
+```bash
+chmod +x ./scripts/deploy-all.sh
+./scripts/deploy-all.sh --key ./id_ed25519
+```
+
+Bu komut hem image transferini hem de remote deploy'u arka arkaya calistirir.
+
 Windows:
 
 ```powershell
@@ -119,7 +137,7 @@ Bu komut sunlari yapar:
 
 - VPS'de `/root/stys` klasorune gider
 - `images/backend.tar` ve `images/frontend.tar` dosyalarini `docker load` ile yukler
-- `STYS_IMAGE_TAG` ile `docker compose up -d` calistirir
+- `images/stys-image.env` dosyasini kaynak alip `docker compose up -d` calistirir
 
 Bu akista:
 

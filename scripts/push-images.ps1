@@ -77,6 +77,13 @@ New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 $backendTar = Join-Path $artifactDir "backend.tar"
 $frontendTar = Join-Path $artifactDir "frontend.tar"
 $imageEnvFile = Join-Path $artifactDir "stys-image.env"
+$resolvedSshKeyPath = $SshKeyPath
+if (-not [System.IO.Path]::IsPathRooted($resolvedSshKeyPath)) {
+    $candidateKeyPath = Join-Path $projectRoot $resolvedSshKeyPath
+    if (Test-Path -LiteralPath $candidateKeyPath) {
+        $resolvedSshKeyPath = $candidateKeyPath
+    }
+}
 
 $env:STYS_IMAGE_TAG = $backendImageInfo.Tag
 
@@ -87,11 +94,12 @@ Write-Host "Image archive olusturuluyor..."
 Invoke-NativeCommand docker @('save', '-o', $backendTar, $backendImageReference)
 Invoke-NativeCommand docker @('save', '-o', $frontendTar, $frontendImageReference)
 
-@"
-export STYS_BACKEND_IMAGE=$($backendImageInfo.Repository)
-export STYS_FRONTEND_IMAGE=$($frontendImageInfo.Repository)
-export STYS_IMAGE_TAG=$($backendImageInfo.Tag)
-"@ | Set-Content -Encoding Ascii $imageEnvFile
+$imageEnvContent = @(
+    "export STYS_BACKEND_IMAGE=$($backendImageInfo.Repository)"
+    "export STYS_FRONTEND_IMAGE=$($frontendImageInfo.Repository)"
+    "export STYS_IMAGE_TAG=$($backendImageInfo.Tag)"
+) -join "`n"
+[System.IO.File]::WriteAllText($imageEnvFile, $imageEnvContent + "`n", (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "VPS'ye kopyalanacak dosyalar hazir:"
 Write-Host " - $backendTar"
@@ -100,9 +108,9 @@ Write-Host " - $imageEnvFile"
 
 Write-Host "Compose dosyasi ve image archive'lari VPS'ye kopyalaniyor..."
 $remoteTarget = "$VpsUser@$VpsHost"
-Invoke-NativeCommand ssh @('-i', $SshKeyPath, $remoteTarget, "mkdir -p '$RemoteDir/images'")
-Invoke-NativeCommand scp @('-i', $SshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
-Invoke-NativeCommand scp @('-i', $SshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
+Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, "mkdir -p '$RemoteDir/images'")
+Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
+Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"

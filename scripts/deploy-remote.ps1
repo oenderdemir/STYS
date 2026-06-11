@@ -21,21 +21,31 @@ function Invoke-NativeCommand {
     }
 }
 
+$resolvedSshKeyPath = $SshKeyPath
+if (-not [System.IO.Path]::IsPathRooted($resolvedSshKeyPath)) {
+    $candidateKeyPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path | Split-Path -Parent) $resolvedSshKeyPath
+    if (Test-Path -LiteralPath $candidateKeyPath) {
+        $resolvedSshKeyPath = $candidateKeyPath
+    }
+}
+
 $remoteTarget = "$VpsUser@$VpsHost"
 $remoteCommand = @"
 cd '$RemoteDir' &&
-. images/stys-image.env &&
+set -a &&
+. ./images/stys-image.env &&
+set +a &&
 docker load -i images/backend.tar &&
 docker load -i images/frontend.tar &&
 docker compose up -d
 "@
 
 Write-Host "VPS deploy basliyor: $remoteTarget"
-Invoke-NativeCommand ssh @('-i', $SshKeyPath, $remoteTarget, $remoteCommand)
+Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, $remoteCommand)
 
 Write-Host ""
 Write-Host "Deploy tamamlandi."
 Write-Host "Kontrol icin:"
-Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose ps'"
-Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 backend'"
-Write-Host " - ssh -i $SshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 frontend'"
+Write-Host " - ssh -i $resolvedSshKeyPath $remoteTarget 'cd $RemoteDir && docker compose ps'"
+Write-Host " - ssh -i $resolvedSshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 backend'"
+Write-Host " - ssh -i $resolvedSshKeyPath $remoteTarget 'cd $RemoteDir && docker compose logs --tail 200 frontend'"

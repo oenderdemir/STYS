@@ -91,6 +91,8 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+export STYS_IMAGE_TAG="$TAG"
+
 read_compose_image() {
     service_name="$1"
     compose config --format json | "$PYTHON_BIN" -c 'import json,sys; data=json.load(sys.stdin); print(data["services"][sys.argv[1]]["image"])' "$service_name"

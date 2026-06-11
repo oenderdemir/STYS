@@ -65,6 +65,7 @@ if (-not (Test-Path -LiteralPath $envFilePath)) {
     throw ".env dosyasi bulunamadi: $envFilePath"
 }
 
+$env:STYS_IMAGE_TAG = $Tag
 $composeConfig = Get-ComposeConfig
 $backendImageReference = $composeConfig.services.backend.image
 $frontendImageReference = $composeConfig.services.frontend.image
@@ -89,8 +90,6 @@ if (-not [System.IO.Path]::IsPathRooted($resolvedSshKeyPath)) {
         $resolvedSshKeyPath = $candidateKeyPath
     }
 }
-
-$env:STYS_IMAGE_TAG = $backendImageInfo.Tag
 
 Write-Host "Image build basliyor..."
 Invoke-NativeCommand docker @('compose', 'build', 'backend', 'frontend')

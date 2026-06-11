@@ -6,9 +6,94 @@
             <span class="text-xl font-semibold">Lisans Yonetimi</span>
         </ng-template>
         <ng-template #end>
+            <p-button label="Konfigurasyon" icon="pi pi-cog" severity="secondary" [loading]="contextLoading" (onClick)="loadContext()" class="mr-2" />
             <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [loading]="loading" (onClick)="loadStatus()" class="mr-2" />
         </ng-template>
     </p-toolbar>
+
+    <!-- Lisans Uretim Konfigurasyonu -->
+    <div class="mt-4 p-4 border-1 surface-border border-round license-context-panel">
+        <div class="flex align-items-center justify-content-between gap-3 mb-3">
+            <div>
+                <h3 class="text-lg font-semibold m-0">Lisans Uretim Konfigurasyonu</h3>
+                <p class="text-color-secondary mt-1 mb-0">
+                    Calisan sistemden lisans uretiminde kullanilacak bilgi setini alip dogrudan kopyalayin veya indirin.
+                </p>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [loading]="contextLoading" (onClick)="loadContext()" />
+                <p-button label="Kopyala" icon="pi pi-copy" severity="secondary" [disabled]="!context" (onClick)="copyContext()" />
+                <p-button label="Indir" icon="pi pi-download" severity="secondary" [disabled]="!context" (onClick)="downloadContext()" />
+            </div>
+        </div>
+
+        @if (contextLoading) {
+            <div class="text-color-secondary">
+                <i class="pi pi-spin pi-spinner mr-2"></i>Konfigurasyon yukleniyor...
+            </div>
+        } @else if (context) {
+            <div class="grid license-context-grid">
+                <div class="col-12 md:col-6 xl:col-3">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Ortam / Instance</div>
+                        <div class="font-medium">{{ context.environmentName }} / {{ context.instanceId }}</div>
+                    </div>
+                </div>
+                <div class="col-12 md:col-6 xl:col-3">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Musteri Kodu</div>
+                        <div class="font-medium">{{ context.customerCode || '-' }}</div>
+                    </div>
+                </div>
+                <div class="col-12 md:col-6 xl:col-3">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Fingerprint Profili</div>
+                        <div class="font-medium flex align-items-center gap-2">
+                            {{ context.fingerprintProfile }}
+                            @if (context.requiresDeploymentMarker) {
+                                <p-tag value="Deployment Marker Zorunlu" severity="warn" />
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 md:col-6 xl:col-3">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">License Dosyasi</div>
+                        <div class="font-medium text-sm">{{ context.licenseFilePath }}</div>
+                    </div>
+                </div>
+                <div class="col-12 lg:col-6">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Deployment Marker</div>
+                        <div class="font-medium text-sm">{{ context.deploymentMarker || '-' }}</div>
+                    </div>
+                </div>
+                <div class="col-12 lg:col-6">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Runtime Fingerprint</div>
+                        <div class="font-medium text-sm break-all">{{ context.runtimeFingerprintHash }}</div>
+                    </div>
+                </div>
+                <div class="col-12 md:col-6">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Machine / OS</div>
+                        <div class="font-medium text-sm">{{ context.runtimeMachineName }}</div>
+                        <div class="text-color-secondary text-sm mt-1">{{ context.runtimeOsDescription }}</div>
+                    </div>
+                </div>
+                <div class="col-12 md:col-6">
+                    <div class="p-3 border-1 surface-border border-round">
+                        <div class="text-color-secondary text-sm mb-1">Not</div>
+                        <div class="font-medium text-sm">
+                            Container profilde sabit <code>STYS_LICENSING_DEPLOYMENT_MARKER</code> kullanin.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        } @else {
+            <div class="text-color-secondary">Konfigurasyon bilgisi yuklenemedi.</div>
+        }
+    </div>
 
     <!-- Yukleme Alani -->
     <div class="mt-4 p-4 border-1 surface-border border-round">

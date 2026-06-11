@@ -10,6 +10,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 import { tryReadApiMessage } from '../../core/api';
+import { LicenseGenerationContextDto } from './lisans-yonetimi-context.dto';
 import { LicenseStatusDto } from './lisans-yonetimi.dto';
 import { LisansYonetimiService } from './lisans-yonetimi.service';
 
@@ -27,7 +28,9 @@ export class LisansYonetimi implements OnInit {
     private readonly cdr = inject(ChangeDetectorRef);
 
     status: LicenseStatusDto | null = null;
+    context: LicenseGenerationContextDto | null = null;
     loading = false;
+    contextLoading = false;
     uploading = false;
 
     get statusSeverity(): 'success' | 'danger' {
@@ -55,6 +58,7 @@ export class LisansYonetimi implements OnInit {
 
     ngOnInit(): void {
         this.loadStatus();
+        this.loadContext();
     }
 
     loadStatus(): void {
@@ -72,6 +76,50 @@ export class LisansYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    loadContext(): void {
+        this.contextLoading = true;
+        this.service
+            .getContext()
+            .pipe(finalize(() => { this.contextLoading = false; this.cdr.detectChanges(); }))
+            .subscribe({
+                next: (data) => {
+                    this.context = data;
+                    this.cdr.detectChanges();
+                },
+                error: (err: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveError(err) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    copyContext(): void {
+        if (!this.context) return;
+
+        const text = JSON.stringify(this.context, null, 2);
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => this.messageService.add({ severity: UiSeverity.Success, summary: 'Kopyalandi', detail: 'Lisans konfigurasyonu panoya kopyalandi.' }))
+                .catch(() => this.fallbackCopy(text));
+            return;
+        }
+
+        this.fallbackCopy(text);
+    }
+
+    downloadContext(): void {
+        if (!this.context) return;
+
+        const blob = new Blob([JSON.stringify(this.context, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `license-context-${this.context.customerCode || 'stys'}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.messageService.add({ severity: UiSeverity.Success, summary: 'Indirildi', detail: 'Lisans konfigurasyonu dosyasi hazirlandi.' });
     }
 
     onFileSelect(event: { files: File[] }): void {
@@ -111,5 +159,18 @@ export class LisansYonetimi implements OnInit {
         }
         if (error instanceof Error && error.message.trim().length > 0) return error.message;
         return 'Beklenmeyen bir hata olustu.';
+    }
+
+    private fallbackCopy(text: string): void {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        this.messageService.add({ severity: UiSeverity.Success, summary: 'Kopyalandi', detail: 'Lisans konfigurasyonu panoya kopyalandi.' });
     }
 }

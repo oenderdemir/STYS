@@ -1,3 +1,13 @@
 :host {
     display: block;
 }
+
+.license-context-panel {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 249, 252, 0.92));
+}
+
+.license-context-grid .p-3 {
+    background: var(--surface-0);
+    min-height: 100%;
+}

@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
+import { LicenseGenerationContextDto } from './lisans-yonetimi-context.dto';
 import { LicenseStatusDto } from './lisans-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -17,6 +18,17 @@ export class LisansYonetimiService {
                     return res.data;
                 }
                 throw new Error(tryReadApiMessage(res) ?? 'Lisans durumu alinamadi.');
+            })
+        );
+    }
+
+    getContext(): Observable<LicenseGenerationContextDto> {
+        return this.http.get<ApiResponse<LicenseGenerationContextDto>>(`${this.apiBaseUrl}/ui/license/context`).pipe(
+            map((res) => {
+                if (res.success && res.data) {
+                    return res.data;
+                }
+                throw new Error(tryReadApiMessage(res) ?? 'Lisans konfigurasyonu alinamadi.');
             })
         );
     }

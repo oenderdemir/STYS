@@ -12,6 +12,9 @@ Logs
 **/node_modules
 **/dist
 **/.angular
+tools/Tod.LicenseGenerator/license-private.key
+tools/Tod.LicenseGenerator/license-public.key
+tools/Tod.LicenseGenerator/license-*.json
 
 *.user
 *.suo
@@ -19,4 +22,3 @@ Logs
 *.tmp
 *.log
 *.binlog
-

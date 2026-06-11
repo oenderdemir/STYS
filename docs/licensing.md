@@ -15,10 +15,18 @@
 ## Adim 1: Lisans Dosyasi Uretimi
 
 Generator araci key yoksa otomatik olusturur, bilgileri sorar, lisans dosyasini uretir.
+Windows'ta GUI icin:
 
 ```bash
 cd tools/Tod.LicenseGenerator
-dotnet run -- generate
+dotnet run -f net10.0-windows -- gui
+```
+
+CLI icin:
+
+```bash
+cd tools/Tod.LicenseGenerator
+dotnet run -f net10.0 -- generate
 ```
 
 Ilk calistirmada ECDSA P-256 anahtar cifti otomatik uretilir:
@@ -46,9 +54,30 @@ Sonucta `license-stys-musteri001.json` gibi bir dosya uretilir.
 ### Diger Komutlar
 
 ```bash
-dotnet run -- fingerprint       # Bu makinenin fingerprint bilgilerini gosterir
-dotnet run -- show-public-key   # Public key parcalarini gosterir
+dotnet run -f net10.0-windows -- fingerprint       # Bu makinenin fingerprint bilgilerini gosterir
+dotnet run -f net10.0-windows -- show-public-key   # Public key parcalarini gosterir
 ```
+
+### Lisans Konfigurasyonu Sorgulama
+
+Calisan uygulamadaki lisans uretim parametrelerini tek endpointten almak icin:
+
+```bash
+curl http://localhost:8080/api/license/context
+```
+
+Donen bilgi seti:
+- `LicenseFilePath`
+- `EnvironmentName`
+- `InstanceId`
+- `CustomerCode`
+- `DeploymentMarker`
+- `FingerprintProfile`
+- `RuntimeFingerprintHash`
+- `RuntimeMachineName`
+- `RuntimeOsDescription`
+
+Bu endpoint, generator icin gerekli runtime konfigurasyonunu manuel bakmadan cikarmak icin kullanilir.
 
 ## Adim 2: Public Key'i Uygulamaya Gomme (Sadece Bir Kez)
 
@@ -168,6 +197,35 @@ public class MuhasebeController : ControllerBase
 ```
 
 Lisansta `enabledModules` alani bos birakilirsa tum moduller aktif sayilir.
+
+## Docker Ile Lisans Uretici
+
+Generator araci artik Linux container icinde de calistirilabilir. Bu, VPS uzerinde veya herhangi bir Docker ortaminda lisans olusturmayi kolaylastirir.
+
+Image build:
+
+```bash
+docker build -t stys-license-generator -f tools/Tod.LicenseGenerator/Dockerfile .
+```
+
+Interaktif lisans uretimi:
+
+```bash
+docker run --rm -it -v "$PWD/license-work:/work" stys-license-generator generate
+```
+
+Ek komutlar:
+
+```bash
+docker run --rm -it -v "$PWD/license-work:/work" stys-license-generator fingerprint
+docker run --rm -it -v "$PWD/license-work:/work" stys-license-generator show-public-key
+```
+
+Notlar:
+- `license-private.key`, `license-public.key` ve deneme lisans JSON'lari image'a alinmaz.
+- Windows GUI arayuzu Windows'ta `dotnet run -- gui` ile acilmaya devam eder.
+- Docker kullanirken ciktilar `license-work` klasorune yazilir.
+- Container profili kullanacaksan `STYS_LICENSING_FINGERPRINT_PROFILE=Container` ve sabit bir `STYS_LICENSING_DEPLOYMENT_MARKER` degeri ver.
 
 Service layer'da programmatic kontrol:
 

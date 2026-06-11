@@ -38,17 +38,22 @@ public static class Program
               dotnet run -- generate         Lisans dosyasi uretir (key yoksa otomatik olusturur)
               dotnet run -- fingerprint      Bu makinenin fingerprint hash degerini gosterir
               dotnet run -- show-public-key  Public key parcalarini gosterir
-              dotnet run -- gui              Kucuk masaustu arayuzunu acar
+              dotnet run -- gui              Kucuk masaustu arayuzunu acar (yalnizca Windows)
             """);
         return 0;
     }
 
     private static int LaunchGui()
     {
+#if WINDOWS
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new LicenseGeneratorForm());
         return 0;
+#else
+        Console.WriteLine("GUI modu yalnizca Windows ortaminda kullanilabilir.");
+        return 1;
+#endif
     }
 
     private static async Task<int> GenerateLicenseAsync()
@@ -170,4 +175,3 @@ public static class Program
         return string.IsNullOrEmpty(input) ? (defaultValue ?? string.Empty) : input;
     }
 }
-

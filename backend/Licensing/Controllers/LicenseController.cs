@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using STYS.Licensing.Dto;
@@ -12,17 +13,20 @@ public class LicenseController : UIController
 {
     private readonly ILicenseService _licenseService;
     private readonly ILicenseSignatureVerifier _signatureVerifier;
+    private readonly IRuntimeFingerprintProvider _fingerprintProvider;
     private readonly LicensingOptions _options;
     private readonly ILogger<LicenseController> _logger;
 
     public LicenseController(
         ILicenseService licenseService,
         ILicenseSignatureVerifier signatureVerifier,
+        IRuntimeFingerprintProvider fingerprintProvider,
         IOptions<LicensingOptions> options,
         ILogger<LicenseController> logger)
     {
         _licenseService = licenseService;
         _signatureVerifier = signatureVerifier;
+        _fingerprintProvider = fingerprintProvider;
         _options = options.Value;
         _logger = logger;
     }
@@ -34,6 +38,14 @@ public class LicenseController : UIController
     {
         var result = await _licenseService.GetCurrentStatusAsync(ct);
         return Ok(ToDto(result));
+    }
+
+    /// <summary>Lisans uretimi icin gerekli mevcut konfigurasyonu doner.</summary>
+    [HttpGet("context")]
+    [Permission(StructurePermissions.LisansYonetimi.View)]
+    public ActionResult<LicenseGenerationContextDto> GetGenerationContext()
+    {
+        return Ok(BuildGenerationContext());
     }
 
     /// <summary>Lisans dosyasi yukler ve dogrular.</summary>
@@ -102,6 +114,24 @@ public class LicenseController : UIController
             ExpiresAtUtc = result.License?.ExpiresAtUtc,
             EnabledModules = result.License?.EnabledModules ?? [],
             Errors = result.Errors.ToList()
+        };
+    }
+
+    private LicenseGenerationContextDto BuildGenerationContext()
+    {
+        return new LicenseGenerationContextDto
+        {
+            ProductCode = "STYS",
+            LicenseFilePath = _options.LicenseFilePath,
+            EnvironmentName = _options.EnvironmentName,
+            InstanceId = _options.InstanceId,
+            CustomerCode = _options.CustomerCode,
+            DeploymentMarker = _options.DeploymentMarker,
+            FingerprintProfile = _options.FingerprintProfile.ToString(),
+            RuntimeFingerprintHash = _fingerprintProvider.ComputeFingerprint(),
+            RuntimeMachineName = Environment.MachineName,
+            RuntimeOsDescription = RuntimeInformation.OSDescription,
+            RequiresDeploymentMarker = _options.FingerprintProfile == FingerprintProfile.Container
         };
     }
 }

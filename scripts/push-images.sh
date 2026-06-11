@@ -86,6 +86,11 @@ if [ ! -f "$COMPOSE_FILE_PATH" ]; then
     exit 1
 fi
 
+if [ ! -f ".env" ]; then
+    echo ".env dosyasi bulunamadi: $PROJECT_ROOT/.env" >&2
+    exit 1
+fi
+
 read_compose_image() {
     service_name="$1"
     compose config --format json | "$PYTHON_BIN" -c 'import json,sys; data=json.load(sys.stdin); print(data["services"][sys.argv[1]]["image"])' "$service_name"
@@ -141,10 +146,12 @@ EOF
 REMOTE_TARGET="$VPS_USER@$VPS_HOST"
 ssh -i "$SSH_KEY_PATH" "$REMOTE_TARGET" "mkdir -p '$REMOTE_DIR/images'"
 scp -i "$SSH_KEY_PATH" "$COMPOSE_FILE_PATH" "$REMOTE_TARGET:$REMOTE_DIR/docker-compose.yml"
+scp -i "$SSH_KEY_PATH" ".env" "$REMOTE_TARGET:$REMOTE_DIR/.env"
 scp -i "$SSH_KEY_PATH" "$BACKEND_TAR" "$FRONTEND_TAR" "$IMAGE_ENV_FILE" "$REMOTE_TARGET:$REMOTE_DIR/images/"
 
 printf '\nKopyalama tamamlandi:\n'
 printf ' - %s:%s/docker-compose.yml\n' "$REMOTE_TARGET" "$REMOTE_DIR"
+printf ' - %s:%s/.env\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/backend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/frontend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/stys-image.env\n' "$REMOTE_TARGET" "$REMOTE_DIR"

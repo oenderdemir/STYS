@@ -84,6 +84,7 @@ Bu komut:
 - `docker compose config` ile gercek backend/frontend image ref'lerini okur
 - `docker save` ile bu image'lari arsivler
 - `docker-compose.yml` dosyasini VPS'ye kopyalar
+- `.env` dosyasini VPS'ye kopyalar
 - image arsivlerini ve `stys-image.env` dosyasini `/root/stys/images` altina yollar
 
 Varsayilan hedef:
@@ -136,6 +137,7 @@ chmod +x ./scripts/deploy-remote.sh
 Bu komut sunlari yapar:
 
 - VPS'de `/root/stys` klasorune gider
+- `.env` dosyasini kullanarak JWT, DB ve Swagger ayarlarini yukler
 - `images/backend.tar` ve `images/frontend.tar` dosyalarini `docker load` ile yukler
 - `images/stys-image.env` dosyasini kaynak alip `docker compose up -d` calistirir
 

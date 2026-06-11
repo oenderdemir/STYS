@@ -60,6 +60,11 @@ if (-not (Test-Path -LiteralPath $ComposeFilePath)) {
     throw "Compose dosyasi bulunamadi: $ComposeFilePath"
 }
 
+$envFilePath = Join-Path $projectRoot ".env"
+if (-not (Test-Path -LiteralPath $envFilePath)) {
+    throw ".env dosyasi bulunamadi: $envFilePath"
+}
+
 $composeConfig = Get-ComposeConfig
 $backendImageReference = $composeConfig.services.backend.image
 $frontendImageReference = $composeConfig.services.frontend.image
@@ -110,11 +115,13 @@ Write-Host "Compose dosyasi ve image archive'lari VPS'ye kopyalaniyor..."
 $remoteTarget = "$VpsUser@$VpsHost"
 Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, "mkdir -p '$RemoteDir/images'")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
+Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $envFilePath, "${remoteTarget}:$RemoteDir/.env")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"
 Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.yml"
+Write-Host " - ${remoteTarget}:$RemoteDir/.env"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/stys-image.env"

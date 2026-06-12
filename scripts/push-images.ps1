@@ -150,7 +150,7 @@ foreach ($line in [System.IO.File]::ReadAllLines($envExampleFilePath)) {
     }
 
     $name = $trimmed.Substring(0, $separatorIndex).Trim()
-    if ($mergedEnvValues.ContainsKey($name)) {
+    if ($mergedEnvValues.Contains($name)) {
         $mergedEnvContent.Add("$name=$($mergedEnvValues[$name])")
         continue
     }

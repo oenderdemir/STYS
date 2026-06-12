@@ -41,10 +41,10 @@ public sealed class LicensingOptions
     public string DeploymentMarker { get; set; } = string.Empty;
 
     /// <summary>
-    /// Fingerprint profili. PhysicalServer (default) tam fingerprint uretir;
+    /// Fingerprint profili. Container (default) MachineName/OS'u disarida birakir;
     /// Container profilinde MachineName/OS dahil edilmez, DeploymentMarker zorunlu olur.
     /// </summary>
-    public FingerprintProfile FingerprintProfile { get; set; } = FingerprintProfile.PhysicalServer;
+    public FingerprintProfile FingerprintProfile { get; set; } = FingerprintProfile.Container;
 
     /// <summary>
     /// Cache suresi (saniye). Bu sure boyunca lisans tekrar dogrulanmaz.

@@ -94,10 +94,10 @@ public static class Program
                 .ToList();
         }
 
-        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
+        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "Container");
         var profile = Enum.TryParse<FingerprintProfile>(profileInput, true, out var parsedProfile)
             ? parsedProfile
-            : FingerprintProfile.PhysicalServer;
+            : FingerprintProfile.Container;
         var deploymentMarker = Ask("Deployment marker (opsiyonel)", string.Empty);
 
         license.FingerprintHash = LicenseGeneratorCore.ComputeFingerprintHash(
@@ -132,10 +132,10 @@ public static class Program
         Console.WriteLine($"  Machine Name:     {Environment.MachineName}");
         Console.WriteLine($"  OS Description:   {RuntimeInformation.OSDescription}");
 
-        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "PhysicalServer");
+        var profileInput = Ask("Fingerprint profili (PhysicalServer/Container)", "Container");
         var profile = Enum.TryParse<FingerprintProfile>(profileInput, true, out var parsedProfile)
             ? parsedProfile
-            : FingerprintProfile.PhysicalServer;
+            : FingerprintProfile.Container;
         var env = Ask("Ortam adi", "Production");
         var instanceId = Ask("Instance ID", "instance-01");
         var customerCode = Ask("Musteri kodu");

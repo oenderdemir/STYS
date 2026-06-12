@@ -55,7 +55,7 @@ services:
       Licensing__InstanceId: "${STYS_LICENSING_INSTANCE_ID:-instance-01}"
       Licensing__CustomerCode: "${STYS_LICENSING_CUSTOMER_CODE:-}"
       Licensing__DeploymentMarker: "${STYS_LICENSING_DEPLOYMENT_MARKER:-}"
-      Licensing__FingerprintProfile: "${STYS_LICENSING_FINGERPRINT_PROFILE:-PhysicalServer}"
+      Licensing__FingerprintProfile: "${STYS_LICENSING_FINGERPRINT_PROFILE:-Container}"
       Jwt__Key: "${STYS_JWT_KEY:-ChangeMe!DockerSecretForTestEnvironmentOnly_2026}"
       Jwt__Issuer: "${STYS_JWT_ISSUER:-TOD.Platform}"
       Jwt__Audience: "${STYS_JWT_AUDIENCE:-TOD.Platform.Clients}"

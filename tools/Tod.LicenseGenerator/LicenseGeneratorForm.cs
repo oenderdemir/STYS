@@ -27,7 +27,7 @@ internal sealed class LicenseGeneratorForm : Form
 
         _expiresAt.Value = DateTime.Now.AddYears(1);
         _profile.Items.AddRange([FingerprintProfile.PhysicalServer, FingerprintProfile.Container]);
-        _profile.SelectedItem = FingerprintProfile.PhysicalServer;
+        _profile.SelectedItem = FingerprintProfile.Container;
 
         var layout = new TableLayoutPanel
         {
@@ -97,7 +97,7 @@ internal sealed class LicenseGeneratorForm : Form
     {
         try
         {
-            var profile = (FingerprintProfile)(_profile.SelectedItem ?? FingerprintProfile.PhysicalServer);
+            var profile = (FingerprintProfile)(_profile.SelectedItem ?? FingerprintProfile.Container);
             _fingerprint.Text = LicenseGeneratorCore.ComputeFingerprintHash(
                 profile,
                 _environmentName.Text.Trim(),
@@ -122,7 +122,7 @@ internal sealed class LicenseGeneratorForm : Form
                 return;
             }
 
-            var profile = (FingerprintProfile)(_profile.SelectedItem ?? FingerprintProfile.PhysicalServer);
+            var profile = (FingerprintProfile)(_profile.SelectedItem ?? FingerprintProfile.Container);
             var license = new LicenseDocument
             {
                 LicenseId = Guid.NewGuid().ToString("D"),
@@ -226,4 +226,3 @@ internal sealed class LicenseGeneratorForm : Form
         _status.AppendText(line + Environment.NewLine);
     }
 }
-

@@ -29,10 +29,10 @@ public sealed class EcdsaLicenseSignatureVerifier : ILicenseSignatureVerifier
     internal static readonly string[] PublicKeyParts =
     [
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQ",
-        "cDQgAE50G686NZJL/kDwoKaz2fnbM4",
-        "KsU1my7VHyKubqN0/Ye5SDr6dcf5Au",
-        "bvhQmCsuudOuqhCel9L/zlbHI237IM",
-        "xQ=="
+        "cDQgAEaSKvP/8CuYtC3WpLuqXQ1k4W",
+        "O1O/8f8Sr+0CTbMSlkuaKSJuxiT8vt",
+        "0Wi9idBqtoIA1htR9oUKoW5AwgGai6",
+        "ig=="
     ];
 
     private readonly Lazy<ECDsa> _publicKey;

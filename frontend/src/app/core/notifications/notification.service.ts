@@ -171,7 +171,8 @@ export class NotificationService {
 
         const connection = new HubConnectionBuilder()
             .withUrl(this.hubUrl, {
-                accessTokenFactory: () => this.authService.getToken() ?? ''
+                accessTokenFactory: () => this.authService.getToken() ?? '',
+                withCredentials: false
             })
             .withAutomaticReconnect()
             .build();

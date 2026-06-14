@@ -73,7 +73,7 @@ function Get-BackendIntegrityEnvContent {
         }
 
         $containerId = $containerId.Trim()
-        Invoke-NativeCommand docker @('cp', "$containerId:/app", $tempDir)
+        Invoke-NativeCommand docker @('cp', "${containerId}:/app", $tempDir)
 
         $appDir = Join-Path $tempDir "app"
         if (-not (Test-Path -LiteralPath $appDir)) {

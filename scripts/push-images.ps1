@@ -178,9 +178,24 @@ Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $ComposeFilePath, "${remot
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $integrityEnvFile, "${remoteTarget}:$RemoteDir/scripts/stys-integrity.env")
 
+$remoteEnvUpdate = @'
+set -eu
+cd '__REMOTE_DIR__'
+if [ -f .env ]; then
+    tmp=$(mktemp)
+    awk -v tag='__TAG__' 'BEGIN { found = 0 } /^STYS_IMAGE_TAG=/ { print "STYS_IMAGE_TAG=" tag; found = 1; next } { print } END { if (!found) print "STYS_IMAGE_TAG=" tag }' .env > "$tmp"
+    mv "$tmp" .env
+else
+    printf 'STYS_IMAGE_TAG=%s\n' '__TAG__' > .env
+fi
+'@
+$remoteEnvUpdate = $remoteEnvUpdate.Replace('__REMOTE_DIR__', $RemoteDir).Replace('__TAG__', $Tag)
+Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, $remoteEnvUpdate)
+
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"
 Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.yml"
+Write-Host " - ${remoteTarget}:$RemoteDir/.env (STYS_IMAGE_TAG guncellendi)"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/stys-image.env"

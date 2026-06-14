@@ -148,12 +148,22 @@ EOF
 REMOTE_TARGET="$VPS_USER@$VPS_HOST"
 ssh -i "$SSH_KEY_PATH" "$REMOTE_TARGET" "mkdir -p '$REMOTE_DIR/images'"
 scp -i "$SSH_KEY_PATH" "$COMPOSE_FILE_PATH" "$REMOTE_TARGET:$REMOTE_DIR/docker-compose.yml"
-scp -i "$SSH_KEY_PATH" ".env" "$REMOTE_TARGET:$REMOTE_DIR/.env"
 scp -i "$SSH_KEY_PATH" "$BACKEND_TAR" "$FRONTEND_TAR" "$IMAGE_ENV_FILE" "$REMOTE_TARGET:$REMOTE_DIR/images/"
+ssh -i "$SSH_KEY_PATH" "$REMOTE_TARGET" "
+set -eu
+cd '$REMOTE_DIR'
+if [ -f .env ]; then
+    tmp=\$(mktemp)
+    awk -v tag='$TAG' 'BEGIN { found = 0 } /^STYS_IMAGE_TAG=/ { print \"STYS_IMAGE_TAG=\" tag; found = 1; next } { print } END { if (!found) print \"STYS_IMAGE_TAG=\" tag }' .env > \"\$tmp\"
+    mv \"\$tmp\" .env
+else
+    printf 'STYS_IMAGE_TAG=%s\\n' '$TAG' > .env
+fi
+"
 
 printf '\nKopyalama tamamlandi:\n'
 printf ' - %s:%s/docker-compose.yml\n' "$REMOTE_TARGET" "$REMOTE_DIR"
-printf ' - %s:%s/.env\n' "$REMOTE_TARGET" "$REMOTE_DIR"
+printf ' - %s:%s/.env (STYS_IMAGE_TAG guncellendi)\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/backend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/frontend.tar\n' "$REMOTE_TARGET" "$REMOTE_DIR"
 printf ' - %s:%s/images/stys-image.env\n' "$REMOTE_TARGET" "$REMOTE_DIR"

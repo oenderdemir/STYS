@@ -1,0 +1,14 @@
+{
+  "licenseId": "51a2b89c-5c43-45b9-b95c-a6924cb1721a",
+  "productCode": "STYS",
+  "customerCode": "trt-trabzon",
+  "customerName": "trt-trabzon",
+  "environmentName": "Production",
+  "instanceId": "instance-01",
+  "issuedAtUtc": "2026-06-12T22:22:42.6086363+00:00",
+  "expiresAtUtc": "2027-06-12T22:23:00+00:00",
+  "fingerprintHash": "E8ywFuocnmQbvV80qJWbRbIJEtAiuy\u002BCe792p6CEQcE=",
+  "enabledModules": [],
+  "licenseVersion": 1,
+  "signature": "nz8LoxwiWmYmukX9gYzkhNn9NcFbRxO2B\u002BcrltRF/YV35Oyyp/kxEiz4bK3V2tzE7YC/YecbWXdtriGKhWYHDQ=="
+}

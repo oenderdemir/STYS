@@ -1,0 +1,14 @@
+{
+  "licenseId": "c5ed447e-b893-498a-bb09-85afac4c4d5c",
+  "productCode": "STYS",
+  "customerCode": "TOD-01",
+  "customerName": "test",
+  "environmentName": "Development",
+  "instanceId": "dev-01",
+  "issuedAtUtc": "2026-06-14T09:50:16.063995+00:00",
+  "expiresAtUtc": "2027-06-14T00:00:00+00:00",
+  "fingerprintHash": "5iqkSiVCOf62M6PU0DCl4UBpo8LyOVCUuy6CJYRmNq8=",
+  "enabledModules": [],
+  "licenseVersion": 1,
+  "signature": "3U1N/YC9D6jAPK4bdlkZ2Ta3zuzi5zHa\u002B3p5fEuBNciJCFFgZWmr\u002BuGKC8NfxVCdk4Ezfgwp\u002B6eXbzfQdOyfkw=="
+}

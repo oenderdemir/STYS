@@ -6,6 +6,9 @@
 .dotnet
 .dotnetuser
 Logs
+artifacts/
+.env
+license-work/
 
 **/bin
 **/obj

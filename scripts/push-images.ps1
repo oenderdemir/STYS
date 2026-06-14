@@ -87,7 +87,13 @@ function Get-BackendIntegrityEnvContent {
 
         $lines = foreach ($dllFile in $dllFiles) {
             $fileBytes = [System.IO.File]::ReadAllBytes($dllFile.FullName)
-            $hashBytes = [System.Security.Cryptography.SHA256]::HashData($fileBytes)
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $hashBytes = $sha256.ComputeHash($fileBytes)
+            }
+            finally {
+                $sha256.Dispose()
+            }
             $hashBase64 = [Convert]::ToBase64String($hashBytes)
             "Licensing__IntegrityHashes__{0}={1}" -f $dllFile.Name, $hashBase64
         }

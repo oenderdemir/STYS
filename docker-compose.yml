@@ -92,6 +92,8 @@ services:
         condition: service_healthy
     volumes:
       - ./Data/logs/backend:/app/Logs
+    env_file:
+      - ./scripts/stys-integrity.env
     expose:
       - "8080"
     networks:

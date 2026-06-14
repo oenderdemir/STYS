@@ -46,11 +46,6 @@ public class JwtTokenService : IJwtTokenService
             claims.Add(new Claim("userId", request.UserId));
         }
 
-        foreach (var permission in request.Permissions.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            claims.Add(new Claim("permission", permission));
-        }
-
         var jwt = new JwtSecurityToken(
             issuer: options.Issuer,
             audience: options.Audience,

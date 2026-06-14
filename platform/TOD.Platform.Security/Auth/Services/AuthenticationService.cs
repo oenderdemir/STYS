@@ -231,7 +231,8 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             RefreshToken = refreshToken,
             RefreshTokenExpireDate = refreshTokenExpireDate,
             DefaultRoute = defaultRoute,
-            UserStatus = user.Status
+            UserStatus = user.Status,
+            Permissions = normalizedPermissions.ToList()
         };
     }
 
@@ -244,7 +245,8 @@ public class AuthenticationService<TKey> : IAuthenticationService<TKey> where TK
             AccessTokenExpireDate = DateTime.UtcNow,
             RefreshToken = string.Empty,
             RefreshTokenExpireDate = null,
-            DefaultRoute = null
+            DefaultRoute = null,
+            Permissions = []
         };
     }
 

@@ -6,4 +6,5 @@ export interface LoginResponseDto {
     refreshTokenExpireDate: string | null;
     defaultRoute: string | null;
     userStatus: string | null;
+    permissions: string[];
 }

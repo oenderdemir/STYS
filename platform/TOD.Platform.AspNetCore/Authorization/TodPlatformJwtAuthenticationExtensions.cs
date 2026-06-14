@@ -73,6 +73,7 @@ public static class TodPlatformJwtAuthenticationExtensions
                 },
                 OnTokenValidated = async context =>
                 {
+                    var permissionClaimType = TodPlatformAuthorizationConstants.PermissionClaimType;
                     var rawUserId = context.Principal?.FindFirstValue("userId");
                     if (!Guid.TryParse(rawUserId, out var userId))
                     {
@@ -98,6 +99,28 @@ public static class TodPlatformJwtAuthenticationExtensions
                     if (!currentTokenVersion.HasValue || currentTokenVersion.Value != tokenVersion)
                     {
                         context.Fail("Token version is no longer valid.");
+                        return;
+                    }
+
+                    var identity = context.Principal?.Identity as ClaimsIdentity;
+                    if (identity is null)
+                    {
+                        context.Fail("Claims identity is not available.");
+                        return;
+                    }
+
+                    var permissions = await identityStore.GetPermissionsAsync(userId, context.HttpContext.RequestAborted);
+                    var existingPermissions = identity.FindAll(permissionClaimType)
+                        .Select(x => x.Value)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var permission in permissions.Where(permission => !string.IsNullOrWhiteSpace(permission)))
+                    {
+                        var normalizedPermission = permission.Trim();
+                        if (existingPermissions.Add(normalizedPermission))
+                        {
+                            identity.AddClaim(new Claim(permissionClaimType, normalizedPermission));
+                        }
                     }
                 }
             };

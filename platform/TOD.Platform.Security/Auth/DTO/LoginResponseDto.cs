@@ -15,4 +15,6 @@ public class LoginResponseDto
     public string? DefaultRoute { get; set; }
 
     public string? UserStatus { get; set; }
+
+    public List<string> Permissions { get; set; } = [];
 }

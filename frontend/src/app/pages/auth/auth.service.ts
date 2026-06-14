@@ -15,6 +15,7 @@ export class AuthService {
     private readonly tokenExpiryStorageKey = 'stys.auth.token_expiry';
     private readonly userStatusStorageKey = 'stys.auth.user_status';
     private readonly defaultRouteStorageKey = 'stys.auth.default_route';
+    private readonly permissionsStorageKey = 'stys.auth.permissions';
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -90,6 +91,7 @@ export class AuthService {
     storeSession(response: LoginResponseDto): void {
         localStorage.setItem(this.tokenStorageKey, response.authToken);
         localStorage.setItem(this.tokenExpiryStorageKey, response.accessTokenExpireDate);
+        this.storePermissions(response.permissions);
         const defaultRoute = this.normalizeRoute(response.defaultRoute);
         if (defaultRoute) {
             localStorage.setItem(this.defaultRouteStorageKey, defaultRoute);
@@ -110,6 +112,7 @@ export class AuthService {
         localStorage.removeItem(this.tokenExpiryStorageKey);
         localStorage.removeItem(this.defaultRouteStorageKey);
         localStorage.removeItem(this.userStatusStorageKey);
+        localStorage.removeItem(this.permissionsStorageKey);
         this.muhasebeTesisContext.clearPersistedTesis();
         this.clearInactivityTimer();
         this.bumpSessionRevision();
@@ -199,22 +202,12 @@ export class AuthService {
     }
 
     getUserPermissions(): string[] {
-        const token = this.getToken();
-        if (!token) {
-            return [];
+        const storedPermissions = this.readStoredPermissions();
+        if (storedPermissions.length > 0) {
+            return storedPermissions;
         }
 
-        const payload = this.decodeJwtPayload(token);
-        if (!payload) {
-            return [];
-        }
-
-        const permissions = [
-            ...this.readClaimAsStringArray(payload, 'permission'),
-            ...this.readClaimAsStringArray(payload, 'permissions')
-        ];
-
-        return [...new Set(permissions)];
+        return this.getPermissionsFromToken();
     }
 
     hasPermission(permission: string): boolean {
@@ -319,6 +312,61 @@ export class AuthService {
         } catch {
             return null;
         }
+    }
+
+    private getPermissionsFromToken(): string[] {
+        const token = this.getToken();
+        if (!token) {
+            return [];
+        }
+
+        const payload = this.decodeJwtPayload(token);
+        if (!payload) {
+            return [];
+        }
+
+        const permissions = [
+            ...this.readClaimAsStringArray(payload, 'permission'),
+            ...this.readClaimAsStringArray(payload, 'permissions')
+        ];
+
+        return [...new Set(permissions)];
+    }
+
+    private storePermissions(permissions: string[] | null | undefined): void {
+        const normalizedPermissions = this.normalizePermissionList(permissions);
+        if (normalizedPermissions.length === 0) {
+            localStorage.removeItem(this.permissionsStorageKey);
+            return;
+        }
+
+        localStorage.setItem(this.permissionsStorageKey, JSON.stringify(normalizedPermissions));
+    }
+
+    private readStoredPermissions(): string[] {
+        const rawPermissions = localStorage.getItem(this.permissionsStorageKey);
+        if (!rawPermissions || rawPermissions.trim().length === 0) {
+            return [];
+        }
+
+        try {
+            const parsed = JSON.parse(rawPermissions);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+
+            return this.normalizePermissionList(parsed.filter((value): value is string => typeof value === 'string'));
+        } catch {
+            return [];
+        }
+    }
+
+    private normalizePermissionList(permissions: string[] | null | undefined): string[] {
+        if (!permissions || permissions.length === 0) {
+            return [];
+        }
+
+        return [...new Set(permissions.map((permission) => permission.trim()).filter((permission) => permission.length > 0))];
     }
 
     private readClaimAsStringArray(payload: Record<string, unknown>, claimName: string): string[] {

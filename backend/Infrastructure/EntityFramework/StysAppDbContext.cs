@@ -2613,7 +2613,7 @@ public class StysAppDbContext : DbContext
         var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity<int>.IsDeleted));
         var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
 
-        if (_currentTenantAccessor is null || !typeof(ITenantEntity).IsAssignableFrom(entityType))
+        if (!typeof(ITenantEntity).IsAssignableFrom(entityType))
         {
             return Expression.Lambda(notDeleted, parameter);
         }
@@ -2631,7 +2631,7 @@ public class StysAppDbContext : DbContext
 
     private void ApplyTenantRules(EntityEntry entry, EntityState originalState)
     {
-        if (_currentTenantAccessor is null || entry.Entity is not ITenantEntity tenantEntity)
+        if (entry.Entity is not ITenantEntity tenantEntity)
         {
             return;
         }
@@ -2650,7 +2650,7 @@ public class StysAppDbContext : DbContext
 
                 if (tenantEntity.KurumId != currentKurumId.Value)
                 {
-                    throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+                    throw new BaseException("Farkli kuruma ait kayit olusturulamaz.", 400);
                 }
 
                 return;

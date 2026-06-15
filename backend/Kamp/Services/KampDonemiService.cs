@@ -38,7 +38,6 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         await EnsureUniqueAsync(dto, null);
 
         var entity = Mapper.Map<KampDonemi>(dto);
-        entity.KurumId = program.KurumId;
 
         await _kampDonemiRepository.AddAsync(entity);
         await _kampDonemiRepository.SaveChangesAsync();
@@ -57,7 +56,8 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         Normalize(dto);
         await EnsureUniqueAsync(dto, dto.Id.Value);
 
-        var entity = await _kampDonemiRepository.GetByIdAsync(dto.Id.Value);
+        var entity = await BuildIncludedQuery()
+            .FirstOrDefaultAsync(x => x.Id == dto.Id.Value);
         if (entity is null)
         {
             throw new BaseException("Guncellenecek kamp donemi bulunamadi.", 404);
@@ -87,7 +87,16 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
     public override async Task DeleteAsync(int id)
     {
         await EnsureCanManageGlobalAsync();
-        await base.DeleteAsync(id);
+
+        var entity = await BuildIncludedQuery()
+            .FirstOrDefaultAsync(x => x.Id == id);
+        if (entity is null)
+        {
+            throw new BaseException("Kamp donemi bulunamadi.", 404);
+        }
+
+        _kampDonemiRepository.Delete(entity);
+        await _kampDonemiRepository.SaveChangesAsync();
     }
 
     public override async Task<IEnumerable<KampDonemiDto>> GetAllAsync(Func<IQueryable<KampDonemi>, IQueryable<KampDonemi>>? include = null)
@@ -344,6 +353,7 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
 
         var kodExists = await _stysDbContext.KampDonemleri.AnyAsync(x =>
             (!excludedId.HasValue || x.Id != excludedId.Value)
+            && x.KampProgramiId == dto.KampProgramiId
             && x.Kod.ToUpper() == normalizedKod);
 
         if (kodExists)
@@ -364,7 +374,8 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
 
     private async Task EnsureKampDonemiExistsAsync(int kampDonemiId, CancellationToken cancellationToken)
     {
-        var exists = await _stysDbContext.KampDonemleri.AnyAsync(x => x.Id == kampDonemiId, cancellationToken);
+        var exists = await BuildIncludedQuery()
+            .AnyAsync(x => x.Id == kampDonemiId, cancellationToken);
         if (!exists)
         {
             throw new BaseException("Kamp donemi bulunamadi.", 404);

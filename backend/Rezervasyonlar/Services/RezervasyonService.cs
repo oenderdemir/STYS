@@ -21,6 +21,7 @@ using STYS.Rezervasyonlar.Entities;
 using STYS.Tesisler;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.Licensing.Abstractions;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
@@ -32,19 +33,22 @@ public class RezervasyonService : IRezervasyonService
     private readonly IBildirimService _bildirimService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILicenseService _licenseService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
         IBildirimService bildirimService,
         IHttpContextAccessor httpContextAccessor,
-        ILicenseService licenseService)
+        ILicenseService licenseService,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
         _bildirimService = bildirimService;
         _httpContextAccessor = httpContextAccessor;
         _licenseService = licenseService;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -214,7 +218,7 @@ public class RezervasyonService : IRezervasyonService
             await EnsureCanAccessTesisAsync(tesisId.Value, cancellationToken);
         }
 
-        var query = _stysDbContext.Rezervasyonlar.AsQueryable();
+        var query = ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar);
 
         if (scope.IsScoped)
         {
@@ -596,14 +600,10 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Gecersiz rezervasyon id.", 400);
         }
 
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var query = _stysDbContext.Rezervasyonlar
-            .Where(x => x.Id == rezervasyonId);
+        await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
 
-        if (scope.IsScoped)
-        {
-            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
-        }
+        var query = ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
+            .Where(x => x.Id == rezervasyonId);
 
         var raw = await query
             .Select(x => new
@@ -820,14 +820,10 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Gecersiz rezervasyon id.", 400);
         }
 
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var query = _stysDbContext.Rezervasyonlar
-            .Where(x => x.Id == rezervasyonId);
+        await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
 
-        if (scope.IsScoped)
-        {
-            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
-        }
+        var query = ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
+            .Where(x => x.Id == rezervasyonId);
 
         var raw = await query
             .Select(x => new
@@ -1026,14 +1022,10 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("En az bir konaklayan kaydi zorunludur.", 400);
         }
 
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var query = _stysDbContext.Rezervasyonlar
-            .Where(x => x.Id == rezervasyonId);
+        await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
 
-        if (scope.IsScoped)
-        {
-            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
-        }
+        var query = ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
+            .Where(x => x.Id == rezervasyonId);
 
         var reservationRaw = await query
             .Select(x => new
@@ -2021,8 +2013,6 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Secilen odalardan en az biri gecersiz veya secilen tesise ait degil.", 400);
         }
 
-        var kurumId = await ResolveReservationKurumIdAsync(request.TesisId, cancellationToken);
-
         foreach (var segment in request.Segmentler)
         {
             var segmentRoomIds = segment.OdaAtamalari
@@ -2078,7 +2068,6 @@ public class RezervasyonService : IRezervasyonService
         var reservation = new Entities.Rezervasyon
         {
             ReferansNo = GenerateReferenceNo(),
-            KurumId = kurumId,
             TesisId = request.TesisId,
             KisiSayisi = request.KisiSayisi,
             MisafirTipiId = request.MisafirTipiId,
@@ -2428,7 +2417,7 @@ public class RezervasyonService : IRezervasyonService
         var roomSummary = string.Join(", ", blockingWarnings
             .Select(x => $"{x.OdaNo} - {x.BinaAdi} ({x.TemizlikDurumu})"));
 
-        var reservationInfo = await _stysDbContext.Rezervasyonlar
+        var reservationInfo = await ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
             .Where(x => x.Id == rezervasyonId)
             .Select(x => new { x.TesisId, x.ReferansNo })
             .FirstOrDefaultAsync(cancellationToken);
@@ -2455,7 +2444,7 @@ public class RezervasyonService : IRezervasyonService
 
     private async Task<List<RezervasyonCheckInUyariDto>> GetCheckInWarningsAsync(int rezervasyonId, CancellationToken cancellationToken)
     {
-        var reservationInfo = await _stysDbContext.Rezervasyonlar
+        var reservationInfo = await ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
             .Where(x => x.Id == rezervasyonId)
             .Select(x => new
             {
@@ -5075,7 +5064,7 @@ public class RezervasyonService : IRezervasyonService
 
     private async Task<decimal> GetRezervasyonKonaklamaTutariAsync(int rezervasyonId, CancellationToken cancellationToken)
     {
-        return await _stysDbContext.Rezervasyonlar
+        return await ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
             .Where(x => x.Id == rezervasyonId)
             .Select(x => (decimal?)x.ToplamUcret)
             .SingleOrDefaultAsync(cancellationToken) ?? 0m;
@@ -5786,21 +5775,6 @@ public class RezervasyonService : IRezervasyonService
         }
     }
 
-    private async Task<int> ResolveReservationKurumIdAsync(int tesisId, CancellationToken cancellationToken)
-    {
-        var kurumId = await _stysDbContext.Tesisler
-            .Where(x => x.Id == tesisId && x.AktifMi)
-            .Select(x => (int?)x.KurumId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (!kurumId.HasValue || kurumId.Value <= 0)
-        {
-            throw new BaseException("Secilen tesis icin kurum bilgisi bulunamadi.", 400);
-        }
-
-        return kurumId.Value;
-    }
-
     private async Task EnsureTesisHasKonaklamaTipiAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken)
     {
         var exists = await _stysDbContext.TesisKonaklamaTipleri.AnyAsync(x =>
@@ -6109,7 +6083,7 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Gecersiz rezervasyon id.", 400);
         }
 
-        var reservation = await _stysDbContext.Rezervasyonlar
+        var reservation = await ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar)
             .FirstOrDefaultAsync(x => x.Id == rezervasyonId, cancellationToken);
 
         if (reservation is null)
@@ -6119,6 +6093,22 @@ public class RezervasyonService : IRezervasyonService
 
         await EnsureCanAccessTesisAsync(reservation.TesisId, cancellationToken);
         return reservation;
+    }
+
+    private IQueryable<Rezervasyon> ApplyRezervasyonTenantScope(IQueryable<Rezervasyon> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
     }
 
     private static RezervasyonKayitSonucDto ToSaveResult(Rezervasyon reservation)

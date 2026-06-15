@@ -813,7 +813,8 @@ public class KampBasvuruService : IKampBasvuruService
     }
 
     private static int ResolveKampDonemiKurumId(KampDonemi kampDonemi)
-        => kampDonemi.KampProgrami?.KurumId ?? kampDonemi.KurumId;
+        => kampDonemi.KampProgrami?.KurumId
+           ?? throw new BaseException("Kamp donemi kurum baglami bulunamadi.", 500);
 
     private static string NormalizeBasvuruNo(string? basvuruNo)
         => string.IsNullOrWhiteSpace(basvuruNo)

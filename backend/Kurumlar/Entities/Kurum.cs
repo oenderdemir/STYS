@@ -1,6 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using STYS.Kamp.Entities;
-using STYS.Rezervasyonlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -27,11 +25,5 @@ public class Kurum : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
-    public ICollection<KampProgrami> KampProgramlari { get; set; } = [];
-
-    public ICollection<KampDonemi> KampDonemleri { get; set; } = [];
-
     public ICollection<Tesis> Tesisler { get; set; } = [];
-
-    public ICollection<Rezervasyon> Rezervasyonlar { get; set; } = [];
 }

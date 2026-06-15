@@ -122,7 +122,8 @@ public class KampRezervasyonService : IKampRezervasyonService
             .FirstOrDefaultAsync(x => x.Id == basvuru.TesisId, cancellationToken)
             ?? throw new BaseException("Tesis bulunamadi.", 404);
 
-        var donemKurumId = donem.KampProgrami?.KurumId ?? donem.KurumId;
+        var donemKurumId = donem.KampProgrami?.KurumId
+            ?? throw new BaseException("Kamp donemi kurum baglami bulunamadi.", 500);
         if (donemKurumId != tesis.KurumId)
         {
             throw new BaseException("Kamp basvurusu, kamp donemi ve tesis kurum bilgileri uyumsuz.", 400);
@@ -156,7 +157,6 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var normalRezervasyon = new Rezervasyon
         {
-            KurumId = tesis.KurumId,
             ReferansNo = rezervasyonNo,
             TesisId = basvuru.TesisId,
             KisiSayisi = basvuru.KatilimciSayisi,

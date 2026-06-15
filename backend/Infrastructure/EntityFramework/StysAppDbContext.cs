@@ -589,22 +589,29 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<KampProgrami>(entity =>
         {
             entity.ToTable("KampProgramlari", "dbo");
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(512);
             entity.Property(x => x.Yil).IsRequired();
             entity.Property(x => x.MaksimumBasvuruSayisi).IsRequired().HasDefaultValue(1);
-            entity.HasIndex(x => new { x.Yil, x.Kod })
+            entity.HasIndex(x => new { x.KurumId, x.Yil, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.Yil, x.Ad })
+            entity.HasIndex(x => new { x.KurumId, x.Yil, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.KampProgramlari)
+                .HasForeignKey(x => x.KurumId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<KampDonemi>(entity =>
         {
             entity.ToTable("KampDonemleri", "dbo");
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(160).IsRequired();
             entity.Property(x => x.BasvuruBaslangicTarihi).HasColumnType("date");
@@ -612,16 +619,21 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.KonaklamaBaslangicTarihi).HasColumnType("date");
             entity.Property(x => x.KonaklamaBitisTarihi).HasColumnType("date");
             entity.Property(x => x.IptalSonGun).HasColumnType("date");
-            entity.HasIndex(x => x.Kod)
+            entity.HasIndex(x => new { x.KurumId, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KampProgramiId, x.Ad })
+            entity.HasIndex(x => new { x.KurumId, x.KampProgramiId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
 
             entity.HasOne(x => x.KampProgrami)
                 .WithMany(x => x.KampDonemleri)
                 .HasForeignKey(x => x.KampProgramiId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.KampDonemleri)
+                .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -786,6 +798,7 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<KampBasvuru>(entity =>
         {
             entity.ToTable("KampBasvurulari", "dbo");
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.KonaklamaBirimiTipi).HasMaxLength(32).IsRequired();
             entity.Property(x => x.BasvuruNo).HasMaxLength(32).IsRequired();
             entity.Property(x => x.BasvuruSahibiAdiSoyadiSnapshot).HasMaxLength(200).IsRequired();
@@ -796,9 +809,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AvansToplamTutar).HasPrecision(18, 2);
             entity.Property(x => x.KalanOdemeTutari).HasPrecision(18, 2);
             entity.Property(x => x.UyariMesajlariJson).HasColumnType("nvarchar(max)");
-            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId, x.Durum })
+            entity.HasIndex(x => new { x.KurumId, x.KampDonemiId, x.TesisId, x.Durum })
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => x.BasvuruNo)
+            entity.HasIndex(x => new { x.KurumId, x.BasvuruNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
 
@@ -815,6 +828,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany(x => x.KampBasvurulari)
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.KampBasvurulari)
+                .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -878,6 +896,7 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<KampRezervasyon>(entity =>
         {
             entity.ToTable("KampRezervasyonlari", "dbo");
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.RezervasyonNo).HasMaxLength(32).IsRequired();
             entity.Property(x => x.BasvuruSahibiAdiSoyadi).HasMaxLength(200).IsRequired();
             entity.Property(x => x.BasvuruSahibiTipi).HasMaxLength(32).IsRequired();
@@ -886,9 +905,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.IptalNedeni).HasMaxLength(500);
             entity.Property(x => x.DonemToplamTutar).HasPrecision(18, 2);
             entity.Property(x => x.AvansToplamTutar).HasPrecision(18, 2);
-            entity.HasIndex(x => x.RezervasyonNo).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KurumId, x.RezervasyonNo }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.KampBasvuruId).IsUnique().HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KampDonemiId, x.TesisId, x.Durum });
+            entity.HasIndex(x => new { x.KurumId, x.KampDonemiId, x.TesisId, x.Durum });
 
             entity.HasOne(x => x.KampBasvuru)
                 .WithMany()
@@ -903,6 +922,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.KampRezervasyonlari)
+                .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

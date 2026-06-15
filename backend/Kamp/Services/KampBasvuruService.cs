@@ -161,6 +161,11 @@ public class KampBasvuruService : IKampBasvuruService
         var kampBasvuruSahibi = await ResolveBasvuruSahibiAsync(basvuruSahibi, request, currentUserId, cancellationToken);
         await EnsureProgramBasvuruLimitiAsync(kampDonemi, kampBasvuruSahibi, cancellationToken);
 
+        if (kampDonemi.KurumId != tesis.KurumId)
+        {
+            throw new BaseException("Secilen kamp donemi ve tesis kurum bilgisi uyumsuz.", 400);
+        }
+
         if (kampDonemi.AyniAileIcinTekBasvuruMu)
         {
             var tercihDonemleri = request.Tercihler
@@ -181,6 +186,7 @@ public class KampBasvuruService : IKampBasvuruService
 
         var entity = new KampBasvuru
         {
+            KurumId = kampDonemi.KurumId,
             KampDonemiId = request.KampDonemiId,
             TesisId = request.TesisId,
             KonaklamaBirimiTipi = request.KonaklamaBirimiTipi,
@@ -343,6 +349,11 @@ public class KampBasvuruService : IKampBasvuruService
 
         var tesis = await _dbContext.Tesisler.FirstOrDefaultAsync(x => x.Id == request.TesisId, cancellationToken)
             ?? throw new BaseException("Tesis bulunamadi.", 404);
+
+        if (kampDonemi.KurumId != tesis.KurumId)
+        {
+            throw new BaseException("Secilen kamp donemi ve tesis kurum bilgisi uyumsuz.", 400);
+        }
 
         var atama = await _dbContext.KampDonemiTesisleri.FirstOrDefaultAsync(
             x => x.KampDonemiId == request.KampDonemiId && x.TesisId == request.TesisId,

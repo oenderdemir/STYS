@@ -1,10 +1,13 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Kurumlar.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kamp.Entities;
 
-public class KampDonemi : BaseEntity<int>
+public class KampDonemi : BaseEntity<int>, ITenantEntity
 {
+    public int KurumId { get; set; }
+
     public int KampProgramiId { get; set; }
 
     [Required]
@@ -36,6 +39,8 @@ public class KampDonemi : BaseEntity<int>
     public DateTime? IptalSonGun { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    public Kurum? Kurum { get; set; }
 
     public KampProgrami? KampProgrami { get; set; }
 

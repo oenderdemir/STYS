@@ -6,6 +6,7 @@ using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
 using STYS.Kamp.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
@@ -15,17 +16,20 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
     private readonly IKampProgramiRepository _kampProgramiRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _stysDbContext;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public KampProgramiService(
         IKampProgramiRepository kampProgramiRepository,
         IUserAccessScopeService userAccessScopeService,
         StysAppDbContext stysDbContext,
+        ICurrentTenantAccessor currentTenantAccessor,
         IMapper mapper)
         : base(kampProgramiRepository, mapper)
     {
         _kampProgramiRepository = kampProgramiRepository;
         _userAccessScopeService = userAccessScopeService;
         _stysDbContext = stysDbContext;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public override async Task<KampProgramiDto> AddAsync(KampProgramiDto dto)
@@ -33,7 +37,13 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         await EnsureCanManageGlobalAsync();
         Normalize(dto);
         await EnsureUniqueAsync(dto, null);
-        return await base.AddAsync(dto);
+
+        var entity = Mapper.Map<KampProgrami>(dto);
+        entity.KurumId = await ResolveCreateKurumIdAsync();
+
+        await _kampProgramiRepository.AddAsync(entity);
+        await _kampProgramiRepository.SaveChangesAsync();
+        return Mapper.Map<KampProgramiDto>(entity);
     }
 
     public override async Task<KampProgramiDto> UpdateAsync(KampProgramiDto dto)
@@ -118,6 +128,34 @@ public class KampProgramiService : BaseRdbmsService<KampProgramiDto, KampProgram
         {
             throw new BaseException($"{dto.Yil} yilinda ayni ada sahip baska bir kamp programi zaten mevcut.", 400);
         }
+    }
+
+    private async Task<int> ResolveCreateKurumIdAsync()
+    {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (currentKurumId.HasValue)
+        {
+            var currentKurumExists = await _stysDbContext.Kurumlar.AnyAsync(x => x.Id == currentKurumId.Value);
+            if (currentKurumExists)
+            {
+                return currentKurumId.Value;
+            }
+
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
+        var defaultKurumId = await _stysDbContext.Kurumlar
+            .Where(x => x.Kod == "DEFAULT" && x.AktifMi)
+            .OrderBy(x => x.Id)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync();
+
+        if (!defaultKurumId.HasValue)
+        {
+            throw new BaseException("Varsayilan kurum bulunamadi.", 500);
+        }
+
+        return defaultKurumId.Value;
     }
 
     private static void Normalize(KampProgramiDto dto)

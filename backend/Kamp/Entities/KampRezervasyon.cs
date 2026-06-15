@@ -1,10 +1,13 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Kurumlar.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kamp.Entities;
 
-public class KampRezervasyon : BaseEntity<int>
+public class KampRezervasyon : BaseEntity<int>, ITenantEntity
 {
+    public int KurumId { get; set; }
+
     [Required]
     [MaxLength(32)]
     public string RezervasyonNo { get; set; } = string.Empty;
@@ -40,6 +43,8 @@ public class KampRezervasyon : BaseEntity<int>
     public string? IptalNedeni { get; set; }
 
     public DateTime? IptalTarihi { get; set; }
+
+    public Kurum? Kurum { get; set; }
 
     public KampDonemi? KampDonemi { get; set; }
 

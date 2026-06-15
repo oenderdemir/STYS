@@ -33,10 +33,16 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
     public override async Task<KampDonemiDto> AddAsync(KampDonemiDto dto)
     {
         await EnsureCanManageGlobalAsync();
-        await EnsureValidProgramAsync(dto.KampProgramiId);
+        var program = await EnsureValidProgramAsync(dto.KampProgramiId);
         Normalize(dto);
         await EnsureUniqueAsync(dto, null);
-        return await base.AddAsync(dto);
+
+        var entity = Mapper.Map<KampDonemi>(dto);
+        entity.KurumId = program.KurumId;
+
+        await _kampDonemiRepository.AddAsync(entity);
+        await _kampDonemiRepository.SaveChangesAsync();
+        return Mapper.Map<KampDonemiDto>(entity);
     }
 
     public override async Task<KampDonemiDto> UpdateAsync(KampDonemiDto dto)
@@ -315,18 +321,20 @@ public class KampDonemiService : BaseRdbmsService<KampDonemiDto, KampDonemi, int
         }
     }
 
-    private async Task EnsureValidProgramAsync(int kampProgramiId)
+    private async Task<KampProgrami> EnsureValidProgramAsync(int kampProgramiId)
     {
         if (kampProgramiId <= 0)
         {
             throw new BaseException("Kamp programi secimi zorunludur.", 400);
         }
 
-        var exists = await _stysDbContext.KampProgramlari.AnyAsync(x => x.Id == kampProgramiId && x.AktifMi);
-        if (!exists)
+        var program = await _stysDbContext.KampProgramlari.FirstOrDefaultAsync(x => x.Id == kampProgramiId && x.AktifMi);
+        if (program is null)
         {
             throw new BaseException("Secilen kamp programi bulunamadi veya aktif degil.", 404);
         }
+
+        return program;
     }
 
     private async Task EnsureUniqueAsync(KampDonemiDto dto, int? excludedId)

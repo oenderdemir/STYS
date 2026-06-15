@@ -1,4 +1,3 @@
-using STYS.Kamp.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kamp.Entities;

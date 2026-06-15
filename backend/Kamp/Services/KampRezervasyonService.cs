@@ -110,6 +110,16 @@ public class KampRezervasyonService : IKampRezervasyonService
             .FirstOrDefaultAsync(x => x.Id == basvuru.KampDonemiId, cancellationToken)
             ?? throw new BaseException("Kamp donemi bulunamadi.", 404);
 
+        var tesis = await _dbContext.Tesisler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == basvuru.TesisId, cancellationToken)
+            ?? throw new BaseException("Tesis bulunamadi.", 404);
+
+        if (basvuru.KurumId != donem.KurumId || basvuru.KurumId != tesis.KurumId)
+        {
+            throw new BaseException("Kamp basvurusu, kamp donemi ve tesis kurum bilgileri uyumsuz.", 400);
+        }
+
         var rezervasyonNo = await GenerateRezervasyonNoAsync(donem.KampProgrami!.Yil, cancellationToken);
         var girisTarihi = donem.KonaklamaBaslangicTarihi.Date;
         var cikisTarihi = donem.KonaklamaBitisTarihi.Date.AddDays(1);
@@ -123,6 +133,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var rezervasyon = new KampRezervasyon
         {
+            KurumId = basvuru.KurumId,
             RezervasyonNo = rezervasyonNo,
             KampBasvuruId = basvuru.Id,
             KampDonemiId = basvuru.KampDonemiId,
@@ -138,6 +149,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var normalRezervasyon = new Rezervasyon
         {
+            KurumId = basvuru.KurumId,
             ReferansNo = rezervasyonNo,
             TesisId = basvuru.TesisId,
             KisiSayisi = basvuru.KatilimciSayisi,

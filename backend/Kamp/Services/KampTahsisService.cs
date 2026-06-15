@@ -83,6 +83,8 @@ public class KampTahsisService : IKampTahsisService
 
         var atamalar = await _dbContext.KampDonemiTesisleri
             .AsNoTracking()
+            .Include(x => x.KampDonemi)
+            .Where(x => x.KampDonemi != null && x.KampDonemi.KampProgrami != null && x.KampDonemi.KampProgrami.AktifMi)
             .ToListAsync(cancellationToken);
 
         var tahsisSayilari = await _dbContext.KampBasvurulari

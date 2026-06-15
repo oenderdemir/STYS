@@ -1,13 +1,10 @@
 using System.ComponentModel.DataAnnotations;
-using STYS.Kurumlar.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kamp.Entities;
 
-public class KampBasvuru : BaseEntity<int>, ITenantEntity
+public class KampBasvuru : BaseEntity<int>
 {
-    public int KurumId { get; set; }
-
     public int KampDonemiId { get; set; }
 
     public int TesisId { get; set; }
@@ -59,8 +56,6 @@ public class KampBasvuru : BaseEntity<int>, ITenantEntity
     public bool TelevizyonTalepEdildiMi { get; set; }
 
     public bool KlimaTalepEdildiMi { get; set; }
-
-    public Kurum? Kurum { get; set; }
 
     public KampDonemi? KampDonemi { get; set; }
 

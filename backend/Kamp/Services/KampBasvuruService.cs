@@ -17,19 +17,22 @@ public class KampBasvuruService : IKampBasvuruService
     private readonly IKampUcretHesaplamaService _ucretHesaplamaService;
     private readonly IKampParametreService _parametreService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public KampBasvuruService(
         StysAppDbContext dbContext,
         IKampPuanlamaService puanlamaService,
         IKampUcretHesaplamaService ucretHesaplamaService,
         IKampParametreService parametreService,
-        ICurrentUserAccessor currentUserAccessor)
+        ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _dbContext = dbContext;
         _puanlamaService = puanlamaService;
         _ucretHesaplamaService = ucretHesaplamaService;
         _parametreService = parametreService;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<KampBasvuruBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -161,7 +164,8 @@ public class KampBasvuruService : IKampBasvuruService
         var kampBasvuruSahibi = await ResolveBasvuruSahibiAsync(basvuruSahibi, request, currentUserId, cancellationToken);
         await EnsureProgramBasvuruLimitiAsync(kampDonemi, kampBasvuruSahibi, cancellationToken);
 
-        if (kampDonemi.KurumId != tesis.KurumId)
+        var donemKurumId = ResolveKampDonemiKurumId(kampDonemi);
+        if (donemKurumId != tesis.KurumId)
         {
             throw new BaseException("Secilen kamp donemi ve tesis kurum bilgisi uyumsuz.", 400);
         }
@@ -186,7 +190,6 @@ public class KampBasvuruService : IKampBasvuruService
 
         var entity = new KampBasvuru
         {
-            KurumId = kampDonemi.KurumId,
             KampDonemiId = request.KampDonemiId,
             TesisId = request.TesisId,
             KonaklamaBirimiTipi = request.KonaklamaBirimiTipi,
@@ -247,7 +250,7 @@ public class KampBasvuruService : IKampBasvuruService
             throw new BaseException("Kamp basvurularini gormek icin kullanici bilgisi bulunamadi.", 401);
         }
 
-        var items = await _dbContext.KampBasvurulari
+        var items = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Where(x => x.KampBasvuruSahibi != null && x.KampBasvuruSahibi.UserId == currentUserId)
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
@@ -263,7 +266,7 @@ public class KampBasvuruService : IKampBasvuruService
 
     public async Task<KampBasvuruDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var item = await _dbContext.KampBasvurulari
+        var item = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
             .Include(x => x.Katilimcilar)
@@ -284,7 +287,7 @@ public class KampBasvuruService : IKampBasvuruService
             throw new BaseException("Basvuru numarasi zorunludur.", 400);
         }
 
-        var item = await _dbContext.KampBasvurulari
+        var item = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
             .Include(x => x.Katilimcilar)
@@ -299,7 +302,7 @@ public class KampBasvuruService : IKampBasvuruService
 
     public async Task<KampKatilimciIptalSonucDto> KatilimciIptalEtAsync(int kampBasvuruId, int katilimciId, CancellationToken cancellationToken = default)
     {
-        var basvuru = await _dbContext.KampBasvurulari
+        var basvuru = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Include(x => x.Katilimcilar)
             .FirstOrDefaultAsync(x => x.Id == kampBasvuruId, cancellationToken)
             ?? throw new BaseException("Kamp basvurusu bulunamadi.", 404);
@@ -350,7 +353,8 @@ public class KampBasvuruService : IKampBasvuruService
         var tesis = await _dbContext.Tesisler.FirstOrDefaultAsync(x => x.Id == request.TesisId, cancellationToken)
             ?? throw new BaseException("Tesis bulunamadi.", 404);
 
-        if (kampDonemi.KurumId != tesis.KurumId)
+        var donemKurumId = ResolveKampDonemiKurumId(kampDonemi);
+        if (donemKurumId != tesis.KurumId)
         {
             throw new BaseException("Secilen kamp donemi ve tesis kurum bilgisi uyumsuz.", 400);
         }
@@ -637,7 +641,7 @@ public class KampBasvuruService : IKampBasvuruService
 
     private async Task<bool> ExistsAktifBasvuruAsync(int kampDonemiId, KampBasvuruSahibi kampBasvuruSahibi, CancellationToken cancellationToken)
     {
-        var query = _dbContext.KampBasvurulari.Where(x =>
+        var query = ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari).Where(x =>
             x.KampDonemiId == kampDonemiId &&
             x.Durum != KampBasvuruDurumlari.IptalEdildi &&
             x.Durum != KampBasvuruDurumlari.Reddedildi);
@@ -666,7 +670,7 @@ public class KampBasvuruService : IKampBasvuruService
 
     private async Task<int> GetProgramBazliAktifBasvuruSayisiAsync(int kampProgramiId, KampBasvuruSahibi kampBasvuruSahibi, CancellationToken cancellationToken)
     {
-        var query = _dbContext.KampBasvurulari.Where(x =>
+        var query = ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari).Where(x =>
             x.KampDonemi != null
             && x.KampDonemi.KampProgramiId == kampProgramiId
             && x.Durum != KampBasvuruDurumlari.IptalEdildi
@@ -791,6 +795,25 @@ public class KampBasvuruService : IKampBasvuruService
             .Distinct()
             .OrderByDescending(x => x)
             .ToList();
+
+    private IQueryable<KampBasvuru> ApplyKampBasvuruTenantScope(IQueryable<KampBasvuru> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
+    }
+
+    private static int ResolveKampDonemiKurumId(KampDonemi kampDonemi)
+        => kampDonemi.KampProgrami?.KurumId ?? kampDonemi.KurumId;
 
     private static string NormalizeBasvuruNo(string? basvuruNo)
         => string.IsNullOrWhiteSpace(basvuruNo)

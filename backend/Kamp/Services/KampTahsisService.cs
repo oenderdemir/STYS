@@ -2,6 +2,8 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
+using STYS.Kamp.Entities;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
@@ -10,11 +12,16 @@ public class KampTahsisService : IKampTahsisService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IKampParametreService _parametreService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
-    public KampTahsisService(StysAppDbContext dbContext, IKampParametreService parametreService)
+    public KampTahsisService(
+        StysAppDbContext dbContext,
+        IKampParametreService parametreService,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _dbContext = dbContext;
         _parametreService = parametreService;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<KampTahsisBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -50,7 +57,7 @@ public class KampTahsisService : IKampTahsisService
 
     public async Task<List<KampTahsisListeDto>> GetListeAsync(KampTahsisFilterDto filter, CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.KampBasvurulari
+        var query = ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .AsNoTracking()
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
@@ -81,13 +88,13 @@ public class KampTahsisService : IKampTahsisService
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        var atamalar = await _dbContext.KampDonemiTesisleri
+        var atamalar = await ApplyKampDonemiTesisTenantScope(_dbContext.KampDonemiTesisleri)
             .AsNoTracking()
             .Include(x => x.KampDonemi)
             .Where(x => x.KampDonemi != null && x.KampDonemi.KampProgrami != null && x.KampDonemi.KampProgrami.AktifMi)
             .ToListAsync(cancellationToken);
 
-        var tahsisSayilari = await _dbContext.KampBasvurulari
+        var tahsisSayilari = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .AsNoTracking()
             .Where(x => x.Durum == KampBasvuruDurumlari.TahsisEdildi)
             .GroupBy(x => new { x.KampDonemiId, x.TesisId })
@@ -147,7 +154,8 @@ public class KampTahsisService : IKampTahsisService
             throw new BaseException("Tahsis karari gecersiz.", 400);
         }
 
-        var entity = await _dbContext.KampBasvurulari.FirstOrDefaultAsync(x => x.Id == kampBasvuruId, cancellationToken)
+        var entity = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
+            .FirstOrDefaultAsync(x => x.Id == kampBasvuruId, cancellationToken)
             ?? throw new BaseException("Kamp basvurusu bulunamadi.", 404);
 
         if (entity.Durum == KampBasvuruDurumlari.IptalEdildi || entity.Durum == KampBasvuruDurumlari.Reddedildi)
@@ -157,12 +165,12 @@ public class KampTahsisService : IKampTahsisService
 
         if (request.Durum == KampBasvuruDurumlari.TahsisEdildi)
         {
-            var atama = await _dbContext.KampDonemiTesisleri
+            var atama = await ApplyKampDonemiTesisTenantScope(_dbContext.KampDonemiTesisleri)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.KampDonemiId == entity.KampDonemiId && x.TesisId == entity.TesisId, cancellationToken)
                 ?? throw new BaseException("Basvuru icin kamp donemi tesis atamasi bulunamadi.", 400);
 
-            var mevcutTahsisSayisi = await _dbContext.KampBasvurulari.CountAsync(
+            var mevcutTahsisSayisi = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari).CountAsync(
                 x => x.KampDonemiId == entity.KampDonemiId
                     && x.TesisId == entity.TesisId
                     && x.Durum == KampBasvuruDurumlari.TahsisEdildi
@@ -183,7 +191,7 @@ public class KampTahsisService : IKampTahsisService
         KampTahsisOtomatikKararRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        var atama = await _dbContext.KampDonemiTesisleri
+        var atama = await ApplyKampDonemiTesisTenantScope(_dbContext.KampDonemiTesisleri)
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 x => x.KampDonemiId == request.KampDonemiId && x.TesisId == request.TesisId,
@@ -191,7 +199,7 @@ public class KampTahsisService : IKampTahsisService
             ?? throw new BaseException("Secilen kamp donemi ve tesis icin atama bulunamadi.", 404);
 
         var toplamKontenjan = Math.Max(0, atama.ToplamKontenjan);
-        var adaylar = await _dbContext.KampBasvurulari
+        var adaylar = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Where(x => x.KampDonemiId == request.KampDonemiId
                 && x.TesisId == request.TesisId
                 && x.Durum != KampBasvuruDurumlari.IptalEdildi
@@ -271,12 +279,12 @@ public class KampTahsisService : IKampTahsisService
 
         // TahsisEdildi durumundaki ama henuz rezervasyonu olusturulmamis basvurulari bul
         // Rezervasyonu olan = kampa katilmis sayilir
-        var tahsisliBasvurular = await _dbContext.KampBasvurulari
+        var tahsisliBasvurular = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Where(x => x.KampDonemiId == kampDonemiId
                 && x.Durum == KampBasvuruDurumlari.TahsisEdildi)
             .ToListAsync(cancellationToken);
 
-        var rezervasyonluBasvuruIdler = await _dbContext.KampRezervasyonlari
+        var rezervasyonluBasvuruIdler = await ApplyKampRezervasyonTenantScope(_dbContext.KampRezervasyonlari)
             .AsNoTracking()
             .Where(x => x.KampDonemiId == kampDonemiId
                 && x.Durum == KampRezervasyonDurumlari.Aktif)
@@ -322,5 +330,53 @@ public class KampTahsisService : IKampTahsisService
         {
             return [];
         }
+    }
+
+    private IQueryable<KampBasvuru> ApplyKampBasvuruTenantScope(IQueryable<KampBasvuru> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
+    }
+
+    private IQueryable<KampRezervasyon> ApplyKampRezervasyonTenantScope(IQueryable<KampRezervasyon> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
+    }
+
+    private IQueryable<KampDonemiTesis> ApplyKampDonemiTesisTenantScope(IQueryable<KampDonemiTesis> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
     }
 }

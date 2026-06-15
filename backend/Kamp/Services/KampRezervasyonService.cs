@@ -5,6 +5,7 @@ using STYS.Kamp.Entities;
 using STYS.Kamp.Repositories;
 using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Entities;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
@@ -13,11 +14,16 @@ public class KampRezervasyonService : IKampRezervasyonService
 {
     private readonly IKampRezervasyonRepository _rezervasyonRepository;
     private readonly StysAppDbContext _dbContext;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
-    public KampRezervasyonService(IKampRezervasyonRepository rezervasyonRepository, StysAppDbContext dbContext)
+    public KampRezervasyonService(
+        IKampRezervasyonRepository rezervasyonRepository,
+        StysAppDbContext dbContext,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _rezervasyonRepository = rezervasyonRepository;
         _dbContext = dbContext;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<KampRezervasyonBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -49,7 +55,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
     public async Task<List<KampRezervasyonListeDto>> GetListeAsync(KampRezervasyonFilterDto filter, CancellationToken cancellationToken = default)
     {
-        var query = _dbContext.KampRezervasyonlari
+        var query = ApplyKampRezervasyonTenantScope(_dbContext.KampRezervasyonlari)
             .AsNoTracking()
             .Include(x => x.KampDonemi)
             .Include(x => x.Tesis)
@@ -93,7 +99,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
     public async Task<KampRezervasyonUretSonucDto> UretAsync(int kampBasvuruId, CancellationToken cancellationToken = default)
     {
-        var basvuru = await _dbContext.KampBasvurulari
+        var basvuru = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Include(x => x.KampBasvuruSahibi)
             .FirstOrDefaultAsync(x => x.Id == kampBasvuruId, cancellationToken)
             ?? throw new BaseException("Kamp basvurusu bulunamadi.", 404);
@@ -107,6 +113,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var donem = await _dbContext.KampDonemleri
             .AsNoTracking()
+            .Include(x => x.KampProgrami)
             .FirstOrDefaultAsync(x => x.Id == basvuru.KampDonemiId, cancellationToken)
             ?? throw new BaseException("Kamp donemi bulunamadi.", 404);
 
@@ -115,7 +122,8 @@ public class KampRezervasyonService : IKampRezervasyonService
             .FirstOrDefaultAsync(x => x.Id == basvuru.TesisId, cancellationToken)
             ?? throw new BaseException("Tesis bulunamadi.", 404);
 
-        if (basvuru.KurumId != donem.KurumId || basvuru.KurumId != tesis.KurumId)
+        var donemKurumId = donem.KampProgrami?.KurumId ?? donem.KurumId;
+        if (donemKurumId != tesis.KurumId)
         {
             throw new BaseException("Kamp basvurusu, kamp donemi ve tesis kurum bilgileri uyumsuz.", 400);
         }
@@ -133,7 +141,6 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var rezervasyon = new KampRezervasyon
         {
-            KurumId = basvuru.KurumId,
             RezervasyonNo = rezervasyonNo,
             KampBasvuruId = basvuru.Id,
             KampDonemiId = basvuru.KampDonemiId,
@@ -149,7 +156,7 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         var normalRezervasyon = new Rezervasyon
         {
-            KurumId = basvuru.KurumId,
+            KurumId = tesis.KurumId,
             ReferansNo = rezervasyonNo,
             TesisId = basvuru.TesisId,
             KisiSayisi = basvuru.KatilimciSayisi,
@@ -192,7 +199,8 @@ public class KampRezervasyonService : IKampRezervasyonService
 
     public async Task IptalEtAsync(int id, KampRezervasyonIptalRequestDto request, CancellationToken cancellationToken = default)
     {
-        var rezervasyon = await _rezervasyonRepository.GetByIdAsync(id)
+        var rezervasyon = await ApplyKampRezervasyonTenantScope(_dbContext.KampRezervasyonlari)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new BaseException("Rezervasyon bulunamadi.", 404);
 
         if (rezervasyon.Durum == KampRezervasyonDurumlari.IptalEdildi)
@@ -380,5 +388,37 @@ public class KampRezervasyonService : IKampRezervasyonService
         public int Kapasite { get; set; }
 
         public bool PaylasimliMi { get; set; }
+    }
+
+    private IQueryable<KampBasvuru> ApplyKampBasvuruTenantScope(IQueryable<KampBasvuru> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
+    }
+
+    private IQueryable<KampRezervasyon> ApplyKampRezervasyonTenantScope(IQueryable<KampRezervasyon> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
     }
 }

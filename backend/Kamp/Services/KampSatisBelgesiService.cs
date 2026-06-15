@@ -9,6 +9,7 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
@@ -29,6 +30,7 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
     private readonly ILogger<KampSatisBelgesiService> _logger;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     private const string KaynakTipiKampRezervasyon = "KampRezervasyon";
     private const decimal VarsayilanKdvOrani = 10m;
@@ -37,11 +39,13 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
         StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
         ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        ICurrentTenantAccessor currentTenantAccessor,
         ILogger<KampSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _taslakOlusturmaService = taslakOlusturmaService;
+        _currentTenantAccessor = currentTenantAccessor;
         _logger = logger;
     }
 
@@ -131,7 +135,7 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
 
         // DbContext doğrudan kullanılır — KampBasvuru ve KampDonemi navigation'ları
         // Include ile birlikte tek seferde çekilmelidir.
-        var rezervasyon = await _dbContext.KampRezervasyonlari
+        var rezervasyon = await ApplyKampRezervasyonTenantScope(_dbContext.KampRezervasyonlari)
             .Include(x => x.KampBasvuru)
             .Include(x => x.KampDonemi)
             .FirstOrDefaultAsync(x => x.Id == rezervasyonId, cancellationToken);
@@ -149,6 +153,22 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
         }
 
         return rezervasyon;
+    }
+
+    private IQueryable<KampRezervasyon> ApplyKampRezervasyonTenantScope(IQueryable<KampRezervasyon> query)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var kurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue)
+        {
+            return query.Where(x => false);
+        }
+
+        return query.Where(x => x.Tesis != null && x.Tesis.KurumId == kurumId.Value);
     }
 
     // ──────────────────────────────────────────────

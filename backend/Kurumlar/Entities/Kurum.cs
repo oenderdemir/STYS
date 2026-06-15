@@ -31,10 +31,6 @@ public class Kurum : BaseEntity<int>
 
     public ICollection<KampDonemi> KampDonemleri { get; set; } = [];
 
-    public ICollection<KampBasvuru> KampBasvurulari { get; set; } = [];
-
-    public ICollection<KampRezervasyon> KampRezervasyonlari { get; set; } = [];
-
     public ICollection<Tesis> Tesisler { get; set; } = [];
 
     public ICollection<Rezervasyon> Rezervasyonlar { get; set; } = [];

@@ -278,6 +278,7 @@ public class GarsonServisService : IGarsonServisService
             .FirstOrDefaultAsync(x => x.Id == oturumId, cancellationToken)
             ?? throw new BaseException("Masa oturumu bulunamadi.", 404);
 
+        await _restoranErisimService.EnsureRestoranErisimiAsync(oturum.RestoranId, cancellationToken);
         EnsureOpenOturum(oturum);
 
         var targetSiparisDurumu = ResolveSiparisDurumu(request.Durum);

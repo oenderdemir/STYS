@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using STYS.Kurumlar.Entities;
 using STYS.Restoranlar.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranOdemeleri.Entities;
@@ -7,9 +6,8 @@ using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.RestoranSiparisleri.Entities;
 
-public class RestoranSiparis : BaseEntity<int>, ITenantEntity
+public class RestoranSiparis : BaseEntity<int>
 {
-    public int KurumId { get; set; }
     public int RestoranId { get; set; }
 
     public int? RestoranMasaId { get; set; }
@@ -41,7 +39,6 @@ public class RestoranSiparis : BaseEntity<int>, ITenantEntity
 
     public DateTime SiparisTarihi { get; set; } = DateTime.UtcNow;
 
-    public Kurum? Kurum { get; set; }
     public Restoran? Restoran { get; set; }
 
     public RestoranMasa? RestoranMasa { get; set; }

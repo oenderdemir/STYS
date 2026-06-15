@@ -158,7 +158,6 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
 
         var entity = new RestoranSiparis
         {
-            KurumId = restoran.KurumId,
             RestoranId = request.RestoranId,
             RestoranMasaId = request.RestoranMasaId,
             SiparisNo = await GenerateSiparisNoAsync(CancellationToken.None),

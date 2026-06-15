@@ -12,19 +12,22 @@ public class RestoranErisimService : IRestoranErisimService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     private bool _initialized;
-    private bool _unrestricted = true;
+    private bool _unrestricted;
     private HashSet<int> _yetkiliRestoranIdleri = [];
 
     public RestoranErisimService(
         StysAppDbContext dbContext,
         ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
         IHttpContextAccessor httpContextAccessor)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -68,9 +71,17 @@ public class RestoranErisimService : IRestoranErisimService
 
         _initialized = true;
         var userId = _currentUserAccessor.GetCurrentUserId();
-        if (!userId.HasValue)
+        if (_currentTenantAccessor.IsSuperAdmin())
         {
             _unrestricted = true;
+            return;
+        }
+
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!userId.HasValue || !currentKurumId.HasValue)
+        {
+            _unrestricted = false;
+            _yetkiliRestoranIdleri = [];
             return;
         }
 
@@ -100,9 +111,17 @@ public class RestoranErisimService : IRestoranErisimService
             .Distinct()
             .ToList();
 
+        IQueryable<Restoran> tenantRestoranQuery = _dbContext.Restoranlar
+            .Where(x => x.Tesis != null && x.Tesis.KurumId == currentKurumId.Value);
+
         if (isAdmin)
         {
-            _unrestricted = true;
+            _unrestricted = false;
+            _yetkiliRestoranIdleri = (await tenantRestoranQuery
+                .Select(x => x.Id)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
             return;
         }
 
@@ -130,12 +149,23 @@ public class RestoranErisimService : IRestoranErisimService
         if (scopeRestoranIds.Count == 0)
         {
             // Tesis yoneticisi/restoran yoneticisi/garson rolleri yalnizca kendi kapsamlarini gorebilir.
-            _unrestricted = !shouldBeScoped;
-            _yetkiliRestoranIdleri = [];
+            if (shouldBeScoped)
+            {
+                _unrestricted = false;
+                _yetkiliRestoranIdleri = [];
+                return;
+            }
+
+            _unrestricted = false;
+            _yetkiliRestoranIdleri = (await tenantRestoranQuery
+                .Select(x => x.Id)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
             return;
         }
 
-        var visibleRestoranIds = await _dbContext.Restoranlar
+        var visibleRestoranIds = await tenantRestoranQuery
             .Where(x => scopeRestoranIds.Contains(x.Id))
             .Select(x => x.Id)
             .Distinct()

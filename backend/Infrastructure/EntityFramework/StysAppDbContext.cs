@@ -1374,19 +1374,13 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<Restoran>(entity =>
         {
             entity.ToTable("Restoranlar", restoranSchema);
-            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(512);
-            entity.HasIndex(x => new { x.KurumId, x.TesisId, x.Ad })
+            entity.HasIndex(x => new { x.TesisId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
             entity.HasIndex(x => x.IsletmeAlaniId)
                 .HasFilter("[IsDeleted] = 0 AND [IsletmeAlaniId] IS NOT NULL");
-
-            entity.HasOne(x => x.Kurum)
-                .WithMany()
-                .HasForeignKey(x => x.KurumId)
-                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()
@@ -1479,7 +1473,6 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<RestoranSiparis>(entity =>
         {
             entity.ToTable("RestoranSiparisleri", restoranSchema);
-            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.SiparisNo).HasMaxLength(64).IsRequired();
             entity.Property(x => x.SiparisDurumu).HasMaxLength(32).IsRequired();
             entity.Property(x => x.ToplamTutar).HasPrecision(18, 2);
@@ -1488,18 +1481,13 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
             entity.Property(x => x.OdemeDurumu).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Notlar).HasMaxLength(1024);
-            entity.HasIndex(x => new { x.KurumId, x.SiparisNo })
+            entity.HasIndex(x => x.SiparisNo)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KurumId, x.RestoranId, x.SiparisTarihi })
+            entity.HasIndex(x => new { x.RestoranId, x.SiparisTarihi })
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KurumId, x.RestoranMasaId, x.SiparisDurumu })
+            entity.HasIndex(x => new { x.RestoranMasaId, x.SiparisDurumu })
                 .HasFilter("[IsDeleted] = 0 AND [RestoranMasaId] IS NOT NULL");
-
-            entity.HasOne(x => x.Kurum)
-                .WithMany()
-                .HasForeignKey(x => x.KurumId)
-                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.Restoran)
                 .WithMany(x => x.Siparisler)

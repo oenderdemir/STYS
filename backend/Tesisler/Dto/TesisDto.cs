@@ -9,6 +9,8 @@ public class TesisDto : BaseRdbmsDto<int>
     [Required]
     public string Ad { get; set; } = string.Empty;
 
+    public int KurumId { get; set; }
+
     [Required]
     public int IlId { get; set; }
 

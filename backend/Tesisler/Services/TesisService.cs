@@ -36,6 +36,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public TesisService(
         ITesisRepository tesisRepository,
@@ -49,6 +50,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
         ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
         IMapper mapper)
         : base(tesisRepository, mapper)
     {
@@ -63,6 +65,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<UserDto> CreateResepsiyonistUserAsync(int tesisId, UserDto dto)
@@ -282,6 +285,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         Normalize(dto);
         await EnsureIlRulesAsync(dto.IlId);
         await EnsureUniqueActiveNameAsync(dto, null);
+        dto.KurumId = await ResolveCreateKurumIdAsync();
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: false);
         var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: false);
         var muhasebeciIds = await NormalizeAndValidateMuhasebeciIdsAsync(dto.MuhasebeciUserIds, preserveWhenNull: false);
@@ -510,6 +514,33 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         {
             throw new BaseException("Bu tesis kaydi icin yetkiniz bulunmuyor.", 403);
         }
+    }
+
+    private async Task<int> ResolveCreateKurumIdAsync()
+    {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (currentKurumId.HasValue)
+        {
+            var currentKurumExists = await _stysDbContext.Kurumlar.AnyAsync(x => x.Id == currentKurumId.Value);
+            if (currentKurumExists)
+            {
+                return currentKurumId.Value;
+            }
+        }
+
+        var defaultKurumId = await _stysDbContext.Kurumlar
+            .Where(x => x.Kod == "DEFAULT" && x.AktifMi)
+            .OrderBy(x => x.Id)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync();
+
+        if (!defaultKurumId.HasValue)
+        {
+            throw new BaseException("Varsayilan kurum bulunamadi.", 500);
+        }
+
+        // TODO Tenant Faz 5: Tum ITenantEntity create islemleri DbContext ApplyAuditInfo üzerinden set edilecek.
+        return defaultKurumId.Value;
     }
 
     private static Func<IQueryable<Tesis>, IQueryable<Tesis>> BuildScopedIncludeQuery(

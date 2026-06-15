@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Kurumlar.Entities;
@@ -23,4 +24,6 @@ public class Kurum : BaseEntity<int>
     public string? Eposta { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    public ICollection<Tesis> Tesisler { get; set; } = [];
 }

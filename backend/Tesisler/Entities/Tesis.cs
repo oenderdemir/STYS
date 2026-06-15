@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using STYS.Binalar.Entities;
 using STYS.Iller.Entities;
 using STYS.Kamp.Entities;
+using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaTipleri.Entities;
@@ -9,11 +10,13 @@ using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Tesisler.Entities;
 
-public class Tesis : BaseEntity<int>
+public class Tesis : BaseEntity<int>, ITenantEntity
 {
     [Required]
     [MaxLength(200)]
     public string Ad { get; set; } = string.Empty;
+
+    public int KurumId { get; set; }
 
     public int IlId { get; set; }
 
@@ -37,6 +40,8 @@ public class Tesis : BaseEntity<int>
     public string EkHizmetPaketCakismaPolitikasi { get; set; } = EkHizmetPaketCakismaPolitikalari.OnayIste;
 
     public bool AktifMi { get; set; } = true;
+
+    public Kurum? Kurum { get; set; }
 
     public Il? Il { get; set; }
 

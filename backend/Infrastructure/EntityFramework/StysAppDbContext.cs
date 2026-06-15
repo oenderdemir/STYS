@@ -236,6 +236,7 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<Tesis>(entity =>
         {
             entity.ToTable("Tesisler", "dbo");
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Telefon).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Adres).HasMaxLength(512).IsRequired();
@@ -244,13 +245,20 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.CikisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(10, 0, 0));
             entity.Property(x => x.EkHizmetPaketCakismaPolitikasi).HasMaxLength(16).IsRequired().HasDefaultValue(EkHizmetPaketCakismaPolitikalari.OnayIste);
 
-            entity.HasIndex(x => new { x.IlId, x.Ad })
+            entity.HasIndex(x => new { x.KurumId, x.IlId, x.Ad })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+
+            entity.HasIndex(x => x.KurumId);
 
             entity.HasOne(x => x.Il)
                 .WithMany(x => x.Tesisler)
                 .HasForeignKey(x => x.IlId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.Tesisler)
+                .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -135,8 +135,14 @@ public class RestoranErisimService : IRestoranErisimService
             return;
         }
 
+        var visibleRestoranIds = await _dbContext.Restoranlar
+            .Where(x => scopeRestoranIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         _unrestricted = false;
-        _yetkiliRestoranIdleri = scopeRestoranIds.ToHashSet();
+        _yetkiliRestoranIdleri = visibleRestoranIds.ToHashSet();
     }
 
     private HashSet<string> GetCurrentUserPermissionSet()

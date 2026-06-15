@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Kurumlar.Entities;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.RestoranMasalari.Entities;
 using STYS.RestoranMenuKategorileri.Entities;
@@ -8,8 +9,9 @@ using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Restoranlar.Entities;
 
-public class Restoran : BaseEntity<int>
+public class Restoran : BaseEntity<int>, ITenantEntity
 {
+    public int KurumId { get; set; }
     public int TesisId { get; set; }
     public int? IsletmeAlaniId { get; set; }
 
@@ -22,6 +24,7 @@ public class Restoran : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
+    public Kurum? Kurum { get; set; }
     public Tesis? Tesis { get; set; }
     public IsletmeAlani? IsletmeAlani { get; set; }
     public ICollection<RestoranYonetici> Yoneticiler { get; set; } = [];

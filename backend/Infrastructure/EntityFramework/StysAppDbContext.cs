@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
@@ -52,18 +53,30 @@ using STYS.Tesisler;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 using TOD.Platform.Security.Auth.Services;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Infrastructure.EntityFramework;
 
 public class StysAppDbContext : DbContext
 {
     private readonly ICurrentUserAccessor? _currentUserAccessor;
+    private readonly ICurrentTenantAccessor? _currentTenantAccessor;
 
-    public StysAppDbContext(DbContextOptions<StysAppDbContext> options, ICurrentUserAccessor? currentUserAccessor = null)
+    public StysAppDbContext(
+        DbContextOptions<StysAppDbContext> options,
+        ICurrentUserAccessor? currentUserAccessor = null,
+        ICurrentTenantAccessor? currentTenantAccessor = null)
         : base(options)
     {
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
     }
+
+    public int? CurrentKurumId => _currentTenantAccessor?.GetCurrentKurumId();
+
+    public int CurrentKurumIdForFilter => CurrentKurumId ?? -1;
+
+    public bool IsSuperAdmin => _currentTenantAccessor?.IsSuperAdmin() == true;
 
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Il> Iller => Set<Il>();
@@ -2552,12 +2565,7 @@ public class StysAppDbContext : DbContext
         {
             if (IsBaseEntityType(entityType.ClrType))
             {
-                var parameter = Expression.Parameter(entityType.ClrType, "e");
-                var prop = Expression.Property(parameter, nameof(BaseEntity<int>.IsDeleted));
-                var body = Expression.Equal(prop, Expression.Constant(false));
-                var lambda = Expression.Lambda(body, parameter);
-
-                modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+                modelBuilder.Entity(entityType.ClrType).HasQueryFilter(BuildQueryFilter(entityType.ClrType));
             }
         }
     }
@@ -2573,6 +2581,7 @@ public class StysAppDbContext : DbContext
         foreach (var entry in entries)
         {
             var entity = entry.Entity;
+            var originalState = entry.State;
             switch (entry.State)
             {
                 case EntityState.Added:
@@ -2592,6 +2601,78 @@ public class StysAppDbContext : DbContext
                     SetProperty(entity, nameof(BaseEntity<int>.DeletedAt), now);
                     SetProperty(entity, nameof(BaseEntity<int>.DeletedBy), user);
                     break;
+            }
+
+            ApplyTenantRules(entry, originalState);
+        }
+    }
+
+    private LambdaExpression BuildQueryFilter(Type entityType)
+    {
+        var parameter = Expression.Parameter(entityType, "e");
+        var isDeletedProperty = Expression.Property(parameter, nameof(BaseEntity<int>.IsDeleted));
+        var notDeleted = Expression.Equal(isDeletedProperty, Expression.Constant(false));
+
+        if (_currentTenantAccessor is null || !typeof(ITenantEntity).IsAssignableFrom(entityType))
+        {
+            return Expression.Lambda(notDeleted, parameter);
+        }
+
+        var kurumIdProperty = Expression.Property(parameter, nameof(ITenantEntity.KurumId));
+        var currentKurumIdProperty = Expression.Property(Expression.Constant(this), nameof(CurrentKurumIdForFilter));
+        var isSuperAdminProperty = Expression.Property(Expression.Constant(this), nameof(IsSuperAdmin));
+
+        var kurumMatches = Expression.Equal(kurumIdProperty, currentKurumIdProperty);
+        var tenantAllowed = Expression.OrElse(isSuperAdminProperty, kurumMatches);
+        var body = Expression.AndAlso(notDeleted, tenantAllowed);
+
+        return Expression.Lambda(body, parameter);
+    }
+
+    private void ApplyTenantRules(EntityEntry entry, EntityState originalState)
+    {
+        if (_currentTenantAccessor is null || entry.Entity is not ITenantEntity tenantEntity)
+        {
+            return;
+        }
+
+        if (originalState == EntityState.Added)
+        {
+            var currentKurumId = CurrentKurumId;
+
+            if (currentKurumId.HasValue)
+            {
+                if (tenantEntity.KurumId <= 0)
+                {
+                    tenantEntity.KurumId = currentKurumId.Value;
+                    return;
+                }
+
+                if (tenantEntity.KurumId != currentKurumId.Value)
+                {
+                    throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+                }
+
+                return;
+            }
+
+            if (IsSuperAdmin && tenantEntity.KurumId > 0)
+            {
+                return;
+            }
+
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
+        if (originalState == EntityState.Modified)
+        {
+            var kurumIdEntry = entry.Property(nameof(ITenantEntity.KurumId));
+            var originalValue = Convert.ToInt32(kurumIdEntry.OriginalValue ?? 0);
+            var currentValue = Convert.ToInt32(kurumIdEntry.CurrentValue ?? 0);
+
+            if (originalValue != currentValue)
+            {
+                throw new BaseException("KurumId degistirilemez.", 400);
             }
         }
     }

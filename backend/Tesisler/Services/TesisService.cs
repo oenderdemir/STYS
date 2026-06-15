@@ -284,8 +284,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     {
         Normalize(dto);
         await EnsureIlRulesAsync(dto.IlId);
-        await EnsureUniqueActiveNameAsync(dto, null);
         dto.KurumId = await ResolveCreateKurumIdAsync();
+        await EnsureUniqueActiveNameAsync(dto, null);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: false);
         var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: false);
         var muhasebeciIds = await NormalizeAndValidateMuhasebeciIdsAsync(dto.MuhasebeciUserIds, preserveWhenNull: false);
@@ -335,6 +335,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         await EnsureCanAccessTesisAsync(existingEntity.Id);
         Normalize(dto);
         await EnsureIlRulesAsync(dto.IlId);
+        dto.KurumId = existingEntity.KurumId;
         await EnsureUniqueActiveNameAsync(dto, dto.Id.Value);
         var managerIds = await NormalizeAndValidateManagerIdsAsync(dto.YoneticiUserIds, preserveWhenNull: true);
         var receptionistIds = await NormalizeAndValidateReceptionistIdsAsync(dto.ResepsiyonistUserIds, preserveWhenNull: true);
@@ -439,13 +440,14 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         var normalizedName = dto.Ad.Trim().ToUpperInvariant();
         var exists = await _tesisRepository.AnyAsync(x =>
             x.AktifMi &&
+            x.KurumId == dto.KurumId &&
             x.IlId == dto.IlId &&
             x.Ad.ToUpper() == normalizedName &&
             (!excludedId.HasValue || x.Id != excludedId.Value));
 
         if (exists)
         {
-            throw new BaseException("Ayni il altinda ayni isimde aktif tesis zaten mevcut.", 400);
+            throw new BaseException("Ayni kurum ve il altinda ayni isimde aktif tesis zaten mevcut.", 400);
         }
     }
 
@@ -526,6 +528,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             {
                 return currentKurumId.Value;
             }
+
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
         }
 
         var defaultKurumId = await _stysDbContext.Kurumlar

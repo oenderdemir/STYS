@@ -8,6 +8,7 @@ using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Kamp.Entities;
+using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
 using STYS.MisafirTipleri.Entities;
@@ -66,6 +67,7 @@ public class StysAppDbContext : DbContext
 
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Il> Iller => Set<Il>();
+    public DbSet<Kurum> Kurumlar => Set<Kurum>();
     public DbSet<Tesis> Tesisler => Set<Tesis>();
     public DbSet<TesisYonetici> TesisYoneticileri => Set<TesisYonetici>();
     public DbSet<TesisResepsiyonist> TesisResepsiyonistleri => Set<TesisResepsiyonist>();
@@ -200,6 +202,35 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.Ad)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1");
+        });
+
+        modelBuilder.Entity<Kurum>(entity =>
+        {
+            entity.ToTable("Kurumlar", "dbo");
+
+            entity.Property(x => x.Kod)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(x => x.Ad)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(x => x.VergiNo)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.Telefon)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.Eposta)
+                .HasMaxLength(256);
+
+            entity.HasIndex(x => x.Kod)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.Ad)
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<Tesis>(entity =>

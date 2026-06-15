@@ -11,6 +11,7 @@ public static class DependencyInjection
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserAccessor, HttpContextCurrentUserAccessor>();
+        services.AddScoped<ICurrentTenantAccessor, HttpContextCurrentTenantAccessor>();
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
 

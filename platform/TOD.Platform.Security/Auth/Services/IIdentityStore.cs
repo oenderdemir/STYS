@@ -12,6 +12,16 @@ public interface IIdentityStore<TKey> where TKey : struct
 
     Task<string?> GetDefaultRouteAsync(TKey userId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyCollection<int>> GetUserKurumIdsAsync(TKey userId, CancellationToken cancellationToken = default);
+
+    Task<int?> GetDefaultKurumIdAsync(TKey userId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyCollection<int>> GetKurumAdminKurumIdsAsync(TKey userId, CancellationToken cancellationToken = default);
+
+    Task<bool> UserHasKurumAccessAsync(TKey userId, int kurumId, CancellationToken cancellationToken = default);
+
+    Task<bool> UserIsKurumAdminAsync(TKey userId, int kurumId, CancellationToken cancellationToken = default);
+
     Task UpdatePasswordHashAsync(TKey userId, string newPasswordHash, CancellationToken cancellationToken = default);
 
     Task<IssuedRefreshToken> IssueRefreshTokenAsync(TKey userId, DateTime expiresAtUtc, CancellationToken cancellationToken = default);

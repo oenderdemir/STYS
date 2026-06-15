@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.RefreshTokens.Entities;
+using TOD.Platform.Identity.UserKurums.Entities;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.Security.Auth.Models;
 using SecurityIdentityUser = TOD.Platform.Security.Auth.Models.IdentityUser<System.Guid>;
@@ -96,6 +97,67 @@ public class EfIdentityStore : IIdentityStore<Guid>
         }
 
         return null;
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetUserKurumIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var kurumIds = await _dbContext.UserKurums
+            .Where(x => x.UserId == userId && x.AktifMi)
+            .OrderBy(x => x.KurumId)
+            .Select(x => x.KurumId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return kurumIds;
+    }
+
+    public async Task<int?> GetDefaultKurumIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var defaultKurum = await _dbContext.UserKurums
+            .Where(x => x.UserId == userId && x.AktifMi)
+            .Where(x => x.VarsayilanMi)
+            .OrderBy(x => x.KurumId)
+            .Select(x => (int?)x.KurumId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (defaultKurum.HasValue)
+        {
+            return defaultKurum.Value;
+        }
+
+        var firstActiveKurum = await _dbContext.UserKurums
+            .Where(x => x.UserId == userId && x.AktifMi)
+            .OrderBy(x => x.KurumId)
+            .Select(x => (int?)x.KurumId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return firstActiveKurum;
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetKurumAdminKurumIdsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var kurumIds = await _dbContext.UserKurums
+            .Where(x => x.UserId == userId && x.AktifMi && x.IsKurumAdmin)
+            .OrderBy(x => x.KurumId)
+            .Select(x => x.KurumId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return kurumIds;
+    }
+
+    public Task<bool> UserHasKurumAccessAsync(Guid userId, int kurumId, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.UserKurums.AnyAsync(
+            x => x.UserId == userId && x.KurumId == kurumId && x.AktifMi,
+            cancellationToken);
+    }
+
+    public Task<bool> UserIsKurumAdminAsync(Guid userId, int kurumId, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.UserKurums.AnyAsync(
+            x => x.UserId == userId && x.KurumId == kurumId && x.AktifMi && x.IsKurumAdmin,
+            cancellationToken);
     }
 
     public async Task UpdatePasswordHashAsync(Guid userId, string newPasswordHash, CancellationToken cancellationToken = default)

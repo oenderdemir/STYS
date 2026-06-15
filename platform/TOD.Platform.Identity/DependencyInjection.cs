@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
         services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(DependencyInjection).Assembly);
+        services.AddScoped<global::TOD.Platform.Identity.UserKurums.Services.IUserKurumService, global::TOD.Platform.Identity.UserKurums.Services.UserKurumService>();
         services.AddScoped<ITokenInvalidationService, TokenInvalidationService>();
         services.AddHostedService<RefreshTokenCleanupHostedService>();
 

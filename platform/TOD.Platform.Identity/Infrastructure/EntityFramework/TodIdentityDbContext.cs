@@ -4,6 +4,7 @@ using TOD.Platform.Identity.MenuItemRoles.Entities;
 using TOD.Platform.Identity.MenuItems.Entities;
 using TOD.Platform.Identity.Roles.Entities;
 using TOD.Platform.Identity.RefreshTokens.Entities;
+using TOD.Platform.Identity.UserKurums.Entities;
 using TOD.Platform.Identity.UserGroupRoles.Entities;
 using TOD.Platform.Identity.UserGroups.Entities;
 using TOD.Platform.Identity.Users.Entities;
@@ -24,6 +25,7 @@ public class TodIdentityDbContext : DbContext
     }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserKurum> UserKurums => Set<UserKurum>();
 
     public DbSet<Role> Roles => Set<Role>();
 
@@ -62,6 +64,27 @@ public class TodIdentityDbContext : DbContext
             entity.HasIndex(x => x.UserName).IsUnique();
             entity.Property(x => x.UserName).HasMaxLength(128);
             entity.Property(x => x.Email).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<UserKurum>(entity =>
+        {
+            entity.ToTable("UserKurums", "identity");
+
+            entity.HasIndex(x => new { x.UserId, x.KurumId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.KurumId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.UserId, x.VarsayilanMi })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanMi] = 1");
+
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.UserKurums)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Role>(entity =>

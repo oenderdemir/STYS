@@ -44,6 +44,33 @@
     pointer-events: none;
 }
 
+.layout-topbar-kurum-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface-card);
+    white-space: nowrap;
+}
+
+.layout-topbar-kurum-switcher__label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-color-secondary);
+}
+
+.layout-topbar-kurum-switcher__select {
+    min-width: 14rem;
+}
+
+.layout-topbar-kurum-switcher__value {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
 @keyframes topbarNotificationPulse {
     0% {
         transform: scale(1);

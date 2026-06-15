@@ -5,7 +5,11 @@ import { catchError, finalize, map, Observable, of, shareReplay, tap } from 'rxj
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl, getSessionInactivityTimeoutMs } from '../../core/config';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
-import { ChangePasswordRequestDto, LoginRequestDto, LoginResponseDto } from './dto';
+import { ChangePasswordRequestDto, CurrentUserDto, LoginRequestDto, LoginResponseDto } from './dto';
+
+interface SelectKurumRequestDto {
+    kurumId: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -16,11 +20,21 @@ export class AuthService {
     private readonly userStatusStorageKey = 'stys.auth.user_status';
     private readonly defaultRouteStorageKey = 'stys.auth.default_route';
     private readonly permissionsStorageKey = 'stys.auth.permissions';
+    private readonly activeKurumIdStorageKey = 'stys.auth.active_kurum_id';
+    private readonly kurumIdsStorageKey = 'stys.auth.kurum_ids';
+    private readonly kurumAdminKurumIdsStorageKey = 'stys.auth.kurum_admin_kurum_ids';
+    private readonly isKurumAdminStorageKey = 'stys.auth.is_kurum_admin';
+    private readonly isSuperAdminStorageKey = 'stys.auth.is_super_admin';
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
     private refreshInFlight$: Observable<LoginResponseDto> | null = null;
     private readonly muhasebeTesisContext = inject(MuhasebeTesisContextService);
+    readonly aktifKurumId = signal<number | null>(this.readStoredNumber(this.activeKurumIdStorageKey));
+    readonly kurumIds = signal<number[]>(this.readStoredNumberArray(this.kurumIdsStorageKey));
+    readonly kurumAdminKurumIds = signal<number[]>(this.readStoredNumberArray(this.kurumAdminKurumIdsStorageKey));
+    readonly isKurumAdmin = signal(this.readStoredBoolean(this.isKurumAdminStorageKey));
+    readonly isSuperAdmin = signal(this.readStoredBoolean(this.isSuperAdminStorageKey));
     readonly sessionRevision = signal(0);
 
     constructor() {
@@ -68,12 +82,15 @@ export class AuthService {
             return this.refreshInFlight$;
         }
 
+        const activeKurumId = this.getAktifKurumId();
+        const body = activeKurumId !== null ? { kurumId: activeKurumId } : {};
+
         this.refreshInFlight$ = this.http
-            .post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/refresh`, {}, { withCredentials: true })
+            .post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/auth/auth/refresh`, body, { withCredentials: true })
             .pipe(
                 map((responseEnvelope) => {
                     if (responseEnvelope.success && responseEnvelope.data) {
-                        return responseEnvelope.data;
+                        return this.normalizeLoginResponse(responseEnvelope.data);
                     }
 
                     throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Refresh token request failed.');
@@ -88,21 +105,44 @@ export class AuthService {
         return this.refreshInFlight$;
     }
 
+    selectKurum(kurumId: number): Observable<LoginResponseDto> {
+        const request: SelectKurumRequestDto = {
+            kurumId
+        };
+
+        return this.http.post<ApiResponse<LoginResponseDto>>(`${this.apiBaseUrl}/api/auth/select-kurum`, request, { withCredentials: true }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return this.normalizeLoginResponse(responseEnvelope.data);
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kurum degistirme islemi basarisiz oldu.');
+            }),
+            tap((response) => this.storeSession(response))
+        );
+    }
+
     storeSession(response: LoginResponseDto): void {
-        localStorage.setItem(this.tokenStorageKey, response.authToken);
-        localStorage.setItem(this.tokenExpiryStorageKey, response.accessTokenExpireDate);
-        this.storePermissions(response.permissions);
-        const defaultRoute = this.normalizeRoute(response.defaultRoute);
+        const normalized = this.normalizeLoginResponse(response);
+        localStorage.setItem(this.tokenStorageKey, normalized.authToken);
+        localStorage.setItem(this.tokenExpiryStorageKey, normalized.accessTokenExpireDate);
+        this.storePermissions(normalized.permissions);
+        const defaultRoute = this.normalizeRoute(normalized.defaultRoute);
         if (defaultRoute) {
             localStorage.setItem(this.defaultRouteStorageKey, defaultRoute);
         } else {
             localStorage.removeItem(this.defaultRouteStorageKey);
         }
-        if (response.userStatus && response.userStatus.trim().length > 0) {
-            localStorage.setItem(this.userStatusStorageKey, response.userStatus.trim());
+        if (normalized.userStatus && normalized.userStatus.trim().length > 0) {
+            localStorage.setItem(this.userStatusStorageKey, normalized.userStatus.trim());
         } else {
             localStorage.removeItem(this.userStatusStorageKey);
         }
+        this.storeNumber(this.activeKurumIdStorageKey, normalized.aktifKurumId);
+        this.storeNumberArray(this.kurumIdsStorageKey, normalized.kurumIds);
+        this.storeNumberArray(this.kurumAdminKurumIdsStorageKey, normalized.kurumAdminKurumIds);
+        this.storeBoolean(this.isKurumAdminStorageKey, normalized.isKurumAdmin);
+        this.storeBoolean(this.isSuperAdminStorageKey, normalized.isSuperAdmin);
         this.resetInactivityTimer();
         this.bumpSessionRevision();
     }
@@ -113,6 +153,17 @@ export class AuthService {
         localStorage.removeItem(this.defaultRouteStorageKey);
         localStorage.removeItem(this.userStatusStorageKey);
         localStorage.removeItem(this.permissionsStorageKey);
+        localStorage.removeItem(this.activeKurumIdStorageKey);
+        localStorage.removeItem(this.kurumIdsStorageKey);
+        localStorage.removeItem(this.kurumAdminKurumIdsStorageKey);
+        localStorage.removeItem(this.isKurumAdminStorageKey);
+        localStorage.removeItem(this.isSuperAdminStorageKey);
+        this.aktifKurumId.set(null);
+        this.kurumIds.set([]);
+        this.kurumAdminKurumIds.set([]);
+        this.isKurumAdmin.set(false);
+        this.isSuperAdmin.set(false);
+        this.refreshInFlight$ = null;
         this.muhasebeTesisContext.clearPersistedTesis();
         this.clearInactivityTimer();
         this.bumpSessionRevision();
@@ -161,6 +212,51 @@ export class AuthService {
     getDefaultRoute(): string | null {
         const value = localStorage.getItem(this.defaultRouteStorageKey);
         return this.normalizeRoute(value);
+    }
+
+    getAktifKurumId(): number | null {
+        return this.aktifKurumId();
+    }
+
+    getKurumIds(): number[] {
+        return [...this.kurumIds()];
+    }
+
+    getKurumAdminKurumIds(): number[] {
+        return [...this.kurumAdminKurumIds()];
+    }
+
+    isSuperAdminUser(): boolean {
+        return this.isSuperAdmin();
+    }
+
+    isKurumAdminUser(): boolean {
+        return this.isKurumAdmin();
+    }
+
+    isKurumAdminFor(kurumId: number): boolean {
+        if (this.isSuperAdmin()) {
+            return true;
+        }
+
+        return this.kurumAdminKurumIds().includes(kurumId);
+    }
+
+    getCurrentUserSnapshot(): CurrentUserDto | null {
+        if (!this.isAuthenticated()) {
+            return null;
+        }
+
+        return {
+            userName: this.getCurrentUserName(),
+            userStatus: this.getUserStatus(),
+            defaultRoute: this.getDefaultRoute(),
+            aktifKurumId: this.getAktifKurumId(),
+            kurumIds: this.getKurumIds(),
+            kurumAdminKurumIds: this.getKurumAdminKurumIds(),
+            isKurumAdmin: this.isKurumAdminUser(),
+            isSuperAdmin: this.isSuperAdminUser()
+        };
     }
 
     getLandingRoute(fallbackRoute: string = '/'): string {
@@ -279,6 +375,20 @@ export class AuthService {
         this.inactivityTimeoutHandle = null;
     }
 
+    private normalizeLoginResponse(response: LoginResponseDto): LoginResponseDto {
+        return {
+            ...response,
+            refreshToken: response.refreshToken ?? '',
+            refreshTokenExpireDate: response.refreshTokenExpireDate ?? null,
+            permissions: Array.isArray(response.permissions) ? response.permissions : [],
+            kurumIds: this.normalizeNumberList(response.kurumIds),
+            kurumAdminKurumIds: this.normalizeNumberList(response.kurumAdminKurumIds),
+            isKurumAdmin: response.isKurumAdmin ?? false,
+            isSuperAdmin: response.isSuperAdmin ?? false,
+            aktifKurumId: response.aktifKurumId ?? null
+        };
+    }
+
     private addActivityListeners(): void {
         if (typeof document === 'undefined') {
             return;
@@ -343,6 +453,94 @@ export class AuthService {
         localStorage.setItem(this.permissionsStorageKey, JSON.stringify(normalizedPermissions));
     }
 
+    private storeNumber(storageKey: string, value: number | null | undefined): void {
+        if (value === null || value === undefined || !Number.isFinite(value)) {
+            localStorage.removeItem(storageKey);
+            if (storageKey === this.activeKurumIdStorageKey) {
+                this.aktifKurumId.set(null);
+            }
+            return;
+        }
+
+        const normalizedValue = Math.trunc(value);
+        localStorage.setItem(storageKey, normalizedValue.toString());
+        if (storageKey === this.activeKurumIdStorageKey) {
+            this.aktifKurumId.set(normalizedValue);
+        }
+    }
+
+    private storeNumberArray(storageKey: string, values: number[] | null | undefined): void {
+        const normalizedValues = this.normalizeNumberList(values);
+        if (normalizedValues.length === 0) {
+            localStorage.removeItem(storageKey);
+            if (storageKey === this.kurumIdsStorageKey) {
+                this.kurumIds.set([]);
+            } else if (storageKey === this.kurumAdminKurumIdsStorageKey) {
+                this.kurumAdminKurumIds.set([]);
+            }
+            return;
+        }
+
+        localStorage.setItem(storageKey, JSON.stringify(normalizedValues));
+        if (storageKey === this.kurumIdsStorageKey) {
+            this.kurumIds.set(normalizedValues);
+        } else if (storageKey === this.kurumAdminKurumIdsStorageKey) {
+            this.kurumAdminKurumIds.set(normalizedValues);
+        }
+    }
+
+    private storeBoolean(storageKey: string, value: boolean | null | undefined): void {
+        const normalizedValue = value === true;
+        localStorage.setItem(storageKey, JSON.stringify(normalizedValue));
+        if (storageKey === this.isKurumAdminStorageKey) {
+            this.isKurumAdmin.set(normalizedValue);
+        } else if (storageKey === this.isSuperAdminStorageKey) {
+            this.isSuperAdmin.set(normalizedValue);
+        }
+    }
+
+    private readStoredNumber(storageKey: string): number | null {
+        const rawValue = localStorage.getItem(storageKey);
+        if (!rawValue || rawValue.trim().length === 0) {
+            return null;
+        }
+
+        const parsed = Number(rawValue);
+        return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+    }
+
+    private readStoredNumberArray(storageKey: string): number[] {
+        const rawValue = localStorage.getItem(storageKey);
+        if (!rawValue || rawValue.trim().length === 0) {
+            return [];
+        }
+
+        try {
+            const parsed = JSON.parse(rawValue);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+
+            return this.normalizeNumberList(parsed);
+        } catch {
+            return [];
+        }
+    }
+
+    private readStoredBoolean(storageKey: string): boolean {
+        const rawValue = localStorage.getItem(storageKey);
+        if (!rawValue || rawValue.trim().length === 0) {
+            return false;
+        }
+
+        try {
+            const parsed = JSON.parse(rawValue);
+            return parsed === true;
+        } catch {
+            return rawValue.trim().toLowerCase() === 'true';
+        }
+    }
+
     private readStoredPermissions(): string[] {
         const rawPermissions = localStorage.getItem(this.permissionsStorageKey);
         if (!rawPermissions || rawPermissions.trim().length === 0) {
@@ -367,6 +565,14 @@ export class AuthService {
         }
 
         return [...new Set(permissions.map((permission) => permission.trim()).filter((permission) => permission.length > 0))];
+    }
+
+    private normalizeNumberList(values: number[] | null | undefined): number[] {
+        if (!values || values.length === 0) {
+            return [];
+        }
+
+        return [...new Set(values.map((value) => Math.trunc(value)).filter((value) => Number.isFinite(value)))];
     }
 
     private readClaimAsStringArray(payload: Record<string, unknown>, claimName: string): string[] {

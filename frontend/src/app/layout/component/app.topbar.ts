@@ -19,6 +19,8 @@ import { ApiErrorItem, tryReadApiMessage } from '../../core/api';
 import { AppConfigurator } from './app.configurator';
 import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
+import { KurumService } from '../../pages/kurum-yonetimi/kurum.service';
+import { KurumModel } from '../../pages/kurum-yonetimi/kurum.model';
 import { NotificationService } from '../../core/notifications/notification.service';
 import { NotificationSeverityValues, NotificationViewModel } from '../../core/notifications/notification.model';
 import { NotificationPreferenceDto } from '../../core/notifications/notification-preference.model';
@@ -81,6 +83,27 @@ import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 
             <div class="layout-topbar-menu hidden lg:block">
                 <div class="layout-topbar-menu-content">
+                    @if (authService.isAuthenticated() && kurumOptions.length > 0) {
+                        <div class="layout-topbar-kurum-switcher">
+                            <span class="layout-topbar-kurum-switcher__label">Kurum</span>
+                            @if (kurumOptions.length > 1) {
+                                <p-select
+                                    [options]="kurumOptions"
+                                    optionLabel="ad"
+                                    optionValue="id"
+                                    [(ngModel)]="selectedKurumId"
+                                    [disabled]="kurumOptionsLoading"
+                                    [showClear]="false"
+                                    placeholder="Kurum secin"
+                                    appendTo="body"
+                                    styleClass="layout-topbar-kurum-switcher__select"
+                                    (ngModelChange)="onKurumSelectionChange($event)"
+                                />
+                            } @else {
+                                <span class="layout-topbar-kurum-switcher__value">{{ kurumDisplayLabel() }}</span>
+                            }
+                        </div>
+                    }
                     <button type="button" class="layout-topbar-action">
                         <i class="pi pi-calendar"></i>
                         <span>Calendar</span>
@@ -303,7 +326,8 @@ import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 })
 export class AppTopbar {
     layoutService = inject(LayoutService);
-    private readonly authService = inject(AuthService);
+    readonly authService = inject(AuthService);
+    private readonly kurumService = inject(KurumService);
     private readonly router = inject(Router);
     private readonly notificationService = inject(NotificationService);
     private readonly messageService = inject(MessageService);
@@ -321,6 +345,11 @@ export class AppTopbar {
     changePasswordError: string | null = null;
     changePasswordErrorDetails: string[] = [];
     currentUserName: string | null = null;
+    selectedKurumId: number | null = null;
+    kurumOptions: KurumModel[] = [];
+    kurumOptionsLoading = false;
+    kurumOptionsLoadedForSessionRevision = -1;
+    kurumOptionsError: string | null = null;
     notificationPreferenceDialogVisible = false;
     isLoadingNotificationPreferences = false;
     isSavingNotificationPreferences = false;
@@ -376,9 +405,12 @@ export class AppTopbar {
                 this.currentUserName = null;
                 this.hasNewNotificationCue = false;
                 this.lastRealtimeNotificationId = null;
+                this.clearKurumOptions();
                 this.closeAllOverlays();
                 return;
             }
+
+            this.syncKurumOptions();
 
             if (this.authService.mustChangePassword()) {
                 if (!this.changePasswordDialogVisible || !this.isForceChangePasswordMode) {
@@ -419,6 +451,16 @@ export class AppTopbar {
         return value > 99 ? '99+' : value.toString();
     }
 
+    kurumDisplayLabel(): string {
+        const activeKurumId = this.selectedKurumId ?? this.authService.getAktifKurumId();
+        if (activeKurumId === null) {
+            return this.authService.isSuperAdminUser() ? 'Kurum seçilmedi' : 'Kurum bulunamadı';
+        }
+
+        const kurum = this.kurumOptions.find((item) => item.id === activeKurumId);
+        return kurum?.ad?.trim().length ? kurum.ad.trim() : `Kurum #${activeKurumId}`;
+    }
+
     toggleNotificationPopover(event: Event): void {
         this.hasNewNotificationCue = false;
         void this.notificationService.reload();
@@ -447,6 +489,109 @@ export class AppTopbar {
             next: () => this.notificationService.applyReadAll(),
             error: () => {
                 // No-op
+            }
+        });
+    }
+
+    private syncKurumOptions(): void {
+        if (this.kurumOptionsLoadedForSessionRevision === this.authService.sessionRevision()) {
+            return;
+        }
+
+        this.kurumOptionsLoadedForSessionRevision = this.authService.sessionRevision();
+        this.loadKurumOptions();
+    }
+
+    private loadKurumOptions(): void {
+        if (!this.authService.isAuthenticated()) {
+            this.clearKurumOptions();
+            return;
+        }
+
+        this.kurumOptionsLoading = true;
+        this.kurumOptionsError = null;
+
+        this.kurumService.getAll().pipe(
+            finalize(() => {
+                this.kurumOptionsLoading = false;
+                this.cdr.detectChanges();
+            })
+        ).subscribe({
+            next: (kurumlar) => {
+                const allowedKurumIds = new Set(this.authService.isSuperAdminUser() ? [] : this.authService.getKurumIds());
+                const normalized = (kurumlar ?? [])
+                    .filter((kurum) => kurum && kurum.aktifMi)
+                    .filter((kurum) => this.authService.isSuperAdminUser() || allowedKurumIds.has(kurum.id))
+                    .sort((left, right) => left.ad.localeCompare(right.ad, 'tr'));
+
+                this.kurumOptions = normalized;
+
+                const activeKurumId = this.authService.getAktifKurumId();
+                const matchedActiveKurum = activeKurumId !== null ? normalized.find((item) => item.id === activeKurumId) : undefined;
+                if (matchedActiveKurum) {
+                    this.selectedKurumId = matchedActiveKurum.id;
+                } else if (this.authService.isSuperAdminUser()) {
+                    this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
+                } else {
+                    this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
+                }
+            },
+            error: (error: unknown) => {
+                this.kurumOptions = [];
+                this.selectedKurumId = this.authService.getAktifKurumId();
+                this.kurumOptionsError = this.resolveErrorMessage(error);
+            }
+        });
+    }
+
+    private clearKurumOptions(): void {
+        this.kurumOptions = [];
+        this.selectedKurumId = null;
+        this.kurumOptionsLoading = false;
+        this.kurumOptionsError = null;
+        this.kurumOptionsLoadedForSessionRevision = -1;
+    }
+
+    onKurumSelectionChange(kurumId: number | null): void {
+        if (kurumId === null || this.kurumOptionsLoading) {
+            return;
+        }
+
+        const normalizedKurumId = Number(kurumId);
+        if (!Number.isFinite(normalizedKurumId) || normalizedKurumId <= 0) {
+            return;
+        }
+
+        if (normalizedKurumId === this.authService.getAktifKurumId()) {
+            return;
+        }
+
+        this.kurumOptionsLoading = true;
+        this.kurumOptionsError = null;
+
+        this.authService.selectKurum(normalizedKurumId).subscribe({
+            next: (response) => {
+                this.selectedKurumId = response.aktifKurumId ?? normalizedKurumId;
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Basarili',
+                    detail: 'Aktif kurum degistirildi.'
+                });
+
+                setTimeout(() => window.location.reload(), 150);
+            },
+            error: (error: unknown) => {
+                this.selectedKurumId = this.authService.getAktifKurumId();
+                this.kurumOptionsError = this.resolveErrorMessage(error);
+                this.messageService.add({
+                    severity: UiSeverity.Error,
+                    summary: 'Kurum degistirilemedi',
+                    detail: this.kurumOptionsError
+                });
+            },
+            complete: () => {
+                this.kurumOptionsLoading = false;
+                this.cdr.detectChanges();
             }
         });
     }

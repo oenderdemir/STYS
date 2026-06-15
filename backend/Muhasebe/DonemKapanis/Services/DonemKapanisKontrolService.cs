@@ -1,23 +1,29 @@
 using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.DonemKapanis.Dtos;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.DonemKapanis.Services;
 
 public class DonemKapanisKontrolService : IDonemKapanisKontrolService
 {
     private readonly StysAppDbContext _db;
+    private readonly IUserAccessScopeService _userAccessScopeService;
 
-    public DonemKapanisKontrolService(StysAppDbContext db)
+    public DonemKapanisKontrolService(StysAppDbContext db, IUserAccessScopeService userAccessScopeService)
     {
         _db = db;
+        _userAccessScopeService = userAccessScopeService;
     }
 
     public async Task<DonemKapanisKontrolDto> KontrolEtAsync(
         DonemKapanisKontrolFilterDto filter,
         CancellationToken cancellationToken = default)
     {
+        await EnsureCanAccessTesisAsync(filter.TesisId, cancellationToken);
+
         var result = new DonemKapanisKontrolDto
         {
             TesisId = filter.TesisId,
@@ -308,5 +314,25 @@ public class DonemKapanisKontrolService : IDonemKapanisKontrolService
         }
 
         return result;
+    }
+
+    private async Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        if (tesisId <= 0)
+        {
+            throw new BaseException("Tesis secimi zorunludur.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
+        {
+            throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
+        }
+
+        var exists = await _db.Tesisler.AnyAsync(x => x.Id == tesisId && x.AktifMi, cancellationToken);
+        if (!exists)
+        {
+            throw new BaseException("Seçilen tesis bulunamadı.", 400);
+        }
     }
 }

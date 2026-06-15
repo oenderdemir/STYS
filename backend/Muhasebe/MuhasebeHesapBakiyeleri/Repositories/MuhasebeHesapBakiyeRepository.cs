@@ -41,6 +41,7 @@ public class MuhasebeHesapBakiyeRepository
 
     public async Task<List<MuhasebeHesapBakiye>> GetFilteredAsync(
         MuhasebeHesapBakiyeFilterDto filter,
+        IReadOnlyCollection<int>? accessibleTesisIds = null,
         CancellationToken cancellationToken = default)
     {
         var query = ApplyFilter(
@@ -48,7 +49,8 @@ public class MuhasebeHesapBakiyeRepository
                 .Include(x => x.Tesis)
                 .Include(x => x.MuhasebeHesapPlani)
                 .AsNoTracking(),
-            filter);
+            filter,
+            accessibleTesisIds);
 
         query = query
             .OrderBy(x => x.TesisId)
@@ -65,9 +67,10 @@ public class MuhasebeHesapBakiyeRepository
 
     public async Task<int> CountFilteredAsync(
         MuhasebeHesapBakiyeFilterDto filter,
+        IReadOnlyCollection<int>? accessibleTesisIds = null,
         CancellationToken cancellationToken = default)
     {
-        var query = ApplyFilter(_dbContext.MuhasebeHesapBakiyeleri.AsNoTracking(), filter);
+        var query = ApplyFilter(_dbContext.MuhasebeHesapBakiyeleri.AsNoTracking(), filter, accessibleTesisIds);
         return await query.CountAsync(cancellationToken);
     }
 
@@ -93,9 +96,13 @@ public class MuhasebeHesapBakiyeRepository
 
     private static IQueryable<MuhasebeHesapBakiye> ApplyFilter(
         IQueryable<MuhasebeHesapBakiye> query,
-        MuhasebeHesapBakiyeFilterDto filter)
+        MuhasebeHesapBakiyeFilterDto filter,
+        IReadOnlyCollection<int>? accessibleTesisIds)
     {
         query = query.Where(x => !x.IsDeleted);
+
+        if (accessibleTesisIds is not null)
+            query = query.Where(x => accessibleTesisIds.Contains(x.TesisId));
 
         if (filter.TesisId.HasValue)
             query = query.Where(x => x.TesisId == filter.TesisId.Value);

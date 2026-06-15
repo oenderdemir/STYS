@@ -16,10 +16,12 @@ public interface IMuhasebeHesapBakiyeRepository : IBaseRdbmsRepository<MuhasebeH
 
     Task<List<MuhasebeHesapBakiye>> GetFilteredAsync(
         MuhasebeHesapBakiyeFilterDto filter,
+        IReadOnlyCollection<int>? accessibleTesisIds = null,
         CancellationToken cancellationToken = default);
 
     Task<int> CountFilteredAsync(
         MuhasebeHesapBakiyeFilterDto filter,
+        IReadOnlyCollection<int>? accessibleTesisIds = null,
         CancellationToken cancellationToken = default);
 
     Task<List<MuhasebeHesapBakiye>> GetByTesisYilDonemAsync(

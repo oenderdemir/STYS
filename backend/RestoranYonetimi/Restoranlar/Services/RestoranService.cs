@@ -221,8 +221,9 @@ public class RestoranService : BaseRdbmsService<RestoranDto, Restoran, int>, IRe
     {
         Validate(request.TesisId, request.Ad!);
 
-        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi);
-        if (!tesisExists)
+        var tesis = await _dbContext.Tesisler
+            .FirstOrDefaultAsync(x => x.Id == request.TesisId && x.AktifMi);
+        if (tesis is null)
         {
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
@@ -231,17 +232,21 @@ public class RestoranService : BaseRdbmsService<RestoranDto, Restoran, int>, IRe
         var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: false, CancellationToken.None);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _restoranRepository.AnyAsync(x => x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
+        var exists = await _restoranRepository.AnyAsync(x => x.KurumId == tesis.KurumId && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni tesis altinda ayni adla aktif restoran zaten var.", 400);
         }
 
-        request.Ad = request.Ad.Trim();
-        request.Aciklama = NormalizeOptional(request.Aciklama, 512);
+        var entity = _mapper.Map<Restoran>(request);
+        entity.KurumId = tesis.KurumId;
+        entity.Ad = request.Ad.Trim();
+        entity.Aciklama = NormalizeOptional(request.Aciklama, 512);
 
-        var created = await base.AddAsync(request);
-        var entity = await _restoranRepository.GetByIdAsync(created.Id!.Value, q => q.Include(x => x.Yoneticiler).Include(x => x.Garsonlar))
+        await _restoranRepository.AddAsync(entity);
+        await _restoranRepository.SaveChangesAsync();
+
+        entity = await _restoranRepository.GetByIdAsync(entity.Id, q => q.Include(x => x.Yoneticiler).Include(x => x.Garsonlar))
             ?? throw new BaseException("Olusturulan restoran bulunamadi.", 500);
 
         SyncYoneticiler(entity, yoneticiUserIds ?? []);
@@ -267,17 +272,29 @@ public class RestoranService : BaseRdbmsService<RestoranDto, Restoran, int>, IRe
             .Include(x => x.Garsonlar))
             ?? throw new BaseException("Restoran bulunamadi.", 404);
 
-        var tesisExists = await _dbContext.Tesisler.AnyAsync(x => x.Id == request.TesisId && x.AktifMi);
-        if (!tesisExists)
+        var tesis = await _dbContext.Tesisler
+            .FirstOrDefaultAsync(x => x.Id == request.TesisId && x.AktifMi);
+        if (tesis is null)
         {
             throw new BaseException("Gecerli ve aktif tesis bulunamadi.", 400);
         }
+
+        if (tesis.KurumId != entity.KurumId)
+        {
+            throw new BaseException("Restoran farkli kuruma ait tesise tasinamaz.", 400);
+        }
+
         await ValidateIsletmeAlaniSecimiAsync(request.TesisId, request.IsletmeAlaniId, CancellationToken.None);
         var yoneticiUserIds = await NormalizeAndValidateManagerIdsAsync(request.YoneticiUserIds, preserveWhenNull: true, CancellationToken.None);
         var garsonUserIds = await NormalizeAndValidateGarsonIdsAsync(request.GarsonUserIds, preserveWhenNull: true, CancellationToken.None);
 
         var normalizedAd = request.Ad.Trim().ToUpperInvariant();
-        var exists = await _restoranRepository.AnyAsync(x => x.Id != request.Id.Value && x.TesisId == request.TesisId && x.Ad.ToUpper() == normalizedAd && x.AktifMi);
+        var exists = await _restoranRepository.AnyAsync(x =>
+            x.Id != request.Id.Value &&
+            x.KurumId == entity.KurumId &&
+            x.TesisId == request.TesisId &&
+            x.Ad.ToUpper() == normalizedAd &&
+            x.AktifMi);
         if (exists)
         {
             throw new BaseException("Ayni tesis altinda ayni adla aktif restoran zaten var.", 400);

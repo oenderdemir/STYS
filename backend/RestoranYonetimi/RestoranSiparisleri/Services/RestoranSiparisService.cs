@@ -154,10 +154,11 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
             masa = await ValidateMasaForOrderAsync(restoran.Id, request.RestoranMasaId.Value, CancellationToken.None);
         }
 
-        var urunler = await ResolveAndValidateUrunlerAsync(request.Kalemler.Select(x => x.RestoranMenuUrunId).ToList(), request.ParaBirimi, CancellationToken.None);
+        var urunler = await ResolveAndValidateUrunlerAsync(restoran.Id, request.Kalemler.Select(x => x.RestoranMenuUrunId).ToList(), request.ParaBirimi, CancellationToken.None);
 
         var entity = new RestoranSiparis
         {
+            KurumId = restoran.KurumId,
             RestoranId = request.RestoranId,
             RestoranMasaId = request.RestoranMasaId,
             SiparisNo = await GenerateSiparisNoAsync(CancellationToken.None),
@@ -215,7 +216,7 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
             throw new BaseException("Sipariste en az bir kalem olmalidir.", 400);
         }
 
-        var urunler = await ResolveAndValidateUrunlerAsync(request.Kalemler.Select(x => x.RestoranMenuUrunId).ToList(), entity.ParaBirimi, CancellationToken.None);
+        var urunler = await ResolveAndValidateUrunlerAsync(entity.RestoranId, request.Kalemler.Select(x => x.RestoranMenuUrunId).ToList(), entity.ParaBirimi, CancellationToken.None);
 
         entity.RestoranMasaId = request.RestoranMasaId;
         entity.Notlar = NormalizeOptional(request.Notlar, 1024);
@@ -321,7 +322,7 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
         return masa;
     }
 
-    private async Task<Dictionary<int, RestoranMenuUrun>> ResolveAndValidateUrunlerAsync(IReadOnlyCollection<int> urunIds, string paraBirimi, CancellationToken cancellationToken)
+    private async Task<Dictionary<int, RestoranMenuUrun>> ResolveAndValidateUrunlerAsync(int restoranId, IReadOnlyCollection<int> urunIds, string paraBirimi, CancellationToken cancellationToken)
     {
         var normalizedCurrency = paraBirimi.Trim().ToUpperInvariant();
         var uniqueIds = urunIds.Distinct().ToList();
@@ -343,9 +344,19 @@ public class RestoranSiparisService : BaseRdbmsService<RestoranSiparisDto, Resto
                 throw new BaseException($"Pasif urun sipariste kullanilamaz: {urun.Ad}", 400);
             }
 
-            if (urun.RestoranMenuKategori is null || !urun.RestoranMenuKategori.AktifMi)
+            if (urun.RestoranMenuKategori is null || !urun.RestoranMenuKategori.AktifMi || urun.RestoranMenuKategori.Restoran is null)
             {
                 throw new BaseException($"Pasif kategori urunu sipariste kullanilamaz: {urun.Ad}", 400);
+            }
+
+            if (urun.RestoranMenuKategori.RestoranId != restoranId)
+            {
+                throw new BaseException("Secilen urunlerden biri siparis restoranina ait degil.", 400);
+            }
+
+            if (!urun.RestoranMenuKategori.Restoran.AktifMi)
+            {
+                throw new BaseException($"Pasif restoran urunu sipariste kullanilamaz: {urun.Ad}", 400);
             }
 
             if (urun.ParaBirimi != normalizedCurrency)

@@ -2021,6 +2021,8 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Secilen odalardan en az biri gecersiz veya secilen tesise ait degil.", 400);
         }
 
+        var kurumId = await ResolveReservationKurumIdAsync(request.TesisId, cancellationToken);
+
         foreach (var segment in request.Segmentler)
         {
             var segmentRoomIds = segment.OdaAtamalari
@@ -2076,6 +2078,7 @@ public class RezervasyonService : IRezervasyonService
         var reservation = new Entities.Rezervasyon
         {
             ReferansNo = GenerateReferenceNo(),
+            KurumId = kurumId,
             TesisId = request.TesisId,
             KisiSayisi = request.KisiSayisi,
             MisafirTipiId = request.MisafirTipiId,
@@ -5763,11 +5766,39 @@ public class RezervasyonService : IRezervasyonService
 
     private async Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken)
     {
+        if (tesisId <= 0)
+        {
+            throw new BaseException("Gecersiz tesis id.", 400);
+        }
+
+        var tesisExists = await _stysDbContext.Tesisler
+            .AnyAsync(x => x.Id == tesisId && x.AktifMi, cancellationToken);
+
+        if (!tesisExists)
+        {
+            throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
         {
             throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
         }
+    }
+
+    private async Task<int> ResolveReservationKurumIdAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var kurumId = await _stysDbContext.Tesisler
+            .Where(x => x.Id == tesisId && x.AktifMi)
+            .Select(x => (int?)x.KurumId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!kurumId.HasValue || kurumId.Value <= 0)
+        {
+            throw new BaseException("Secilen tesis icin kurum bilgisi bulunamadi.", 400);
+        }
+
+        return kurumId.Value;
     }
 
     private async Task EnsureTesisHasKonaklamaTipiAsync(int tesisId, int konaklamaTipiId, CancellationToken cancellationToken)

@@ -1,16 +1,19 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.EkHizmetler.Entities;
+using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Rezervasyonlar.Entities;
 
-public class Rezervasyon : BaseEntity<int>
+public class Rezervasyon : BaseEntity<int>, ITenantEntity
 {
     [Required]
     [MaxLength(64)]
     public string ReferansNo { get; set; } = string.Empty;
+
+    public int KurumId { get; set; }
 
     public int TesisId { get; set; }
 
@@ -64,6 +67,8 @@ public class Rezervasyon : BaseEntity<int>
     public string RezervasyonDurumu { get; set; } = RezervasyonDurumlari.Onayli;
 
     public bool AktifMi { get; set; } = true;
+
+    public Kurum? Kurum { get; set; }
 
     public Tesis? Tesis { get; set; }
 

@@ -1093,6 +1093,7 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("Rezervasyonlar", "dbo");
             entity.Property(x => x.ReferansNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.KurumId).IsRequired();
             entity.Property(x => x.MisafirAdiSoyadi).HasMaxLength(200).IsRequired();
             entity.Property(x => x.MisafirTelefon).HasMaxLength(32).IsRequired();
             entity.Property(x => x.MisafirEposta).HasMaxLength(256);
@@ -1105,13 +1106,18 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
             entity.Property(x => x.UygulananIndirimlerJson).HasColumnType("nvarchar(max)");
             entity.Property(x => x.RezervasyonDurumu).HasMaxLength(32).IsRequired();
-            entity.HasIndex(x => x.ReferansNo)
+            entity.HasIndex(x => new { x.KurumId, x.ReferansNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.TesisId, x.GirisTarihi, x.CikisTarihi })
+            entity.HasIndex(x => new { x.KurumId, x.TesisId, x.GirisTarihi, x.CikisTarihi })
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => x.RezervasyonDurumu)
+            entity.HasIndex(x => new { x.KurumId, x.RezervasyonDurumu })
                 .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany(x => x.Rezervasyonlar)
+                .HasForeignKey(x => x.KurumId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()

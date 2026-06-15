@@ -46,6 +46,19 @@ public class JwtTokenService : IJwtTokenService
             claims.Add(new Claim("userId", request.UserId));
         }
 
+        if (request.KurumId.HasValue)
+        {
+            claims.Add(new Claim("kurumId", request.KurumId.Value.ToString()));
+        }
+
+        if (request.KurumIds.Count > 0)
+        {
+            claims.Add(new Claim("kurumIds", string.Join(",", request.KurumIds.Distinct())));
+        }
+
+        claims.Add(new Claim("isKurumAdmin", request.IsKurumAdmin.ToString().ToLowerInvariant()));
+        claims.Add(new Claim("isSuperAdmin", request.IsSuperAdmin.ToString().ToLowerInvariant()));
+
         var jwt = new JwtSecurityToken(
             issuer: options.Issuer,
             audience: options.Audience,

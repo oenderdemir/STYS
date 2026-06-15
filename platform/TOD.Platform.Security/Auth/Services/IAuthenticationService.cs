@@ -13,6 +13,8 @@ public interface IAuthenticationService<TKey> where TKey : struct
     Task<LoginResponseDto> LogoutAsync(CancellationToken cancellationToken = default);
 
     Task<CurrentUserResponseDto> GetCurrentUserAsync(CancellationToken cancellationToken = default);
+
+    Task<LoginResponseDto> SelectKurumAsync(SelectKurumRequestDto request, CancellationToken cancellationToken = default);
 }
 
 public interface IAuthenticationService : IAuthenticationService<Guid>

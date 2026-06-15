@@ -15,4 +15,12 @@ public class GenerateTokenRequest
     public List<string> Permissions { get; set; } = new();
 
     public int TokenVersion { get; set; }
+
+    public int? KurumId { get; set; }
+
+    public List<int> KurumIds { get; set; } = [];
+
+    public bool IsKurumAdmin { get; set; }
+
+    public bool IsSuperAdmin { get; set; }
 }

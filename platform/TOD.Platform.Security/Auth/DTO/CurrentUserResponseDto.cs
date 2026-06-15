@@ -7,4 +7,14 @@ public class CurrentUserResponseDto
     public string? UserStatus { get; set; }
 
     public string? DefaultRoute { get; set; }
+
+    public int? AktifKurumId { get; set; }
+
+    public List<int> KurumIds { get; set; } = [];
+
+    public List<int> KurumAdminKurumIds { get; set; } = [];
+
+    public bool IsKurumAdmin { get; set; }
+
+    public bool IsSuperAdmin { get; set; }
 }

@@ -60,7 +60,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
-    public async Task<ActionResult<LoginResponseDto>> Refresh()
+    public async Task<ActionResult<LoginResponseDto>> Refresh([FromBody] RefreshTokenRequestDto? request)
     {
         var refreshToken = Request.Cookies[RefreshTokenCookieName];
         if (string.IsNullOrWhiteSpace(refreshToken))
@@ -77,7 +77,8 @@ public class AuthController : ControllerBase
 
         var response = await _authenticationService.RefreshAsync(new RefreshTokenRequestDto
         {
-            RefreshToken = refreshToken
+            RefreshToken = refreshToken,
+            KurumId = request?.KurumId
         });
 
         if (!response.AuthenticateResult)
@@ -95,6 +96,14 @@ public class AuthController : ControllerBase
         SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpireDate);
         response.RefreshToken = string.Empty;
         return response;
+    }
+
+    [HttpPost("~/api/auth/select-kurum")]
+    [Authorize]
+    public async Task<ActionResult<LoginResponseDto>> SelectKurum([FromBody] SelectKurumRequestDto request, CancellationToken cancellationToken)
+    {
+        var response = await _authenticationService.SelectKurumAsync(request, cancellationToken);
+        return Ok(response);
     }
 
     [HttpPost("logout")]

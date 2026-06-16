@@ -62,6 +62,11 @@ public class UserController : UIController
     public async Task<ActionResult<UserDto>> Create([FromBody] UserDto dto, CancellationToken cancellationToken)
     {
         var resolvedKurumId = await ResolveCreateKurumIdAsync(dto.KurumId, cancellationToken);
+        if (dto.IsKurumAdmin && !_currentTenantAccessor.IsSuperAdmin())
+        {
+            throw new BaseException("Kurum admini olusturma yetkiniz bulunmuyor.", 403);
+        }
+
         var isKurumAdmin = dto.IsKurumAdmin;
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);

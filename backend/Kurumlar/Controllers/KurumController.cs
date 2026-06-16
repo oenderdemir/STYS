@@ -83,6 +83,7 @@ public class KurumController : UIController
     }
 
     [HttpGet("benim-kurumlarim")]
+    [Permission]
     public async Task<ActionResult<List<KurumDto>>> GetMyKurumlar(CancellationToken cancellationToken)
     {
         var kurumlar = await GetAccessibleKurumlarAsync(cancellationToken);

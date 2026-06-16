@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using TOD.Platform.Identity;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
 using TOD.Platform.Identity.UserGroups.Repositories;
@@ -9,6 +10,7 @@ using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Entities;
 using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Security.Auth.Services;
+using TOD.Platform.SharedKernel.Exceptions;
 using BaseUserService = TOD.Platform.Identity.Users.Services.UserService;
 
 namespace STYS.Kullanicilar.Services;
@@ -38,6 +40,7 @@ public class StysScopedUserService : BaseUserService
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public StysScopedUserService(
         IUserRepository userRepository,
@@ -48,6 +51,7 @@ public class StysScopedUserService : BaseUserService
         TodIdentityDbContext identityDbContext,
         IAccessScopeProvider accessScopeProvider,
         ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
         AutoMapper.IMapper mapper)
         : base(userRepository, userGroupRepository, passwordHasher, tokenInvalidationService, mapper)
     {
@@ -55,6 +59,7 @@ public class StysScopedUserService : BaseUserService
         _identityDbContext = identityDbContext;
         _accessScopeProvider = accessScopeProvider;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public override async Task<IEnumerable<UserDto>> GetAllAsync(Func<IQueryable<User>, IQueryable<User>>? include = null)
@@ -98,6 +103,8 @@ public class StysScopedUserService : BaseUserService
 
     public override async Task<UserDto> AddAsync(UserDto dto)
     {
+        await EnsureRequestedGroupsAreAllowedAsync(dto);
+
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
         {
@@ -129,6 +136,8 @@ public class StysScopedUserService : BaseUserService
         {
             throw new InvalidOperationException("Id cannot be empty.");
         }
+
+        await EnsureRequestedGroupsAreAllowedAsync(dto);
 
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
         if (actorScope.IsTesisManagerScoped)
@@ -433,6 +442,79 @@ public class StysScopedUserService : BaseUserService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return permissions;
+    }
+
+    private async Task EnsureRequestedGroupsAreAllowedAsync(UserDto dto, CancellationToken cancellationToken = default)
+    {
+        if (dto.IsKurumAdmin && !_currentTenantAccessor.IsSuperAdmin())
+        {
+            throw new BaseException("Kurum admini olusturma yetkiniz bulunmuyor.", 403);
+        }
+
+        var requestedGroupIds = dto.UserGroups
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (requestedGroupIds.Count == 0)
+        {
+            if (dto.IsKurumAdmin)
+            {
+                await EnsureKurumYoneticisiGroupIsPresentAsync(dto, cancellationToken);
+            }
+
+            return;
+        }
+
+        var requestedGroups = await _identityDbContext.UserGroups
+            .Where(x => requestedGroupIds.Contains(x.Id) && !x.IsDeleted)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(cancellationToken);
+
+        if (!_currentTenantAccessor.IsSuperAdmin() && requestedGroups.Any(x => string.Equals(x.Name, IdentityGroupNames.AdminGroup, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new BaseException("Yönetici Grubu atanamaz.", 403);
+        }
+
+        var kurumYoneticisiGroupSelected = requestedGroups.Any(x => string.Equals(x.Name, IdentityGroupNames.KurumYoneticisiGroup, StringComparison.OrdinalIgnoreCase));
+        if (kurumYoneticisiGroupSelected && !dto.IsKurumAdmin)
+        {
+            throw new BaseException("Kurum Yöneticisi Grubu sadece kurum admini için atanabilir.", 403);
+        }
+
+        if (dto.IsKurumAdmin)
+        {
+            await EnsureKurumYoneticisiGroupIsPresentAsync(dto, cancellationToken);
+        }
+    }
+
+    private async Task EnsureKurumYoneticisiGroupIsPresentAsync(UserDto dto, CancellationToken cancellationToken)
+    {
+        var kurumYoneticisiGroup = await _identityDbContext.UserGroups
+            .FirstOrDefaultAsync(x => x.Name == IdentityGroupNames.KurumYoneticisiGroup && !x.IsDeleted, cancellationToken);
+
+        if (kurumYoneticisiGroup is null)
+        {
+            throw new BaseException("Kurum Yöneticisi Grubu bulunamadi.", 500);
+        }
+
+        var hasGroup = dto.UserGroups
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Contains(kurumYoneticisiGroup.Id);
+
+        if (hasGroup)
+        {
+            return;
+        }
+
+        dto.UserGroups.Add(new UserGroupDto
+        {
+            Id = kurumYoneticisiGroup.Id
+        });
     }
 
     private async Task<List<string>> GetTargetUserAssignableMarkersAsync(Guid userId, CancellationToken cancellationToken)

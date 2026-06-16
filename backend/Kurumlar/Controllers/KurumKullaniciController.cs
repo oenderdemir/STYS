@@ -7,6 +7,7 @@ using TOD.Platform.Identity;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserKurums.Dto;
 using TOD.Platform.Identity.UserKurums.Services;
+using TOD.Platform.Identity.UserUserGroups.Entities;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -73,6 +74,7 @@ public class KurumKullaniciController : ControllerBase
         await EnsureManageScopeAsync(request.KurumId);
 
         var created = await _userKurumService.AssignAsync(request, cancellationToken);
+        await SyncKurumYoneticisiGroupAsync(request.UserId, cancellationToken);
         return Ok(created);
     }
 
@@ -89,6 +91,7 @@ public class KurumKullaniciController : ControllerBase
         await EnsureManageScopeAsync(existing.KurumId);
 
         var updated = await _userKurumService.UpdateAsync(id, request, cancellationToken);
+        await SyncKurumYoneticisiGroupAsync(existing.UserId, cancellationToken);
         return Ok(updated);
     }
 
@@ -105,6 +108,7 @@ public class KurumKullaniciController : ControllerBase
         await EnsureManageScopeAsync(existing.KurumId);
 
         await _userKurumService.DeleteAsync(id, cancellationToken);
+        await SyncKurumYoneticisiGroupAsync(existing.UserId, cancellationToken);
         return Ok();
     }
 
@@ -170,5 +174,62 @@ public class KurumKullaniciController : ControllerBase
             .OrderByDescending(x => x.VarsayilanMi)
             .ThenBy(x => x.UserId)
             .ToList();
+    }
+
+    private async Task SyncKurumYoneticisiGroupAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var superAdminMembershipExists = await _identityDbContext.UserUserGroups.AnyAsync(
+            x => x.UserId == userId
+                 && !x.IsDeleted
+                 && x.UserGroup.Name == IdentityGroupNames.AdminGroup,
+            cancellationToken);
+
+        if (superAdminMembershipExists)
+        {
+            return;
+        }
+
+        var kurumYoneticisiGroup = await _identityDbContext.UserGroups
+            .FirstOrDefaultAsync(x => x.Name == IdentityGroupNames.KurumYoneticisiGroup && !x.IsDeleted, cancellationToken);
+
+        if (kurumYoneticisiGroup is null)
+        {
+            return;
+        }
+
+        var hasKurumAdminAssignment = await _identityDbContext.UserKurums.AnyAsync(
+            x => x.UserId == userId && x.AktifMi && x.IsKurumAdmin,
+            cancellationToken);
+
+        var existingMembership = await _identityDbContext.UserUserGroups
+            .FirstOrDefaultAsync(x => x.UserId == userId && x.UserGroupId == kurumYoneticisiGroup.Id, cancellationToken);
+
+        if (hasKurumAdminAssignment)
+        {
+            if (existingMembership is null)
+            {
+                await _identityDbContext.UserUserGroups.AddAsync(new UserUserGroup
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    UserGroupId = kurumYoneticisiGroup.Id
+                }, cancellationToken);
+            }
+            else
+            {
+                existingMembership.IsDeleted = false;
+                _identityDbContext.UserUserGroups.Update(existingMembership);
+            }
+
+            await _identityDbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (existingMembership is not null && !existingMembership.IsDeleted)
+        {
+            existingMembership.IsDeleted = true;
+            _identityDbContext.UserUserGroups.Update(existingMembership);
+            await _identityDbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 }

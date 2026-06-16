@@ -7,6 +7,7 @@ using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserKurums.Dto;
 using TOD.Platform.Identity.UserKurums.Services;
 using TOD.Platform.Identity.Users.DTO;
+using TOD.Platform.Identity.Users.Entities;
 using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -37,30 +38,53 @@ public class UserController : UIController
 
     [HttpGet]
     [Permission(IdentityPermissions.UserManagement.View, TodPlatformAuthorizationConstants.SuperAdminPermission)]
-    public Task<IEnumerable<UserDto>> GetAll()
+    public async Task<IEnumerable<UserDto>> GetAll(CancellationToken cancellationToken)
     {
-        return _userService.GetAllAsync(q => q
-            .Include(x => x.UserUserGroups.Where(x => !x.IsDeleted))
-            .ThenInclude(x => x.UserGroup)
-            .ThenInclude(x => x.UserGroupRoles)
-            .ThenInclude(x => x.Role));
+        var include = BuildUserInclude();
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return await _userService.GetAllAsync(include);
+        }
+
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            return [];
+        }
+
+        return await _userService.WhereAsync(x =>
+                x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi),
+            include);
     }
 
     [HttpGet("{id:guid}")]
     [Permission(IdentityPermissions.UserManagement.View, TodPlatformAuthorizationConstants.SuperAdminPermission)]
-    public Task<UserDto?> GetById(Guid id)
+    public async Task<ActionResult<UserDto?>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        return _userService.GetByIdAsync(id, q => q
-            .Include(x => x.UserUserGroups.Where(x => !x.IsDeleted))
-            .ThenInclude(x => x.UserGroup)
-            .ThenInclude(x => x.UserGroupRoles)
-            .ThenInclude(x => x.Role));
+        var include = BuildUserInclude();
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return Ok(await _userService.GetByIdAsync(id, include));
+        }
+
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            return Ok(null);
+        }
+
+        var users = await _userService.WhereAsync(x =>
+                x.Id == id && x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi),
+            include);
+
+        return Ok(users.FirstOrDefault());
     }
 
     [HttpPost]
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
     public async Task<ActionResult<UserDto>> Create([FromBody] UserDto dto, CancellationToken cancellationToken)
     {
+        await EnsureRequestedGroupsAreAllowedAsync(dto, cancellationToken);
         var resolvedKurumId = await ResolveCreateKurumIdAsync(dto.KurumId, cancellationToken);
         if (dto.IsKurumAdmin && !_currentTenantAccessor.IsSuperAdmin())
         {
@@ -99,8 +123,10 @@ public class UserController : UIController
 
     [HttpPut("{id:guid}")]
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UserDto dto)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UserDto dto, CancellationToken cancellationToken)
     {
+        await EnsureUserVisibleAsync(id, cancellationToken);
+        await EnsureRequestedGroupsAreAllowedAsync(dto, cancellationToken);
         dto.Id = id;
         await _userService.UpdateAsync(dto);
         return Ok();
@@ -108,16 +134,18 @@ public class UserController : UIController
 
     [HttpDelete("{id:guid}")]
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
+        await EnsureUserVisibleAsync(id, cancellationToken);
         await _userService.DeleteAsync(id);
         return Ok();
     }
 
     [HttpPut("{id:guid}/password")]
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
-    public async Task<IActionResult> ResetPassword(Guid id, [FromBody] UserResetPasswordDto dto)
+    public async Task<IActionResult> ResetPassword(Guid id, [FromBody] UserResetPasswordDto dto, CancellationToken cancellationToken)
     {
+        await EnsureUserVisibleAsync(id, cancellationToken);
         await _userService.ResetPasswordAsync(id, dto);
         return Ok();
     }
@@ -161,6 +189,65 @@ public class UserController : UIController
         if (!exists)
         {
             throw new BaseException("Kurum bulunamadi veya aktif degil.", 404);
+        }
+    }
+
+    private Func<IQueryable<User>, IQueryable<User>> BuildUserInclude()
+    {
+        return q => q
+            .Include(x => x.UserKurums.Where(x => !x.IsDeleted))
+            .Include(x => x.UserUserGroups.Where(x => !x.IsDeleted))
+                .ThenInclude(x => x.UserGroup)
+                .ThenInclude(x => x.UserGroupRoles)
+                .ThenInclude(x => x.Role);
+    }
+
+    private async Task EnsureUserVisibleAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return;
+        }
+
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Bu kullaniciya erisim yetkiniz bulunmuyor.", 403);
+        }
+
+        var visible = await _dbContext.UserKurums.AnyAsync(
+            x => x.UserId == userId && x.KurumId == currentKurumId.Value && x.AktifMi,
+            cancellationToken);
+
+        if (!visible)
+        {
+            throw new BaseException("Bu kullaniciya erisim yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private async Task EnsureRequestedGroupsAreAllowedAsync(UserDto dto, CancellationToken cancellationToken)
+    {
+        var requestedGroupIds = dto.UserGroups
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        if (requestedGroupIds.Count == 0)
+        {
+            return;
+        }
+
+        var requestedGroups = await _dbContext.UserGroups
+            .Where(x => requestedGroupIds.Contains(x.Id) && !x.IsDeleted)
+            .Select(x => new { x.Name })
+            .ToListAsync(cancellationToken);
+
+        if (!_currentTenantAccessor.IsSuperAdmin() &&
+            requestedGroups.Any(x => string.Equals(x.Name, IdentityGroupNames.AdminGroup, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new BaseException("Yönetici Grubu atanamaz.", 403);
         }
     }
 }

@@ -20,37 +20,16 @@ public partial class SeedTrtKurumTesisBinaAndAdminUser : Migration
             DECLARE @AuditTag nvarchar(128) = N'migration_seed_trt_kurum_admin';
             DECLARE @SeedPasswordHash nvarchar(max) = N'PBKDF2$100000$7EIkx3zl3+g/hx5ORM0tUw==$JCeyiS0ajdez/R1BKi3K5awsF1bs+D8b2neo0E6KW+k=';
 
-            DECLARE @TrabzonIlId int = 61;
-            DECLARE @TrabzonIlExists bit = 0;
+            DECLARE @TrabzonIlId int = (
+                SELECT TOP (1) [Id]
+                FROM [dbo].[Iller]
+                WHERE [Ad] = N'Trabzon'
+                ORDER BY [Id]
+            );
 
-            SELECT TOP (1)
-                @TrabzonIlId = [Id],
-                @TrabzonIlExists = 1
-            FROM [dbo].[Iller]
-            WHERE [Ad] = N'Trabzon'
-            ORDER BY [Id];
-
-            IF (@TrabzonIlExists = 1)
+            IF (@TrabzonIlId IS NULL)
             BEGIN
-                UPDATE [dbo].[Iller]
-                SET [Ad] = N'Trabzon',
-                    [AktifMi] = 1,
-                    [IsDeleted] = 0,
-                    [DeletedAt] = NULL,
-                    [UpdatedAt] = @Now,
-                    [UpdatedBy] = @AuditTag
-                WHERE [Id] = @TrabzonIlId;
-            END
-            ELSE
-            BEGIN
-                SET IDENTITY_INSERT [dbo].[Iller] ON;
-
-                INSERT INTO [dbo].[Iller]
-                    ([Id], [Ad], [AktifMi], [IsDeleted], [CreatedAt], [UpdatedAt], [DeletedAt], [CreatedBy], [UpdatedBy], [DeletedBy])
-                VALUES
-                    (@TrabzonIlId, N'Trabzon', 1, 0, @Now, @Now, NULL, @AuditTag, @AuditTag, NULL);
-
-                SET IDENTITY_INSERT [dbo].[Iller] OFF;
+                THROW 50000, 'Trabzon ili bulunamadi. Once merkezi il seed migration'i calismali.', 1;
             END;
 
             DECLARE @TrtKurumId int = 1000;

@@ -104,7 +104,7 @@ public partial class SeedKurumYoneticisiGrubu : Migration
             INSERT INTO @KurumAdminUsers ([Id])
             SELECT DISTINCT u.[Id]
             FROM [TODBase].[Users] u
-            INNER JOIN [TODBase].[UserKurums] uk
+            INNER JOIN [identity].[UserKurums] uk
                 ON uk.[UserId] = u.[Id]
                AND uk.[IsDeleted] = 0
                AND uk.[AktifMi] = 1
@@ -178,7 +178,7 @@ public partial class SeedKurumYoneticisiGrubu : Migration
             INSERT INTO @KurumAdminUsers ([Id])
             SELECT DISTINCT u.[Id]
             FROM [TODBase].[Users] u
-            INNER JOIN [TODBase].[UserKurums] uk
+            INNER JOIN [identity].[UserKurums] uk
                 ON uk.[UserId] = u.[Id]
                AND uk.[IsDeleted] = 0
                AND uk.[AktifMi] = 1

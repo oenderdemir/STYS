@@ -375,44 +375,13 @@ export class AppTopbar {
     hasNewNotificationCue = false;
     private lastRealtimeNotificationId: number | null = null;
 
-    get profileMenuItems(): MenuItem[] {
-        const items: MenuItem[] = [
-            {
-                label: 'Bildirim Tercihleri',
-                icon: 'pi pi-sliders-h',
-                command: () => this.openNotificationPreferencesDialog()
-            },
-            {
-                label: 'Sifre Degistir',
-                icon: 'pi pi-key',
-                command: () => this.openChangePasswordDialog()
-            }
-        ];
-
-        if (this.canViewKurumManagement()) {
-            items.push({
-                label: 'Kurum Yonetimi',
-                icon: 'pi pi-building',
-                routerLink: ['/kurum-yonetimi']
-            });
-        }
-
-        items.push(
-            { separator: true },
-            {
-                label: 'Cikis',
-                icon: 'pi pi-sign-out',
-                command: () => this.handleLogout()
-            }
-        );
-
-        return items;
-    }
+    profileMenuItems: MenuItem[] = [];
 
     constructor() {
         effect(() => {
             this.authService.sessionRevision();
             this.currentUserName = this.authService.getCurrentUserName();
+            this.refreshProfileMenuItems();
 
             if (!this.authService.isAuthenticated()) {
                 this.currentUserName = null;
@@ -466,6 +435,40 @@ export class AppTopbar {
 
     private canViewKurumManagement(): boolean {
         return this.authService.hasPermission('UserManagement.Manage') || this.authService.isSuperAdminUser();
+    }
+
+    private refreshProfileMenuItems(): void {
+        const items: MenuItem[] = [
+            {
+                label: 'Bildirim Tercihleri',
+                icon: 'pi pi-sliders-h',
+                command: () => this.openNotificationPreferencesDialog()
+            },
+            {
+                label: 'Sifre Degistir',
+                icon: 'pi pi-key',
+                command: () => this.openChangePasswordDialog()
+            }
+        ];
+
+        if (this.canViewKurumManagement()) {
+            items.push({
+                label: 'Kurum Yonetimi',
+                icon: 'pi pi-building',
+                routerLink: ['/kurum-yonetimi']
+            });
+        }
+
+        items.push(
+            { separator: true },
+            {
+                label: 'Cikis',
+                icon: 'pi pi-sign-out',
+                command: () => this.handleLogout()
+            }
+        );
+
+        this.profileMenuItems = items;
     }
 
     kurumDisplayLabel(): string {

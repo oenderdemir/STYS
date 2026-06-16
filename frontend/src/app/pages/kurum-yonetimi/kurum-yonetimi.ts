@@ -86,6 +86,7 @@ export class KurumYonetimi implements OnInit {
     activeTabIndex = 0;
     activeTabValue = '0';
     assignmentDraft: AssignmentFormState = this.createEmptyAssignment();
+    currentKurumAdmins: UserKurumModel[] = [];
 
     readonly canViewKurumManagement = this.authService.hasPermission('UserManagement.Manage') || this.authService.isSuperAdminUser();
 
@@ -104,10 +105,6 @@ export class KurumYonetimi implements OnInit {
 
     get canManageKurumList(): boolean {
         return this.canViewKurumManagement;
-    }
-
-    get currentKurumAdmins(): UserKurumModel[] {
-        return this.selectedKurumUsers.filter((item) => item.isKurumAdmin);
     }
 
     ngOnInit(): void {
@@ -134,6 +131,7 @@ export class KurumYonetimi implements OnInit {
         this.selectedKurum = this.createEmptyKurum();
         this.selectedKurumIsNew = true;
         this.selectedKurumUsers = [];
+        this.currentKurumAdmins = [];
         this.assignmentDialogVisible = false;
         this.activeTabIndex = 0;
         this.activeTabValue = '0';
@@ -144,6 +142,7 @@ export class KurumYonetimi implements OnInit {
         this.selectedKurumIsNew = false;
         this.activeTabIndex = 0;
         this.activeTabValue = '0';
+        this.currentKurumAdmins = [];
         this.loadKurumUsers();
     }
 
@@ -383,10 +382,11 @@ export class KurumYonetimi implements OnInit {
                         label: this.buildUserOptionLabel(user)
                     }));
 
-                    if (keepNewDraft && this.selectedKurumIsNew) {
-                        this.selectedKurumUsers = [];
-                        return;
-                    }
+                        if (keepNewDraft && this.selectedKurumIsNew) {
+                            this.selectedKurumUsers = [];
+                            this.currentKurumAdmins = [];
+                            return;
+                        }
 
                     const matched = this.resolvePreferredKurum(preferredKurumId);
                     if (matched) {
@@ -435,9 +435,11 @@ export class KurumYonetimi implements OnInit {
 
                         return this.getUserLabel(left.userId).localeCompare(this.getUserLabel(right.userId), 'tr');
                     });
+                    this.currentKurumAdmins = this.selectedKurumUsers.filter((item) => item.isKurumAdmin);
                 },
                 error: (error: unknown) => {
                     this.selectedKurumUsers = [];
+                    this.currentKurumAdmins = [];
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                 }
             });

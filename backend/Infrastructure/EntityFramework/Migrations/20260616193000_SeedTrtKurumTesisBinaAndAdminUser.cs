@@ -29,7 +29,7 @@ public partial class SeedTrtKurumTesisBinaAndAdminUser : Migration
 
             IF (@TrabzonIlId IS NULL)
             BEGIN
-                THROW 50000, 'Trabzon ili bulunamadi. Once merkezi il seed migration'i calismali.', 1;
+                THROW 50000, N'Trabzon ili bulunamadi. Once merkezi il seed migration''i calismali.', 1;
             END;
 
             DECLARE @TrtKurumId int = 1000;

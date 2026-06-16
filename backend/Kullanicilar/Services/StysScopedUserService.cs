@@ -481,13 +481,31 @@ public class StysScopedUserService : BaseUserService
         var kurumYoneticisiGroupSelected = requestedGroups.Any(x => string.Equals(x.Name, IdentityGroupNames.KurumYoneticisiGroup, StringComparison.OrdinalIgnoreCase));
         if (kurumYoneticisiGroupSelected && !dto.IsKurumAdmin)
         {
-            throw new BaseException("Kurum Yöneticisi Grubu sadece kurum admini için atanabilir.", 403);
+            if (!dto.Id.HasValue)
+            {
+                dto.IsKurumAdmin = true;
+            }
+            else if (await HasActiveKurumAdminAssignmentAsync(dto.Id.Value, cancellationToken))
+            {
+                dto.IsKurumAdmin = true;
+            }
+            else
+            {
+                throw new BaseException("Kurum Yöneticisi Grubu sadece kurum admini olan kullanicilara atanabilir.", 403);
+            }
         }
 
         if (dto.IsKurumAdmin)
         {
             await EnsureKurumYoneticisiGroupIsPresentAsync(dto, cancellationToken);
         }
+    }
+
+    private async Task<bool> HasActiveKurumAdminAssignmentAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await _identityDbContext.UserKurums.AnyAsync(
+            x => x.UserId == userId && x.AktifMi && x.IsKurumAdmin,
+            cancellationToken);
     }
 
     private async Task EnsureKurumYoneticisiGroupIsPresentAsync(UserDto dto, CancellationToken cancellationToken)

@@ -8,19 +8,28 @@
     border-radius: 1rem;
 }
 
-.kurum-yonetimi-grid {
-    display: grid;
-    grid-template-columns: minmax(30rem, 1fr) minmax(0, 1.6fr);
-    gap: 1rem;
-    align-items: start;
-}
-
 .panel-card {
     background: var(--surface-card);
     border: 1px solid var(--surface-border);
     border-radius: 1rem;
     padding: 1rem;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.kurum-list-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+:host ::ng-deep .kurum-yonetimi-dialog .p-dialog-content {
+    padding-top: 0.25rem;
+}
+
+.dialog-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .section-header {
@@ -164,8 +173,8 @@
 }
 
 @media (max-width: 1100px) {
-    .kurum-yonetimi-grid {
-        grid-template-columns: 1fr;
+    .panel-card {
+        padding: 0.85rem;
     }
 }
 

@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, forkJoin, Observable } from 'rxjs';
+import { catchError, finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -81,6 +81,7 @@ export class KurumYonetimi implements OnInit {
     kurumSaving = false;
     kurumUserLoading = false;
     kurumUserSaving = false;
+    kurumDialogVisible = false;
     assignmentDialogVisible = false;
     assignmentDialogMode: 'create' | 'edit' = 'create';
     activeTabIndex = 0;
@@ -112,11 +113,11 @@ export class KurumYonetimi implements OnInit {
             return;
         }
 
-        this.loadPageData(this.authService.getAktifKurumId(), false);
+        this.loadPageData(false);
     }
 
     refresh(): void {
-        this.loadPageData(this.selectedKurumIsNew ? this.authService.getAktifKurumId() : this.selectedKurum.id ?? this.authService.getAktifKurumId(), this.selectedKurumIsNew);
+        this.loadPageData(this.selectedKurumIsNew, this.selectedKurum.id ?? null);
     }
 
     onTabChange(value: string | number | undefined): void {
@@ -132,6 +133,7 @@ export class KurumYonetimi implements OnInit {
         this.selectedKurumIsNew = true;
         this.selectedKurumUsers = [];
         this.currentKurumAdmins = [];
+        this.kurumDialogVisible = true;
         this.assignmentDialogVisible = false;
         this.activeTabIndex = 0;
         this.activeTabValue = '0';
@@ -140,6 +142,7 @@ export class KurumYonetimi implements OnInit {
     selectKurum(kurum: KurumModel): void {
         this.selectedKurum = this.cloneKurum(kurum);
         this.selectedKurumIsNew = false;
+        this.kurumDialogVisible = true;
         this.activeTabIndex = 0;
         this.activeTabValue = '0';
         this.currentKurumAdmins = [];
@@ -185,8 +188,15 @@ export class KurumYonetimi implements OnInit {
                         detail: this.selectedKurumIsNew ? 'Kurum olusturuldu.' : 'Kurum guncellendi.'
                     });
                     this.selectedKurumIsNew = false;
-                    const preferredKurumId = saved.id ?? this.selectedKurum.id ?? this.authService.getAktifKurumId() ?? null;
-                    this.loadPageData(preferredKurumId, false);
+                    this.selectedKurum = {
+                        ...saved,
+                        id: saved.id ?? this.selectedKurum.id ?? null
+                    };
+                    this.kurumDialogVisible = true;
+                    this.loadPageData(false, this.selectedKurum.id ?? null);
+                    if (this.selectedKurum.id) {
+                        this.loadKurumUsers();
+                    }
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
@@ -219,7 +229,7 @@ export class KurumYonetimi implements OnInit {
                         }
 
                         const preferredKurumId = wasSelected ? (this.authService.getAktifKurumId() ?? null) : (this.selectedKurum.id ?? null);
-                        this.loadPageData(preferredKurumId, wasSelected);
+                        this.loadPageData(wasSelected, preferredKurumId);
                     },
                     error: (error: unknown) => {
                         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
@@ -362,11 +372,29 @@ export class KurumYonetimi implements OnInit {
         return this.selectedKurumUsers.length;
     }
 
-    private loadPageData(preferredKurumId: number | null, keepNewDraft: boolean): void {
+    private loadPageData(keepNewDraft: boolean, preferredKurumId: number | null = null): void {
         this.loading = true;
         forkJoin({
-            kurumlar: this.kurumService.getAll(),
-            users: this.kullaniciYonetimiService.getUsers()
+            kurumlar: this.kurumService.getMyKurumlar().pipe(
+                catchError((error: unknown) => {
+                    this.messageService.add({
+                        severity: UiSeverity.Error,
+                        summary: 'Hata',
+                        detail: this.resolveErrorMessage(error)
+                    });
+                    return of([]);
+                })
+            ),
+            users: this.kullaniciYonetimiService.getUsers().pipe(
+                catchError((error: unknown) => {
+                    this.messageService.add({
+                        severity: UiSeverity.Warn,
+                        summary: 'Uyari',
+                        detail: this.resolveErrorMessage(error)
+                    });
+                    return of([]);
+                })
+            )
         })
             .pipe(
                 finalize(() => {
@@ -382,26 +410,28 @@ export class KurumYonetimi implements OnInit {
                         label: this.buildUserOptionLabel(user)
                     }));
 
-                        if (keepNewDraft && this.selectedKurumIsNew) {
-                            this.selectedKurumUsers = [];
-                            this.currentKurumAdmins = [];
-                            return;
-                        }
+                    if (keepNewDraft && this.selectedKurumIsNew) {
+                        this.selectedKurumUsers = [];
+                        this.currentKurumAdmins = [];
+                        return;
+                    }
 
                     const matched = this.resolvePreferredKurum(preferredKurumId);
-                    if (matched) {
-                        this.selectedKurum = this.cloneKurum(matched);
+                    const fallback = matched ?? this.kurumlar[0] ?? null;
+
+                    if (fallback) {
+                        const shouldReloadUsers = this.selectedKurum.id !== fallback.id || this.selectedKurumIsNew;
+                        this.selectedKurum = this.cloneKurum(fallback);
                         this.selectedKurumIsNew = false;
-                        this.loadKurumUsers();
-                        return;
+
+                        if (shouldReloadUsers) {
+                            this.loadKurumUsers();
+                        }
                     }
 
-                    if (this.kurumlar.length > 0) {
-                        this.selectKurum(this.kurumlar[0]);
-                        return;
+                    if (!this.selectedKurum.id && this.kurumlar.length === 0) {
+                        this.openNewKurum();
                     }
-
-                    this.openNewKurum();
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });

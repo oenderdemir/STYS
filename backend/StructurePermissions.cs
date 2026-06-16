@@ -2,6 +2,11 @@ namespace STYS;
 
 public static class StructurePermissions
 {
+    public static class System
+    {
+        public const string SuperAdmin = "System.SuperAdmin";
+    }
+
     public static class IlYonetimi
     {
         public const string Menu = "IlYonetimi.Menu";

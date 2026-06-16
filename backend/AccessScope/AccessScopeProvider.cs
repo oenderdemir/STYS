@@ -334,6 +334,7 @@ public class AccessScopeProvider : IAccessScopeProvider
 
         return permissions.Any(permission =>
             permission.Equals(TodPlatformAuthorizationConstants.AdminPermission, StringComparison.OrdinalIgnoreCase)
+            || permission.Equals(TodPlatformAuthorizationConstants.SuperAdminPermission, StringComparison.OrdinalIgnoreCase)
             || permission.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
     }
 }

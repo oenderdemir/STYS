@@ -9,6 +9,7 @@ public static class TodPlatformAuthorizationConstants
     public const string PermissionClaimType = "permission";
 
     public const string AdminPermission = "KullaniciTipi.Admin";
+    public const string SuperAdminPermission = "System.SuperAdmin";
     public const string UiUserPermission = "KullaniciTipi.UIUser";
     public const string ServiceUserPermission = "KullaniciTipi.ServiceUser";
 }

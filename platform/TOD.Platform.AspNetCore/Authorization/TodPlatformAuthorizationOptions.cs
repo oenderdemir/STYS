@@ -4,6 +4,7 @@ public sealed class TodPlatformAuthorizationOptions
 {
     public string PermissionClaimType { get; set; } = TodPlatformAuthorizationConstants.PermissionClaimType;
     public string AdminPermission { get; set; } = TodPlatformAuthorizationConstants.AdminPermission;
+    public string SuperAdminPermission { get; set; } = TodPlatformAuthorizationConstants.SuperAdminPermission;
     public string UiUserPermission { get; set; } = TodPlatformAuthorizationConstants.UiUserPermission;
     public string ServiceUserPermission { get; set; } = TodPlatformAuthorizationConstants.ServiceUserPermission;
     public string UiScheme { get; set; } = TodPlatformAuthorizationConstants.UiScheme;

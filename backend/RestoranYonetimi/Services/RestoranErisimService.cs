@@ -87,6 +87,7 @@ public class RestoranErisimService : IRestoranErisimService
 
         var userPermissions = GetCurrentUserPermissionSet();
         var isAdmin = userPermissions.Contains(TodPlatformAuthorizationConstants.AdminPermission)
+            || userPermissions.Contains(TodPlatformAuthorizationConstants.SuperAdminPermission)
             || userPermissions.Any(x => x.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
         var shouldBeScoped = userPermissions.Contains(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir)
             || userPermissions.Contains(StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir)

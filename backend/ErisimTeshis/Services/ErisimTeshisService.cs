@@ -505,6 +505,7 @@ public class ErisimTeshisService : IErisimTeshisService
     {
         var adminMi = permissionSet.Any(permission =>
             permission.Equals(TodPlatformAuthorizationConstants.AdminPermission, StringComparison.OrdinalIgnoreCase)
+            || permission.Equals(TodPlatformAuthorizationConstants.SuperAdminPermission, StringComparison.OrdinalIgnoreCase)
             || permission.EndsWith(".Admin", StringComparison.OrdinalIgnoreCase));
 
         if (adminMi)

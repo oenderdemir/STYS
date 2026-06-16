@@ -55,12 +55,12 @@ public static class TodPlatformExtensions
         {
             authOptions.AddPolicy(TodPlatformAuthorizationConstants.UiPolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.UiUserPermission)
+                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.SuperAdminPermission, options.UiUserPermission)
                 .AddAuthenticationSchemes(options.UiScheme));
 
             authOptions.AddPolicy(TodPlatformAuthorizationConstants.ServicePolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.ServiceUserPermission)
+                .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.SuperAdminPermission, options.ServiceUserPermission)
                 .AddAuthenticationSchemes(options.ServiceScheme));
         });
 

@@ -60,6 +60,10 @@ public partial class SeedKurumYoneticisiGrubu : Migration
                  OR (r.[Domain] = N'RoleManagement' AND r.[Name] = N'Manage')
                  OR (r.[Domain] = N'UserGroupManagement' AND r.[Name] = N'Manage')
                  OR (r.[Domain] = N'MenuManagement' AND r.[Name] = N'Manage')
+                 OR (r.[Domain] = N'RoleManagement' AND r.[Name] = N'Menu')
+                 OR (r.[Domain] = N'UserGroupManagement' AND r.[Name] = N'Menu')
+                 OR (r.[Domain] = N'MenuManagement' AND r.[Name] = N'Menu')
+                 OR (r.[Domain] = N'LisansYonetimi' AND r.[Name] = N'Menu')
                  OR (r.[Domain] = N'CountryManagement' AND r.[Name] = N'Manage')
               );
 

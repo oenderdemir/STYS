@@ -38,7 +38,7 @@ interface UserFormState extends UserResponseDto {
     isKurumAdmin?: boolean;
 }
 
-type ScopedCreateType = 'resepsiyonist' | 'binaYonetici' | 'restoranYonetici' | 'garson' | null;
+type ScopedCreateType = 'tesisYonetici' | 'resepsiyonist' | 'binaYonetici' | 'restoranYonetici' | 'garson' | null;
 
 @Component({
     selector: 'app-kullanici-yonetimi',
@@ -150,6 +150,10 @@ export class KullaniciYonetimi implements OnInit {
         this.openScopedCreate('resepsiyonist');
     }
 
+    openNewTesisYoneticisi(): void {
+        this.openScopedCreate('tesisYonetici');
+    }
+
     openNewBinaYoneticisi(): void {
         this.openScopedCreate('binaYonetici');
     }
@@ -223,7 +227,8 @@ export class KullaniciYonetimi implements OnInit {
             && this.isScopedTesisManager
             && !!this.selectedTesisIdForCreate
             && (
-                this.scopedCreateType === 'resepsiyonist'
+                this.scopedCreateType === 'tesisYonetici'
+                || this.scopedCreateType === 'resepsiyonist'
                 || this.scopedCreateType === 'binaYonetici'
                 || this.scopedCreateType === 'restoranYonetici'
                 || this.scopedCreateType === 'garson'
@@ -247,7 +252,9 @@ export class KullaniciYonetimi implements OnInit {
         const request$: Observable<unknown> =
             this.isEditMode && this.selectedUser.id
                 ? this.service.updateUser(this.selectedUser.id, payload)
-                : isScopedCreate && this.scopedCreateType === 'resepsiyonist' && this.selectedTesisIdForCreate
+                : isScopedCreate && this.scopedCreateType === 'tesisYonetici' && this.selectedTesisIdForCreate
+                    ? this.service.createTesisYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
+                    : isScopedCreate && this.scopedCreateType === 'resepsiyonist' && this.selectedTesisIdForCreate
                     ? this.service.createResepsiyonistUserForTesis(this.selectedTesisIdForCreate, payload)
                     : isScopedCreate && this.scopedCreateType === 'binaYonetici' && this.selectedTesisIdForCreate
                         ? this.service.createBinaYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
@@ -538,26 +545,30 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
-        const markerRole = type === 'resepsiyonist'
-            ? 'KullaniciAtama.ResepsiyonistAtanabilir'
-            : type === 'binaYonetici'
-                ? 'KullaniciAtama.BinaYoneticisiAtanabilir'
-                : type === 'restoranYonetici'
-                    ? 'KullaniciAtama.RestoranYoneticisiAtanabilir'
-                    : 'KullaniciAtama.RestoranGarsonuAtanabilir';
+        const markerRole = type === 'tesisYonetici'
+            ? 'KullaniciAtama.TesisYoneticisiAtanabilir'
+            : type === 'resepsiyonist'
+                ? 'KullaniciAtama.ResepsiyonistAtanabilir'
+                : type === 'binaYonetici'
+                    ? 'KullaniciAtama.BinaYoneticisiAtanabilir'
+                    : type === 'restoranYonetici'
+                        ? 'KullaniciAtama.RestoranYoneticisiAtanabilir'
+                        : 'KullaniciAtama.RestoranGarsonuAtanabilir';
 
         const groupId = this.findGroupIdByMarkerRole(markerRole);
         if (!groupId) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Grup Bulunamadi',
-                detail: type === 'resepsiyonist'
-                    ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
-                    : type === 'binaYonetici'
-                        ? 'Bina yoneticisi grubuna ait atanabilir kayit bulunamadi.'
-                        : type === 'restoranYonetici'
-                            ? 'Restoran yoneticisi grubuna ait atanabilir kayit bulunamadi.'
-                            : 'Garson grubuna ait atanabilir kayit bulunamadi.'
+                detail: type === 'tesisYonetici'
+                    ? 'Tesis yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+                    : type === 'resepsiyonist'
+                        ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
+                        : type === 'binaYonetici'
+                            ? 'Bina yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+                            : type === 'restoranYonetici'
+                                ? 'Restoran yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+                                : 'Garson grubuna ait atanabilir kayit bulunamadi.'
             });
             return;
         }
@@ -572,7 +583,9 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     private findGroupIdByMarkerRole(markerRole: string): string | null {
-        const preferredGroupName = markerRole === 'KullaniciAtama.RestoranYoneticisiAtanabilir'
+        const preferredGroupName = markerRole === 'KullaniciAtama.TesisYoneticisiAtanabilir'
+            ? 'TesisYoneticiGrubu'
+            : markerRole === 'KullaniciAtama.RestoranYoneticisiAtanabilir'
             ? 'RestoranYoneticiGrubu'
             : markerRole === 'KullaniciAtama.RestoranGarsonuAtanabilir'
                 ? 'GarsonGrubu'

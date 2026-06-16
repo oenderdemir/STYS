@@ -111,6 +111,49 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         return created;
     }
 
+    public async Task<UserDto> CreateTesisYoneticisiUserAsync(int tesisId, UserDto dto)
+    {
+        if (dto is null)
+        {
+            throw new BaseException("Kullanici bilgisi zorunludur.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId);
+        await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir);
+
+        var tesis = await _tesisRepository.GetByIdAsync(tesisId);
+        if (tesis is null)
+        {
+            throw new BaseException("Secilen tesis bulunamadi.", 404);
+        }
+
+        var managerGroupId = await GetGroupIdByMarkerAsync(
+            nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir));
+
+        if (managerGroupId == Guid.Empty)
+        {
+            throw new BaseException("Tesis yoneticisi grubu bulunamadi.", 400);
+        }
+
+        dto.UserGroups =
+        [
+            new UserGroupDto
+            {
+                Id = managerGroupId
+            }
+        ];
+
+        var created = await _userService.AddAsync(dto);
+        if (!created.Id.HasValue)
+        {
+            throw new BaseException("Tesis yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
+        }
+
+        await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+        await EnsureTesisYoneticiAssignmentAsync(created.Id.Value, tesisId);
+        return created;
+    }
+
     public async Task<UserDto> CreateMuhasebeciUserAsync(int tesisId, UserDto dto)
     {
         if (dto is null)
@@ -931,6 +974,10 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         {
             query = query.OrderByDescending(x => x.Name == "RestoranYoneticiGrubu");
         }
+        else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir))
+        {
+            query = query.OrderByDescending(x => x.Name == "TesisYoneticiGrubu");
+        }
         else if (markerRoleName == nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir))
         {
             query = query.OrderByDescending(x => x.Name == "GarsonGrubu");
@@ -970,5 +1017,24 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingOwner.TesisId = tesisId;
         _stysDbContext.KullaniciTesisSahiplikleri.Update(existingOwner);
         await _stysDbContext.SaveChangesAsync();
+    }
+
+    private async Task EnsureTesisYoneticiAssignmentAsync(Guid userId, int tesisId)
+    {
+        var existingAssignment = await _tesisYoneticiRepository
+            .Where(x => x.UserId == userId && x.TesisId == tesisId)
+            .FirstOrDefaultAsync();
+
+        if (existingAssignment is not null)
+        {
+            return;
+        }
+
+        await _tesisYoneticiRepository.AddAsync(new TesisYonetici
+        {
+            UserId = userId,
+            TesisId = tesisId
+        });
+        await _tesisYoneticiRepository.SaveChangesAsync();
     }
 }

@@ -72,6 +72,18 @@ export class KullaniciYonetimiService {
         );
     }
 
+    createTesisYoneticisiUserForTesis(tesisId: number, payload: UserRequestDto): Observable<UserResponseDto> {
+        return this.http.post<ApiResponse<UserResponseDto>>(`${this.apiBaseUrl}/ui/tesis/${tesisId}/tesis-yonetici-kullanici`, payload).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis yoneticisi kullanici olusturulamadi.');
+            })
+        );
+    }
+
     createBinaYoneticisiUserForTesis(tesisId: number, payload: UserRequestDto): Observable<UserResponseDto> {
         return this.http.post<ApiResponse<UserResponseDto>>(`${this.apiBaseUrl}/ui/tesis/${tesisId}/bina-yonetici-kullanici`, payload).pipe(
             map((responseEnvelope) => {

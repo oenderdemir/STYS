@@ -4,6 +4,9 @@
 <p-toolbar styleClass="mb-4">
     <ng-template #start>
         @if (showScopedCreateButtons) {
+            @if (canAssignTesisYoneticisi) {
+                <p-button label="Tesis Yoneticisi Olustur" icon="pi pi-users" class="mr-2" (onClick)="openNewTesisYoneticisi()" />
+            }
             @if (canAssignResepsiyonist) {
                 <p-button label="Resepsiyonist Olustur" icon="pi pi-user-plus" class="mr-2" (onClick)="openNewResepsiyonist()" />
             }

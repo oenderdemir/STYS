@@ -112,6 +112,14 @@ public class TesisController : UIController
         return Ok(created);
     }
 
+    [HttpPost("{tesisId:int}/tesis-yonetici-kullanici")]
+    [Permission(IdentityPermissions.UserManagement.Manage)]
+    public async Task<ActionResult<UserDto>> CreateTesisYoneticisiUser(int tesisId, [FromBody] UserDto dto)
+    {
+        var created = await _tesisService.CreateTesisYoneticisiUserAsync(tesisId, dto);
+        return Ok(created);
+    }
+
     [HttpPost("{tesisId:int}/bina-yonetici-kullanici")]
     [Permission(IdentityPermissions.UserManagement.Manage)]
     public async Task<ActionResult<UserDto>> CreateBinaYoneticisiUser(int tesisId, [FromBody] UserDto dto)

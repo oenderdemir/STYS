@@ -1,8 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { catchError, finalize, forkJoin, Observable, of } from 'rxjs';
+import { catchError, finalize, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -70,6 +70,7 @@ export class KurumYonetimi implements OnInit {
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
+    private readonly cdr = inject(ChangeDetectorRef);
 
     kurumlar: KurumModel[] = [];
     selectedKurum: KurumFormState = this.createEmptyKurum();
@@ -373,9 +374,15 @@ export class KurumYonetimi implements OnInit {
     }
 
     private loadPageData(keepNewDraft: boolean, preferredKurumId: number | null = null): void {
+        this.loadKurumlar(keepNewDraft, preferredKurumId);
+        this.loadAssignableUsers();
+    }
+
+    private loadKurumlar(keepNewDraft: boolean, preferredKurumId: number | null = null): void {
         this.loading = true;
-        forkJoin({
-            kurumlar: this.kurumService.getMyKurumlar().pipe(
+        this.kurumService
+            .getMyKurumlar()
+            .pipe(
                 catchError((error: unknown) => {
                     this.messageService.add({
                         severity: UiSeverity.Error,
@@ -383,33 +390,15 @@ export class KurumYonetimi implements OnInit {
                         detail: this.resolveErrorMessage(error)
                     });
                     return of([]);
-                })
-            ),
-            users: this.kullaniciYonetimiService.getUsers().pipe(
-                catchError((error: unknown) => {
-                    this.messageService.add({
-                        severity: UiSeverity.Warn,
-                        summary: 'Uyari',
-                        detail: this.resolveErrorMessage(error)
-                    });
-                    return of([]);
-                })
-            )
-        })
-            .pipe(
+                }),
                 finalize(() => {
                     this.loading = false;
+                    this.cdr.detectChanges();
                 })
             )
             .subscribe({
-                next: ({ kurumlar, users }) => {
+                next: (kurumlar) => {
                     this.kurumlar = [...(kurumlar ?? [])].sort((left, right) => left.ad.localeCompare(right.ad, 'tr'));
-                    this.users = [...(users ?? [])].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? '', 'tr'));
-                    this.userOptions = this.users.map((user) => ({
-                        value: user.id ?? '',
-                        label: this.buildUserOptionLabel(user)
-                    }));
-
                     if (keepNewDraft && this.selectedKurumIsNew) {
                         this.selectedKurumUsers = [];
                         this.currentKurumAdmins = [];
@@ -432,9 +421,38 @@ export class KurumYonetimi implements OnInit {
                     if (!this.selectedKurum.id && this.kurumlar.length === 0) {
                         this.openNewKurum();
                     }
+                    this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadAssignableUsers(): void {
+        this.kullaniciYonetimiService
+            .getUsers()
+            .pipe(
+                catchError((error: unknown) => {
+                    this.messageService.add({
+                        severity: UiSeverity.Warn,
+                        summary: 'Uyari',
+                        detail: this.resolveErrorMessage(error)
+                    });
+                    return of([]);
+                }),
+                finalize(() => {
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (users) => {
+                    this.users = [...(users ?? [])].sort((left, right) => (left.userName ?? '').localeCompare(right.userName ?? '', 'tr'));
+                    this.userOptions = this.users.map((user) => ({
+                        value: user.id ?? '',
+                        label: this.buildUserOptionLabel(user)
+                    }));
                 }
             });
     }

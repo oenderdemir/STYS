@@ -1,0 +1,190 @@
+.kurum-yonetimi-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.kurum-yonetimi-toolbar {
+    border-radius: 1rem;
+}
+
+.kurum-yonetimi-grid {
+    display: grid;
+    grid-template-columns: minmax(30rem, 1fr) minmax(0, 1.6fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.panel-card {
+    background: var(--surface-card);
+    border: 1px solid var(--surface-border);
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.section-header.compact {
+    margin-bottom: 1.25rem;
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.section-header p {
+    margin: 0.25rem 0 0;
+    color: var(--text-color-secondary);
+    font-size: 0.88rem;
+}
+
+.summary-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: var(--surface-100);
+    color: var(--text-color-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.selected-row {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.kurum-table tr {
+    cursor: pointer;
+}
+
+.actions-col {
+    width: 14rem;
+}
+
+.mono {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    font-size: 0.92rem;
+}
+
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.kurum-form-grid,
+.assignment-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem 1rem;
+    align-items: start;
+}
+
+.kurum-form-grid .field,
+.assignment-form-grid .field {
+    margin: 0;
+    min-width: 0;
+}
+
+.kurum-form-grid .field-full,
+.assignment-form-grid .field-full {
+    grid-column: 1 / -1;
+}
+
+.kurum-form-grid label,
+.assignment-form-grid label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-color-secondary);
+}
+
+.toggle-field {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding-top: 0.35rem;
+}
+
+.checkbox-line {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.checkbox-line label {
+    margin-bottom: 0;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+}
+
+.empty-state,
+.empty-inline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 18rem;
+    text-align: center;
+    color: var(--text-color-secondary);
+}
+
+.empty-state i {
+    font-size: 2rem;
+    color: var(--primary-color);
+}
+
+.empty-state h3,
+.empty-inline p {
+    margin: 0;
+}
+
+.help-text {
+    display: block;
+    margin-top: 0.35rem;
+    color: var(--text-color-secondary);
+    font-size: 0.78rem;
+}
+
+@media (max-width: 1100px) {
+    .kurum-yonetimi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .kurum-form-grid,
+    .assignment-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .kurum-form-grid .field-full,
+    .assignment-form-grid .field-full {
+        grid-column: auto;
+    }
+
+    .section-header {
+        flex-direction: column;
+    }
+
+    .actions-col {
+        width: auto;
+    }
+}

@@ -375,26 +375,39 @@ export class AppTopbar {
     hasNewNotificationCue = false;
     private lastRealtimeNotificationId: number | null = null;
 
-    readonly profileMenuItems: MenuItem[] = [
-        {
-            label: 'Bildirim Tercihleri',
-            icon: 'pi pi-sliders-h',
-            command: () => this.openNotificationPreferencesDialog()
-        },
-        {
-            label: 'Sifre Degistir',
-            icon: 'pi pi-key',
-            command: () => this.openChangePasswordDialog()
-        },
-        {
-            separator: true
-        },
-        {
-            label: 'Cikis',
-            icon: 'pi pi-sign-out',
-            command: () => this.handleLogout()
+    get profileMenuItems(): MenuItem[] {
+        const items: MenuItem[] = [
+            {
+                label: 'Bildirim Tercihleri',
+                icon: 'pi pi-sliders-h',
+                command: () => this.openNotificationPreferencesDialog()
+            },
+            {
+                label: 'Sifre Degistir',
+                icon: 'pi pi-key',
+                command: () => this.openChangePasswordDialog()
+            }
+        ];
+
+        if (this.canViewKurumManagement()) {
+            items.push({
+                label: 'Kurum Yonetimi',
+                icon: 'pi pi-building',
+                routerLink: ['/kurum-yonetimi']
+            });
         }
-    ];
+
+        items.push(
+            { separator: true },
+            {
+                label: 'Cikis',
+                icon: 'pi pi-sign-out',
+                command: () => this.handleLogout()
+            }
+        );
+
+        return items;
+    }
 
     constructor() {
         effect(() => {
@@ -449,6 +462,10 @@ export class AppTopbar {
     unreadBadgeText(): string {
         const value = this.unreadCount();
         return value > 99 ? '99+' : value.toString();
+    }
+
+    private canViewKurumManagement(): boolean {
+        return this.authService.hasPermission('UserManagement.Manage') || this.authService.isSuperAdminUser();
     }
 
     kurumDisplayLabel(): string {

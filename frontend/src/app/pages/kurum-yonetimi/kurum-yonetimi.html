@@ -1,0 +1,406 @@
+<p-toast />
+<p-confirmDialog />
+
+<div class="kurum-yonetimi-page">
+    <p-toolbar styleClass="kurum-yonetimi-toolbar">
+        <ng-template #start>
+            <div class="flex flex-wrap gap-2">
+                <p-button
+                    label="Yeni Kurum"
+                    icon="pi pi-plus"
+                    [disabled]="!canManageKurumList"
+                    (onClick)="openNewKurum()"
+                />
+                <p-button
+                    label="Yenile"
+                    icon="pi pi-refresh"
+                    severity="secondary"
+                    [outlined]="true"
+                    (onClick)="refresh()"
+                />
+            </div>
+        </ng-template>
+        <ng-template #end>
+            <span class="text-sm text-color-secondary">Kurum ve kurum kullanici atamalarini yonetin.</span>
+        </ng-template>
+    </p-toolbar>
+
+    @if (!canViewKurumManagement) {
+        <div class="panel-card access-denied-card">
+            <i class="pi pi-lock"></i>
+            <h3>Erisim Sinirli</h3>
+            <p>Bu sayfayi goruntulemek icin gerekli yetkiniz bulunmuyor.</p>
+        </div>
+    } @else {
+        <div class="kurum-yonetimi-grid">
+            <section class="panel-card kurum-list-panel">
+                <div class="section-header">
+                    <div>
+                        <h3>Kurumlar</h3>
+                        <p>Aktif kurum secimini ve kurum kartlarini yonetin.</p>
+                    </div>
+                    <span class="summary-pill">{{ kurumlar.length }} kayit</span>
+                </div>
+
+                <p-table
+                    [value]="kurumlar"
+                    [loading]="loading"
+                    dataKey="id"
+                    [tableStyle]="{ 'min-width': '56rem' }"
+                    styleClass="p-datatable-sm kurum-table"
+                    [scrollable]="true"
+                    scrollDirection="horizontal"
+                >
+                    <ng-template #header>
+                        <tr>
+                            <th>Kod</th>
+                            <th>Ad</th>
+                            <th>VergiNo</th>
+                            <th>Telefon</th>
+                            <th>Eposta</th>
+                            <th>Durum</th>
+                            <th class="actions-col">Islemler</th>
+                        </tr>
+                    </ng-template>
+
+                    <ng-template #body let-kurum>
+                        <tr [class.selected-row]="isSelectedKurum(kurum)" (click)="selectKurum(kurum)">
+                            <td class="mono">{{ kurum.kod }}</td>
+                            <td>{{ kurum.ad }}</td>
+                            <td>{{ kurum.vergiNo || '-' }}</td>
+                            <td>{{ kurum.telefon || '-' }}</td>
+                            <td>{{ kurum.eposta || '-' }}</td>
+                            <td>
+                                <p-tag [value]="kurum.aktifMi ? 'Aktif' : 'Pasif'" [severity]="kurum.aktifMi ? 'success' : 'danger'"></p-tag>
+                            </td>
+                            <td>
+                                <div class="table-actions" (click)="$event.stopPropagation()">
+                                    <p-button label="Sec" icon="pi pi-check" size="small" severity="secondary" [outlined]="true" (onClick)="selectKurum(kurum)" />
+                                    <p-button label="Duzenle" icon="pi pi-pencil" size="small" severity="info" [outlined]="true" (onClick)="selectKurum(kurum)" />
+                                    <p-button label="Sil" icon="pi pi-trash" size="small" severity="danger" [outlined]="true" [disabled]="!canManageKurumList" (onClick)="deleteKurum(kurum)" />
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </section>
+
+            <section class="panel-card kurum-detail-panel">
+                @if (!selectedKurum.id && !selectedKurumIsNew) {
+                    <div class="empty-state">
+                        <i class="pi pi-building"></i>
+                        <h3>Yeni kurum olusturun</h3>
+                        <p>Soldaki listeden bir kurum secin veya yeni kurum olusturarak detay formunu doldurun.</p>
+                    </div>
+                } @else {
+                    <p-tabs [value]="activeTabValue" (valueChange)="onTabChange($event)">
+                        <p-tablist>
+                            <p-tab value="0">Kurum Bilgileri</p-tab>
+                            <p-tab value="1" [disabled]="!selectedKurum.id">Kurum Kullanıcıları</p-tab>
+                            <p-tab value="2" [disabled]="!selectedKurum.id">Kurum Adminleri</p-tab>
+                        </p-tablist>
+                        <p-tabpanels>
+                            <p-tabpanel value="0">
+                            <div class="section-header compact">
+                                <div>
+                                    <h3>{{ selectedKurumIsNew ? 'Yeni Kurum' : selectedKurum.ad }}</h3>
+                                    <p>{{ selectedKurumIsNew ? 'Kurum kartini olusturun.' : 'Secili kurumun temel bilgilerini yonetin.' }}</p>
+                                </div>
+                                @if (selectedKurum.id) {
+                                    <p-tag [value]="selectedKurum.aktifMi ? 'Aktif' : 'Pasif'" [severity]="selectedKurum.aktifMi ? 'success' : 'danger'"></p-tag>
+                                }
+                            </div>
+
+                            <div class="kurum-form-grid">
+                                <div class="field">
+                                    <label>Kod *</label>
+                                    <input pInputText class="w-full" [(ngModel)]="selectedKurum.kod" placeholder="Kurum kodu" />
+                                </div>
+
+                                <div class="field">
+                                    <label>Ad *</label>
+                                    <input pInputText class="w-full" [(ngModel)]="selectedKurum.ad" placeholder="Kurum adi" />
+                                </div>
+
+                                <div class="field">
+                                    <label>Vergi No</label>
+                                    <input pInputText class="w-full" [(ngModel)]="selectedKurum.vergiNo" placeholder="Vergi numarasi" />
+                                </div>
+
+                                <div class="field">
+                                    <label>Telefon</label>
+                                    <input pInputText class="w-full" [(ngModel)]="selectedKurum.telefon" placeholder="Telefon" />
+                                </div>
+
+                                <div class="field field-full">
+                                    <label>E-posta</label>
+                                    <input pInputText class="w-full" [(ngModel)]="selectedKurum.eposta" placeholder="E-posta" />
+                                </div>
+
+                                <div class="field field-full toggle-field">
+                                    <p-checkbox inputId="kurumActive" [binary]="true" [(ngModel)]="selectedKurum.aktifMi"></p-checkbox>
+                                    <label for="kurumActive">Aktif kurum</label>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <p-button
+                                    [label]="kurumSaving ? 'Kaydediliyor...' : (selectedKurumIsNew ? 'Olustur' : 'Guncelle')"
+                                    icon="pi pi-save"
+                                    [disabled]="kurumSaving || !canManageKurumList"
+                                    (onClick)="saveKurum()"
+                                />
+                                <p-button
+                                    label="Yeni Form"
+                                    icon="pi pi-plus"
+                                    severity="secondary"
+                                    [outlined]="true"
+                                    [disabled]="kurumSaving || !canManageKurumList"
+                                    (onClick)="openNewKurum()"
+                                />
+                                <p-button
+                                    label="Sil"
+                                    icon="pi pi-trash"
+                                    severity="danger"
+                                    [outlined]="true"
+                                    [disabled]="kurumSaving || !selectedKurum.id || !canManageKurumList"
+                                    (onClick)="deleteKurum()"
+                                />
+                            </div>
+                            </p-tabpanel>
+
+                            <p-tabpanel value="1">
+                                @if (!selectedKurum.id) {
+                                    <div class="empty-inline">
+                                        <p>Bu sekme kurum kaydi kaydedildikten sonra kullanilabilir.</p>
+                                    </div>
+                                } @else {
+                                    <div class="section-header compact">
+                                        <div>
+                                            <h3>{{ selectedKurum.ad }}</h3>
+                                            <p>Secili kurum icin kullanici atamalarini yonetin.</p>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <p-button
+                                                label="Yeni Atama"
+                                                icon="pi pi-user-plus"
+                                                [disabled]="!canManageSelectedKurum"
+                                                (onClick)="openAssignDialog()"
+                                            />
+                                            <p-button
+                                                label="Yenile"
+                                                icon="pi pi-refresh"
+                                                severity="secondary"
+                                                [outlined]="true"
+                                                (onClick)="loadKurumUsers()"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <p-table
+                                        [value]="selectedKurumUsers"
+                                        [loading]="kurumUserLoading"
+                                        dataKey="id"
+                                        [tableStyle]="{ 'min-width': '60rem' }"
+                                        styleClass="p-datatable-sm kurum-user-table"
+                                        [scrollable]="true"
+                                        scrollDirection="horizontal"
+                                    >
+                                        <ng-template #header>
+                                            <tr>
+                                                <th>Kullanici</th>
+                                                <th>UserId</th>
+                                                <th>VarsayilanMi</th>
+                                                <th>AktifMi</th>
+                                                <th>IsKurumAdmin</th>
+                                                <th class="actions-col">Islemler</th>
+                                            </tr>
+                                        </ng-template>
+
+                                        <ng-template #body let-item>
+                                            <tr>
+                                                <td>{{ getUserLabel(item.userId) }}</td>
+                                                <td class="mono">{{ item.userId }}</td>
+                                                <td>
+                                                    <p-tag [value]="item.varsayilanMi ? 'Evet' : 'Hayir'" [severity]="item.varsayilanMi ? 'success' : 'secondary'"></p-tag>
+                                                </td>
+                                                <td>
+                                                    <p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'danger'"></p-tag>
+                                                </td>
+                                                <td>
+                                                    <p-tag [value]="item.isKurumAdmin ? 'Evet' : 'Hayir'" [severity]="item.isKurumAdmin ? 'info' : 'secondary'"></p-tag>
+                                                </td>
+                                                <td>
+                                                    <div class="table-actions">
+                                                        <p-button
+                                                            label="Duzenle"
+                                                            icon="pi pi-pencil"
+                                                            size="small"
+                                                            severity="info"
+                                                            [outlined]="true"
+                                                            [disabled]="!canManageSelectedKurum"
+                                                            (onClick)="openEditAssignment(item)"
+                                                        />
+                                                        <p-button
+                                                            label="Sil"
+                                                            icon="pi pi-trash"
+                                                            size="small"
+                                                            severity="danger"
+                                                            [outlined]="true"
+                                                            [disabled]="!canManageSelectedKurum"
+                                                            (onClick)="deleteAssignment(item)"
+                                                        />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </ng-template>
+                                    </p-table>
+                                }
+                            </p-tabpanel>
+
+                            <p-tabpanel value="2">
+                                @if (!selectedKurum.id) {
+                                    <div class="empty-inline">
+                                        <p>Bu sekme kurum kaydi kaydedildikten sonra kullanilabilir.</p>
+                                    </div>
+                                } @else {
+                                    <div class="section-header compact">
+                                        <div>
+                                            <h3>Kurum Adminleri</h3>
+                                            <p>IsKurumAdmin isaretli atamalar burada listelenir.</p>
+                                        </div>
+                                        <span class="summary-pill">{{ currentKurumAdmins.length }} admin</span>
+                                    </div>
+
+                                    <p-table
+                                        [value]="currentKurumAdmins"
+                                        [loading]="kurumUserLoading"
+                                        dataKey="id"
+                                        [tableStyle]="{ 'min-width': '56rem' }"
+                                        styleClass="p-datatable-sm kurum-admin-table"
+                                        [scrollable]="true"
+                                        scrollDirection="horizontal"
+                                    >
+                                        <ng-template #header>
+                                            <tr>
+                                                <th>Kullanici</th>
+                                                <th>UserId</th>
+                                                <th>VarsayilanMi</th>
+                                                <th>AktifMi</th>
+                                                <th class="actions-col">Islemler</th>
+                                            </tr>
+                                        </ng-template>
+
+                                        <ng-template #body let-item>
+                                            <tr>
+                                                <td>{{ getUserLabel(item.userId) }}</td>
+                                                <td class="mono">{{ item.userId }}</td>
+                                                <td>
+                                                    <p-tag [value]="item.varsayilanMi ? 'Evet' : 'Hayir'" [severity]="item.varsayilanMi ? 'success' : 'secondary'"></p-tag>
+                                                </td>
+                                                <td>
+                                                    <p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'danger'"></p-tag>
+                                                </td>
+                                                <td>
+                                                    <div class="table-actions">
+                                                        <p-button
+                                                            label="Duzenle"
+                                                            icon="pi pi-pencil"
+                                                            size="small"
+                                                            severity="info"
+                                                            [outlined]="true"
+                                                            [disabled]="!canManageSelectedKurum"
+                                                            (onClick)="openEditAssignment(item)"
+                                                        />
+                                                        <p-button
+                                                            label="Sil"
+                                                            icon="pi pi-trash"
+                                                            size="small"
+                                                            severity="danger"
+                                                            [outlined]="true"
+                                                            [disabled]="!canManageSelectedKurum"
+                                                            (onClick)="deleteAssignment(item)"
+                                                        />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </ng-template>
+                                    </p-table>
+                                }
+                            </p-tabpanel>
+                        </p-tabpanels>
+                    </p-tabs>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+<p-dialog
+    [header]="assignmentDialogMode === 'create' ? 'Kullanici Atama' : 'Kullanici Atama Duzenle'"
+    [(visible)]="assignmentDialogVisible"
+    [modal]="true"
+    [style]="{ width: '34rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '96vw' }"
+>
+    @if (selectedKurum.id) {
+        <div class="assignment-form-grid">
+            <div class="field field-full">
+                <label>Kullanici</label>
+                <p-select
+                    [options]="userOptions"
+                    [(ngModel)]="assignmentDraft.userId"
+                    optionLabel="label"
+                    optionValue="value"
+                    [filter]="true"
+                    [showClear]="true"
+                    appendTo="body"
+                    styleClass="w-full"
+                    [disabled]="assignmentDialogMode === 'edit'"
+                    placeholder="Kullanici secin"
+                />
+                @if (assignmentDialogMode === 'edit') {
+                    <small class="help-text">Duzenlemede kullanici degistirilmez.</small>
+                }
+            </div>
+
+            <div class="field">
+                <div class="checkbox-line">
+                    <p-checkbox inputId="assignmentDefault" [binary]="true" [(ngModel)]="assignmentDraft.varsayilanMi"></p-checkbox>
+                    <label for="assignmentDefault">Varsayilan</label>
+                </div>
+            </div>
+
+            <div class="field">
+                <div class="checkbox-line">
+                    <p-checkbox inputId="assignmentActive" [binary]="true" [(ngModel)]="assignmentDraft.aktifMi"></p-checkbox>
+                    <label for="assignmentActive">Aktif</label>
+                </div>
+            </div>
+
+            <div class="field field-full">
+                <div class="checkbox-line">
+                    <p-checkbox inputId="assignmentAdmin" [binary]="true" [(ngModel)]="assignmentDraft.isKurumAdmin"></p-checkbox>
+                    <label for="assignmentAdmin">Kurum admini olarak isaretle</label>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ng-template #footer>
+        <p-button
+            label="Iptal"
+            icon="pi pi-times"
+            severity="secondary"
+            text
+            [disabled]="kurumUserSaving"
+            (onClick)="assignmentDialogVisible = false"
+        />
+        <p-button
+            [label]="kurumUserSaving ? 'Kaydediliyor...' : 'Kaydet'"
+            icon="pi pi-check"
+            [disabled]="kurumUserSaving || !selectedKurum.id"
+            (onClick)="saveAssignment()"
+        />
+    </ng-template>
+</p-dialog>

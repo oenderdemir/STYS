@@ -78,6 +78,7 @@ import { TevkifatHesapEslemeleriPage } from './app/pages/muhasebe/tevkifat-hesap
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
+import { KurumYonetimi } from './app/pages/kurum-yonetimi/kurum-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
 
 export const appRoutes: Routes = [
@@ -105,6 +106,7 @@ export const appRoutes: Routes = [
             { path: 'menuler', component: MenuYonetimi, data: { breadcrumb: ['Yetkilendirme', 'Menuler'] } },
             { path: 'ulkeler', component: UlkeYonetimi, data: { breadcrumb: ['Sistem', 'Ulke Yonetimi'] } },
             { path: 'iller', component: IlYonetimi, data: { breadcrumb: ['Sistem', 'Il Yonetimi'] } },
+            { path: 'kurum-yonetimi', component: KurumYonetimi, data: { breadcrumb: ['Sistem', 'Kurum Yonetimi'] } },
             { path: 'tesisler', component: TesisYonetimi, data: { breadcrumb: ['Isletme', 'Tesis Yonetimi'] } },
             { path: 'binalar', component: BinaYonetimi, data: { breadcrumb: ['Tesis', 'Bina Yonetimi'] } },
             { path: 'isletme-alanlari', component: IsletmeAlaniSinifiYonetimi, data: { breadcrumb: ['Isletme', 'Isletme Alanlari'] } },

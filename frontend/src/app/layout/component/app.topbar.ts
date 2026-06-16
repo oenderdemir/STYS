@@ -531,17 +531,15 @@ export class AppTopbar {
         this.kurumOptionsLoading = true;
         this.kurumOptionsError = null;
 
-        this.kurumService.getAll().pipe(
+        this.kurumService.getMyKurumlar().pipe(
             finalize(() => {
                 this.kurumOptionsLoading = false;
                 this.cdr.detectChanges();
             })
         ).subscribe({
             next: (kurumlar) => {
-                const allowedKurumIds = new Set(this.authService.isSuperAdminUser() ? [] : this.authService.getKurumIds());
                 const normalized = (kurumlar ?? [])
                     .filter((kurum) => kurum && kurum.aktifMi)
-                    .filter((kurum) => this.authService.isSuperAdminUser() || allowedKurumIds.has(kurum.id))
                     .sort((left, right) => left.ad.localeCompare(right.ad, 'tr'));
 
                 this.kurumOptions = normalized;
@@ -557,9 +555,8 @@ export class AppTopbar {
                 }
             },
             error: (error: unknown) => {
-                this.kurumOptions = [];
+                this.clearKurumOptions();
                 this.selectedKurumId = this.authService.getAktifKurumId();
-                this.kurumOptionsError = this.resolveErrorMessage(error);
             }
         });
     }

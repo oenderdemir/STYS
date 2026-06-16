@@ -19,5 +19,9 @@ public class UserDto : BaseRdbmsDto<Guid>
 
     public string Status { get; set; } = string.Empty;
 
+    public int? KurumId { get; set; }
+
+    public bool IsKurumAdmin { get; set; }
+
     public List<UserGroupDto> UserGroups { get; set; } = new();
 }

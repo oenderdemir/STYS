@@ -94,6 +94,7 @@ builder.Services.AddScoped<IUserService, StysScopedUserService>();
 builder.Services.AddScoped<IAccessScopeProvider, AccessScopeProvider>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();
 builder.Services.AddScoped<IYoneticiAdayService, YoneticiAdayService>();
+builder.Services.AddScoped<TOD.Platform.Security.Auth.Services.IKurumLookupService, STYS.Kurumlar.Services.KurumLookupService>();
 builder.Services.AddScoped<IOdaTemizlikService, OdaTemizlikService>();
 builder.Services.AddScoped<IErisimTeshisService, ErisimTeshisService>();
 builder.Services.AddScoped<IKampParametreService, KampParametreService>();

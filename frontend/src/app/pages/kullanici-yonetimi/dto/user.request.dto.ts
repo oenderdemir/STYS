@@ -9,4 +9,6 @@ export interface UserRequestDto {
     avatarPath?: string | null;
     status: string;
     userGroups: UserGroupRequestDto[];
+    kurumId?: number | null;
+    isKurumAdmin?: boolean;
 }

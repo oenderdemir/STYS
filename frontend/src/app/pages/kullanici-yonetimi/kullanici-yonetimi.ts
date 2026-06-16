@@ -17,9 +17,12 @@ import { Table, TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { CheckboxModule } from 'primeng/checkbox';
 import { tryReadApiMessage } from '../../core/api';
 import { UserGroupRequestDto, UserGroupResponseDto } from '../../core/identity';
 import { AuthService } from '../auth';
+import { KurumModel } from '../kurum-yonetimi/kurum.model';
+import { KurumService } from '../kurum-yonetimi/kurum.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { UserRequestDto, UserResetPasswordRequestDto, UserResponseDto } from './dto';
 import { KullaniciYonetimiService } from './kullanici-yonetimi.service';
@@ -30,12 +33,17 @@ interface UserGroupOption {
     roleNames: string[];
 }
 
+interface UserFormState extends UserResponseDto {
+    kurumId?: number | null;
+    isKurumAdmin?: boolean;
+}
+
 type ScopedCreateType = 'resepsiyonist' | 'binaYonetici' | 'restoranYonetici' | 'garson' | null;
 
 @Component({
     selector: 'app-kullanici-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, DividerModule, IconFieldModule, InputIconModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, DividerModule, IconFieldModule, InputIconModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './kullanici-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -43,6 +51,7 @@ export class KullaniciYonetimi implements OnInit {
     private static readonly ADMIN_ROLE = 'KullaniciTipi.Admin';
 
     private readonly service = inject(KullaniciYonetimiService);
+    private readonly kurumService = inject(KurumService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
@@ -51,9 +60,11 @@ export class KullaniciYonetimi implements OnInit {
     users: UserResponseDto[] = [];
     allUserGroups: UserGroupOption[] = [];
     tesisler: TesisDto[] = [];
-    selectedUser: UserResponseDto = this.getEmptyUser();
+    selectedUser: UserFormState = this.getEmptyUser();
     selectedUserGroupIds: string[] = [];
     selectedTesisIdForCreate: number | null = null;
+    selectedKurumIdForCreate: number | null = null;
+    createAsKurumAdmin = false;
     selectedRoleNames: string[] = [];
     loading = false;
     saving = false;
@@ -66,6 +77,7 @@ export class KullaniciYonetimi implements OnInit {
     selectedPasswordUserName = '';
     newPassword = '';
     newPassword2 = '';
+    kurumOptions: KurumModel[] = [];
     readonly statusOptions = [
         { label: 'Standard', value: 'Standard' },
         { label: 'Must Change Password', value: 'MustChangePassword' },
@@ -102,6 +114,10 @@ export class KullaniciYonetimi implements OnInit {
             && !this.authService.hasPermission('KullaniciTipi.Admin');
     }
 
+    get isSuperAdminUser(): boolean {
+        return this.authService.isSuperAdminUser();
+    }
+
     ngOnInit(): void {
         this.loadData();
     }
@@ -124,6 +140,8 @@ export class KullaniciYonetimi implements OnInit {
         this.selectedUserGroupIds = [];
         this.selectedRoleNames = [];
         this.selectedTesisIdForCreate = null;
+        this.selectedKurumIdForCreate = this.resolveInitialCreateKurumId();
+        this.createAsKurumAdmin = false;
         this.isEditMode = false;
         this.dialogVisible = true;
     }
@@ -148,11 +166,15 @@ export class KullaniciYonetimi implements OnInit {
         this.scopedCreateType = null;
         this.selectedUser = {
             ...user,
-            userGroups: [...(user.userGroups ?? [])]
+            userGroups: [...(user.userGroups ?? [])],
+            kurumId: null,
+            isKurumAdmin: false
         };
         this.selectedUserGroupIds = this.selectedUser.userGroups.map((group) => group.id).filter((id): id is string => !!id);
         this.selectedRoleNames = this.extractRoleNames(this.selectedUser.userGroups);
         this.selectedTesisIdForCreate = null;
+        this.selectedKurumIdForCreate = null;
+        this.createAsKurumAdmin = false;
         this.isEditMode = true;
         this.dialogVisible = true;
     }
@@ -206,6 +228,21 @@ export class KullaniciYonetimi implements OnInit {
                 || this.scopedCreateType === 'restoranYonetici'
                 || this.scopedCreateType === 'garson'
             );
+
+        const createKurumId = this.resolveCreateKurumId();
+        if (!this.isEditMode && !this.scopedCreateType && createKurumId === null) {
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: 'Eksik Bilgi',
+                detail: 'Kurum secimi zorunludur.'
+            });
+            return;
+        }
+
+        if (!this.isEditMode && !this.scopedCreateType) {
+            payload.kurumId = createKurumId;
+            payload.isKurumAdmin = this.createAsKurumAdmin;
+        }
 
         const request$: Observable<unknown> =
             this.isEditMode && this.selectedUser.id
@@ -417,7 +454,8 @@ export class KullaniciYonetimi implements OnInit {
         forkJoin({
             users: this.service.getUsers(),
             userGroups: this.service.getUserGroups(),
-            tesisler: this.isScopedTesisManager ? this.service.getTesisler() : of([])
+            tesisler: this.isScopedTesisManager ? this.service.getTesisler() : of([]),
+            kurumlar: this.canManage ? this.kurumService.getMyKurumlar() : of([])
         })
             .pipe(
                 finalize(() => {
@@ -426,12 +464,16 @@ export class KullaniciYonetimi implements OnInit {
                 })
             )
             .subscribe({
-                next: ({ users, userGroups, tesisler }) => {
+                next: ({ users, userGroups, tesisler, kurumlar }) => {
                     this.users = users;
                     this.allUserGroups = userGroups
                         .map((userGroup) => this.mapToUserGroupOption(userGroup))
                         .filter((groupOption) => this.canAssignGroup(groupOption));
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    this.kurumOptions = [...kurumlar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                    if (!this.isEditMode && !this.scopedCreateType) {
+                        this.selectedKurumIdForCreate = this.resolveInitialCreateKurumId();
+                    }
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -621,15 +663,59 @@ export class KullaniciYonetimi implements OnInit {
         return 'Beklenmeyen bir hata olustu.';
     }
 
-    private getEmptyUser(): UserResponseDto {
+    private getEmptyUser(): UserFormState {
         return {
             userName: '',
             firstName: '',
             lastName: '',
             email: '',
             status: 'MustChangePassword',
-            userGroups: []
+            userGroups: [],
+            kurumId: null,
+            isKurumAdmin: false
         };
+    }
+
+    get canSelectCreateKurum(): boolean {
+        return !this.isEditMode && !this.scopedCreateType && (this.authService.isSuperAdminUser() || this.authService.isKurumAdminUser());
+    }
+
+    get showCreateKurumAdminCheckbox(): boolean {
+        return this.canSelectCreateKurum && this.authService.isSuperAdminUser();
+    }
+
+    private resolveInitialCreateKurumId(): number | null {
+        if (this.authService.isSuperAdminUser()) {
+            const activeKurumId = this.authService.getAktifKurumId();
+            if (activeKurumId !== null && this.kurumOptions.some((item) => item.id === activeKurumId)) {
+                return activeKurumId;
+            }
+
+            return this.kurumOptions.length > 0 ? this.kurumOptions[0].id : null;
+        }
+
+        if (this.authService.isKurumAdminUser()) {
+            const activeKurumId = this.authService.getAktifKurumId();
+            if (activeKurumId !== null && this.kurumOptions.some((item) => item.id === activeKurumId)) {
+                return activeKurumId;
+            }
+        }
+
+        return this.selectedKurumIdForCreate ?? this.authService.getAktifKurumId();
+    }
+
+    private resolveCreateKurumId(): number | null {
+        if (this.authService.isSuperAdminUser()) {
+            return this.selectedKurumIdForCreate && this.selectedKurumIdForCreate > 0 ? this.selectedKurumIdForCreate : null;
+        }
+
+        if (this.authService.isKurumAdminUser()) {
+            const activeKurumId = this.authService.getAktifKurumId();
+            return activeKurumId !== null && activeKurumId > 0 ? activeKurumId : null;
+        }
+
+        const fallback = this.selectedKurumIdForCreate ?? this.authService.getAktifKurumId();
+        return fallback !== null && fallback > 0 ? fallback : null;
     }
 }
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

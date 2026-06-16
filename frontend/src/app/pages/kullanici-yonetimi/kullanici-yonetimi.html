@@ -114,6 +114,30 @@
             <label for="email" class="block font-medium mb-2">Email</label>
             <input id="email" pInputText [(ngModel)]="selectedUser.email" class="w-full" [disabled]="!canManage || saving" />
         </div>
+        @if (canSelectCreateKurum) {
+            <div class="col-span-12 md:col-span-6">
+                <label for="kurumId" class="block font-medium mb-2">Kurum</label>
+                    <p-select
+                        inputId="kurumId"
+                        [options]="kurumOptions"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedKurumIdForCreate"
+                        [showClear]="false"
+                        [filter]="true"
+                        appendTo="body"
+                        class="w-full"
+                        [disabled]="!isSuperAdminUser || saving"
+                        placeholder="Kurum seciniz"
+                    />
+                </div>
+            @if (showCreateKurumAdminCheckbox) {
+                <div class="col-span-12 md:col-span-6 flex items-center gap-2 pt-6">
+                    <p-checkbox inputId="createKurumAdmin" [binary]="true" [(ngModel)]="createAsKurumAdmin" [disabled]="saving"></p-checkbox>
+                    <label for="createKurumAdmin" class="font-medium">Kurum admini olarak olustur</label>
+                </div>
+            }
+        }
         @if (showTesisSelectorForCreate) {
             <div class="col-span-12">
                 <label for="createTesisId" class="block font-medium mb-2">Tesis</label>

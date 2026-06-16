@@ -23,6 +23,18 @@ export class KurumService {
         );
     }
 
+    getMyKurumlar(): Observable<KurumModel[]> {
+        return this.http.get<ApiResponse<KurumModel[]>>(`${this.apiBaseUrl}/ui/kurum/benim-kurumlarim`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kurum listesi alinamadi.');
+            })
+        );
+    }
+
     getById(id: number): Observable<KurumModel> {
         return this.http.get<ApiResponse<KurumModel>>(`${this.apiBaseUrl}/ui/kurum/${id}`).pipe(
             map((responseEnvelope) => {

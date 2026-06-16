@@ -172,7 +172,7 @@ public class MuhasebeHesapPlaniService
     {
         var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
         var version = await GetCacheVersionAsync(cancellationToken);
-        var cacheKey = $"{TreeCacheKeyPrefix}:v{version}:{BuildScopeCacheSegment(_currentTenantAccessor.IsSuperAdmin(), effectiveTesisIds)}";
+        var cacheKey = $"{TreeCacheKeyPrefix}:v{version}:{BuildScopeCacheSegment(effectiveTesisIds)}";
         var payload = await _distributedCache.GetStringAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrWhiteSpace(payload))
         {
@@ -375,13 +375,8 @@ public class MuhasebeHesapPlaniService
         };
     }
 
-    private static string BuildScopeCacheSegment(bool isSuperAdmin, int[] effectiveTesisIds)
+    private static string BuildScopeCacheSegment(int[] effectiveTesisIds)
     {
-        if (isSuperAdmin)
-        {
-            return "all";
-        }
-
         return effectiveTesisIds.Length == 0
             ? "global-only"
             : $"tesis-{string.Join('-', effectiveTesisIds.OrderBy(x => x))}";

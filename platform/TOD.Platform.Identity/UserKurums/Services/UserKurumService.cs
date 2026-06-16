@@ -41,6 +41,11 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
 
     public async Task<UserKurumDto> AssignAsync(AssignUserKurumRequest request, CancellationToken cancellationToken = default)
     {
+        if (request is null)
+        {
+            throw new BaseException("Istek bos olamaz.", 400);
+        }
+
         ValidateRequest(request.UserId, request.KurumId);
 
         var exists = await _userKurumRepository.AnyAsync(x => x.UserId == request.UserId && x.KurumId == request.KurumId);
@@ -68,6 +73,11 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
 
     public async Task<UserKurumDto> UpdateAsync(Guid id, UpdateUserKurumRequest request, CancellationToken cancellationToken = default)
     {
+        if (request is null)
+        {
+            throw new BaseException("Istek bos olamaz.", 400);
+        }
+
         var entity = await _userKurumRepository.GetByIdAsync(id);
         if (entity is null)
         {

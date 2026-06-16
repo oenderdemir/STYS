@@ -1,23 +1,22 @@
 using Microsoft.EntityFrameworkCore;
-using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Dashboard.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
-using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.Dashboard.Services;
 
 public class MuhasebeDashboardService : IMuhasebeDashboardService
 {
     private readonly StysAppDbContext _db;
-    private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IMuhasebeTesisScopeService _tesisScopeService;
 
-    public MuhasebeDashboardService(StysAppDbContext db, IUserAccessScopeService userAccessScopeService)
+    public MuhasebeDashboardService(StysAppDbContext db, IMuhasebeTesisScopeService tesisScopeService)
     {
         _db = db;
-        _userAccessScopeService = userAccessScopeService;
+        _tesisScopeService = tesisScopeService;
     }
 
     public async Task<MuhasebeDashboardDto> GetDashboardAsync(
@@ -25,12 +24,36 @@ public class MuhasebeDashboardService : IMuhasebeDashboardService
         CancellationToken cancellationToken = default)
     {
         var maliYil = filter.MaliYil ?? DateTime.UtcNow.Year;
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var accessibleTesisIds = scope.IsScoped ? scope.TesisIds.OrderBy(x => x).ToArray() : [];
+        var accessibleTesisIds = filter.TesisId.HasValue
+            ? [filter.TesisId.Value]
+            : await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
 
         if (filter.TesisId.HasValue)
         {
-            EnsureCanAccessTesis(scope, filter.TesisId.Value);
+            await _tesisScopeService.EnsureCanAccessTesisAsync(filter.TesisId.Value, cancellationToken);
+        }
+
+        if (accessibleTesisIds.Length == 0)
+        {
+            return new MuhasebeDashboardDto
+            {
+                TesisId = filter.TesisId,
+                MaliYil = maliYil,
+                Donem = filter.Donem,
+                AcikDonemSayisi = 0,
+                KapaliDonemSayisi = 0,
+                TaslakFisSayisi = 0,
+                OnayliFisSayisi = 0,
+                IptalFisSayisi = 0,
+                TersKayitFisSayisi = 0,
+                DengesizTaslakFisSayisi = 0,
+                ToplamBorc = 0m,
+                ToplamAlacak = 0m,
+                Fark = 0m,
+                AcikDonemler = [],
+                SonFisler = [],
+                Uyarilar = []
+            };
         }
 
         var fisQuery = _db.MuhasebeFisler.AsQueryable();
@@ -38,7 +61,7 @@ public class MuhasebeDashboardService : IMuhasebeDashboardService
         {
             fisQuery = fisQuery.Where(f => f.TesisId == filter.TesisId.Value);
         }
-        else if (scope.IsScoped)
+        else
         {
             fisQuery = fisQuery.Where(f => accessibleTesisIds.Contains(f.TesisId));
         }
@@ -52,7 +75,7 @@ public class MuhasebeDashboardService : IMuhasebeDashboardService
         {
             donemQuery = donemQuery.Where(d => d.TesisId == filter.TesisId.Value);
         }
-        else if (scope.IsScoped)
+        else
         {
             donemQuery = donemQuery.Where(d => accessibleTesisIds.Contains(d.TesisId));
         }
@@ -218,18 +241,5 @@ public class MuhasebeDashboardService : IMuhasebeDashboardService
             SonFisler = sonFisler,
             Uyarilar = uyarilar
         };
-    }
-
-    private static void EnsureCanAccessTesis(DomainAccessScope scope, int tesisId)
-    {
-        if (!scope.IsScoped)
-        {
-            return;
-        }
-
-        if (!scope.TesisIds.Contains(tesisId))
-        {
-            throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
-        }
     }
 }

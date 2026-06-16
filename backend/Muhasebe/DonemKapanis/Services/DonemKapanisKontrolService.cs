@@ -1,28 +1,58 @@
 using Microsoft.EntityFrameworkCore;
-using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.DonemKapanis.Dtos;
-using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.DonemKapanis.Services;
 
 public class DonemKapanisKontrolService : IDonemKapanisKontrolService
 {
     private readonly StysAppDbContext _db;
-    private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IMuhasebeTesisScopeService _tesisScopeService;
 
-    public DonemKapanisKontrolService(StysAppDbContext db, IUserAccessScopeService userAccessScopeService)
+    public DonemKapanisKontrolService(StysAppDbContext db, IMuhasebeTesisScopeService tesisScopeService)
     {
         _db = db;
-        _userAccessScopeService = userAccessScopeService;
+        _tesisScopeService = tesisScopeService;
     }
 
     public async Task<DonemKapanisKontrolDto> KontrolEtAsync(
         DonemKapanisKontrolFilterDto filter,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCanAccessTesisAsync(filter.TesisId, cancellationToken);
+        int[] effectiveTesisIds;
+        if (filter.TesisId > 0)
+        {
+            await _tesisScopeService.EnsureCanAccessTesisAsync(filter.TesisId, cancellationToken);
+            effectiveTesisIds = [filter.TesisId];
+        }
+        else
+        {
+            effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+        }
+
+        if (effectiveTesisIds.Length == 0)
+        {
+            return new DonemKapanisKontrolDto
+            {
+                TesisId = filter.TesisId,
+                MaliYil = filter.MaliYil,
+                DonemNo = filter.DonemNo,
+                KapatilabilirMi = false,
+                DonemVarMi = false,
+                DonemKapaliMi = false,
+                Maddeler = [new DonemKapanisKontrolMaddeDto
+                {
+                    Kod = "TESIS_YOK",
+                    Baslik = "Erişilebilir tesis yok",
+                    Mesaj = "Aktif kurum kapsamında erişilebilir tesis bulunmadığından dönem kapanış kontrolü yapılamadı.",
+                    Severity = "info",
+                    BasariliMi = false,
+                    BloklayiciMi = true
+                }]
+            };
+        }
 
         var result = new DonemKapanisKontrolDto
         {
@@ -35,7 +65,7 @@ public class DonemKapanisKontrolService : IDonemKapanisKontrolService
         // 1. Dönem var mı?
         var donem = await _db.MuhasebeDonemler
             .FirstOrDefaultAsync(d =>
-                d.TesisId == filter.TesisId
+                effectiveTesisIds.Contains(d.TesisId)
                 && d.MaliYil == filter.MaliYil
                 && d.DonemNo == filter.DonemNo,
                 cancellationToken);
@@ -89,7 +119,7 @@ public class DonemKapanisKontrolService : IDonemKapanisKontrolService
 
         // Fişleri bu dönem için sorgula
         var fisQuery = _db.MuhasebeFisler
-            .Where(f => f.TesisId == filter.TesisId
+            .Where(f => effectiveTesisIds.Contains(f.TesisId)
                         && f.MaliYil == filter.MaliYil
                         && f.Donem == filter.DonemNo);
 
@@ -314,25 +344,5 @@ public class DonemKapanisKontrolService : IDonemKapanisKontrolService
         }
 
         return result;
-    }
-
-    private async Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken)
-    {
-        if (tesisId <= 0)
-        {
-            throw new BaseException("Tesis secimi zorunludur.", 400);
-        }
-
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
-        {
-            throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
-        }
-
-        var exists = await _db.Tesisler.AnyAsync(x => x.Id == tesisId && x.AktifMi, cancellationToken);
-        if (!exists)
-        {
-            throw new BaseException("Seçilen tesis bulunamadı.", 400);
-        }
     }
 }

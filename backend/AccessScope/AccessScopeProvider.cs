@@ -18,6 +18,7 @@ public class AccessScopeProvider : IAccessScopeProvider
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     private DomainAccessScope? _domainAccessScope;
@@ -27,11 +28,13 @@ public class AccessScopeProvider : IAccessScopeProvider
         StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
         ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
         IHttpContextAccessor httpContextAccessor)
     {
         _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
         _httpContextAccessor = httpContextAccessor;
     }
 
@@ -151,6 +154,24 @@ public class AccessScopeProvider : IAccessScopeProvider
             .Concat(ownedTesisIdsForTemizlik)
             .Distinct()
             .ToHashSet();
+
+        if (!IsCurrentUserAdmin())
+        {
+            var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+            if (currentKurumId.HasValue)
+            {
+                var currentKurumTesisIds = await _stysDbContext.Tesisler
+                    .Where(x => x.KurumId == currentKurumId.Value && x.AktifMi)
+                    .Select(x => x.Id)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                foreach (var tesisId in currentKurumTesisIds)
+                {
+                    directTesisIds.Add(tesisId);
+                }
+            }
+        }
 
         var hasTesisLevelScope = directTesisIds.Count > 0;
         _domainAccessScope = await BuildDomainAccessScopeAsync(

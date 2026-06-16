@@ -1,8 +1,8 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Dtos;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
@@ -19,18 +19,18 @@ public class MuhasebeHesapBakiyeService
 {
     private readonly IMuhasebeHesapBakiyeRepository _repository;
     private readonly StysAppDbContext _dbContext;
-    private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IMuhasebeTesisScopeService _tesisScopeService;
 
     public MuhasebeHesapBakiyeService(
         IMuhasebeHesapBakiyeRepository repository,
         IMapper mapper,
         StysAppDbContext dbContext,
-        IUserAccessScopeService userAccessScopeService)
+        IMuhasebeTesisScopeService tesisScopeService)
         : base(repository, mapper)
     {
         _repository = repository;
         _dbContext = dbContext;
-        _userAccessScopeService = userAccessScopeService;
+        _tesisScopeService = tesisScopeService;
     }
 
     // ---------------------------------------------------------------
@@ -54,7 +54,7 @@ public class MuhasebeHesapBakiyeService
         var baslamaZamani = DateTime.UtcNow;
 
         // ── Validasyon ──
-        await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
+        await _tesisScopeService.EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
 
         if (request.MaliYil < 2000 || request.MaliYil > 2100)
             throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
@@ -149,7 +149,11 @@ public class MuhasebeHesapBakiyeService
                 .ToList();
 
             var hesaplar = await _dbContext.MuhasebeHesapPlanlari
-                .Where(x => hesapIds.Contains(x.Id) && !x.IsDeleted && x.AktifMi)
+                .Where(x =>
+                    hesapIds.Contains(x.Id)
+                    && !x.IsDeleted
+                    && x.AktifMi
+                    && (x.TesisId == null || x.TesisId == request.TesisId))
                 .ToListAsync(cancellationToken);
 
             // Satırların hesap doğrulaması
@@ -173,7 +177,11 @@ public class MuhasebeHesapBakiyeService
             if (ustKodlar.Count > 0)
             {
                 var ustHesapListesi = await _dbContext.MuhasebeHesapPlanlari
-                    .Where(x => ustKodlar.Contains(x.TamKod) && !x.IsDeleted && x.AktifMi)
+                    .Where(x =>
+                        ustKodlar.Contains(x.TamKod)
+                        && !x.IsDeleted
+                        && x.AktifMi
+                        && (x.TesisId == null || x.TesisId == request.TesisId))
                     .ToListAsync(cancellationToken);
 
                 ustHesapLookup = ustKodlar.ToDictionary(
@@ -323,14 +331,14 @@ public class MuhasebeHesapBakiyeService
     {
         filter.Normalize();
         IReadOnlyCollection<int>? accessibleTesisIds = null;
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (filter.TesisId.HasValue)
         {
-            await EnsureCanAccessTesisAsync(filter.TesisId.Value, cancellationToken);
+            await _tesisScopeService.EnsureCanAccessTesisAsync(filter.TesisId.Value, cancellationToken);
+            accessibleTesisIds = [filter.TesisId.Value];
         }
-        else if (scope.IsScoped)
+        else
         {
-            accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
+            accessibleTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
         }
 
         var entities = await _repository.GetFilteredAsync(filter, accessibleTesisIds, cancellationToken);
@@ -343,14 +351,14 @@ public class MuhasebeHesapBakiyeService
     {
         filter.Normalize();
         IReadOnlyCollection<int>? accessibleTesisIds = null;
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (filter.TesisId.HasValue)
         {
-            await EnsureCanAccessTesisAsync(filter.TesisId.Value, cancellationToken);
+            await _tesisScopeService.EnsureCanAccessTesisAsync(filter.TesisId.Value, cancellationToken);
+            accessibleTesisIds = [filter.TesisId.Value];
         }
-        else if (scope.IsScoped)
+        else
         {
-            accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
+            accessibleTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
         }
 
         return await _repository.CountFilteredAsync(filter, accessibleTesisIds, cancellationToken);
@@ -362,7 +370,7 @@ public class MuhasebeHesapBakiyeService
         int donem,
         CancellationToken cancellationToken = default)
     {
-        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        await _tesisScopeService.EnsureCanAccessTesisAsync(tesisId, cancellationToken);
         var entities = await _repository.GetByTesisYilDonemAsync(tesisId, maliYil, donem, cancellationToken);
         return Mapper.Map<List<MuhasebeHesapBakiyeDto>>(entities);
     }
@@ -370,8 +378,8 @@ public class MuhasebeHesapBakiyeService
     public override async Task<IEnumerable<MuhasebeHesapBakiyeDto>> GetAllAsync(
         Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>>? include = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        var effectiveInclude = BuildScopedIncludeQuery(effectiveTesisIds, include);
 
         return await base.GetAllAsync(effectiveInclude);
     }
@@ -380,8 +388,8 @@ public class MuhasebeHesapBakiyeService
         int id,
         Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>>? include = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        var effectiveInclude = BuildScopedIncludeQuery(effectiveTesisIds, include);
 
         return await base.GetByIdAsync(id, effectiveInclude);
     }
@@ -402,7 +410,7 @@ public class MuhasebeHesapBakiyeService
         if (existing is null)
             throw new BaseException("Güncellenecek hesap bakiyesi bulunamadı.", 404);
 
-        await EnsureCanAccessTesisAsync(existing.TesisId, CancellationToken.None);
+        await _tesisScopeService.EnsureCanAccessTesisAsync(existing.TesisId, CancellationToken.None);
 
         if (dto.TesisId != existing.TesisId)
             throw new BaseException("Muhasebe kaydinin tesisi degistirilemez.", 400);
@@ -457,7 +465,7 @@ public class MuhasebeHesapBakiyeService
         if (dto.TesisId <= 0)
             throw new BaseException("Tesis seçilmelidir.", 400);
 
-        await EnsureCanAccessTesisAsync(dto.TesisId, cancellationToken);
+        await _tesisScopeService.EnsureCanAccessTesisAsync(dto.TesisId, cancellationToken);
 
         if (dto.MaliYil < 2000 || dto.MaliYil > 2100)
             throw new BaseException("Mali yıl 2000-2100 aralığında olmalıdır.", 400);
@@ -476,7 +484,13 @@ public class MuhasebeHesapBakiyeService
 
         // Muhasebe hesap planı kontrolü ve HesapKodu/HesapAdi set etme
         var hesap = await _dbContext.MuhasebeHesapPlanlari
-            .FirstOrDefaultAsync(x => x.Id == dto.MuhasebeHesapPlaniId, cancellationToken);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                x.Id == dto.MuhasebeHesapPlaniId
+                && !x.IsDeleted
+                && x.AktifMi
+                && (x.TesisId == null || x.TesisId == dto.TesisId),
+                cancellationToken);
 
         if (hesap is null)
             throw new BaseException("Seçilen muhasebe hesabı bulunamadı.", 400);
@@ -569,28 +583,8 @@ public class MuhasebeHesapBakiyeService
         return result;
     }
 
-    private async Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken)
-    {
-        if (tesisId <= 0)
-        {
-            throw new BaseException("Tesis secimi zorunludur.", 400);
-        }
-
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
-        {
-            throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
-        }
-
-        var exists = await _dbContext.Tesisler.AnyAsync(x => x.Id == tesisId && x.AktifMi, cancellationToken);
-        if (!exists)
-        {
-            throw new BaseException("Seçilen tesis bulunamadı.", 400);
-        }
-    }
-
     private static Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>> BuildScopedIncludeQuery(
-        DomainAccessScope scope,
+        int[] effectiveTesisIds,
         Func<IQueryable<MuhasebeHesapBakiye>, IQueryable<MuhasebeHesapBakiye>>? include)
     {
         return query =>
@@ -606,10 +600,13 @@ public class MuhasebeHesapBakiyeService
                 .ThenBy(x => x.HesapKodu)
                 .ThenBy(x => x.KonsolideMi);
 
-            if (scope.IsScoped)
+            if (effectiveTesisIds.Length > 0)
             {
-                var accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
-                result = result.Where(x => accessibleTesisIds.Contains(x.TesisId));
+                result = result.Where(x => effectiveTesisIds.Contains(x.TesisId));
+            }
+            else
+            {
+                result = result.Where(_ => false);
             }
 
             return result;

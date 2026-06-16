@@ -1,14 +1,15 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
-using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Dtos;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Repositories;
 using System.Text.Json;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Services;
@@ -22,45 +23,45 @@ public class MuhasebeHesapPlaniService
 
     private readonly IDistributedCache _distributedCache;
     private readonly StysAppDbContext _dbContext;
-    private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IMuhasebeTesisScopeService _tesisScopeService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public MuhasebeHesapPlaniService(
         IMuhasebeHesapPlaniRepository repository,
         IMapper mapper,
         IDistributedCache distributedCache,
         StysAppDbContext dbContext,
-        IUserAccessScopeService userAccessScopeService)
+        IMuhasebeTesisScopeService tesisScopeService,
+        ICurrentTenantAccessor currentTenantAccessor)
         : base(repository, mapper)
     {
         _distributedCache = distributedCache;
         _dbContext = dbContext;
-        _userAccessScopeService = userAccessScopeService;
+        _tesisScopeService = tesisScopeService;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public override async Task<MuhasebeHesapPlaniDto?> GetByIdAsync(
         int id,
         Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>>? include = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
-        return await base.GetByIdAsync(id, effectiveInclude);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        return await base.GetByIdAsync(id, BuildScopedIncludeQuery(effectiveTesisIds, include));
     }
 
     public override async Task<IEnumerable<MuhasebeHesapPlaniDto>> GetAllAsync(
         Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>>? include = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
-        return await base.GetAllAsync(effectiveInclude);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        return await base.GetAllAsync(BuildScopedIncludeQuery(effectiveTesisIds, include));
     }
 
     public override async Task<IEnumerable<MuhasebeHesapPlaniDto>> WhereAsync(
         System.Linq.Expressions.Expression<Func<MuhasebeHesapPlani, bool>> predicate,
         Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>>? include = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
-        return await base.WhereAsync(predicate, effectiveInclude);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        return await base.WhereAsync(predicate, BuildScopedIncludeQuery(effectiveTesisIds, include));
     }
 
     public override async Task<PagedResult<MuhasebeHesapPlaniDto>> GetPagedAsync(
@@ -69,9 +70,8 @@ public class MuhasebeHesapPlaniService
         Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>>? include = null,
         Func<IQueryable<MuhasebeHesapPlani>, IOrderedQueryable<MuhasebeHesapPlani>>? orderBy = null)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var effectiveInclude = BuildScopedIncludeQuery(scope, include);
-        return await base.GetPagedAsync(request, predicate, effectiveInclude, orderBy);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        return await base.GetPagedAsync(request, predicate, BuildScopedIncludeQuery(effectiveTesisIds, include), orderBy);
     }
 
     public override async Task<MuhasebeHesapPlaniDto> AddAsync(MuhasebeHesapPlaniDto dto)
@@ -97,8 +97,8 @@ public class MuhasebeHesapPlaniService
 
     public override async Task DeleteAsync(int id)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var existing = await ApplyManageScope(_dbContext.MuhasebeHesapPlanlari, scope)
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync();
+        var existing = await ApplyManageScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (existing is null)
@@ -115,14 +115,14 @@ public class MuhasebeHesapPlaniService
 
     public async Task<List<MuhasebeHesapPlaniDto>> GetTreeRootsAsync(CancellationToken cancellationToken = default)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var nodes = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), scope)
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+        var nodes = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .Where(x => x.SeviyeNo == 1)
             .OrderBy(x => x.TamKod)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        return await MapTreeLevelAsync(nodes, scope, cancellationToken);
+        return await MapTreeLevelAsync(nodes, effectiveTesisIds, cancellationToken);
     }
 
     public async Task<List<MuhasebeHesapPlaniDto>> GetTreeChildrenAsync(int? parentId, CancellationToken cancellationToken = default)
@@ -132,8 +132,8 @@ public class MuhasebeHesapPlaniService
             return await GetTreeRootsAsync(cancellationToken);
         }
 
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var parent = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), scope)
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+        var parent = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .FirstOrDefaultAsync(x => x.Id == parentId.Value, cancellationToken);
 
         if (parent is null)
@@ -143,25 +143,25 @@ public class MuhasebeHesapPlaniService
 
         var prefix = $"{parent.TamKod}.";
         var childLevel = parent.SeviyeNo + 1;
-        var nodes = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), scope)
+        var nodes = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .Where(x => x.SeviyeNo == childLevel && x.TamKod.StartsWith(prefix))
             .OrderBy(x => x.TamKod)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        return await MapTreeLevelAsync(nodes, scope, cancellationToken);
+        return await MapTreeLevelAsync(nodes, effectiveTesisIds, cancellationToken);
     }
 
     private async Task<List<MuhasebeHesapPlaniDto>> MapTreeLevelAsync(
         List<MuhasebeHesapPlani> nodes,
-        DomainAccessScope scope,
+        int[] effectiveTesisIds,
         CancellationToken cancellationToken)
     {
         var result = new List<MuhasebeHesapPlaniDto>(nodes.Count);
         foreach (var node in nodes)
         {
             var dto = Mapper.Map<MuhasebeHesapPlaniDto>(node);
-            dto.HasChildren = await HasScopedChildrenAsync(node.TamKod, node.SeviyeNo, scope, cancellationToken);
+            dto.HasChildren = await HasScopedChildrenAsync(node.TamKod, node.SeviyeNo, effectiveTesisIds, cancellationToken);
             result.Add(dto);
         }
 
@@ -170,9 +170,9 @@ public class MuhasebeHesapPlaniService
 
     private async Task<List<MuhasebeHesapPlaniDto>> GetTreeCachedAsync(CancellationToken cancellationToken)
     {
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
         var version = await GetCacheVersionAsync(cancellationToken);
-        var cacheKey = $"{TreeCacheKeyPrefix}:v{version}:{BuildScopeCacheSegment(scope)}";
+        var cacheKey = $"{TreeCacheKeyPrefix}:v{version}:{BuildScopeCacheSegment(_currentTenantAccessor.IsSuperAdmin(), effectiveTesisIds)}";
         var payload = await _distributedCache.GetStringAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrWhiteSpace(payload))
         {
@@ -183,11 +183,14 @@ public class MuhasebeHesapPlaniService
             }
         }
 
-        var items = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), scope)
+        var entities = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .OrderBy(x => x.TamKod)
             .ThenBy(x => x.Id)
-            .Select(x => Mapper.Map<MuhasebeHesapPlaniDto>(x))
             .ToListAsync(cancellationToken);
+
+        var items = entities
+            .Select(x => Mapper.Map<MuhasebeHesapPlaniDto>(x))
+            .ToList();
 
         var serialized = JsonSerializer.Serialize(items);
         await _distributedCache.SetStringAsync(cacheKey, serialized, new DistributedCacheEntryOptions
@@ -230,18 +233,14 @@ public class MuhasebeHesapPlaniService
             throw new BaseException("Hareket gorebilir hesap ayni zamanda detay hesap olmalidir.", 400);
         }
 
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped)
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+        if (dto.TesisId.HasValue)
         {
-            if (!dto.TesisId.HasValue)
-            {
-                throw new BaseException("Global hesap planı kayıtları bu kapsamda değiştirilemez.", 403);
-            }
-
-            if (!scope.TesisIds.Contains(dto.TesisId.Value))
-            {
-                throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
-            }
+            await _tesisScopeService.EnsureCanAccessTesisAsync(dto.TesisId.Value, cancellationToken);
+        }
+        else if (!_currentTenantAccessor.IsSuperAdmin())
+        {
+            throw new BaseException("Global hesap planı kayıtları yalnızca SuperAdmin tarafından yönetilebilir.", 403);
         }
 
         if (dto.TesisId.HasValue)
@@ -256,7 +255,7 @@ public class MuhasebeHesapPlaniService
         MuhasebeHesapPlani? existing = null;
         if (currentId.HasValue)
         {
-            existing = await ApplyManageScope(_dbContext.MuhasebeHesapPlanlari, scope)
+            existing = await ApplyManageScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
                 .FirstOrDefaultAsync(x => x.Id == currentId.Value, cancellationToken);
 
             if (existing is null)
@@ -277,7 +276,7 @@ public class MuhasebeHesapPlaniService
                 throw new BaseException("Bir hesap kendisinin ust hesabi olamaz.", 400);
             }
 
-            var parent = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari, scope)
+            var parent = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
                 .FirstOrDefaultAsync(x => x.Id == dto.UstHesapId.Value, cancellationToken);
             if (parent is null)
             {
@@ -312,47 +311,40 @@ public class MuhasebeHesapPlaniService
     private async Task<bool> HasScopedChildrenAsync(
         string parentTamKod,
         int parentLevel,
-        DomainAccessScope scope,
+        int[] effectiveTesisIds,
         CancellationToken cancellationToken)
     {
         var prefix = $"{parentTamKod}.";
         var childLevel = parentLevel + 1;
-        return await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), scope)
+        return await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
             .AnyAsync(x => x.SeviyeNo == childLevel && x.TamKod.StartsWith(prefix), cancellationToken);
     }
 
-    private IQueryable<MuhasebeHesapPlani> ApplyReadScope(IQueryable<MuhasebeHesapPlani> query, DomainAccessScope scope)
+    private IQueryable<MuhasebeHesapPlani> ApplyReadScope(IQueryable<MuhasebeHesapPlani> query, int[] effectiveTesisIds)
     {
-        if (!scope.IsScoped)
-        {
-            return query;
-        }
-
-        var accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
-        if (accessibleTesisIds.Length == 0)
+        if (effectiveTesisIds.Length == 0)
         {
             return query.Where(x => x.TesisId == null);
         }
 
         return query.Where(x =>
             x.TesisId == null
-            || (x.TesisId.HasValue && accessibleTesisIds.Contains(x.TesisId.Value)));
+            || (x.TesisId.HasValue && effectiveTesisIds.Contains(x.TesisId.Value)));
     }
 
-    private IQueryable<MuhasebeHesapPlani> ApplyManageScope(IQueryable<MuhasebeHesapPlani> query, DomainAccessScope scope)
+    private IQueryable<MuhasebeHesapPlani> ApplyManageScope(IQueryable<MuhasebeHesapPlani> query, int[] effectiveTesisIds)
     {
-        if (!scope.IsScoped)
+        if (_currentTenantAccessor.IsSuperAdmin())
         {
             return query;
         }
 
-        var accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
-        if (accessibleTesisIds.Length == 0)
+        if (effectiveTesisIds.Length == 0)
         {
             return query.Where(_ => false);
         }
 
-        return query.Where(x => x.TesisId.HasValue && accessibleTesisIds.Contains(x.TesisId.Value));
+        return query.Where(x => x.TesisId.HasValue && effectiveTesisIds.Contains(x.TesisId.Value));
     }
 
     private static bool IsParentScopeCompatible(int? childTesisId, int? parentTesisId)
@@ -366,39 +358,33 @@ public class MuhasebeHesapPlaniService
     }
 
     private static Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>> BuildScopedIncludeQuery(
-        DomainAccessScope scope,
+        int[] effectiveTesisIds,
         Func<IQueryable<MuhasebeHesapPlani>, IQueryable<MuhasebeHesapPlani>>? include)
     {
         return query =>
         {
             var result = include is null ? query : include(query);
-            if (!scope.IsScoped)
-            {
-                return result;
-            }
-
-            var accessibleTesisIds = scope.TesisIds.OrderBy(x => x).ToArray();
-            if (accessibleTesisIds.Length == 0)
+            if (effectiveTesisIds.Length == 0)
             {
                 return result.Where(x => x.TesisId == null);
             }
 
             return result.Where(x =>
                 x.TesisId == null
-                || (x.TesisId.HasValue && accessibleTesisIds.Contains(x.TesisId.Value)));
+                || (x.TesisId.HasValue && effectiveTesisIds.Contains(x.TesisId.Value)));
         };
     }
 
-    private static string BuildScopeCacheSegment(DomainAccessScope scope)
+    private static string BuildScopeCacheSegment(bool isSuperAdmin, int[] effectiveTesisIds)
     {
-        if (!scope.IsScoped)
+        if (isSuperAdmin)
         {
             return "all";
         }
 
-        return scope.TesisIds.Count == 0
+        return effectiveTesisIds.Length == 0
             ? "global-only"
-            : $"tesis-{string.Join('-', scope.TesisIds.OrderBy(x => x))}";
+            : $"tesis-{string.Join('-', effectiveTesisIds.OrderBy(x => x))}";
     }
 
     private async Task<string> GetCacheVersionAsync(CancellationToken cancellationToken)

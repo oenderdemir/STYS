@@ -54,6 +54,11 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
             throw new BaseException("Ayni user-kurum atamasi zaten mevcut.", 400);
         }
 
+        if (request.IsKurumAdmin && request.AktifMi)
+        {
+            await EnsureSingleActiveKurumAdminAsync(request.UserId, null, cancellationToken);
+        }
+
         if (request.VarsayilanMi)
         {
             await ClearDefaultAssignmentsAsync(request.UserId, cancellationToken);
@@ -87,6 +92,11 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
         if (request.VarsayilanMi)
         {
             await ClearDefaultAssignmentsAsync(entity.UserId, cancellationToken, id);
+        }
+
+        if (request.IsKurumAdmin && request.AktifMi)
+        {
+            await EnsureSingleActiveKurumAdminAsync(entity.UserId, id, cancellationToken);
         }
 
         entity.VarsayilanMi = request.VarsayilanMi && request.AktifMi;
@@ -165,6 +175,20 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
         if (kurumId <= 0)
         {
             throw new BaseException("KurumId zorunludur.", 400);
+        }
+    }
+
+    private async Task EnsureSingleActiveKurumAdminAsync(Guid userId, Guid? excludedId, CancellationToken cancellationToken)
+    {
+        var hasAnotherActiveAdmin = await _userKurumRepository.AnyAsync(
+            x => x.UserId == userId
+                 && x.AktifMi
+                 && x.IsKurumAdmin
+                 && (!excludedId.HasValue || x.Id != excludedId.Value));
+
+        if (hasAnotherActiveAdmin)
+        {
+            throw new BaseException("Kullanici zaten baska bir kurumda kurum admini.", 403);
         }
     }
 }

@@ -1,11 +1,16 @@
+using AutoMapper;
 using System.Reflection;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Kurumlar.Controllers;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserKurums.Dto;
+using TOD.Platform.Identity.UserKurums.Entities;
+using TOD.Platform.Identity.UserKurums.Mapping;
+using TOD.Platform.Identity.UserKurums.Repositories;
 using TOD.Platform.Identity.UserKurums.Services;
 using TOD.Platform.Identity.Users.Controllers;
 using TOD.Platform.Identity.Users.DTO;
@@ -57,6 +62,88 @@ public class TenantSecurityTests
         Assert.Null(userKurumService.LastAssignRequest);
     }
 
+    [Fact]
+    public async Task UserKurumService_Assign_RejectsSecondActiveKurumAdmin()
+    {
+        await using var dbContext = CreateIdentityDbContext();
+        var service = CreateUserKurumService(dbContext);
+        var userId = Guid.NewGuid();
+
+        dbContext.UserKurums.AddRange(
+            new UserKurum
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                KurumId = 10,
+                AktifMi = true,
+                VarsayilanMi = true,
+                IsKurumAdmin = true
+            },
+            new UserKurum
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                KurumId = 20,
+                AktifMi = true,
+                VarsayilanMi = false,
+                IsKurumAdmin = false
+            });
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AssignAsync(new AssignUserKurumRequest
+        {
+            UserId = userId,
+            KurumId = 30,
+            AktifMi = true,
+            VarsayilanMi = false,
+            IsKurumAdmin = true
+        }));
+
+        Assert.Equal(403, ex.ErrorCode);
+        Assert.Equal("Kullanici zaten baska bir kurumda kurum admini.", ex.Message);
+    }
+
+    [Fact]
+    public async Task UserKurumService_Update_RejectsPromotingSecondKurumToAdmin()
+    {
+        await using var dbContext = CreateIdentityDbContext();
+        var service = CreateUserKurumService(dbContext);
+        var userId = Guid.NewGuid();
+
+        dbContext.UserKurums.AddRange(
+            new UserKurum
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                KurumId = 10,
+                AktifMi = true,
+                VarsayilanMi = true,
+                IsKurumAdmin = true
+            },
+            new UserKurum
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                KurumId = 20,
+                AktifMi = true,
+                VarsayilanMi = false,
+                IsKurumAdmin = false
+            });
+        await dbContext.SaveChangesAsync();
+
+        var target = await dbContext.UserKurums.SingleAsync(x => x.UserId == userId && x.KurumId == 20);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(target.Id, new UpdateUserKurumRequest
+        {
+            AktifMi = true,
+            VarsayilanMi = false,
+            IsKurumAdmin = true
+        }));
+
+        Assert.Equal(403, ex.ErrorCode);
+        Assert.Equal("Kullanici zaten baska bir kurumda kurum admini.", ex.Message);
+    }
+
     private static TodIdentityDbContext CreateIdentityDbContext()
     {
         var options = new DbContextOptionsBuilder<TodIdentityDbContext>()
@@ -64,6 +151,18 @@ public class TenantSecurityTests
             .Options;
 
         return new TodIdentityDbContext(options);
+    }
+
+    private static UserKurumService CreateUserKurumService(TodIdentityDbContext dbContext)
+    {
+        var mapperConfig = new MapperConfiguration(cfg =>
+        {
+            cfg.AddMaps(typeof(UserKurumProfile).Assembly);
+        }, NullLoggerFactory.Instance);
+
+        var mapper = mapperConfig.CreateMapper();
+        var repository = new UserKurumRepository(dbContext, mapper);
+        return new UserKurumService(repository, mapper);
     }
 
     private sealed class FakeUserService : IUserService

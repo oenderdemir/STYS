@@ -18,7 +18,7 @@ public partial class SeedTrtKurumTesisBinaAndAdminUser : Migration
 
             DECLARE @Now datetime2 = SYSUTCDATETIME();
             DECLARE @AuditTag nvarchar(128) = N'migration_seed_trt_kurum_admin';
-            DECLARE @SeedPasswordHash nvarchar(max) = N'PBKDF2$100000$7EIkx3zl3+g/hx5ORM0tUw==$JCeyiS0ajdez/R1BKi3K5awsF1bs+D8b2neo0E6KW+k=';
+            DECLARE @SeedPasswordHash nvarchar(max) = N'PBKDF2$100000$RFpRL3G82m+YFbhu6szuuQ==$QP5heD3o4rtZaopfF8Rll9kx0zqyz509E/CVrwbS3p4=';
 
             DECLARE @TrabzonIlId int = (
                 SELECT TOP (1) [Id]

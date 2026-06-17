@@ -6,6 +6,7 @@ using STYS.Kamp.Entities;
 using STYS.Kamp.Services;
 using STYS.Iller.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tests;
@@ -91,7 +92,7 @@ public class KampTahsisServiceTests
         await dbContext.SaveChangesAsync();
 
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams);
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor());
         var result = await service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
             KampDonemiId = 10,
@@ -123,7 +124,7 @@ public class KampTahsisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedFixtureAsync(dbContext, atamaEkle: false);
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams);
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor());
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
@@ -167,6 +168,7 @@ public class KampTahsisServiceTests
             Id = 1,
             Kod = "YAZ",
             Ad = "Yaz Kampi",
+            Yil = 2025,
             AktifMi = true
         });
 
@@ -176,7 +178,6 @@ public class KampTahsisServiceTests
             KampProgramiId = 1,
             Kod = "2025-YAZ-1",
             Ad = "2025 Yaz 1",
-            Yil = 2025,
             BasvuruBaslangicTarihi = new DateTime(2025, 1, 1),
             BasvuruBitisTarihi = new DateTime(2025, 1, 31),
             KonaklamaBaslangicTarihi = new DateTime(2025, 6, 1),
@@ -232,5 +233,16 @@ public class KampTahsisServiceTests
             => _values
                 .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class FakeCurrentTenantAccessor : ICurrentTenantAccessor
+    {
+        public int? GetCurrentKurumId() => null;
+
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+
+        public bool IsSuperAdmin() => true;
+
+        public bool IsKurumAdmin() => false;
     }
 }

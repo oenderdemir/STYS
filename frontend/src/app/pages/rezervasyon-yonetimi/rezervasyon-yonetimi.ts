@@ -254,7 +254,7 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Secili oda tipi paylasimli. Bu durumda sistem zaten kisi bazli fiyat uygular.';
         }
 
-        return 'Bu secenek aciksa, paylasimsiz odada tek konaklayan icin kisi bazli tarife kullanilir. Kapaliysa ozel kullanim fiyatı once kullanilir.';
+        return 'Bu secenek aciksa, paylasimsiz odada tek konaklayan icin kisi bazli tarife kullanilir. Kapaliysa kapasite dolmamis odalarda ozel kullanim birim fiyatı kisi sayisina gore hesaplanir.';
     }
 
     get canApplyCustomDiscount(): boolean {

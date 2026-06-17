@@ -31,7 +31,7 @@ public class KampKurallariTests
             ]
         };
 
-        await service.PuanlaAsync(request, onizleme, kampProgramiId, 2025, request.GecmisKatilimYillari);
+        await service.PuanlaAsync(request, onizleme, kampProgramiId, request.GecmisKatilimYillari);
 
         Assert.Equal(1, onizleme.OncelikSirasi);
         Assert.Equal(62, onizleme.Puan);
@@ -111,6 +111,7 @@ public class KampKurallariTests
         {
             Kod = "GENEL",
             Ad = "Genel Kamp Programi",
+            Yil = 2025,
             AktifMi = true
         };
         dbContext.KampProgramlari.Add(kampProgrami);
@@ -133,7 +134,6 @@ public class KampKurallariTests
         dbContext.KampKuralSetleri.Add(new KampKuralSeti
         {
             KampProgrami = kampProgrami,
-            KampYili = 2025,
             OncekiYilSayisi = 2,
             KatilimCezaPuani = 20,
             KatilimciBasinaPuan = 10,

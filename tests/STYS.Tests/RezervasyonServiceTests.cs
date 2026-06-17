@@ -14,6 +14,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Kurumlar.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaKullanimBloklari;
 using STYS.OdaKullanimBloklari.Entities;
@@ -25,6 +26,8 @@ using STYS.Rezervasyonlar.Entities;
 using STYS.Rezervasyonlar.Services;
 using STYS.SezonKurallari.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.Licensing.Abstractions;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tests;
@@ -459,6 +462,85 @@ public class RezervasyonServiceTests
         Assert.Equal(100, scenario.Segmentler[0].OdaAtamalari[0].OdaId);
         Assert.Equal(4000m, scenario.ToplamBazUcret);
         Assert.Equal(4000m, scenario.ToplamNihaiUcret);
+    }
+
+    // TRT Trabzon'da oda kapasitesi tam doldugunda kisi basi tarifeye donulmeli.
+    [Fact]
+    public async Task SenaryoUretimi_TrtTrabzonOdaTamDoluysaKisiBasiFiyatUygular()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTrtTrabzonFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1001,
+            OdaTipiId = 21,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 2,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = false,
+            KonaklayanCinsiyetleri = [KonaklayanCinsiyetleri.Kadin, KonaklayanCinsiyetleri.Erkek]
+        });
+
+        var scenario = Assert.Single(scenarios);
+        Assert.Single(scenario.Segmentler);
+        Assert.Equal(2400m, scenario.ToplamBazUcret);
+        Assert.Equal(2400m, scenario.ToplamNihaiUcret);
+    }
+
+    // TRT Trabzon'da oda kapasitesi dolmadiysa ozel kullanim gunluk bedeli uygulanmali.
+    [Fact]
+    public async Task SenaryoUretimi_TrtTrabzonOdaKapasitesiDolmadiysaOzelKullanimUygular()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTrtTrabzonFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1001,
+            OdaTipiId = 21,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = false
+        });
+
+        var scenario = Assert.Single(scenarios);
+        Assert.Single(scenario.Segmentler);
+        Assert.Equal(1500m, scenario.ToplamBazUcret);
+        Assert.Equal(1500m, scenario.ToplamNihaiUcret);
+    }
+
+    // Ozel kullanim, kapasite dolmadiginda kisi basi fiyat gibi carpilmali.
+    [Fact]
+    public async Task SenaryoUretimi_OzelKullanimKapasiteDolmadiysaKisiBasiGibiHesaplanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOzelKullanimKisiBasiFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 2001,
+            OdaTipiId = 301,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 2,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = false
+        });
+
+        var scenario = Assert.Single(scenarios);
+        Assert.Single(scenario.Segmentler);
+        Assert.Equal(3000m, scenario.ToplamBazUcret);
+        Assert.Equal(3000m, scenario.ToplamNihaiUcret);
     }
 
     // Farkli oda tip/fiyat kombinasyonunda segment bazli oda degisimi ve fiyat dogru hesaplanmali.
@@ -2485,7 +2567,9 @@ public class RezervasyonServiceTests
             dbContext,
             new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()),
             new FakeBildirimService(),
-            httpContextAccessor);
+            httpContextAccessor,
+            new FakeLicenseService(),
+            new FakeCurrentTenantAccessor());
     }
 
     private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()
@@ -2543,7 +2627,7 @@ public class RezervasyonServiceTests
             .ConfigureWarnings(x => x.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
-        return new StysAppDbContext(options);
+        return new StysAppDbContext(options, null, new FakeCurrentTenantAccessor());
     }
 
     private static async Task SeedSingleRoomFixtureAsync(
@@ -2607,6 +2691,215 @@ public class RezervasyonServiceTests
             ParaBirimi = "TRY",
             BaslangicTarihi = new DateTime(2026, 3, 1),
             BitisTarihi = new DateTime(2026, 3, 31),
+            AktifMi = true
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedTrtTrabzonFixtureAsync(StysAppDbContext dbContext)
+    {
+        await SeedLookupsAsync(dbContext);
+
+        dbContext.Kurumlar.Add(new Kurum
+        {
+            Id = 1000,
+            Kod = "TRT",
+            Ad = "TRT",
+            AktifMi = true
+        });
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1001,
+            Ad = "Trabzon Misafirhane",
+            KurumId = 1000,
+            IlId = 61,
+            Telefon = "+90 462 000 00 00",
+            Adres = "Trabzon Merkez",
+            Eposta = "trabzon.misafirhane@trt.test",
+            GirisSaati = new TimeSpan(14, 0, 0),
+            CikisSaati = new TimeSpan(10, 0, 0),
+            AktifMi = true
+        });
+
+        dbContext.Binalar.Add(new Bina
+        {
+            Id = 1002,
+            TesisId = 1001,
+            Ad = "Ana Bina",
+            KatSayisi = 4,
+            AktifMi = true
+        });
+
+        dbContext.OdaTipleri.Add(new OdaTipi
+        {
+            Id = 21,
+            TesisId = 1001,
+            OdaSinifiId = 2,
+            Ad = "Tek Kişilk İki Yatak",
+            Kapasite = 2,
+            PaylasimliMi = false,
+            AktifMi = true
+        });
+
+        dbContext.Odalar.Add(new Oda
+        {
+            Id = 13,
+            OdaNo = "101",
+            BinaId = 1002,
+            TesisOdaTipiId = 21,
+            KatNo = 1,
+            AktifMi = true
+        });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat
+            {
+                Id = 189,
+                TesisOdaTipiId = 21,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+                Fiyat = 1200m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 190,
+                TesisOdaTipiId = 21,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.OzelKullanim,
+                Fiyat = 1500m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            });
+
+        dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
+        {
+            Id = 5001,
+            TesisId = 1001,
+            MisafirTipiId = 1,
+            AktifMi = true
+        });
+
+        dbContext.TesisKonaklamaTipleri.Add(new TesisKonaklamaTipi
+        {
+            Id = 5002,
+            TesisId = 1001,
+            KonaklamaTipiId = 1,
+            AktifMi = true
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedOzelKullanimKisiBasiFixtureAsync(StysAppDbContext dbContext)
+    {
+        await SeedLookupsAsync(dbContext);
+
+        dbContext.Kurumlar.Add(new Kurum
+        {
+            Id = 1000,
+            Kod = "TRT",
+            Ad = "TRT",
+            AktifMi = true
+        });
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 2001,
+            Ad = "KisiBasi Ozel Kullanim Tesisi",
+            KurumId = 1000,
+            IlId = 61,
+            Telefon = "+90 462 000 00 01",
+            Adres = "Trabzon",
+            GirisSaati = new TimeSpan(14, 0, 0),
+            CikisSaati = new TimeSpan(10, 0, 0),
+            AktifMi = true
+        });
+
+        dbContext.Binalar.Add(new Bina
+        {
+            Id = 2002,
+            TesisId = 2001,
+            Ad = "Blok A",
+            KatSayisi = 3,
+            AktifMi = true
+        });
+
+        dbContext.OdaTipleri.Add(new OdaTipi
+        {
+            Id = 301,
+            TesisId = 2001,
+            OdaSinifiId = 2,
+            Ad = "Uclu Oda",
+            Kapasite = 3,
+            PaylasimliMi = false,
+            AktifMi = true
+        });
+
+        dbContext.Odalar.Add(new Oda
+        {
+            Id = 3001,
+            OdaNo = "301",
+            BinaId = 2002,
+            TesisOdaTipiId = 301,
+            KatNo = 3,
+            AktifMi = true
+        });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat
+            {
+                Id = 30010,
+                TesisOdaTipiId = 301,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+                Fiyat = 1200m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 30011,
+                TesisOdaTipiId = 301,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 1,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.OzelKullanim,
+                Fiyat = 1500m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            });
+
+        dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
+        {
+            Id = 30012,
+            TesisId = 2001,
+            MisafirTipiId = 1,
+            AktifMi = true
+        });
+
+        dbContext.TesisKonaklamaTipleri.Add(new TesisKonaklamaTipi
+        {
+            Id = 30013,
+            TesisId = 2001,
+            KonaklamaTipiId = 1,
             AktifMi = true
         });
 
@@ -3470,5 +3763,35 @@ public class RezervasyonServiceTests
 
         public Task PublishToUsersAsync(IEnumerable<Guid> userIds, BildirimOlusturRequestDto request, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+    }
+
+    private sealed class FakeLicenseService : ILicenseService
+    {
+        public Task<LicenseValidationResult> GetCurrentStatusAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(LicenseValidationResult.Failure("test"));
+
+        public Task<bool> IsModuleLicensedAsync(string moduleCode, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public void InvalidateCache()
+        {
+        }
+
+        public Task EnsureLicensedAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task EnsureModuleLicensedAsync(string moduleCode, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FakeCurrentTenantAccessor : ICurrentTenantAccessor
+    {
+        public int? GetCurrentKurumId() => null;
+
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+
+        public bool IsSuperAdmin() => true;
+
+        public bool IsKurumAdmin() => false;
     }
 }

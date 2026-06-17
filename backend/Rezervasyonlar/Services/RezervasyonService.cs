@@ -3495,7 +3495,8 @@ public class RezervasyonService : IRezervasyonService
                 OdaId = oda.Id,
                 bina.TesisId,
                 OdaTipiId = odaTipi.Id,
-                odaTipi.PaylasimliMi
+                odaTipi.PaylasimliMi,
+                odaTipi.Kapasite
             })
             .ToListAsync(cancellationToken);
 
@@ -3505,7 +3506,7 @@ public class RezervasyonService : IRezervasyonService
         }
 
         var roomTypeIds = roomMaps.Select(x => x.OdaTipiId).Distinct().ToList();
-        var roomTypeByRoomId = roomMaps.ToDictionary(x => x.OdaId, x => new RoomTypePricingInfo(x.OdaTipiId, x.PaylasimliMi));
+        var roomTypeByRoomId = roomMaps.ToDictionary(x => x.OdaId, x => new RoomTypePricingInfo(x.OdaTipiId, x.PaylasimliMi, x.Kapasite));
         var tesisSaatleri = await _stysDbContext.Tesisler
             .Where(x => x.Id == tesisId)
             .Select(x => new { x.GirisSaati, x.CikisSaati })
@@ -3568,6 +3569,7 @@ public class RezervasyonService : IRezervasyonService
                 var fiyat = ResolveScenarioPrice(
                     applicableRows,
                     roomTypeInfo.PaylasimliMi,
+                    roomTypeInfo.Kapasite,
                     atama.AyrilanKisiSayisi,
                     kisiSayisi,
                     tekKisilikFiyatUygulansinMi,
@@ -4789,6 +4791,7 @@ public class RezervasyonService : IRezervasyonService
     private static SelectedScenarioPrice ResolveScenarioPrice(
         IReadOnlyCollection<OdaFiyat> priceRows,
         bool paylasimliOdaTipi,
+        int odaKapasitesi,
         int segmentKisiSayisi,
         int rezervasyonKisiSayisi,
         bool tekKisilikFiyatUygulansinMi,
@@ -4817,14 +4820,23 @@ public class RezervasyonService : IRezervasyonService
             return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat);
         }
 
-        if (ozelKullanimPrice is not null)
+        // Ozel kullanim, kapasite dolmadiginda kisi basi birim fiyat gibi uygulanir.
+        // Oda tam doluysa kisi basi tarife kullanilir.
+        if (ozelKullanimPrice is not null
+            && segmentKisiSayisi > 0
+            && segmentKisiSayisi < odaKapasitesi)
         {
-            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat);
+            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi);
         }
 
         if (kisiBasiPrice is not null)
         {
             return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi);
+        }
+
+        if (ozelKullanimPrice is not null)
+        {
+            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi);
         }
 
         throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin uygun oda fiyati bulunamadi.", 400);
@@ -6276,7 +6288,7 @@ public class RezervasyonService : IRezervasyonService
         DateTime BitisTarihi,
         string? Cinsiyet);
 
-    private sealed record RoomTypePricingInfo(int OdaTipiId, bool PaylasimliMi);
+    private sealed record RoomTypePricingInfo(int OdaTipiId, bool PaylasimliMi, int Kapasite);
 
     private sealed record SelectedScenarioPrice(string ParaBirimi, decimal Tutar);
 

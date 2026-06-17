@@ -8,6 +8,7 @@ import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { MenuModule } from 'primeng/menu';
@@ -71,7 +72,7 @@ interface DegisiklikPayloadTableData {
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule],
     templateUrl: './rezervasyon-yonetimi.html',
     styleUrl: './rezervasyon-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
@@ -172,8 +173,8 @@ export class RezervasyonYonetimi implements OnInit {
     kisiSayisi = 1;
     tekKisilikFiyatUygulansinMi = false;
     senaryoKonaklayanCinsiyetleri: Array<string | null> = [null];
-    baslangicTarihi = this.nowInput();
-    bitisTarihi = this.tomorrowInput();
+    baslangicTarihi = this.nowDateTime();
+    bitisTarihi = this.tomorrowDateTime();
     misafirAdiSoyadi = '';
     misafirTelefon = '';
     misafirEposta = '';
@@ -449,7 +450,7 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        if (new Date(this.baslangicTarihi).getTime() >= new Date(this.bitisTarihi).getTime()) {
+        if (!this.baslangicTarihi || !this.bitisTarihi || this.baslangicTarihi.getTime() >= this.bitisTarihi.getTime()) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Baslangic tarihi bitis tarihinden kucuk olmalidir.' });
             return;
         }
@@ -3289,22 +3290,44 @@ export class RezervasyonYonetimi implements OnInit {
         return chips;
     }
 
+    private nowDateTime(): Date {
+        return new Date();
+    }
+
     private nowInput(): string {
         return this.toDateTimeLocalInput(new Date());
     }
 
-    private tomorrowInput(): string {
+    private tomorrowDateTime(): Date {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        return this.toDateTimeLocalInput(tomorrow);
+        return tomorrow;
     }
 
-    private toIsoDate(value: string): string {
-        if (value.length === 16) {
-            return `${value}:00`;
+    private toIsoDate(value: Date | string | null): string {
+        if (!value) {
+            return new Date().toISOString();
         }
 
-        return value;
+        if (typeof value === 'string') {
+            if (value.length === 16) {
+                return `${value}:00`;
+            }
+
+            return value;
+        }
+
+        if (Number.isNaN(value.getTime())) {
+            return new Date().toISOString();
+        }
+
+        const year = String(value.getFullYear()).padStart(4, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        const hour = String(value.getHours()).padStart(2, '0');
+        const minute = String(value.getMinutes()).padStart(2, '0');
+        const second = String(value.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
     }
 
     private normalizeOptional(value: string): string | null {
@@ -3314,15 +3337,6 @@ export class RezervasyonYonetimi implements OnInit {
 
     private hasSharedRoomUsage(scenario: KonaklamaSenaryoDto): boolean {
         return scenario.segmentler.some((segment) => segment.odaAtamalari.some((assignment) => assignment.paylasimliMi));
-    }
-
-    private toDateTimeLocalInput(date: Date): string {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hour = String(date.getHours()).padStart(2, '0');
-        const minute = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hour}:${minute}`;
     }
 
     private toDateTimeLocalInputValue(value: string): string {
@@ -3343,8 +3357,8 @@ export class RezervasyonYonetimi implements OnInit {
         const [girisSaat, girisDakika] = this.parseSaat(selectedTesis.girisSaati, this.defaultGirisSaati);
         const [cikisSaat, cikisDakika] = this.parseSaat(selectedTesis.cikisSaati, this.defaultCikisSaati);
 
-        const baslangic = this.tryParseDate(this.baslangicTarihi) ?? new Date();
-        const bitis = this.tryParseDate(this.bitisTarihi) ?? new Date(baslangic.getTime() + 24 * 60 * 60 * 1000);
+        const baslangic = this.cloneDate(this.baslangicTarihi) ?? new Date();
+        const bitis = this.cloneDate(this.bitisTarihi) ?? new Date(baslangic.getTime() + 24 * 60 * 60 * 1000);
 
         baslangic.setHours(girisSaat, girisDakika, 0, 0);
         bitis.setHours(cikisSaat, cikisDakika, 0, 0);
@@ -3353,8 +3367,8 @@ export class RezervasyonYonetimi implements OnInit {
             bitis.setDate(bitis.getDate() + 1);
         }
 
-        this.baslangicTarihi = this.toDateTimeLocalInput(baslangic);
-        this.bitisTarihi = this.toDateTimeLocalInput(bitis);
+        this.baslangicTarihi = baslangic;
+        this.bitisTarihi = bitis;
     }
 
     private parseSaat(source: string | null | undefined, fallback: string): [number, number] {
@@ -3367,13 +3381,30 @@ export class RezervasyonYonetimi implements OnInit {
         return [safeSaat, safeDakika];
     }
 
-    private tryParseDate(value: string): Date | null {
+    private cloneDate(value: Date | string | null | undefined): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
+        }
+
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
             return null;
         }
 
         return date;
+    }
+
+    private toDateTimeLocalInput(date: Date): string {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hour = String(date.getHours()).padStart(2, '0');
+        const minute = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}`;
     }
 
     private resolveErrorMessage(error: unknown): string {

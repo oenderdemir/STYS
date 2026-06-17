@@ -145,12 +145,36 @@
 
         <div class="col-span-12 md:col-span-4 lg:col-span-5">
             <label for="rezBaslangic" class="block font-medium mb-2">Baslangic Tarihi</label>
-            <input pInputText id="rezBaslangic" class="w-full" type="datetime-local" [(ngModel)]="baslangicTarihi" [disabled]="loadingReferences || loadingResults" />
+            <p-datepicker
+                inputId="rezBaslangic"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [(ngModel)]="baslangicTarihi"
+                [disabled]="loadingReferences || loadingResults"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                [showTime]="true"
+                hourFormat="24"
+                dateFormat="dd.mm.yy"
+                appendTo="body" />
         </div>
 
         <div class="col-span-12 md:col-span-4 lg:col-span-5">
             <label for="rezBitis" class="block font-medium mb-2">Bitis Tarihi</label>
-            <input pInputText id="rezBitis" class="w-full" type="datetime-local" [(ngModel)]="bitisTarihi" [disabled]="loadingReferences || loadingResults" />
+            <p-datepicker
+                inputId="rezBitis"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [(ngModel)]="bitisTarihi"
+                [disabled]="loadingReferences || loadingResults"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                [showTime]="true"
+                hourFormat="24"
+                dateFormat="dd.mm.yy"
+                appendTo="body" />
         </div>
     </div>
 

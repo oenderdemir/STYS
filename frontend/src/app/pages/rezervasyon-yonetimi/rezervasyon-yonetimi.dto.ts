@@ -70,6 +70,7 @@ export interface KonaklamaSenaryoDto {
     toplamBazUcret: number;
     toplamNihaiUcret: number;
     paraBirimi: string;
+    fiyatlamaTipi?: string | null;
     uygulananIndirimler?: UygulananIndirimDto[];
     segmentler: KonaklamaSenaryoSegmentDto[];
 }

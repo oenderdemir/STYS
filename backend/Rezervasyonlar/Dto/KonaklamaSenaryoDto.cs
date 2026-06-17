@@ -16,5 +16,7 @@ public class KonaklamaSenaryoDto
 
     public string ParaBirimi { get; set; } = "TRY";
 
+    public string FiyatlamaTipi { get; set; } = string.Empty;
+
     public List<KonaklamaSenaryoSegmentDto> Segmentler { get; set; } = [];
 }

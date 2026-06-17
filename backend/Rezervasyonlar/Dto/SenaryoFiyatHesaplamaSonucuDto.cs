@@ -10,5 +10,7 @@ public class SenaryoFiyatHesaplamaSonucuDto
 
     public string ParaBirimi { get; set; } = "TRY";
 
+    public string FiyatlamaTipi { get; set; } = string.Empty;
+
     public List<UygulananIndirimDto> UygulananIndirimler { get; set; } = [];
 }

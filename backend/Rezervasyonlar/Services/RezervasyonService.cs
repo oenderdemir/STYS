@@ -1935,6 +1935,7 @@ public class RezervasyonService : IRezervasyonService
             scenario.ToplamBazUcret = pricing.ToplamBazUcret;
             scenario.ToplamNihaiUcret = pricing.ToplamNihaiUcret;
             scenario.ParaBirimi = pricing.ParaBirimi;
+            scenario.FiyatlamaTipi = pricing.FiyatlamaTipi;
         }
 
         var sortedByPrice = distinct
@@ -3534,6 +3535,7 @@ public class RezervasyonService : IRezervasyonService
 
         var currency = string.Empty;
         var baseTotal = 0m;
+        var pricingModeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var chargeWindow in EnumerateChargeWindows(
                      baslangicTarihi,
@@ -3571,9 +3573,10 @@ public class RezervasyonService : IRezervasyonService
                     roomTypeInfo.PaylasimliMi,
                     roomTypeInfo.Kapasite,
                     atama.AyrilanKisiSayisi,
-                    kisiSayisi,
                     tekKisilikFiyatUygulansinMi,
                     chargeWindow.ChargeDay);
+
+                pricingModeSet.Add(fiyat.FiyatlamaTipi);
 
                 if (string.IsNullOrWhiteSpace(currency))
                 {
@@ -3641,6 +3644,7 @@ public class RezervasyonService : IRezervasyonService
             ToplamBazUcret = baseTotal,
             ToplamNihaiUcret = finalTotal,
             ParaBirimi = string.IsNullOrWhiteSpace(currency) ? "TRY" : currency.ToUpperInvariant(),
+            FiyatlamaTipi = ResolveScenarioPricingTipi(pricingModeSet),
             UygulananIndirimler = appliedDiscounts
         };
     }
@@ -3833,11 +3837,6 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Kisi sayisi sifirdan buyuk olmalidir.", 400);
         }
 
-        if (tekKisilikFiyatUygulansinMi && kisiSayisi != 1)
-        {
-            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
-        }
-
         if (baslangicTarihi >= bitisTarihi)
         {
             throw new BaseException("Baslangic tarihi bitis tarihinden kucuk olmalidir.", 400);
@@ -3918,11 +3917,6 @@ public class RezervasyonService : IRezervasyonService
         {
             throw new BaseException("Konaklayan cinsiyet sayisi kisi sayisi ile uyumlu olmalidir.", 400);
         }
-
-        if (request.TekKisilikFiyatUygulansinMi && request.KisiSayisi != 1)
-        {
-            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
-        }
     }
 
     private static void ValidateSaveRequest(RezervasyonKaydetRequestDto request)
@@ -3990,11 +3984,6 @@ public class RezervasyonService : IRezervasyonService
         if (request.MisafirCinsiyeti is not null && NormalizeKonaklayanCinsiyet(request.MisafirCinsiyeti) is null)
         {
             throw new BaseException("Misafir cinsiyeti gecersiz.", 400);
-        }
-
-        if (request.TekKisilikFiyatUygulansinMi && request.KisiSayisi != 1)
-        {
-            throw new BaseException("Tek kisilik fiyat yalnizca tek konaklayan icin secilebilir.", 400);
         }
 
         if (request.UygulananIndirimler.Any(x =>
@@ -4793,7 +4782,6 @@ public class RezervasyonService : IRezervasyonService
         bool paylasimliOdaTipi,
         int odaKapasitesi,
         int segmentKisiSayisi,
-        int rezervasyonKisiSayisi,
         bool tekKisilikFiyatUygulansinMi,
         DateTime hedefTarih)
     {
@@ -4807,17 +4795,17 @@ public class RezervasyonService : IRezervasyonService
                 throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin paylasimli kullanim kisi bazli tarife bulunamadi.", 400);
             }
 
-            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi);
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi, ScenarioPricingTipleri.KisiBasi);
         }
 
-        if (tekKisilikFiyatUygulansinMi && rezervasyonKisiSayisi == 1)
+        if (tekKisilikFiyatUygulansinMi)
         {
             if (kisiBasiPrice is null)
             {
                 throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin tek kisilik fiyat uygulanacak kisi bazli tarife bulunamadi.", 400);
             }
 
-            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat);
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi, ScenarioPricingTipleri.TekKisilikFiyat);
         }
 
         // Ozel kullanim, kapasite dolmadiginda kisi basi birim fiyat gibi uygulanir.
@@ -4826,17 +4814,17 @@ public class RezervasyonService : IRezervasyonService
             && segmentKisiSayisi > 0
             && segmentKisiSayisi < odaKapasitesi)
         {
-            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi);
+            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi, ScenarioPricingTipleri.OzelKullanim);
         }
 
         if (kisiBasiPrice is not null)
         {
-            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi);
+            return new SelectedScenarioPrice(kisiBasiPrice.ParaBirimi, kisiBasiPrice.Fiyat * segmentKisiSayisi, ScenarioPricingTipleri.KisiBasi);
         }
 
         if (ozelKullanimPrice is not null)
         {
-            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi);
+            return new SelectedScenarioPrice(ozelKullanimPrice.ParaBirimi, ozelKullanimPrice.Fiyat * segmentKisiSayisi, ScenarioPricingTipleri.OzelKullanim);
         }
 
         throw new BaseException($"{hedefTarih:yyyy-MM-dd} tarihi icin uygun oda fiyati bulunamadi.", 400);
@@ -4871,6 +4859,26 @@ public class RezervasyonService : IRezervasyonService
         }
 
         return "Ozel kullanim fiyatlama";
+    }
+
+    private static string ResolveScenarioPricingTipi(IReadOnlyCollection<string> pricingModes)
+    {
+        var uniqueModes = pricingModes
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (uniqueModes.Count == 0)
+        {
+            return ScenarioPricingTipleri.KisiBasi;
+        }
+
+        if (uniqueModes.Count == 1)
+        {
+            return uniqueModes[0];
+        }
+
+        return ScenarioPricingTipleri.Karma;
     }
 
     private static bool DoesGuestRequireAssignments(string katilimDurumu)
@@ -5448,6 +5456,22 @@ public class RezervasyonService : IRezervasyonService
             ("Tek parca konaklama - az paylasimli tercih", availabilities.OrderBy(x => x.PaylasimliMi).ThenByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList()),
             ("Tek parca konaklama - daginik alternatif", availabilities.OrderBy(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList())
         };
+
+        foreach (var odaTipiId in availabilities
+                     .OrderBy(x => x.OdaTipiId)
+                     .Select(x => x.OdaTipiId)
+                     .Distinct()
+                     .Take(3))
+        {
+            var preferredRoomType = availabilities.First(x => x.OdaTipiId == odaTipiId);
+            variantSources.Add((
+                $"Tek parca konaklama - {preferredRoomType.OdaTipiAdi} odakli",
+                availabilities
+                    .OrderBy(x => x.OdaTipiId == odaTipiId ? 0 : 1)
+                    .ThenByDescending(x => x.RemainingCapacity)
+                    .ThenBy(x => x.OdaId)
+                    .ToList()));
+        }
 
         foreach (var variant in variantSources)
         {
@@ -6290,7 +6314,15 @@ public class RezervasyonService : IRezervasyonService
 
     private sealed record RoomTypePricingInfo(int OdaTipiId, bool PaylasimliMi, int Kapasite);
 
-    private sealed record SelectedScenarioPrice(string ParaBirimi, decimal Tutar);
+    private static class ScenarioPricingTipleri
+    {
+        public const string KisiBasi = "KisiBasi";
+        public const string OzelKullanim = "OzelKullanim";
+        public const string TekKisilikFiyat = "TekKisilikFiyat";
+        public const string Karma = "Karma";
+    }
+
+    private sealed record SelectedScenarioPrice(string ParaBirimi, decimal Tutar, string FiyatlamaTipi);
 
     private sealed record ScenarioGuestGenderRequirements(
         int KadinSayisi,

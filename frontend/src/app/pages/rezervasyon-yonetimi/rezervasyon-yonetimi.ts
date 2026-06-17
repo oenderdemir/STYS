@@ -234,10 +234,6 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     get canUseSinglePersonPricing(): boolean {
-        if (this.kisiSayisi !== 1) {
-            return false;
-        }
-
         if (!this.selectedRezervasyonOdaTipi) {
             return true;
         }
@@ -246,15 +242,15 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     get singlePersonPricingHint(): string | null {
-        if (this.kisiSayisi !== 1) {
-            return 'Tek kisilik fiyat secimi yalnizca tek konaklayan icin kullanilir.';
-        }
-
         if (this.selectedRezervasyonOdaTipi?.paylasimliMi) {
             return 'Secili oda tipi paylasimli. Bu durumda sistem zaten kisi bazli fiyat uygular.';
         }
 
-        return 'Bu secenek aciksa, paylasimsiz odada tek konaklayan icin kisi bazli tarife kullanilir. Kapaliysa kapasite dolmamis odalarda ozel kullanim birim fiyatı kisi sayisina gore hesaplanir.';
+        if (this.kisiSayisi === 1) {
+            return 'Bu secenek aciksa, paylasimsiz odada kisi bazli tarife kullanilir. Kapaliysa kapasite dolmamis odalarda ozel kullanim birim fiyatı kisi sayisina gore hesaplanir.';
+        }
+
+        return 'Bu secenek aciksa, paylasimsiz odada kisi bazli tarife rezervasyondaki her kisi icin uygulanir. Kapaliysa kapasite dolmamis odalarda ozel kullanim birim fiyatı kisi sayisina gore hesaplanir.';
     }
 
     get canApplyCustomDiscount(): boolean {
@@ -528,6 +524,20 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     getScenarioPricingLabel(scenario: KonaklamaSenaryoDto): string {
+        const pricingType = scenario.fiyatlamaTipi?.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (pricingType) {
+            switch (pricingType) {
+                case 'tekkisilikfiyat':
+                    return 'Tek Kisilik Fiyat';
+                case 'kisibasi':
+                    return 'Kisi Basi';
+                case 'ozelkullanim':
+                    return 'Ozel Kullanim';
+                case 'karma':
+                    return 'Karma';
+            }
+        }
+
         if (this.tekKisilikFiyatUygulansinMi && this.kisiSayisi === 1) {
             return 'Tek Kisilik Fiyat';
         }

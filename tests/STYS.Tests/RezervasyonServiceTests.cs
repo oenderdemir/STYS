@@ -513,8 +513,98 @@ public class RezervasyonServiceTests
 
         var scenario = Assert.Single(scenarios);
         Assert.Single(scenario.Segmentler);
+        Assert.Equal("OzelKullanim", scenario.FiyatlamaTipi);
         Assert.Equal(1500m, scenario.ToplamBazUcret);
         Assert.Equal(1500m, scenario.ToplamNihaiUcret);
+    }
+
+    // Ozel kullanim tarifi olmayan 3 kisilik oda, kapasite dolmadiysa kisi basi gibi etiketlenmeli.
+    [Fact]
+    public async Task SenaryoUretimi_TrtTrabzonUcYatakliOdaOzelKullanimFiyatiYoksaKisiBasiEtiketlenir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTrtTrabzonFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1001,
+            OdaTipiId = 23,
+            MisafirTipiId = 2,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = false,
+            KonaklayanCinsiyetleri = [KonaklayanCinsiyetleri.Kadin]
+        });
+
+        var scenario = Assert.Single(scenarios);
+        Assert.Equal("KisiBasi", scenario.FiyatlamaTipi);
+        Assert.Equal(1200m, scenario.ToplamBazUcret);
+        Assert.Equal(1200m, scenario.ToplamNihaiUcret);
+    }
+
+    // Tek kisilik fiyat secimi coklu konaklayan icin de uygulanabilmeli.
+    [Fact]
+    public async Task SenaryoUretimi_TrtTrabzonTekKisilikFiyatCokluKisiIcinDeUygulanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTrtTrabzonFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1001,
+            OdaTipiId = 23,
+            MisafirTipiId = 2,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 2,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = true,
+            KonaklayanCinsiyetleri = [KonaklayanCinsiyetleri.Kadin, KonaklayanCinsiyetleri.Erkek]
+        });
+
+        var scenario = Assert.Single(scenarios);
+        Assert.Equal("TekKisilikFiyat", scenario.FiyatlamaTipi);
+        Assert.Equal(2400m, scenario.ToplamBazUcret);
+        Assert.Equal(2400m, scenario.ToplamNihaiUcret);
+    }
+
+    // Oda tipi secilmediginde uygun oda tipleri icin birden fazla alternatif donmeli.
+    [Fact]
+    public async Task SenaryoUretimi_TrtTrabzonOdaTipiSecilmedigindeUygunAlternatiflerDondurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTrtTrabzonFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
+        {
+            TesisId = 1001,
+            OdaTipiId = null,
+            MisafirTipiId = 2,
+            KonaklamaTipiId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = new DateTime(2026, 6, 18, 14, 0, 0),
+            BitisTarihi = new DateTime(2026, 6, 19, 10, 0, 0),
+            TekKisilikFiyatUygulansinMi = false,
+            KonaklayanCinsiyetleri = [KonaklayanCinsiyetleri.Kadin]
+        });
+
+        Assert.True(scenarios.Count >= 3);
+
+        var odaTipleri = scenarios
+            .SelectMany(x => x.Segmentler)
+            .SelectMany(x => x.OdaAtamalari)
+            .Select(x => x.OdaTipiId)
+            .Distinct()
+            .ToHashSet();
+
+        Assert.Contains(21, odaTipleri);
+        Assert.Contains(22, odaTipleri);
+        Assert.Contains(23, odaTipleri);
     }
 
     // Ozel kullanim, kapasite dolmadiginda kisi basi fiyat gibi carpilmali.
@@ -2743,12 +2833,54 @@ public class RezervasyonServiceTests
             AktifMi = true
         });
 
+        dbContext.OdaTipleri.Add(new OdaTipi
+        {
+            Id = 23,
+            TesisId = 1001,
+            OdaSinifiId = 2,
+            Ad = "Uc Yatakli",
+            Kapasite = 3,
+            PaylasimliMi = false,
+            AktifMi = true
+        });
+
+        dbContext.OdaTipleri.Add(new OdaTipi
+        {
+            Id = 22,
+            TesisId = 1001,
+            OdaSinifiId = 2,
+            Ad = "Suit Oda Cift Kisilik Yatak",
+            Kapasite = 2,
+            PaylasimliMi = false,
+            AktifMi = true
+        });
+
         dbContext.Odalar.Add(new Oda
         {
             Id = 13,
             OdaNo = "101",
             BinaId = 1002,
             TesisOdaTipiId = 21,
+            KatNo = 1,
+            AktifMi = true
+        });
+
+        dbContext.Odalar.Add(new Oda
+        {
+            Id = 21,
+            OdaNo = "109",
+            BinaId = 1002,
+            TesisOdaTipiId = 23,
+            KatNo = 1,
+            AktifMi = true
+        });
+
+        dbContext.Odalar.Add(new Oda
+        {
+            Id = 22,
+            OdaNo = "107",
+            BinaId = 1002,
+            TesisOdaTipiId = 22,
             KatNo = 1,
             AktifMi = true
         });
@@ -2783,11 +2915,92 @@ public class RezervasyonServiceTests
                 AktifMi = true
             });
 
+        dbContext.OdaFiyatlari.Add(new OdaFiyat
+        {
+            Id = 191,
+            TesisOdaTipiId = 23,
+            KonaklamaTipiId = 1,
+            MisafirTipiId = 2,
+            KisiSayisi = 1,
+            KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+            Fiyat = 1200m,
+            ParaBirimi = "TRY",
+            BaslangicTarihi = new DateTime(2026, 6, 17),
+            BitisTarihi = new DateTime(2026, 12, 31),
+            AktifMi = true
+        });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat
+            {
+                Id = 192,
+                TesisOdaTipiId = 21,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 2,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+                Fiyat = 1200m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 193,
+                TesisOdaTipiId = 21,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 2,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.OzelKullanim,
+                Fiyat = 1500m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 194,
+                TesisOdaTipiId = 22,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 2,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+                Fiyat = 1200m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            },
+            new OdaFiyat
+            {
+                Id = 195,
+                TesisOdaTipiId = 23,
+                KonaklamaTipiId = 1,
+                MisafirTipiId = 2,
+                KisiSayisi = 1,
+                KullanimSekli = OdaFiyatKullanimSekilleri.KisiBasi,
+                Fiyat = 1200m,
+                ParaBirimi = "TRY",
+                BaslangicTarihi = new DateTime(2026, 6, 17),
+                BitisTarihi = new DateTime(2026, 12, 31),
+                AktifMi = true
+            });
+
         dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
         {
             Id = 5001,
             TesisId = 1001,
             MisafirTipiId = 1,
+            AktifMi = true
+        });
+
+        dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
+        {
+            Id = 5003,
+            TesisId = 1001,
+            MisafirTipiId = 2,
             AktifMi = true
         });
 
@@ -3709,6 +3922,14 @@ public class RezervasyonServiceTests
             Id = 1,
             Kod = "TEST-MISAFIR",
             Ad = "Test Misafir Tipi",
+            AktifMi = true
+        });
+
+        dbContext.MisafirTipleri.Add(new MisafirTipi
+        {
+            Id = 2,
+            Kod = "TEST-DIGER",
+            Ad = "Test Diger Tipi",
             AktifMi = true
         });
 

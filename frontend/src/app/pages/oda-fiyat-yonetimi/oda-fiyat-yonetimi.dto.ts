@@ -43,8 +43,8 @@ export interface OdaFiyatFormRow {
     kullanimSekli: string;
     fiyat: number | null;
     paraBirimi: string;
-    baslangicTarihi: string;
-    bitisTarihi: string;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
     aktifMi: boolean;
     uiYeniOzelKullanimSatiriMi?: boolean;
 }

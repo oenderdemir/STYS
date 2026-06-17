@@ -172,7 +172,7 @@ export class OdaFiyatYonetimi implements OnInit {
 
         const defaultKonaklamaTipiId = this.konaklamaTipleri[0]?.id ?? null;
         const defaultMisafirTipiId = this.misafirTipleri[0]?.id ?? null;
-        const today = this.todayInput();
+        const today = this.todayDate();
 
         this.fiyatSatirlari = [
             ...this.fiyatSatirlari,
@@ -220,7 +220,7 @@ export class OdaFiyatYonetimi implements OnInit {
             this.fiyatSatirlari.map((row) => `${row.konaklamaTipiId ?? 0}-${row.misafirTipiId ?? 0}-${row.kullanimSekli}`)
         );
 
-        const defaultDate = this.todayInput();
+        const defaultDate = this.todayDate();
         const newRows: OdaFiyatFormRow[] = [];
 
         for (const konaklamaTipi of this.konaklamaTipleri) {
@@ -500,7 +500,7 @@ export class OdaFiyatYonetimi implements OnInit {
                 return `${lineNo}. satir: Baslangic ve bitis tarihi zorunludur.`;
             }
 
-            if (row.baslangicTarihi > row.bitisTarihi) {
+            if (row.baslangicTarihi.getTime() > row.bitisTarihi.getTime()) {
                 return `${lineNo}. satir: Baslangic tarihi bitis tarihinden buyuk olamaz.`;
             }
         }
@@ -508,25 +508,30 @@ export class OdaFiyatYonetimi implements OnInit {
         return null;
     }
 
-    private normalizeDateInput(value: string): string {
+    private normalizeDateInput(value: string): Date {
         if (!value) {
-            return this.todayInput();
+            return this.todayDate();
         }
 
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
-            return this.todayInput();
+            return this.todayDate();
         }
 
-        return date.toISOString().slice(0, 10);
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
     }
 
-    private toIsoDate(value: string): string {
-        return `${value}T00:00:00`;
+    private toIsoDate(value: Date | null): string {
+        if (!value || Number.isNaN(value.getTime())) {
+            return new Date().toISOString();
+        }
+
+        return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate())).toISOString();
     }
 
-    private todayInput(): string {
-        return new Date().toISOString().slice(0, 10);
+    private todayDate(): Date {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
     }
 
     private resolveErrorMessage(error: unknown): string {

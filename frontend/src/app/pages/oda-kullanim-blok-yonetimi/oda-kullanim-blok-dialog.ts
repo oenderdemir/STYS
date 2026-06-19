@@ -3,9 +3,11 @@ import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
 import { TextareaModule } from 'primeng/textarea';
+import { parseApiDateTime, toLocalDateTimeString } from '../../core/utils/date-time.util';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { OdaKullanimBlokDto, OdaKullanimBlokOdaSecenekDto } from './oda-kullanim-blok-yonetimi.dto';
 
@@ -17,7 +19,7 @@ interface SelectOption<T = string | number> {
 @Component({
     selector: 'app-oda-kullanim-blok-dialog',
     standalone: true,
-    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, CheckboxModule, SelectModule, TextareaModule],
+    imports: [CommonModule, FormsModule, DialogModule, ButtonModule, CheckboxModule, DatePickerModule, SelectModule, TextareaModule],
     template: `
         <p-dialog
             [header]="dialogTitle"
@@ -68,22 +70,36 @@ interface SelectOption<T = string | number> {
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic Tarihi</label>
-                    <input
-                        id="baslangicTarihi"
-                        type="datetime-local"
-                        class="w-full p-inputtext p-component"
-                        [(ngModel)]="baslangicTarihiInput"
+                    <p-datepicker
+                        inputId="baslangicTarihi"
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="baslangicTarihi"
                         [disabled]="isReadOnly || saving"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        [showTime]="true"
+                        hourFormat="24"
+                        dateFormat="dd.mm.yy"
+                        appendTo="body"
                     />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="bitisTarihi" class="block font-medium mb-2">Bitis Tarihi</label>
-                    <input
-                        id="bitisTarihi"
-                        type="datetime-local"
-                        class="w-full p-inputtext p-component"
-                        [(ngModel)]="bitisTarihiInput"
+                    <p-datepicker
+                        inputId="bitisTarihi"
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="bitisTarihi"
                         [disabled]="isReadOnly || saving"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        [showTime]="true"
+                        hourFormat="24"
+                        dateFormat="dd.mm.yy"
+                        appendTo="body"
                     />
                 </div>
                 <div class="col-span-12">
@@ -123,8 +139,8 @@ export class OdaKullanimBlokDialog implements OnChanges {
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
     workingModel: OdaKullanimBlokDto = this.emptyModel();
-    baslangicTarihiInput = '';
-    bitisTarihiInput = '';
+    baslangicTarihi: Date | null = null;
+    bitisTarihi: Date | null = null;
 
     readonly blokTipiOptions: SelectOption<string>[] = [
         { label: 'Bakim', value: 'Bakim' },
@@ -194,11 +210,12 @@ export class OdaKullanimBlokDialog implements OnChanges {
         const hasTesis = (this.selectedTesisId ?? 0) > 0;
         const hasRoom = (this.workingModel.odaId ?? 0) > 0;
         const hasType = (this.workingModel.blokTipi ?? '').trim().length > 0;
-        if (!hasTesis || !hasRoom || !hasType || !this.baslangicTarihiInput || !this.bitisTarihiInput) {
+
+        if (!hasTesis || !hasRoom || !hasType || !this.baslangicTarihi || !this.bitisTarihi) {
             return false;
         }
 
-        return new Date(this.baslangicTarihiInput).getTime() < new Date(this.bitisTarihiInput).getTime();
+        return this.baslangicTarihi.getTime() < this.bitisTarihi.getTime();
     }
 
     submit(): void {
@@ -211,8 +228,8 @@ export class OdaKullanimBlokDialog implements OnChanges {
             tesisId: this.selectedTesisId ?? 0,
             odaId: this.workingModel.odaId,
             blokTipi: this.workingModel.blokTipi,
-            baslangicTarihi: this.toIsoDate(this.baslangicTarihiInput),
-            bitisTarihi: this.toIsoDate(this.bitisTarihiInput),
+            baslangicTarihi: toLocalDateTimeString(this.baslangicTarihi) ?? '',
+            bitisTarihi: toLocalDateTimeString(this.bitisTarihi) ?? '',
             aciklama: this.normalizeOptional(this.workingModel.aciklama),
             aktifMi: this.workingModel.aktifMi
         });
@@ -238,8 +255,8 @@ export class OdaKullanimBlokDialog implements OnChanges {
 
     private applyModel(source: OdaKullanimBlokDto): void {
         this.workingModel = this.cloneModel(source);
-        this.baslangicTarihiInput = this.toDateTimeLocalInput(source.baslangicTarihi);
-        this.bitisTarihiInput = this.toDateTimeLocalInput(source.bitisTarihi);
+        this.baslangicTarihi = parseApiDateTime(source.baslangicTarihi);
+        this.bitisTarihi = parseApiDateTime(source.bitisTarihi);
     }
 
     private cloneModel(source: OdaKullanimBlokDto): OdaKullanimBlokDto {
@@ -265,28 +282,6 @@ export class OdaKullanimBlokDialog implements OnChanges {
             aciklama: null,
             aktifMi: true
         };
-    }
-
-    private toDateTimeLocalInput(value: string): string {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return '';
-        }
-
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hour = String(date.getHours()).padStart(2, '0');
-        const minute = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hour}:${minute}`;
-    }
-
-    private toIsoDate(value: string): string {
-        if (value.length === 16) {
-            return `${value}:00`;
-        }
-
-        return value;
     }
 
     private normalizeOptional(value: string | null | undefined): string | null {

@@ -16,6 +16,8 @@ public class IndirimKuraliDto : BaseRdbmsDto<int>
 
     public int? TesisId { get; set; }
 
+    public string? TesisAdi { get; set; }
+
     public DateTime BaslangicTarihi { get; set; }
 
     public DateTime BitisTarihi { get; set; }

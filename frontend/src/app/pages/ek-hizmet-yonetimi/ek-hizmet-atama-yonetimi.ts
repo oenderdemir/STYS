@@ -15,6 +15,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { EkHizmetTesisAtamaDto } from './ek-hizmet-yonetimi.dto';
 import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 
@@ -28,6 +29,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 })
 export class EkHizmetAtamaYonetimi implements OnInit {
     private readonly service = inject(EkHizmetYonetimiService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly router = inject(Router);
     private readonly messageService = inject(MessageService);
@@ -109,7 +111,7 @@ export class EkHizmetAtamaYonetimi implements OnInit {
 
     private loadContext(): void {
         this.loadingBaglam = true;
-        this.service
+        this.tesisService
             .getTesisler()
             .pipe(finalize(() => {
                 this.loadingBaglam = false;
@@ -117,7 +119,7 @@ export class EkHizmetAtamaYonetimi implements OnInit {
             }))
             .subscribe({
                 next: (tesisler) => {
-                    this.tesisSecenekleri = tesisler.map((x) => ({ label: x.ad, value: x.id }));
+                    this.tesisSecenekleri = tesisler.filter(x => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
                     if (this.selectedTesisId && !this.tesisSecenekleri.some((x) => x.value === this.selectedTesisId)) {
                         this.selectedTesisId = null;
                     }

@@ -15,9 +15,12 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { forkJoin } from 'rxjs';
 import { tryReadApiMessage } from '../../core/api';
+import { parseApiDate, toLocalDateString } from '../../core/utils/date-time.util';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import { EkHizmetDto, EkHizmetFormRow, EkHizmetTarifeDto, EkHizmetTesisDto } from './ek-hizmet-yonetimi.dto';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
+import { EkHizmetDto, EkHizmetFormRow, EkHizmetTarifeDto } from './ek-hizmet-yonetimi.dto';
 import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 
 @Component({
@@ -30,12 +33,13 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
 })
 export class EkHizmetYonetimi implements OnInit {
     private readonly service = inject(EkHizmetYonetimiService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly router = inject(Router);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
 
-    tesisler: EkHizmetTesisDto[] = [];
+    tesisler: TesisDto[] = [];
     selectedTesisId: number | null = null;
     tarifeler: EkHizmetFormRow[] = [];
     hizmetSecenekleri: EkHizmetDto[] = [];
@@ -96,8 +100,8 @@ export class EkHizmetYonetimi implements OnInit {
                 ekHizmetId: this.hizmetSecenekleri[0]?.id ?? null,
                 birimFiyat: 0,
                 paraBirimi: 'TRY',
-                baslangicTarihi: '',
-                bitisTarihi: '',
+                baslangicTarihi: null,
+                bitisTarihi: null,
                 aktifMi: true
             }
         ];
@@ -131,8 +135,8 @@ export class EkHizmetYonetimi implements OnInit {
             birimAdi: '',
             birimFiyat: row.birimFiyat ?? 0,
             paraBirimi: (row.paraBirimi || 'TRY').trim().toUpperCase(),
-            baslangicTarihi: row.baslangicTarihi,
-            bitisTarihi: row.bitisTarihi,
+            baslangicTarihi: toLocalDateString(row.baslangicTarihi) ?? '',
+            bitisTarihi: toLocalDateString(row.bitisTarihi) ?? '',
             aktifMi: row.aktifMi
         } as EkHizmetTarifeDto));
 
@@ -163,7 +167,7 @@ export class EkHizmetYonetimi implements OnInit {
 
     private loadReferences(): void {
         this.loadingReferences = true;
-        this.service
+        this.tesisService
             .getTesisler()
             .pipe(finalize(() => {
                 this.loadingReferences = false;
@@ -231,14 +235,10 @@ export class EkHizmetYonetimi implements OnInit {
             ekHizmetId: item.ekHizmetId,
             birimFiyat: item.birimFiyat,
             paraBirimi: item.paraBirimi,
-            baslangicTarihi: this.toInputDate(item.baslangicTarihi),
-            bitisTarihi: this.toInputDate(item.bitisTarihi),
+            baslangicTarihi: parseApiDate(item.baslangicTarihi),
+            bitisTarihi: parseApiDate(item.bitisTarihi),
             aktifMi: item.aktifMi
         };
-    }
-
-    private toInputDate(value: string): string {
-        return value ? value.slice(0, 10) : '';
     }
 
     private validateTarifeler(): string | null {
@@ -262,7 +262,7 @@ export class EkHizmetYonetimi implements OnInit {
                 return `${row.lineNo}. tarife satiri: Baslangic ve bitis tarihleri zorunludur.`;
             }
 
-            if (row.baslangicTarihi > row.bitisTarihi) {
+            if (row.baslangicTarihi.getTime() > row.bitisTarihi.getTime()) {
                 return `${row.lineNo}. tarife satiri: Baslangic tarihi bitis tarihinden buyuk olamaz.`;
             }
         }
@@ -275,9 +275,9 @@ export class EkHizmetYonetimi implements OnInit {
         }
 
         for (const rowsForService of groups.values()) {
-            const ordered = [...rowsForService].sort((a, b) => a.baslangicTarihi.localeCompare(b.baslangicTarihi) || a.bitisTarihi.localeCompare(b.bitisTarihi));
+            const ordered = [...rowsForService].sort((a, b) => a.baslangicTarihi!.getTime() - b.baslangicTarihi!.getTime() || a.bitisTarihi!.getTime() - b.bitisTarihi!.getTime());
             for (let i = 1; i < ordered.length; i++) {
-                if (ordered[i].baslangicTarihi <= ordered[i - 1].bitisTarihi) {
+                if (ordered[i].baslangicTarihi!.getTime() <= ordered[i - 1].bitisTarihi!.getTime()) {
                     return `${ordered[i].lineNo}. tarife satiri: Ayni hizmet icin cakisan tarih araligi tanimlanamaz.`;
                 }
             }

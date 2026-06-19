@@ -16,8 +16,10 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { AuthService } from '../auth';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { OdaKullanimBlokDialog } from './oda-kullanim-blok-dialog';
-import { OdaKullanimBlokDto, OdaKullanimBlokOdaSecenekDto, OdaKullanimBlokTesisDto } from './oda-kullanim-blok-yonetimi.dto';
+import { OdaKullanimBlokDto, OdaKullanimBlokOdaSecenekDto } from './oda-kullanim-blok-yonetimi.dto';
 import { OdaKullanimBlokYonetimiService } from './oda-kullanim-blok-yonetimi.service';
 
 interface SelectOption<T = string | number> {
@@ -34,13 +36,14 @@ interface SelectOption<T = string | number> {
 })
 export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
     private readonly service = inject(OdaKullanimBlokYonetimiService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
 
     kayitlar: OdaKullanimBlokDto[] = [];
-    tesisler: OdaKullanimBlokTesisDto[] = [];
+    tesisler: TesisDto[] = [];
     odaSecenekleri: OdaKullanimBlokOdaSecenekDto[] = [];
     tesisOptions: SelectOption<number>[] = [];
     odaOptions: SelectOption<number>[] = [];
@@ -254,7 +257,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
 
         this.loading = true;
         forkJoin({
-            tesisler: this.service.getTesisler()
+            tesisler: this.tesisService.getTesisler()
         })
             .pipe(
                 finalize(() => {
@@ -265,7 +268,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
             .subscribe({
                 next: ({ tesisler }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.tesisOptions = this.tesisler.map((x) => ({ label: x.ad, value: x.id }));
+                    this.tesisOptions = this.tesisler.filter(x => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
 
                     if (!this.selectedTesisId && this.tesisOptions.length > 0) {
                         this.selectedTesisId = this.tesisOptions[0].value;

@@ -1,5 +1,6 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
+import { parseApiDate, toLocalDateString } from '../../../core/utils/date-time.util';
 import {
     FormBuilder,
     FormGroup,
@@ -223,25 +224,10 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
             iadeHakkiVarMi: item.iadeHakkiVarMi,
             eBelgeKoduZorunluMu: item.eBelgeKoduZorunluMu,
             aktifMi: item.aktifMi,
-            gecerlilikBaslangicTarihi: item.gecerlilikBaslangicTarihi
-                ? this.toDateInputValue(item.gecerlilikBaslangicTarihi)
-                : null,
-            gecerlilikBitisTarihi: item.gecerlilikBitisTarihi
-                ? this.toDateInputValue(item.gecerlilikBitisTarihi)
-                : null
+            gecerlilikBaslangicTarihi: parseApiDate(item.gecerlilikBaslangicTarihi),
+            gecerlilikBitisTarihi: parseApiDate(item.gecerlilikBitisTarihi)
         });
         this.dialogVisible = true;
-    }
-
-    private toDateInputValue(isoString: string): string {
-        if (!isoString) return '';
-        try {
-            const d = new Date(isoString);
-            if (isNaN(d.getTime())) return isoString.substring(0, 10);
-            return d.toISOString().substring(0, 10);
-        } catch {
-            return isoString.substring(0, 10);
-        }
     }
 
     save(): void {
@@ -249,10 +235,14 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
 
         const formValue = this.editForm.value;
 
-        // Client-side date validation
-        const baslangicRaw = formValue.gecerlilikBaslangicTarihi;
-        const bitisRaw = formValue.gecerlilikBitisTarihi;
-        if (baslangicRaw && bitisRaw && new Date(bitisRaw) <= new Date(baslangicRaw)) {
+        const baslangicDate: Date | null = formValue.gecerlilikBaslangicTarihi instanceof Date
+            ? formValue.gecerlilikBaslangicTarihi
+            : null;
+        const bitisDate: Date | null = formValue.gecerlilikBitisTarihi instanceof Date
+            ? formValue.gecerlilikBitisTarihi
+            : null;
+
+        if (baslangicDate && bitisDate && bitisDate.getTime() <= baslangicDate.getTime()) {
             this.messageService.add({
                 severity: 'error',
                 summary: 'Hata',
@@ -263,12 +253,8 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
 
         this.saving = true;
 
-        const baslangic = baslangicRaw
-            ? new Date(baslangicRaw).toISOString()
-            : null;
-        const bitis = bitisRaw
-            ? new Date(bitisRaw).toISOString()
-            : null;
+        const baslangic = toLocalDateString(baslangicDate);
+        const bitis = toLocalDateString(bitisDate);
 
         if (this.isEditing && this.editingItem) {
             const request: UpdateKdvIstisnaTanimRequest = {

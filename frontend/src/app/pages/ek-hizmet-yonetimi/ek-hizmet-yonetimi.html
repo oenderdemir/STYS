@@ -66,8 +66,7 @@
                             [firstDayOfWeek]="1"
                             [showIcon]="true"
                             [showButtonBar]="true"
-                            appendTo="body"
-                            dataType="string" />
+                            appendTo="body" />
                     </td>
                     <td>
                         <p-datepicker
@@ -80,8 +79,7 @@
                             [firstDayOfWeek]="1"
                             [showIcon]="true"
                             [showButtonBar]="true"
-                            appendTo="body"
-                            dataType="string" />
+                            appendTo="body" />
                     </td>
                     <td class="text-center"><p-checkbox [binary]="true" [(ngModel)]="row.aktifMi" [disabled]="!canManage || savingTarifeler" /></td>
                     <td class="text-center"><p-button icon="pi pi-trash" severity="danger" [text]="true" [disabled]="!canManage || savingTarifeler" (onClick)="removeTarifeRow(rowIndex)" /></td>

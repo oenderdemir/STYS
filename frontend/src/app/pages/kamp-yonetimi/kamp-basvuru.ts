@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
+import { toLocalDateString } from '../../core/utils/date-time.util';
 import { RouterLink } from '@angular/router';
 import { debounceTime, Subject, takeUntil } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -377,7 +378,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             katilimcilar: katilimcilar.map((x) => ({
                 adSoyad: x.adSoyad ?? '',
                 tcKimlikNo: x.tcKimlikNo ?? null,
-                dogumTarihi: x.dogumTarihi ?? '',
+                dogumTarihi: toLocalDateString(x.dogumTarihi as unknown as Date) ?? (x.dogumTarihi ?? ''),
                 basvuruSahibiMi: !!x.basvuruSahibiMi,
                 katilimciTipi: x.katilimciTipi ?? this.getVarsayilanEkKatilimciTipiKodu(),
                 akrabalikTipi: x.akrabalikTipi ?? this.getVarsayilanEkKatilimciAkrabalikKodu(),

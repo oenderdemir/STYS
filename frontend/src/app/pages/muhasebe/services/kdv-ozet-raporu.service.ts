@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
+import { toLocalDateTimeString } from '../../../core/utils/date-time.util';
 import {
     KdvOzetRaporModel,
     KdvRaporFilterModel,
@@ -68,6 +69,7 @@ export class KdvOzetRaporuService {
     }
 
     private toIso(value: Date | string): string {
-        return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+        const date = value instanceof Date ? value : new Date(value);
+        return toLocalDateTimeString(date) ?? '';
     }
 }

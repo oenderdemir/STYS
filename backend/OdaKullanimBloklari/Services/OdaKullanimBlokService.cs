@@ -8,6 +8,7 @@ using STYS.OdaKullanimBloklari.Entities;
 using STYS.OdaKullanimBloklari.Repositories;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.OdaKullanimBloklari.Services;
@@ -16,26 +17,35 @@ public class OdaKullanimBlokService : BaseRdbmsService<OdaKullanimBlokDto, OdaKu
 {
     private readonly IOdaKullanimBlokRepository _odaKullanimBlokRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly StysAppDbContext _stysDbContext;
 
     public OdaKullanimBlokService(
         IOdaKullanimBlokRepository odaKullanimBlokRepository,
         IUserAccessScopeService userAccessScopeService,
+        ICurrentTenantAccessor currentTenantAccessor,
         StysAppDbContext stysDbContext,
         IMapper mapper)
         : base(odaKullanimBlokRepository, mapper)
     {
         _odaKullanimBlokRepository = odaKullanimBlokRepository;
         _userAccessScopeService = userAccessScopeService;
+        _currentTenantAccessor = currentTenantAccessor;
         _stysDbContext = stysDbContext;
     }
 
     public async Task<List<OdaKullanimBlokTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
 
         var query = _stysDbContext.Tesisler
-            .Where(x => x.AktifMi);
+            .Where(x => x.AktifMi && x.KurumId == currentKurumId.Value);
 
         if (scope.IsScoped)
         {

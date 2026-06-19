@@ -1,6 +1,7 @@
 // ──────────────────────────────────────────────
 //  Satış Belgesi / Fatura Taslak — Frontend Model
 // ──────────────────────────────────────────────
+import { toLocalDateString } from '../../../core/utils/date-time.util';
 
 // ── Enums ──
 
@@ -347,7 +348,7 @@ export function createEmptyCreateSatisBelgesiRequest(): CreateSatisBelgesiReques
         kaynakId: null,
         tesisId: null,
         cariKartId: null,
-        belgeTarihi: new Date().toISOString().split('T')[0],
+        belgeTarihi: toLocalDateString(new Date()) ?? '',
         vadeTarihi: null,
         musteriUnvan: null,
         musteriAdSoyad: null,

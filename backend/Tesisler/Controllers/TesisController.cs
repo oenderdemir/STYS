@@ -20,10 +20,9 @@ public class TesisController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.TesisYonetimi.View)]
-    public async Task<List<TesisDto>> GetAll()
+    public async Task<List<TesisDto>> GetAll(CancellationToken cancellationToken)
     {
-        var tesisler = await _tesisService.GetAllAsync();
-        return tesisler.OrderBy(x => x.Ad).ToList();
+        return await _tesisService.GetAktifKurumTesisleriAsync(cancellationToken);
     }
 
     [HttpGet("paged")]

@@ -22,6 +22,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { EkHizmetPaketCakismaPolitikalari } from '../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
 import { KonaklayanKatilimDurumlari } from './konaklayan-katilim-durumlari.constants';
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
@@ -54,7 +56,6 @@ import {
     RezervasyonOdaDegisimKonaklayanDto,
     RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
-    RezervasyonTesisDto,
     SenaryoFiyatHesaplamaSonucuDto
 } from './rezervasyon-yonetimi.dto';
 import { RezervasyonYonetimiService } from './rezervasyon-yonetimi.service';
@@ -79,12 +80,13 @@ interface DegisiklikPayloadTableData {
 })
 export class RezervasyonYonetimi implements OnInit {
     private readonly service = inject(RezervasyonYonetimiService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
 
-    tesisler: RezervasyonTesisDto[] = [];
+    tesisler: TesisDto[] = [];
     odaTipleri: RezervasyonOdaTipiDto[] = [];
     misafirTipleri: RezervasyonMisafirTipiDto[] = [];
     konaklamaTipleri: RezervasyonKonaklamaTipiDto[] = [];
@@ -172,9 +174,9 @@ export class RezervasyonYonetimi implements OnInit {
     selectedRezervasyonDurumFiltre = 'Tum';
     kisiSayisi = 1;
     tekKisilikFiyatUygulansinMi = false;
-    senaryoKonaklayanCinsiyetleri: Array<string | null> = [null];
-    baslangicTarihi = this.nowDateTime();
-    bitisTarihi = this.tomorrowDateTime();
+    senaryoKonaklayanCinsiyetleri: Array<string | null> = [KonaklayanCinsiyetleri.Erkek];
+    baslangicTarihi: Date | null = this.createDefaultCheckInDate();
+    bitisTarihi: Date | null = this.createDefaultCheckOutDate();
     misafirAdiSoyadi = '';
     misafirTelefon = '';
     misafirEposta = '';
@@ -459,8 +461,8 @@ export class RezervasyonYonetimi implements OnInit {
                 misafirTipiId: this.selectedMisafirTipiId,
                 konaklamaTipiId: this.selectedKonaklamaTipiId,
                 kisiSayisi: this.kisiSayisi,
-                baslangicTarihi: this.toIsoDate(this.baslangicTarihi),
-                bitisTarihi: this.toIsoDate(this.bitisTarihi),
+                baslangicTarihi: this.toLocalDateTimeString(this.baslangicTarihi),
+                bitisTarihi: this.toLocalDateTimeString(this.bitisTarihi),
                 tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
                 konaklayanCinsiyetleri: this.senaryoKonaklayanCinsiyetleri.map((x) => this.normalizeOptional(x ?? ''))
             })
@@ -580,7 +582,7 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        this.senaryoKonaklayanCinsiyetleri = Array.from({ length: targetCount }, (_, index) => this.senaryoKonaklayanCinsiyetleri[index] ?? null);
+        this.senaryoKonaklayanCinsiyetleri = Array.from({ length: targetCount }, (_, index) => this.senaryoKonaklayanCinsiyetleri[index] ?? KonaklayanCinsiyetleri.Erkek);
         if (!this.misafirCinsiyeti && this.senaryoKonaklayanCinsiyetleri.length > 0) {
             this.misafirCinsiyeti = this.senaryoKonaklayanCinsiyetleri[0];
         }
@@ -611,8 +613,8 @@ export class RezervasyonYonetimi implements OnInit {
             kisiSayisi: this.kisiSayisi,
             misafirTipiId: this.selectedMisafirTipiId!,
             konaklamaTipiId: this.selectedKonaklamaTipiId!,
-            girisTarihi: this.toIsoDate(this.baslangicTarihi),
-            cikisTarihi: this.toIsoDate(this.bitisTarihi),
+            girisTarihi: this.toLocalDateTimeString(this.baslangicTarihi),
+            cikisTarihi: this.toLocalDateTimeString(this.bitisTarihi),
             tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
             misafirAdiSoyadi: this.misafirAdiSoyadi.trim(),
             misafirTelefon: this.misafirTelefon.trim(),
@@ -687,8 +689,8 @@ export class RezervasyonYonetimi implements OnInit {
                 this.selectedTesisId,
                 this.selectedMisafirTipiId,
                 this.selectedKonaklamaTipiId,
-                this.toIsoDate(this.baslangicTarihi),
-                this.toIsoDate(this.bitisTarihi)
+                this.toLocalDateTimeString(this.baslangicTarihi),
+                this.toLocalDateTimeString(this.bitisTarihi)
             )
             .pipe(
                 finalize(() => {
@@ -730,8 +732,8 @@ export class RezervasyonYonetimi implements OnInit {
                 misafirTipiId: this.selectedMisafirTipiId,
                 konaklamaTipiId: this.selectedKonaklamaTipiId,
                 kisiSayisi: this.kisiSayisi,
-                baslangicTarihi: this.toIsoDate(this.baslangicTarihi),
-                bitisTarihi: this.toIsoDate(this.bitisTarihi),
+                baslangicTarihi: this.toLocalDateTimeString(this.baslangicTarihi),
+                bitisTarihi: this.toLocalDateTimeString(this.bitisTarihi),
                 tekKisilikFiyatUygulansinMi: this.tekKisilikFiyatUygulansinMi,
                 segmentler: this.selectedScenarioForDiscount.segmentler.map((segment) => ({
                     baslangicTarihi: segment.baslangicTarihi,
@@ -2238,7 +2240,7 @@ export class RezervasyonYonetimi implements OnInit {
         const request = {
             rezervasyonKonaklayanId: this.selectedEkHizmetKonaklayanId,
             ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
-            hizmetTarihi: this.toIsoDate(this.ekHizmetTarihi),
+            hizmetTarihi: this.normalizeDateTimeLocalInput(this.ekHizmetTarihi),
             miktar,
             birimFiyat,
             aciklama: this.normalizeOptional(this.ekHizmetAciklama)
@@ -2630,7 +2632,7 @@ export class RezervasyonYonetimi implements OnInit {
 
     private loadReferences(): void {
         this.loadingReferences = true;
-        this.service.getTesisler()
+        this.tesisService.getTesisler()
             .pipe(
                 finalize(() => {
                     this.loadingReferences = false;
@@ -2646,7 +2648,7 @@ export class RezervasyonYonetimi implements OnInit {
                     }
 
                     if (!this.selectedTesisId && this.tesisler.length > 0) {
-                        this.selectedTesisId = this.tesisler[0].id;
+                        this.selectedTesisId = this.tesisler[0].id ?? null;
                     }
 
                     if (this.selectedTesisId && this.selectedTesisId > 0) {
@@ -2950,10 +2952,15 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         const now = new Date();
-        const giris = new Date(kayit.girisTarihi);
-        const cikis = new Date(kayit.cikisTarihi);
-        const value = now >= giris && now <= cikis ? now : giris;
-        return new Date(value.getTime() - value.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        const giris = this.parseApiDateTime(kayit.girisTarihi);
+        const cikis = this.parseApiDateTime(kayit.cikisTarihi);
+        if (!giris) {
+            return this.nowInput();
+        }
+
+        const safeCikis = cikis ?? new Date(giris.getTime() + 24 * 60 * 60 * 1000);
+        const value = now >= giris && now <= safeCikis ? now : giris;
+        return this.toDateTimeLocalInput(value);
     }
 
     private getSelectedOdemeRezervasyonDurumu(): string | null {
@@ -3160,13 +3167,20 @@ export class RezervasyonYonetimi implements OnInit {
         kayit.bekleyenKonaklayanSayisi = 0;
     }
 
-    formatDateTime(value: string): string {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return value;
+    formatDateTime(value: string | Date | null | undefined): string {
+        const date = this.parseApiDateTime(value);
+        if (!date) {
+            return '-';
         }
 
-        return date.toLocaleString('tr-TR');
+        return new Intl.DateTimeFormat('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
     }
 
     formatCurrency(value: number, currency: string): string {
@@ -3300,35 +3314,26 @@ export class RezervasyonYonetimi implements OnInit {
         return chips;
     }
 
-    private nowDateTime(): Date {
-        return new Date();
-    }
-
     private nowInput(): string {
         return this.toDateTimeLocalInput(new Date());
     }
 
-    private tomorrowDateTime(): Date {
+    private createDefaultCheckInDate(): Date {
+        const now = new Date();
+        now.setHours(14, 0, 0, 0);
+        return now;
+    }
+
+    private createDefaultCheckOutDate(): Date {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(10, 0, 0, 0);
         return tomorrow;
     }
 
-    private toIsoDate(value: Date | string | null): string {
-        if (!value) {
-            return new Date().toISOString();
-        }
-
-        if (typeof value === 'string') {
-            if (value.length === 16) {
-                return `${value}:00`;
-            }
-
-            return value;
-        }
-
-        if (Number.isNaN(value.getTime())) {
-            return new Date().toISOString();
+    private toLocalDateTimeString(value: Date | null | undefined): string {
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+            return '';
         }
 
         const year = String(value.getFullYear()).padStart(4, '0');
@@ -3338,6 +3343,23 @@ export class RezervasyonYonetimi implements OnInit {
         const minute = String(value.getMinutes()).padStart(2, '0');
         const second = String(value.getSeconds()).padStart(2, '0');
         return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+    }
+
+    private normalizeDateTimeLocalInput(value: string | null | undefined): string {
+        if (!value) {
+            return '';
+        }
+
+        const normalized = value.trim();
+        if (normalized.length === 0) {
+            return '';
+        }
+
+        if (normalized.length === 16) {
+            return `${normalized}:00`;
+        }
+
+        return normalized;
     }
 
     private normalizeOptional(value: string): string | null {
@@ -3350,12 +3372,39 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     private toDateTimeLocalInputValue(value: string): string {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
+        const date = this.parseApiDateTime(value);
+        if (!date) {
             return value;
         }
 
         return this.toDateTimeLocalInput(date);
+    }
+
+    private parseApiDateTime(value: string | Date | null | undefined): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
+        }
+
+        const normalized = value.trim();
+        if (normalized.length === 0) {
+            return null;
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+            const [yearText, monthText, dayText] = normalized.split('-');
+            const year = Number.parseInt(yearText, 10);
+            const month = Number.parseInt(monthText, 10);
+            const day = Number.parseInt(dayText, 10);
+            const localDate = new Date(year, month - 1, day);
+            return Number.isNaN(localDate.getTime()) ? null : localDate;
+        }
+
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
 
     private applySelectedTesisDateTimes(): void {
@@ -3367,8 +3416,8 @@ export class RezervasyonYonetimi implements OnInit {
         const [girisSaat, girisDakika] = this.parseSaat(selectedTesis.girisSaati, this.defaultGirisSaati);
         const [cikisSaat, cikisDakika] = this.parseSaat(selectedTesis.cikisSaati, this.defaultCikisSaati);
 
-        const baslangic = this.cloneDate(this.baslangicTarihi) ?? new Date();
-        const bitis = this.cloneDate(this.bitisTarihi) ?? new Date(baslangic.getTime() + 24 * 60 * 60 * 1000);
+        const baslangic = this.cloneDate(this.baslangicTarihi) ?? this.createDefaultCheckInDate();
+        const bitis = this.cloneDate(this.bitisTarihi) ?? this.createDefaultCheckOutDate();
 
         baslangic.setHours(girisSaat, girisDakika, 0, 0);
         bitis.setHours(cikisSaat, cikisDakika, 0, 0);
@@ -3392,20 +3441,8 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     private cloneDate(value: Date | string | null | undefined): Date | null {
-        if (!value) {
-            return null;
-        }
-
-        if (value instanceof Date) {
-            return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
-        }
-
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return null;
-        }
-
-        return date;
+        const date = this.parseApiDateTime(value);
+        return date ? new Date(date.getTime()) : null;
     }
 
     private toDateTimeLocalInput(date: Date): string {

@@ -9,6 +9,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
+import { toLocalDateString, todayStart } from '../../core/utils/date-time.util';
 import { KampBasvuruDto, KampIadeKarariDto, KampTahsisBaglamDto, KampTahsisListeDto } from './kamp-yonetimi.dto';
 import { KampYonetimiService } from './kamp-yonetimi.service';
 
@@ -37,7 +38,7 @@ export class KampIadeYonetimiPage implements OnInit {
     selectedTesisId = 0;
     selectedDurum = '';
 
-    vazgecmeTarihi = '';
+    vazgecmeTarihi: Date | null = null;
     odenenToplamTutar = 0;
     mazeretliZorunluAyrilisMi = false;
     kullanilmayanGunSayisi = 0;
@@ -78,7 +79,7 @@ export class KampIadeYonetimiPage implements OnInit {
             .subscribe({
                 next: (detay) => {
                     this.selectedBasvuru = detay;
-                    this.vazgecmeTarihi = new Date().toISOString().slice(0, 10);
+                    this.vazgecmeTarihi = todayStart();
                     this.odenenToplamTutar = detay.avansToplamTutar;
                     this.kullanilmayanGunSayisi = 0;
                     this.mazeretliZorunluAyrilisMi = false;
@@ -105,7 +106,7 @@ export class KampIadeYonetimiPage implements OnInit {
             kampDonemiId: this.selectedBasvuru.kampDonemiId,
             kampBaslangicTarihi: this.selectedBasvuru.konaklamaBaslangicTarihi,
             toplamGunSayisi: this.toplamGunSayisi,
-            vazgecmeTarihi: this.vazgecmeTarihi || null,
+            vazgecmeTarihi: toLocalDateString(this.vazgecmeTarihi),
             avansTutari: this.selectedBasvuru.avansToplamTutar,
             donemToplamTutari: this.selectedBasvuru.donemToplamTutar,
             odenenToplamTutar: this.odenenToplamTutar,

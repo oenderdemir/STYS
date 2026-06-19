@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { toLocalDateString } from '../../core/utils/date-time.util';
 import { FormsModule } from '@angular/forms';
 import { catchError, finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -10,8 +11,10 @@ import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { LazyLoadPayload, resolveSortFromLazyPayload, SortDirection, tryReadApiMessage } from '../../core/api';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
@@ -24,7 +27,7 @@ import { IndirimKuraliYonetimiService } from './indirim-kurali-yonetimi.service'
 @Component({
     selector: 'app-indirim-kurali-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, IndirimKuraliDialog],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, IndirimKuraliDialog],
     templateUrl: './indirim-kurali-yonetimi.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -196,12 +199,26 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
         });
     }
 
-    getTesisName(tesisId?: number | null): string {
-        if (!tesisId) {
-            return '-';
+    getTesisDisplayName(row: IndirimKuraliDto): string {
+        if (row.kapsamTipi === 'Sistem' || !row.tesisId) {
+            return 'Tum tesisler';
         }
 
-        return this.tesisNameMap.get(tesisId) ?? `#${tesisId}`;
+        const ad = row.tesisAdi?.trim() ?? this.tesisNameMap.get(row.tesisId);
+        if (!ad) {
+            return `Tesis #${row.tesisId}`;
+        }
+
+        return ad.length > 22 ? `${ad.slice(0, 22)}...` : ad;
+    }
+
+    getTesisTooltip(row: IndirimKuraliDto): string {
+        if (row.kapsamTipi === 'Sistem' || !row.tesisId) {
+            return 'Tum tesisler icin gecerli';
+        }
+
+        const ad = row.tesisAdi?.trim() ?? this.tesisNameMap.get(row.tesisId);
+        return ad ? `${ad} (#${row.tesisId})` : `Tesis #${row.tesisId}`;
     }
 
     private loadLookups(): void {
@@ -303,11 +320,11 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
             return this.todayInput();
         }
 
-        return parsed.toISOString().slice(0, 10);
+        return toLocalDateString(parsed) ?? this.todayInput();
     }
 
     private todayInput(): string {
-        return new Date().toISOString().slice(0, 10);
+        return toLocalDateString(new Date())!;
     }
 
     private getEmptyModel(): IndirimKuraliDto {

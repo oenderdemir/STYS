@@ -43,7 +43,7 @@
             <th pSortableColumn="indirimTipi">Tip <p-sortIcon field="indirimTipi" /></th>
             <th pSortableColumn="deger">Deger <p-sortIcon field="deger" /></th>
             <th pSortableColumn="kapsamTipi">Kapsam <p-sortIcon field="kapsamTipi" /></th>
-            <th pSortableColumn="tesisId">Tesis <p-sortIcon field="tesisId" /></th>
+            <th pSortableColumn="tesisId" style="width: 13rem">Tesis <p-sortIcon field="tesisId" /></th>
             <th pSortableColumn="baslangicTarihi">Tarih Araligi <p-sortIcon field="baslangicTarihi" /></th>
             <th pSortableColumn="oncelik">Oncelik <p-sortIcon field="oncelik" /></th>
             <th pSortableColumn="aktifMi">Aktif <p-sortIcon field="aktifMi" /></th>
@@ -58,7 +58,18 @@
             <td>{{ item.indirimTipi }}</td>
             <td>{{ item.deger }}</td>
             <td>{{ item.kapsamTipi }}</td>
-            <td>{{ getTesisName(item.tesisId) }}</td>
+            <td>
+                @if (item.kapsamTipi === 'Sistem' || !item.tesisId) {
+                    <p-tag value="Tum tesisler" severity="secondary" />
+                } @else {
+                    <p-tag
+                        [value]="getTesisDisplayName(item)"
+                        severity="info"
+                        [pTooltip]="getTesisTooltip(item)"
+                        tooltipPosition="top"
+                    />
+                }
+            </td>
             <td>{{ item.baslangicTarihi | date: 'yyyy-MM-dd' }} - {{ item.bitisTarihi | date: 'yyyy-MM-dd' }}</td>
             <td>{{ item.oncelik }}</td>
             <td>{{ item.aktifMi ? 'Evet' : 'Hayir' }}</td>

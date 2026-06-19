@@ -10,6 +10,8 @@ using STYS.Tesisler.Entities;
 using STYS.Tesisler.Repositories;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
+using TOD.Platform.Identity.UserKurums.Dto;
+using TOD.Platform.Identity.UserKurums.Services;
 using TOD.Platform.Identity.Users.DTO;
 using TOD.Platform.Identity.Users.Repositories;
 using TOD.Platform.Identity.Users.Services;
@@ -32,6 +34,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     private readonly IIlRepository _ilRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUserService _userService;
+    private readonly IUserKurumService _userKurumService;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
@@ -46,6 +49,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         IIlRepository ilRepository,
         IUserRepository userRepository,
         IUserService userService,
+        IUserKurumService userKurumService,
         TodIdentityDbContext identityDbContext,
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
@@ -61,6 +65,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         _ilRepository = ilRepository;
         _userRepository = userRepository;
         _userService = userService;
+        _userKurumService = userKurumService;
         _identityDbContext = identityDbContext;
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -106,8 +111,12 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Resepsiyonist olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         await SyncUserToSingleTesisAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -149,8 +158,12 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Tesis yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         await EnsureTesisYoneticiAssignmentAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -192,8 +205,12 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Muhasebeci olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
         await SyncMuhasebeciToSingleTesisAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -235,7 +252,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Bina yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -277,7 +298,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Restoran yoneticisi olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -319,7 +344,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Restoran garsonu olusturulurken kullanici kimligi alinamadi.", 500);
         }
 
+        await AssignUserKurumForTesisAsync(created.Id.Value, tesis.KurumId);
         await SetOwnerTesisForCreatedUserAsync(created.Id.Value, tesisId);
+
+        created.KurumId = tesis.KurumId;
+        created.IsKurumAdmin = false;
         return created;
     }
 
@@ -1086,5 +1115,17 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             TesisId = tesisId
         });
         await _tesisYoneticiRepository.SaveChangesAsync();
+    }
+
+    private async Task AssignUserKurumForTesisAsync(Guid userId, int tesisKurumId)
+    {
+        await _userKurumService.AssignAsync(new AssignUserKurumRequest
+        {
+            UserId = userId,
+            KurumId = tesisKurumId,
+            VarsayilanMi = true,
+            AktifMi = true,
+            IsKurumAdmin = false
+        });
     }
 }

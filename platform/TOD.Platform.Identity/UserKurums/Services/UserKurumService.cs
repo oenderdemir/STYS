@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserKurums.Dto;
 using TOD.Platform.Identity.UserKurums.Entities;
 using TOD.Platform.Identity.UserKurums.Repositories;
@@ -11,11 +12,13 @@ namespace TOD.Platform.Identity.UserKurums.Services;
 public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>, IUserKurumService
 {
     private readonly IUserKurumRepository _userKurumRepository;
+    private readonly TodIdentityDbContext _dbContext;
 
-    public UserKurumService(IUserKurumRepository userKurumRepository, IMapper mapper)
+    public UserKurumService(IUserKurumRepository userKurumRepository, TodIdentityDbContext dbContext, IMapper mapper)
         : base(userKurumRepository, mapper)
     {
         _userKurumRepository = userKurumRepository;
+        _dbContext = dbContext;
     }
 
     public async Task<List<UserKurumDto>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -48,10 +51,33 @@ public class UserKurumService : BaseRdbmsService<UserKurumDto, UserKurum, Guid>,
 
         ValidateRequest(request.UserId, request.KurumId);
 
-        var exists = await _userKurumRepository.AnyAsync(x => x.UserId == request.UserId && x.KurumId == request.KurumId);
-        if (exists)
+        // Soft-deleted kayıtlar dahil tüm kayıtları kontrol et
+        var existingEntity = await _dbContext.UserKurums
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.KurumId == request.KurumId, cancellationToken);
+
+        if (existingEntity is not null)
         {
-            throw new BaseException("Ayni user-kurum atamasi zaten mevcut.", 400);
+            // Mevcut kayıt varsa (silinmiş veya aktif) güncelle
+            if (request.IsKurumAdmin && request.AktifMi)
+            {
+                await EnsureSingleActiveKurumAdminAsync(request.UserId, existingEntity.Id, cancellationToken);
+            }
+
+            if (request.VarsayilanMi)
+            {
+                await ClearDefaultAssignmentsAsync(request.UserId, cancellationToken, existingEntity.Id);
+            }
+
+            existingEntity.AktifMi = request.AktifMi;
+            existingEntity.VarsayilanMi = request.VarsayilanMi;
+            existingEntity.IsKurumAdmin = request.IsKurumAdmin;
+            existingEntity.IsDeleted = false;
+
+            _userKurumRepository.Update(existingEntity);
+            await _userKurumRepository.SaveChangesAsync(cancellationToken);
+
+            return Mapper.Map<UserKurumDto>(existingEntity);
         }
 
         if (request.IsKurumAdmin && request.AktifMi)

@@ -53,7 +53,7 @@ public class UserController : UIController
         }
 
         return await _userService.WhereAsync(x =>
-                x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi),
+                x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi && !uk.IsDeleted),
             include);
     }
 
@@ -74,7 +74,7 @@ public class UserController : UIController
         }
 
         var users = await _userService.WhereAsync(x =>
-                x.Id == id && x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi),
+                x.Id == id && x.UserKurums.Any(uk => uk.KurumId == currentKurumId.Value && uk.AktifMi && !uk.IsDeleted),
             include);
 
         return Ok(users.FirstOrDefault());
@@ -85,37 +85,42 @@ public class UserController : UIController
     public async Task<ActionResult<UserDto>> Create([FromBody] UserDto dto, CancellationToken cancellationToken)
     {
         await EnsureRequestedGroupsAreAllowedAsync(dto, cancellationToken);
+
         var resolvedKurumId = await ResolveCreateKurumIdAsync(dto.KurumId, cancellationToken);
+
+        if (!resolvedKurumId.HasValue || resolvedKurumId.Value <= 0)
+        {
+            throw new BaseException("Kullanici olusturulacak kurum bilgisi cozumlenemedi.", 400);
+        }
+
         if (dto.IsKurumAdmin && !_currentTenantAccessor.IsSuperAdmin())
         {
             throw new BaseException("Kurum admini olusturma yetkiniz bulunmuyor.", 403);
         }
 
-        var isKurumAdmin = dto.IsKurumAdmin;
+        // Sadece SuperAdmin IsKurumAdmin=true atayabilir
+        var isKurumAdmin = _currentTenantAccessor.IsSuperAdmin() && dto.IsKurumAdmin;
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var created = await _userService.AddAsync(dto);
-        if (resolvedKurumId.HasValue)
+
+        if (!created.Id.HasValue || created.Id.Value == Guid.Empty)
         {
-            var assignment = new AssignUserKurumRequest
-            {
-                UserId = created.Id ?? Guid.Empty,
-                KurumId = resolvedKurumId.Value,
-                VarsayilanMi = true,
-                AktifMi = true,
-                IsKurumAdmin = isKurumAdmin
-            };
-
-            if (assignment.UserId == Guid.Empty)
-            {
-                throw new BaseException("Kullanici olusturulamadi.", 500);
-            }
-
-            await _userKurumService.AssignAsync(assignment, cancellationToken);
-            created.KurumId = resolvedKurumId;
-            created.IsKurumAdmin = isKurumAdmin;
+            throw new BaseException("Kullanici olusturulamadi.", 500);
         }
+
+        await _userKurumService.AssignAsync(new AssignUserKurumRequest
+        {
+            UserId = created.Id.Value,
+            KurumId = resolvedKurumId.Value,
+            VarsayilanMi = true,
+            AktifMi = true,
+            IsKurumAdmin = isKurumAdmin
+        }, cancellationToken);
+
+        created.KurumId = resolvedKurumId.Value;
+        created.IsKurumAdmin = isKurumAdmin;
 
         await transaction.CommitAsync(cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -216,7 +221,7 @@ public class UserController : UIController
         }
 
         var visible = await _dbContext.UserKurums.AnyAsync(
-            x => x.UserId == userId && x.KurumId == currentKurumId.Value && x.AktifMi,
+            x => x.UserId == userId && x.KurumId == currentKurumId.Value && x.AktifMi && !x.IsDeleted,
             cancellationToken);
 
         if (!visible)

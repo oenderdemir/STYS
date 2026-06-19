@@ -7,8 +7,27 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { parseApiDate, toLocalDateString } from '../../core/utils/date-time.util';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
+
+interface KampDonemiWorkingModel {
+    id?: number | null;
+    kampProgramiId: number;
+    kod: string;
+    ad: string;
+    basvuruBaslangicTarihi: Date | null;
+    basvuruBitisTarihi: Date | null;
+    konaklamaBaslangicTarihi: Date | null;
+    konaklamaBitisTarihi: Date | null;
+    minimumGece: number;
+    maksimumGece: number;
+    onayGerektirirMi: boolean;
+    cekilisGerekliMi: boolean;
+    ayniAileIcinTekBasvuruMu: boolean;
+    iptalSonGun: Date | null;
+    aktifMi: boolean;
+}
 
 @Component({
     selector: 'app-kamp-donemi-dialog',
@@ -44,19 +63,19 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="basvuruBaslangic" class="block font-medium mb-2">Basvuru Baslangic</label>
-                    <p-datepicker id="basvuruBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="basvuruBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="basvuruBitis" class="block font-medium mb-2">Basvuru Bitis</label>
-                    <p-datepicker id="basvuruBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="basvuruBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.basvuruBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="konaklamaBaslangic" class="block font-medium mb-2">Konaklama Baslangic</label>
-                    <p-datepicker id="konaklamaBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="konaklamaBaslangic" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBaslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="konaklamaBitis" class="block font-medium mb-2">Konaklama Bitis</label>
-                    <p-datepicker id="konaklamaBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="konaklamaBitis" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.konaklamaBitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="minimumGece" class="block font-medium mb-2">Minimum Gece</label>
@@ -68,7 +87,7 @@ import { KampDonemiDto, KampProgramiSecenekDto } from './kamp-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="iptalSonGun" class="block font-medium mb-2">Iptal Son Gun</label>
-                    <p-datepicker id="iptalSonGun" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.iptalSonGun" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="iptalSonGun" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.iptalSonGun" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-3 flex items-center">
                     <p-checkbox inputId="onayGerektirirMi" [(ngModel)]="workingModel.onayGerektirirMi" [binary]="true" [disabled]="isReadOnly || saving" />
@@ -109,7 +128,7 @@ export class KampDonemiDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<KampDonemiDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: KampDonemiDto = this.emptyModel();
+    workingModel: KampDonemiWorkingModel = this.emptyWorkingModel();
 
     get programOptions(): Array<{ label: string; value: number }> {
         return this.programlar.map((item) => ({ label: `${item.yil} - ${item.ad}`, value: item.id }));
@@ -157,11 +176,11 @@ export class KampDonemiDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.toWorkingModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = { ...this.model };
+            this.workingModel = this.toWorkingModel(this.model);
         }
     }
 
@@ -171,9 +190,16 @@ export class KampDonemiDialog implements OnChanges {
         const hasAd = (this.workingModel.ad?.trim().length ?? 0) > 0;
         const validMin = Number(this.workingModel.minimumGece) >= 1;
         const validMax = Number(this.workingModel.maksimumGece) >= Number(this.workingModel.minimumGece);
-        const basvuruOk = !!this.workingModel.basvuruBaslangicTarihi && !!this.workingModel.basvuruBitisTarihi && this.workingModel.basvuruBaslangicTarihi <= this.workingModel.basvuruBitisTarihi;
-        const konaklamaOk = !!this.workingModel.konaklamaBaslangicTarihi && !!this.workingModel.konaklamaBitisTarihi && this.workingModel.konaklamaBaslangicTarihi <= this.workingModel.konaklamaBitisTarihi;
-        const iptalOk = !this.workingModel.iptalSonGun || this.workingModel.iptalSonGun <= this.workingModel.konaklamaBaslangicTarihi;
+
+        const bbs = this.workingModel.basvuruBaslangicTarihi;
+        const bbt = this.workingModel.basvuruBitisTarihi;
+        const kbs = this.workingModel.konaklamaBaslangicTarihi;
+        const kbt = this.workingModel.konaklamaBitisTarihi;
+        const isg = this.workingModel.iptalSonGun;
+
+        const basvuruOk = !!bbs && !!bbt && bbs.getTime() <= bbt.getTime();
+        const konaklamaOk = !!kbs && !!kbt && kbs.getTime() <= kbt.getTime();
+        const iptalOk = !isg || (!!kbs && isg.getTime() <= kbs.getTime());
 
         return hasProgram && hasKod && hasAd && validMin && validMax && basvuruOk && konaklamaOk && iptalOk;
     }
@@ -184,14 +210,22 @@ export class KampDonemiDialog implements OnChanges {
         }
 
         this.save.emit({
-            ...this.workingModel,
+            ...this.model,
             id: this.workingModel.id ?? null,
             kampProgramiId: Number(this.workingModel.kampProgramiId),
             kod: this.workingModel.kod.trim().toUpperCase(),
             ad: this.workingModel.ad.trim(),
+            basvuruBaslangicTarihi: toLocalDateString(this.workingModel.basvuruBaslangicTarihi) ?? '',
+            basvuruBitisTarihi: toLocalDateString(this.workingModel.basvuruBitisTarihi) ?? '',
+            konaklamaBaslangicTarihi: toLocalDateString(this.workingModel.konaklamaBaslangicTarihi) ?? '',
+            konaklamaBitisTarihi: toLocalDateString(this.workingModel.konaklamaBitisTarihi) ?? '',
             minimumGece: Number(this.workingModel.minimumGece),
             maksimumGece: Number(this.workingModel.maksimumGece),
-            iptalSonGun: this.workingModel.iptalSonGun || null
+            onayGerektirirMi: this.workingModel.onayGerektirirMi,
+            cekilisGerekliMi: this.workingModel.cekilisGerekliMi,
+            ayniAileIcinTekBasvuruMu: this.workingModel.ayniAileIcinTekBasvuruMu,
+            iptalSonGun: toLocalDateString(this.workingModel.iptalSonGun),
+            aktifMi: this.workingModel.aktifMi
         });
     }
 
@@ -205,12 +239,51 @@ export class KampDonemiDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = { ...this.model };
+        this.workingModel = this.toWorkingModel(this.model);
         this.modeChange.emit('view');
     }
 
     close(): void {
         this.visibleChange.emit(false);
+    }
+
+    private toWorkingModel(source: KampDonemiDto): KampDonemiWorkingModel {
+        return {
+            id: source.id ?? null,
+            kampProgramiId: source.kampProgramiId,
+            kod: source.kod ?? '',
+            ad: source.ad ?? '',
+            basvuruBaslangicTarihi: parseApiDate(source.basvuruBaslangicTarihi),
+            basvuruBitisTarihi: parseApiDate(source.basvuruBitisTarihi),
+            konaklamaBaslangicTarihi: parseApiDate(source.konaklamaBaslangicTarihi),
+            konaklamaBitisTarihi: parseApiDate(source.konaklamaBitisTarihi),
+            minimumGece: source.minimumGece ?? 1,
+            maksimumGece: source.maksimumGece ?? 1,
+            onayGerektirirMi: !!source.onayGerektirirMi,
+            cekilisGerekliMi: !!source.cekilisGerekliMi,
+            ayniAileIcinTekBasvuruMu: source.ayniAileIcinTekBasvuruMu ?? true,
+            iptalSonGun: parseApiDate(source.iptalSonGun ?? null),
+            aktifMi: source.aktifMi ?? true
+        };
+    }
+
+    private emptyWorkingModel(): KampDonemiWorkingModel {
+        return {
+            kampProgramiId: 0,
+            kod: '',
+            ad: '',
+            basvuruBaslangicTarihi: null,
+            basvuruBitisTarihi: null,
+            konaklamaBaslangicTarihi: null,
+            konaklamaBitisTarihi: null,
+            minimumGece: 1,
+            maksimumGece: 1,
+            onayGerektirirMi: true,
+            cekilisGerekliMi: false,
+            ayniAileIcinTekBasvuruMu: true,
+            iptalSonGun: null,
+            aktifMi: true
+        };
     }
 
     private emptyModel(): KampDonemiDto {

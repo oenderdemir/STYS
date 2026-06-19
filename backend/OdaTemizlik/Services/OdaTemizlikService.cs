@@ -9,6 +9,7 @@ using STYS.Odalar;
 using STYS.OdaTemizlik.Dto;
 using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Persistence.Rdbms.Paging;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.OdaTemizlik.Services;
@@ -17,27 +18,36 @@ public class OdaTemizlikService : IOdaTemizlikService
 {
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IBildirimService _bildirimService;
     private readonly ILicenseService _licenseService;
 
     public OdaTemizlikService(
         StysAppDbContext stysDbContext,
         IUserAccessScopeService userAccessScopeService,
+        ICurrentTenantAccessor currentTenantAccessor,
         IBildirimService bildirimService,
         ILicenseService licenseService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
+        _currentTenantAccessor = currentTenantAccessor;
         _bildirimService = bildirimService;
         _licenseService = licenseService;
     }
 
     public async Task<List<OdaTemizlikTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
 
         var query = _stysDbContext.Tesisler
-            .Where(x => x.AktifMi);
+            .Where(x => x.AktifMi && x.KurumId == currentKurumId.Value);
 
         if (scope.IsScoped)
         {

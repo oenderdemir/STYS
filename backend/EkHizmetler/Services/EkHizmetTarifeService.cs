@@ -7,6 +7,7 @@ using STYS.KonaklamaTipleri;
 using STYS.EkHizmetler.Repositories;
 using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.EkHizmetler.Services;
@@ -15,24 +16,33 @@ public class EkHizmetTarifeService : BaseRdbmsService<EkHizmetTarifeDto, EkHizme
 {
     private readonly IEkHizmetTarifeRepository _ekHizmetTarifeRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly StysAppDbContext _stysDbContext;
 
     public EkHizmetTarifeService(
         IEkHizmetTarifeRepository ekHizmetTarifeRepository,
         IUserAccessScopeService userAccessScopeService,
+        ICurrentTenantAccessor currentTenantAccessor,
         StysAppDbContext stysDbContext,
         IMapper mapper)
         : base(ekHizmetTarifeRepository, mapper)
     {
         _ekHizmetTarifeRepository = ekHizmetTarifeRepository;
         _userAccessScopeService = userAccessScopeService;
+        _currentTenantAccessor = currentTenantAccessor;
         _stysDbContext = stysDbContext;
     }
 
     public async Task<List<EkHizmetTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        var query = _stysDbContext.Tesisler.Where(x => x.AktifMi);
+        var query = _stysDbContext.Tesisler.Where(x => x.AktifMi && x.KurumId == currentKurumId.Value);
 
         if (scope.IsScoped)
         {

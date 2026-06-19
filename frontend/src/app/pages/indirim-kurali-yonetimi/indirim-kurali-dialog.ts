@@ -8,12 +8,30 @@ import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
+import { parseApiDate, toLocalDateString, todayStart } from '../../core/utils/date-time.util';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { IndirimKuraliDto } from './indirim-kurali-yonetimi.dto';
 
 export interface SelectOption<T = string | number> {
     label: string;
     value: T;
+}
+
+interface IndirimKuraliWorkingModel {
+    id?: number | null;
+    kod: string;
+    ad: string;
+    indirimTipi: string;
+    deger: number;
+    kapsamTipi: string;
+    tesisId?: number | null;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
+    oncelik: number;
+    birlesebilirMi: boolean;
+    aktifMi: boolean;
+    misafirTipiIds: number[];
+    konaklamaTipiIds: number[];
 }
 
 @Component({
@@ -79,11 +97,11 @@ export interface SelectOption<T = string | number> {
 
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic</label>
-                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="bitisTarihi" class="block font-medium mb-2">Bitis</label>
-                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
 
                 <div class="col-span-12 md:col-span-6">
@@ -167,7 +185,7 @@ export class IndirimKuraliDialog implements OnChanges {
         return options;
     }
 
-    workingModel: IndirimKuraliDto = this.emptyModel();
+    workingModel: IndirimKuraliWorkingModel = this.emptyWorkingModel();
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -211,11 +229,11 @@ export class IndirimKuraliDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = this.cloneModel(this.model);
+            this.workingModel = this.toWorkingModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = this.cloneModel(this.model);
+            this.workingModel = this.toWorkingModel(this.model);
         }
 
         if (!this.canCreateSystemRule && this.mode === 'create' && this.workingModel.kapsamTipi === 'Sistem') {
@@ -245,11 +263,14 @@ export class IndirimKuraliDialog implements OnChanges {
             return false;
         }
 
-        if (!this.workingModel.baslangicTarihi || !this.workingModel.bitisTarihi) {
+        const bas = this.workingModel.baslangicTarihi;
+        const bit = this.workingModel.bitisTarihi;
+
+        if (!bas || !bit) {
             return false;
         }
 
-        if (this.workingModel.baslangicTarihi > this.workingModel.bitisTarihi) {
+        if (bas.getTime() > bit.getTime()) {
             return false;
         }
 
@@ -265,16 +286,25 @@ export class IndirimKuraliDialog implements OnChanges {
             return;
         }
 
-        const payload = this.cloneModel(this.workingModel);
-        payload.kod = payload.kod.trim().toUpperCase();
-        payload.ad = payload.ad.trim();
-        payload.indirimTipi = payload.indirimTipi.trim();
-        payload.kapsamTipi = payload.kapsamTipi.trim();
-        payload.tesisId = payload.kapsamTipi === 'Tesis' ? payload.tesisId : null;
-        payload.baslangicTarihi = `${payload.baslangicTarihi}T00:00:00`;
-        payload.bitisTarihi = `${payload.bitisTarihi}T00:00:00`;
-        payload.misafirTipiIds = [...new Set(payload.misafirTipiIds)];
-        payload.konaklamaTipiIds = [...new Set(payload.konaklamaTipiIds)];
+        const basStr = toLocalDateString(this.workingModel.baslangicTarihi);
+        const bitStr = toLocalDateString(this.workingModel.bitisTarihi);
+
+        const payload: IndirimKuraliDto = {
+            id: this.workingModel.id ?? null,
+            kod: this.workingModel.kod.trim().toUpperCase(),
+            ad: this.workingModel.ad.trim(),
+            indirimTipi: this.workingModel.indirimTipi.trim(),
+            deger: this.workingModel.deger,
+            kapsamTipi: this.workingModel.kapsamTipi.trim(),
+            tesisId: this.workingModel.kapsamTipi === 'Tesis' ? this.workingModel.tesisId : null,
+            baslangicTarihi: basStr ? `${basStr}T00:00:00` : '',
+            bitisTarihi: bitStr ? `${bitStr}T00:00:00` : '',
+            oncelik: this.workingModel.oncelik,
+            birlesebilirMi: this.workingModel.birlesebilirMi,
+            aktifMi: this.workingModel.aktifMi,
+            misafirTipiIds: [...new Set(this.workingModel.misafirTipiIds)],
+            konaklamaTipiIds: [...new Set(this.workingModel.konaklamaTipiIds)]
+        };
 
         this.save.emit(payload);
     }
@@ -289,7 +319,7 @@ export class IndirimKuraliDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = this.cloneModel(this.model);
+        this.workingModel = this.toWorkingModel(this.model);
         this.modeChange.emit('view');
     }
 
@@ -297,7 +327,7 @@ export class IndirimKuraliDialog implements OnChanges {
         this.visibleChange.emit(false);
     }
 
-    private cloneModel(source: IndirimKuraliDto): IndirimKuraliDto {
+    private toWorkingModel(source: IndirimKuraliDto): IndirimKuraliWorkingModel {
         return {
             id: source.id ?? null,
             kod: source.kod ?? '',
@@ -306,8 +336,8 @@ export class IndirimKuraliDialog implements OnChanges {
             deger: source.deger ?? 0,
             kapsamTipi: source.kapsamTipi ?? 'Tesis',
             tesisId: source.tesisId ?? null,
-            baslangicTarihi: this.normalizeDateInput(source.baslangicTarihi),
-            bitisTarihi: this.normalizeDateInput(source.bitisTarihi),
+            baslangicTarihi: parseApiDate(source.baslangicTarihi) ?? todayStart(),
+            bitisTarihi: parseApiDate(source.bitisTarihi) ?? todayStart(),
             oncelik: source.oncelik ?? 0,
             birlesebilirMi: source.birlesebilirMi ?? true,
             aktifMi: source.aktifMi ?? true,
@@ -316,25 +346,8 @@ export class IndirimKuraliDialog implements OnChanges {
         };
     }
 
-    private normalizeDateInput(value: string): string {
-        if (!value) {
-            return this.todayInput();
-        }
-
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) {
-            return this.todayInput();
-        }
-
-        return parsed.toISOString().slice(0, 10);
-    }
-
-    private todayInput(): string {
-        return new Date().toISOString().slice(0, 10);
-    }
-
-    private emptyModel(): IndirimKuraliDto {
-        const today = this.todayInput();
+    private emptyWorkingModel(): IndirimKuraliWorkingModel {
+        const today = todayStart();
         return {
             kod: '',
             ad: '',
@@ -344,6 +357,24 @@ export class IndirimKuraliDialog implements OnChanges {
             tesisId: null,
             baslangicTarihi: today,
             bitisTarihi: today,
+            oncelik: 0,
+            birlesebilirMi: true,
+            aktifMi: true,
+            misafirTipiIds: [],
+            konaklamaTipiIds: []
+        };
+    }
+
+    private emptyModel(): IndirimKuraliDto {
+        return {
+            kod: '',
+            ad: '',
+            indirimTipi: 'Yuzde',
+            deger: 0,
+            kapsamTipi: 'Tesis',
+            tesisId: null,
+            baslangicTarihi: '',
+            bitisTarihi: '',
             oncelik: 0,
             birlesebilirMi: true,
             aktifMi: true,

@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
+import { toLocalDateTimeString } from '../../../core/utils/date-time.util';
 import { CariBakiyeOzetModel, CariEkstreModel, CariHareketDurumOzetModel, CariHareketModel, CreateCariHareketRequest, UpdateCariHareketRequest } from './cari-hareketler.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -80,10 +81,10 @@ export class CariHareketlerService {
     getCariHareketEkstre(cariKartId: number, baslangic?: Date | null, bitis?: Date | null): Observable<CariHareketDurumOzetModel[]> {
         let params = new HttpParams();
         if (baslangic) {
-            params = params.set('baslangic', baslangic.toISOString());
+            params = params.set('baslangic', toLocalDateTimeString(baslangic) ?? '');
         }
         if (bitis) {
-            params = params.set('bitis', bitis.toISOString());
+            params = params.set('bitis', toLocalDateTimeString(bitis) ?? '');
         }
 
         return this.http.get<ApiResponse<CariHareketDurumOzetModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/cari/${cariKartId}/hareket-ekstre`, { params }).pipe(map((envelope) => this.unwrapList(envelope)));

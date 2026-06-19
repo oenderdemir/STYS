@@ -437,6 +437,32 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         return await base.GetAllAsync(includeQuery);
     }
 
+    public async Task<List<TesisDto>> GetAktifKurumTesisleriAsync(CancellationToken cancellationToken = default)
+    {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+
+        var query = _stysDbContext.Tesisler
+            .Where(x => x.AktifMi && x.KurumId == currentKurumId.Value);
+
+        if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.Id));
+        }
+
+        var tesisler = await query
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return Mapper.Map<List<TesisDto>>(tesisler);
+    }
+
     public override async Task<IEnumerable<TesisDto>> WhereAsync(Expression<Func<Tesis, bool>> predicate, Func<IQueryable<Tesis>, IQueryable<Tesis>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();

@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { toLocalDateString } from '../../core/utils/date-time.util';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -522,11 +523,7 @@ export class OdaFiyatYonetimi implements OnInit {
     }
 
     private toIsoDate(value: Date | null): string {
-        if (!value || Number.isNaN(value.getTime())) {
-            return new Date().toISOString();
-        }
-
-        return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate())).toISOString();
+        return toLocalDateString(value) ?? toLocalDateString(new Date())!;
     }
 
     private todayDate(): Date {

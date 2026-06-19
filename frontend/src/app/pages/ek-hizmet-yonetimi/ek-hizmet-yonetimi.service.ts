@@ -3,24 +3,12 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { EkHizmetDto, EkHizmetTarifeDto, EkHizmetTesisAtamaDto, EkHizmetTesisDto, GlobalEkHizmetTanimiDto } from './ek-hizmet-yonetimi.dto';
+import { EkHizmetDto, EkHizmetTarifeDto, EkHizmetTesisAtamaDto, GlobalEkHizmetTanimiDto } from './ek-hizmet-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class EkHizmetYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
-
-    getTesisler(): Observable<EkHizmetTesisDto[]> {
-        return this.http.get<ApiResponse<EkHizmetTesisDto[]>>(`${this.apiBaseUrl}/ui/ekhizmettarife/tesisler`).pipe(
-            map((responseEnvelope) => {
-                if (responseEnvelope.success && responseEnvelope.data) {
-                    return responseEnvelope.data;
-                }
-
-                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis listesi alinamadi.');
-            })
-        );
-    }
 
     getGlobalTanimlar(): Observable<GlobalEkHizmetTanimiDto[]> {
         return this.http.get<ApiResponse<GlobalEkHizmetTanimiDto[]>>(`${this.apiBaseUrl}/ui/ekhizmettarife/global-tanimlar`).pipe(

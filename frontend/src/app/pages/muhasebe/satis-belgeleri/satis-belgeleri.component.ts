@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { toLocalDateString } from '../../../core/utils/date-time.util';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
@@ -736,7 +737,7 @@ export class SatisBelgeleriComponent implements OnInit {
             kaynakId: belge.kaynakId,
             tesisId: belge.tesisId,
             cariKartId: belge.cariKartId ?? null,
-            belgeTarihi: belge.belgeTarihi?.split('T')[0] ?? new Date().toISOString().split('T')[0],
+            belgeTarihi: belge.belgeTarihi?.split('T')[0] ?? (toLocalDateString(new Date()) ?? ''),
             vadeTarihi: belge.vadeTarihi?.split('T')[0] ?? null,
             musteriUnvan: belge.musteriUnvan,
             musteriAdSoyad: belge.musteriAdSoyad,

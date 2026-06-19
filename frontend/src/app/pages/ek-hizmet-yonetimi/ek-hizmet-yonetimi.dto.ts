@@ -53,8 +53,8 @@ export interface EkHizmetFormRow {
     ekHizmetId: number | null;
     birimFiyat: number | null;
     paraBirimi: string;
-    baslangicTarihi: string;
-    bitisTarihi: string;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
     aktifMi: boolean;
 }
 

@@ -6,6 +6,7 @@ export interface IndirimKuraliDto {
     deger: number;
     kapsamTipi: string;
     tesisId?: number | null;
+    tesisAdi?: string | null;
     baslangicTarihi: string;
     bitisTarihi: string;
     oncelik: number;

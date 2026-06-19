@@ -53,15 +53,15 @@ public class RezervasyonService : IRezervasyonService
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         var query = _stysDbContext.Tesisler
-            .Where(x => x.AktifMi);
-
-        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
-        if (currentKurumId.HasValue)
-        {
-            query = query.Where(x => x.KurumId == currentKurumId.Value);
-        }
+            .Where(x => x.AktifMi && x.KurumId == currentKurumId.Value);
 
         if (scope.IsScoped)
         {

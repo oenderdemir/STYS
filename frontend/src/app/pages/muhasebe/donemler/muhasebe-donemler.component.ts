@@ -16,6 +16,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
+import { parseApiDate, toLocalDateString } from '../../../core/utils/date-time.util';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
@@ -27,6 +28,19 @@ import {
     createDefaultDonemFilter
 } from '../models/muhasebe-donem.model';
 import { MuhasebeDonemService } from '../services/muhasebe-donem.service';
+
+interface DonemDialogModel {
+    id: number;
+    tesisId: number;
+    tesisAdi: string | null;
+    maliYil: number;
+    donemNo: number;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
+    kapaliMi: boolean;
+    kapanisTarihi: string | null;
+    aciklama: string | null;
+}
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const currentYear = new Date().getFullYear();
@@ -87,7 +101,7 @@ export class MuhasebeDonemlerComponent implements OnInit {
     filteredRecords: MuhasebeDonemDto[] = [];
 
     filter = createDefaultDonemFilter();
-    model: MuhasebeDonemDto = this.createEmpty();
+    model: DonemDialogModel = this.createEmpty();
 
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
@@ -197,7 +211,11 @@ export class MuhasebeDonemlerComponent implements OnInit {
 
     openEdit(item: MuhasebeDonemDto): void {
         this.dialogMode = 'edit';
-        this.model = { ...item };
+        this.model = {
+            ...item,
+            baslangicTarihi: parseApiDate(item.baslangicTarihi),
+            bitisTarihi: parseApiDate(item.bitisTarihi)
+        };
         this.dialogVisible = true;
     }
 
@@ -225,7 +243,7 @@ export class MuhasebeDonemlerComponent implements OnInit {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Bitiş tarihi zorunludur.' });
             return;
         }
-        if (new Date(this.model.baslangicTarihi) >= new Date(this.model.bitisTarihi)) {
+        if (this.model.baslangicTarihi!.getTime() >= this.model.bitisTarihi!.getTime()) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Tarih', detail: 'Başlangıç tarihi bitiş tarihinden önce olmalıdır.' });
             return;
         }
@@ -237,8 +255,8 @@ export class MuhasebeDonemlerComponent implements OnInit {
                 tesisId: this.model.tesisId,
                 maliYil: this.model.maliYil,
                 donemNo: this.model.donemNo,
-                baslangicTarihi: this.model.baslangicTarihi,
-                bitisTarihi: this.model.bitisTarihi,
+                baslangicTarihi: toLocalDateString(this.model.baslangicTarihi) ?? '',
+                bitisTarihi: toLocalDateString(this.model.bitisTarihi) ?? '',
                 aciklama: this.model.aciklama || null
             };
             this.service.create(request).pipe(finalize(() => {
@@ -259,8 +277,8 @@ export class MuhasebeDonemlerComponent implements OnInit {
                 tesisId: this.model.tesisId,
                 maliYil: this.model.maliYil,
                 donemNo: this.model.donemNo,
-                baslangicTarihi: this.model.baslangicTarihi,
-                bitisTarihi: this.model.bitisTarihi,
+                baslangicTarihi: toLocalDateString(this.model.baslangicTarihi) ?? '',
+                bitisTarihi: toLocalDateString(this.model.bitisTarihi) ?? '',
                 kapaliMi: this.model.kapaliMi,
                 aciklama: this.model.aciklama || null
             };
@@ -397,7 +415,7 @@ export class MuhasebeDonemlerComponent implements OnInit {
         return kapaliMi ? 'Kapalı' : 'Açık';
     }
 
-    private createEmpty(): MuhasebeDonemDto {
+    private createEmpty(): DonemDialogModel {
         const today = new Date();
         return {
             id: 0,
@@ -405,8 +423,8 @@ export class MuhasebeDonemlerComponent implements OnInit {
             tesisAdi: null,
             maliYil: today.getFullYear(),
             donemNo: today.getMonth() + 1,
-            baslangicTarihi: '',
-            bitisTarihi: '',
+            baslangicTarihi: null,
+            bitisTarihi: null,
             kapaliMi: false,
             kapanisTarihi: null,
             aciklama: null

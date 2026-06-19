@@ -41,9 +41,9 @@ export class RezervasyonDashboard implements OnInit {
 
     tesisler: RezervasyonTesisDto[] = [];
     selectedTesisId: number | null = null;
-    selectedTarihDate = this.todayDate();
-    kpiBaslangicDate = this.firstDayOfMonthDate();
-    kpiBitisDate = this.todayDate();
+    selectedTarihDate: Date | null = this.todayDate();
+    kpiBaslangicDate: Date | null = this.firstDayOfMonthDate();
+    kpiBitisDate: Date | null = this.todayDate();
     selectedKpiDonemi: 'thisMonth' | 'last7' | 'last30' | 'custom' = 'thisMonth';
     readonly kpiDonemleri = [
         { label: 'Bu Ay', value: 'thisMonth' },
@@ -52,8 +52,8 @@ export class RezervasyonDashboard implements OnInit {
         { label: 'Ozel Aralik', value: 'custom' }
     ];
     reportSelectedTesisIds: number[] = [];
-    reportBaslangicDate = this.firstDayOfMonthDate();
-    reportBitisDate = this.todayDate();
+    reportBaslangicDate: Date | null = this.firstDayOfMonthDate();
+    reportBitisDate: Date | null = this.todayDate();
     dashboard: RezervasyonDashboardDto | null = null;
 
     loadingReferences = false;
@@ -118,13 +118,20 @@ export class RezervasyonDashboard implements OnInit {
         this.exportOdemeRapor('pdf');
     }
 
-    formatDateTime(value: string): string {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return value;
+    formatDateTime(value: string | Date | null | undefined): string {
+        const date = this.parseApiDateTime(value);
+        if (!date) {
+            return '-';
         }
 
-        return date.toLocaleString('tr-TR');
+        return new Intl.DateTimeFormat('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
     }
 
     formatNumber(value: number): string {
@@ -363,8 +370,8 @@ export class RezervasyonDashboard implements OnInit {
     }
 
     private formatShortDate(value: string): string {
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
+        const date = this.parseApiDateTime(value);
+        if (!date) {
             return value;
         }
 
@@ -450,6 +457,33 @@ export class RezervasyonDashboard implements OnInit {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    private parseApiDateTime(value: string | Date | null | undefined): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : new Date(value.getTime());
+        }
+
+        const normalized = value.trim();
+        if (normalized.length === 0) {
+            return null;
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+            const [yearText, monthText, dayText] = normalized.split('-');
+            const year = Number.parseInt(yearText, 10);
+            const month = Number.parseInt(monthText, 10);
+            const day = Number.parseInt(dayText, 10);
+            const localDate = new Date(year, month - 1, day);
+            return Number.isNaN(localDate.getTime()) ? null : localDate;
+        }
+
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
 
     private exportOdemeRapor(format: 'excel' | 'pdf'): void {

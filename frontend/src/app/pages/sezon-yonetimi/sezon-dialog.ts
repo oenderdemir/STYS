@@ -7,12 +7,25 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { parseApiDate, toLocalDateString } from '../../core/utils/date-time.util';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
 import { SezonKuraliDto } from './sezon-yonetimi.dto';
 
 interface SelectOption<T = string | number> {
     label: string;
     value: T;
+}
+
+interface SezonWorkingModel {
+    id?: number | null;
+    tesisId: number;
+    kod: string;
+    ad: string;
+    baslangicTarihi: Date | null;
+    bitisTarihi: Date | null;
+    minimumGece: number;
+    stopSaleMi: boolean;
+    aktifMi: boolean;
 }
 
 @Component({
@@ -49,11 +62,11 @@ interface SelectOption<T = string | number> {
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic</label>
-                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="bitisTarihi" class="block font-medium mb-2">Bitis</label>
-                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" dataType="string" />
+                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
                 </div>
                 <div class="col-span-12 md:col-span-4">
                     <label for="minimumGece" class="block font-medium mb-2">Minimum Gece</label>
@@ -90,7 +103,7 @@ export class SezonDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<SezonKuraliDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: SezonKuraliDto = this.emptyModel();
+    workingModel: SezonWorkingModel = this.emptyWorkingModel();
 
     get isReadOnly(): boolean {
         return this.mode === 'view' || !this.canManage;
@@ -134,11 +147,11 @@ export class SezonDialog implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
-            this.workingModel = this.cloneModel(this.model);
+            this.workingModel = this.toWorkingModel(this.model);
         }
 
         if (changes['visible'] && this.visible) {
-            this.workingModel = this.cloneModel(this.model);
+            this.workingModel = this.toWorkingModel(this.model);
         }
     }
 
@@ -153,7 +166,7 @@ export class SezonDialog implements OnChanges {
             return false;
         }
 
-        return new Date(this.workingModel.baslangicTarihi).getTime() <= new Date(this.workingModel.bitisTarihi).getTime();
+        return this.workingModel.baslangicTarihi!.getTime() <= this.workingModel.bitisTarihi!.getTime();
     }
 
     submit(): void {
@@ -166,8 +179,8 @@ export class SezonDialog implements OnChanges {
             tesisId: this.workingModel.tesisId,
             kod: this.workingModel.kod.trim().toUpperCase(),
             ad: this.workingModel.ad.trim(),
-            baslangicTarihi: this.workingModel.baslangicTarihi,
-            bitisTarihi: this.workingModel.bitisTarihi,
+            baslangicTarihi: toLocalDateString(this.workingModel.baslangicTarihi) ?? '',
+            bitisTarihi: toLocalDateString(this.workingModel.bitisTarihi) ?? '',
             minimumGece: Number(this.workingModel.minimumGece),
             stopSaleMi: this.workingModel.stopSaleMi,
             aktifMi: this.workingModel.aktifMi
@@ -184,7 +197,7 @@ export class SezonDialog implements OnChanges {
             return;
         }
 
-        this.workingModel = this.cloneModel(this.model);
+        this.workingModel = this.toWorkingModel(this.model);
         this.modeChange.emit('view');
     }
 
@@ -192,17 +205,30 @@ export class SezonDialog implements OnChanges {
         this.visibleChange.emit(false);
     }
 
-    private cloneModel(source: SezonKuraliDto): SezonKuraliDto {
+    private toWorkingModel(source: SezonKuraliDto): SezonWorkingModel {
         return {
             id: source.id ?? null,
             tesisId: source.tesisId,
             kod: source.kod ?? '',
             ad: source.ad ?? '',
-            baslangicTarihi: source.baslangicTarihi ?? '',
-            bitisTarihi: source.bitisTarihi ?? '',
+            baslangicTarihi: parseApiDate(source.baslangicTarihi),
+            bitisTarihi: parseApiDate(source.bitisTarihi),
             minimumGece: source.minimumGece ?? 1,
             stopSaleMi: !!source.stopSaleMi,
             aktifMi: source.aktifMi ?? true
+        };
+    }
+
+    private emptyWorkingModel(): SezonWorkingModel {
+        return {
+            tesisId: 0,
+            kod: '',
+            ad: '',
+            baslangicTarihi: null,
+            bitisTarihi: null,
+            minimumGece: 1,
+            stopSaleMi: false,
+            aktifMi: true
         };
     }
 

@@ -12,6 +12,7 @@ using STYS.Tesisler.Repositories;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.AspNetCore.Authorization;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Fiyatlandirma.Services;
@@ -23,6 +24,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
     private readonly IKonaklamaTipiRepository _konaklamaTipiRepository;
     private readonly ITesisRepository _tesisRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly StysAppDbContext _stysDbContext;
 
@@ -32,6 +34,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         IKonaklamaTipiRepository konaklamaTipiRepository,
         ITesisRepository tesisRepository,
         IUserAccessScopeService userAccessScopeService,
+        ICurrentTenantAccessor currentTenantAccessor,
         IHttpContextAccessor httpContextAccessor,
         StysAppDbContext stysAppDbContext,
         IMapper mapper)
@@ -42,6 +45,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         _konaklamaTipiRepository = konaklamaTipiRepository;
         _tesisRepository = tesisRepository;
         _userAccessScopeService = userAccessScopeService;
+        _currentTenantAccessor = currentTenantAccessor;
         _httpContextAccessor = httpContextAccessor;
         _stysDbContext = stysAppDbContext;
     }
@@ -134,8 +138,14 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
 
     public override async Task<IEnumerable<IndirimKuraliDto>> GetAllAsync(Func<IQueryable<IndirimKurali>, IQueryable<IndirimKurali>>? include = null)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var query = BuildScopedQuery(scope, _indirimKuraliRepository.Where(_ => true, IncludeAll));
+        var query = BuildKurumAndScopedQuery(currentKurumId.Value, scope, _indirimKuraliRepository.Where(_ => true, IncludeAll));
         var items = await query.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Ad).ToListAsync();
         return Mapper.Map<List<IndirimKuraliDto>>(items);
     }
@@ -146,8 +156,14 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         Func<IQueryable<IndirimKurali>, IQueryable<IndirimKurali>>? include = null,
         Func<IQueryable<IndirimKurali>, IOrderedQueryable<IndirimKurali>>? orderBy = null)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var query = BuildScopedQuery(scope, _indirimKuraliRepository.Where(_ => true, IncludeAll));
+        var query = BuildKurumAndScopedQuery(currentKurumId.Value, scope, _indirimKuraliRepository.Where(_ => true, IncludeAll));
         if (predicate is not null)
         {
             query = query.Where(predicate);
@@ -167,16 +183,22 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         return entity is null ? null : Mapper.Map<IndirimKuraliDto>(entity);
     }
 
-    private static IQueryable<IndirimKurali> BuildScopedQuery(DomainAccessScope scope, IQueryable<IndirimKurali> query)
+    private static IQueryable<IndirimKurali> BuildKurumAndScopedQuery(int kurumId, DomainAccessScope scope, IQueryable<IndirimKurali> query)
     {
-        if (!scope.IsScoped)
+        // Tesis kapsamlı kurallar yalnızca aktif kuruma ait aktif tesisler için görünür
+        query = query.Where(x =>
+            x.KapsamTipi == IndirimKapsamTipleri.Sistem
+            || (x.TesisId.HasValue && x.Tesis != null && x.Tesis.KurumId == kurumId && x.Tesis.AktifMi));
+
+        // Scope'lu kullanıcılar yalnızca kendi tesis scope'larındaki kuralları görebilir
+        if (scope.IsScoped)
         {
-            return query;
+            query = query.Where(x =>
+                x.KapsamTipi == IndirimKapsamTipleri.Sistem
+                || (x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)));
         }
 
-        return query.Where(x =>
-            x.KapsamTipi == IndirimKapsamTipleri.Sistem ||
-            (x.KapsamTipi == IndirimKapsamTipleri.Tesis && x.TesisId.HasValue && scope.TesisIds.Contains(x.TesisId.Value)));
+        return query;
     }
 
     private async Task EnsureCanViewEntityAsync(IndirimKurali entity)
@@ -248,6 +270,25 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
         throw new BaseException("Sistem geneli indirim kurallari icin yetkiniz bulunmuyor.", 403);
     }
 
+    private async Task EnsureTesisBelongsToCurrentKurumAsync(int tesisId)
+    {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            throw new BaseException("Aktif kurum bilgisi bulunamadi.", 400);
+        }
+
+        var exists = await _stysDbContext.Tesisler.AnyAsync(x =>
+            x.Id == tesisId
+            && x.KurumId == currentKurumId.Value
+            && x.AktifMi);
+
+        if (!exists)
+        {
+            throw new BaseException("Bu tesis aktif kuruma ait degil veya aktif degil.", 403);
+        }
+    }
+
     private bool HasPermission(string permission)
     {
         var claims = _httpContextAccessor.HttpContext?.User
@@ -272,11 +313,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
                 throw new BaseException("Tesis kapsamli indirim icin tesis secimi zorunludur.", 400);
             }
 
-            var tesisExists = await _tesisRepository.AnyAsync(x => x.Id == dto.TesisId.Value && x.AktifMi);
-            if (!tesisExists)
-            {
-                throw new BaseException("Secilen tesis bulunamadi veya pasif.", 400);
-            }
+            await EnsureTesisBelongsToCurrentKurumAsync(dto.TesisId.Value);
         }
 
         if (dto.MisafirTipiIds.Count > 0)
@@ -440,6 +477,7 @@ public class IndirimKuraliService : BaseRdbmsService<IndirimKuraliDto, IndirimKu
     {
         return query
             .Include(x => x.MisafirTipiKisitlari)
-            .Include(x => x.KonaklamaTipiKisitlari);
+            .Include(x => x.KonaklamaTipiKisitlari)
+            .Include(x => x.Tesis);
     }
 }

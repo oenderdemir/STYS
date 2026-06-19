@@ -13,4 +13,10 @@ public interface ITesisService : IBaseRdbmsService<TesisDto, Tesis, int>
     Task<UserDto> CreateRestoranYoneticisiUserAsync(int tesisId, UserDto dto);
     Task<UserDto> CreateRestoranGarsonuUserAsync(int tesisId, UserDto dto);
     Task<UserDto> CreateMuhasebeciUserAsync(int tesisId, UserDto dto);
+
+    /// <summary>
+    /// Aktif kuruma ait, kullanıcı scope'una göre filtrelenmiş tesis listesini döndürür.
+    /// Dropdown/lookup için optimize edilmiş hafif sorgu. Aktif kurum yoksa 400 fırlatır.
+    /// </summary>
+    Task<List<TesisDto>> GetAktifKurumTesisleriAsync(CancellationToken cancellationToken = default);
 }

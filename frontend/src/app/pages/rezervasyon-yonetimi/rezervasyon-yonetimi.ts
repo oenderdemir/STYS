@@ -101,6 +101,7 @@ export class RezervasyonYonetimi implements OnInit {
     customDiscountDescription = '';
     scenarioPriceBreakdown: SenaryoFiyatHesaplamaSonucuDto | null = null;
     selectedScenarioForDiscount: KonaklamaSenaryoDto | null = null;
+    originalScenarioForReservation: KonaklamaSenaryoDto | null = null;
     discountDialogVisible = false;
     rezervasyonUcretDetayDialogVisible = false;
     rezervasyonUcretDetayRezervasyonId: number | null = null;
@@ -665,12 +666,27 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     openDiscountDialog(scenario: KonaklamaSenaryoDto): void {
+        if (!this.canManage || this.saving) {
+            return;
+        }
+
         if (!this.selectedTesisId || !this.selectedMisafirTipiId || !this.selectedKonaklamaTipiId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis, misafir tipi ve konaklama tipi secimi zorunludur.' });
             return;
         }
 
+        if (!this.misafirAdiSoyadi.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Misafir adi soyadi zorunludur.' });
+            return;
+        }
+
+        if (!this.misafirTelefon.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Misafir telefonu zorunludur.' });
+            return;
+        }
+
         const mevcutIndirimler = [...(scenario.uygulananIndirimler ?? [])];
+        this.originalScenarioForReservation = { ...scenario };
         this.selectedScenarioForDiscount = scenario;
         this.selectedDiscountRuleIds = [];
         this.customDiscountAmount = null;
@@ -771,11 +787,41 @@ export class RezervasyonYonetimi implements OnInit {
     closeDiscountDialog(): void {
         this.discountDialogVisible = false;
         this.selectedScenarioForDiscount = null;
+        this.originalScenarioForReservation = null;
         this.availableDiscountRules = [];
         this.selectedDiscountRuleIds = [];
         this.customDiscountAmount = null;
         this.customDiscountDescription = '';
         this.scenarioPriceBreakdown = null;
+    }
+
+    reserveWithoutDiscounts(): void {
+        if (!this.originalScenarioForReservation || this.saving) {
+            return;
+        }
+
+        const scenario = this.originalScenarioForReservation;
+        this.closeDiscountDialog();
+        this.reserveScenario(scenario);
+    }
+
+    reserveWithAppliedDiscounts(): void {
+        if (!this.selectedScenarioForDiscount || this.saving) {
+            return;
+        }
+
+        const scenarioToUse: KonaklamaSenaryoDto = this.scenarioPriceBreakdown
+            ? {
+                ...this.selectedScenarioForDiscount,
+                toplamBazUcret: this.scenarioPriceBreakdown.toplamBazUcret,
+                toplamNihaiUcret: this.scenarioPriceBreakdown.toplamNihaiUcret,
+                paraBirimi: this.scenarioPriceBreakdown.paraBirimi,
+                uygulananIndirimler: [...this.scenarioPriceBreakdown.uygulananIndirimler]
+            }
+            : this.selectedScenarioForDiscount;
+
+        this.closeDiscountDialog();
+        this.reserveScenario(scenarioToUse);
     }
 
     private applyCustomDiscountIfNeeded(result: SenaryoFiyatHesaplamaSonucuDto): SenaryoFiyatHesaplamaSonucuDto {

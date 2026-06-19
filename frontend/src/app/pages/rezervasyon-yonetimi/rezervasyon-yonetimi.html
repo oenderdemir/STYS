@@ -287,8 +287,9 @@
                                 severity="secondary"
                                 [outlined]="true"
                                 size="small"
-                                [disabled]="loadingResults"
-                                (onClick)="openDiscountDialog(senaryo)"
+                                [disabled]="true"
+                                pTooltip="Fiyat detayi"
+                                tooltipPosition="top"
                             />
                             @if (canManage) {
                                 <p-button
@@ -296,7 +297,7 @@
                                     icon="pi pi-check"
                                     size="small"
                                     [disabled]="saving"
-                                    (onClick)="reserveScenario(senaryo)"
+                                    (onClick)="openDiscountDialog(senaryo)"
                                 />
                             }
                         </div>
@@ -1266,16 +1267,30 @@
 </p-dialog>
 
 <p-dialog
-    header="Senaryo Fiyatlandirma ve Indirimler"
+    header="Rezervasyon Onayı ve İndirim"
     [(visible)]="discountDialogVisible"
     [modal]="true"
-    [style]="{ width: '44rem', 'max-width': '96vw' }"
+    [style]="{ width: '52rem', 'max-width': '96vw' }"
     [breakpoints]="{ '960px': '94vw' }"
     (onHide)="closeDiscountDialog()"
 >
     @if (selectedScenarioForDiscount) {
-        <div class="text-sm mb-3">
-            <strong>{{ selectedScenarioForDiscount.senaryoKodu }}</strong> - {{ selectedScenarioForDiscount.aciklama }}
+        <div class="mb-4 p-3 border-round surface-100">
+            <div class="text-sm font-semibold mb-2">Senaryo Özeti</div>
+            <div class="grid grid-cols-12 gap-2 text-sm">
+                <div class="col-span-12 md:col-span-4">
+                    <span class="text-color-secondary">Kod: </span>
+                    <strong>{{ selectedScenarioForDiscount.senaryoKodu }}</strong>
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                    <span class="text-color-secondary">Oda: </span>{{ selectedScenarioForDiscount.toplamOdaSayisi }}
+                    <span class="text-color-secondary ml-2">Degisim: </span>{{ selectedScenarioForDiscount.odaDegisimSayisi }}
+                </div>
+                <div class="col-span-12 md:col-span-4">
+                    <span class="text-color-secondary">Baz Fiyat: </span>
+                    <strong>{{ formatCurrency(selectedScenarioForDiscount.toplamBazUcret, selectedScenarioForDiscount.paraBirimi) }}</strong>
+                </div>
+            </div>
         </div>
     }
 
@@ -1362,8 +1377,10 @@
     }
 
     <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="calculatingScenarioPrice" (onClick)="closeDiscountDialog()" />
-        <p-button label="Indirimleri Uygula" icon="pi pi-check" [loading]="calculatingScenarioPrice" [disabled]="loadingDiscountRules" (onClick)="hesaplaSenaryoUcreti()" />
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" text [disabled]="calculatingScenarioPrice || saving" (onClick)="closeDiscountDialog()" />
+        <p-button label="Fiyati Yeniden Hesapla" icon="pi pi-refresh" severity="info" [outlined]="true" [loading]="calculatingScenarioPrice" [disabled]="loadingDiscountRules || saving" (onClick)="hesaplaSenaryoUcreti()" />
+        <p-button label="Indirimsiz Devam Et" icon="pi pi-forward" severity="secondary" [disabled]="calculatingScenarioPrice || saving || loadingDiscountRules" (onClick)="reserveWithoutDiscounts()" />
+        <p-button label="Rezervasyonu Olustur" icon="pi pi-check" severity="success" [loading]="saving" [disabled]="calculatingScenarioPrice || loadingDiscountRules" (onClick)="reserveWithAppliedDiscounts()" />
     </ng-template>
 </p-dialog>
 

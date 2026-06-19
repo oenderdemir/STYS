@@ -22,12 +22,12 @@ public class KdvIstisnaTanimController : UIController
     }
 
     [HttpGet]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.View)]
     public async Task<ActionResult<IEnumerable<KdvIstisnaTanimDto>>> GetAll(CancellationToken cancellationToken)
         => Ok(await _service.GetAllAsync());
 
     [HttpGet("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.View)]
     public async Task<ActionResult<KdvIstisnaTanimDto>> GetById(int id, CancellationToken cancellationToken)
     {
         var item = await _service.GetByIdAsync(id);
@@ -35,7 +35,7 @@ public class KdvIstisnaTanimController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.Manage)]
     public async Task<ActionResult<KdvIstisnaTanimDto>> Create(
         [FromBody] CreateKdvIstisnaTanimRequest request,
         CancellationToken cancellationToken)
@@ -45,7 +45,7 @@ public class KdvIstisnaTanimController : UIController
     }
 
     [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.Manage)]
     public async Task<ActionResult<KdvIstisnaTanimDto>> Update(
         int id,
         [FromBody] UpdateKdvIstisnaTanimRequest request,
@@ -57,7 +57,7 @@ public class KdvIstisnaTanimController : UIController
     }
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.Manage)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id);
@@ -65,7 +65,7 @@ public class KdvIstisnaTanimController : UIController
     }
 
     [HttpPost("filter")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvIstisnaTanimlariYonetimi.View)]
     public async Task<ActionResult<IEnumerable<KdvIstisnaTanimDto>>> Filter(
         [FromBody] KdvIstisnaTanimFilterDto filter,
         CancellationToken cancellationToken)

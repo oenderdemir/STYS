@@ -17,7 +17,7 @@ public class MuhasebeDashboardController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeDashboardYonetimi.View)]
     public async Task<IActionResult> GetDashboard(
         [FromBody] MuhasebeDashboardFilterDto filter,
         CancellationToken cancellationToken)

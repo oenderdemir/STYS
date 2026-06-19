@@ -17,7 +17,7 @@ public class KdvOzetRaporController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> GetOzetRapor(
         [FromBody] KdvOzetRaporFilterDto filter,
         CancellationToken cancellationToken)
@@ -27,7 +27,7 @@ public class KdvOzetRaporController : UIController
     }
 
     [HttpPost("export-excel")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> ExportExcel(
         [FromBody] KdvOzetRaporFilterDto filter,
         CancellationToken cancellationToken)

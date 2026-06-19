@@ -17,22 +17,30 @@ public class KdvRaporlariController : UIController
     }
 
     [HttpGet("ozet")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(
+        StructurePermissions.MuhasebeKdvHareketRaporuYonetimi.View,
+        StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> GetOzet([FromQuery] KdvRaporFilterDto filter, CancellationToken cancellationToken)
         => Ok(await _service.GetOzetAsync(filter, cancellationToken));
 
     [HttpGet("hareketler")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(
+        StructurePermissions.MuhasebeKdvHareketRaporuYonetimi.View,
+        StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> GetHareketler([FromQuery] KdvRaporFilterDto filter, CancellationToken cancellationToken)
         => Ok(await _service.GetHareketlerAsync(filter, cancellationToken));
 
     [HttpGet("tevkifat-ozet")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(
+        StructurePermissions.MuhasebeKdvHareketRaporuYonetimi.View,
+        StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> GetTevkifatOzet([FromQuery] KdvRaporFilterDto filter, CancellationToken cancellationToken)
         => Ok(await _service.GetTevkifatOzetAsync(filter, cancellationToken));
 
     [HttpGet("tevkifat-hareketler")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(
+        StructurePermissions.MuhasebeKdvHareketRaporuYonetimi.View,
+        StructurePermissions.MuhasebeKdvOzetRaporuYonetimi.View)]
     public async Task<IActionResult> GetTevkifatHareketler([FromQuery] KdvRaporFilterDto filter, CancellationToken cancellationToken)
         => Ok(await _service.GetTevkifatHareketlerAsync(filter, cancellationToken));
 }

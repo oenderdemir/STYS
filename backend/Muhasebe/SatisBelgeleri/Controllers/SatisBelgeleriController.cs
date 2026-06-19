@@ -24,7 +24,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpGet("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.View)]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken)
     {
         var result = await _service.GetByIdAsync(id, cancellationToken);
@@ -32,7 +32,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("filter")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.View)]
     public async Task<IActionResult> Filter(
         [FromBody] SatisBelgesiFilterDto filter,
         CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> Create(
         [FromBody] CreateSatisBelgesiRequest request,
         CancellationToken cancellationToken)
@@ -52,7 +52,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("kaynaktan-taslak-olustur")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> KaynaktanTaslakOlustur(
         [FromBody] SatisBelgesiTaslakOlusturRequest request,
         CancellationToken cancellationToken)
@@ -62,7 +62,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateSatisBelgesiRequest request,
@@ -73,7 +73,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id, cancellationToken);
@@ -81,7 +81,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("{id:int}/muhasebe-onayina-gonder")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> MuhasebeOnayinaGonder(int id, CancellationToken cancellationToken)
     {
         await _service.MuhasebeOnayinaGonderAsync(id, cancellationToken);
@@ -89,7 +89,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("{id:int}/muhasebe-onayla")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> MuhasebeOnayla(int id, CancellationToken cancellationToken)
     {
         await _service.MuhasebeOnaylaAsync(id, cancellationToken);
@@ -97,7 +97,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("{id:int}/reddet")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> Reddet(
         int id,
         [FromBody] SatisBelgesiRedRequest request,
@@ -108,7 +108,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("{id:int}/iptal")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> IptalEt(int id, CancellationToken cancellationToken)
     {
         await _service.IptalEtAsync(id, cancellationToken);
@@ -116,7 +116,7 @@ public class SatisBelgeleriController : UIController
     }
 
     [HttpPost("{id:int}/muhasebe-fisi-olustur")]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.Manage)]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)
     {
         var result = await _muhasebeFisService.MuhasebeFisiOlusturAsync(id, cancellationToken);

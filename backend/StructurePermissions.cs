@@ -406,6 +406,51 @@ public static class StructurePermissions
         public const string Manage = "MuhasebeFisYonetimi.Manage";
     }
 
+    public static class MuhasebeDashboardYonetimi
+    {
+        public const string Menu = "MuhasebeDashboardYonetimi.Menu";
+        public const string View = "MuhasebeDashboardYonetimi.View";
+    }
+
+    public static class MuhasebeSatisBelgeleriYonetimi
+    {
+        public const string Menu = "MuhasebeSatisBelgeleriYonetimi.Menu";
+        public const string View = "MuhasebeSatisBelgeleriYonetimi.View";
+        public const string Manage = "MuhasebeSatisBelgeleriYonetimi.Manage";
+    }
+
+    public static class MuhasebeAlisBelgeleriYonetimi
+    {
+        public const string Menu = "MuhasebeAlisBelgeleriYonetimi.Menu";
+        public const string View = "MuhasebeAlisBelgeleriYonetimi.View";
+        public const string Manage = "MuhasebeAlisBelgeleriYonetimi.Manage";
+    }
+
+    public static class MuhasebeKdvIstisnaTanimlariYonetimi
+    {
+        public const string Menu = "MuhasebeKdvIstisnaTanimlariYonetimi.Menu";
+        public const string View = "MuhasebeKdvIstisnaTanimlariYonetimi.View";
+        public const string Manage = "MuhasebeKdvIstisnaTanimlariYonetimi.Manage";
+    }
+
+    public static class MuhasebeKdvHareketRaporuYonetimi
+    {
+        public const string Menu = "MuhasebeKdvHareketRaporuYonetimi.Menu";
+        public const string View = "MuhasebeKdvHareketRaporuYonetimi.View";
+    }
+
+    public static class MuhasebeKdvOzetRaporuYonetimi
+    {
+        public const string Menu = "MuhasebeKdvOzetRaporuYonetimi.Menu";
+        public const string View = "MuhasebeKdvOzetRaporuYonetimi.View";
+    }
+
+    public static class MuhasebeKdvBeyannameHazirlikKontrolYonetimi
+    {
+        public const string Menu = "MuhasebeKdvBeyannameHazirlikKontrolYonetimi.Menu";
+        public const string View = "MuhasebeKdvBeyannameHazirlikKontrolYonetimi.View";
+    }
+
     public static class MuhasebeHesapBakiyeYonetimi
     {
         public const string Menu = "MuhasebeHesapBakiyeYonetimi.Menu";

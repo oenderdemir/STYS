@@ -17,7 +17,7 @@ public class KdvBeyannameHazirlikKontrolController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.MuhasebeFisYonetimi.View)]
+    [Permission(StructurePermissions.MuhasebeKdvBeyannameHazirlikKontrolYonetimi.View)]
     public async Task<IActionResult> KontrolEt(
         [FromBody] KdvBeyannameHazirlikKontrolFilterDto filter,
         CancellationToken cancellationToken)

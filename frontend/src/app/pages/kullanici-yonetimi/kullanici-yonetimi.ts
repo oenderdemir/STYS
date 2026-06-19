@@ -89,7 +89,9 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     get canAssignTesisYoneticisi(): boolean {
-        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir');
+        // Tesis yoneticisi baska tesis yoneticisi olusturamaz; sadece KurumAdmin veya SuperAdmin olusturabilir
+        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir')
+            && (this.authService.isSuperAdminUser() || this.authService.isKurumAdminUser());
     }
 
     get canAssignBinaYoneticisi(): boolean {

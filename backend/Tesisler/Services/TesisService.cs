@@ -127,6 +127,12 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
             throw new BaseException("Kullanici bilgisi zorunludur.", 400);
         }
 
+        // Tesis yoneticisi sadece Kurum Admin veya SuperAdmin olusturabilir
+        if (!_currentTenantAccessor.IsSuperAdmin() && !_currentTenantAccessor.IsKurumAdmin())
+        {
+            throw new BaseException("Tesis yoneticisi olusturma yetkiniz bulunmuyor.", 403);
+        }
+
         await EnsureCanAccessTesisAsync(tesisId);
         await EnsureCurrentUserHasPermissionAsync(StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir);
 

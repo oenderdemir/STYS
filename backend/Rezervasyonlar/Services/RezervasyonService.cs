@@ -57,6 +57,12 @@ public class RezervasyonService : IRezervasyonService
         var query = _stysDbContext.Tesisler
             .Where(x => x.AktifMi);
 
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (currentKurumId.HasValue)
+        {
+            query = query.Where(x => x.KurumId == currentKurumId.Value);
+        }
+
         if (scope.IsScoped)
         {
             query = query.Where(x => scope.TesisIds.Contains(x.Id));
@@ -5796,12 +5802,20 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Gecersiz tesis id.", 400);
         }
 
-        var tesisExists = await _stysDbContext.Tesisler
-            .AnyAsync(x => x.Id == tesisId && x.AktifMi, cancellationToken);
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        var tesisQuery = _stysDbContext.Tesisler.Where(x => x.Id == tesisId && x.AktifMi);
+        if (currentKurumId.HasValue)
+        {
+            tesisQuery = tesisQuery.Where(x => x.KurumId == currentKurumId.Value);
+        }
+
+        var tesisExists = await tesisQuery.AnyAsync(cancellationToken);
 
         if (!tesisExists)
         {
-            throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
+            throw new BaseException(currentKurumId.HasValue
+                ? "Bu tesis aktif kuruma ait degil."
+                : "Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
         }
 
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);

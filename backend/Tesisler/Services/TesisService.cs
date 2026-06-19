@@ -424,21 +424,24 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
     public override async Task<TesisDto?> GetByIdAsync(int id, Func<IQueryable<Tesis>, IQueryable<Tesis>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        var includeQuery = BuildScopedIncludeQuery(scope, currentKurumId, include);
         return await base.GetByIdAsync(id, includeQuery);
     }
 
     public override async Task<IEnumerable<TesisDto>> GetAllAsync(Func<IQueryable<Tesis>, IQueryable<Tesis>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        var includeQuery = BuildScopedIncludeQuery(scope, currentKurumId, include);
         return await base.GetAllAsync(includeQuery);
     }
 
     public override async Task<IEnumerable<TesisDto>> WhereAsync(Expression<Func<Tesis, bool>> predicate, Func<IQueryable<Tesis>, IQueryable<Tesis>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        var includeQuery = BuildScopedIncludeQuery(scope, currentKurumId, include);
         return await base.WhereAsync(predicate, includeQuery);
     }
 
@@ -449,7 +452,8 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         Func<IQueryable<Tesis>, IOrderedQueryable<Tesis>>? orderBy = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
-        var includeQuery = BuildScopedIncludeQuery(scope, include);
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        var includeQuery = BuildScopedIncludeQuery(scope, currentKurumId, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
@@ -549,6 +553,21 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
     private async Task EnsureCanAccessTesisAsync(int tesisId)
     {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (currentKurumId.HasValue)
+        {
+            var belongsToCurrentKurum = await _tesisRepository.AnyAsync(x =>
+                x.Id == tesisId
+                && x.KurumId == currentKurumId.Value);
+
+            if (!belongsToCurrentKurum)
+            {
+                throw new BaseException("Bu tesis aktif kuruma ait degil.", 403);
+            }
+
+            return;
+        }
+
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         if (!scope.IsScoped)
         {
@@ -592,6 +611,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
 
     private static Func<IQueryable<Tesis>, IQueryable<Tesis>> BuildScopedIncludeQuery(
         DomainAccessScope scope,
+        int? currentKurumId,
         Func<IQueryable<Tesis>, IQueryable<Tesis>>? include)
     {
         return query =>
@@ -602,7 +622,11 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
                 .Include(x => x.Resepsiyonistler)
                 .Include(x => x.Muhasebeciler);
 
-            if (scope.IsScoped)
+            if (currentKurumId.HasValue)
+            {
+                result = result.Where(x => x.KurumId == currentKurumId.Value);
+            }
+            else if (scope.IsScoped)
             {
                 result = result.Where(x => scope.TesisIds.Contains(x.Id));
             }

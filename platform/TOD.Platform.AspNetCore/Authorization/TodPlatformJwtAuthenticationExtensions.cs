@@ -95,7 +95,7 @@ public static class TodPlatformJwtAuthenticationExtensions
                         return;
                     }
 
-                    var currentTokenVersion = await identityStore.GetTokenVersionAsync(userId, context.HttpContext.RequestAborted);
+                    var currentTokenVersion = await identityStore.GetTokenVersionAsync(userId, CancellationToken.None);
                     if (!currentTokenVersion.HasValue || currentTokenVersion.Value != tokenVersion)
                     {
                         context.Fail("Token version is no longer valid.");
@@ -109,7 +109,7 @@ public static class TodPlatformJwtAuthenticationExtensions
                         return;
                     }
 
-                    var permissions = await identityStore.GetPermissionsAsync(userId, context.HttpContext.RequestAborted);
+                    var permissions = await identityStore.GetPermissionsAsync(userId, CancellationToken.None);
                     var existingPermissions = identity.FindAll(permissionClaimType)
                         .Select(x => x.Value)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);

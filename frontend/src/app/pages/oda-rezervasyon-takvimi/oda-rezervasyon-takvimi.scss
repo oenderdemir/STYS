@@ -106,9 +106,19 @@
     box-shadow: 0 1px 3px rgba(0,0,0,.15);
     transition: filter .1s; z-index: 2;
     &:hover { filter: brightness(.92); }
-    .blok-baslik { overflow: hidden; text-overflow: ellipsis; flex: 1; }
-    .blok-uyari { color: #f59e0b; }
-    .blok-badge { font-size: .65rem; opacity: .8; }
+    // Giriş günü sağ yarısından başlar
+    &.has-checkin-start { margin-left: calc(50% / var(--disp-cols, 1)); }
+    // Çıkış günü sol yarısında biter
+    &.has-checkout-end  { margin-right: calc(50% / var(--disp-cols, 1)); }
+    .blok-icerik { display: flex; align-items: center; gap: 3px; overflow: hidden; flex: 1; min-width: 0; }
+    .blok-baslik { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .blok-gece   { font-size: .65rem; opacity: .75; white-space: nowrap; flex-shrink: 0; }
+    .blok-uyari  { font-size: .65rem; color: #f59e0b; flex-shrink: 0; }
+    .blok-badge  { font-size: .65rem; opacity: .8; flex-shrink: 0; }
+    .ci-icon     { color: #16a34a; }
+    .co-icon     { color: #b45309; }
+    .blok-devam-sol { font-size: .6rem; opacity: .7; flex-shrink: 0; margin-right: 1px; }
+    .blok-devam-sag { font-size: .6rem; opacity: .7; flex-shrink: 0; margin-left: 1px; }
     &.block-info      { background: var(--p-blue-100);    color: var(--p-blue-800); }
     &.block-success   { background: var(--p-green-100);   color: var(--p-green-800); }
     &.block-warn      { background: var(--p-orange-100);  color: var(--p-orange-800); }

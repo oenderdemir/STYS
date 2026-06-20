@@ -50,6 +50,9 @@ export interface OdaRezervasyonBlokDto {
     bitisTarihi: string;
     baslangicGunIndex: number;
     gunUzunlugu: number;
+    geceSayisi: number;
+    solKenaraDevamEdiyor: boolean;
+    sagKenaraDevamEdiyor: boolean;
     durum: string;
     renkTipi: string;
     toplamUcret: number | null;

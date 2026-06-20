@@ -226,19 +226,34 @@
                                         type="button"
                                         [class]="getBlokClass(blok)"
                                         [style.grid-column]="getBlokGridColumn(blok)"
+                                        [ngStyle]="getBlokStyle(blok)"
                                         [pTooltip]="getBlokTooltip(blok)"
                                         tooltipPosition="top"
                                         (click)="blokDetayAc(blok)"
                                     >
-                                        <span class="blok-baslik">{{ blok.baslik }}</span>
+                                        @if (blok.solKenaraDevamEdiyor) {
+                                            <i class="pi pi-chevron-left blok-devam-sol" title="Rezervasyon bu tarihten önce başlıyor"></i>
+                                        }
+                                        @if (blok.blokTipi === 'Rezervasyon' && blok.checkInBugunMu) {
+                                            <i class="pi pi-sign-in blok-badge ci-icon" title="Bugün check-in"></i>
+                                        }
+                                        <span class="blok-icerik">
+                                            <span class="blok-baslik">{{ blok.baslik }}</span>
+                                            @if (blok.blokTipi === 'Rezervasyon' && blok.geceSayisi > 0 && blok.gunUzunlugu > 1) {
+                                                <span class="blok-gece">· {{ blok.geceSayisi }} gece</span>
+                                            }
+                                        </span>
                                         @if (blok.odemeEksikMi) {
                                             <i class="pi pi-exclamation-triangle blok-uyari" title="Ödeme eksik"></i>
                                         }
-                                        @if (blok.checkInBugunMu) {
-                                            <i class="pi pi-sign-in blok-badge" title="Bugün check-in"></i>
+                                        @if (blok.odaDegisimiGerekli) {
+                                            <i class="pi pi-arrow-right-arrow-left blok-uyari" title="Oda değişimi gerekli"></i>
                                         }
-                                        @if (blok.checkOutBugunMu) {
-                                            <i class="pi pi-sign-out blok-badge" title="Bugün check-out"></i>
+                                        @if (blok.blokTipi === 'Rezervasyon' && blok.checkOutBugunMu && !blok.sagKenaraDevamEdiyor) {
+                                            <i class="pi pi-sign-out blok-badge co-icon" title="Bugün check-out"></i>
+                                        }
+                                        @if (blok.sagKenaraDevamEdiyor) {
+                                            <i class="pi pi-chevron-right blok-devam-sag" title="Rezervasyon bu tarihten sonra devam ediyor"></i>
                                         }
                                     </button>
                                 }

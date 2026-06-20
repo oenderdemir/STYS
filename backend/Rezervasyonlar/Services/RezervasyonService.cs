@@ -6499,19 +6499,24 @@ public class RezervasyonService : IRezervasyonService
 
                     foreach (var atama in segmentAtamalari.Where(a => a.OdaId == oda.Id))
                     {
-                        var blokBaslangic = atama.SegmentBaslangic.Date;
-                        var blokBitis = atama.SegmentBitis.Date;
-                        var startIdx = Math.Max(0, (blokBaslangic - baslangic).Days);
-                        var endIdx = Math.Min(gunSayisi, (blokBitis - baslangic).Days);
+                        var blokGiris = atama.SegmentBaslangic.Date;
+                        var blokCikis = atama.SegmentBitis.Date;
+
+                        // Geceleme mantığı: giriş dahil, çıkış hariç
+                        var geceSayisi = Math.Max(1, (blokCikis - blokGiris).Days);
+                        var startIdx = Math.Max(0, (blokGiris - baslangic).Days);
+                        // bitisExclusiveIndex: çıkış tarihi geceleme sayılmaz
+                        var endIdx = Math.Min(gunSayisi, (blokCikis - baslangic).Days);
                         var uzunluk = Math.Max(1, endIdx - startIdx);
+
+                        var solDevam = blokGiris < baslangic;
+                        var sagDevam = blokCikis > bitis;
+
                         var kalan = atama.ToplamUcret - atama.OdenenTutar;
                         var odemeEksik = kalan > 0.01m;
 
                         var uyarilar = new List<string>();
-                        if (odemeEksik)
-                        {
-                            uyarilar.Add("Ödeme eksik");
-                        }
+                        if (odemeEksik) uyarilar.Add("Ödeme eksik");
 
                         var renkTipi = atama.Durum switch
                         {
@@ -6537,14 +6542,17 @@ public class RezervasyonService : IRezervasyonService
                             BitisTarihi = atama.SegmentBitis,
                             BaslangicGunIndex = startIdx,
                             GunUzunlugu = uzunluk,
+                            GeceSayisi = geceSayisi,
+                            SolKenaraDevamEdiyor = solDevam,
+                            SagKenaraDevamEdiyor = sagDevam,
                             Durum = atama.Durum,
                             RenkTipi = renkTipi,
                             ToplamUcret = atama.ToplamUcret,
                             OdenenTutar = atama.OdenenTutar,
                             KalanTutar = kalan,
                             ParaBirimi = atama.ParaBirimi,
-                            CheckInBugunMu = atama.SegmentBaslangic.Date == bugun,
-                            CheckOutBugunMu = atama.SegmentBitis.Date == bugun,
+                            CheckInBugunMu = blokGiris == bugun,
+                            CheckOutBugunMu = blokCikis == bugun,
                             OdemeEksikMi = odemeEksik,
                             Uyarilar = uyarilar
                         });

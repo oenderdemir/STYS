@@ -188,26 +188,57 @@ export class OdaRezervasyonTakvimi implements OnInit {
     }
 
     getBlokClass(blok: OdaRezervasyonBlokDto): string {
-        const base = 'reservation-block';
-        const renk = blok.renkTipi;
-        return `${base} block-${renk}`;
+        const classes = ['reservation-block', `block-${blok.renkTipi}`];
+        if (!blok.solKenaraDevamEdiyor) classes.push('has-checkin-start');
+        if (!blok.sagKenaraDevamEdiyor) classes.push('has-checkout-end');
+        return classes.join(' ');
     }
 
     getBlokGridColumn(blok: OdaRezervasyonBlokDto): string {
-        const start = blok.baslangicGunIndex + 2;
-        const end = start + Math.max(1, blok.gunUzunlugu);
+        // +1 çünkü room-days-area kendi nested grid'i; oda bilgi sütunu burada yok
+        const start = blok.baslangicGunIndex + 1;
+        const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
+        const end = start + Math.max(1, blok.gunUzunlugu) + checkoutEklendi;
         return `${start} / ${end}`;
+    }
+
+    getBlokStyle(blok: OdaRezervasyonBlokDto): Record<string, string> {
+        const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
+        const dispCols = Math.max(1, blok.gunUzunlugu) + checkoutEklendi;
+        return { '--disp-cols': dispCols.toString() };
     }
 
     getBlokTooltip(blok: OdaRezervasyonBlokDto): string {
         if (blok.blokTipi === 'Rezervasyon') {
-            const satirlar = [blok.baslik];
+            const satirlar: string[] = [blok.baslik];
             if (blok.altBaslik) satirlar.push(`#${blok.altBaslik}`);
-            if (blok.durum) satirlar.push(this.durumLabel(blok.durum));
+            satirlar.push(`Giriş: ${this.formatBlokTarih(blok.baslangicTarihi)}`);
+            satirlar.push(`Çıkış: ${this.formatBlokTarih(blok.bitisTarihi)}`);
+            satirlar.push(`Geceleme: ${blok.geceSayisi} gece`);
+            satirlar.push(`Durum: ${this.durumLabel(blok.durum)}`);
+            if (blok.toplamUcret != null) {
+                satirlar.push(`Toplam: ${this.formatPara(blok.toplamUcret, blok.paraBirimi)}`);
+            }
+            if (blok.odemeEksikMi && blok.kalanTutar != null) {
+                satirlar.push(`Kalan: ${this.formatPara(blok.kalanTutar, blok.paraBirimi)}`);
+            }
             if (blok.uyarilar?.length) satirlar.push(...blok.uyarilar);
             return satirlar.join('\n');
         }
-        return [blok.baslik, blok.altBaslik].filter(Boolean).join('\n');
+        const satirlar = [blok.baslik];
+        if (blok.altBaslik) satirlar.push(blok.altBaslik);
+        satirlar.push(`Başlangıç: ${this.formatBlokTarih(blok.baslangicTarihi)}`);
+        satirlar.push(`Bitiş: ${this.formatBlokTarih(blok.bitisTarihi)}`);
+        return satirlar.join('\n');
+    }
+
+    formatBlokTarih(tarih: string): string {
+        if (!tarih) return '-';
+        const d = new Date(tarih);
+        return new Intl.DateTimeFormat('tr-TR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: false
+        }).format(d);
     }
 
     durumLabel(durum: string): string {

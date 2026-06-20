@@ -1,0 +1,142 @@
+.room-calendar-page { padding: 1rem; min-height: 100%; }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.filter-select { min-width: 180px; }
+.filter-select-sm { min-width: 100px; }
+.filter-datepicker { width: 160px; }
+.nav-buttons { display: flex; align-items: center; gap: .25rem; }
+
+.ozet-row { display: flex; flex-wrap: wrap; gap: .75rem; }
+.ozet-kart {
+    flex: 1 1 100px; min-width: 100px;
+    padding: .75rem 1rem;
+    border-radius: .5rem;
+    background: var(--p-surface-card);
+    border: 1px solid var(--p-surface-border);
+    text-align: center;
+    .ozet-kart-deger { font-size: 1.4rem; font-weight: 700; }
+    .ozet-kart-etiket { font-size: .72rem; color: var(--p-text-muted-color); margin-top: .2rem; }
+    &--success .ozet-kart-deger { color: var(--p-green-500); }
+    &--danger  .ozet-kart-deger { color: var(--p-red-500); }
+    &--warn    .ozet-kart-deger { color: var(--p-orange-500); }
+    &--info    .ozet-kart-deger { color: var(--p-blue-500); }
+}
+
+.room-calendar-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--p-surface-border);
+    border-radius: .5rem;
+}
+
+.room-calendar { display: grid; min-width: max-content; }
+
+.calendar-header-cell {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--p-surface-100);
+    border-bottom: 2px solid var(--p-surface-border);
+    border-right: 1px solid var(--p-surface-border);
+    padding: .4rem .5rem;
+    font-size: .78rem; font-weight: 600; text-align: center;
+}
+
+.room-col-header { position: sticky; left: 0; z-index: 11; text-align: left; }
+
+.day-header {
+    white-space: nowrap;
+    .day-label { color: var(--p-text-muted-color); font-size: .68rem; text-transform: uppercase; }
+    .day-number { font-size: 1rem; font-weight: 700; }
+    .day-month  { font-size: .68rem; font-weight: 400; color: var(--p-text-muted-color); }
+    .day-ci-co  { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+}
+
+.today-header {
+    background: var(--p-primary-100, #e0f2fe);
+    border-bottom-color: var(--p-primary-500, #0ea5e9);
+    .day-number { color: var(--p-primary-600, #0284c7); }
+}
+
+.ci-badge {
+    display: inline-block; border-radius: 9999px;
+    font-size: .6rem; font-weight: 700; padding: 0 4px; line-height: 14px;
+    &.ci { background: var(--p-green-100); color: var(--p-green-700); }
+    &.co { background: var(--p-orange-100); color: var(--p-orange-700); }
+}
+
+.room-type-row {
+    grid-column: 1 / -1;
+    background: var(--p-surface-50);
+    border-top: 1px solid var(--p-surface-border);
+    border-bottom: 1px solid var(--p-surface-border);
+    padding: .3rem .75rem;
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    color: var(--p-text-muted-color); letter-spacing: .05em;
+    display: flex; align-items: center; gap: .4rem;
+}
+
+.room-info-cell {
+    position: sticky; left: 0; z-index: 5;
+    background: var(--p-surface-card);
+    border-right: 2px solid var(--p-surface-border);
+    border-bottom: 1px solid var(--p-surface-border);
+    padding: .4rem .6rem; min-height: 52px;
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    .room-no  { font-weight: 700; font-size: .85rem; }
+    .room-cap { font-size: .7rem; color: var(--p-text-muted-color); }
+}
+
+:host ::ng-deep .temizlik-tag .p-tag { font-size: .6rem; padding: .1rem .3rem; }
+
+.room-days-area {
+    display: grid; position: relative;
+    border-bottom: 1px solid var(--p-surface-border);
+}
+
+.day-cell {
+    border-right: 1px solid var(--p-surface-border); min-height: 52px;
+    &.today-cell { background: color-mix(in srgb, var(--p-primary-100, #e0f2fe) 30%, transparent); }
+}
+
+.reservation-block {
+    position: absolute; inset-block: 4px;
+    border-radius: 4px; padding: 2px 6px;
+    font-size: .72rem; font-weight: 600;
+    cursor: pointer; border: none;
+    display: flex; align-items: center; gap: 4px;
+    overflow: hidden; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    transition: filter .1s; z-index: 2;
+    &:hover { filter: brightness(.92); }
+    .blok-baslik { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .blok-uyari { color: #f59e0b; }
+    .blok-badge { font-size: .65rem; opacity: .8; }
+    &.block-info      { background: var(--p-blue-100);    color: var(--p-blue-800); }
+    &.block-success   { background: var(--p-green-100);   color: var(--p-green-800); }
+    &.block-warn      { background: var(--p-orange-100);  color: var(--p-orange-800); }
+    &.block-danger    { background: var(--p-red-100);     color: var(--p-red-800); }
+    &.block-secondary { background: var(--p-surface-200); color: var(--p-text-muted-color); }
+}
+
+.empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 1rem; padding: 4rem 2rem;
+    color: var(--p-text-muted-color);
+    p { margin: 0; font-size: .95rem; }
+}
+
+.calendar-skeleton { padding: .5rem; }
+
+.detay-body { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1rem; }
+
+.detay-satir {
+    display: flex; gap: .5rem;
+    .detay-etiket { min-width: 110px; font-size: .78rem; font-weight: 600; color: var(--p-text-muted-color); }
+    .detay-deger  { font-size: .85rem; &.kalan-warn { color: var(--p-orange-600); font-weight: 700; } }
+}
+
+.detay-uyarilar { margin-top: .5rem; display: flex; flex-direction: column; gap: .25rem; }
+.detay-uyari { font-size: .78rem; color: var(--p-orange-600); display: flex; align-items: center; gap: .4rem; }
+
+.detay-actions {
+    display: flex; gap: .5rem; justify-content: flex-end;
+    padding-top: .75rem; border-top: 1px solid var(--p-surface-border);
+}

@@ -1,0 +1,359 @@
+<p-toast />
+
+<div class="room-calendar-page">
+    <!-- Toolbar -->
+    <p-toolbar styleClass="mb-3">
+        <ng-template pTemplate="start">
+            <div class="filter-row">
+                <p-select
+                    [options]="tesisler"
+                    [(ngModel)]="selectedTesisId"
+                    optionLabel="ad"
+                    optionValue="id"
+                    placeholder="Tesis seçin..."
+                    [loading]="tesislerYukleniyor"
+                    (onChange)="onTesisChange()"
+                    styleClass="filter-select"
+                />
+
+                <p-datepicker
+                    [(ngModel)]="selectedBaslangicTarihi"
+                    dateFormat="dd.mm.yy"
+                    [showIcon]="true"
+                    placeholder="Başlangıç tarihi"
+                    styleClass="filter-datepicker"
+                    (onSelect)="takvimYukle()"
+                />
+
+                <p-select
+                    [options]="gunSayisiSecenekleri"
+                    [(ngModel)]="selectedGunSayisi"
+                    optionLabel="label"
+                    optionValue="value"
+                    (onChange)="takvimYukle()"
+                    styleClass="filter-select-sm"
+                />
+
+                <p-select
+                    [options]="odaTipleri"
+                    [(ngModel)]="selectedOdaTipiId"
+                    optionLabel="ad"
+                    optionValue="id"
+                    placeholder="Tüm oda tipleri"
+                    [showClear]="true"
+                    (onChange)="takvimYukle()"
+                    styleClass="filter-select"
+                />
+
+                <p-select
+                    [options]="durumSecenekleri"
+                    [(ngModel)]="selectedDurum"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Tüm durumlar"
+                    [showClear]="true"
+                    (onChange)="takvimYukle()"
+                    styleClass="filter-select"
+                />
+            </div>
+        </ng-template>
+
+        <ng-template pTemplate="end">
+            <div class="nav-buttons">
+                <p-button
+                    icon="pi pi-chevron-left"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="haftaGeri()"
+                    pTooltip="Önceki hafta"
+                />
+                <p-button
+                    label="Bugün"
+                    severity="secondary"
+                    [outlined]="true"
+                    (onClick)="bugunGit()"
+                />
+                <p-button
+                    icon="pi pi-chevron-right"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="haftaIleri()"
+                    pTooltip="Sonraki hafta"
+                />
+                <p-button
+                    icon="pi pi-refresh"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="takvimYukle()"
+                    pTooltip="Yenile"
+                />
+            </div>
+        </ng-template>
+    </p-toolbar>
+
+    <!-- Özet kartları -->
+    @if (ozet) {
+        <div class="ozet-row mb-3">
+            <div class="ozet-kart">
+                <div class="ozet-kart-deger">{{ ozet.toplamOdaSayisi }}</div>
+                <div class="ozet-kart-etiket">Toplam Oda</div>
+            </div>
+            <div class="ozet-kart ozet-kart--danger">
+                <div class="ozet-kart-deger">{{ ozet.doluOdaSayisi }}</div>
+                <div class="ozet-kart-etiket">Dolu Oda</div>
+            </div>
+            <div class="ozet-kart ozet-kart--success">
+                <div class="ozet-kart-deger">{{ ozet.bosOdaSayisi }}</div>
+                <div class="ozet-kart-etiket">Boş Oda</div>
+            </div>
+            <div class="ozet-kart ozet-kart--info">
+                <div class="ozet-kart-deger">{{ ozet.bugunCheckInSayisi }}</div>
+                <div class="ozet-kart-etiket">Bugün Check-in</div>
+            </div>
+            <div class="ozet-kart ozet-kart--warn">
+                <div class="ozet-kart-deger">{{ ozet.bugunCheckOutSayisi }}</div>
+                <div class="ozet-kart-etiket">Bugün Check-out</div>
+            </div>
+            <div class="ozet-kart ozet-kart--info">
+                <div class="ozet-kart-deger">{{ ozet.yarinCheckInSayisi }}</div>
+                <div class="ozet-kart-etiket">Yarın Check-in</div>
+            </div>
+            <div class="ozet-kart">
+                <div class="ozet-kart-deger">{{ ozet.bugunKisiSayisi }}</div>
+                <div class="ozet-kart-etiket">Bugün Kişi</div>
+            </div>
+            <div class="ozet-kart ozet-kart--success">
+                <div class="ozet-kart-deger">{{ formatPara(ozet.donemToplamGelir, ozet.paraBirimi) }}</div>
+                <div class="ozet-kart-etiket">Dönem Geliri</div>
+            </div>
+        </div>
+    }
+
+    <!-- Tesis seçilmemiş uyarı -->
+    @if (!selectedTesisId && !tesislerYukleniyor) {
+        <div class="empty-state">
+            <i class="pi pi-building" style="font-size: 2rem; color: var(--p-text-muted-color)"></i>
+            <p>Takvimi görüntülemek için lütfen bir tesis seçin.</p>
+        </div>
+    }
+
+    <!-- Yüklenme skeleton -->
+    @if (yukleniyor) {
+        <div class="calendar-skeleton">
+            @for (i of [1,2,3,4,5,6]; track i) {
+                <p-skeleton height="3rem" styleClass="mb-1" />
+            }
+        </div>
+    }
+
+    <!-- Takvim grid -->
+    @if (!yukleniyor && takvim) {
+        @if (takvim.odaTipleri.length === 0) {
+            <div class="empty-state">
+                <i class="pi pi-calendar" style="font-size: 2rem; color: var(--p-text-muted-color)"></i>
+                <p>Seçili tarih aralığında ve filtrelerde gösterilecek oda bulunamadı.</p>
+            </div>
+        } @else {
+            <div class="room-calendar-wrapper">
+                <div
+                    class="room-calendar"
+                    [style.grid-template-columns]="gridTemplateColumns"
+                >
+                    <!-- Header: Oda etiketi + gün sütunları -->
+                    <div class="calendar-header-cell room-col-header">Oda</div>
+                    @for (gun of takvim.gunler; track gun.tarih) {
+                        <div
+                            class="calendar-header-cell day-header"
+                            [class.today-header]="gun.bugunMu"
+                        >
+                            <div class="day-label">{{ gun.kisaGunAdi }}</div>
+                            <div class="day-number">{{ gun.gun }}<span class="day-month">/{{ gun.ay }}</span></div>
+                            @if (gun.checkInSayisi > 0 || gun.checkOutSayisi > 0) {
+                                <div class="day-ci-co">
+                                    @if (gun.checkInSayisi > 0) {
+                                        <span class="ci-badge ci">{{ gun.checkInSayisi }}</span>
+                                    }
+                                    @if (gun.checkOutSayisi > 0) {
+                                        <span class="ci-badge co">{{ gun.checkOutSayisi }}</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- Oda tipi grupları ve satırları -->
+                    @for (grup of takvim.odaTipleri; track grup.odaTipiId) {
+                        <!-- Oda tipi başlık satırı -->
+                        <div
+                            class="room-type-row"
+                            [style.grid-column]="'1 / ' + (takvim.gunSayisi + 2)"
+                        >
+                            <i class="pi pi-tag"></i>
+                            {{ grup.odaTipiAdi }}
+                        </div>
+
+                        @for (oda of grup.odalar; track oda.odaId) {
+                            <!-- Oda bilgi hücresi -->
+                            <div class="room-info-cell">
+                                <div class="room-no">{{ oda.odaNo }}</div>
+                                <div class="room-cap">{{ oda.kapasite }} kişi</div>
+                                @if (oda.temizlikDurumu) {
+                                    <p-tag
+                                        [value]="temizlikLabel(oda.temizlikDurumu)"
+                                        [severity]="temizlikSeverity(oda.temizlikDurumu)"
+                                        styleClass="temizlik-tag"
+                                    />
+                                }
+                            </div>
+
+                            <!-- Gün hücreleri (arka plan grid) + bloklar -->
+                            <div
+                                class="room-days-area"
+                                [style.grid-column]="'2 / ' + (takvim.gunSayisi + 2)"
+                                [style.grid-template-columns]="'repeat(' + takvim.gunSayisi + ', minmax(110px, 1fr))'"
+                            >
+                                <!-- Boş gün hücreleri (arka plan) -->
+                                @for (gun of takvim.gunler; track gun.tarih) {
+                                    <div
+                                        class="day-cell"
+                                        [class.today-cell]="gun.bugunMu"
+                                    ></div>
+                                }
+
+                                <!-- Rezervasyon / bakım blokları -->
+                                @for (blok of oda.bloklar; track blok.baslangicGunIndex + '-' + blok.rezervasyonId + '-' + blok.odaKullanimBlokId) {
+                                    <button
+                                        type="button"
+                                        [class]="getBlokClass(blok)"
+                                        [style.grid-column]="getBlokGridColumn(blok)"
+                                        [pTooltip]="getBlokTooltip(blok)"
+                                        tooltipPosition="top"
+                                        (click)="blokDetayAc(blok)"
+                                    >
+                                        <span class="blok-baslik">{{ blok.baslik }}</span>
+                                        @if (blok.odemeEksikMi) {
+                                            <i class="pi pi-exclamation-triangle blok-uyari" title="Ödeme eksik"></i>
+                                        }
+                                        @if (blok.checkInBugunMu) {
+                                            <i class="pi pi-sign-in blok-badge" title="Bugün check-in"></i>
+                                        }
+                                        @if (blok.checkOutBugunMu) {
+                                            <i class="pi pi-sign-out blok-badge" title="Bugün check-out"></i>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Blok detay dialog -->
+<p-dialog
+    [(visible)]="blokDetayVisible"
+    [modal]="true"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    header="Rezervasyon Detayı"
+    styleClass="blok-detay-dialog"
+    [style]="{ width: '420px' }"
+    (onHide)="blokDetayKapat()"
+>
+    @if (secilenBlok) {
+        @if (secilenBlok.blokTipi === 'Rezervasyon') {
+            <div class="detay-body">
+                <div class="detay-satir">
+                    <span class="detay-etiket">Misafir</span>
+                    <span class="detay-deger">{{ secilenBlok.baslik }}</span>
+                </div>
+                @if (secilenBlok.altBaslik) {
+                    <div class="detay-satir">
+                        <span class="detay-etiket">Referans No</span>
+                        <span class="detay-deger">#{{ secilenBlok.altBaslik }}</span>
+                    </div>
+                }
+                <div class="detay-satir">
+                    <span class="detay-etiket">Durum</span>
+                    <span class="detay-deger">{{ durumLabel(secilenBlok.durum) }}</span>
+                </div>
+                <div class="detay-satir">
+                    <span class="detay-etiket">Tarih Aralığı</span>
+                    <span class="detay-deger">
+                        {{ secilenBlok.baslangicTarihi | date: 'dd.MM.yyyy' }}
+                        –
+                        {{ secilenBlok.bitisTarihi | date: 'dd.MM.yyyy' }}
+                    </span>
+                </div>
+                @if (secilenBlok.toplamUcret != null) {
+                    <div class="detay-satir">
+                        <span class="detay-etiket">Toplam Ücret</span>
+                        <span class="detay-deger">{{ formatPara(secilenBlok.toplamUcret, secilenBlok.paraBirimi) }}</span>
+                    </div>
+                    <div class="detay-satir">
+                        <span class="detay-etiket">Ödenen</span>
+                        <span class="detay-deger">{{ formatPara(secilenBlok.odenenTutar, secilenBlok.paraBirimi) }}</span>
+                    </div>
+                    <div class="detay-satir">
+                        <span class="detay-etiket">Kalan</span>
+                        <span class="detay-deger" [class.kalan-warn]="secilenBlok.odemeEksikMi">
+                            {{ formatPara(secilenBlok.kalanTutar, secilenBlok.paraBirimi) }}
+                        </span>
+                    </div>
+                }
+                @if (secilenBlok.uyarilar.length > 0) {
+                    <div class="detay-uyarilar">
+                        @for (u of secilenBlok.uyarilar; track u) {
+                            <div class="detay-uyari"><i class="pi pi-exclamation-triangle"></i> {{ u }}</div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="detay-actions">
+                <p-button
+                    label="Detaya Git"
+                    icon="pi pi-external-link"
+                    (onClick)="rezervasyonDetayinaGit(secilenBlok.rezervasyonId)"
+                />
+                <p-button
+                    label="Kapat"
+                    severity="secondary"
+                    [outlined]="true"
+                    (onClick)="blokDetayKapat()"
+                />
+            </div>
+        } @else {
+            <div class="detay-body">
+                <div class="detay-satir">
+                    <span class="detay-etiket">Tür</span>
+                    <span class="detay-deger">{{ secilenBlok.blokTipi === 'Ariza' ? 'Arıza' : 'Bakım' }}</span>
+                </div>
+                @if (secilenBlok.altBaslik) {
+                    <div class="detay-satir">
+                        <span class="detay-etiket">Açıklama</span>
+                        <span class="detay-deger">{{ secilenBlok.altBaslik }}</span>
+                    </div>
+                }
+                <div class="detay-satir">
+                    <span class="detay-etiket">Başlangıç</span>
+                    <span class="detay-deger">{{ secilenBlok.baslangicTarihi | date: 'dd.MM.yyyy HH:mm' }}</span>
+                </div>
+                <div class="detay-satir">
+                    <span class="detay-etiket">Bitiş</span>
+                    <span class="detay-deger">{{ secilenBlok.bitisTarihi | date: 'dd.MM.yyyy HH:mm' }}</span>
+                </div>
+            </div>
+            <div class="detay-actions">
+                <p-button
+                    label="Kapat"
+                    severity="secondary"
+                    [outlined]="true"
+                    (onClick)="blokDetayKapat()"
+                />
+            </div>
+        }
+    }
+</p-dialog>

@@ -251,6 +251,12 @@ public static class StructurePermissions
         public const string CustomIndirimGirebilir = "RezervasyonYonetimi.CustomIndirimGirebilir";
     }
 
+    public static class OdaRezervasyonTakvimiYonetimi
+    {
+        public const string Menu = "OdaRezervasyonTakvimiYonetimi.Menu";
+        public const string View = "OdaRezervasyonTakvimiYonetimi.View";
+    }
+
     public static class RestoranYonetimi
     {
         public const string Menu = "RestoranYonetimi.Menu";

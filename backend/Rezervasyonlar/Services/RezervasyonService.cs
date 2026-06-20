@@ -6378,4 +6378,297 @@ public class RezervasyonService : IRezervasyonService
     {
         public int ToplamKisi => KadinSayisi + ErkekSayisi;
     }
+
+    public async Task<OdaRezervasyonTakvimiDto> GetOdaRezervasyonTakvimiAsync(
+        int tesisId,
+        DateTime baslangicTarihi,
+        int gunSayisi,
+        int? odaTipiId,
+        string? durum,
+        CancellationToken cancellationToken = default)
+    {
+        if (gunSayisi < 1 || gunSayisi > 31)
+        {
+            throw new BaseException("Gun sayisi 1 ile 31 arasinda olmalidir.", 400);
+        }
+
+        await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+
+        var baslangic = baslangicTarihi.Date;
+        var bitis = baslangic.AddDays(gunSayisi);
+        var bugun = DateTime.UtcNow.Date;
+
+        var tesisBilgi = await _stysDbContext.Tesisler
+            .Where(x => x.Id == tesisId)
+            .Select(x => new { x.Ad })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Tesis bulunamadi.", 404);
+
+        var odaQuery = _stysDbContext.Odalar
+            .Where(x => x.AktifMi && x.TesisOdaTipi != null && x.TesisOdaTipi.TesisId == tesisId);
+
+        if (odaTipiId.HasValue)
+        {
+            odaQuery = odaQuery.Where(x => x.TesisOdaTipiId == odaTipiId.Value);
+        }
+
+        var odalar = await odaQuery
+            .OrderBy(x => x.TesisOdaTipi!.Ad)
+            .ThenBy(x => x.OdaNo)
+            .Select(x => new
+            {
+                x.Id,
+                x.OdaNo,
+                x.TemizlikDurumu,
+                OdaTipiId = x.TesisOdaTipiId,
+                OdaTipiAdi = x.TesisOdaTipi!.Ad,
+                Kapasite = x.TesisOdaTipi.Kapasite
+            })
+            .ToListAsync(cancellationToken);
+
+        var odaIds = odalar.Select(x => x.Id).ToList();
+
+        var segmentAtamalari = await _stysDbContext.RezervasyonSegmentOdaAtamalari
+            .Where(x => odaIds.Contains(x.OdaId)
+                && x.RezervasyonSegment != null
+                && x.RezervasyonSegment.BaslangicTarihi < bitis
+                && x.RezervasyonSegment.BitisTarihi > baslangic
+                && x.RezervasyonSegment.Rezervasyon != null
+                && x.RezervasyonSegment.Rezervasyon.AktifMi
+                && x.RezervasyonSegment.Rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal)
+            .Select(x => new
+            {
+                x.OdaId,
+                RezervasyonId = x.RezervasyonSegment!.RezervasyonId,
+                MisafirAdi = x.RezervasyonSegment.Rezervasyon!.MisafirAdiSoyadi,
+                ReferansNo = x.RezervasyonSegment.Rezervasyon.ReferansNo,
+                SegmentBaslangic = x.RezervasyonSegment.BaslangicTarihi,
+                SegmentBitis = x.RezervasyonSegment.BitisTarihi,
+                Durum = x.RezervasyonSegment.Rezervasyon.RezervasyonDurumu,
+                ToplamUcret = x.RezervasyonSegment.Rezervasyon.ToplamUcret,
+                ParaBirimi = x.RezervasyonSegment.Rezervasyon.ParaBirimi,
+                OdenenTutar = x.RezervasyonSegment.Rezervasyon.Odemeler
+                    .Where(o => !o.IsDeleted)
+                    .Sum(o => (decimal?)o.OdemeTutari) ?? 0m,
+                KisiSayisi = x.RezervasyonSegment.Rezervasyon.KisiSayisi
+            })
+            .ToListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(durum))
+        {
+            segmentAtamalari = durum switch
+            {
+                "Onayli" => segmentAtamalari.Where(x => x.Durum == RezervasyonDurumlari.Onayli).ToList(),
+                "CheckIn" => segmentAtamalari.Where(x => x.Durum == RezervasyonDurumlari.CheckInTamamlandi).ToList(),
+                "OdemeEksik" => segmentAtamalari.Where(x => x.OdenenTutar < x.ToplamUcret).ToList(),
+                _ => segmentAtamalari
+            };
+        }
+
+        var kullanimBloklari = await _stysDbContext.OdaKullanimBloklari
+            .Where(x => odaIds.Contains(x.OdaId)
+                && x.AktifMi
+                && x.BaslangicTarihi < bitis
+                && x.BitisTarihi > baslangic)
+            .Select(x => new
+            {
+                x.Id,
+                x.OdaId,
+                x.BlokTipi,
+                x.BaslangicTarihi,
+                x.BitisTarihi,
+                x.Aciklama
+            })
+            .ToListAsync(cancellationToken);
+
+        if (durum == "BakimAriza")
+        {
+            segmentAtamalari = [];
+        }
+
+        var odaTipiGruplari = odalar
+            .GroupBy(x => new { x.OdaTipiId, x.OdaTipiAdi })
+            .OrderBy(g => g.Key.OdaTipiAdi)
+            .Select(g => new OdaRezervasyonOdaTipiGrupDto
+            {
+                OdaTipiId = g.Key.OdaTipiId,
+                OdaTipiAdi = g.Key.OdaTipiAdi,
+                Odalar = g.Select(oda =>
+                {
+                    var bloklar = new List<OdaRezervasyonBlokDto>();
+
+                    foreach (var atama in segmentAtamalari.Where(a => a.OdaId == oda.Id))
+                    {
+                        var blokBaslangic = atama.SegmentBaslangic.Date;
+                        var blokBitis = atama.SegmentBitis.Date;
+                        var startIdx = Math.Max(0, (blokBaslangic - baslangic).Days);
+                        var endIdx = Math.Min(gunSayisi, (blokBitis - baslangic).Days);
+                        var uzunluk = Math.Max(1, endIdx - startIdx);
+                        var kalan = atama.ToplamUcret - atama.OdenenTutar;
+                        var odemeEksik = kalan > 0.01m;
+
+                        var uyarilar = new List<string>();
+                        if (odemeEksik)
+                        {
+                            uyarilar.Add("Ödeme eksik");
+                        }
+
+                        var renkTipi = atama.Durum switch
+                        {
+                            RezervasyonDurumlari.Taslak => "secondary",
+                            RezervasyonDurumlari.Onayli => "info",
+                            RezervasyonDurumlari.CheckInTamamlandi => "success",
+                            RezervasyonDurumlari.CheckOutTamamlandi => "secondary",
+                            _ => "info"
+                        };
+
+                        if (odemeEksik && atama.Durum != RezervasyonDurumlari.CheckOutTamamlandi)
+                        {
+                            renkTipi = "warn";
+                        }
+
+                        bloklar.Add(new OdaRezervasyonBlokDto
+                        {
+                            BlokTipi = "Rezervasyon",
+                            RezervasyonId = atama.RezervasyonId,
+                            Baslik = atama.MisafirAdi,
+                            AltBaslik = atama.ReferansNo,
+                            BaslangicTarihi = atama.SegmentBaslangic,
+                            BitisTarihi = atama.SegmentBitis,
+                            BaslangicGunIndex = startIdx,
+                            GunUzunlugu = uzunluk,
+                            Durum = atama.Durum,
+                            RenkTipi = renkTipi,
+                            ToplamUcret = atama.ToplamUcret,
+                            OdenenTutar = atama.OdenenTutar,
+                            KalanTutar = kalan,
+                            ParaBirimi = atama.ParaBirimi,
+                            CheckInBugunMu = atama.SegmentBaslangic.Date == bugun,
+                            CheckOutBugunMu = atama.SegmentBitis.Date == bugun,
+                            OdemeEksikMi = odemeEksik,
+                            Uyarilar = uyarilar
+                        });
+                    }
+
+                    foreach (var blok in kullanimBloklari.Where(b => b.OdaId == oda.Id))
+                    {
+                        var blokBaslangic = blok.BaslangicTarihi.Date;
+                        var blokBitis = blok.BitisTarihi.Date;
+                        var startIdx = Math.Max(0, (blokBaslangic - baslangic).Days);
+                        var endIdx = Math.Min(gunSayisi, (blokBitis - baslangic).Days);
+                        var uzunluk = Math.Max(1, endIdx - startIdx);
+
+                        var renkTipi = blok.BlokTipi == "Ariza" ? "danger" : "secondary";
+
+                        bloklar.Add(new OdaRezervasyonBlokDto
+                        {
+                            BlokTipi = blok.BlokTipi,
+                            OdaKullanimBlokId = blok.Id,
+                            Baslik = blok.BlokTipi == "Ariza" ? "Arıza" : "Bakım",
+                            AltBaslik = blok.Aciklama,
+                            BaslangicTarihi = blok.BaslangicTarihi,
+                            BitisTarihi = blok.BitisTarihi,
+                            BaslangicGunIndex = startIdx,
+                            GunUzunlugu = uzunluk,
+                            Durum = blok.BlokTipi,
+                            RenkTipi = renkTipi
+                        });
+                    }
+
+                    return new OdaRezervasyonOdaSatiriDto
+                    {
+                        OdaId = oda.Id,
+                        OdaNo = oda.OdaNo,
+                        OdaTipiId = oda.OdaTipiId,
+                        OdaTipiAdi = oda.OdaTipiAdi,
+                        Kapasite = oda.Kapasite,
+                        TemizlikDurumu = oda.TemizlikDurumu,
+                        Bloklar = bloklar
+                    };
+                }).ToList()
+            })
+            .ToList();
+
+        var gunler = Enumerable.Range(0, gunSayisi).Select(i =>
+        {
+            var tarih = baslangic.AddDays(i);
+            var odaIdsInDay = segmentAtamalari
+                .Where(a => a.SegmentBaslangic.Date <= tarih && a.SegmentBitis.Date > tarih)
+                .Select(a => a.OdaId)
+                .Distinct()
+                .ToHashSet();
+
+            var kullanimIdsInDay = kullanimBloklari
+                .Where(b => b.BaslangicTarihi.Date <= tarih && b.BitisTarihi.Date > tarih)
+                .Select(b => b.OdaId)
+                .ToHashSet();
+
+            var doluIds = odaIdsInDay.Union(kullanimIdsInDay).ToHashSet();
+
+            return new OdaRezervasyonTakvimGunDto
+            {
+                Tarih = tarih,
+                GunAdi = tarih.ToString("dddd", new System.Globalization.CultureInfo("tr-TR")),
+                KisaGunAdi = tarih.ToString("ddd", new System.Globalization.CultureInfo("tr-TR")),
+                Gun = tarih.Day,
+                Ay = tarih.Month,
+                Yil = tarih.Year,
+                BugunMu = tarih == bugun,
+                DoluOdaSayisi = doluIds.Count,
+                BosOdaSayisi = odaIds.Count - doluIds.Count,
+                CheckInSayisi = segmentAtamalari.Count(a => a.SegmentBaslangic.Date == tarih),
+                CheckOutSayisi = segmentAtamalari.Count(a => a.SegmentBitis.Date == tarih),
+                KisiSayisi = segmentAtamalari
+                    .Where(a => a.SegmentBaslangic.Date <= tarih && a.SegmentBitis.Date > tarih)
+                    .Select(a => a.RezervasyonId)
+                    .Distinct()
+                    .Count()
+            };
+        }).ToList();
+
+        var doluOdaIds = segmentAtamalari
+            .Where(a => a.SegmentBaslangic.Date <= bugun && a.SegmentBitis.Date > bugun)
+            .Select(a => a.OdaId)
+            .Union(kullanimBloklari
+                .Where(b => b.BaslangicTarihi.Date <= bugun && b.BitisTarihi.Date > bugun)
+                .Select(b => b.OdaId))
+            .Distinct()
+            .Count();
+
+        var yarin = bugun.AddDays(1);
+
+        var ozet = new OdaRezervasyonTakvimOzetDto
+        {
+            ToplamOdaSayisi = odaIds.Count,
+            DoluOdaSayisi = doluOdaIds,
+            BosOdaSayisi = odaIds.Count - doluOdaIds,
+            BugunCheckInSayisi = segmentAtamalari.Count(a => a.SegmentBaslangic.Date == bugun),
+            BugunCheckOutSayisi = segmentAtamalari.Count(a => a.SegmentBitis.Date == bugun),
+            YarinCheckInSayisi = segmentAtamalari.Count(a => a.SegmentBaslangic.Date == yarin),
+            BugunKisiSayisi = segmentAtamalari
+                .Where(a => a.SegmentBaslangic.Date <= bugun && a.SegmentBitis.Date > bugun)
+                .SelectMany(_ => new[] { _.KisiSayisi })
+                .Sum(),
+            YarinGelecekKisiSayisi = segmentAtamalari
+                .Where(a => a.SegmentBaslangic.Date == yarin)
+                .SelectMany(_ => new[] { _.KisiSayisi })
+                .Sum(),
+            DonemToplamGelir = segmentAtamalari
+                .GroupBy(a => a.RezervasyonId)
+                .Sum(g => g.First().ToplamUcret),
+            ParaBirimi = "TRY"
+        };
+
+        return new OdaRezervasyonTakvimiDto
+        {
+            TesisId = tesisId,
+            TesisAdi = tesisBilgi.Ad,
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            GunSayisi = gunSayisi,
+            Gunler = gunler,
+            OdaTipleri = odaTipiGruplari,
+            Ozet = ozet
+        };
+    }
 }

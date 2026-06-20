@@ -1,0 +1,13 @@
+{
+  "productCode": "STYS",
+  "licenseFilePath": "Data/license.json",
+  "environmentName": "Production",
+  "instanceId": "instance-01",
+  "customerCode": "trt-trabzon",
+  "deploymentMarker": "stys-prod",
+  "fingerprintProfile": "Container",
+  "runtimeFingerprintHash": "E8ywFuocnmQbvV80qJWbRbIJEtAiuy+Ce792p6CEQcE=",
+  "runtimeMachineName": "a8e0a66e5739",
+  "runtimeOsDescription": "Ubuntu 24.04.4 LTS",
+  "requiresDeploymentMarker": true
+}

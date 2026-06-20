@@ -355,6 +355,26 @@ public class RezervasyonController : UIController
         return File(fileBytes, "application/pdf", fileName);
     }
 
+    [HttpGet("oda-rezervasyon-takvimi")]
+    [Permission(StructurePermissions.OdaRezervasyonTakvimiYonetimi.View)]
+    public async Task<ActionResult<OdaRezervasyonTakvimiDto>> GetOdaRezervasyonTakvimi(
+        [FromQuery] int tesisId,
+        [FromQuery] DateTime baslangicTarihi,
+        [FromQuery] int gunSayisi = 14,
+        [FromQuery] int? odaTipiId = null,
+        [FromQuery] string? durum = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _rezervasyonService.GetOdaRezervasyonTakvimiAsync(
+            tesisId,
+            baslangicTarihi,
+            gunSayisi,
+            odaTipiId,
+            durum,
+            cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("kayitlar/{rezervasyonId:int}/satis-belgesi-taslagi-olustur")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
     public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(

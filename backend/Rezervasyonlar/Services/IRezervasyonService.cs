@@ -88,4 +88,12 @@ public interface IRezervasyonService
         CancellationToken cancellationToken = default);
 
     Task<OdemeRaporDto> GetOdemeRaporuAsync(IReadOnlyCollection<int> tesisIds, DateTime baslangicTarihi, DateTime bitisTarihi, CancellationToken cancellationToken = default);
+
+    Task<OdaRezervasyonTakvimiDto> GetOdaRezervasyonTakvimiAsync(
+        int tesisId,
+        DateTime baslangicTarihi,
+        int gunSayisi,
+        int? odaTipiId,
+        string? durum,
+        CancellationToken cancellationToken = default);
 }

@@ -198,14 +198,25 @@ export class OdaRezervasyonTakvimi implements OnInit {
         // +1 çünkü room-days-area kendi nested grid'i; oda bilgi sütunu burada yok
         const start = blok.baslangicGunIndex + 1;
         const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
-        const end = start + Math.max(1, blok.gunUzunlugu) + checkoutEklendi;
+        // gunUzunlugu 0 olabilir (sadece checkout kuyruğu): en az 1 sütun kapla
+        const end = Math.max(start + 1, start + blok.gunUzunlugu + checkoutEklendi);
         return `${start} / ${end}`;
     }
 
-    getBlokStyle(blok: OdaRezervasyonBlokDto): Record<string, string> {
+    getBlokLeft(blok: OdaRezervasyonBlokDto): string {
+        if (blok.solKenaraDevamEdiyor) return '0';
+        // Giriş bu takvimde → giriş sütununun sağ yarısından başla
         const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
-        const dispCols = Math.max(1, blok.gunUzunlugu) + checkoutEklendi;
-        return { '--disp-cols': dispCols.toString() };
+        const dispCols = Math.max(1, blok.gunUzunlugu + checkoutEklendi);
+        return `${50 / dispCols}%`;
+    }
+
+    getBlokRight(blok: OdaRezervasyonBlokDto): string {
+        if (blok.sagKenaraDevamEdiyor) return '0';
+        // Çıkış bu takvimde → çıkış sütununun sol yarısında bitir
+        const checkoutEklendi = 1;
+        const dispCols = Math.max(1, blok.gunUzunlugu + checkoutEklendi);
+        return `${50 / dispCols}%`;
     }
 
     getBlokTooltip(blok: OdaRezervasyonBlokDto): string {

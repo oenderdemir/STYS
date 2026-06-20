@@ -6505,9 +6505,10 @@ public class RezervasyonService : IRezervasyonService
                         // Geceleme mantığı: giriş dahil, çıkış hariç
                         var geceSayisi = Math.Max(1, (blokCikis - blokGiris).Days);
                         var startIdx = Math.Max(0, (blokGiris - baslangic).Days);
-                        // bitisExclusiveIndex: çıkış tarihi geceleme sayılmaz
+                        // bitisExclusiveIndex: çıkış tarihi geceleme olarak sayılmaz
                         var endIdx = Math.Min(gunSayisi, (blokCikis - baslangic).Days);
-                        var uzunluk = Math.Max(1, endIdx - startIdx);
+                        // 0'a izin ver: sadece checkout kuyruğu görünecek durumlar için
+                        var uzunluk = Math.Max(0, endIdx - startIdx);
 
                         var solDevam = blokGiris < baslangic;
                         var sagDevam = blokCikis > bitis;

@@ -1,4 +1,4 @@
 window.__env = {
-    apiBaseUrl: "/api",
+    apiBaseUrl: "/stys/api",
     sessionInactivityTimeoutMs: 600000
 };

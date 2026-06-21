@@ -5,7 +5,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm install --no-audit --no-fund
 
 COPY frontend/ ./
-RUN npm run build
+RUN npm run build -- --base-href /stys/ --deploy-url /stys/
 
 FROM nginx:1.27-alpine AS runtime
 

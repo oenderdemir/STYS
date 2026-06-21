@@ -17,6 +17,11 @@ export function getApiBaseUrl(): string {
         return defaultApiBaseUrl;
     }
 
+    const derivedApiBaseUrl = deriveApiBaseUrlFromBaseHref();
+    if (derivedApiBaseUrl) {
+        return derivedApiBaseUrl;
+    }
+
     const configuredApiBaseUrl = window.__env?.apiBaseUrl;
     if (typeof configuredApiBaseUrl !== 'string' || configuredApiBaseUrl.trim().length === 0) {
         return defaultApiBaseUrl;
@@ -36,4 +41,26 @@ export function getSessionInactivityTimeoutMs(): number {
     }
 
     return configuredTimeout;
+}
+
+function deriveApiBaseUrlFromBaseHref(): string | null {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    const baseHref = document.querySelector('base[href]')?.getAttribute('href')?.trim();
+    if (!baseHref) {
+        return null;
+    }
+
+    if (baseHref === '/' || baseHref === './' || baseHref === '') {
+        return null;
+    }
+
+    const normalizedBaseHref = baseHref.replace(/\/+$/, '');
+    if (!normalizedBaseHref.startsWith('/')) {
+        return null;
+    }
+
+    return `${normalizedBaseHref}/api`;
 }

@@ -27,22 +27,13 @@ public class StysScopedUserService : BaseUserService
         StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir,
         StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir
     ];
-    private static readonly string[] AssignableMarkerRoleNames =
-    [
-        nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir),
-        nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir)
-    ];
-
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IDomainOperationLogger _domainLogger;
+    private readonly IManageableUserScopeService _manageableUserScopeService;
 
     public StysScopedUserService(
         IUserRepository userRepository,
@@ -55,7 +46,8 @@ public class StysScopedUserService : BaseUserService
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         AutoMapper.IMapper mapper,
-        IDomainOperationLogger domainLogger)
+        IDomainOperationLogger domainLogger,
+        IManageableUserScopeService manageableUserScopeService)
         : base(userRepository, userGroupRepository, passwordHasher, tokenInvalidationService, mapper)
     {
         _stysDbContext = stysDbContext;
@@ -64,29 +56,30 @@ public class StysScopedUserService : BaseUserService
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _domainLogger = domainLogger;
+        _manageableUserScopeService = manageableUserScopeService;
     }
 
     public override async Task<IEnumerable<UserDto>> GetAllAsync(Func<IQueryable<User>, IQueryable<User>>? include = null)
     {
-        var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
-
         var query = include is null
             ? Repository.Where(_ => true)
             : include(Repository.Where(_ => true));
 
-        if (actorScope.IsTesisManagerScoped)
+        var manageableIds = await _manageableUserScopeService.GetManageableUserIdsAsync();
+        if (manageableIds is null)
         {
-            var manageableUserIds = await GetManageableUserIdsForScopedManagerAsync(actorScope);
-            if (manageableUserIds.Count == 0)
-            {
-                return [];
-            }
-
-            query = query.Where(x => manageableUserIds.Contains(x.Id));
+            var users = await query.ToListAsync();
+            return Mapper.Map<IEnumerable<UserDto>>(users);
         }
 
-        var users = await query.ToListAsync();
-        return Mapper.Map<IEnumerable<UserDto>>(users);
+        if (manageableIds.Count == 0)
+        {
+            return [];
+        }
+
+        query = query.Where(x => manageableIds.Contains(x.Id));
+        var filteredUsers = await query.ToListAsync();
+        return Mapper.Map<IEnumerable<UserDto>>(filteredUsers);
     }
 
     public override async Task<UserDto?> GetByIdAsync(Guid id, Func<IQueryable<User>, IQueryable<User>>? include = null)
@@ -378,70 +371,6 @@ public class StysScopedUserService : BaseUserService
         await _stysDbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<HashSet<Guid>> GetManageableUserIdsForScopedManagerAsync(
-        UserActorScope actorScope,
-        CancellationToken cancellationToken = default)
-    {
-        if (!actorScope.IsTesisManagerScoped || actorScope.ManagedTesisIds.Count == 0)
-        {
-            return [];
-        }
-
-        var ownerScopedUserIds = await _stysDbContext.KullaniciTesisSahiplikleri
-            .Where(x => x.TesisId.HasValue && actorScope.ManagedTesisIds.Contains(x.TesisId.Value))
-            .Select(x => x.UserId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        if (ownerScopedUserIds.Count == 0)
-        {
-            return [];
-        }
-
-        var actorPermissions = await GetCurrentUserPermissionSetAsync(cancellationToken);
-        var manageableMarkerRoleNames = GetManageableAssignableMarkerRoleNames(actorPermissions);
-        if (manageableMarkerRoleNames.Count == 0)
-        {
-            return [];
-        }
-
-        var markerRows = await _identityDbContext.UserUserGroups
-            .Where(x => ownerScopedUserIds.Contains(x.UserId))
-            .SelectMany(x => x.UserGroup.UserGroupRoles
-                .Where(ugr =>
-                    ugr.Role.Domain == nameof(StructurePermissions.KullaniciAtama)
-                    && AssignableMarkerRoleNames.Contains(ugr.Role.Name))
-                .Select(ugr => new
-                {
-                    x.UserId,
-                    MarkerRoleName = ugr.Role.Name
-                }))
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var markersByUserId = markerRows
-            .GroupBy(x => x.UserId)
-            .ToDictionary(
-                x => x.Key,
-                x => x.Select(y => y.MarkerRoleName).ToHashSet(StringComparer.OrdinalIgnoreCase));
-
-        var manageableUserIds = new HashSet<Guid>();
-        foreach (var userId in ownerScopedUserIds)
-        {
-            if (!markersByUserId.TryGetValue(userId, out var markerRoleNames) || markerRoleNames.Count == 0)
-            {
-                continue;
-            }
-
-            if (markerRoleNames.All(markerRoleName => manageableMarkerRoleNames.Contains(markerRoleName)))
-            {
-                manageableUserIds.Add(userId);
-            }
-        }
-
-        return manageableUserIds;
-    }
-
     private async Task<Dictionary<Guid, string>> GetManageableGroupPermissionMapAsync(CancellationToken cancellationToken)
     {
         var groupRoleRows = await _identityDbContext.UserGroupRoles
@@ -646,40 +575,4 @@ public class StysScopedUserService : BaseUserService
         throw new InvalidOperationException("Desteklenmeyen atanabilir grup marker izni.");
     }
 
-    private static HashSet<string> GetManageableAssignableMarkerRoleNames(IReadOnlySet<string> actorPermissions)
-    {
-        var manageableMarkerRoleNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.TesisYoneticisiAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.TesisYoneticisiAtanabilir));
-        }
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.BinaYoneticisiAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.BinaYoneticisiAtanabilir));
-        }
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.RestoranYoneticisiAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.RestoranYoneticisiAtanabilir));
-        }
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.RestoranGarsonuAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.RestoranGarsonuAtanabilir));
-        }
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.ResepsiyonistAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.ResepsiyonistAtanabilir));
-        }
-
-        if (HasPermission(actorPermissions, StructurePermissions.KullaniciAtama.MuhasebeciAtayabilir))
-        {
-            manageableMarkerRoleNames.Add(nameof(StructurePermissions.KullaniciAtama.MuhasebeciAtanabilir));
-        }
-
-        return manageableMarkerRoleNames;
-    }
 }

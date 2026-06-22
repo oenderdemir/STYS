@@ -1,4 +1,10 @@
 FROM node:22-alpine AS build
+
+ARG APP_VERSION=unknown
+ARG IMAGE_TAG=unknown
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+
 WORKDIR /src/frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
@@ -6,6 +12,11 @@ RUN npm install --no-audit --no-fund
 
 COPY frontend/ ./
 RUN npm run build -- --base-href /stys/ --deploy-url /stys/
+
+RUN mkdir -p /src/frontend/dist/sakai-ng/browser/assets \
+    && printf '{"application":"STYS Frontend","version":"%s","imageTag":"%s","gitSha":"%s","buildTime":"%s"}\n' \
+        "$APP_VERSION" "$IMAGE_TAG" "$GIT_SHA" "$BUILD_TIME" \
+        > /src/frontend/dist/sakai-ng/browser/assets/version.json
 
 FROM nginx:1.27-alpine AS runtime
 

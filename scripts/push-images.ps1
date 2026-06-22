@@ -4,7 +4,10 @@ param(
     [string]$SshKeyPath = "id_ed25519",
     [string]$RemoteDir = "/root/stys",
     [string]$ComposeFilePath = "docker-compose.yml",
-    [string]$Tag = "latest"
+    [Parameter(Mandatory = $true)][string]$AppVersion,
+    [Parameter(Mandatory = $true)][string]$GitSha,
+    [Parameter(Mandatory = $true)][string]$ShortGitSha,
+    [Parameter(Mandatory = $true)][string]$BuildTime
 )
 
 Set-StrictMode -Version Latest
@@ -120,7 +123,10 @@ if (-not (Test-Path -LiteralPath $envFilePath)) {
     throw ".env dosyasi bulunamadi: $envFilePath"
 }
 
-$env:STYS_IMAGE_TAG = $Tag
+# Full image tag: AppVersion + ShortGitSha (e.g. v1.0.11-d5ba8148)
+$FullTag = "$AppVersion-$ShortGitSha"
+$env:STYS_IMAGE_TAG = $FullTag
+
 $composeConfig = Get-ComposeConfig
 $backendImageReference = $composeConfig.services.backend.image
 $frontendImageReference = $composeConfig.services.frontend.image
@@ -131,8 +137,7 @@ if ($backendImageInfo.Tag -ne $frontendImageInfo.Tag) {
     throw "Backend ve frontend image tag'leri farkli: $($backendImageInfo.Tag) / $($frontendImageInfo.Tag)"
 }
 
-$Tag = $backendImageInfo.Tag
-$artifactDir = Join-Path $projectRoot "artifacts\deploy\$Tag"
+$artifactDir = Join-Path $projectRoot "artifacts\deploy\$AppVersion"
 New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
 $backendTar = Join-Path $artifactDir "backend.tar"
@@ -147,8 +152,29 @@ if (-not [System.IO.Path]::IsPathRooted($resolvedSshKeyPath)) {
     }
 }
 
-Write-Host "Image build basliyor..."
-Invoke-NativeCommand docker @('compose', 'build', 'backend', 'frontend')
+Write-Host "Image build basliyor (tag: $FullTag)..."
+
+Invoke-NativeCommand docker @(
+    'build',
+    '--build-arg', "APP_VERSION=$AppVersion",
+    '--build-arg', "IMAGE_TAG=$backendImageReference",
+    '--build-arg', "GIT_SHA=$ShortGitSha",
+    '--build-arg', "BUILD_TIME=$BuildTime",
+    '-t', $backendImageReference,
+    '-f', 'backend/Dockerfile',
+    '.'
+)
+
+Invoke-NativeCommand docker @(
+    'build',
+    '--build-arg', "APP_VERSION=$AppVersion",
+    '--build-arg', "IMAGE_TAG=$frontendImageReference",
+    '--build-arg', "GIT_SHA=$ShortGitSha",
+    '--build-arg', "BUILD_TIME=$BuildTime",
+    '-t', $frontendImageReference,
+    '-f', 'frontend/Dockerfile',
+    '.'
+)
 
 Write-Host "Image archive olusturuluyor..."
 Invoke-NativeCommand docker @('save', '-o', $backendTar, $backendImageReference)
@@ -189,13 +215,13 @@ else
     printf 'STYS_IMAGE_TAG=%s\n' '__TAG__' > .env
 fi
 '@
-$remoteEnvUpdate = $remoteEnvUpdate.Replace('__REMOTE_DIR__', $RemoteDir).Replace('__TAG__', $Tag)
+$remoteEnvUpdate = $remoteEnvUpdate.Replace('__REMOTE_DIR__', $RemoteDir).Replace('__TAG__', $FullTag)
 Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, $remoteEnvUpdate)
 
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"
 Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.yml"
-Write-Host " - ${remoteTarget}:$RemoteDir/.env (STYS_IMAGE_TAG guncellendi)"
+Write-Host " - ${remoteTarget}:$RemoteDir/.env (STYS_IMAGE_TAG=$FullTag olarak guncellendi)"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/stys-image.env"

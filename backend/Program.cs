@@ -232,6 +232,16 @@ await app.ValidateLicenseOnStartupAsync();
 app.UseTodLicenseGuard();
 app.MapTodPlatformHealthChecks();
 app.MapControllers();
+
+app.MapGet("/ui/version", (IWebHostEnvironment env) => Results.Ok(new
+{
+    application = "STYS Backend",
+    version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "unknown",
+    imageTag = Environment.GetEnvironmentVariable("IMAGE_TAG") ?? "unknown",
+    gitSha = Environment.GetEnvironmentVariable("GIT_SHA") ?? "unknown",
+    buildTime = Environment.GetEnvironmentVariable("BUILD_TIME") ?? "unknown",
+    environment = env.EnvironmentName
+}));
 app.MapHub<BildirimHub>(BildirimHub.HubRoute)
     .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
 

@@ -25,6 +25,8 @@ import { NotificationService } from '../../core/notifications/notification.servi
 import { NotificationSeverityValues, NotificationViewModel } from '../../core/notifications/notification.model';
 import { NotificationPreferenceDto } from '../../core/notifications/notification-preference.model';
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
+import { VersionService } from '../../core/version/version.service';
+import { BackendVersionInfo, VersionInfo } from '../../core/version/version.model';
 
 @Component({
     selector: 'app-topbar',
@@ -322,6 +324,81 @@ import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
             <ng-template #footer>
                 <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="changePasswordErrorDialogVisible = false" />
             </ng-template>
+        </p-dialog>
+
+        <p-dialog
+            header="Sürüm Bilgisi"
+            [(visible)]="versionDialogVisible"
+            [modal]="true"
+            [style]="{ width: '38rem', 'max-width': '96vw' }"
+            [breakpoints]="{ '960px': '96vw' }"
+        >
+            @if (isLoadingVersion) {
+                <div style="padding: 1.5rem; text-align: center; color: var(--text-color-secondary);">
+                    <i class="pi pi-spin pi-spinner" style="font-size: 1.5rem;"></i>
+                    <div style="margin-top: 0.5rem;">Yükleniyor...</div>
+                </div>
+            } @else {
+                <div class="flex flex-col gap-4">
+                    <div style="border: 1px solid var(--surface-border); border-radius: 0.5rem; padding: 1rem;">
+                        <div style="font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="pi pi-desktop"></i>
+                            <span>{{ frontendVersion?.application ?? 'STYS Frontend' }}</span>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary); width: 6.5rem;">Sürüm</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-weight: 600;">{{ frontendVersion?.version ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Image Tag</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-size: 0.8rem; word-break: break-all;">{{ frontendVersion?.imageTag ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Git SHA</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace;">{{ frontendVersion?.gitSha ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Build Time</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-size: 0.8rem;">{{ frontendVersion?.buildTime ?? '-' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="border: 1px solid var(--surface-border); border-radius: 0.5rem; padding: 1rem;">
+                        <div style="font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="pi pi-server"></i>
+                            <span>{{ backendVersion?.application ?? 'STYS Backend' }}</span>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary); width: 6.5rem;">Sürüm</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-weight: 600;">{{ backendVersion?.version ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Image Tag</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-size: 0.8rem; word-break: break-all;">{{ backendVersion?.imageTag ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Git SHA</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace;">{{ backendVersion?.gitSha ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Build Time</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace; font-size: 0.8rem;">{{ backendVersion?.buildTime ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.25rem 0.5rem 0.25rem 0; color: var(--text-color-secondary);">Ortam</td>
+                                <td style="padding: 0.25rem 0; font-family: monospace;">{{ backendVersion?.environment ?? '-' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            <ng-template #footer>
+                <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="versionDialogVisible = false" />
+            </ng-template>
         </p-dialog>`
 })
 export class AppTopbar {
@@ -332,6 +409,7 @@ export class AppTopbar {
     private readonly notificationService = inject(NotificationService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private readonly versionService = inject(VersionService);
     @ViewChild('profileMenu') private profileMenu?: Menu;
     @ViewChild('notificationPopover') private notificationPopover?: Popover;
 
@@ -376,6 +454,11 @@ export class AppTopbar {
     private lastRealtimeNotificationId: number | null = null;
 
     profileMenuItems: MenuItem[] = [];
+
+    versionDialogVisible = false;
+    isLoadingVersion = false;
+    frontendVersion: VersionInfo | null = null;
+    backendVersion: BackendVersionInfo | null = null;
 
     constructor() {
         effect(() => {
@@ -448,6 +531,11 @@ export class AppTopbar {
                 label: 'Sifre Degistir',
                 icon: 'pi pi-key',
                 command: () => this.openChangePasswordDialog()
+            },
+            {
+                label: 'Sürüm Bilgisi',
+                icon: 'pi pi-info-circle',
+                command: () => this.openVersionDialog()
             }
         ];
 
@@ -610,6 +698,34 @@ export class AppTopbar {
                 this.kurumOptionsLoading = false;
                 this.cdr.detectChanges();
             }
+        });
+    }
+
+    openVersionDialog(): void {
+        this.profileMenu?.hide();
+        this.frontendVersion = null;
+        this.backendVersion = null;
+        this.isLoadingVersion = true;
+        this.versionDialogVisible = true;
+        this.cdr.detectChanges();
+
+        let pendingCount = 2;
+        const done = () => {
+            pendingCount--;
+            if (pendingCount === 0) {
+                this.isLoadingVersion = false;
+                this.cdr.detectChanges();
+            }
+        };
+
+        this.versionService.getFrontendVersion().subscribe({
+            next: (v) => { this.frontendVersion = v; done(); },
+            error: () => done()
+        });
+
+        this.versionService.getBackendVersion().subscribe({
+            next: (v) => { this.backendVersion = v; done(); },
+            error: () => done()
         });
     }
 

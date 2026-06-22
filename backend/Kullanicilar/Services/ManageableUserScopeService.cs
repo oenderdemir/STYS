@@ -22,21 +22,34 @@ public class ManageableUserScopeService : IManageableUserScopeService
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
     public ManageableUserScopeService(
         StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
         IAccessScopeProvider accessScopeProvider,
-        ICurrentUserAccessor currentUserAccessor)
+        ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
         _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;
         _accessScopeProvider = accessScopeProvider;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
     }
 
     public async Task<IReadOnlySet<Guid>?> GetManageableUserIdsAsync(CancellationToken cancellationToken = default)
     {
+        if (_currentTenantAccessor.IsSuperAdmin())
+        {
+            return null;
+        }
+
+        if (_currentTenantAccessor.IsKurumAdmin())
+        {
+            return await GetCurrentKurumUserIdsAsync(cancellationToken);
+        }
+
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync(cancellationToken);
 
         if (!actorScope.IsTesisManagerScoped)
@@ -56,6 +69,21 @@ public class ManageableUserScopeService : IManageableUserScopeService
     {
         var manageableIds = await GetManageableUserIdsAsync(cancellationToken);
         return manageableIds is null || manageableIds.Contains(targetUserId);
+    }
+
+    private async Task<HashSet<Guid>> GetCurrentKurumUserIdsAsync(CancellationToken cancellationToken)
+    {
+        var currentKurumId = _currentTenantAccessor.GetCurrentKurumId();
+        if (!currentKurumId.HasValue)
+        {
+            return [];
+        }
+
+        return await _identityDbContext.UserKurums
+            .Where(x => x.KurumId == currentKurumId.Value && x.AktifMi && !x.IsDeleted)
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToHashSetAsync(cancellationToken);
     }
 
     private async Task<HashSet<Guid>> GetScopedManageableUserIdsAsync(

@@ -220,7 +220,7 @@ else
     printf 'STYS_IMAGE_TAG=%s\n' '__TAG__' > .env
 fi
 '@
-$remoteEnvUpdate = $remoteEnvUpdate.Replace('__REMOTE_DIR__', $RemoteDir).Replace('__TAG__', $FullTag)
+$remoteEnvUpdate = $remoteEnvUpdate.Replace("`r`n", "`n").Replace('__REMOTE_DIR__', $RemoteDir).Replace('__TAG__', $FullTag)
 Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, $remoteEnvUpdate)
 
 Write-Host ""

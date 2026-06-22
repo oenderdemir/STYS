@@ -1,6 +1,8 @@
 interface RuntimeEnvironment {
     apiBaseUrl?: string;
     sessionInactivityTimeoutMs?: number;
+    appBasePath?: string;
+    environment?: string;
 }
 
 declare global {
@@ -41,6 +43,22 @@ export function getSessionInactivityTimeoutMs(): number {
     }
 
     return configuredTimeout;
+}
+
+export function getAppBasePath(): string {
+    if (typeof window === 'undefined') {
+        return '';
+    }
+
+    return window.__env?.appBasePath ?? '';
+}
+
+export function getEnvironment(): string {
+    if (typeof window === 'undefined') {
+        return 'Development';
+    }
+
+    return window.__env?.environment ?? 'Development';
 }
 
 function deriveApiBaseUrlFromBaseHref(): string | null {

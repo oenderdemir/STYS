@@ -171,10 +171,15 @@ Invoke-NativeCommand docker @(
     '--build-arg', "IMAGE_TAG=$frontendImageReference",
     '--build-arg', "GIT_SHA=$ShortGitSha",
     '--build-arg', "BUILD_TIME=$BuildTime",
+    '--build-arg', "APP_ENV=prod",
     '-t', $frontendImageReference,
     '-f', 'frontend/Dockerfile',
     '.'
 )
+
+Write-Host "Frontend environment: prod" -ForegroundColor Green
+Write-Host "Runtime env file:     env.prod.js -> env.js" -ForegroundColor Green
+Write-Host "Base href:            /stys/" -ForegroundColor Green
 
 Write-Host "Image archive olusturuluyor..."
 Invoke-NativeCommand docker @('save', '-o', $backendTar, $backendImageReference)

@@ -369,17 +369,17 @@
             <ng-template #header>
                 <tr>
                     <th style="width: 4rem"></th>
-                    <th>Referans</th>
-                    <th>Kaynak</th>
-                    <th>Misafir Ad Soyad</th>
-                    <th>Cinsiyet</th>
-                    <th>TC Kimlik No</th>
+                    <!-- <th>Referans</th> -->
+                    <!-- <th>Kaynak</th> -->
+                    <th>Ad Soyad</th>
+                    <!-- <th>Cinsiyet</th> -->
+                    <!-- <th>TC Kimlik No</th> -->
                     <th>Telefon</th>
-                    <th>Eposta</th>
-                    <th>Pasaport</th>
+                    <!-- <th>Eposta</th> -->
+                    <!-- <th>Pasaport</th> -->
                     <th>Kisi</th>
                     <th>Katilim Ozeti</th>
-                    <th>Fiyatlama</th>
+                    <!-- <th>Fiyatlama</th> -->
                     <th>Giris</th>
                     <th>Cikis</th>
                     <th>Ucret</th>
@@ -391,7 +391,7 @@
                     <td>
                         <p-button type="button" [pRowToggler]="kayit" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
                     </td>
-                    <td>
+                    <!-- <td>
                         <div class="flex flex-column gap-1">
                             <span>{{ kayit.referansNo }}</span>
                             <p-tag
@@ -403,16 +403,16 @@
                                 <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
                             }
                         </div>
-                    </td>
-                    <td>
+                    </td> -->
+                    <!-- <td>
                         <p-tag [value]="kayit.kaynak || 'Normal'" [severity]="kayit.kaynak === 'Kamp' ? 'info' : 'secondary'" [rounded]="true" />
-                    </td>
+                    </td> -->
                     <td>{{ kayit.misafirAdiSoyadi }}</td>
-                    <td>{{ kayit.misafirCinsiyeti || '-' }}</td>
-                    <td>{{ kayit.tcKimlikNo || '-' }}</td>
+                    <!-- <td>{{ kayit.misafirCinsiyeti || '-' }}</td> -->
+                    <!-- <td>{{ kayit.tcKimlikNo || '-' }}</td> -->
                     <td>{{ kayit.misafirTelefon || '-' }}</td>
-                    <td>{{ kayit.misafirEposta || '-' }}</td>
-                    <td>{{ kayit.pasaportNo || '-' }}</td>
+                    <!-- <td>{{ kayit.misafirEposta || '-' }}</td> -->
+                    <!-- <td>{{ kayit.pasaportNo || '-' }}</td> -->
                     <td>{{ kayit.kisiSayisi }}</td>
                     <td>
                         <div class="flex flex-wrap gap-1">
@@ -421,13 +421,13 @@
                             }
                         </div>
                     </td>
-                    <td>
+                    <!-- <td>
                         <p-tag
                             [value]="kayit.fiyatlamaOzeti || '-'"
                             [severity]="getFiyatlamaOzetiSeverity(kayit.fiyatlamaOzeti)"
                             [rounded]="true"
                         />
-                    </td>
+                    </td> -->
                     <td>{{ formatDateTime(kayit.girisTarihi) }}</td>
                     <td>{{ formatDateTime(kayit.cikisTarihi) }}</td>
                     <td>

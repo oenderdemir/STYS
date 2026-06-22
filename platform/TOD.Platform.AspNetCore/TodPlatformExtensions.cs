@@ -21,9 +21,11 @@ public static class TodPlatformExtensions
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<BusinessOperationLoggingFilter>();
         services.AddTodPlatformHealthChecks();
         services.Configure<MvcOptions>(options =>
         {
+            options.Filters.AddService<BusinessOperationLoggingFilter>();
             options.Filters.Add(new ApiResponseWrapperFilter());
         });
         services.Configure<ApiBehaviorOptions>(options =>

@@ -32,12 +32,13 @@ if (-not $AllowDirtyWorkingTree) {
 Write-Host "Local tag kontrol ediliyor: $Tag"
 $localTag = git tag -l $Tag
 if ([string]::IsNullOrWhiteSpace($localTag)) {
-    Write-Host ""
-    Write-Host "HATA: Local tag bulunamadi: $Tag" -ForegroundColor Red
-    Write-Host "Olusturmak icin:" -ForegroundColor Yellow
-    Write-Host "  git tag $Tag"
-    Write-Host "Sonra deploy komutunu tekrar calistirin."
-    exit 1
+    Write-Host "Local tag bulunamadi, HEAD'e olusturuluyor: $Tag"
+    git tag $Tag
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "HATA: Local tag olusturulamadi: $Tag" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "Local tag olusturuldu: $Tag" -ForegroundColor Green
 }
 
 # --- 3. Local tag commit SHA ---

@@ -181,7 +181,7 @@ public class AccessScopeProvider : IAccessScopeProvider
             hasTesisLevelScope,
             cancellationToken);
 
-        if (!isTesisManager)
+        if (!isTesisManager || managedTesisIds.Count == 0)
         {
             _userActorScope = UserActorScope.Unrestricted();
             return;

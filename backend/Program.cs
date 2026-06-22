@@ -90,6 +90,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();
+builder.Services.AddScoped<STYS.Kullanicilar.Services.IManageableUserScopeService, STYS.Kullanicilar.Services.ManageableUserScopeService>();
 builder.Services.AddScoped<IUserService, StysScopedUserService>();
 builder.Services.AddScoped<IAccessScopeProvider, AccessScopeProvider>();
 builder.Services.AddScoped<IUserAccessScopeService, UserAccessScopeService>();

@@ -6,6 +6,8 @@ using STYS.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.MenuItems.Entities;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
+using TOD.Platform.Identity.Users.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.ErisimTeshis.Services;
@@ -15,33 +17,30 @@ public class ErisimTeshisService : IErisimTeshisService
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly IAccessScopeProvider _accessScopeProvider;
+    private readonly IUserService _userService;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
 
     public ErisimTeshisService(
         StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
-        IAccessScopeProvider accessScopeProvider)
+        IAccessScopeProvider accessScopeProvider,
+        IUserService userService,
+        ICurrentUserAccessor currentUserAccessor)
     {
         _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;
         _accessScopeProvider = accessScopeProvider;
+        _userService = userService;
+        _currentUserAccessor = currentUserAccessor;
     }
 
     public async Task<ErisimTeshisReferansDto> GetReferanslarAsync(CancellationToken cancellationToken = default)
     {
-        var actorScope = await _accessScopeProvider.GetUserActorScopeAsync(cancellationToken);
+        var allowedUserIds = await GetErisimTeshisAllowedUserIdsAsync(cancellationToken);
 
-        var usersQuery = _identityDbContext.Users
+        var users = await _identityDbContext.Users
             .AsNoTracking()
-            .Include(x => x.UserUserGroups)
-            .ThenInclude(x => x.UserGroup)
-            .AsQueryable();
-
-        if (actorScope.IsTesisManagerScoped)
-        {
-            usersQuery = usersQuery.Where(x => actorScope.VisibleUserIds.Contains(x.Id));
-        }
-
-        var users = await usersQuery
+            .Where(x => allowedUserIds.Contains(x.Id))
             .OrderBy(x => x.UserName)
             .Select(x => new
             {
@@ -100,8 +99,8 @@ public class ErisimTeshisService : IErisimTeshisService
             throw new BaseException("Gecerli bir modul seciniz.", 400);
         }
 
-        var actorScope = await _accessScopeProvider.GetUserActorScopeAsync(cancellationToken);
-        if (actorScope.IsTesisManagerScoped && !actorScope.VisibleUserIds.Contains(request.KullaniciId))
+        var allowedUserIds = await GetErisimTeshisAllowedUserIdsAsync(cancellationToken);
+        if (!allowedUserIds.Contains(request.KullaniciId))
         {
             throw new BaseException("Bu kullanici icin teshis yapma yetkiniz bulunmuyor.", 403);
         }
@@ -729,6 +728,25 @@ public class ErisimTeshisService : IErisimTeshisService
         }
 
         return $"{userName} {moduleName} menusunu gorebilir; ancak {firstBlocked.IslemAdi.ToLowerInvariant()} islemi engelli. Neden: {firstBlocked.Aciklama}";
+    }
+
+    private async Task<HashSet<Guid>> GetErisimTeshisAllowedUserIdsAsync(CancellationToken cancellationToken)
+    {
+        var manageableUsers = await _userService.GetAllAsync();
+        var currentUserId = _currentUserAccessor.GetCurrentUserId();
+
+        var userIds = manageableUsers
+            .Select(x => x.Id)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToHashSet();
+
+        if (currentUserId.HasValue)
+        {
+            userIds.Add(currentUserId.Value);
+        }
+
+        return userIds;
     }
 
     private sealed record UserScopeSnapshot(

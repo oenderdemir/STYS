@@ -21,7 +21,12 @@ Set-Location $projectRoot
 Write-Host "Tag dogrulaniyor: $Tag"
 $null = git rev-parse $Tag 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw "Git tag bulunamadi: '$Tag'. Once 'git tag $Tag' ile olusturun."
+    Write-Host "Tag bulunamadi, mevcut HEAD'e olusturuluyor: $Tag"
+    git tag $Tag
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git tag olusturulamadi: $Tag"
+    }
+    Write-Host "Tag olusturuldu: $Tag"
 }
 
 $GitSha = (git rev-list -n 1 $Tag 2>&1 | Out-String).Trim()

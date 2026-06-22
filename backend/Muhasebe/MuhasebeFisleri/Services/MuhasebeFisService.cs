@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using AutoMapper;
 using ClosedXML.Excel;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using TOD.Platform.AspNetCore.Logging;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.CariHareketler.Entities;
@@ -30,6 +32,7 @@ public class MuhasebeFisService
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IMuhasebeHesapBakiyeGuncellemeService _muhasebeHesapBakiyeGuncellemeService;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public MuhasebeFisService(
         IMuhasebeFisRepository repository,
@@ -37,7 +40,8 @@ public class MuhasebeFisService
         StysAppDbContext dbContext,
         IMuhasebeDonemService muhasebeDonemService,
         IMuhasebeHesapBakiyeGuncellemeService muhasebeHesapBakiyeGuncellemeService,
-        IUserAccessScopeService userAccessScopeService)
+        IUserAccessScopeService userAccessScopeService,
+        IDomainOperationLogger domainLogger)
         : base(repository, mapper)
     {
         _repository = repository;
@@ -45,6 +49,7 @@ public class MuhasebeFisService
         _muhasebeDonemService = muhasebeDonemService;
         _muhasebeHesapBakiyeGuncellemeService = muhasebeHesapBakiyeGuncellemeService;
         _userAccessScopeService = userAccessScopeService;
+        _domainLogger = domainLogger;
     }
 
     public async Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default)
@@ -115,6 +120,9 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     public async Task<MuhasebeFisDto> OnaylaAsync(int id, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Accounting.JournalEntry.Create.Started", new { MuhasebeFisId = id });
+
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         try
@@ -205,10 +213,31 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             // Reload
             var reloaded = await _repository.GetByIdWithSatirlarAsync(fis.Id, cancellationToken)
                 ?? throw new BaseException("Onaylanan fiş okunamadı.", 500);
+
+            sw.Stop();
+            _domainLogger.Completed("Accounting.JournalEntry.Create.Completed", new
+            {
+                MuhasebeFisId = fis.Id,
+                FisNo = fis.YevmiyeNo,
+                TesisId = fis.TesisId,
+                ToplamBorc = fis.ToplamBorc,
+                ToplamAlacak = fis.ToplamAlacak,
+                FisTarihi = fis.FisTarihi,
+                MaliYil = fis.MaliYil,
+                SatirSayisi = aktifSatirlar.Count,
+                DurationMs = sw.ElapsedMilliseconds
+            });
+
             return Mapper.Map<MuhasebeFisDto>(reloaded);
         }
-        catch
+        catch (Exception ex)
         {
+            sw.Stop();
+            _domainLogger.Failed("Accounting.JournalEntry.Create.Failed", ex, new
+            {
+                MuhasebeFisId = id,
+                DurationMs = sw.ElapsedMilliseconds
+            });
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
@@ -336,6 +365,18 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
             // Reload
             var reloaded = await _repository.GetByIdWithSatirlarAsync(orijinalFis.Id, cancellationToken)
                 ?? throw new BaseException("İptal edilen fiş okunamadı.", 500);
+
+            _domainLogger.Completed("Accounting.JournalEntry.Create.Completed", new
+            {
+                MuhasebeFisId = orijinalFis.Id,
+                TersFisId = tersFis.Id,
+                TesisId = orijinalFis.TesisId,
+                ToplamBorc = orijinalFis.ToplamBorc,
+                FisTarihi = orijinalFis.FisTarihi,
+                MaliYil = orijinalFis.MaliYil,
+                BusinessResult = "IptalTersKayit"
+            });
+
             return Mapper.Map<MuhasebeFisDto>(reloaded);
         }
         catch
@@ -1472,6 +1513,21 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
         var created = await _repository.GetByIdWithSatirlarAsync(entity.Id)
             ?? throw new BaseException("Fiş oluşturulamadı.", 500);
+
+        _domainLogger.Completed("Accounting.JournalEntry.Create.Completed", new
+        {
+            MuhasebeFisId = entity.Id,
+            FisNo = entity.FisNo,
+            TesisId = entity.TesisId,
+            ToplamBorc = entity.ToplamBorc,
+            ToplamAlacak = entity.ToplamAlacak,
+            FisTarihi = entity.FisTarihi,
+            MaliYil = entity.MaliYil,
+            Durum = entity.Durum,
+            SatirSayisi = entity.Satirlar.Count,
+            BusinessResult = "TaslakOlusturuldu"
+        });
+
         return Mapper.Map<MuhasebeFisDto>(created);
     }
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Identity;
 using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.UserGroups.DTO;
@@ -41,6 +42,7 @@ public class StysScopedUserService : BaseUserService
     private readonly IAccessScopeProvider _accessScopeProvider;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public StysScopedUserService(
         IUserRepository userRepository,
@@ -52,7 +54,8 @@ public class StysScopedUserService : BaseUserService
         IAccessScopeProvider accessScopeProvider,
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
-        AutoMapper.IMapper mapper)
+        AutoMapper.IMapper mapper,
+        IDomainOperationLogger domainLogger)
         : base(userRepository, userGroupRepository, passwordHasher, tokenInvalidationService, mapper)
     {
         _stysDbContext = stysDbContext;
@@ -60,6 +63,7 @@ public class StysScopedUserService : BaseUserService
         _accessScopeProvider = accessScopeProvider;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
+        _domainLogger = domainLogger;
     }
 
     public override async Task<IEnumerable<UserDto>> GetAllAsync(Func<IQueryable<User>, IQueryable<User>>? include = null)
@@ -103,6 +107,16 @@ public class StysScopedUserService : BaseUserService
 
     public override async Task<UserDto> AddAsync(UserDto dto)
     {
+        _domainLogger.Started("Identity.User.Create.Started", new
+        {
+            TargetUserName = dto.UserName,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            IsKurumAdmin = dto.IsKurumAdmin,
+            GrupSayisi = dto.UserGroups?.Count ?? 0
+        });
+
+        try
+        {
         await EnsureRequestedGroupsAreAllowedAsync(dto);
 
         var actorScope = await _accessScopeProvider.GetUserActorScopeAsync();
@@ -127,7 +141,28 @@ public class StysScopedUserService : BaseUserService
             await EnsureOwnerRecordForUnscopedCreateAsync(created.Id.Value, CancellationToken.None);
         }
 
+        _domainLogger.Completed("Identity.User.Create.Completed", new
+        {
+            TargetUserId = created.Id,
+            TargetUserName = created.UserName,
+            CreatedByUserId = _currentUserAccessor.GetCurrentUserId(),
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            IsKurumAdmin = created.IsKurumAdmin,
+            IsScopedUser = actorScope.IsTesisManagerScoped,
+            GrupIdList = created.UserGroups?.Select(x => x.Id).ToList()
+        });
+
         return created;
+        }
+        catch (Exception ex)
+        {
+            _domainLogger.Failed("Identity.User.Create.Failed", ex, new
+            {
+                TargetUserName = dto.UserName,
+                KurumId = _currentTenantAccessor.GetCurrentKurumId()
+            });
+            throw;
+        }
     }
 
     public override async Task<UserDto> UpdateAsync(UserDto dto)
@@ -158,6 +193,13 @@ public class StysScopedUserService : BaseUserService
         }
 
         await base.ResetPasswordAsync(id, dto);
+
+        _domainLogger.Completed("Identity.User.Password.Reset", new
+        {
+            TargetUserId = id,
+            CreatedByUserId = _currentUserAccessor.GetCurrentUserId(),
+            KurumId = _currentTenantAccessor.GetCurrentKurumId()
+        });
     }
 
     public override async Task DeleteAsync(Guid id)
@@ -179,6 +221,13 @@ public class StysScopedUserService : BaseUserService
             _stysDbContext.KullaniciTesisSahiplikleri.RemoveRange(ownerRows);
             await _stysDbContext.SaveChangesAsync();
         }
+
+        _domainLogger.Completed("Identity.User.Delete.Completed", new
+        {
+            TargetUserId = id,
+            DeletedByUserId = _currentUserAccessor.GetCurrentUserId(),
+            KurumId = _currentTenantAccessor.GetCurrentKurumId()
+        });
     }
 
     private async Task EnsureScopedManagerCanManageUserAsync(

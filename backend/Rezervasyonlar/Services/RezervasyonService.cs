@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using System.Data;
+using System.Diagnostics;
 using System.Text.Json;
 using STYS.AccessScope;
+using TOD.Platform.AspNetCore.Logging;
 using STYS.Bildirimler;
 using STYS.Bildirimler.Dto;
 using STYS.Bildirimler.Services;
@@ -34,6 +36,7 @@ public class RezervasyonService : IRezervasyonService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILicenseService _licenseService;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
@@ -41,7 +44,8 @@ public class RezervasyonService : IRezervasyonService
         IBildirimService bildirimService,
         IHttpContextAccessor httpContextAccessor,
         ILicenseService licenseService,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IDomainOperationLogger domainLogger)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -49,6 +53,7 @@ public class RezervasyonService : IRezervasyonService
         _httpContextAccessor = httpContextAccessor;
         _licenseService = licenseService;
         _currentTenantAccessor = currentTenantAccessor;
+        _domainLogger = domainLogger;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -1977,6 +1982,24 @@ public class RezervasyonService : IRezervasyonService
 
     public async Task<RezervasyonKayitSonucDto> KaydetAsync(RezervasyonKaydetRequestDto request, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Reservation.Create.Started", new
+        {
+            TesisId = request.TesisId,
+            KisiSayisi = request.KisiSayisi,
+            GirisTarihi = request.GirisTarihi,
+            CikisTarihi = request.CikisTarihi,
+            MisafirTipiId = request.MisafirTipiId,
+            KonaklamaTipiId = request.KonaklamaTipiId,
+            SegmentSayisi = request.Segmentler?.Count ?? 0,
+            UygulananIndirimSayisi = request.UygulananIndirimler?.Count ?? 0,
+            TekKisilikFiyatUygulansinMi = request.TekKisilikFiyatUygulansinMi,
+            ToplamUcret = request.ToplamUcret,
+            ParaBirimi = request.ParaBirimi
+        });
+
+        try
+        {
         await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Rezervasyon, cancellationToken);
         ValidateSaveRequest(request);
         await EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
@@ -2189,7 +2212,42 @@ public class RezervasyonService : IRezervasyonService
         await _stysDbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        sw.Stop();
+        _domainLogger.Completed("Reservation.Create.Completed", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            KisiSayisi = reservation.KisiSayisi,
+            GirisTarihi = reservation.GirisTarihi,
+            CikisTarihi = reservation.CikisTarihi,
+            GeceSayisi = (reservation.CikisTarihi - reservation.GirisTarihi).Days,
+            SegmentSayisi = reservation.Segmentler.Count,
+            OdaAtamaSayisi = reservation.Segmentler.Sum(x => x.OdaAtamalari.Count),
+            UygulananIndirimSayisi = request.UygulananIndirimler?.Count ?? 0,
+            ToplamBazUcret = reservation.ToplamBazUcret,
+            ToplamIndirimTutari = reservation.ToplamBazUcret - reservation.ToplamUcret,
+            ToplamUcret = reservation.ToplamUcret,
+            ParaBirimi = reservation.ParaBirimi,
+            DurationMs = sw.ElapsedMilliseconds
+        });
+
         return ToSaveResult(reservation);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _domainLogger.Failed("Reservation.Create.Failed", ex, new
+            {
+                TesisId = request.TesisId,
+                KisiSayisi = request.KisiSayisi,
+                GirisTarihi = request.GirisTarihi,
+                CikisTarihi = request.CikisTarihi,
+                DurationMs = sw.ElapsedMilliseconds
+            });
+            throw;
+        }
     }
 
     public async Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default)
@@ -2295,6 +2353,14 @@ public class RezervasyonService : IRezervasyonService
             },
             cancellationToken);
 
+        _domainLogger.Completed("Reservation.CheckIn.Completed", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId()
+        });
+
         return ToSaveResult(reservation);
     }
 
@@ -2381,6 +2447,14 @@ public class RezervasyonService : IRezervasyonService
                 Link = "/rezervasyon-yonetimi"
             },
             cancellationToken);
+
+        _domainLogger.Completed("Reservation.CheckOut.Completed", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId()
+        });
 
         return ToSaveResult(reservation);
     }
@@ -2617,6 +2691,16 @@ public class RezervasyonService : IRezervasyonService
             new { RezervasyonDurumu = statusBeforeCancellation },
             new { RezervasyonDurumu = reservation.RezervasyonDurumu });
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        _domainLogger.Completed("Reservation.Cancelled", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            OncekiDurum = statusBeforeCancellation
+        });
+
         return ToSaveResult(reservation);
     }
 
@@ -2906,6 +2990,19 @@ public class RezervasyonService : IRezervasyonService
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
 
+        _domainLogger.Completed("Reservation.ExtraService.Added", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            EkHizmetId = context.Tarife.EkHizmetId,
+            Miktar = request.Miktar,
+            BirimFiyat = birimFiyat,
+            ToplamTutar = toplamTutar,
+            ParaBirimi = reservation.ParaBirimi,
+            HizmetTarihi = request.HizmetTarihi
+        });
+
         return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
     }
 
@@ -3039,6 +3136,16 @@ public class RezervasyonService : IRezervasyonService
 
     public async Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Reservation.Payment.Receive.Started", new
+        {
+            ReservationId = rezervasyonId,
+            OdemeTutari = request.OdemeTutari,
+            OdemeTipi = request.OdemeTipi
+        });
+
+        try
+        {
         await _licenseService.EnsureModuleLicensedAsync(StysLicensedModules.Rezervasyon, cancellationToken);
 
         if (request.OdemeTutari <= 0)
@@ -3113,7 +3220,36 @@ public class RezervasyonService : IRezervasyonService
             },
             cancellationToken);
 
+        sw.Stop();
+        _domainLogger.Completed("Reservation.Payment.Receive.Completed", new
+        {
+            ReservationId = reservation.Id,
+            ReferansNo = reservation.ReferansNo,
+            TesisId = reservation.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            OdemeTipi = normalizedOdemeTipi,
+            OdemeTarihi = DateTime.UtcNow.Date,
+            OdemeTutari = request.OdemeTutari,
+            ParaBirimi = reservation.ParaBirimi,
+            OncekiOdenenTutar = odenenTutar,
+            YeniOdenenTutar = yeniOdenenTutar,
+            KalanTutar = yeniKalanTutar,
+            DurationMs = sw.ElapsedMilliseconds
+        });
+
         return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _domainLogger.Failed("Reservation.Payment.Receive.Failed", ex, new
+            {
+                ReservationId = rezervasyonId,
+                OdemeTutari = request.OdemeTutari,
+                DurationMs = sw.ElapsedMilliseconds
+            });
+            throw;
+        }
     }
 
     public async Task<RezervasyonDetayDto> GuncelleKonaklamaHakkiDurumuAsync(
@@ -3207,6 +3343,20 @@ public class RezervasyonService : IRezervasyonService
             });
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
+
+        if (hedefDurum == RezervasyonKonaklamaHakDurumlari.Kullanildi)
+        {
+            _domainLogger.Completed("Reservation.Entitlement.Consumed", new
+            {
+                ReservationId = rezervasyonId,
+                ReferansNo = reservation.ReferansNo,
+                TesisId = reservation.TesisId,
+                HakId = hak.Id,
+                HizmetKodu = hak.HizmetKodu,
+                OncekiDurum = oncekiDurum,
+                YeniDurum = hedefDurum
+            });
+        }
 
         return await GetRezervasyonDetayAsync(rezervasyonId, cancellationToken)
             ?? throw new BaseException("Rezervasyon detayi bulunamadi.", 404);
@@ -5813,6 +5963,11 @@ public class RezervasyonService : IRezervasyonService
 
         if (!tesisExists)
         {
+            _domainLogger.Warning("Security.Tesis.AccessDenied", new
+            {
+                RequestedTesisId = tesisId,
+                CurrentKurumId = currentKurumId
+            });
             throw new BaseException(currentKurumId.HasValue
                 ? "Bu tesis aktif kuruma ait degil."
                 : "Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
@@ -5821,6 +5976,12 @@ public class RezervasyonService : IRezervasyonService
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
         if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
         {
+            _domainLogger.Warning("Security.Scope.AccessDenied", new
+            {
+                RequestedTesisId = tesisId,
+                CurrentKurumId = currentKurumId,
+                ScopeTesisIds = scope.TesisIds
+            });
             throw new BaseException("Bu tesis altinda islem yapma yetkiniz bulunmuyor.", 403);
         }
     }

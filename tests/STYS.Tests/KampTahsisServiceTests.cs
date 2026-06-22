@@ -92,7 +92,7 @@ public class KampTahsisServiceTests
         await dbContext.SaveChangesAsync();
 
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor());
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), null!);
         var result = await service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
             KampDonemiId = 10,
@@ -124,7 +124,7 @@ public class KampTahsisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedFixtureAsync(dbContext, atamaEkle: false);
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor());
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), null!);
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {

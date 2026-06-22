@@ -2659,7 +2659,8 @@ public class RezervasyonServiceTests
             new FakeBildirimService(),
             httpContextAccessor,
             new FakeLicenseService(),
-            new FakeCurrentTenantAccessor());
+            new FakeCurrentTenantAccessor(),
+            null!);
     }
 
     private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()

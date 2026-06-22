@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
+using TOD.Platform.AspNetCore.Logging;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.CariHareketler.Entities;
@@ -29,6 +31,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly IMuhasebeFisService _muhasebeFisService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ILogger<SatisBelgesiService> _logger;
+    private readonly IDomainOperationLogger _domainLogger;
 
     /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -80,7 +83,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         IMuhasebeFisRepository muhasebeFisRepository,
         IMuhasebeFisService muhasebeFisService,
         IUserAccessScopeService userAccessScopeService,
-        ILogger<SatisBelgesiService> logger)
+        ILogger<SatisBelgesiService> logger,
+        IDomainOperationLogger domainLogger)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
@@ -89,6 +93,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         _muhasebeFisService = muhasebeFisService;
         _userAccessScopeService = userAccessScopeService;
         _logger = logger;
+        _domainLogger = domainLogger;
     }
 
     // ── Satirları include eden yardımcı ──
@@ -289,6 +294,16 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         CreateSatisBelgesiRequest request,
         CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Accounting.SalesDocument.Create.Started", new
+        {
+            BelgeTipi = request.BelgeTipi,
+            KaynakTipi = request.KaynakTipi,
+            KaynakId = request.KaynakId,
+            TesisId = request.TesisId,
+            SatirSayisi = request.Satirlar?.Count ?? 0
+        });
+
         request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken);
         if (request.CariKartId.HasValue)
         {
@@ -348,6 +363,23 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         {
             await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
         }
+
+        sw.Stop();
+        _domainLogger.Completed("Accounting.SalesDocument.Create.Completed", new
+        {
+            BelgeId = belge.Id,
+            BelgeNo = belge.BelgeNo,
+            BelgeTipi = belge.BelgeTipi,
+            KaynakTipi = belge.KaynakTipi,
+            KaynakId = belge.KaynakId,
+            TesisId = belge.TesisId,
+            CariId = belge.CariKartId,
+            GenelToplam = belge.GenelToplam,
+            ToplamMatrah = belge.ToplamMatrah,
+            ToplamKdv = belge.ToplamKdv,
+            SatirSayisi = belge.Satirlar.Count,
+            DurationMs = sw.ElapsedMilliseconds
+        });
 
         return Mapper.Map<SatisBelgesiDto>(belge);
     }
@@ -511,6 +543,20 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         belge.MuhasebeOnayTarihi = DateTime.UtcNow;
 
         await Repository.SaveChangesAsync(cancellationToken);
+
+        _domainLogger.Completed("Accounting.SalesDocument.Create.Completed", new
+        {
+            BelgeId = belge.Id,
+            BelgeNo = belge.BelgeNo,
+            BelgeTipi = belge.BelgeTipi,
+            KaynakTipi = belge.KaynakTipi,
+            KaynakId = belge.KaynakId,
+            TesisId = belge.TesisId,
+            GenelToplam = belge.GenelToplam,
+            ToplamKdv = belge.ToplamKdv,
+            YeniDurum = belge.Durum.ToString(),
+            BusinessResult = "MuhasebeOnaylandi"
+        });
     }
 
     // ──────────────────────────────────────────────
@@ -573,6 +619,20 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            _domainLogger.Completed("Accounting.SalesDocument.Create.Completed", new
+            {
+                BelgeId = belge.Id,
+                BelgeNo = belge.BelgeNo,
+                BelgeTipi = belge.BelgeTipi,
+                KaynakTipi = belge.KaynakTipi,
+                KaynakId = belge.KaynakId,
+                TesisId = belge.TesisId,
+                GenelToplam = belge.GenelToplam,
+                ToplamKdv = belge.ToplamKdv,
+                YeniDurum = belge.Durum.ToString(),
+                BusinessResult = "IptalEdildi"
+            });
         }
         catch
         {

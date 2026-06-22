@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -13,15 +14,18 @@ public class KampTahsisService : IKampTahsisService
     private readonly StysAppDbContext _dbContext;
     private readonly IKampParametreService _parametreService;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public KampTahsisService(
         StysAppDbContext dbContext,
         IKampParametreService parametreService,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IDomainOperationLogger domainLogger)
     {
         _dbContext = dbContext;
         _parametreService = parametreService;
         _currentTenantAccessor = currentTenantAccessor;
+        _domainLogger = domainLogger;
     }
 
     public async Task<KampTahsisBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -185,6 +189,16 @@ public class KampTahsisService : IKampTahsisService
 
         entity.Durum = request.Durum;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _domainLogger.Completed("Camp.Application.Allocation.Completed", new
+        {
+            KampBasvuruId = kampBasvuruId,
+            KampDonemiId = entity.KampDonemiId,
+            TesisId = entity.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            TahsisDurumu = entity.Durum,
+            Puan = entity.Puan
+        });
     }
 
     public async Task<KampTahsisOtomatikKararSonucDto> OtomatikKararUygulaAsync(
@@ -243,7 +257,7 @@ public class KampTahsisService : IKampTahsisService
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        return new KampTahsisOtomatikKararSonucDto
+        var sonuc = new KampTahsisOtomatikKararSonucDto
         {
             KampDonemiId = request.KampDonemiId,
             TesisId = request.TesisId,
@@ -253,6 +267,21 @@ public class KampTahsisService : IKampTahsisService
             TahsisEdilemeyenSayisi = tahsisEdilemeyenSayisi,
             GuncellenenKayitSayisi = guncellenenKayitSayisi
         };
+
+        _domainLogger.Completed("Camp.Application.Allocation.Completed", new
+        {
+            KampDonemiId = request.KampDonemiId,
+            TesisId = request.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            ToplamKontenjan = toplamKontenjan,
+            DegerlendirilenBasvuruSayisi = adaylar.Count,
+            TahsisEdilenSayisi = tahsisEdilenSayisi,
+            TahsisEdilemeyenSayisi = tahsisEdilemeyenSayisi,
+            GuncellenenKayitSayisi = guncellenenKayitSayisi,
+            OtomatikMi = true
+        });
+
+        return sonuc;
     }
 
     public async Task<KampNoShowIptalSonucDto> NoShowIptalUygulaAsync(int kampDonemiId, CancellationToken cancellationToken = default)

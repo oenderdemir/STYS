@@ -1,10 +1,12 @@
 using System.Text.Json;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -18,6 +20,7 @@ public class KampBasvuruService : IKampBasvuruService
     private readonly IKampParametreService _parametreService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public KampBasvuruService(
         StysAppDbContext dbContext,
@@ -25,7 +28,8 @@ public class KampBasvuruService : IKampBasvuruService
         IKampUcretHesaplamaService ucretHesaplamaService,
         IKampParametreService parametreService,
         ICurrentUserAccessor currentUserAccessor,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IDomainOperationLogger domainLogger)
     {
         _dbContext = dbContext;
         _puanlamaService = puanlamaService;
@@ -33,6 +37,7 @@ public class KampBasvuruService : IKampBasvuruService
         _parametreService = parametreService;
         _currentUserAccessor = currentUserAccessor;
         _currentTenantAccessor = currentTenantAccessor;
+        _domainLogger = domainLogger;
     }
 
     public async Task<KampBasvuruBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -148,6 +153,19 @@ public class KampBasvuruService : IKampBasvuruService
 
     public async Task<KampBasvuruDto> BasvuruOlusturAsync(KampBasvuruRequestDto request, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Camp.Application.Create.Started", new
+        {
+            KampDonemiId = request.KampDonemiId,
+            TesisId = request.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            KatilimciSayisi = request.Katilimcilar?.Count ?? 0,
+            TercihSayisi = request.Tercihler?.Count ?? 0,
+            BasvuruSahibiTipi = request.BasvuruSahibiTipi
+        });
+
+        try
+        {
         NormalizeTercihler(request);
         await _parametreService.LoadAsync(cancellationToken);
         var currentUserId = _currentUserAccessor.GetCurrentUserId();
@@ -239,7 +257,44 @@ public class KampBasvuruService : IKampBasvuruService
         await EnsureGecmisKatilimKayitlariAsync(kampBasvuruSahibi.Id, onizleme.GecmisKatilimYillari, entity.Id, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        sw.Stop();
+        _domainLogger.Completed("Camp.Application.Create.Completed", new
+        {
+            KampBasvuruId = entity.Id,
+            BasvuruNo = entity.BasvuruNo,
+            KampDonemiId = entity.KampDonemiId,
+            TesisId = entity.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            BasvuruDurumu = entity.Durum,
+            Puan = entity.Puan,
+            OncelikSirasi = entity.OncelikSirasi,
+            KatilimciSayisi = entity.KatilimciSayisi,
+            ToplamUcret = entity.DonemToplamTutar,
+            DurationMs = sw.ElapsedMilliseconds
+        });
+
+        _domainLogger.Completed("Camp.Application.Score.Calculated", new
+        {
+            KampBasvuruId = entity.Id,
+            KampDonemiId = entity.KampDonemiId,
+            TesisId = entity.TesisId,
+            Puan = entity.Puan,
+            OncelikSirasi = entity.OncelikSirasi
+        });
+
         return MapToDto(entity, kampDonemi, tesis, onizleme.Uyarilar, onizleme.GecmisKatilimYillari);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _domainLogger.Failed("Camp.Application.Create.Failed", ex, new
+            {
+                KampDonemiId = request.KampDonemiId,
+                TesisId = request.TesisId,
+                DurationMs = sw.ElapsedMilliseconds
+            });
+            throw;
+        }
     }
 
     public async Task<List<KampBasvuruDto>> GetBenimBasvurularimAsync(CancellationToken cancellationToken = default)

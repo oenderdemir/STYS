@@ -47,6 +47,7 @@ public class TenantSecurityTests
             userKurumService,
             dbContext,
             new FakeCurrentTenantAccessor(isSuperAdmin: false, isKurumAdmin: true, currentKurumId: 5),
+            null!,
             new FakeKurumLookupService());
 
         var ex = await Assert.ThrowsAsync<BaseException>(() => controller.Create(new UserDto
@@ -162,7 +163,7 @@ public class TenantSecurityTests
 
         var mapper = mapperConfig.CreateMapper();
         var repository = new UserKurumRepository(dbContext, mapper);
-        return new UserKurumService(repository, mapper);
+        return new UserKurumService(repository, dbContext, mapper);
     }
 
     private sealed class FakeUserService : IUserService

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Dto;
@@ -5,6 +6,7 @@ using STYS.Kamp.Entities;
 using STYS.Kamp.Repositories;
 using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -15,15 +17,18 @@ public class KampRezervasyonService : IKampRezervasyonService
     private readonly IKampRezervasyonRepository _rezervasyonRepository;
     private readonly StysAppDbContext _dbContext;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IDomainOperationLogger _domainLogger;
 
     public KampRezervasyonService(
         IKampRezervasyonRepository rezervasyonRepository,
         StysAppDbContext dbContext,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IDomainOperationLogger domainLogger)
     {
         _rezervasyonRepository = rezervasyonRepository;
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
+        _domainLogger = domainLogger;
     }
 
     public async Task<KampRezervasyonBaglamDto> GetBaglamAsync(CancellationToken cancellationToken = default)
@@ -99,6 +104,15 @@ public class KampRezervasyonService : IKampRezervasyonService
 
     public async Task<KampRezervasyonUretSonucDto> UretAsync(int kampBasvuruId, CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
+        _domainLogger.Started("Camp.Application.ConvertToReservation.Started", new
+        {
+            KampBasvuruId = kampBasvuruId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId()
+        });
+
+        try
+        {
         var basvuru = await ApplyKampBasvuruTenantScope(_dbContext.KampBasvurulari)
             .Include(x => x.KampBasvuruSahibi)
             .FirstOrDefaultAsync(x => x.Id == kampBasvuruId, cancellationToken)
@@ -190,11 +204,35 @@ public class KampRezervasyonService : IKampRezervasyonService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
 
+        sw.Stop();
+        _domainLogger.Completed("Camp.Application.ConvertToReservation.Completed", new
+        {
+            KampBasvuruId = kampBasvuruId,
+            KampRezervasyonId = rezervasyon.Id,
+            RezervasyonId = normalRezervasyon.Id,
+            RezervasyonNo = rezervasyon.RezervasyonNo,
+            TesisId = basvuru.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            ToplamUcret = basvuru.DonemToplamTutar,
+            DurationMs = sw.ElapsedMilliseconds
+        });
+
         return new KampRezervasyonUretSonucDto
         {
             Id = rezervasyon.Id,
             RezervasyonNo = rezervasyon.RezervasyonNo
         };
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _domainLogger.Failed("Camp.Application.ConvertToReservation.Failed", ex, new
+            {
+                KampBasvuruId = kampBasvuruId,
+                DurationMs = sw.ElapsedMilliseconds
+            });
+            throw;
+        }
     }
 
     public async Task IptalEtAsync(int id, KampRezervasyonIptalRequestDto request, CancellationToken cancellationToken = default)
@@ -219,6 +257,15 @@ public class KampRezervasyonService : IKampRezervasyonService
 
         _rezervasyonRepository.Update(rezervasyon);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _domainLogger.Completed("Camp.Payment.Refund.Completed", new
+        {
+            KampRezervasyonId = id,
+            KampBasvuruId = rezervasyon.KampBasvuruId,
+            TesisId = rezervasyon.TesisId,
+            KurumId = _currentTenantAccessor.GetCurrentKurumId(),
+            YeniDurum = rezervasyon.Durum
+        });
     }
 
     private async Task<string> GenerateRezervasyonNoAsync(int yil, CancellationToken cancellationToken)

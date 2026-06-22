@@ -10,6 +10,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.CurrentUser.Services;
 using TOD.Platform.AspNetCore.Filters;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.SharedKernel.Responses;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -21,6 +22,7 @@ public static class TodPlatformExtensions
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IDomainOperationLogger, DomainOperationLogger>();
         services.AddScoped<BusinessOperationLoggingFilter>();
         services.AddTodPlatformHealthChecks();
         services.Configure<MvcOptions>(options =>

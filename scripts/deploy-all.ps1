@@ -4,44 +4,122 @@ param(
     [string]$SshKeyPath = "id_ed25519",
     [string]$RemoteDir = "/root/stys",
     [string]$ComposeFilePath = "docker-compose.yml",
-    [Parameter(Mandatory = $true)][string]$Tag
+    [Parameter(Mandatory = $true)][string]$Tag,
+    [switch]$AllowDirtyWorkingTree
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($Tag)) {
-    throw "-Tag parametresi zorunludur. Ornek: -Tag v1.0.11"
-}
-
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDirectory
 Set-Location $projectRoot
 
-Write-Host "Tag dogrulaniyor: $Tag"
-$existingTag = git tag -l $Tag
-if ([string]::IsNullOrWhiteSpace($existingTag)) {
-    Write-Host "Tag bulunamadi, mevcut HEAD'e olusturuluyor: $Tag"
-    git tag $Tag
-    if ($LASTEXITCODE -ne 0) {
-        throw "Git tag olusturulamadi: $Tag"
+# --- 1. Working tree kontrolu ---
+if (-not $AllowDirtyWorkingTree) {
+    $dirtyFiles = git status --porcelain
+    if (-not [string]::IsNullOrWhiteSpace($dirtyFiles)) {
+        Write-Host ""
+        Write-Host "HATA: Working tree temiz degil. Once degisiklikleri commit/stash yapin." -ForegroundColor Red
+        Write-Host $dirtyFiles
+        Write-Host ""
+        Write-Host "Dirty working tree ile deploy etmek icin: -AllowDirtyWorkingTree" -ForegroundColor Yellow
+        exit 1
     }
-    Write-Host "Tag olusturuldu: $Tag"
 }
 
-$GitSha = (git rev-list -n 1 $Tag 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $GitSha.Length -lt 8) {
-    throw "Tag icin commit SHA alinamadi: $Tag"
+# --- 2. Local tag kontrolu ---
+Write-Host "Local tag kontrol ediliyor: $Tag"
+git rev-parse --verify "refs/tags/$Tag" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "HATA: Local tag bulunamadi: $Tag" -ForegroundColor Red
+    Write-Host "Olusturmak icin:" -ForegroundColor Yellow
+    Write-Host "  git tag $Tag"
+    Write-Host "Sonra deploy komutunu tekrar calistirin."
+    exit 1
+}
+
+# --- 3. Local tag commit SHA ---
+# rev-list annotated tag'i de dogru cozer (^{} olmaksizin calisir)
+$GitSha = (git rev-list -n 1 $Tag 2>&1).Trim()
+if ($LASTEXITCODE -ne 0 -or $GitSha.Length -lt 40) {
+    Write-Host "HATA: Tag icin commit SHA alinamadi: $Tag" -ForegroundColor Red
+    exit 1
 }
 $ShortGitSha = $GitSha.Substring(0, 8)
+
+# --- 4. Remote tag kontrolu ---
+Write-Host "Origin tag kontrol ediliyor: $Tag"
+$remoteLines = git ls-remote --tags origin "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>&1
+$remoteTagExists = ($LASTEXITCODE -eq 0) -and (-not [string]::IsNullOrWhiteSpace($remoteLines))
+
+if (-not $remoteTagExists) {
+    Write-Host "Origin uzerinde tag bulunamadi. Pushlanıyor: $Tag"
+    git push origin $Tag
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "HATA: Tag origin'e pushlanamadi: $Tag" -ForegroundColor Red
+        Write-Host "Deploy durduruldu."
+        exit 1
+    }
+    Write-Host "Tag origin'e pushlandı: $Tag" -ForegroundColor Green
+
+    # Push sonrasi remote SHA dogrula
+    $remoteLines = git ls-remote --tags origin "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>&1
+} else {
+    Write-Host "Tag origin uzerinde mevcut: $Tag"
+}
+
+# --- 5. Remote SHA coz ve local ile karsilastir ---
+# Annotated tag icin refs/tags/$Tag^{} satirini tercih et
+$remoteSha = $null
+foreach ($line in ($remoteLines -split "`n")) {
+    $line = $line.Trim()
+    if ($line -match '^([0-9a-f]{40})\s+refs/tags/.+\^\{\}$') {
+        $remoteSha = $Matches[1]
+        break
+    }
+}
+if (-not $remoteSha) {
+    foreach ($line in ($remoteLines -split "`n")) {
+        $line = $line.Trim()
+        if ($line -match '^([0-9a-f]{40})\s+refs/tags/') {
+            $remoteSha = $Matches[1]
+            break
+        }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($remoteSha)) {
+    Write-Host "HATA: Origin'deki tag icin SHA cozulemedi: $Tag" -ForegroundColor Red
+    exit 1
+}
+
+if ($remoteSha -ne $GitSha) {
+    Write-Host ""
+    Write-Host "HATA: Origin tag ile local tag farklı commit'e isaret ediyor." -ForegroundColor Red
+    Write-Host "  Local : $GitSha"
+    Write-Host "  Origin: $remoteSha"
+    Write-Host "Deploy durduruldu. Tag force push yapılmayacak." -ForegroundColor Yellow
+    exit 1
+}
+
+# --- 6. Deploy bilgileri ---
 $BuildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-Write-Host "Tag:       $Tag"
-Write-Host "GitSha:    $GitSha"
-Write-Host "ShortSha:  $ShortGitSha"
-Write-Host "BuildTime: $BuildTime"
+Write-Host ""
+Write-Host "=== Deploy Ozeti ===" -ForegroundColor Cyan
+Write-Host "Tag:            $Tag"
+Write-Host "Git SHA:        $GitSha"
+Write-Host "Short SHA:      $ShortGitSha"
+Write-Host "Build Time:     $BuildTime"
+Write-Host "Backend image:  stys-backend:$Tag-$ShortGitSha"
+Write-Host "Frontend image: stys-frontend:$Tag-$ShortGitSha"
+Write-Host "====================" -ForegroundColor Cyan
 Write-Host ""
 
+# --- 7. Build ve push ---
 & (Join-Path $scriptDirectory "push-images.ps1") `
     -VpsHost $VpsHost `
     -VpsUser $VpsUser `
@@ -53,6 +131,7 @@ Write-Host ""
     -ShortGitSha $ShortGitSha `
     -BuildTime $BuildTime
 
+# --- 8. Remote deploy ---
 & (Join-Path $scriptDirectory "deploy-remote.ps1") `
     -VpsHost $VpsHost `
     -VpsUser $VpsUser `

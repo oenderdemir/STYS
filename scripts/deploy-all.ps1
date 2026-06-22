@@ -19,8 +19,8 @@ $projectRoot = Split-Path -Parent $scriptDirectory
 Set-Location $projectRoot
 
 Write-Host "Tag dogrulaniyor: $Tag"
-$null = git rev-parse $Tag 2>&1
-if ($LASTEXITCODE -ne 0) {
+$existingTag = git tag -l $Tag
+if ([string]::IsNullOrWhiteSpace($existingTag)) {
     Write-Host "Tag bulunamadi, mevcut HEAD'e olusturuluyor: $Tag"
     git tag $Tag
     if ($LASTEXITCODE -ne 0) {

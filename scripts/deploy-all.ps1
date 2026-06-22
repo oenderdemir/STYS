@@ -30,8 +30,8 @@ if (-not $AllowDirtyWorkingTree) {
 
 # --- 2. Local tag kontrolu ---
 Write-Host "Local tag kontrol ediliyor: $Tag"
-git rev-parse --verify "refs/tags/$Tag" 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
+$localTag = git tag -l $Tag
+if ([string]::IsNullOrWhiteSpace($localTag)) {
     Write-Host ""
     Write-Host "HATA: Local tag bulunamadi: $Tag" -ForegroundColor Red
     Write-Host "Olusturmak icin:" -ForegroundColor Yellow

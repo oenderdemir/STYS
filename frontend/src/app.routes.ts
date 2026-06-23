@@ -100,7 +100,7 @@ export const appRoutes: Routes = [
         canActivate: [authGuard],
         canActivateChild: [authChildGuard],
         children: [
-            { path: '', component: RezervasyonDashboard, data: { breadcrumb: ['Ana Menu', 'Dashboard'] } },
+            { path: '', component: RezervasyonDashboard, data: { } },
             { path: 'kullanicilar', component: KullaniciYonetimi, data: { breadcrumb: ['Yetkilendirme', 'Kullanicilar'] } },
             { path: 'kullanici-gruplar', component: KullaniciGrupYonetimi, data: { breadcrumb: ['Yetkilendirme', 'Kullanici Gruplari'] } },
             { path: 'yetkiler', component: RolYonetimi, data: { breadcrumb: ['Yetkilendirme', 'Yetkiler'] } },

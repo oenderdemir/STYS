@@ -256,12 +256,12 @@
         @for (senaryo of senaryolar; track senaryo.senaryoKodu) {
             <div class="col-span-12">
                 <div class="card">
-                    <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center justify-between">
                         <div>
                             <h6 class="m-0">{{ senaryo.senaryoKodu }}</h6>
-                            <span class="text-sm">{{ senaryo.aciklama }}</span>
+                            
                             @if (getScenarioSharedRoomGenderBadgeLabel(senaryo); as badgeLabel) {
-                                <div class="mt-2">
+                                <div>
                                     <p-tag
                                         [value]="badgeLabel"
                                         [severity]="getScenarioSharedRoomGenderBadgeSeverity(senaryo)"
@@ -269,7 +269,7 @@
                                     />
                                 </div>
                             }
-                            <div class="mt-2">
+                            <div>
                                 <p-tag
                                     [value]="getScenarioPricingLabel(senaryo)"
                                     [severity]="getScenarioPricingSeverity(senaryo)"
@@ -277,20 +277,52 @@
                                 />
                             </div>
                         </div>
+                        <div>
+    <div >
+        <span class="text-sm">{{ senaryo.aciklama }}</span>
+    </div>
+
                         <div class="flex items-center gap-3">
+                          
                             <div class="text-sm">
                                 Oda: {{ senaryo.toplamOdaSayisi }} | Degisim: {{ senaryo.odaDegisimSayisi }}
                             </div>
                             <p-button
                                 [label]="formatCurrency(senaryo.toplamNihaiUcret, senaryo.paraBirimi)"
                                 icon="pi pi-money-bill"
-                                severity="secondary"
+                                severity="info"
                                 [outlined]="true"
-                                size="small"
-                                [disabled]="true"
+                                size="large"
+                                [disabled]="false"
                                 pTooltip="Fiyat detayi"
                                 tooltipPosition="top"
                             />
+                            <!-- <div
+                                    class="flex align-items-center gap-2
+                                        bg-primary border-round-xl px-4 py-2 shadow-2"
+                                >
+                                    <i class="pi pi-wallet text-white"></i>
+
+                                    <span class="text-white font-bold text-xl">
+                                        {{ formatCurrency(senaryo.toplamNihaiUcret, senaryo.paraBirimi) }}
+                                    </span>
+                                </div> -->
+                            <!-- <p-tag
+                                severity="success"
+                                [value]="formatCurrency(senaryo.toplamNihaiUcret, senaryo.paraBirimi)"
+                                icon="pi pi-money-bill"
+                                size="large"
+                                styleClass="text-xl px-4 py-3 font-bold"
+                            />
+
+                            <div    class="flex align-items-center gap-2 px-4 py-3 border-round-lg surface-100 border-1 border-primary">
+                                <i class="pi pi-wallet text-primary text-2xl"></i>
+                                <div>
+                                    <div class="text-3xl font-bold text-primary">
+                                        {{ formatCurrency(senaryo.toplamNihaiUcret, senaryo.paraBirimi) }}
+                                    </div>
+                                </div>
+                            </div> -->
                             @if (canManage) {
                                 <p-button
                                     label="Bu Senaryo ile Rezerve Et"
@@ -301,6 +333,7 @@
                                 />
                             }
                         </div>
+                    </div>
                     </div>
 
                     @for (segment of senaryo.segmentler; track $index) {
@@ -368,8 +401,8 @@
         <p-table [value]="filteredRezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }">
             <ng-template #header>
                 <tr>
-                    <th style="width: 4rem"></th>
-                    <!-- <th>Referans</th> -->
+                    <th ></th>
+                    <th><!-- Referans --></th> 
                     <!-- <th>Kaynak</th> -->
                     <th>Ad Soyad</th>
                     <!-- <th>Cinsiyet</th> -->
@@ -391,9 +424,9 @@
                     <td>
                         <p-button type="button" [pRowToggler]="kayit" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
                     </td>
-                    <!-- <td>
-                        <div class="flex flex-column gap-1">
-                            <span>{{ kayit.referansNo }}</span>
+                     <td>
+                        <!-- <div class="flex flex-column gap-1"> -->
+                         <!--   <span>{{ kayit.referansNo }}</span>-->
                             <p-tag
                                 [value]="getRezervasyonDurumLabel(kayit.rezervasyonDurumu)"
                                 [severity]="getRezervasyonDurumSeverity(kayit.rezervasyonDurumu)"
@@ -402,8 +435,8 @@
                             @if (kayit.odaDegisimiGerekli) {
                                 <p-tag value="Oda Degisimi Gerekli" severity="danger" [rounded]="true" />
                             }
-                        </div>
-                    </td> -->
+                        <!-- </div> -->
+                    </td> 
                     <!-- <td>
                         <p-tag [value]="kayit.kaynak || 'Normal'" [severity]="kayit.kaynak === 'Kamp' ? 'info' : 'secondary'" [rounded]="true" />
                     </td> -->

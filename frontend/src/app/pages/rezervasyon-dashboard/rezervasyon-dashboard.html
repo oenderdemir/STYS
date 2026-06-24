@@ -166,7 +166,13 @@
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
                 <div class="kpi-card kpi-card--emerald">
-                    <div class="text-xs text-color-secondary mb-1">Doluluk Orani</div>
+
+                    <div class="flex justify-between align-items-start mb-1">
+    <div class="text-xs text-color-secondary">Doluluk Orani</div>
+    <div class="text-xs text-color-secondary">
+        Trend: {{ getTrendValuesPreview('doluluk') }}
+    </div>
+</div>
                     <div class="text-xl font-semibold">{{ formatPercent(getKpiOzet().dolulukOraniYuzde) }}</div>
                     <div class="mt-2 mb-1">
                         <svg viewBox="0 0 100 24" class="w-full" style="height: 2rem;">
@@ -194,7 +200,7 @@
                         <span>{{ getTrendStartLabel() }}</span>
                         <span>{{ getTrendEndLabel() }}</span>
                     </div>
-                    <div class="text-xs text-color-secondary">Trend: {{ getTrendValuesPreview('doluluk') }}</div>
+                    
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
@@ -205,7 +211,12 @@
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">
                 <div class="kpi-card kpi-card--emerald">
-                    <div class="text-xs text-color-secondary mb-1">Toplam Gelir</div>
+<div class="flex justify-between align-items-start mb-1">
+    <div class="text-xs text-color-secondary">Toplam Gelir</div>
+    <div class="text-xs text-color-secondary">
+        Trend: {{ getTrendValuesPreview('gelir') }}
+    </div>
+</div>
                     <div class="text-xl font-semibold">{{ formatMoney(getKpiOzet().toplamGelir) }} TRY</div>
                     <div class="mt-2 mb-1">
                         <svg viewBox="0 0 100 24" class="w-full" style="height: 2rem;">
@@ -233,7 +244,7 @@
                         <span>{{ getTrendStartLabel() }}</span>
                         <span>{{ getTrendEndLabel() }}</span>
                     </div>
-                    <div class="text-xs text-color-secondary">Trend: {{ getTrendValuesPreview('gelir') }}</div>
+                    
                 </div>
             </div>
             <div class="col-span-12 sm:col-span-6 lg:col-span-3">

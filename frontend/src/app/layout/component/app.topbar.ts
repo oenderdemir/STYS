@@ -47,7 +47,6 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
                     alt="STYS"
                     (error)="onKurumLogoError($event)"
                 />
-                <span class="layout-topbar-logo-title">STYS</span>
             </a>
         </div>
 

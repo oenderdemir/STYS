@@ -61,24 +61,10 @@
     flex-shrink: 0;
 }
 
-.layout-topbar-logo-title {
-    max-width: 12rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--text-color);
-}
-
 @media (max-width: 768px) {
     .topbar-kurum-logo {
         height: 2.25rem;
         max-width: 8rem;
-    }
-
-    .layout-topbar-logo-title {
-        display: none;
     }
 }
 

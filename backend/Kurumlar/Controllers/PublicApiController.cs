@@ -6,11 +6,12 @@ using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Kurumlar.Controllers;
 
-public class PublicController : UIController
+[Route("api/public")]
+public class PublicApiController : UIController
 {
     private readonly ITenantBrandingService _tenantBrandingService;
 
-    public PublicController(ITenantBrandingService tenantBrandingService)
+    public PublicApiController(ITenantBrandingService tenantBrandingService)
     {
         _tenantBrandingService = tenantBrandingService;
     }

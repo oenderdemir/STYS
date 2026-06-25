@@ -44,6 +44,38 @@
     pointer-events: none;
 }
 
+.layout-topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    text-decoration: none;
+}
+
+.logo-img {
+    height: 2.75rem;
+    max-width: 10rem;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.layout-topbar-logo-title {
+    max-width: 12rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+
+@media (max-width: 768px) {
+    .layout-topbar-logo-title {
+        display: none;
+    }
+}
+
 .layout-topbar-kurum-switcher {
     display: inline-flex;
     align-items: center;

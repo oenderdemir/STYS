@@ -41,9 +41,17 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
                 <i class="pi pi-bars"></i>
             </button>
             <a class="layout-topbar-logo" routerLink="/">
-
-               <img src="logo.png" class="logo-img" style="width:100px;" />
-                    <!-- <span>STYS</span> -->
+                <img
+                    [src]="activeKurumLogoSrc()"
+                    [style.height.px]="44"
+                    [style.width]="'auto'"
+                    [style.max-width]="'160px'"
+                    [style.object-fit]="'contain'"
+                    [style.flex-shrink]="'0'"
+                    alt="STYS"
+                    (error)="onKurumLogoError($event)"
+                />
+                <span class="layout-topbar-logo-title">STYS</span>
             </a>
         </div>
 
@@ -559,6 +567,36 @@ export class AppTopbar {
         this.profileMenuItems = items;
     }
 
+    activeKurum(): KurumModel | null {
+        const id = this.selectedKurumId ?? this.authService.getAktifKurumId();
+        if (id === null) {
+            return null;
+        }
+
+        return this.kurumOptions.find((x) => x.id === id) ?? null;
+    }
+
+    activeKurumName(): string {
+        return this.activeKurum()?.ad?.trim() || 'STYS';
+    }
+
+    activeKurumLogoSrc(): string {
+        const logoUrl = this.activeKurum()?.logoUrl;
+        if (!logoUrl) {
+            return 'logo.png';
+        }
+
+        return this.kurumService.buildLogoUrl(logoUrl);
+    }
+
+    onKurumLogoError(event: Event): void {
+        const img = event.target as HTMLImageElement;
+        if (!img.dataset['fallbackApplied']) {
+            img.dataset['fallbackApplied'] = 'true';
+            img.src = 'logo.png';
+        }
+    }
+
     kurumDisplayLabel(): string {
         const activeKurumId = this.selectedKurumId ?? this.authService.getAktifKurumId();
         if (activeKurumId === null) {
@@ -642,7 +680,7 @@ export class AppTopbar {
                     this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
                 }
             },
-            error: (error: unknown) => {
+            error: (_error: unknown) => {
                 this.clearKurumOptions();
                 this.selectedKurumId = this.authService.getAktifKurumId();
             }

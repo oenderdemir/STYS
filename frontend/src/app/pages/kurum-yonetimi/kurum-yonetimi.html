@@ -52,6 +52,7 @@
             >
                 <ng-template #header>
                     <tr>
+                        <th style="width:4rem">Logo</th>
                         <th>Kod</th>
                         <th>Ad</th>
                         <th>VergiNo</th>
@@ -64,6 +65,13 @@
 
                 <ng-template #body let-kurum>
                     <tr [class.selected-row]="isSelectedKurum(kurum)" (click)="selectKurum(kurum)">
+                        <td (click)="$event.stopPropagation()">
+                            @if (kurum.logoUrl) {
+                                <img [src]="buildLogoSrc(kurum.logoUrl)" class="kurum-logo-thumb" alt="Logo" (error)="$any($event.target).src='logo.png'" />
+                            } @else {
+                                <span class="kurum-logo-placeholder">-</span>
+                            }
+                        </td>
                         <td class="mono">{{ kurum.kod }}</td>
                         <td>{{ kurum.ad }}</td>
                         <td>{{ kurum.vergiNo || '-' }}</td>
@@ -145,6 +153,52 @@
                                 <p-checkbox inputId="kurumActive" [binary]="true" [(ngModel)]="selectedKurum.aktifMi"></p-checkbox>
                                 <label for="kurumActive">Aktif kurum</label>
                             </div>
+
+                            @if (selectedKurum.id) {
+                                <div class="field field-full kurum-logo-field">
+                                    <label>Kurum Logosu</label>
+                                    <div class="kurum-logo-section">
+                                        @if (selectedKurum.logoUrl) {
+                                            <img [src]="buildLogoSrc(selectedKurum.logoUrl)" class="kurum-logo-preview" alt="Kurum Logosu" (error)="$any($event.target).src='logo.png'" />
+                                        } @else {
+                                            <div class="kurum-logo-empty">Logo yüklenmemiş</div>
+                                        }
+                                        <div class="kurum-logo-actions">
+                                            @if (canManageSelectedKurumLogo) {
+                                                <label class="p-button p-button-sm p-button-outlined p-button-secondary kurum-logo-upload-btn" [class.disabled]="isLogoUploading">
+                                                    @if (isLogoUploading) {
+                                                        <i class="pi pi-spin pi-spinner"></i>
+                                                        Yükleniyor...
+                                                    } @else {
+                                                        <i class="pi pi-upload"></i>
+                                                        {{ selectedKurum.logoUrl ? 'Logo Değiştir' : 'Logo Yükle' }}
+                                                    }
+                                                    <input
+                                                        #logoFileInput
+                                                        type="file"
+                                                        accept="image/png,image/jpeg,image/webp"
+                                                        style="display:none"
+                                                        [disabled]="isLogoUploading"
+                                                        (change)="onLogoFileSelected($event)"
+                                                    />
+                                                </label>
+                                                @if (selectedKurum.logoUrl) {
+                                                    <p-button
+                                                        label="Logo Sil"
+                                                        icon="pi pi-trash"
+                                                        size="small"
+                                                        severity="danger"
+                                                        [outlined]="true"
+                                                        [disabled]="isLogoDeleting"
+                                                        [loading]="isLogoDeleting"
+                                                        (onClick)="deleteSelectedKurumLogo()"
+                                                    />
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                         </div>
 
                         <div class="form-actions">

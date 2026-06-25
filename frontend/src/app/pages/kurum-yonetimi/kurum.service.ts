@@ -82,4 +82,33 @@ export class KurumService {
             })
         );
     }
+
+    uploadLogo(kurumId: number, file: File): Observable<KurumModel> {
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.http.post<ApiResponse<KurumModel>>(
+            `${this.apiBaseUrl}/ui/kurum/${kurumId}/logo`,
+            formData
+        ).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Logo yuklenemedi.');
+            })
+        );
+    }
+
+    deleteLogo(kurumId: number): Observable<void> {
+        return this.http.delete<void>(`${this.apiBaseUrl}/ui/kurum/${kurumId}/logo`).pipe(
+            map(() => void 0)
+        );
+    }
+
+    buildLogoUrl(logoUrl: string): string {
+        const base = this.apiBaseUrl.replace(/\/$/, '');
+        const normalizedPath = logoUrl.startsWith('/') ? logoUrl : `/${logoUrl}`;
+        return `${base}${normalizedPath}`;
+    }
 }

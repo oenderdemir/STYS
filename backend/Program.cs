@@ -50,6 +50,7 @@ using TOD.Platform.Identity.Infrastructure.EntityFramework;
 using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Licensing.AspNetCore;
 using TOD.Platform.Persistence.Rdbms.Extensions;
+using STYS.Kurumlar.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -87,6 +88,8 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
     options.InstanceName = builder.Configuration["Redis:InstanceName"] ?? "stys:";
 });
+builder.Services.Configure<KurumLogoStorageOptions>(
+    builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();

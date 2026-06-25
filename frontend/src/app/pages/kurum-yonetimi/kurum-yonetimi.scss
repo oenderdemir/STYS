@@ -172,6 +172,77 @@
     font-size: 0.78rem;
 }
 
+.kurum-logo-thumb {
+    width: 5rem;
+    height: 3rem;
+    object-fit: contain;
+    border-radius: 0.25rem;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-ground);
+    padding: 0.2rem;
+    display: block;
+}
+
+.kurum-logo-placeholder {
+    color: var(--text-color-secondary);
+    font-size: 0.85rem;
+}
+
+.kurum-logo-field {
+    border-top: 1px solid var(--surface-border);
+    padding-top: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+.kurum-logo-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.kurum-logo-preview {
+    max-width: 200px;
+    max-height: 100px;
+    object-fit: contain;
+    border: 1px solid var(--surface-border);
+    border-radius: 0.5rem;
+    background: var(--surface-ground);
+    padding: 0.4rem;
+}
+
+.kurum-logo-empty {
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--surface-border);
+    border-radius: 0.5rem;
+}
+
+.kurum-logo-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.kurum-logo-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 6px;
+}
+
+.kurum-logo-upload-btn.disabled {
+    opacity: 0.6;
+    cursor: default;
+    pointer-events: none;
+}
+
 @media (max-width: 1100px) {
     .panel-card {
         padding: 0.85rem;

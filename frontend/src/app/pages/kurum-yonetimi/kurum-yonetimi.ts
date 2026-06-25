@@ -29,6 +29,8 @@ import { UserKurumModel } from './user-kurum.model';
 
 interface KurumFormState extends UpdateKurumRequest {
     id?: number | null;
+    logoDosyaAdi?: string | null;
+    logoUrl?: string | null;
 }
 
 interface AssignmentFormState extends UpdateUserKurumRequest {
@@ -89,6 +91,8 @@ export class KurumYonetimi implements OnInit {
     activeTabValue = '0';
     assignmentDraft: AssignmentFormState = this.createEmptyAssignment();
     currentKurumAdmins: UserKurumModel[] = [];
+    logoUploadingKurumId: number | null = null;
+    logoDeletingKurumId: number | null = null;
 
     readonly canViewKurumManagement = this.authService.hasPermission('UserManagement.Manage') || this.authService.isSuperAdminUser();
 
@@ -526,6 +530,111 @@ export class KurumYonetimi implements OnInit {
         return user.userName;
     }
 
+    get canManageSelectedKurumLogo(): boolean {
+        if (!this.selectedKurum.id) {
+            return false;
+        }
+
+        if (this.authService.isSuperAdminUser()) {
+            return true;
+        }
+
+        const activeKurumId = this.authService.getAktifKurumId();
+        return activeKurumId === this.selectedKurum.id && this.authService.isKurumAdminFor(this.selectedKurum.id);
+    }
+
+    get isLogoUploading(): boolean {
+        return this.logoUploadingKurumId === this.selectedKurum.id;
+    }
+
+    get isLogoDeleting(): boolean {
+        return this.logoDeletingKurumId === this.selectedKurum.id;
+    }
+
+    buildLogoSrc(logoUrl: string | null | undefined): string {
+        if (!logoUrl) {
+            return 'logo.png';
+        }
+
+        return this.kurumService.buildLogoUrl(logoUrl);
+    }
+
+    onLogoFileSelected(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = '';
+
+        const kurumId = this.selectedKurum.id;
+        if (!file || !kurumId) {
+            return;
+        }
+
+        this.logoUploadingKurumId = kurumId;
+        this.kurumService.uploadLogo(kurumId, file).pipe(
+            finalize(() => {
+                this.logoUploadingKurumId = null;
+                this.cdr.detectChanges();
+            })
+        ).subscribe({
+            next: (updated) => {
+                this.updateKurumInList(updated);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo yuklendi.' });
+            },
+            error: (error: unknown) => {
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+            }
+        });
+    }
+
+    deleteSelectedKurumLogo(): void {
+        const kurumId = this.selectedKurum.id;
+        if (!kurumId || !this.canManageSelectedKurumLogo) {
+            return;
+        }
+
+        this.logoDeletingKurumId = kurumId;
+        this.kurumService.deleteLogo(kurumId).pipe(
+            finalize(() => {
+                this.logoDeletingKurumId = null;
+                this.cdr.detectChanges();
+            })
+        ).subscribe({
+            next: () => {
+                const cleared: KurumModel = {
+                    id: kurumId,
+                    kod: this.selectedKurum.kod,
+                    ad: this.selectedKurum.ad,
+                    aktifMi: this.selectedKurum.aktifMi,
+                    vergiNo: this.selectedKurum.vergiNo,
+                    telefon: this.selectedKurum.telefon,
+                    eposta: this.selectedKurum.eposta,
+                    logoDosyaAdi: null,
+                    logoUrl: null
+                };
+                this.updateKurumInList(cleared);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo silindi.' });
+            },
+            error: (error: unknown) => {
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+            }
+        });
+    }
+
+    private updateKurumInList(updated: KurumModel): void {
+        const index = this.kurumlar.findIndex((k) => k.id === updated.id);
+        if (index !== -1) {
+            this.kurumlar = [
+                ...this.kurumlar.slice(0, index),
+                updated,
+                ...this.kurumlar.slice(index + 1)
+            ];
+        }
+
+        if (this.selectedKurum.id === updated.id) {
+            this.selectedKurum = this.cloneKurum(updated);
+        }
+    }
+
     private cloneKurum(kurum: KurumModel): KurumFormState {
         return {
             id: kurum.id,
@@ -534,7 +643,9 @@ export class KurumYonetimi implements OnInit {
             vergiNo: kurum.vergiNo ?? null,
             telefon: kurum.telefon ?? null,
             eposta: kurum.eposta ?? null,
-            aktifMi: kurum.aktifMi
+            aktifMi: kurum.aktifMi,
+            logoDosyaAdi: kurum.logoDosyaAdi ?? null,
+            logoUrl: kurum.logoUrl ?? null
         };
     }
 

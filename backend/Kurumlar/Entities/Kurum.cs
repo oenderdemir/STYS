@@ -25,5 +25,18 @@ public class Kurum : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
+    [MaxLength(260)]
+    public string? LogoDosyaAdi { get; set; }
+
+    [MaxLength(260)]
+    public string? LogoOrijinalDosyaAdi { get; set; }
+
+    [MaxLength(100)]
+    public string? LogoContentType { get; set; }
+
+    public long? LogoBoyut { get; set; }
+
+    public DateTime? LogoYuklenmeTarihi { get; set; }
+
     public ICollection<Tesis> Tesisler { get; set; } = [];
 }

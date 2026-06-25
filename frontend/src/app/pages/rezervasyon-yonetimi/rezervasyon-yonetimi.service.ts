@@ -27,6 +27,8 @@ import {
     RezervasyonOdaDegisimKaydetRequestDto,
     RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
+    RezervasyonAramaRequestDto,
+    RezervasyonAramaSonucDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplaRequestDto,
     SenaryoFiyatHesaplamaSonucuDto,
@@ -103,6 +105,21 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon kayitlari alinamadi.');
+            })
+        );
+    }
+
+    searchRezervasyonlar(request: RezervasyonAramaRequestDto): Observable<RezervasyonAramaSonucDto> {
+        return this.http.post<ApiResponse<RezervasyonAramaSonucDto>>(
+            `${this.apiBaseUrl}/ui/rezervasyon/kayitlar/ara`,
+            request
+        ).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon arama islemi basarisiz oldu.');
             })
         );
     }

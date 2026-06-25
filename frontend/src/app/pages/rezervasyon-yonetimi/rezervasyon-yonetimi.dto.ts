@@ -233,6 +233,27 @@ export interface RezervasyonListeDto {
     odaDegisimiGerekli: boolean;
 }
 
+export interface RezervasyonAramaRequestDto {
+    tesisId?: number | null;
+    aramaMetni?: string | null;
+    rezervasyonDurumu?: string | null;
+    girisBaslangicTarihi?: string | null;
+    girisBitisTarihi?: string | null;
+    cikisBaslangicTarihi?: string | null;
+    cikisBitisTarihi?: string | null;
+    sadeceOdemesiKalanlar: boolean;
+    sadeceOdaDegisimiGerekli: boolean;
+    page: number;
+    pageSize: number;
+}
+
+export interface RezervasyonAramaSonucDto {
+    kayitlar: RezervasyonListeDto[];
+    toplamKayitSayisi: number;
+    page: number;
+    pageSize: number;
+}
+
 export interface RezervasyonDashboardKayitDto {
     id: number;
     referansNo: string;

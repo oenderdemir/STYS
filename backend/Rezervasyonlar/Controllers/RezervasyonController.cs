@@ -84,6 +84,16 @@ public class RezervasyonController : UIController
         return Ok(kayitlar);
     }
 
+    [HttpPost("kayitlar/ara")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<RezervasyonAramaSonucDto>> AraRezervasyonlar(
+        [FromBody] RezervasyonAramaRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.AraRezervasyonlarAsync(request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("dashboard")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<RezervasyonDashboardDto>> GetDashboard(

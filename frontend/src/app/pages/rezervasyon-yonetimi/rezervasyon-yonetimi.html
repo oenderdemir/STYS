@@ -390,30 +390,120 @@
 <div class="card mt-4">
     <h5 class="m-0 mb-3">Kayitli Rezervasyonlar</h5>
     <p-menu #rowActionsMenu [model]="rowActionItems" [popup]="true" [appendTo]="'body'"></p-menu>
-    @if (loadingRezervasyonlar) {
-        <div>Rezervasyon kayitlari yukleniyor...</div>
-    } @else {
-        <div class="flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-            <div class="text-sm text-color-secondary">
-                Toplam {{ rezervasyonKayitlari.length }} kayit
-                @if (selectedRezervasyonDurumFiltre !== 'Tum') {
-                    <span> • Filtreli gorunum: {{ filteredRezervasyonKayitlari.length }}</span>
-                }
+
+    <div class="mb-4 p-3 border-round surface-ground">
+        <div class="flex flex-wrap gap-3 mb-3">
+            <div class="flex-1" style="min-width: 240px">
+                <label class="block text-sm font-medium mb-1">Arama</label>
+                <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="aramaMetni"
+                    placeholder="Referans no, misafir adi, telefon, e-posta, TC, pasaport, oda no..."
+                    class="w-full"
+                    (keydown.enter)="araRezervasyonlar(1)"
+                />
             </div>
-            <div class="flex align-items-center gap-2">
-                <label for="rezervasyonDurumFiltre" class="text-sm font-medium">Durum Filtresi</label>
+            <div style="min-width: 180px">
+                <label class="block text-sm font-medium mb-1">Durum</label>
                 <p-select
-                    inputId="rezervasyonDurumFiltre"
-                    [options]="rezervasyonDurumFiltreSecenekleri"
+                    [options]="aramaDurumSecenekleri"
                     optionLabel="label"
                     optionValue="value"
-                    [(ngModel)]="selectedRezervasyonDurumFiltre"
+                    [(ngModel)]="aramaDurumu"
                     [appendTo]="'body'"
-                    styleClass="w-16rem"
+                    styleClass="w-full"
                 />
             </div>
         </div>
-        <p-table [value]="filteredRezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }">
+        <div class="flex flex-wrap gap-3 mb-3">
+            <div style="min-width: 160px">
+                <label class="block text-sm font-medium mb-1">Giris Tarihi (Baslangic)</label>
+                <p-datepicker
+                    [(ngModel)]="aramaGirisBaslangic"
+                    dateFormat="dd.mm.yy"
+                    [showClear]="true"
+                    [appendTo]="'body'"
+                    styleClass="w-full"
+                />
+            </div>
+            <div style="min-width: 160px">
+                <label class="block text-sm font-medium mb-1">Giris Tarihi (Bitis)</label>
+                <p-datepicker
+                    [(ngModel)]="aramaGirisBitis"
+                    dateFormat="dd.mm.yy"
+                    [showClear]="true"
+                    [appendTo]="'body'"
+                    styleClass="w-full"
+                />
+            </div>
+            <div style="min-width: 160px">
+                <label class="block text-sm font-medium mb-1">Cikis Tarihi (Baslangic)</label>
+                <p-datepicker
+                    [(ngModel)]="aramaCikisBaslangic"
+                    dateFormat="dd.mm.yy"
+                    [showClear]="true"
+                    [appendTo]="'body'"
+                    styleClass="w-full"
+                />
+            </div>
+            <div style="min-width: 160px">
+                <label class="block text-sm font-medium mb-1">Cikis Tarihi (Bitis)</label>
+                <p-datepicker
+                    [(ngModel)]="aramaCikisBitis"
+                    dateFormat="dd.mm.yy"
+                    [showClear]="true"
+                    [appendTo]="'body'"
+                    styleClass="w-full"
+                />
+            </div>
+        </div>
+        <div class="flex flex-wrap align-items-center gap-3 mb-3">
+            <div class="flex align-items-center gap-2">
+                <p-checkbox
+                    inputId="aramaSadeceOdemesiKalanlar"
+                    [(ngModel)]="aramaSadeceOdemesiKalanlar"
+                    [binary]="true"
+                />
+                <label for="aramaSadeceOdemesiKalanlar" class="text-sm cursor-pointer">Sadece odemesi kalanlar</label>
+            </div>
+            <div class="flex align-items-center gap-2">
+                <p-checkbox
+                    inputId="aramaSadeceOdaDegisimiGerekli"
+                    [(ngModel)]="aramaSadeceOdaDegisimiGerekli"
+                    [binary]="true"
+                />
+                <label for="aramaSadeceOdaDegisimiGerekli" class="text-sm cursor-pointer">Sadece oda degisimi gerekli</label>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <p-button label="Ara" icon="pi pi-search" (onClick)="araRezervasyonlar(1)" />
+            <p-button label="Temizle" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="temizleAramaFiltreler()" />
+        </div>
+    </div>
+
+    @if (loadingRezervasyonlar) {
+        <div>Rezervasyon kayitlari yukleniyor...</div>
+    } @else {
+        <div class="flex align-items-center justify-content-between mb-3">
+            <div class="text-sm text-color-secondary">
+                Toplam {{ aramaToplamKayitSayisi }} kayit
+                @if (aramaToplamKayitSayisi > aramaPageSize) {
+                    <span> &bull; Sayfa {{ aramaPage }} / {{ Math.ceil(aramaToplamKayitSayisi / aramaPageSize) }}</span>
+                }
+            </div>
+        </div>
+        @if (!loadingRezervasyonlar && rezervasyonKayitlari.length === 0) {
+            <div class="text-center py-4 text-color-secondary">Filtrelere uygun rezervasyon bulunamadi.</div>
+        }
+        <p-table [value]="filteredRezervasyonKayitlari" dataKey="id" [expandedRowKeys]="expandedRowKeys" (onRowExpand)="onRowExpand($event)" [tableStyle]="{ 'min-width': '80rem' }"
+            [lazy]="true" [totalRecords]="aramaToplamKayitSayisi" [rows]="aramaPageSize"
+            [first]="(aramaPage - 1) * aramaPageSize"
+            (onPage)="onAramaSayfaDegisti($event)"
+            [paginator]="aramaToplamKayitSayisi > aramaPageSize"
+            [showCurrentPageReport]="true"
+            currentPageReportTemplate="{first} - {last} / {totalRecords}"
+        >
             <ng-template #header>
                 <tr>
                     <th ></th>

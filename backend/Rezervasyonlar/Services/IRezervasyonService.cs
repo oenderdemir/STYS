@@ -30,6 +30,8 @@ public interface IRezervasyonService
 
     Task<List<RezervasyonListeDto>> GetRezervasyonlarAsync(int? tesisId, CancellationToken cancellationToken = default);
 
+    Task<RezervasyonAramaSonucDto> AraRezervasyonlarAsync(RezervasyonAramaRequestDto request, CancellationToken cancellationToken = default);
+
     Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(
         int tesisId,
         DateTime? tarih,

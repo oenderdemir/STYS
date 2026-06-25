@@ -324,6 +324,203 @@ public class RezervasyonService : IRezervasyonService
         return kayitlar;
     }
 
+    public async Task<RezervasyonAramaSonucDto> AraRezervasyonlarAsync(
+        RezervasyonAramaRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        request ??= new RezervasyonAramaRequestDto();
+        request.Page = Math.Max(1, request.Page);
+        request.PageSize = Math.Clamp(request.PageSize, 10, 200);
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+
+        if (request.TesisId.HasValue && request.TesisId.Value > 0)
+        {
+            await EnsureCanAccessTesisAsync(request.TesisId.Value, cancellationToken);
+        }
+
+        var query = ApplyRezervasyonTenantScope(_stysDbContext.Rezervasyonlar);
+
+        if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
+        }
+
+        if (request.TesisId.HasValue && request.TesisId.Value > 0)
+        {
+            query = query.Where(x => x.TesisId == request.TesisId.Value);
+        }
+
+        var aramaMetni = request.AramaMetni?.Trim();
+        if (!string.IsNullOrEmpty(aramaMetni))
+        {
+            var term = NormalizeLikeTerm(aramaMetni);
+            var pattern = $"%{term}%";
+            query = query.Where(x =>
+                EF.Functions.Like(x.ReferansNo, pattern) ||
+                EF.Functions.Like(x.MisafirAdiSoyadi, pattern) ||
+                EF.Functions.Like(x.MisafirTelefon, pattern) ||
+                (x.MisafirEposta != null && EF.Functions.Like(x.MisafirEposta, pattern)) ||
+                (x.TcKimlikNo != null && EF.Functions.Like(x.TcKimlikNo, pattern)) ||
+                (x.PasaportNo != null && EF.Functions.Like(x.PasaportNo, pattern)) ||
+                x.Segmentler.Any(s => s.OdaAtamalari.Any(a => EF.Functions.Like(a.OdaNoSnapshot, pattern))));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RezervasyonDurumu))
+        {
+            query = query.Where(x => x.RezervasyonDurumu == request.RezervasyonDurumu);
+        }
+
+        if (request.GirisBaslangicTarihi.HasValue)
+        {
+            var tarih = request.GirisBaslangicTarihi.Value.Date;
+            query = query.Where(x => x.GirisTarihi >= tarih);
+        }
+
+        if (request.GirisBitisTarihi.HasValue)
+        {
+            var tarih = request.GirisBitisTarihi.Value.Date.AddDays(1);
+            query = query.Where(x => x.GirisTarihi < tarih);
+        }
+
+        if (request.CikisBaslangicTarihi.HasValue)
+        {
+            var tarih = request.CikisBaslangicTarihi.Value.Date;
+            query = query.Where(x => x.CikisTarihi >= tarih);
+        }
+
+        if (request.CikisBitisTarihi.HasValue)
+        {
+            var tarih = request.CikisBitisTarihi.Value.Date.AddDays(1);
+            query = query.Where(x => x.CikisTarihi < tarih);
+        }
+
+        if (request.SadeceOdemesiKalanlar)
+        {
+            query = query.Where(x =>
+                x.ToplamUcret - (x.Odemeler.Sum(o => (decimal?)o.OdemeTutari) ?? 0m) > 0m);
+        }
+
+        if (request.SadeceOdaDegisimiGerekli)
+        {
+            var odaDegisimGerekliIdQuery = (
+                from r in _stysDbContext.Rezervasyonlar
+                join s in _stysDbContext.RezervasyonSegmentleri on r.Id equals s.RezervasyonId
+                join a in _stysDbContext.RezervasyonSegmentOdaAtamalari on s.Id equals a.RezervasyonSegmentId
+                join b in _stysDbContext.OdaKullanimBloklari on a.OdaId equals b.OdaId
+                where b.AktifMi
+                      && b.BaslangicTarihi < s.BitisTarihi
+                      && b.BitisTarihi > s.BaslangicTarihi
+                      && r.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                      && r.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
+                select r.Id
+            ).Distinct();
+
+            query = query.Where(x => odaDegisimGerekliIdQuery.Contains(x.Id));
+        }
+
+        var toplamKayitSayisi = await query.CountAsync(cancellationToken);
+
+        var skip = (request.Page - 1) * request.PageSize;
+
+        var kayitlar = await query
+            .OrderByDescending(x => x.GirisTarihi)
+            .ThenByDescending(x => x.Id)
+            .Skip(skip)
+            .Take(request.PageSize)
+            .Select(x => new RezervasyonListeDto
+            {
+                Id = x.Id,
+                ReferansNo = x.ReferansNo,
+                Kaynak = x.ReferansNo.StartsWith("KAMP-") ? "Kamp" : "Normal",
+                TesisId = x.TesisId,
+                MisafirAdiSoyadi = x.MisafirAdiSoyadi,
+                MisafirTelefon = x.MisafirTelefon,
+                MisafirEposta = x.MisafirEposta,
+                TcKimlikNo = x.TcKimlikNo,
+                PasaportNo = x.PasaportNo,
+                MisafirCinsiyeti = x.MisafirCinsiyeti,
+                KisiSayisi = x.KisiSayisi,
+                GirisTarihi = x.GirisTarihi,
+                CikisTarihi = x.CikisTarihi,
+                ToplamUcret = x.ToplamUcret,
+                OdenenTutar = x.Odemeler
+                    .Select(o => (decimal?)o.OdemeTutari)
+                    .Sum() ?? 0m,
+                KalanTutar = x.ToplamUcret - (x.Odemeler
+                    .Select(o => (decimal?)o.OdemeTutari)
+                    .Sum() ?? 0m),
+                ParaBirimi = x.ParaBirimi,
+                RezervasyonDurumu = x.RezervasyonDurumu,
+                FiyatlamaOzeti = x.TekKisilikFiyatUygulandiMi
+                    ? "Tek kisilik fiyat"
+                    : x.Segmentler
+                        .SelectMany(s => s.OdaAtamalari)
+                        .Any(a => a.PaylasimliMiSnapshot)
+                            ? x.Segmentler
+                                .SelectMany(s => s.OdaAtamalari)
+                                .Any(a => !a.PaylasimliMiSnapshot)
+                                    ? "Karma"
+                                    : "Kisi basi"
+                            : "Ozel kullanim",
+                KonaklayanPlaniTamamlandi = x.Segmentler.Count() > 0
+                    && x.Konaklayanlar.Count() == x.KisiSayisi
+                    && !x.Konaklayanlar.Any(k => k.AdSoyad == null || k.AdSoyad == string.Empty)
+                    && !x.Konaklayanlar.Any(k =>
+                        k.KatilimDurumu != KonaklayanKatilimDurumlari.Gelmedi
+                        && k.SegmentAtamalari.Count() != x.Segmentler.Count()),
+                GelenKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == KonaklayanKatilimDurumlari.Geldi),
+                BekleyenKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == null || k.KatilimDurumu == KonaklayanKatilimDurumlari.Bekleniyor),
+                AyrilanKonaklayanSayisi = x.Konaklayanlar.Count(k => k.KatilimDurumu == KonaklayanKatilimDurumlari.Ayrildi),
+                OdaDegisimiGerekli = false
+            })
+            .ToListAsync(cancellationToken);
+
+        if (kayitlar.Count > 0)
+        {
+            var ekHizmetToplamlari = await GetEkHizmetToplamlariAsync(
+                kayitlar.Select(x => x.Id).ToList(),
+                cancellationToken);
+
+            foreach (var kayit in kayitlar)
+            {
+                var ekHizmetToplami = ekHizmetToplamlari.TryGetValue(kayit.Id, out var toplam)
+                    ? toplam
+                    : 0m;
+
+                kayit.ToplamUcret += ekHizmetToplami;
+                kayit.KalanTutar = Math.Max(0m, kayit.ToplamUcret - kayit.OdenenTutar);
+            }
+
+            if (!request.SadeceOdaDegisimiGerekli)
+            {
+                var affectedIds = await GetReservationsRequiringRoomReassignmentAsync(
+                    kayitlar.Select(x => x.Id).ToList(),
+                    cancellationToken);
+
+                foreach (var kayit in kayitlar)
+                {
+                    kayit.OdaDegisimiGerekli = affectedIds.Contains(kayit.Id);
+                }
+            }
+            else
+            {
+                foreach (var kayit in kayitlar)
+                {
+                    kayit.OdaDegisimiGerekli = true;
+                }
+            }
+        }
+
+        return new RezervasyonAramaSonucDto
+        {
+            Kayitlar = kayitlar,
+            ToplamKayitSayisi = toplamKayitSayisi,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
     public async Task<RezervasyonDashboardDto> GetGunlukDashboardAsync(
         int tesisId,
         DateTime? tarih,
@@ -4338,6 +4535,14 @@ public class RezervasyonService : IRezervasyonService
         }
 
         return claims.Any(x => x.Equals(permission, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeLikeTerm(string value)
+    {
+        return value
+            .Replace("[", "[[]")
+            .Replace("%", "[%]")
+            .Replace("_", "[_]");
     }
 
     private static string NormalizeOdemeTipi(string? odemeTipi)

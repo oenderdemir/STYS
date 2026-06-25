@@ -129,8 +129,7 @@ public class KurumController : UIController
             return NotFound();
         }
 
-        var filePath = ResolveLogoPath(kurum.LogoDosyaAdi);
-        if (!System.IO.File.Exists(filePath))
+        if (!TryResolveExistingLogoPath(kurum.LogoDosyaAdi, out var filePath))
         {
             return NotFound();
         }
@@ -281,18 +280,30 @@ public class KurumController : UIController
 
     private string ResolveLogoPath(string fileName)
     {
-        var rootPath = Path.IsPathRooted(_logoOptions.RootPath)
-            ? _logoOptions.RootPath
-            : Path.Combine(_env.ContentRootPath, _logoOptions.RootPath);
+        var rootPath = ResolvePath(_logoOptions.RootPath);
 
         return Path.Combine(rootPath, fileName);
     }
 
+    private bool TryResolveExistingLogoPath(string fileName, out string resolvedPath)
+    {
+        foreach (var rootPath in GetLogoRootPathCandidates())
+        {
+            var candidatePath = Path.Combine(rootPath, fileName);
+            if (System.IO.File.Exists(candidatePath))
+            {
+                resolvedPath = candidatePath;
+                return true;
+            }
+        }
+
+        resolvedPath = string.Empty;
+        return false;
+    }
+
     private void EnsureRootPathExists()
     {
-        var rootPath = Path.IsPathRooted(_logoOptions.RootPath)
-            ? _logoOptions.RootPath
-            : Path.Combine(_env.ContentRootPath, _logoOptions.RootPath);
+        var rootPath = ResolvePath(_logoOptions.RootPath);
 
         Directory.CreateDirectory(rootPath);
     }
@@ -301,8 +312,7 @@ public class KurumController : UIController
     {
         try
         {
-            var filePath = ResolveLogoPath(fileName);
-            if (System.IO.File.Exists(filePath))
+            if (TryResolveExistingLogoPath(fileName, out var filePath))
             {
                 System.IO.File.Delete(filePath);
             }
@@ -311,6 +321,35 @@ public class KurumController : UIController
         {
             _logger.LogWarning(ex, "Eski logo dosyası silinemedi: {FileName}", fileName);
         }
+    }
+
+    private IEnumerable<string> GetLogoRootPathCandidates()
+    {
+        var configuredRoot = _logoOptions.RootPath;
+        var candidateRoots = new[]
+        {
+            configuredRoot,
+            "Data/Uploads/KurumLogolari",
+            "../Data/Uploads/KurumLogolari",
+            "Uploads/KurumLogolari"
+        };
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidateRoot in candidateRoots)
+        {
+            var resolvedRoot = ResolvePath(candidateRoot);
+            if (seen.Add(resolvedRoot))
+            {
+                yield return resolvedRoot;
+            }
+        }
+    }
+
+    private string ResolvePath(string path)
+    {
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.Combine(_env.ContentRootPath, path);
     }
 
     private static async Task<long> TrimAndSaveLogoAsync(

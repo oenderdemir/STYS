@@ -83,6 +83,7 @@ services:
       Serilog__WriteTo__1__Args__path: "${STYS_LOG_FILE_PATH:-/app/Logs/stys-.log}"
       Serilog__WriteTo__1__Args__fileSizeLimitBytes: "${STYS_LOG_FILE_SIZE_LIMIT_BYTES:-10485760}"
       Serilog__WriteTo__1__Args__retainedFileCountLimit: "${STYS_LOG_RETAINED_FILE_COUNT_LIMIT:-14}"
+      KurumLogoStorage__RootPath: "${STYS_KURUM_LOGO_ROOT_PATH:-Data/Uploads/KurumLogolari}"
       Redis__Configuration: "${STYS_REDIS_CONFIGURATION:-redis:6379}"
       Redis__InstanceName: "${STYS_REDIS_INSTANCE_NAME:-stys:}"
     depends_on:
@@ -92,7 +93,7 @@ services:
         condition: service_healthy
     volumes:
       - ./Data/logs/backend:/app/Logs
-      - ./Data/uploads/kurum-logolari:/app/Uploads/KurumLogolari
+      - ./Data/Uploads/KurumLogolari:/app/Data/Uploads/KurumLogolari
     env_file:
       - ./scripts/stys-integrity.env
     expose:

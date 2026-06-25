@@ -29,6 +29,10 @@ import { KonaklayanKatilimDurumlari } from './konaklayan-katilim-durumlari.const
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
     KonaklamaSenaryoDto,
+    KonaklamaSenaryoOdaAtamaDto,
+    KonaklamaSenaryoSegmentDto,
+    UygunOdaDto,
+    UygunOdaAramaRequestDto,
     RezervasyonCheckInKontrolDto,
     RezervasyonDetayDto,
     RezervasyonDegisiklikGecmisiDto,
@@ -161,6 +165,12 @@ export class RezervasyonYonetimi implements OnInit {
     odaDegisimRezervasyonDurumu: string | null = null;
     odaDegisimSecenekleri: RezervasyonOdaDegisimSecenekDto | null = null;
     odaDegisimSecimleri: Record<number, number> = {};
+    alternatifOdaDialogVisible = false;
+    alternatifOdaLoading = false;
+    alternatifOdalar: UygunOdaDto[] = [];
+    selectedSenaryoForOdaDegistir: KonaklamaSenaryoDto | null = null;
+    selectedSegmentForOdaDegistir: KonaklamaSenaryoSegmentDto | null = null;
+    selectedAtamaForOdaDegistir: KonaklamaSenaryoOdaAtamaDto | null = null;
     readonly odemeTipleri = [
         { label: 'Nakit', value: 'Nakit' },
         { label: 'Kredi Karti', value: 'KrediKarti' }
@@ -663,6 +673,58 @@ export class RezervasyonYonetimi implements OnInit {
                     this.cdr.detectChanges();
                 }
             });
+    }
+
+    openAlternatifOdaDialog(senaryo: KonaklamaSenaryoDto, segment: KonaklamaSenaryoSegmentDto, atama: KonaklamaSenaryoOdaAtamaDto): void {
+        if (!this.selectedTesisId) {
+            return;
+        }
+        this.selectedSenaryoForOdaDegistir = senaryo;
+        this.selectedSegmentForOdaDegistir = segment;
+        this.selectedAtamaForOdaDegistir = atama;
+        this.alternatifOdalar = [];
+        this.alternatifOdaDialogVisible = true;
+        this.alternatifOdaLoading = true;
+
+        const request: UygunOdaAramaRequestDto = {
+            tesisId: this.selectedTesisId,
+            odaTipiId: atama.odaTipiId,
+            kisiSayisi: atama.ayrilanKisiSayisi,
+            baslangicTarihi: segment.baslangicTarihi,
+            bitisTarihi: segment.bitisTarihi
+        };
+
+        this.service
+            .searchUygunOdalar(request)
+            .pipe(finalize(() => { this.alternatifOdaLoading = false; this.cdr.detectChanges(); }))
+            .subscribe({
+                next: (odalar) => {
+                    this.alternatifOdalar = odalar.filter(o => o.odaId !== atama.odaId);
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    selectAlternatifOda(oda: UygunOdaDto): void {
+        const atama = this.selectedAtamaForOdaDegistir;
+        if (!atama) {
+            return;
+        }
+        atama.odaId = oda.odaId;
+        atama.odaNo = oda.odaNo;
+        atama.binaId = oda.binaId;
+        atama.binaAdi = oda.binaAdi;
+        atama.odaTipiId = oda.odaTipiId;
+        atama.odaTipiAdi = oda.odaTipiAdi;
+        atama.kapasite = oda.kapasite;
+        atama.paylasimliMi = oda.paylasimliMi;
+        this.alternatifOdaDialogVisible = false;
+        this.messageService.add({ severity: UiSeverity.Success, summary: 'Guncellendi', detail: 'Oda secimi guncellendi. Fiyat bilgisi degismis olabilir; rezervasyon onayinda tekrar hesaplanacaktir.' });
+        this.cdr.detectChanges();
     }
 
     openDiscountDialog(scenario: KonaklamaSenaryoDto): void {

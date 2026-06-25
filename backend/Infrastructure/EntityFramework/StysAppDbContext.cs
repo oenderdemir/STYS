@@ -244,6 +244,14 @@ public class StysAppDbContext : DbContext
 
             entity.HasIndex(x => x.Ad)
                 .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.TenantKey)
+                .IsUnique()
+                .HasFilter("[TenantKey] IS NOT NULL");
+
+            entity.HasIndex(x => x.LoginHost)
+                .IsUnique()
+                .HasFilter("[LoginHost] IS NOT NULL");
         });
 
         modelBuilder.Entity<Tesis>(entity =>

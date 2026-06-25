@@ -2646,12 +2646,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasIndex("LoginHost")
                         .IsUnique()
-                        .HasDatabaseName("IX_Kurumlar_LoginHost")
                         .HasFilter("[LoginHost] IS NOT NULL");
 
                     b.HasIndex("TenantKey")
                         .IsUnique()
-                        .HasDatabaseName("IX_Kurumlar_TenantKey")
                         .HasFilter("[TenantKey] IS NOT NULL");
 
                     b.ToTable("Kurumlar", "dbo");

@@ -148,10 +148,12 @@ public class KurumController : UIController
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
     public async Task<ActionResult<KurumDto>> UploadLogo(
         int kurumId,
-        [FromForm] IFormFile file,
+        [FromForm] UploadKurumLogoRequest request,
         CancellationToken cancellationToken)
     {
         await EnsureCanManageLogoAsync(kurumId, cancellationToken);
+
+        var file = request.File;
 
         if (file is null || file.Length == 0)
         {

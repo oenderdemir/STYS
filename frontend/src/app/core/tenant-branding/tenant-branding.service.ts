@@ -21,7 +21,7 @@ export class TenantBrandingService {
     getBranding(host: string): Observable<TenantBrandingDto> {
         const params = new HttpParams().set('host', host);
         return this.http
-            .get<ApiResponse<TenantBrandingDto>>(`${this.apiBaseUrl}/api/public/tenant-branding`, { params })
+            .get<ApiResponse<TenantBrandingDto>>(`${this.apiBaseUrl}/public/tenant-branding`, { params })
             .pipe(map(response => response.data ?? { applicationName: 'STYS' }));
     }
 

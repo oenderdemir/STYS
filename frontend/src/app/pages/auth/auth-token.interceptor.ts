@@ -101,7 +101,8 @@ function isBackendApiRequest(normalizedRequestUrl: string, apiBaseUrl: string): 
 }
 
 function isAnonymousPublicRequest(normalizedRequestUrl: string): boolean {
-    return normalizedRequestUrl.includes('/ui/kampbasvuru/baglam')
+    return normalizedRequestUrl.includes('/public/')
+        || normalizedRequestUrl.includes('/ui/kampbasvuru/baglam')
         || normalizedRequestUrl.includes('/ui/kampbasvuru/onizleme')
         || normalizedRequestUrl.includes('/ui/kampbasvuru/basvuru-no/')
         || /\/ui\/kampbasvuru(?:\?.*)?$/.test(normalizedRequestUrl)

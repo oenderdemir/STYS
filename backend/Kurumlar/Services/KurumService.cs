@@ -40,8 +40,17 @@ public class KurumService : BaseRdbmsService<KurumDto, Kurum, int>, IKurumServic
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var existing = await GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+            throw new BaseException("Kurum bulunamadi.", 404);
+
         var dto = Mapper.Map<KurumDto>(request);
         dto.Id = id;
+        dto.LogoDosyaAdi = existing.LogoDosyaAdi;
+        dto.LogoOrijinalDosyaAdi = existing.LogoOrijinalDosyaAdi;
+        dto.LogoContentType = existing.LogoContentType;
+        dto.LogoBoyut = existing.LogoBoyut;
+        dto.LogoYuklenmeTarihi = existing.LogoYuklenmeTarihi;
         return await UpdateAsync(dto);
     }
 

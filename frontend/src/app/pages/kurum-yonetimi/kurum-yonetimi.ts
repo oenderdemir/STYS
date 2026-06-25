@@ -645,7 +645,9 @@ export class KurumYonetimi implements OnInit {
             eposta: kurum.eposta ?? null,
             aktifMi: kurum.aktifMi,
             logoDosyaAdi: kurum.logoDosyaAdi ?? null,
-            logoUrl: kurum.logoUrl ?? null
+            logoUrl: kurum.logoUrl ?? null,
+            tenantKey: kurum.tenantKey ?? null,
+            loginHost: kurum.loginHost ?? null
         };
     }
 
@@ -657,7 +659,9 @@ export class KurumYonetimi implements OnInit {
             vergiNo: null,
             telefon: null,
             eposta: null,
-            aktifMi: true
+            aktifMi: true,
+            tenantKey: null,
+            loginHost: null
         };
     }
 
@@ -668,7 +672,9 @@ export class KurumYonetimi implements OnInit {
             vergiNo: this.normalizeOptionalText(form.vergiNo),
             telefon: this.normalizeOptionalText(form.telefon),
             eposta: this.normalizeOptionalText(form.eposta),
-            aktifMi: form.aktifMi === true
+            aktifMi: form.aktifMi === true,
+            tenantKey: this.normalizeOptionalText(form.tenantKey),
+            loginHost: this.normalizeOptionalText(form.loginHost)
         };
     }
 

@@ -43,11 +43,7 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
             <a class="layout-topbar-logo" routerLink="/">
                 <img
                     [src]="activeKurumLogoSrc()"
-                    [style.height.px]="44"
-                    [style.width]="'auto'"
-                    [style.max-width]="'160px'"
-                    [style.object-fit]="'contain'"
-                    [style.flex-shrink]="'0'"
+                    class="topbar-kurum-logo"
                     alt="STYS"
                     (error)="onKurumLogoError($event)"
                 />

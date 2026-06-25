@@ -32,15 +32,6 @@
             width: 3rem;
         }
 
-        img {
-            height: 44px !important;
-            width: auto !important;
-            max-width: 160px !important;
-            object-fit: contain;
-            flex-shrink: 0;
-            display: block;
-        }
-
         &:focus-visible {
             @include focused();
         }

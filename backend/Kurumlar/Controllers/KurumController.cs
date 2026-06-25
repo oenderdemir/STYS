@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using STYS.Kurumlar.Dto;
 using STYS.Kurumlar.Options;
 using STYS.Kurumlar.Services;
@@ -182,9 +185,10 @@ public class KurumController : UIController
         var safeFileName = $"kurum-{kurumId}-{Guid.NewGuid():N}{extension}";
         var filePath = ResolveLogoPath(safeFileName);
 
-        await using (var stream = System.IO.File.Create(filePath))
+        long savedFileSize;
+        await using (var inputStream = file.OpenReadStream())
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            savedFileSize = await TrimAndSaveLogoAsync(inputStream, filePath, contentType, cancellationToken);
         }
 
         var oldFileName = kurum.LogoDosyaAdi;
@@ -192,7 +196,7 @@ public class KurumController : UIController
         kurum.LogoDosyaAdi = safeFileName;
         kurum.LogoOrijinalDosyaAdi = file.FileName;
         kurum.LogoContentType = contentType;
-        kurum.LogoBoyut = file.Length;
+        kurum.LogoBoyut = savedFileSize;
         kurum.LogoYuklenmeTarihi = DateTime.UtcNow;
 
         await _stysDbContext.SaveChangesAsync(cancellationToken);
@@ -301,6 +305,86 @@ public class KurumController : UIController
         {
             _logger.LogWarning(ex, "Eski logo dosyası silinemedi: {FileName}", fileName);
         }
+    }
+
+    private static async Task<long> TrimAndSaveLogoAsync(
+        Stream inputStream,
+        string outputPath,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        using var image = await Image.LoadAsync<Rgba32>(inputStream, cancellationToken);
+
+        var bounds = FindLogoContentBounds(image);
+        if (bounds.HasValue)
+        {
+            var padded = AddPadding(bounds.Value, image.Width, image.Height);
+            image.Mutate(ctx => ctx.Crop(padded));
+        }
+
+        await using var outputStream = System.IO.File.Create(outputPath);
+        switch (contentType)
+        {
+            case "image/jpeg":
+                await image.SaveAsJpegAsync(outputStream, cancellationToken: cancellationToken);
+                break;
+            case "image/webp":
+                await image.SaveAsWebpAsync(outputStream, cancellationToken: cancellationToken);
+                break;
+            default:
+                await image.SaveAsPngAsync(outputStream, cancellationToken: cancellationToken);
+                break;
+        }
+
+        return outputStream.Length;
+    }
+
+    private static Rectangle? FindLogoContentBounds(Image<Rgba32> image)
+    {
+        var minX = image.Width;
+        var minY = image.Height;
+        var maxX = -1;
+        var maxY = -1;
+
+        image.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < accessor.Height; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < row.Length; x++)
+                {
+                    ref var pixel = ref row[x];
+                    var isTransparent = pixel.A < 10;
+                    var isNearWhite = pixel.R >= 245 && pixel.G >= 245 && pixel.B >= 245;
+                    if (isTransparent || isNearWhite)
+                    {
+                        continue;
+                    }
+
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        });
+
+        if (maxX < minX || maxY < minY)
+        {
+            return null;
+        }
+
+        return Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
+    }
+
+    private static Rectangle AddPadding(Rectangle bounds, int imageWidth, int imageHeight)
+    {
+        var padding = Math.Max(8, Math.Min(imageWidth, imageHeight) / 30);
+        var x = Math.Max(0, bounds.X - padding);
+        var y = Math.Max(0, bounds.Y - padding);
+        var right = Math.Min(imageWidth, bounds.Right + padding);
+        var bottom = Math.Min(imageHeight, bounds.Bottom + padding);
+        return Rectangle.FromLTRB(x, y, right, bottom);
     }
 
     private async Task EnsureCanManageLogoAsync(int kurumId, CancellationToken cancellationToken)

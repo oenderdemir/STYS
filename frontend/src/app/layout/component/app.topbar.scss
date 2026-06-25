@@ -47,15 +47,16 @@
 .layout-topbar-logo {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
     min-width: 0;
     text-decoration: none;
 }
 
-.logo-img {
+.topbar-kurum-logo {
+    display: block;
     height: 2.75rem;
-    max-width: 10rem;
     width: auto;
+    max-width: 11rem;
     object-fit: contain;
     flex-shrink: 0;
 }
@@ -71,6 +72,11 @@
 }
 
 @media (max-width: 768px) {
+    .topbar-kurum-logo {
+        height: 2.25rem;
+        max-width: 8rem;
+    }
+
     .layout-topbar-logo-title {
         display: none;
     }

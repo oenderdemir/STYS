@@ -1,0 +1,97 @@
+.layout-menu-search {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0 0.25rem;
+}
+
+.layout-menu-search--open {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-overlay);
+    padding-bottom: 0.5rem;
+}
+
+.layout-menu-search-toggle {
+    width: 2rem;
+    height: 2rem;
+    padding: 0 !important;
+    flex-shrink: 0;
+}
+
+.layout-menu-search-input {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.875rem;
+    height: 2rem;
+}
+
+.layout-menu-search-close {
+    width: 2rem;
+    height: 2rem;
+    padding: 0 !important;
+    flex-shrink: 0;
+}
+
+.layout-menu-search-results {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.layout-menu-search-result {
+    a {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        padding: 0.6rem 0.75rem;
+        border-radius: var(--content-border-radius);
+        cursor: pointer;
+        color: var(--text-color);
+        transition: background-color var(--element-transition-duration);
+        outline: none;
+        text-decoration: none;
+
+        &:hover,
+        &:focus {
+            background-color: var(--surface-hover);
+        }
+
+        .layout-menuitem-icon {
+            margin-top: 0.15rem;
+            flex-shrink: 0;
+            opacity: 0.72;
+        }
+
+        .search-result-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            min-width: 0;
+        }
+
+        .search-result-label {
+            font-weight: 600;
+            font-size: 0.875rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .search-result-breadcrumb {
+            font-size: 0.75rem;
+            color: var(--text-color-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+}
+
+.layout-menu-search-empty {
+    padding: 1rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-color-secondary);
+    text-align: center;
+}

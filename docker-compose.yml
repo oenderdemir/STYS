@@ -92,6 +92,7 @@ services:
         condition: service_healthy
     volumes:
       - ./Data/logs/backend:/app/Logs
+      - ./Data/uploads/kurum-logolari:/app/Uploads/KurumLogolari
     env_file:
       - ./scripts/stys-integrity.env
     expose:

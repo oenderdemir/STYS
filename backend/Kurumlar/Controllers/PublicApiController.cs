@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Kurumlar.Dto;
 using STYS.Kurumlar.Services;
-using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Kurumlar.Controllers;
 
-[Route("api/public")]
-public class PublicApiController : UIController
+[ApiController]
+[Route("public")]
+public class PublicApiController : ControllerBase
 {
     private readonly ITenantBrandingService _tenantBrandingService;
 

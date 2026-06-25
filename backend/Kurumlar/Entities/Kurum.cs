@@ -38,5 +38,11 @@ public class Kurum : BaseEntity<int>
 
     public DateTime? LogoYuklenmeTarihi { get; set; }
 
+    [MaxLength(64)]
+    public string? TenantKey { get; set; }
+
+    [MaxLength(256)]
+    public string? LoginHost { get; set; }
+
     public ICollection<Tesis> Tesisler { get; set; } = [];
 }

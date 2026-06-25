@@ -12,4 +12,6 @@ export interface KurumModel {
     logoBoyut?: number | null;
     logoYuklenmeTarihi?: string | null;
     logoUrl?: string | null;
+    tenantKey?: string | null;
+    loginHost?: string | null;
 }

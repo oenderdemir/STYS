@@ -12,6 +12,7 @@ import { tryReadApiMessage } from '../../core/api';
 import { LoginResponseDto } from './dto';
 import { AuthService } from './auth.service';
 import { AppFloatingConfigurator } from '../../layout/component/app.floatingconfigurator';
+import { TenantBrandingService } from '../../core/tenant-branding/tenant-branding.service';
 
 @Component({
     selector: 'app-login',
@@ -24,13 +25,23 @@ import { AppFloatingConfigurator } from '../../layout/component/app.floatingconf
                 <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                     <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
 
-<div class="mb-8 flex flex-col items-center">
-    <img src="logo.png" class="logo-img" style="width:200px;" />
-    <!-- <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">STYS - Hoşgeldiniz</div>-->
-    <span class="text-muted-color font-medium mt-3">
-        Lütfen Giriş Yapınız
-    </span>
-</div>
+                        <div class="mb-8 flex flex-col items-center">
+                            <img
+                                [src]="brandingLogoUrl"
+                                style="max-width:220px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block;"
+                                [alt]="brandingKurumAdi"
+                                (error)="onBrandLogoError($event)"
+                            />
+                            @if (brandingKurumAdi !== 'STYS') {
+                                <div class="text-surface-900 dark:text-surface-0 text-2xl font-semibold mt-4 text-center">
+                                    {{ brandingKurumAdi }}
+                                </div>
+                            }
+                            <span class="text-muted-color font-medium mt-3">
+                                Lütfen Giriş Yapınız
+                            </span>
+                        </div>
+
                         <div>
                             <label for="username1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Kullanıcı Adı</label>
                             <input
@@ -57,15 +68,6 @@ import { AppFloatingConfigurator } from '../../layout/component/app.floatingconf
                                 (keyup.enter)="signIn()"
                             ></p-password>
 
-                            <!--
-                            <div class="flex items-center justify-between mt-2 mb-4 gap-8">
-                                <div class="flex items-center">
-                                    <p-checkbox [(ngModel)]="checked" id="rememberme1" binary class="mr-2"></p-checkbox>
-                                    <label for="rememberme1">Remember me</label>
-                                </div>
-                            </div>
-                            -->
-
                             @if (errorMessage) {
                                 <small class="block mb-4 text-red-500">{{ errorMessage }}</small>
                             }
@@ -88,6 +90,7 @@ export class Login implements OnInit {
     private readonly router = inject(Router);
     private readonly route = inject(ActivatedRoute);
     private readonly cdr = inject(ChangeDetectorRef);
+    private readonly tenantBrandingService = inject(TenantBrandingService);
 
     userName = '';
     password = '';
@@ -95,7 +98,12 @@ export class Login implements OnInit {
     isSubmitting = false;
     errorMessage: string | null = null;
 
+    brandingLogoUrl = 'logo.png';
+    brandingKurumAdi = 'STYS';
+
     ngOnInit(): void {
+        this.loadTenantBranding();
+
         const reason = this.route.snapshot.queryParamMap.get('reason');
         if (reason === 'expired') {
             this.errorMessage = 'Session expired. Please sign in again.';
@@ -109,6 +117,14 @@ export class Login implements OnInit {
 
         if (reason === 'unauthorized') {
             this.errorMessage = 'Your session is no longer valid. Please sign in again.';
+        }
+    }
+
+    onBrandLogoError(event: Event): void {
+        const img = event.target as HTMLImageElement;
+        if (!img.dataset['fallbackApplied']) {
+            img.dataset['fallbackApplied'] = 'true';
+            img.src = 'logo.png';
         }
     }
 
@@ -145,6 +161,23 @@ export class Login implements OnInit {
                 error: (error: unknown) => {
                     this.errorMessage = this.resolveErrorMessage(error);
                     this.cdr.detectChanges();
+                }
+            });
+    }
+
+    private loadTenantBranding(): void {
+        const host = window.location.host;
+        this.tenantBrandingService
+            .getBranding(host)
+            .pipe(finalize(() => this.cdr.detectChanges()))
+            .subscribe({
+                next: (branding) => {
+                    this.brandingKurumAdi = branding.kurumAdi || branding.applicationName || 'STYS';
+                    this.brandingLogoUrl = this.tenantBrandingService.resolveLogoUrl(branding.logoUrl);
+                },
+                error: () => {
+                    this.brandingKurumAdi = 'STYS';
+                    this.brandingLogoUrl = 'logo.png';
                 }
             });
     }

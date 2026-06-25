@@ -149,6 +149,18 @@
                                 <input pInputText class="w-full" [(ngModel)]="selectedKurum.eposta" placeholder="E-posta" />
                             </div>
 
+                            <div class="field">
+                                <label>Tenant Key</label>
+                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.tenantKey" placeholder="trt" />
+                                <small class="help-text">Kısa kurum anahtarı (ör: trt, meb). Otomatik küçük harfe çevrilir.</small>
+                            </div>
+
+                            <div class="field">
+                                <label>Login Host</label>
+                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.loginHost" placeholder="trt.stys.com" />
+                                <small class="help-text">Login ekranı subdomain'i (ör: trt.stys.com). Protokol yazmayın.</small>
+                            </div>
+
                             <div class="field field-full toggle-field">
                                 <p-checkbox inputId="kurumActive" [binary]="true" [(ngModel)]="selectedKurum.aktifMi"></p-checkbox>
                                 <label for="kurumActive">Aktif kurum</label>

@@ -13,4 +13,8 @@ public class UpdateKurumRequest
     public string? Eposta { get; set; }
 
     public bool AktifMi { get; set; } = true;
+
+    public string? TenantKey { get; set; }
+
+    public string? LoginHost { get; set; }
 }

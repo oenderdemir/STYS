@@ -27,4 +27,8 @@ public class KurumDto : BaseRdbmsDto<int>
     public DateTime? LogoYuklenmeTarihi { get; set; }
 
     public string? LogoUrl { get; set; }
+
+    public string? TenantKey { get; set; }
+
+    public string? LoginHost { get; set; }
 }

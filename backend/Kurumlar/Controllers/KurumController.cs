@@ -79,6 +79,8 @@ public class KurumController : UIController
     [Permission(TodPlatformAuthorizationConstants.SuperAdminPermission)]
     public async Task<ActionResult<KurumDto>> Create([FromBody] CreateKurumRequest request, CancellationToken cancellationToken)
     {
+        request.TenantKey = NormalizeTenantKey(request.TenantKey);
+        request.LoginHost = NormalizeLoginHost(request.LoginHost);
         var created = await _kurumService.CreateAsync(request, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -87,6 +89,8 @@ public class KurumController : UIController
     [Permission(IdentityPermissions.UserManagement.Manage, TodPlatformAuthorizationConstants.SuperAdminPermission)]
     public async Task<ActionResult<KurumDto>> Update(int id, [FromBody] UpdateKurumRequest request, CancellationToken cancellationToken)
     {
+        request.TenantKey = NormalizeTenantKey(request.TenantKey);
+        request.LoginHost = NormalizeLoginHost(request.LoginHost);
         await EnsureCanUpdateKurumAsync(id, cancellationToken);
         var updated = await _kurumService.UpdateAsync(id, request, cancellationToken);
         EnrichWithLogoUrl(updated);
@@ -385,6 +389,25 @@ public class KurumController : UIController
         var right = Math.Min(imageWidth, bounds.Right + padding);
         var bottom = Math.Min(imageHeight, bounds.Bottom + padding);
         return Rectangle.FromLTRB(x, y, right, bottom);
+    }
+
+    private static string? NormalizeTenantKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value.Trim().ToLowerInvariant();
+    }
+
+    private static string? NormalizeLoginHost(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var host = value.Trim().ToLowerInvariant();
+        if (host.StartsWith("https://")) host = host[8..];
+        else if (host.StartsWith("http://")) host = host[7..];
+        host = host.TrimEnd('/');
+        var colonIdx = host.IndexOf(':');
+        if (colonIdx >= 0) host = host[..colonIdx];
+        if (host.StartsWith("www.")) host = host[4..];
+        return string.IsNullOrWhiteSpace(host) ? null : host;
     }
 
     private async Task EnsureCanManageLogoAsync(int kurumId, CancellationToken cancellationToken)

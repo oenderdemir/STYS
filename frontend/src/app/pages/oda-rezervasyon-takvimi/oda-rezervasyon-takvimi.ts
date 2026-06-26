@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -35,6 +35,13 @@ interface DurumSecenegi {
     value: string | null;
 }
 
+const TakvimDurumFiltreleri = {
+    Onayli: 'Onayli',
+    CheckIn: 'CheckIn',
+    OdemeEksik: 'OdemeEksik',
+    BakimAriza: 'BakimAriza'
+} as const;
+
 @Component({
     selector: 'app-oda-rezervasyon-takvimi',
     standalone: true,
@@ -53,7 +60,8 @@ interface DurumSecenegi {
     ],
     providers: [MessageService],
     templateUrl: './oda-rezervasyon-takvimi.html',
-    styleUrl: './oda-rezervasyon-takvimi.scss'
+    styleUrl: './oda-rezervasyon-takvimi.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OdaRezervasyonTakvimi implements OnInit {
     private readonly rezervasyonService = inject(RezervasyonYonetimiService);
@@ -78,6 +86,8 @@ export class OdaRezervasyonTakvimi implements OnInit {
     secilenBlok: OdaRezervasyonBlokDto | null = null;
     blokDetayVisible = false;
 
+    private takvimRequestSeq = 0;
+
     readonly gunSayisiSecenekleri: GunSayisiSecenegi[] = [
         { label: '7 Gün', value: 7 },
         { label: '14 Gün', value: 14 },
@@ -86,10 +96,10 @@ export class OdaRezervasyonTakvimi implements OnInit {
 
     readonly durumSecenekleri: DurumSecenegi[] = [
         { label: 'Tümü', value: null },
-        { label: 'Onaylı', value: 'Onayli' },
-        { label: 'Check-in Yapılmış', value: 'CheckIn' },
-        { label: 'Ödeme Eksik', value: 'OdemeEksik' },
-        { label: 'Bakım / Arıza', value: 'BakimAriza' }
+        { label: 'Onaylı', value: TakvimDurumFiltreleri.Onayli },
+        { label: 'Check-in Yapılmış', value: TakvimDurumFiltreleri.CheckIn },
+        { label: 'Ödeme Eksik', value: TakvimDurumFiltreleri.OdemeEksik },
+        { label: 'Bakım / Arıza', value: TakvimDurumFiltreleri.BakimAriza }
     ];
 
     ngOnInit(): void {
@@ -128,6 +138,14 @@ export class OdaRezervasyonTakvimi implements OnInit {
             next: (tipler) => {
                 this.odaTipleri = tipler;
                 this.cdr.markForCheck();
+            },
+            error: (err: HttpErrorResponse) => {
+                this.messageService.add({
+                    severity: 'error',
+                    summary: 'Hata',
+                    detail: tryReadApiMessage(err) ?? 'Oda tipleri alınamadı.'
+                });
+                this.cdr.markForCheck();
             }
         });
 
@@ -140,6 +158,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
         const baslangicStr = toLocalDateString(this.selectedBaslangicTarihi);
         if (!baslangicStr) return;
 
+        const requestSeq = ++this.takvimRequestSeq;
         this.yukleniyor = true;
         this.takvim = null;
 
@@ -151,17 +170,26 @@ export class OdaRezervasyonTakvimi implements OnInit {
                 this.selectedOdaTipiId,
                 this.selectedDurum
             )
-            .pipe(finalize(() => { this.yukleniyor = false; this.cdr.markForCheck(); }))
+            .pipe(finalize(() => {
+                if (requestSeq === this.takvimRequestSeq) {
+                    this.yukleniyor = false;
+                    this.cdr.markForCheck();
+                }
+            }))
             .subscribe({
                 next: (takvim) => {
-                    this.takvim = takvim;
+                    if (requestSeq === this.takvimRequestSeq) {
+                        this.takvim = takvim;
+                    }
                 },
                 error: (err: HttpErrorResponse) => {
-                    this.messageService.add({
-                        severity: 'error',
-                        summary: 'Hata',
-                        detail: tryReadApiMessage(err) ?? 'Takvim yüklenemedi.'
-                    });
+                    if (requestSeq === this.takvimRequestSeq) {
+                        this.messageService.add({
+                            severity: 'error',
+                            summary: 'Hata',
+                            detail: tryReadApiMessage(err) ?? 'Takvim yüklenemedi.'
+                        });
+                    }
                 }
             });
     }

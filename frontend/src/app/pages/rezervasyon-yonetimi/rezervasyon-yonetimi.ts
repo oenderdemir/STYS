@@ -6,6 +6,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from './components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
 import { RezervasyonKonaklayanPlaniDialogComponent } from './components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { RezervasyonOdaDegisimiDialogComponent } from './components/rezervasyon-oda-degisimi-dialog/rezervasyon-oda-degisimi-dialog';
+import { RezervasyonOdemeDialogComponent } from './components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog';
 import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -27,7 +28,6 @@ import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
-import { EkHizmetPaketCakismaPolitikalari } from '../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
     KonaklamaSenaryoDto,
@@ -39,10 +39,6 @@ import {
     RezervasyonAramaSonucDto,
     RezervasyonCheckInKontrolDto,
     RezervasyonDetayDto,
-    RezervasyonEkHizmetDto,
-    RezervasyonEkHizmetMisafirSecenekDto,
-    RezervasyonEkHizmetSecenekleriDto,
-    RezervasyonEkHizmetTarifeSecenekDto,
     RezervasyonIndirimKuraliSecenekDto,
     RezervasyonKaydetRequestDto,
     RezervasyonKayitSonucDto,
@@ -52,7 +48,6 @@ import {
     RezervasyonKonaklamaTipiDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
-    RezervasyonOdemeDto,
     RezervasyonOdemeOzetDto,
     RezervasyonOdaTipiDto,
     SenaryoFiyatHesaplamaSonucuDto
@@ -68,7 +63,7 @@ type RezervasyonNavAction =
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent, RezervasyonOdaDegisimiDialogComponent],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent, RezervasyonOdaDegisimiDialogComponent, RezervasyonOdemeDialogComponent],
     templateUrl: './rezervasyon-yonetimi.html',
     styleUrl: './rezervasyon-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
@@ -117,25 +112,9 @@ export class RezervasyonYonetimi implements OnInit {
         { label: 'Erkek', value: KonaklayanCinsiyetleri.Erkek }
     ];
     odemeDialogVisible = false;
-    odemeLoading = false;
-    odemeSaving = false;
     odemeRezervasyonId: number | null = null;
     odemeReferansNo = '';
-    odemeOzeti: RezervasyonOdemeOzetDto | null = null;
-    odemeEkHizmetPanelExpanded = false;
-    odemeRestoranUcretPanelExpanded = false;
-    odemeEkHizmetSecenekleri: RezervasyonEkHizmetSecenekleriDto | null = null;
-    selectedEkHizmetKonaklayanId: number | null = null;
-    selectedEkHizmetTarifeId: number | null = null;
-    ekHizmetTarihi = '';
-    ekHizmetMiktar: number | null = 1;
-    ekHizmetBirimFiyat: number | null = null;
-    ekHizmetAciklama = '';
-    ekHizmetSaving = false;
-    editingEkHizmetId: number | null = null;
-    odemeTutari: number | null = null;
-    odemeTipi = 'Nakit';
-    odemeAciklama = '';
+    odemeRezervasyonDurumu: string | null = null;
     odaDegisimDialogVisible = false;
     odaDegisimRezervasyonId: number | null = null;
     odaDegisimReferansNo = '';
@@ -146,10 +125,6 @@ export class RezervasyonYonetimi implements OnInit {
     selectedSenaryoForOdaDegistir: KonaklamaSenaryoDto | null = null;
     selectedSegmentForOdaDegistir: KonaklamaSenaryoSegmentDto | null = null;
     selectedAtamaForOdaDegistir: KonaklamaSenaryoOdaAtamaDto | null = null;
-    readonly odemeTipleri = [
-        { label: 'Nakit', value: 'Nakit' },
-        { label: 'Kredi Karti', value: 'KrediKarti' }
-    ];
     rowActionItems: MenuItem[] = [];
     checkActionLoadingByRezervasyonId: Record<number, boolean> = {};
 
@@ -264,100 +239,6 @@ export class RezervasyonYonetimi implements OnInit {
 
     get canApplyCustomDiscount(): boolean {
         return this.authService.hasPermission('RezervasyonYonetimi.CustomIndirimGirebilir');
-    }
-
-    get ekHizmetMisafirSecenekleri(): RezervasyonEkHizmetMisafirSecenekDto[] {
-        return this.odemeEkHizmetSecenekleri?.misafirler ?? [];
-    }
-
-    get ekHizmetTarifeSecenekleri(): RezervasyonEkHizmetTarifeSecenekDto[] {
-        return this.odemeEkHizmetSecenekleri?.tarifeler ?? [];
-    }
-
-    get canModifyEkHizmet(): boolean {
-        const durum = this.getSelectedOdemeRezervasyonDurumu();
-        return !!this.odemeOzeti && durum === this.durumCheckInTamamlandi;
-    }
-
-    get ekHizmetBilgiMesaji(): string | null {
-        const reason = this.getEkHizmetModificationDisabledReason();
-        if (reason === 'Check-in bekleniyor') {
-            return 'Ek hizmet kalemleri yalnizca check-in tamamlandiktan sonra eklenebilir veya guncellenebilir.';
-        }
-
-        if (reason === 'Check-out tamamlandi') {
-            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemleri yalnizca goruntulenebilir.';
-        }
-
-        if (reason === 'Iptal edildi') {
-            return 'Iptal edilen rezervasyonda ek hizmet kalemleri yalnizca goruntulenebilir.';
-        }
-
-        if ((this.odemeOzeti?.odenenTutar ?? 0) > 0) {
-            return 'Odeme alinmis rezervasyonda ek hizmet eklenebilir. Ancak silme veya tutar dusuren guncelleme fazla tahsilat olusturacaksa engellenir.';
-        }
-
-        return null;
-    }
-
-    get odemeEkHizmetToggleLabel(): string {
-        return this.odemeEkHizmetPanelExpanded ? 'Ek Hizmetleri Gizle' : 'Ek Hizmetleri Goster';
-    }
-
-    get odemeRestoranUcretToggleLabel(): string {
-        return this.odemeRestoranUcretPanelExpanded ? 'Restoran Ucretlendirmelerini Gizle' : 'Restoran Ucretlendirmelerini Goster';
-    }
-
-    get restoranUcretlendirmeKayitlari(): RezervasyonOdemeDto[] {
-        if (!this.odemeOzeti) {
-            return [];
-        }
-
-        return this.odemeOzeti.odemeler.filter((x) => x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0);
-    }
-
-    get tahsilatKayitlari(): RezervasyonOdemeDto[] {
-        if (!this.odemeOzeti) {
-            return [];
-        }
-
-        return this.odemeOzeti.odemeler.filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0));
-    }
-
-    get restoranUcretlendirmeToplami(): number {
-        return this.restoranUcretlendirmeKayitlari.reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
-    }
-
-    get odemeDialogToplamBorc(): number {
-        if (!this.odemeOzeti) {
-            return 0;
-        }
-
-        return (this.odemeOzeti.konaklamaUcreti ?? 0) + (this.odemeOzeti.ekHizmetToplami ?? 0) + this.restoranUcretlendirmeToplami;
-    }
-
-    get odemeDialogOdenenToplam(): number {
-        return this.tahsilatKayitlari.reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
-    }
-
-    get odemeDialogKalanTutar(): number {
-        return Math.max(0, this.odemeDialogToplamBorc - this.odemeDialogOdenenToplam);
-    }
-
-    get odemeKaydetDisabled(): boolean {
-        return !this.odemeOzeti || this.odemeLoading || this.odemeDialogKalanTutar <= 0;
-    }
-
-    getOdemeTipiEtiket(odemeTipi: string): string {
-        if (odemeTipi === 'OdayaEkle') {
-            return 'Restoran Ucretlendirmesi';
-        }
-
-        return odemeTipi;
-    }
-
-    toPositiveAmount(value: number): number {
-        return Math.abs(Number(value ?? 0));
     }
 
     ngOnInit(): void {
@@ -1803,279 +1684,21 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        this.odemeDialogVisible = true;
         this.odemeRezervasyonId = kayit.id;
         this.odemeReferansNo = kayit.referansNo;
-        this.odemeOzeti = null;
-        this.odemeEkHizmetPanelExpanded = false;
-        this.odemeRestoranUcretPanelExpanded = false;
-        this.odemeTutari = null;
-        this.odemeTipi = 'Nakit';
-        this.odemeAciklama = '';
-        this.odemeEkHizmetSecenekleri = null;
-        this.selectedEkHizmetKonaklayanId = null;
-        this.selectedEkHizmetTarifeId = null;
-        this.ekHizmetTarihi = this.getDefaultEkHizmetTarihi(kayit.id);
-        this.ekHizmetMiktar = 1;
-        this.ekHizmetBirimFiyat = null;
-        this.ekHizmetAciklama = '';
-        this.editingEkHizmetId = null;
-        this.loadOdemeOzeti(kayit.id);
-        this.loadEkHizmetSecenekleri(kayit.id);
+        this.odemeRezervasyonDurumu = kayit.rezervasyonDurumu;
+        this.odemeDialogVisible = true;
     }
 
     closeOdemeDialog(): void {
         this.odemeDialogVisible = false;
-        this.odemeLoading = false;
-        this.odemeSaving = false;
-        this.ekHizmetSaving = false;
         this.odemeRezervasyonId = null;
         this.odemeReferansNo = '';
-        this.odemeOzeti = null;
-        this.odemeEkHizmetPanelExpanded = false;
-        this.odemeRestoranUcretPanelExpanded = false;
-        this.odemeEkHizmetSecenekleri = null;
-        this.selectedEkHizmetKonaklayanId = null;
-        this.selectedEkHizmetTarifeId = null;
-        this.ekHizmetTarihi = '';
-        this.ekHizmetMiktar = 1;
-        this.ekHizmetBirimFiyat = null;
-        this.ekHizmetAciklama = '';
-        this.editingEkHizmetId = null;
-        this.odemeTutari = null;
-        this.odemeTipi = 'Nakit';
-        this.odemeAciklama = '';
+        this.odemeRezervasyonDurumu = null;
     }
 
-    kaydetEkHizmet(): void {
-        if (!this.odemeRezervasyonId || !this.odemeOzeti || this.ekHizmetSaving) {
-            return;
-        }
-
-        if (this.getSelectedOdemeRezervasyonDurumu() !== this.durumCheckInTamamlandi) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Check-in Bekleniyor', detail: 'Ek hizmet eklemek icin once check-in tamamlanmalidir.' });
-            return;
-        }
-
-        if (!this.selectedEkHizmetKonaklayanId || this.selectedEkHizmetKonaklayanId <= 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir konaklayan seciniz.' });
-            return;
-        }
-
-        if (!this.selectedEkHizmetTarifeId || this.selectedEkHizmetTarifeId <= 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir ek hizmet seciniz.' });
-            return;
-        }
-
-        const miktar = Number(this.ekHizmetMiktar ?? 0);
-        if (!Number.isFinite(miktar) || miktar <= 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Miktar', detail: 'Miktar sifirdan buyuk olmalidir.' });
-            return;
-        }
-
-        const birimFiyat = Number(this.ekHizmetBirimFiyat ?? 0);
-        if (!Number.isFinite(birimFiyat) || birimFiyat < 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Fiyat', detail: 'Birim fiyat sifirdan kucuk olamaz.' });
-            return;
-        }
-
-        if (!this.ekHizmetTarihi) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Hizmet tarihi zorunludur.' });
-            return;
-        }
-
-        const request = {
-            rezervasyonKonaklayanId: this.selectedEkHizmetKonaklayanId,
-            ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
-            hizmetTarihi: this.normalizeDateTimeLocalInput(this.ekHizmetTarihi),
-            miktar,
-            birimFiyat,
-            aciklama: this.normalizeOptional(this.ekHizmetAciklama)
-        };
-        const paketUyarisi = this.getSelectedEkHizmetTarifePaketUyarisi();
-        const paketCakismaPolitikasi = this.odemeEkHizmetSecenekleri?.paketCakismaPolitikasi ?? EkHizmetPaketCakismaPolitikalari.OnayIste;
-
-        if (paketUyarisi) {
-            if (paketCakismaPolitikasi === EkHizmetPaketCakismaPolitikalari.Engelle) {
-                this.messageService.add({ severity: UiSeverity.Error, summary: 'Paket Cakismasi', detail: `${paketUyarisi} Bu tesis politikasina gore ek satis engellendi.` });
-                return;
-            }
-
-            if (paketCakismaPolitikasi === EkHizmetPaketCakismaPolitikalari.OnayIste) {
-                this.confirmationService.confirm({
-                    header: 'Paket Icerigi Uyarisi',
-                    message: `${paketUyarisi} Yine de ek hizmet satisina devam etmek istiyor musunuz?`,
-                    icon: 'pi pi-exclamation-triangle',
-                    acceptLabel: 'Devam Et',
-                    rejectLabel: 'Vazgec',
-                    accept: () => this.executeKaydetEkHizmet(request)
-                });
-                return;
-            }
-
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Paket Cakismasi', detail: paketUyarisi });
-        }
-
-        this.executeKaydetEkHizmet(request);
-    }
-
-    private executeKaydetEkHizmet(request: {
-        rezervasyonKonaklayanId: number;
-        ekHizmetTarifeId: number;
-        hizmetTarihi: string;
-        miktar: number;
-        birimFiyat: number;
-        aciklama: string | null;
-    }): void {
-        if (!this.odemeRezervasyonId) {
-            return;
-        }
-
-        const rezervasyonId = this.odemeRezervasyonId;
-        this.ekHizmetSaving = true;
-
-        const request$ = this.editingEkHizmetId
-            ? this.service.guncelleEkHizmet(rezervasyonId, this.editingEkHizmetId, request)
-            : this.service.kaydetEkHizmet(rezervasyonId, request);
-
-        request$
-            .pipe(
-                finalize(() => {
-                    this.ekHizmetSaving = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (result) => {
-                    this.odemeOzeti = result;
-                    this.applyOdemeOzetiToRezervasyon(result);
-                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
-                    const message = this.editingEkHizmetId
-                        ? 'Ek hizmet kaydi guncellendi.'
-                        : 'Ek hizmet hesaba eklendi.';
-                    this.resetEkHizmetForm();
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: message });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
-    duzenleEkHizmet(hizmet: RezervasyonEkHizmetDto): void {
-        if (this.getEkHizmetEditDisabledReason(hizmet) !== null) {
-            return;
-        }
-
-        this.odemeEkHizmetPanelExpanded = true;
-        this.editingEkHizmetId = hizmet.id;
-        this.selectedEkHizmetKonaklayanId = hizmet.rezervasyonKonaklayanId;
-        this.selectedEkHizmetTarifeId = hizmet.ekHizmetTarifeId;
-        this.ekHizmetTarihi = this.toDateTimeLocalInputValue(hizmet.hizmetTarihi);
-        this.ekHizmetMiktar = hizmet.miktar;
-        this.ekHizmetBirimFiyat = hizmet.birimFiyat;
-        this.ekHizmetAciklama = hizmet.aciklama ?? '';
-    }
-
-    onEkHizmetTarifeChange(): void {
-        const selectedTarife = this.getSelectedEkHizmetTarife();
-        this.ekHizmetBirimFiyat = selectedTarife?.birimFiyat ?? null;
-    }
-
-    toggleOdemeEkHizmetPanel(): void {
-        this.odemeEkHizmetPanelExpanded = !this.odemeEkHizmetPanelExpanded;
-    }
-
-    toggleOdemeRestoranUcretPanel(): void {
-        this.odemeRestoranUcretPanelExpanded = !this.odemeRestoranUcretPanelExpanded;
-    }
-
-    ekHizmetDuzenlemeyiIptalEt(): void {
-        this.resetEkHizmetForm();
-    }
-
-    silEkHizmet(hizmet: RezervasyonEkHizmetDto): void {
-        if (!this.odemeRezervasyonId || this.getEkHizmetDeleteDisabledReason(hizmet) !== null || this.ekHizmetSaving) {
-            return;
-        }
-
-        if (!window.confirm(`'${hizmet.tarifeAdi}' ek hizmet kaydi silinsin mi?`)) {
-            return;
-        }
-
-        this.ekHizmetSaving = true;
-        this.service
-            .silEkHizmet(this.odemeRezervasyonId, hizmet.id)
-            .pipe(
-                finalize(() => {
-                    this.ekHizmetSaving = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (result) => {
-                    this.odemeOzeti = result;
-                    this.applyOdemeOzetiToRezervasyon(result);
-                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
-                    if (this.editingEkHizmetId === hizmet.id) {
-                        this.resetEkHizmetForm();
-                    }
-
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Ek hizmet kaydi silindi.' });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
-    kaydetOdeme(): void {
-        if (!this.odemeRezervasyonId || !this.odemeOzeti || this.odemeSaving) {
-            return;
-        }
-
-        if (this.getSelectedOdemeRezervasyonDurumu() !== this.durumCheckInTamamlandi) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Check-in Bekleniyor', detail: 'Odeme almak icin once check-in tamamlanmalidir.' });
-            return;
-        }
-
-        const tutar = Number(this.odemeTutari ?? 0);
-        if (!Number.isFinite(tutar) || tutar <= 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Tutar', detail: 'Odeme tutari sifirdan buyuk olmalidir.' });
-            return;
-        }
-
-        this.odemeSaving = true;
-        this.service
-            .kaydetOdeme(this.odemeRezervasyonId, {
-                odemeTutari: tutar,
-                odemeTipi: this.odemeTipi,
-                aciklama: this.normalizeOptional(this.odemeAciklama)
-            })
-            .pipe(
-                finalize(() => {
-                    this.odemeSaving = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (result) => {
-                    this.odemeOzeti = result;
-                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
-                    this.odemeAciklama = '';
-                    this.applyOdemeOzetiToRezervasyon(result);
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
+    onOdemeSaved(result: RezervasyonOdemeOzetDto): void {
+        this.applyOdemeOzetiToRezervasyon(result);
     }
 
     tamamlaCheckOut(kayit: RezervasyonListeDto): void {
@@ -2367,57 +1990,6 @@ export class RezervasyonYonetimi implements OnInit {
         return `${year}-${month}-${day}`;
     }
 
-    private loadOdemeOzeti(rezervasyonId: number): void {
-        this.odemeLoading = true;
-        this.service
-            .getOdemeOzeti(rezervasyonId)
-            .pipe(
-                finalize(() => {
-                    this.odemeLoading = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (ozet) => {
-                    this.odemeOzeti = ozet;
-                    this.odemeTutari = this.getOdemeGorunumKalanTutar(ozet) > 0 ? this.getOdemeGorunumKalanTutar(ozet) : null;
-                    if (ozet.odemeler.length > 0 && this.editingEkHizmetId) {
-                        this.resetEkHizmetForm();
-                    }
-
-                    this.applyOdemeOzetiToRezervasyon(ozet);
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.odemeOzeti = null;
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
-    private loadEkHizmetSecenekleri(rezervasyonId: number): void {
-        this.service.getEkHizmetSecenekleri(rezervasyonId).subscribe({
-            next: (result) => {
-                this.odemeEkHizmetSecenekleri = result;
-                if (!this.selectedEkHizmetKonaklayanId || !result.misafirler.some((x) => x.rezervasyonKonaklayanId === this.selectedEkHizmetKonaklayanId)) {
-                    this.selectedEkHizmetKonaklayanId = result.misafirler[0]?.rezervasyonKonaklayanId ?? null;
-                }
-
-                if (!this.selectedEkHizmetTarifeId || !result.tarifeler.some((x) => x.id === this.selectedEkHizmetTarifeId)) {
-                    this.selectedEkHizmetTarifeId = result.tarifeler[0]?.id ?? null;
-                }
-
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.odemeEkHizmetSecenekleri = null;
-                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                this.cdr.detectChanges();
-            }
-        });
-    }
-
     private applyOdemeOzetiToRezervasyon(ozet: RezervasyonOdemeOzetDto): void {
         const kayit = this.rezervasyonKayitlari.find((x) => x.id === ozet.rezervasyonId);
         if (kayit) {
@@ -2432,185 +2004,6 @@ export class RezervasyonYonetimi implements OnInit {
             detay.ekHizmetToplami = ozet.ekHizmetToplami;
             detay.toplamUcret = ozet.toplamUcret;
             detay.ekHizmetler = [...ozet.ekHizmetler];
-        }
-    }
-
-    private getOdemeGorunumKalanTutar(ozet: RezervasyonOdemeOzetDto): number {
-        const restoranUcretlendirmeToplami = (ozet.odemeler ?? [])
-            .filter((x) => x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0)
-            .reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
-
-        const tahsilatToplami = (ozet.odemeler ?? [])
-            .filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0))
-            .reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
-
-        const toplamBorc = (ozet.konaklamaUcreti ?? 0) + (ozet.ekHizmetToplami ?? 0) + restoranUcretlendirmeToplami;
-        return Math.max(0, toplamBorc - tahsilatToplami);
-    }
-
-    private getSelectedEkHizmetTarife(): RezervasyonEkHizmetTarifeSecenekDto | null {
-        if (!this.selectedEkHizmetTarifeId) {
-            return null;
-        }
-
-        return this.ekHizmetTarifeSecenekleri.find((x) => x.id === this.selectedEkHizmetTarifeId) ?? null;
-    }
-
-    getSelectedEkHizmetTarifeVarsayilanFiyat(): string | null {
-        const selectedTarife = this.getSelectedEkHizmetTarife();
-        if (!selectedTarife) {
-            return null;
-        }
-
-        return this.formatCurrency(selectedTarife.birimFiyat, selectedTarife.paraBirimi);
-    }
-
-    getSelectedEkHizmetTarifePaketUyarisi(): string | null {
-        return this.getSelectedEkHizmetTarife()?.paketIcerigiUyariMesaji ?? null;
-    }
-
-    getEkHizmetToplamOnizleme(): string | null {
-        const selectedTarife = this.getSelectedEkHizmetTarife();
-        const miktar = Number(this.ekHizmetMiktar ?? 0);
-        const birimFiyat = Number(this.ekHizmetBirimFiyat ?? 0);
-        if (!selectedTarife || !Number.isFinite(miktar) || miktar <= 0 || !Number.isFinite(birimFiyat) || birimFiyat < 0) {
-            return null;
-        }
-
-        return this.formatCurrency(Math.round(birimFiyat * miktar * 100) / 100, selectedTarife.paraBirimi);
-    }
-
-    private getDefaultEkHizmetTarihi(rezervasyonId: number): string {
-        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
-        if (!kayit) {
-            return this.nowInput();
-        }
-
-        const now = new Date();
-        const giris = this.parseApiDateTime(kayit.girisTarihi);
-        const cikis = this.parseApiDateTime(kayit.cikisTarihi);
-        if (!giris) {
-            return this.nowInput();
-        }
-
-        const safeCikis = cikis ?? new Date(giris.getTime() + 24 * 60 * 60 * 1000);
-        const value = now >= giris && now <= safeCikis ? now : giris;
-        return this.toDateTimeLocalInput(value);
-    }
-
-    private getSelectedOdemeRezervasyonDurumu(): string | null {
-        if (!this.odemeRezervasyonId) {
-            return null;
-        }
-
-        return this.rezervasyonKayitlari.find((x) => x.id === this.odemeRezervasyonId)?.rezervasyonDurumu ?? null;
-    }
-
-    private getEkHizmetModificationDisabledReason(): string | null {
-        if (!this.odemeOzeti) {
-            return 'Odeme ozeti yok';
-        }
-
-        const durum = this.getSelectedOdemeRezervasyonDurumu();
-        if (durum !== this.durumCheckInTamamlandi) {
-            if (durum === this.durumCheckOutTamamlandi) {
-                return 'Check-out tamamlandi';
-            }
-
-            if (durum === this.durumIptal) {
-                return 'Iptal edildi';
-            }
-
-            return 'Check-in bekleniyor';
-        }
-
-        return null;
-    }
-
-    getEkHizmetEditDisabledReason(_hizmet: RezervasyonEkHizmetDto): string | null {
-        return this.getEkHizmetModificationDisabledReason();
-    }
-
-    getEkHizmetEditDisabledMessage(hizmet: RezervasyonEkHizmetDto): string {
-        const reason = this.getEkHizmetEditDisabledReason(hizmet);
-        if (reason === 'Check-out tamamlandi') {
-            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemi guncellenemez.';
-        }
-
-        if (reason === 'Iptal edildi') {
-            return 'Iptal edilen rezervasyonda ek hizmet kalemi guncellenemez.';
-        }
-
-        if (reason === 'Check-in bekleniyor') {
-            return 'Check-in tamamlanmadan ek hizmet kalemi guncellenemez.';
-        }
-
-        if (reason === 'Odeme ozeti yok') {
-            return 'Ek hizmet islemi icin odeme ozeti yuklenemedi.';
-        }
-
-        return 'Ek hizmet kalemi guncellenemez.';
-    }
-
-    getEkHizmetDeleteDisabledReason(hizmet: RezervasyonEkHizmetDto): string | null {
-        const reservationReason = this.getEkHizmetModificationDisabledReason();
-        if (reservationReason) {
-            return reservationReason;
-        }
-
-        if (!this.odemeOzeti) {
-            return 'Odeme ozeti yok';
-        }
-
-        const kalanTutar = this.odemeOzeti.kalanTutar ?? 0;
-        if (kalanTutar <= 0) {
-            return 'Odeme bakiyesi sifirlandi';
-        }
-
-        if (hizmet.toplamTutar > kalanTutar) {
-            return 'Fazla odeme olusur';
-        }
-
-        return null;
-    }
-
-    getEkHizmetDeleteDisabledMessage(hizmet: RezervasyonEkHizmetDto): string {
-        const reason = this.getEkHizmetDeleteDisabledReason(hizmet);
-        if (reason === 'Check-out tamamlandi') {
-            return 'Check-out tamamlanan rezervasyonda ek hizmet kalemi silinemez.';
-        }
-
-        if (reason === 'Iptal edildi') {
-            return 'Iptal edilen rezervasyonda ek hizmet kalemi silinemez.';
-        }
-
-        if (reason === 'Check-in bekleniyor') {
-            return 'Check-in tamamlanmadan ek hizmet kalemi silinemez.';
-        }
-
-        if (reason === 'Odeme bakiyesi sifirlandi') {
-            return 'Odeme bakiyesi sifirlandigi icin bu ek hizmet kalemi silinemez.';
-        }
-
-        if (reason === 'Fazla odeme olusur') {
-            return `Bu kalem silinirse tahsil edilen tutar yeni toplamdan buyuk kalir. Kalan tutar: ${this.formatCurrency(this.odemeOzeti?.kalanTutar ?? 0, this.odemeOzeti?.paraBirimi ?? 'TRY')}.`;
-        }
-
-        if (reason === 'Odeme ozeti yok') {
-            return 'Ek hizmet islemi icin odeme ozeti yuklenemedi.';
-        }
-
-        return 'Ek hizmet kalemi silinemez.';
-    }
-
-    private resetEkHizmetForm(): void {
-        this.editingEkHizmetId = null;
-        this.ekHizmetMiktar = 1;
-        this.ekHizmetBirimFiyat = this.getSelectedEkHizmetTarife()?.birimFiyat ?? null;
-        this.ekHizmetAciklama = '';
-
-        if (this.odemeRezervasyonId) {
-            this.ekHizmetTarihi = this.getDefaultEkHizmetTarihi(this.odemeRezervasyonId);
         }
     }
 

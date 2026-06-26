@@ -376,7 +376,7 @@
                     severity="secondary"
                     [outlined]="true"
                     size="small"
-                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'odeme')"
+                    (onClick)="odemeAc(secilenBlok)"
                 />
                 <p-button
                     label="Oda Değiştir"
@@ -553,3 +553,11 @@
     [rezervasyonDurumu]="odaDegisimRezervasyonDurumu"
     (saved)="takvimYukle()">
 </app-rezervasyon-oda-degisimi-dialog>
+
+<app-rezervasyon-odeme-dialog
+    [(visible)]="odemeDialogVisible"
+    [rezervasyonId]="odemeRezervasyonId"
+    [referansNo]="odemeReferansNo"
+    [rezervasyonDurumu]="odemeRezervasyonDurumu"
+    (saved)="takvimYukle()">
+</app-rezervasyon-odeme-dialog>

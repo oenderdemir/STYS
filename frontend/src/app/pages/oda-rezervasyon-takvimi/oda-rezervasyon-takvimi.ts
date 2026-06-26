@@ -21,6 +21,7 @@ import { RezervasyonTesisDto, RezervasyonOdaTipiDto } from '../rezervasyon-yonet
 import { RezervasyonDegisiklikGecmisiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
 import { RezervasyonKonaklayanPlaniDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { RezervasyonOdaDegisimiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-oda-degisimi-dialog/rezervasyon-oda-degisimi-dialog';
+import { RezervasyonOdemeDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog';
 import { OdaRezervasyonTakvimiService } from './oda-rezervasyon-takvimi.service';
 import {
     OdaRezervasyonTakvimiDto,
@@ -85,7 +86,8 @@ const TakvimDurumFiltreleri = {
         ToolbarModule,
         RezervasyonDegisiklikGecmisiDialogComponent,
         RezervasyonKonaklayanPlaniDialogComponent,
-        RezervasyonOdaDegisimiDialogComponent
+        RezervasyonOdaDegisimiDialogComponent,
+        RezervasyonOdemeDialogComponent
     ],
     providers: [MessageService],
     templateUrl: './oda-rezervasyon-takvimi.html',
@@ -127,6 +129,10 @@ export class OdaRezervasyonTakvimi implements OnInit {
     odaDegisimRezervasyonId: number | null = null;
     odaDegisimReferansNo = '';
     odaDegisimRezervasyonDurumu: string | null = null;
+    odemeDialogVisible = false;
+    odemeRezervasyonId: number | null = null;
+    odemeReferansNo = '';
+    odemeRezervasyonDurumu: string | null = null;
 
     private takvimRequestSeq = 0;
     private odaTipiRequestSeq = 0;
@@ -437,14 +443,18 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.legendVisible = false;
     }
 
-    rezervasyonYonetimineGit(
-        rezervasyonId: number | null,
-        action?: 'odeme'
-    ): void {
+    rezervasyonYonetimineGit(rezervasyonId: number | null): void {
         if (!rezervasyonId) return;
-        const queryParams: Record<string, string | number> = { rezervasyonId };
-        if (action) queryParams['action'] = action;
-        this.router.navigate(['/rezervasyon-yonetimi'], { queryParams });
+        this.router.navigate(['/rezervasyon-yonetimi'], { queryParams: { rezervasyonId } });
+        this.blokDetayKapat();
+    }
+
+    odemeAc(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId) return;
+        this.odemeRezervasyonId = blok.rezervasyonId;
+        this.odemeReferansNo = blok.altBaslik ?? '';
+        this.odemeRezervasyonDurumu = blok.durum ?? null;
+        this.odemeDialogVisible = true;
         this.blokDetayKapat();
     }
 

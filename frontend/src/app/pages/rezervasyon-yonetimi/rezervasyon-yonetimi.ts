@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -92,6 +92,10 @@ export class RezervasyonYonetimi implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private readonly route = inject(ActivatedRoute);
+
+    private pendingNavRezervasyonId: number | null = null;
+    private pendingNavAction: string | null = null;
 
     tesisler: TesisDto[] = [];
     odaTipleri: RezervasyonOdaTipiDto[] = [];
@@ -404,11 +408,52 @@ export class RezervasyonYonetimi implements OnInit {
         // Defensive cleanup: stale scroll-lock classes can remain after modal/sidebar flows.
         document.body.classList.remove('p-overflow-hidden');
         document.body.classList.remove('blocked-scroll');
+
+        const params = this.route.snapshot.queryParams;
+        const idParam = params['rezervasyonId'];
+        if (idParam) {
+            const parsed = Number(idParam);
+            if (!isNaN(parsed) && parsed > 0) {
+                this.pendingNavRezervasyonId = parsed;
+                this.pendingNavAction = params['action'] ?? null;
+            }
+        }
+
         this.loadReferences();
     }
 
     refresh(): void {
         this.loadReferences();
+    }
+
+    private handlePendingNavAction(): void {
+        const rezervasyonId = this.pendingNavRezervasyonId;
+        const action = this.pendingNavAction;
+        if (!rezervasyonId) return;
+
+        this.pendingNavRezervasyonId = null;
+        this.pendingNavAction = null;
+
+        const kayit = this.rezervasyonKayitlari.find(k => k.id === rezervasyonId);
+        if (!kayit) return;
+
+        switch (action) {
+            case 'odeme':
+                this.openOdemeDialog(kayit);
+                break;
+            case 'odaDegisim':
+                this.openOdaDegisimDialog(kayit);
+                break;
+            case 'konaklayanPlan':
+                this.openKonaklayanPlaniDialog(kayit);
+                break;
+            case 'degisiklikGecmisi':
+                this.openDegisiklikGecmisiDialog(kayit);
+                break;
+            default:
+                this.loadRezervasyonDetay(rezervasyonId);
+                this.expandedRowKeys = { [rezervasyonId]: true };
+        }
     }
 
     onRowExpand(event: { data?: RezervasyonListeDto }): void {
@@ -2956,6 +3001,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.closeKonaklayanPlaniDialog();
                     this.closeOdaDegisimDialog();
                     this.closeOdemeDialog();
+                    this.handlePendingNavAction();
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {

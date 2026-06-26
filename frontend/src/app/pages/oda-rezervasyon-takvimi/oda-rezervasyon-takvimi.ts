@@ -420,9 +420,14 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.legendVisible = false;
     }
 
-    rezervasyonDetayinaGit(rezervasyonId: number | null): void {
+    rezervasyonYonetimineGit(
+        rezervasyonId: number | null,
+        action?: 'odeme' | 'odaDegisim' | 'konaklayanPlan' | 'degisiklikGecmisi'
+    ): void {
         if (!rezervasyonId) return;
-        this.router.navigate(['/rezervasyon-yonetimi'], { queryParams: { rezervasyonId } });
+        const queryParams: Record<string, string | number> = { rezervasyonId };
+        if (action) queryParams['action'] = action;
+        this.router.navigate(['/rezervasyon-yonetimi'], { queryParams });
         this.blokDetayKapat();
     }
 

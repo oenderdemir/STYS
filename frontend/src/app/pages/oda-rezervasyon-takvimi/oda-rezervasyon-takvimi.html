@@ -361,12 +361,49 @@
                     </div>
                 }
             </div>
-            <div class="detay-actions">
+            <div class="detay-hizli-islemler">
                 <p-button
-                    label="Detaya Git"
+                    label="Rezervasyon Detayı"
                     icon="pi pi-external-link"
-                    (onClick)="rezervasyonDetayinaGit(secilenBlok.rezervasyonId)"
+                    severity="secondary"
+                    [outlined]="true"
+                    size="small"
+                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId)"
                 />
+                <p-button
+                    label="Ödeme İşlemleri"
+                    icon="pi pi-credit-card"
+                    severity="secondary"
+                    [outlined]="true"
+                    size="small"
+                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'odeme')"
+                />
+                <p-button
+                    label="Oda Değiştir"
+                    icon="pi pi-arrow-right-arrow-left"
+                    severity="secondary"
+                    [outlined]="true"
+                    size="small"
+                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'odaDegisim')"
+                />
+                <p-button
+                    label="Konaklayan Planı"
+                    icon="pi pi-users"
+                    severity="secondary"
+                    [outlined]="true"
+                    size="small"
+                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'konaklayanPlan')"
+                />
+                <p-button
+                    label="Değişiklik Geçmişi"
+                    icon="pi pi-history"
+                    severity="secondary"
+                    [outlined]="true"
+                    size="small"
+                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'degisiklikGecmisi')"
+                />
+            </div>
+            <div class="detay-actions">
                 <p-button
                     label="Kapat"
                     severity="secondary"

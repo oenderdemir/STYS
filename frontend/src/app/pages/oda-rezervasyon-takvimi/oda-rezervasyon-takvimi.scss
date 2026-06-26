@@ -150,3 +150,47 @@
     display: flex; gap: .5rem; justify-content: flex-end;
     padding-top: .75rem; border-top: 1px solid var(--p-surface-border);
 }
+
+.legend-body {
+    display: flex; flex-direction: column; gap: 1.25rem;
+    padding-bottom: .25rem;
+}
+
+.legend-section {
+    display: flex; flex-direction: column; gap: .45rem;
+}
+
+.legend-section-title {
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--p-text-muted-color);
+    margin-bottom: .1rem;
+    padding-bottom: .25rem;
+    border-bottom: 1px solid var(--p-surface-border);
+}
+
+.legend-row {
+    display: flex; align-items: center; gap: .65rem;
+}
+
+.legend-label {
+    font-size: .83rem;
+}
+
+.legend-color {
+    display: inline-block;
+    width: 2rem; height: 1rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+    &.onayli      { background: var(--p-green-100);   }
+    &.checkin     { background: var(--p-blue-100);    }
+    &.odeme-eksik { background: var(--p-orange-100);  }
+    &.bakim-ariza { background: var(--p-surface-200); }
+}
+
+.legend-icon {
+    font-size: .9rem; width: 1.1rem; text-align: center; flex-shrink: 0;
+    &.ci-icon   { color: #16a34a; }
+    &.co-icon   { color: #b45309; }
+    &.warn-icon { color: #f59e0b; }
+    &.muted-icon { color: var(--p-text-muted-color); }
+}

@@ -104,6 +104,14 @@
                     (onClick)="tumGruplariKapat()"
                     pTooltip="Tüm oda tipi gruplarını kapat"
                 />
+                <span class="nav-sep"></span>
+                <p-button
+                    label="Açıklamalar"
+                    icon="pi pi-info-circle"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="legendAc()"
+                />
             </div>
         </ng-template>
     </p-toolbar>
@@ -392,4 +400,93 @@
             </div>
         }
     }
+</p-dialog>
+
+<!-- Lejant / Açıklamalar dialog -->
+<p-dialog
+    [(visible)]="legendVisible"
+    [modal]="true"
+    [closable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    header="Takvim Açıklamaları"
+    styleClass="legend-dialog"
+    [style]="{ width: '520px', maxWidth: '95vw' }"
+    (onHide)="legendKapat()"
+>
+    <div class="legend-body">
+
+        <!-- Renkler -->
+        <div class="legend-section">
+            <div class="legend-section-title">Renkler</div>
+            <div class="legend-row">
+                <span class="legend-color onayli"></span>
+                <span class="legend-label">Onaylı rezervasyon</span>
+            </div>
+            <div class="legend-row">
+                <span class="legend-color checkin"></span>
+                <span class="legend-label">Check-in yapılmış rezervasyon</span>
+            </div>
+            <div class="legend-row">
+                <span class="legend-color odeme-eksik"></span>
+                <span class="legend-label">Ödeme eksik rezervasyon</span>
+            </div>
+            <div class="legend-row">
+                <span class="legend-color bakim-ariza"></span>
+                <span class="legend-label">Bakım / Arıza</span>
+            </div>
+        </div>
+
+        <!-- İkonlar -->
+        <div class="legend-section">
+            <div class="legend-section-title">İkonlar</div>
+            <div class="legend-row">
+                <i class="pi pi-sign-in legend-icon ci-icon"></i>
+                <span class="legend-label">Bugün check-in var</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-sign-out legend-icon co-icon"></i>
+                <span class="legend-label">Bugün check-out var</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-exclamation-triangle legend-icon warn-icon"></i>
+                <span class="legend-label">Ödeme eksik</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-arrow-right-arrow-left legend-icon warn-icon"></i>
+                <span class="legend-label">Oda değişimi gerekli</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-chevron-left legend-icon muted-icon"></i>
+                <span class="legend-label">Rezervasyon takvim aralığının dışından devam ediyor</span>
+            </div>
+        </div>
+
+        <!-- Kullanım -->
+        <div class="legend-section">
+            <div class="legend-section-title">Kullanım</div>
+            <div class="legend-row">
+                <i class="pi pi-hand-pointer legend-icon muted-icon"></i>
+                <span class="legend-label">Rezervasyon bloğuna tıklayarak detayları görüntüleyin.</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-tag legend-icon muted-icon"></i>
+                <span class="legend-label">Oda tipi başlığına tıklayarak grubu açın veya kapatın.</span>
+            </div>
+            <div class="legend-row">
+                <i class="pi pi-th-large legend-icon muted-icon"></i>
+                <span class="legend-label">"Tümünü Aç / Kapat" butonları tüm grupları aynı anda yönetir.</span>
+            </div>
+        </div>
+
+    </div>
+
+    <ng-template pTemplate="footer">
+        <p-button
+            label="Kapat"
+            severity="secondary"
+            [outlined]="true"
+            (onClick)="legendKapat()"
+        />
+    </ng-template>
 </p-dialog>

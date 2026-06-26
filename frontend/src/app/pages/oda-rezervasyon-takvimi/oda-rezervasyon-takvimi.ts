@@ -108,6 +108,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
 
     secilenBlok: OdaRezervasyonBlokViewModel | null = null;
     blokDetayVisible = false;
+    legendVisible = false;
 
     private takvimRequestSeq = 0;
     private odaTipiRequestSeq = 0;
@@ -408,6 +409,14 @@ export class OdaRezervasyonTakvimi implements OnInit {
     blokDetayKapat(): void {
         this.blokDetayVisible = false;
         this.secilenBlok = null;
+    }
+
+    legendAc(): void {
+        this.legendVisible = true;
+    }
+
+    legendKapat(): void {
+        this.legendVisible = false;
     }
 
     rezervasyonDetayinaGit(rezervasyonId: number | null): void {

@@ -76,6 +76,12 @@ interface DegisiklikPayloadTableData {
     rows: Record<string, string>[];
 }
 
+type RezervasyonNavAction =
+    | 'odeme'
+    | 'odaDegisim'
+    | 'konaklayanPlan'
+    | 'degisiklikGecmisi';
+
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
@@ -95,7 +101,7 @@ export class RezervasyonYonetimi implements OnInit {
     private readonly route = inject(ActivatedRoute);
 
     private pendingNavRezervasyonId: number | null = null;
-    private pendingNavAction: string | null = null;
+    private pendingNavAction: RezervasyonNavAction | null = null;
 
     tesisler: TesisDto[] = [];
     odaTipleri: RezervasyonOdaTipiDto[] = [];
@@ -415,7 +421,7 @@ export class RezervasyonYonetimi implements OnInit {
             const parsed = Number(idParam);
             if (!isNaN(parsed) && parsed > 0) {
                 this.pendingNavRezervasyonId = parsed;
-                this.pendingNavAction = params['action'] ?? null;
+                this.pendingNavAction = this.parseRezervasyonNavAction(params['action']);
             }
         }
 
@@ -424,6 +430,18 @@ export class RezervasyonYonetimi implements OnInit {
 
     refresh(): void {
         this.loadReferences();
+    }
+
+    private parseRezervasyonNavAction(value: unknown): RezervasyonNavAction | null {
+        switch (value) {
+            case 'odeme':
+            case 'odaDegisim':
+            case 'konaklayanPlan':
+            case 'degisiklikGecmisi':
+                return value;
+            default:
+                return null;
+        }
     }
 
     private handlePendingNavAction(): void {
@@ -435,7 +453,14 @@ export class RezervasyonYonetimi implements OnInit {
         this.pendingNavAction = null;
 
         const kayit = this.rezervasyonKayitlari.find(k => k.id === rezervasyonId);
-        if (!kayit) return;
+        if (!kayit) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Uyarı',
+                detail: `Rezervasyon kaydı listede bulunamadı. Rezervasyon No: ${rezervasyonId}. Lütfen filtreleri kontrol edin.`
+            });
+            return;
+        }
 
         switch (action) {
             case 'odeme':

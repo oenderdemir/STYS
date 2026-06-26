@@ -115,7 +115,18 @@
                             <div class="grid grid-cols-12 gap-3 mb-3">
                                 <div class="col-span-12 md:col-span-4">
                                     <label for="ekHizmetTarih" class="block font-medium mb-2">Hizmet Tarihi</label>
-                                    <input pInputText id="ekHizmetTarih" class="w-full" type="datetime-local" [(ngModel)]="ekHizmetTarihi" [disabled]="ekHizmetSaving || saving" />
+                                    <p-datepicker
+                                        inputId="ekHizmetTarih"
+                                        class="w-full"
+                                        styleClass="w-full"
+                                        appendTo="body"
+                                        [(ngModel)]="ekHizmetTarihi"
+                                        [showIcon]="true"
+                                        [showTime]="true"
+                                        [hourFormat]="'24'"
+                                        dateFormat="dd.mm.yy"
+                                        [disabled]="ekHizmetSaving || saving">
+                                    </p-datepicker>
                                 </div>
                                 <div class="col-span-12 md:col-span-2">
                                     <label for="ekHizmetMiktar" class="block font-medium mb-2">Miktar</label>

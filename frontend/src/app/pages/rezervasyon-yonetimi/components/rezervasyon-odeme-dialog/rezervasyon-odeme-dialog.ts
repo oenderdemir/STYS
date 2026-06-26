@@ -81,7 +81,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     odemeEkHizmetSecenekleri: RezervasyonEkHizmetSecenekleriDto | null = null;
     selectedEkHizmetKonaklayanId: number | null = null;
     selectedEkHizmetTarifeId: number | null = null;
-    ekHizmetTarihi = '';
+    ekHizmetTarihi: Date | null = null;
     ekHizmetMiktar: number | null = 1;
     ekHizmetBirimFiyat: number | null = null;
     ekHizmetAciklama = '';
@@ -238,7 +238,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             return;
         }
 
-        if (!this.ekHizmetTarihi) {
+        if (!(this.ekHizmetTarihi instanceof Date) || Number.isNaN(this.ekHizmetTarihi.getTime())) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Hizmet tarihi zorunludur.' });
             return;
         }
@@ -246,7 +246,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         const request = {
             rezervasyonKonaklayanId: this.selectedEkHizmetKonaklayanId,
             ekHizmetTarifeId: this.selectedEkHizmetTarifeId,
-            hizmetTarihi: this.normalizeDateTimeLocalInput(this.ekHizmetTarihi),
+            hizmetTarihi: this.toLocalDateTimeString(this.ekHizmetTarihi),
             miktar,
             birimFiyat,
             aciklama: this.normalizeOptional(this.ekHizmetAciklama)
@@ -333,7 +333,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.editingEkHizmetId = hizmet.id;
         this.selectedEkHizmetKonaklayanId = hizmet.rezervasyonKonaklayanId;
         this.selectedEkHizmetTarifeId = hizmet.ekHizmetTarifeId;
-        this.ekHizmetTarihi = this.toDateTimeLocalInputValue(hizmet.hizmetTarihi);
+        this.ekHizmetTarihi = this.parseApiDateTime(hizmet.hizmetTarihi) ?? new Date();
         this.ekHizmetMiktar = hizmet.miktar;
         this.ekHizmetBirimFiyat = hizmet.birimFiyat;
         this.ekHizmetAciklama = hizmet.aciklama ?? '';
@@ -682,7 +682,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.odemeEkHizmetSecenekleri = null;
         this.selectedEkHizmetKonaklayanId = null;
         this.selectedEkHizmetTarifeId = null;
-        this.ekHizmetTarihi = this.nowInput();
+        this.ekHizmetTarihi = new Date();
         this.ekHizmetMiktar = 1;
         this.ekHizmetBirimFiyat = null;
         this.ekHizmetAciklama = '';
@@ -706,46 +706,17 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.ekHizmetMiktar = 1;
         this.ekHizmetBirimFiyat = this.getSelectedEkHizmetTarife()?.birimFiyat ?? null;
         this.ekHizmetAciklama = '';
-        this.ekHizmetTarihi = this.nowInput();
+        this.ekHizmetTarihi = new Date();
     }
 
-    private nowInput(): string {
-        return this.toDateTimeLocalInput(new Date());
-    }
-
-    private toDateTimeLocalInput(date: Date): string {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hour = String(date.getHours()).padStart(2, '0');
-        const minute = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hour}:${minute}`;
-    }
-
-    private toDateTimeLocalInputValue(value: string): string {
-        const date = this.parseApiDateTime(value);
-        if (!date) {
-            return value;
-        }
-
-        return this.toDateTimeLocalInput(date);
-    }
-
-    private normalizeDateTimeLocalInput(value: string | null | undefined): string {
-        if (!value) {
-            return '';
-        }
-
-        const normalized = value.trim();
-        if (normalized.length === 0) {
-            return '';
-        }
-
-        if (normalized.length === 16) {
-            return `${normalized}:00`;
-        }
-
-        return normalized;
+    private toLocalDateTimeString(value: Date): string {
+        const year = String(value.getFullYear()).padStart(4, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        const hour = String(value.getHours()).padStart(2, '0');
+        const minute = String(value.getMinutes()).padStart(2, '0');
+        const second = String(value.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
     }
 
     private normalizeOptional(value: string): string | null {

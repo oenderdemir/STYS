@@ -2,6 +2,11 @@
     padding-top: 0;
 }
 
+:host ::ng-deep .rez-odeme-dialog .p-datepicker,
+:host ::ng-deep .rez-odeme-dialog .p-datepicker input {
+    width: 100%;
+}
+
 :host ::ng-deep .rez-odeme-dialog .p-datatable {
     font-size: 0.875rem;
 }

@@ -1,0 +1,103 @@
+<p-dialog
+    header="Rezervasyon Degisiklik Gecmisi"
+    [visible]="visible"
+    [modal]="true"
+    [style]="{ width: '72rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="kapat()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ referansNo }}
+    </div>
+
+    @if (loading) {
+        <div>Degisiklik gecmisi yukleniyor...</div>
+    } @else if (kayitlar.length === 0) {
+        <div>Bu rezervasyon icin degisiklik gecmisi kaydi bulunamadi.</div>
+    } @else {
+        <div class="flex flex-col gap-3" style="max-height: 60vh; overflow: auto;">
+            @for (kayit of kayitlar; track kayit.id) {
+                <div class="border-1 surface-border border-round p-3">
+                    <div class="flex flex-wrap justify-between gap-2 mb-2">
+                        <div class="flex items-center gap-2">
+                            <p-tag [value]="getIslemLabel(kayit.islemTipi)" severity="info" [rounded]="true" />
+                            <span class="text-sm text-color-secondary">{{ formatDateTime(kayit.createdAt) }}</span>
+                        </div>
+                        <div class="text-sm">
+                            <strong>Yapan:</strong> {{ kayit.createdBy || '-' }}
+                        </div>
+                    </div>
+
+                    <div class="text-sm mb-2">
+                        {{ kayit.aciklama || '-' }}
+                    </div>
+
+                    <div class="text-sm mb-2">
+                        <strong>Degisiklik Ozeti:</strong> {{ getDegisiklikOzet(kayit) }}
+                    </div>
+
+                    <div class="flex gap-2">
+                        <p-button
+                            label="Onceki Deger"
+                            icon="pi pi-eye"
+                            size="small"
+                            [text]="true"
+                            [disabled]="!hasJsonPayload(kayit.oncekiDegerJson)"
+                            (onClick)="openPayloadDialog(kayit, 'onceki')"
+                        />
+                        <p-button
+                            label="Yeni Deger"
+                            icon="pi pi-eye"
+                            size="small"
+                            [text]="true"
+                            [disabled]="!hasJsonPayload(kayit.yeniDegerJson)"
+                            (onClick)="openPayloadDialog(kayit, 'yeni')"
+                        />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="kapat()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    [header]="payloadDialogTitle"
+    [visible]="payloadDialogVisible"
+    [modal]="true"
+    [style]="{ width: '52rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="closePayloadDialog()"
+>
+    @if (payloadDialogMode === 'table') {
+        <p-table [value]="payloadTableRows" [tableStyle]="{ 'min-width': '44rem' }" [rows]="10" [paginator]="payloadTableRows.length > 10" stripedRows>
+            <ng-template #header>
+                <tr>
+                    @for (column of payloadTableColumns; track column.field) {
+                        <th>{{ column.header }}</th>
+                    }
+                </tr>
+            </ng-template>
+            <ng-template #body let-row>
+                <tr>
+                    @for (column of payloadTableColumns; track column.field) {
+                        <td>
+                            <span class="whitespace-pre-line">{{ row[column.field] }}</span>
+                        </td>
+                    }
+                </tr>
+            </ng-template>
+        </p-table>
+    } @else {
+        <div class="border-1 surface-border border-round p-3 overflow-auto" style="max-height: 60vh">
+            <pre class="m-0 text-xs">{{ payloadDialogContent }}</pre>
+        </div>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text (onClick)="closePayloadDialog()" />
+    </ng-template>
+</p-dialog>

@@ -400,7 +400,7 @@
                     severity="secondary"
                     [outlined]="true"
                     size="small"
-                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'degisiklikGecmisi')"
+                    (onClick)="degisiklikGecmisiAc(secilenBlok)"
                 />
             </div>
             <div class="detay-actions">
@@ -532,3 +532,9 @@
         />
     </ng-template>
 </p-dialog>
+
+<app-rezervasyon-degisiklik-gecmisi-dialog
+    [(visible)]="degisiklikGecmisiDialogVisible"
+    [rezervasyonId]="degisiklikGecmisiRezervasyonId"
+    [referansNo]="degisiklikGecmisiReferansNo">
+</app-rezervasyon-degisiklik-gecmisi-dialog>

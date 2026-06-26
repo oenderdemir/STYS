@@ -24,6 +24,7 @@ import {
     OdaRezervasyonBlokDto,
     OdaRezervasyonOdaSatiriDto,
     OdaRezervasyonOdaTipiGrupDto,
+    OdaRezervasyonTakvimGunDto,
     OdaRezervasyonTakvimOzetDto
 } from './oda-rezervasyon-takvimi.dto';
 
@@ -441,5 +442,18 @@ export class OdaRezervasyonTakvimi implements OnInit {
     get gridTemplateColumns(): string {
         const gunSayisi = this.takvim?.gunSayisi ?? 14;
         return `180px repeat(${gunSayisi}, minmax(110px, 1fr))`;
+    }
+
+    gunDolulukOrani(gun: OdaRezervasyonTakvimGunDto): number {
+        const toplam = gun.doluOdaSayisi + gun.bosOdaSayisi;
+        if (toplam === 0) return 0;
+        return Math.round((gun.doluOdaSayisi / toplam) * 100);
+    }
+
+    gunDolulukClass(gun: OdaRezervasyonTakvimGunDto): string {
+        const oran = this.gunDolulukOrani(gun);
+        if (oran >= 80) return 'occupancy-high';
+        if (oran >= 50) return 'occupancy-medium';
+        return 'occupancy-low';
     }
 }

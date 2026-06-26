@@ -193,6 +193,11 @@
                         >
                             <div class="day-label">{{ gun.kisaGunAdi }}</div>
                             <div class="day-number">{{ gun.gun }}<span class="day-month">/{{ gun.ay }}</span></div>
+                            @if (gun.doluOdaSayisi + gun.bosOdaSayisi > 0) {
+                                <div class="day-occupancy" [class]="gunDolulukClass(gun)">
+                                    %{{ gunDolulukOrani(gun) }}
+                                </div>
+                            }
                             @if (gun.checkInSayisi > 0 || gun.checkOutSayisi > 0) {
                                 <div class="day-ci-co">
                                     @if (gun.checkInSayisi > 0) {

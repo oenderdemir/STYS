@@ -63,6 +63,15 @@
     &.co { background: var(--p-orange-100); color: var(--p-orange-700); }
 }
 
+.day-occupancy {
+    display: inline-block; border-radius: 9999px;
+    font-size: .58rem; font-weight: 700; padding: 0 5px; line-height: 14px;
+    margin-top: 2px;
+    &.occupancy-low    { background: var(--p-green-100);  color: var(--p-green-700);  }
+    &.occupancy-medium { background: var(--p-yellow-100); color: var(--p-yellow-800); }
+    &.occupancy-high   { background: var(--p-red-100);    color: var(--p-red-700);    }
+}
+
 .room-type-row {
     grid-column: 1 / -1;
     background: var(--p-surface-50);

@@ -109,6 +109,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
     blokDetayVisible = false;
 
     private takvimRequestSeq = 0;
+    private readonly collapsedOdaTipiIds = new Set<number>();
 
     readonly gunSayisiSecenekleri: GunSayisiSecenegi[] = [
         { label: '7 Gün', value: 7 },
@@ -235,6 +236,29 @@ export class OdaRezervasyonTakvimi implements OnInit {
         d.setDate(d.getDate() + 7);
         this.selectedBaslangicTarihi = d;
         this.takvimYukle();
+    }
+
+    isGrupCollapsed(odaTipiId: number): boolean {
+        return this.collapsedOdaTipiIds.has(odaTipiId);
+    }
+
+    toggleGrup(odaTipiId: number): void {
+        if (this.collapsedOdaTipiIds.has(odaTipiId)) {
+            this.collapsedOdaTipiIds.delete(odaTipiId);
+        } else {
+            this.collapsedOdaTipiIds.add(odaTipiId);
+        }
+        this.cdr.markForCheck();
+    }
+
+    tumGruplariAc(): void {
+        this.collapsedOdaTipiIds.clear();
+        this.cdr.markForCheck();
+    }
+
+    tumGruplariKapat(): void {
+        this.takvim?.odaTipleri.forEach(g => this.collapsedOdaTipiIds.add(g.odaTipiId));
+        this.cdr.markForCheck();
     }
 
     private toTakvimViewModel(dto: OdaRezervasyonTakvimiDto): OdaRezervasyonTakvimiViewModel {

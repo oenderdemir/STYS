@@ -87,6 +87,21 @@
                     (onClick)="takvimYukle()"
                     pTooltip="Yenile"
                 />
+                <span class="nav-sep"></span>
+                <p-button
+                    label="Tümünü Aç"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="tumGruplariAc()"
+                    pTooltip="Tüm oda tipi gruplarını aç"
+                />
+                <p-button
+                    label="Tümünü Kapat"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="tumGruplariKapat()"
+                    pTooltip="Tüm oda tipi gruplarını kapat"
+                />
             </div>
         </ng-template>
     </p-toolbar>
@@ -187,11 +202,13 @@
                         <div
                             class="room-type-row"
                             [style.grid-column]="'1 / ' + (takvim.gunSayisi + 2)"
+                            (click)="toggleGrup(grup.odaTipiId)"
                         >
-                            <i class="pi pi-tag"></i>
+                            <i [class]="isGrupCollapsed(grup.odaTipiId) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"></i>
                             {{ grup.odaTipiAdi }}
                         </div>
 
+                        @if (!isGrupCollapsed(grup.odaTipiId)) {
                         @for (oda of grup.odalar; track oda.odaId) {
                             <!-- Oda bilgi hücresi -->
                             <div class="room-info-cell">
@@ -260,6 +277,7 @@
                                 }
                             </div>
                         }
+                        } <!-- @if (!isGrupCollapsed) -->
                     }
                 </div>
             </div>

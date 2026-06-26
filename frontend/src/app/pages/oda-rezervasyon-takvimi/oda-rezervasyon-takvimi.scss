@@ -5,6 +5,7 @@
 .filter-select-sm { min-width: 100px; }
 .filter-datepicker { width: 160px; }
 .nav-buttons { display: flex; align-items: center; gap: .25rem; }
+.nav-sep { width: 1px; height: 1.5rem; background: var(--p-surface-border); margin: 0 .25rem; }
 
 .ozet-row { display: flex; flex-wrap: wrap; gap: .75rem; }
 .ozet-kart {
@@ -71,6 +72,9 @@
     font-size: .75rem; font-weight: 700; text-transform: uppercase;
     color: var(--p-text-muted-color); letter-spacing: .05em;
     display: flex; align-items: center; gap: .4rem;
+    cursor: pointer; user-select: none;
+    transition: background .1s;
+    &:hover { background: var(--p-surface-100); }
 }
 
 .room-info-cell {

@@ -62,14 +62,20 @@ export class RezervasyonDegisiklikGecmisiDialogComponent implements OnChanges {
     private loadSeq = 0;
 
     ngOnChanges(changes: SimpleChanges): void {
-        if (changes['visible']) {
-            if (this.visible && this.rezervasyonId) {
-                this.kayitlar = [];
-                this.closePayloadDialog();
-                this.load(this.rezervasyonId);
-            } else if (!this.visible) {
-                this.reset();
-            }
+        const shouldLoad =
+            this.visible &&
+            !!this.rezervasyonId &&
+            (changes['visible'] || changes['rezervasyonId']);
+
+        if (shouldLoad) {
+            this.kayitlar = [];
+            this.closePayloadDialog();
+            this.load(this.rezervasyonId!);
+            return;
+        }
+
+        if (changes['visible'] && !this.visible) {
+            this.reset();
         }
     }
 
@@ -213,6 +219,7 @@ export class RezervasyonDegisiklikGecmisiDialogComponent implements OnChanges {
     }
 
     private reset(): void {
+        ++this.loadSeq;
         this.loading = false;
         this.kayitlar = [];
         this.closePayloadDialog();

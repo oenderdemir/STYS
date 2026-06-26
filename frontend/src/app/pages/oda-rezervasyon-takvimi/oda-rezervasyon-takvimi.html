@@ -384,7 +384,7 @@
                     severity="secondary"
                     [outlined]="true"
                     size="small"
-                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'odaDegisim')"
+                    (onClick)="odaDegisimiAc(secilenBlok)"
                 />
                 <p-button
                     label="Konaklayan Planı"
@@ -545,3 +545,11 @@
     [referansNo]="konaklayanPlanReferansNo"
     (saved)="takvimYukle()">
 </app-rezervasyon-konaklayan-plani-dialog>
+
+<app-rezervasyon-oda-degisimi-dialog
+    [(visible)]="odaDegisimDialogVisible"
+    [rezervasyonId]="odaDegisimRezervasyonId"
+    [referansNo]="odaDegisimReferansNo"
+    [rezervasyonDurumu]="odaDegisimRezervasyonDurumu"
+    (saved)="takvimYukle()">
+</app-rezervasyon-oda-degisimi-dialog>

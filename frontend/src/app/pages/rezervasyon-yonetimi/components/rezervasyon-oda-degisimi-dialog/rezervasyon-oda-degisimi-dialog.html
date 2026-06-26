@@ -1,0 +1,112 @@
+<p-dialog
+    header="Oda Degisimi"
+    [visible]="visible"
+    [modal]="true"
+    [style]="{ width: '68rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="kapat()"
+>
+    <div class="text-sm mb-3">
+        <strong>Referans:</strong> {{ referansNo }}
+    </div>
+
+    @if (bilgiMesaji) {
+        <div class="text-sm text-orange-600 mb-3">
+            {{ bilgiMesaji }}
+        </div>
+    }
+
+    @if (loading) {
+        <div>Oda degisim secenekleri yukleniyor...</div>
+    } @else if (!odaDegisimSecenekleri || odaDegisimSecenekleri.kayitlar.length === 0) {
+        <div>Bu rezervasyon icin oda degisimi gerektiren kayit bulunmuyor.</div>
+    } @else {
+        <p-table [value]="odaDegisimSecenekleri.kayitlar" [tableStyle]="{ 'min-width': '64rem' }">
+            <ng-template #header>
+                <tr>
+                    <th>Segment</th>
+                    <th>Mevcut Oda</th>
+                    <th>Ayrilan Kisi</th>
+                    <th>Yeni Oda</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-kayit>
+                <tr>
+                    <td>
+                        <div class="font-medium">Segment {{ kayit.segmentSirasi }}</div>
+                        <div class="text-xs text-color-secondary">
+                            {{ formatDateTime(kayit.baslangicTarihi) }} - {{ formatDateTime(kayit.bitisTarihi) }}
+                        </div>
+                    </td>
+                    <td>
+                        <div>{{ kayit.mevcutOdaNo }} - {{ kayit.mevcutBinaAdi }}</div>
+                        <div class="text-xs text-color-secondary">
+                            {{ kayit.mevcutOdaTipiAdi }} | {{ kayit.mevcutOdaPaylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}
+                        </div>
+                        @if (kayit.tasinacakKonaklayanlar.length > 0) {
+                            <div class="text-xs text-color-secondary mt-2">
+                                Tasinacak konaklayanlar:
+                                {{ getTasinacakKonaklayanAdlari(kayit) }}
+                            </div>
+                        }
+                    </td>
+                    <td>{{ kayit.ayrilanKisiSayisi }}</td>
+                    <td>
+                        @if (kayit.adayOdalar.length === 0) {
+                            <span class="text-red-500">Uygun alternatif oda bulunamadi.</span>
+                        } @else {
+                            <p-select
+                                class="w-full"
+                                [options]="getAdayOptions(kayit)"
+                                optionLabel="label"
+                                optionValue="value"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="saving"
+                                [ngModel]="getSeciliOdaId(kayit)"
+                                (ngModelChange)="setSeciliOdaId(kayit, $event)"
+                            />
+                            @if (getSelectedAday(kayit); as selectedAday) {
+                                <div class="text-xs text-color-secondary mt-2">
+                                    @if (selectedAday.paylasimliMi && selectedAday.onerilenYatakNolari.length > 0) {
+                                        Onerilen yataklar: {{ selectedAday.onerilenYatakNolari.join(', ') }}
+                                    } @else if (selectedAday.paylasimliMi) {
+                                        Yatak atamasi kayit sirasinda otomatik belirlenecek.
+                                    } @else {
+                                        Paylasimsiz oda secildi.
+                                    }
+                                </div>
+                                @if (kayit.tasinacakKonaklayanlar.length > 0) {
+                                    <div class="mt-2 border-round border-1 surface-border p-2">
+                                        <div class="text-xs font-medium mb-2">Konaklayan Tasima Onerisi</div>
+                                        <div class="grid grid-cols-12 gap-2 text-xs">
+                                            <div class="col-span-5 font-medium">Konaklayan</div>
+                                            <div class="col-span-3 font-medium">Mevcut Yatak</div>
+                                            <div class="col-span-4 font-medium">Onerilen Yatak</div>
+                                            @for (oneri of getKonaklayanOnerileri(kayit, selectedAday); track oneri.konaklayan.siraNo) {
+                                                <div class="col-span-5">{{ oneri.konaklayan.adSoyad }}</div>
+                                                <div class="col-span-3">{{ oneri.konaklayan.mevcutYatakNo ?? '-' }}</div>
+                                                <div class="col-span-4">{{ oneri.onerilenYatakNo ?? (selectedAday.paylasimliMi ? 'Otomatik' : '-') }}</div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        }
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="kapat()" />
+        <p-button
+            label="Degisikligi Kaydet"
+            icon="pi pi-check"
+            [loading]="saving"
+            [disabled]="!canKaydet()"
+            (onClick)="kaydet()"
+        />
+    </ng-template>
+</p-dialog>

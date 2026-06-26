@@ -20,6 +20,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
 import { RezervasyonTesisDto, RezervasyonOdaTipiDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
 import { RezervasyonKonaklayanPlaniDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
+import { RezervasyonOdaDegisimiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-oda-degisimi-dialog/rezervasyon-oda-degisimi-dialog';
 import { OdaRezervasyonTakvimiService } from './oda-rezervasyon-takvimi.service';
 import {
     OdaRezervasyonTakvimiDto,
@@ -83,7 +84,8 @@ const TakvimDurumFiltreleri = {
         TooltipModule,
         ToolbarModule,
         RezervasyonDegisiklikGecmisiDialogComponent,
-        RezervasyonKonaklayanPlaniDialogComponent
+        RezervasyonKonaklayanPlaniDialogComponent,
+        RezervasyonOdaDegisimiDialogComponent
     ],
     providers: [MessageService],
     templateUrl: './oda-rezervasyon-takvimi.html',
@@ -121,6 +123,10 @@ export class OdaRezervasyonTakvimi implements OnInit {
     konaklayanPlanDialogVisible = false;
     konaklayanPlanRezervasyonId: number | null = null;
     konaklayanPlanReferansNo = '';
+    odaDegisimDialogVisible = false;
+    odaDegisimRezervasyonId: number | null = null;
+    odaDegisimReferansNo = '';
+    odaDegisimRezervasyonDurumu: string | null = null;
 
     private takvimRequestSeq = 0;
     private odaTipiRequestSeq = 0;
@@ -433,7 +439,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
 
     rezervasyonYonetimineGit(
         rezervasyonId: number | null,
-        action?: 'odeme' | 'odaDegisim'
+        action?: 'odeme'
     ): void {
         if (!rezervasyonId) return;
         const queryParams: Record<string, string | number> = { rezervasyonId };
@@ -455,6 +461,15 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.konaklayanPlanRezervasyonId = blok.rezervasyonId;
         this.konaklayanPlanReferansNo = blok.altBaslik ?? '';
         this.konaklayanPlanDialogVisible = true;
+        this.blokDetayKapat();
+    }
+
+    odaDegisimiAc(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId) return;
+        this.odaDegisimRezervasyonId = blok.rezervasyonId;
+        this.odaDegisimReferansNo = blok.altBaslik ?? '';
+        this.odaDegisimRezervasyonDurumu = blok.durum ?? null;
+        this.odaDegisimDialogVisible = true;
         this.blokDetayKapat();
     }
 

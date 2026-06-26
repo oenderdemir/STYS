@@ -224,11 +224,11 @@
                                 @for (blok of oda.bloklar; track blok.baslangicGunIndex + '-' + blok.rezervasyonId + '-' + blok.odaKullanimBlokId) {
                                     <button
                                         type="button"
-                                        [class]="getBlokClass(blok)"
-                                        [style.grid-column]="getBlokGridColumn(blok)"
-                                        [style.left]="getBlokLeft(blok)"
-                                        [style.right]="getBlokRight(blok)"
-                                        [pTooltip]="getBlokTooltip(blok)"
+                                        [class]="blok.uiClass"
+                                        [style.grid-column]="blok.uiGridColumn"
+                                        [style.left]="blok.uiLeft"
+                                        [style.right]="blok.uiRight"
+                                        [pTooltip]="blok.uiTooltip"
                                         tooltipPosition="top"
                                         (click)="blokDetayAc(blok)"
                                     >

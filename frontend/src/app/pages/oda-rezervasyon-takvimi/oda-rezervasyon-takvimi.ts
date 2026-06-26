@@ -22,6 +22,8 @@ import { OdaRezervasyonTakvimiService } from './oda-rezervasyon-takvimi.service'
 import {
     OdaRezervasyonTakvimiDto,
     OdaRezervasyonBlokDto,
+    OdaRezervasyonOdaSatiriDto,
+    OdaRezervasyonOdaTipiGrupDto,
     OdaRezervasyonTakvimOzetDto
 } from './oda-rezervasyon-takvimi.dto';
 
@@ -33,6 +35,26 @@ interface GunSayisiSecenegi {
 interface DurumSecenegi {
     label: string;
     value: string | null;
+}
+
+interface OdaRezervasyonBlokViewModel extends OdaRezervasyonBlokDto {
+    uiClass: string;
+    uiGridColumn: string;
+    uiLeft: string;
+    uiRight: string;
+    uiTooltip: string;
+}
+
+interface OdaRezervasyonOdaSatiriViewModel extends Omit<OdaRezervasyonOdaSatiriDto, 'bloklar'> {
+    bloklar: OdaRezervasyonBlokViewModel[];
+}
+
+interface OdaRezervasyonOdaTipiGrupViewModel extends Omit<OdaRezervasyonOdaTipiGrupDto, 'odalar'> {
+    odalar: OdaRezervasyonOdaSatiriViewModel[];
+}
+
+interface OdaRezervasyonTakvimiViewModel extends Omit<OdaRezervasyonTakvimiDto, 'odaTipleri'> {
+    odaTipleri: OdaRezervasyonOdaTipiGrupViewModel[];
 }
 
 const TakvimDurumFiltreleri = {
@@ -79,11 +101,11 @@ export class OdaRezervasyonTakvimi implements OnInit {
     selectedOdaTipiId: number | null = null;
     selectedDurum: string | null = null;
 
-    takvim: OdaRezervasyonTakvimiDto | null = null;
+    takvim: OdaRezervasyonTakvimiViewModel | null = null;
     yukleniyor = false;
     tesislerYukleniyor = false;
 
-    secilenBlok: OdaRezervasyonBlokDto | null = null;
+    secilenBlok: OdaRezervasyonBlokViewModel | null = null;
     blokDetayVisible = false;
 
     private takvimRequestSeq = 0;
@@ -179,7 +201,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
             .subscribe({
                 next: (takvim) => {
                     if (requestSeq === this.takvimRequestSeq) {
-                        this.takvim = takvim;
+                        this.takvim = this.toTakvimViewModel(takvim);
                     }
                 },
                 error: (err: HttpErrorResponse) => {
@@ -215,14 +237,34 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.takvimYukle();
     }
 
-    getBlokClass(blok: OdaRezervasyonBlokDto): string {
+    private toTakvimViewModel(dto: OdaRezervasyonTakvimiDto): OdaRezervasyonTakvimiViewModel {
+        return {
+            ...dto,
+            odaTipleri: dto.odaTipleri.map(grup => ({
+                ...grup,
+                odalar: grup.odalar.map(oda => ({
+                    ...oda,
+                    bloklar: oda.bloklar.map(blok => ({
+                        ...blok,
+                        uiClass: this.getBlokClass(blok),
+                        uiGridColumn: this.getBlokGridColumn(blok),
+                        uiLeft: this.getBlokLeft(blok),
+                        uiRight: this.getBlokRight(blok),
+                        uiTooltip: this.getBlokTooltip(blok)
+                    }))
+                }))
+            }))
+        };
+    }
+
+    private getBlokClass(blok: OdaRezervasyonBlokDto): string {
         const classes = ['reservation-block', `block-${blok.renkTipi}`];
         if (!blok.solKenaraDevamEdiyor) classes.push('has-checkin-start');
         if (!blok.sagKenaraDevamEdiyor) classes.push('has-checkout-end');
         return classes.join(' ');
     }
 
-    getBlokGridColumn(blok: OdaRezervasyonBlokDto): string {
+    private getBlokGridColumn(blok: OdaRezervasyonBlokDto): string {
         // +1 çünkü room-days-area kendi nested grid'i; oda bilgi sütunu burada yok
         const start = blok.baslangicGunIndex + 1;
         const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
@@ -231,7 +273,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
         return `${start} / ${end}`;
     }
 
-    getBlokLeft(blok: OdaRezervasyonBlokDto): string {
+    private getBlokLeft(blok: OdaRezervasyonBlokDto): string {
         if (blok.solKenaraDevamEdiyor) return '0';
         // Giriş bu takvimde → giriş sütununun sağ yarısından başla
         const checkoutEklendi = !blok.sagKenaraDevamEdiyor ? 1 : 0;
@@ -239,7 +281,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
         return `${50 / dispCols}%`;
     }
 
-    getBlokRight(blok: OdaRezervasyonBlokDto): string {
+    private getBlokRight(blok: OdaRezervasyonBlokDto): string {
         if (blok.sagKenaraDevamEdiyor) return '0';
         // Çıkış bu takvimde → çıkış sütununun sol yarısında bitir
         const checkoutEklendi = 1;
@@ -247,7 +289,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
         return `${50 / dispCols}%`;
     }
 
-    getBlokTooltip(blok: OdaRezervasyonBlokDto): string {
+    private getBlokTooltip(blok: OdaRezervasyonBlokDto): string {
         if (blok.blokTipi === 'Rezervasyon') {
             const satirlar: string[] = [blok.baslik];
             if (blok.altBaslik) satirlar.push(`#${blok.altBaslik}`);
@@ -312,7 +354,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
         return map[durum] ?? 'secondary';
     }
 
-    blokDetayAc(blok: OdaRezervasyonBlokDto): void {
+    blokDetayAc(blok: OdaRezervasyonBlokViewModel): void {
         this.secilenBlok = blok;
         this.blokDetayVisible = true;
     }

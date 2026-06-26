@@ -41,6 +41,8 @@
                     optionValue="id"
                     placeholder="Tüm oda tipleri"
                     [showClear]="true"
+                    [loading]="odaTipleriYukleniyor"
+                    [disabled]="!selectedTesisId || odaTipleriYukleniyor"
                     (onChange)="takvimYukle()"
                     styleClass="filter-select"
                 />

@@ -104,11 +104,13 @@ export class OdaRezervasyonTakvimi implements OnInit {
     takvim: OdaRezervasyonTakvimiViewModel | null = null;
     yukleniyor = false;
     tesislerYukleniyor = false;
+    odaTipleriYukleniyor = false;
 
     secilenBlok: OdaRezervasyonBlokViewModel | null = null;
     blokDetayVisible = false;
 
     private takvimRequestSeq = 0;
+    private odaTipiRequestSeq = 0;
     private readonly collapsedOdaTipiIds = new Set<number>();
 
     readonly gunSayisiSecenekleri: GunSayisiSecenegi[] = [
@@ -155,22 +157,42 @@ export class OdaRezervasyonTakvimi implements OnInit {
     onTesisChange(): void {
         this.odaTipleri = [];
         this.selectedOdaTipiId = null;
-        if (!this.selectedTesisId) return;
 
-        this.rezervasyonService.getOdaTipleriByTesis(this.selectedTesisId).subscribe({
-            next: (tipler) => {
-                this.odaTipleri = tipler;
-                this.cdr.markForCheck();
-            },
-            error: (err: HttpErrorResponse) => {
-                this.messageService.add({
-                    severity: 'error',
-                    summary: 'Hata',
-                    detail: tryReadApiMessage(err) ?? 'Oda tipleri alınamadı.'
-                });
-                this.cdr.markForCheck();
-            }
-        });
+        if (!this.selectedTesisId) {
+            this.odaTipleriYukleniyor = false;
+            this.takvim = null;
+            this.cdr.markForCheck();
+            return;
+        }
+
+        const tesisId = this.selectedTesisId;
+        const requestSeq = ++this.odaTipiRequestSeq;
+        this.odaTipleriYukleniyor = true;
+
+        this.rezervasyonService
+            .getOdaTipleriByTesis(tesisId)
+            .pipe(finalize(() => {
+                if (requestSeq === this.odaTipiRequestSeq) {
+                    this.odaTipleriYukleniyor = false;
+                    this.cdr.markForCheck();
+                }
+            }))
+            .subscribe({
+                next: (tipler) => {
+                    if (requestSeq === this.odaTipiRequestSeq && tesisId === this.selectedTesisId) {
+                        this.odaTipleri = tipler;
+                    }
+                },
+                error: (err: HttpErrorResponse) => {
+                    if (requestSeq === this.odaTipiRequestSeq) {
+                        this.messageService.add({
+                            severity: 'error',
+                            summary: 'Hata',
+                            detail: tryReadApiMessage(err) ?? 'Oda tipleri alınamadı.'
+                        });
+                    }
+                }
+            });
 
         this.takvimYukle();
     }

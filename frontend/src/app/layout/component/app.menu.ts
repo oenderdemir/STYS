@@ -102,7 +102,7 @@ export class AppMenu {
     private readonly layoutService = inject(LayoutService);
 
     readonly searchTerm = signal<string>('');
-    readonly searchExpanded = signal<boolean>(false);
+    readonly searchExpanded = signal<boolean>(true);
 
     private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 

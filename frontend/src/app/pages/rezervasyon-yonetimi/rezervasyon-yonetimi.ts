@@ -4,6 +4,7 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from './components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
+import { RezervasyonKonaklayanPlaniDialogComponent } from './components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -26,7 +27,6 @@ import { AuthService } from '../auth';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { EkHizmetPaketCakismaPolitikalari } from '../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
-import { KonaklayanKatilimDurumlari } from './konaklayan-katilim-durumlari.constants';
 import { KonaklayanCinsiyetleri } from './konaklayan-cinsiyetleri.constants';
 import {
     KonaklamaSenaryoDto,
@@ -49,10 +49,6 @@ import {
     RezervasyonKonaklamaHakkiTuketimKaydiDto,
     RezervasyonKonaklamaHakkiTuketimNoktasiDto,
     RezervasyonKonaklamaTipiDto,
-    RezervasyonKonaklayanKisiDto,
-    RezervasyonKonaklayanOdaSecenekDto,
-    RezervasyonKonaklayanPlanDto,
-    RezervasyonKonaklayanSegmentDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
     RezervasyonOdemeDto,
@@ -75,7 +71,7 @@ type RezervasyonNavAction =
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent],
     templateUrl: './rezervasyon-yonetimi.html',
     styleUrl: './rezervasyon-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
@@ -117,20 +113,11 @@ export class RezervasyonYonetimi implements OnInit {
     degisiklikGecmisiRezervasyonId: number | null = null;
     degisiklikGecmisiReferansNo = '';
     konaklayanPlanDialogVisible = false;
-    konaklayanPlanLoading = false;
-    konaklayanPlanSaving = false;
     konaklayanPlanRezervasyonId: number | null = null;
     konaklayanPlanReferansNo = '';
-    konaklayanPlan: RezervasyonKonaklayanPlanDto | null = null;
     readonly konaklayanCinsiyetSecenekleri = [
         { label: 'Kadin', value: KonaklayanCinsiyetleri.Kadin },
         { label: 'Erkek', value: KonaklayanCinsiyetleri.Erkek }
-    ];
-    readonly konaklayanKatilimDurumuSecenekleri = [
-        { label: 'Bekleniyor', value: KonaklayanKatilimDurumlari.Bekleniyor },
-        { label: 'Geldi', value: KonaklayanKatilimDurumlari.Geldi },
-        { label: 'Gelmedi', value: KonaklayanKatilimDurumlari.Gelmedi },
-        { label: 'Ayrildi', value: KonaklayanKatilimDurumlari.Ayrildi }
     ];
     odemeDialogVisible = false;
     odemeLoading = false;
@@ -1295,118 +1282,22 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        this.konaklayanPlanDialogVisible = true;
         this.konaklayanPlanRezervasyonId = kayit.id;
         this.konaklayanPlanReferansNo = kayit.referansNo;
-        this.konaklayanPlan = null;
-        this.loadKonaklayanPlani(kayit.id);
+        this.konaklayanPlanDialogVisible = true;
     }
 
     closeKonaklayanPlaniDialog(): void {
         this.konaklayanPlanDialogVisible = false;
         this.konaklayanPlanRezervasyonId = null;
         this.konaklayanPlanReferansNo = '';
-        this.konaklayanPlan = null;
-        this.konaklayanPlanLoading = false;
-        this.konaklayanPlanSaving = false;
     }
 
-    kaydetKonaklayanPlani(): void {
-        if (!this.canManage || !this.konaklayanPlanRezervasyonId || !this.konaklayanPlan) {
-            return;
-        }
-
-        this.konaklayanPlanSaving = true;
-        this.service
-            .saveKonaklayanPlani(this.konaklayanPlanRezervasyonId, {
-                konaklayanlar: this.konaklayanPlan.konaklayanlar.map((kisi) => ({
-                    siraNo: kisi.siraNo,
-                    adSoyad: (kisi.adSoyad ?? '').trim(),
-                    tcKimlikNo: this.normalizeOptional(kisi.tcKimlikNo ?? ''),
-                    pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
-                    cinsiyet: this.normalizeOptional(kisi.cinsiyet ?? ''),
-                    katilimDurumu: this.normalizeOptional(kisi.katilimDurumu ?? '') ?? KonaklayanKatilimDurumlari.Bekleniyor,
-                    atamalar: kisi.atamalar.map((atama) => ({
-                        segmentId: atama.segmentId,
-                        odaId: atama.odaId,
-                        yatakNo: atama.yatakNo
-                    }))
-                }))
-            })
-            .pipe(
-                finalize(() => {
-                    this.konaklayanPlanSaving = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (plan) => {
-                    this.konaklayanPlan = plan;
-                    const rezervasyonId = this.konaklayanPlanRezervasyonId;
-                    if (rezervasyonId && rezervasyonId > 0) {
-                        const kayit = this.rezervasyonKayitlari.find((x) => x.id === rezervasyonId);
-                        if (kayit) {
-                            kayit.konaklayanPlaniTamamlandi = this.isKonaklayanPlanComplete(plan);
-                            kayit.gelenKonaklayanSayisi = plan.konaklayanlar.filter((x) => x.katilimDurumu === KonaklayanKatilimDurumlari.Geldi).length;
-                            kayit.bekleyenKonaklayanSayisi = plan.konaklayanlar.filter((x) => x.katilimDurumu === KonaklayanKatilimDurumlari.Bekleniyor).length;
-                        }
-                    }
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
-    }
-
-    private isKonaklayanPlanComplete(plan: RezervasyonKonaklayanPlanDto): boolean {
-        if (!plan || plan.segmentler.length === 0 || plan.konaklayanlar.length !== plan.kisiSayisi) {
-            return false;
-        }
-
-        const segmentIds = new Set(plan.segmentler.map((x) => x.segmentId));
-        return plan.konaklayanlar.every((kisi) =>
-            (kisi.adSoyad ?? '').trim().length > 0
-            && (kisi.katilimDurumu ?? '').trim().length > 0
-            && kisi.atamalar.length === segmentIds.size
-            && kisi.atamalar.every((atama) => {
-                if (!segmentIds.has(atama.segmentId)) {
-                    return false;
-                }
-
-                if (!this.isKonaklayanAssignmentsRequired(kisi)) {
-                    return (atama.odaId ?? 0) <= 0 && (atama.yatakNo ?? 0) <= 0;
-                }
-
-                if ((atama.odaId ?? 0) <= 0) {
-                    return false;
-                }
-
-                const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(atama.segmentId, atama.odaId);
-                if (!odaSecenegi) {
-                    return false;
-                }
-
-                if (!odaSecenegi.paylasimliMi) {
-                    return true;
-                }
-
-                const yatakNo = atama.yatakNo ?? 0;
-                return yatakNo > 0 && yatakNo <= odaSecenegi.ayrilanKisiSayisi;
-            }));
-    }
-
-    isKonaklayanAssignmentsRequired(kisi: RezervasyonKonaklayanKisiDto): boolean {
-        return kisi.katilimDurumu !== KonaklayanKatilimDurumlari.Gelmedi;
-    }
-
-    setKonaklayanKatilimDurumu(kisi: RezervasyonKonaklayanKisiDto, katilimDurumu: string | null): void {
-        kisi.katilimDurumu = katilimDurumu ?? KonaklayanKatilimDurumlari.Bekleniyor;
-        if (kisi.katilimDurumu === KonaklayanKatilimDurumlari.Gelmedi) {
-            kisi.atamalar = kisi.atamalar.map((x) => ({ ...x, odaId: null, yatakNo: null }));
-        }
+    onKonaklayanPlaniSaved(): void {
+        const id = this.konaklayanPlanRezervasyonId;
+        if (!id) return;
+        delete this.rezervasyonDetayById[id];
+        this.loadRezervasyonDetay(id);
     }
 
     canCompleteCheckIn(kayit: RezervasyonListeDto): boolean {
@@ -2367,157 +2258,6 @@ export class RezervasyonYonetimi implements OnInit {
             });
     }
 
-    getKonaklayanSegmentler(): RezervasyonKonaklayanSegmentDto[] {
-        return this.konaklayanPlan?.segmentler ?? [];
-    }
-
-    getKonaklayanOdaSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
-        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
-            return [];
-        }
-
-        const segment = this.konaklayanPlan?.segmentler.find((x) => x.segmentId === segmentId);
-        if (!segment) {
-            return [];
-        }
-
-        const currentSelection = this.getKonaklayanAtamaOdaId(kisi, segmentId);
-        return segment.odaSecenekleri
-            .filter((oda) => {
-                const selectedCount = this.getSegmentOdaSelectedCount(segmentId, oda.odaId);
-                if (currentSelection === oda.odaId) {
-                    return true;
-                }
-
-                return selectedCount < oda.ayrilanKisiSayisi;
-            })
-            .map((oda) => ({
-                value: oda.odaId,
-                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi, ${oda.paylasimliMi ? 'paylasimli' : 'paylasimsiz'})`
-            }));
-    }
-
-    getKonaklayanAtamaOdaId(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): number | null {
-        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
-        return atama?.odaId ?? null;
-    }
-
-    getKonaklayanAtamaYatakNo(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): number | null {
-        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
-        return atama?.yatakNo ?? null;
-    }
-
-    isKonaklayanYatakSecimiGerekli(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): boolean {
-        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
-            return false;
-        }
-
-        const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
-        if (!odaId || odaId <= 0) {
-            return false;
-        }
-
-        const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
-        return !!odaSecenegi?.paylasimliMi;
-    }
-
-    getKonaklayanYatakSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
-        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
-            return [];
-        }
-
-        const odaId = this.getKonaklayanAtamaOdaId(kisi, segmentId);
-        if (!odaId || odaId <= 0) {
-            return [];
-        }
-
-        const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
-        if (!odaSecenegi || !odaSecenegi.paylasimliMi || odaSecenegi.ayrilanKisiSayisi <= 0) {
-            return [];
-        }
-
-        const currentYatakNo = this.getKonaklayanAtamaYatakNo(kisi, segmentId);
-        const selectedBeds = this.getSegmentOdaSelectedBeds(segmentId, odaId);
-        const options: { label: string; value: number }[] = [];
-        for (let bedNo = 1; bedNo <= odaSecenegi.ayrilanKisiSayisi; bedNo++) {
-            if (currentYatakNo === bedNo || !selectedBeds.has(bedNo)) {
-                options.push({ label: `Yatak ${bedNo}`, value: bedNo });
-            }
-        }
-
-        return options;
-    }
-
-    setKonaklayanAtamaOdaId(kisi: RezervasyonKonaklayanKisiDto, segmentId: number, odaId: number | null): void {
-        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
-        if (atama) {
-            atama.odaId = odaId;
-            const odaSecenegi = this.getKonaklayanSegmentOdaSecenegi(segmentId, odaId);
-            if (!odaSecenegi || !odaSecenegi.paylasimliMi) {
-                atama.yatakNo = null;
-                return;
-            }
-
-            if ((atama.yatakNo ?? 0) <= 0 || (atama.yatakNo ?? 0) > odaSecenegi.ayrilanKisiSayisi) {
-                atama.yatakNo = null;
-            }
-            return;
-        }
-
-        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId, yatakNo: null }];
-    }
-
-    setKonaklayanAtamaYatakNo(kisi: RezervasyonKonaklayanKisiDto, segmentId: number, yatakNo: number | null): void {
-        const atama = kisi.atamalar.find((x) => x.segmentId === segmentId);
-        if (atama) {
-            atama.yatakNo = yatakNo;
-            return;
-        }
-
-        kisi.atamalar = [...kisi.atamalar, { segmentId, odaId: null, yatakNo }];
-    }
-
-    private getSegmentOdaSelectedCount(segmentId: number, odaId: number): number {
-        if (!this.konaklayanPlan) {
-            return 0;
-        }
-
-        return this.konaklayanPlan.konaklayanlar.reduce((total, kisi) => {
-            if (!this.isKonaklayanAssignmentsRequired(kisi)) {
-                return total;
-            }
-
-            const selectedOdaId = kisi.atamalar.find((x) => x.segmentId === segmentId)?.odaId;
-            return total + (selectedOdaId === odaId ? 1 : 0);
-        }, 0);
-    }
-
-    private getSegmentOdaSelectedBeds(segmentId: number, odaId: number): Set<number> {
-        if (!this.konaklayanPlan) {
-            return new Set<number>();
-        }
-
-        const selected = this.konaklayanPlan.konaklayanlar
-            .filter((kisi) => this.isKonaklayanAssignmentsRequired(kisi))
-            .map((kisi) => kisi.atamalar.find((x) => x.segmentId === segmentId))
-            .filter((atama) => atama?.odaId === odaId && (atama?.yatakNo ?? 0) > 0)
-            .map((atama) => atama!.yatakNo!) as number[];
-        return new Set(selected);
-    }
-
-    private getKonaklayanSegmentOdaSecenegi(segmentId: number, odaId: number | null | undefined): RezervasyonKonaklayanOdaSecenekDto | null {
-        if (!odaId || odaId <= 0 || !this.konaklayanPlan) {
-            return null;
-        }
-
-        const segment = this.konaklayanPlan.segmentler.find((x) => x.segmentId === segmentId);
-        if (!segment) {
-            return null;
-        }
-
-        return segment.odaSecenekleri.find((x) => x.odaId === odaId) ?? null;
-    }
-
     getRezervasyonDetay(rezervasyonId: number | null | undefined): RezervasyonDetayDto | null {
         if (!rezervasyonId || rezervasyonId <= 0) {
             return null;
@@ -2773,29 +2513,6 @@ export class RezervasyonYonetimi implements OnInit {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
-    }
-
-    private loadKonaklayanPlani(rezervasyonId: number): void {
-        this.konaklayanPlanLoading = true;
-        this.service
-            .getKonaklayanPlani(rezervasyonId)
-            .pipe(
-                finalize(() => {
-                    this.konaklayanPlanLoading = false;
-                    this.cdr.detectChanges();
-                })
-            )
-            .subscribe({
-                next: (plan) => {
-                    this.konaklayanPlan = plan;
-                    this.cdr.detectChanges();
-                },
-                error: (error: unknown) => {
-                    this.konaklayanPlan = null;
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-                    this.cdr.detectChanges();
-                }
-            });
     }
 
     private loadOdemeOzeti(rezervasyonId: number): void {

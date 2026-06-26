@@ -392,7 +392,7 @@
                     severity="secondary"
                     [outlined]="true"
                     size="small"
-                    (onClick)="rezervasyonYonetimineGit(secilenBlok.rezervasyonId, 'konaklayanPlan')"
+                    (onClick)="konaklayanPlaniAc(secilenBlok)"
                 />
                 <p-button
                     label="Değişiklik Geçmişi"
@@ -538,3 +538,10 @@
     [rezervasyonId]="degisiklikGecmisiRezervasyonId"
     [referansNo]="degisiklikGecmisiReferansNo">
 </app-rezervasyon-degisiklik-gecmisi-dialog>
+
+<app-rezervasyon-konaklayan-plani-dialog
+    [(visible)]="konaklayanPlanDialogVisible"
+    [rezervasyonId]="konaklayanPlanRezervasyonId"
+    [referansNo]="konaklayanPlanReferansNo"
+    (saved)="takvimYukle()">
+</app-rezervasyon-konaklayan-plani-dialog>

@@ -19,6 +19,7 @@ import { toLocalDateString } from '../../core/utils/date-time.util';
 import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
 import { RezervasyonTesisDto, RezervasyonOdaTipiDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
+import { RezervasyonKonaklayanPlaniDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { OdaRezervasyonTakvimiService } from './oda-rezervasyon-takvimi.service';
 import {
     OdaRezervasyonTakvimiDto,
@@ -81,7 +82,8 @@ const TakvimDurumFiltreleri = {
         ToastModule,
         TooltipModule,
         ToolbarModule,
-        RezervasyonDegisiklikGecmisiDialogComponent
+        RezervasyonDegisiklikGecmisiDialogComponent,
+        RezervasyonKonaklayanPlaniDialogComponent
     ],
     providers: [MessageService],
     templateUrl: './oda-rezervasyon-takvimi.html',
@@ -116,6 +118,9 @@ export class OdaRezervasyonTakvimi implements OnInit {
     degisiklikGecmisiDialogVisible = false;
     degisiklikGecmisiRezervasyonId: number | null = null;
     degisiklikGecmisiReferansNo = '';
+    konaklayanPlanDialogVisible = false;
+    konaklayanPlanRezervasyonId: number | null = null;
+    konaklayanPlanReferansNo = '';
 
     private takvimRequestSeq = 0;
     private odaTipiRequestSeq = 0;
@@ -428,7 +433,7 @@ export class OdaRezervasyonTakvimi implements OnInit {
 
     rezervasyonYonetimineGit(
         rezervasyonId: number | null,
-        action?: 'odeme' | 'odaDegisim' | 'konaklayanPlan'
+        action?: 'odeme' | 'odaDegisim'
     ): void {
         if (!rezervasyonId) return;
         const queryParams: Record<string, string | number> = { rezervasyonId };
@@ -442,6 +447,14 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.degisiklikGecmisiRezervasyonId = blok.rezervasyonId;
         this.degisiklikGecmisiReferansNo = blok.altBaslik ?? '';
         this.degisiklikGecmisiDialogVisible = true;
+        this.blokDetayKapat();
+    }
+
+    konaklayanPlaniAc(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId) return;
+        this.konaklayanPlanRezervasyonId = blok.rezervasyonId;
+        this.konaklayanPlanReferansNo = blok.altBaslik ?? '';
+        this.konaklayanPlanDialogVisible = true;
         this.blokDetayKapat();
     }
 

@@ -336,13 +336,9 @@
     </div>
 
     <ng-template #footer>
-        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="kapat()" />
-        <p-button
-            label="Odeme Kaydet"
-            icon="pi pi-check"
-            [loading]="saving"
-            [disabled]="odemeKaydetDisabled"
-            (onClick)="kaydetOdeme()"
-        />
+        <div class="rez-odeme-action-row">
+            <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || ekHizmetSaving" (onClick)="kapat()" />
+            <p-button label="Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled" (onClick)="kaydetOdeme()" />
+        </div>
     </ng-template>
 </p-dialog>

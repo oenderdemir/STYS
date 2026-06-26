@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { finalize } from 'rxjs';
+import { EMPTY, Observable, finalize, switchMap } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { DatePickerModule } from 'primeng/datepicker';
@@ -17,7 +17,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { toLocalDateString } from '../../core/utils/date-time.util';
 import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
-import { RezervasyonTesisDto, RezervasyonOdaTipiDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
+import { RezervasyonTesisDto, RezervasyonOdaTipiDto, RezervasyonCheckInKontrolDto, RezervasyonKayitSonucDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
 import { RezervasyonKonaklayanPlaniDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { RezervasyonOdaDegisimiDialogComponent } from '../rezervasyon-yonetimi/components/rezervasyon-oda-degisimi-dialog/rezervasyon-oda-degisimi-dialog';
@@ -133,6 +133,14 @@ export class OdaRezervasyonTakvimi implements OnInit {
     odemeRezervasyonId: number | null = null;
     odemeReferansNo = '';
     odemeRezervasyonDurumu: string | null = null;
+
+    checkActionLoadingByRezervasyonId: Record<number, boolean> = {};
+
+    readonly durumTaslak = 'Taslak';
+    readonly durumOnayli = 'Onayli';
+    readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
+    readonly durumCheckOutTamamlandi = 'CheckOutTamamlandi';
+    readonly durumIptal = 'Iptal';
 
     private takvimRequestSeq = 0;
     private odaTipiRequestSeq = 0;
@@ -481,6 +489,174 @@ export class OdaRezervasyonTakvimi implements OnInit {
         this.odaDegisimRezervasyonDurumu = blok.durum ?? null;
         this.odaDegisimDialogVisible = true;
         this.blokDetayKapat();
+    }
+
+    isCheckActionLoading(rezervasyonId: number | null | undefined): boolean {
+        if (!rezervasyonId) return false;
+        return this.checkActionLoadingByRezervasyonId[rezervasyonId] ?? false;
+    }
+
+    canCheckIn(blok: OdaRezervasyonBlokViewModel): boolean {
+        if (!blok.rezervasyonId) return false;
+        return blok.durum === this.durumOnayli;
+    }
+
+    getCheckInDisabledMessage(blok: OdaRezervasyonBlokViewModel): string {
+        if (!blok.rezervasyonId) return 'Rezervasyon bilgisi yok.';
+        if (blok.durum !== this.durumOnayli) return `Check-in yapılabilmesi için rezervasyonun Onaylı durumunda olması gerekir (mevcut: ${this.durumLabel(blok.durum)}).`;
+        return '';
+    }
+
+    canCheckOut(blok: OdaRezervasyonBlokViewModel): boolean {
+        if (!blok.rezervasyonId) return false;
+        return blok.durum === this.durumCheckInTamamlandi;
+    }
+
+    getCheckOutDisabledMessage(blok: OdaRezervasyonBlokViewModel): string {
+        if (!blok.rezervasyonId) return 'Rezervasyon bilgisi yok.';
+        if (blok.durum !== this.durumCheckInTamamlandi) return `Check-out yapılabilmesi için Check-in tamamlanmış olması gerekir (mevcut: ${this.durumLabel(blok.durum)}).`;
+        return '';
+    }
+
+    canCancelOrRevert(blok: OdaRezervasyonBlokViewModel): boolean {
+        if (!blok.rezervasyonId) return false;
+        const d = blok.durum;
+        return d === this.durumTaslak || d === this.durumOnayli || d === this.durumIptal;
+    }
+
+    getCancelActionLabel(blok: OdaRezervasyonBlokViewModel): string {
+        return blok.durum === this.durumIptal ? 'İptali Geri Al' : 'İptal Et';
+    }
+
+    getCancelDisabledMessage(blok: OdaRezervasyonBlokViewModel): string {
+        if (!blok.rezervasyonId) return 'Rezervasyon bilgisi yok.';
+        const d = blok.durum;
+        if (d !== this.durumTaslak && d !== this.durumOnayli && d !== this.durumIptal) {
+            return `Bu durumdaki rezervasyon iptal edilemez (mevcut: ${this.durumLabel(d)}).`;
+        }
+        return '';
+    }
+
+    tamamlaCheckIn(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId || !this.canCheckIn(blok) || this.isCheckActionLoading(blok.rezervasyonId)) return;
+
+        const rezervasyonId = blok.rezervasyonId;
+        this.checkActionLoadingByRezervasyonId[rezervasyonId] = true;
+        this.rezervasyonService
+            .getCheckInKontrol(rezervasyonId)
+            .pipe(
+                switchMap((kontrol: RezervasyonCheckInKontrolDto) => this.executeCheckInIfAllowed(rezervasyonId, kontrol)),
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[rezervasyonId] = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (result: RezervasyonKayitSonucDto) => {
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Başarılı',
+                        detail: `Check-in tamamlandı. Referans: ${result.referansNo}`
+                    });
+                    this.takvimYukle();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    private executeCheckInIfAllowed(rezervasyonId: number, kontrol: RezervasyonCheckInKontrolDto): Observable<RezervasyonKayitSonucDto> {
+        if (kontrol.uyarilar.length > 0) {
+            const warningDetail = kontrol.uyarilar
+                .map((x) => x.odaNo ? `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})` : x.mesaj)
+                .join(', ');
+            this.messageService.add({
+                severity: kontrol.checkInYapilabilir ? 'warn' : 'error',
+                summary: kontrol.checkInYapilabilir ? 'Uyarı' : 'Check-in Engellendi',
+                detail: kontrol.checkInYapilabilir
+                    ? `Oda durumu uyarısı: ${warningDetail}`
+                    : `Hazır olmayan odalar var: ${warningDetail}`
+            });
+        }
+
+        if (!kontrol.checkInYapilabilir) {
+            return EMPTY as Observable<RezervasyonKayitSonucDto>;
+        }
+
+        return this.rezervasyonService.tamamlaCheckIn(rezervasyonId);
+    }
+
+    tamamlaCheckOut(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId || !this.canCheckOut(blok) || this.isCheckActionLoading(blok.rezervasyonId)) return;
+
+        const rezervasyonId = blok.rezervasyonId;
+        this.checkActionLoadingByRezervasyonId[rezervasyonId] = true;
+        this.rezervasyonService
+            .tamamlaCheckOut(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[rezervasyonId] = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (result: RezervasyonKayitSonucDto) => {
+                    this.messageService.add({
+                        severity: 'success',
+                        summary: 'Başarılı',
+                        detail: `Check-out tamamlandı. Referans: ${result.referansNo}`
+                    });
+                    this.takvimYukle();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    iptalEtVeyaGeriAl(blok: OdaRezervasyonBlokViewModel): void {
+        if (!blok.rezervasyonId || !this.canCancelOrRevert(blok) || this.isCheckActionLoading(blok.rezervasyonId)) return;
+
+        const isRevert = blok.durum === this.durumIptal;
+        const confirmMsg = isRevert
+            ? 'Bu rezervasyonun iptalini geri alıp Taslak durumuna dönmek istediğinize emin misiniz?'
+            : 'Bu rezervasyonu iptal etmek istediğinize emin misiniz?';
+
+        if (!window.confirm(confirmMsg)) return;
+
+        const rezervasyonId = blok.rezervasyonId;
+        this.checkActionLoadingByRezervasyonId[rezervasyonId] = true;
+        this.rezervasyonService
+            .iptalEt(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.checkActionLoadingByRezervasyonId[rezervasyonId] = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (result: RezervasyonKayitSonucDto) => {
+                    const detail = result.rezervasyonDurumu === this.durumIptal
+                        ? `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
+                        : `Rezervasyon iptali geri alındı. Referans: ${result.referansNo}`;
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail });
+                    this.takvimYukle();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    private resolveErrorMessage(error: unknown): string {
+        if (error instanceof HttpErrorResponse) {
+            return tryReadApiMessage(error) ?? 'Beklenmeyen bir hata oluştu.';
+        }
+        return 'Beklenmeyen bir hata oluştu.';
     }
 
     formatPara(tutar: number | null | undefined, paraBirimi: string | null | undefined): string {

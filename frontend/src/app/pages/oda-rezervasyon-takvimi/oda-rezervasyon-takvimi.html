@@ -403,6 +403,43 @@
                     (onClick)="degisiklikGecmisiAc(secilenBlok)"
                 />
             </div>
+            @if (secilenBlok.rezervasyonId) {
+                <div class="detay-hizli-islemler detay-hizli-islemler--aksiyon">
+                    <p-button
+                        label="Check-in"
+                        icon="pi pi-sign-in"
+                        severity="success"
+                        size="small"
+                        [disabled]="!canCheckIn(secilenBlok) || isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [loading]="isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [pTooltip]="getCheckInDisabledMessage(secilenBlok)"
+                        tooltipPosition="top"
+                        (onClick)="tamamlaCheckIn(secilenBlok)"
+                    />
+                    <p-button
+                        label="Check-out"
+                        icon="pi pi-sign-out"
+                        severity="warn"
+                        size="small"
+                        [disabled]="!canCheckOut(secilenBlok) || isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [loading]="isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [pTooltip]="getCheckOutDisabledMessage(secilenBlok)"
+                        tooltipPosition="top"
+                        (onClick)="tamamlaCheckOut(secilenBlok)"
+                    />
+                    <p-button
+                        [label]="getCancelActionLabel(secilenBlok)"
+                        icon="pi pi-ban"
+                        severity="danger"
+                        size="small"
+                        [disabled]="!canCancelOrRevert(secilenBlok) || isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [loading]="isCheckActionLoading(secilenBlok.rezervasyonId)"
+                        [pTooltip]="getCancelDisabledMessage(secilenBlok)"
+                        tooltipPosition="top"
+                        (onClick)="iptalEtVeyaGeriAl(secilenBlok)"
+                    />
+                </div>
+            }
             <div class="detay-actions">
                 <p-button
                     label="Kapat"

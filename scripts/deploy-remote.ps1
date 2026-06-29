@@ -38,14 +38,20 @@ if ($IncludeObservability) {
 }
 
 if ($IncludeObservability) {
-    $observabilityFileCheck = "test -f docker-compose.observability.yml || (echo 'HATA: docker-compose.observability.yml bulunamadi.' && exit 1) &&`n"
+    $obsChecks = @(
+        "test -f docker-compose.observability.yml || (echo 'HATA: docker-compose.observability.yml bulunamadi.' && exit 1)",
+        "test -f observability/alloy/config.alloy || (echo 'HATA: observability/alloy/config.alloy bulunamadi.' && exit 1)",
+        "test -f observability/loki/loki-config.yml || (echo 'HATA: observability/loki/loki-config.yml bulunamadi.' && exit 1)",
+        "test -d observability/grafana/provisioning || (echo 'HATA: observability/grafana/provisioning klasoru bulunamadi.' && exit 1)"
+    )
+    $observabilityFileCheck = ($obsChecks -join " &&`n") + " &&`n"
 } else {
     $observabilityFileCheck = ""
 }
 
 $remoteCommand = @"
 cd '$RemoteDir' &&
-test -f .env || (echo 'HATA: .env dosyasi bulunamadi. Once .env dosyasini olusturun.' && exit 1) &&
+test -f .env || (echo 'HATA: .env dosyasi bulunamadi. $RemoteDir/.env dosyasini olusturun. Ornek icin .env.example dosyasina bakin.' && exit 1) &&
 test -f docker-compose.yml || (echo 'HATA: docker-compose.yml bulunamadi.' && exit 1) &&
 $($observabilityFileCheck)set -a &&
 . ./images/stys-image.env &&

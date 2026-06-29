@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory = $true)][string]$AppVersion,
     [Parameter(Mandatory = $true)][string]$GitSha,
     [Parameter(Mandatory = $true)][string]$ShortGitSha,
-    [Parameter(Mandatory = $true)][string]$BuildTime
+    [Parameter(Mandatory = $true)][string]$BuildTime,
+    [switch]$IncludeObservability
 )
 
 Set-StrictMode -Version Latest
@@ -204,10 +205,32 @@ Write-Host " - $integrityEnvFile"
 
 Write-Host "Compose dosyasi ve image archive'lari VPS'ye kopyalaniyor..."
 $remoteTarget = "$VpsUser@$VpsHost"
-Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, "mkdir -p '$RemoteDir/images' '$RemoteDir/scripts'")
+$remoteDirs = "'$RemoteDir/images' '$RemoteDir/scripts'"
+if ($IncludeObservability) { $remoteDirs += " '$RemoteDir/observability'" }
+Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, "mkdir -p $remoteDirs")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $integrityEnvFile, "${remoteTarget}:$RemoteDir/scripts/stys-integrity.env")
+
+if ($IncludeObservability) {
+    $observabilityComposeFile = Join-Path $projectRoot "docker-compose.observability.yml"
+    $observabilityDir = Join-Path $projectRoot "observability"
+    $envExampleFile = Join-Path $projectRoot ".env.example"
+
+    if (-not (Test-Path -LiteralPath $observabilityComposeFile)) {
+        throw "docker-compose.observability.yml bulunamadi: $observabilityComposeFile"
+    }
+    if (-not (Test-Path -LiteralPath $observabilityDir)) {
+        throw "observability/ klasoru bulunamadi: $observabilityDir"
+    }
+
+    Write-Host "Observability dosyalari VPS'ye kopyalaniyor..."
+    Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $observabilityComposeFile, "${remoteTarget}:$RemoteDir/docker-compose.observability.yml")
+    Invoke-NativeCommand scp @('-r', '-i', $resolvedSshKeyPath, $observabilityDir, "${remoteTarget}:$RemoteDir/")
+    if (Test-Path -LiteralPath $envExampleFile) {
+        Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $envExampleFile, "${remoteTarget}:$RemoteDir/.env.example")
+    }
+}
 
 $remoteEnvUpdate = @'
 set -eu
@@ -226,6 +249,11 @@ Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, $remoteEnvU
 Write-Host ""
 Write-Host "Kopyalama tamamlandi:"
 Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.yml"
+if ($IncludeObservability) {
+    Write-Host " - ${remoteTarget}:$RemoteDir/docker-compose.observability.yml"
+    Write-Host " - ${remoteTarget}:$RemoteDir/observability/"
+    Write-Host " - ${remoteTarget}:$RemoteDir/.env.example"
+}
 Write-Host " - ${remoteTarget}:$RemoteDir/.env (STYS_IMAGE_TAG=$FullTag olarak guncellendi)"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"

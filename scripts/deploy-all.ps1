@@ -131,7 +131,8 @@ Write-Host ""
     -AppVersion $Tag `
     -GitSha $GitSha `
     -ShortGitSha $ShortGitSha `
-    -BuildTime $BuildTime
+    -BuildTime $BuildTime `
+    -IncludeObservability:$IncludeObservability
 
 # --- 8. Remote deploy ---
 $remoteDeployParams = @{

@@ -47,7 +47,7 @@ services:
     ports:
       - "12345:12345"
     volumes:
-      - ./Data/logs/backend:/var/log/stys/backend:ro
+      - ${STYS_BACKEND_LOG_HOST_PATH:-./Logs}:${STYS_ALLOY_LOG_CONTAINER_PATH:-/var/log/stys/backend}:ro
       - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
     depends_on:
       loki:

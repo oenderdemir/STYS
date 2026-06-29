@@ -95,7 +95,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./Data/logs/backend:/app/Logs
+      - ${STYS_BACKEND_LOG_HOST_PATH:-./Logs}:${STYS_BACKEND_LOG_CONTAINER_PATH:-/app/Logs}
       - ./Data/Uploads/KurumLogolari:/app/Data/Uploads/KurumLogolari
     env_file:
       - ./scripts/stys-integrity.env

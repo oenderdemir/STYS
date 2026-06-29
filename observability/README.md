@@ -115,10 +115,12 @@ count_over_time({app="stys", log_type="error"}[1h])
 
 Alloy, `STYS_BACKEND_LOG_HOST_PATH` olarak mount edilen klasörü izler:
 
-| Host klasörü (örnek)                    | Loki label              |
-|-----------------------------------------|-------------------------|
-| `<LOG_PATH>/stys-*.json`                | `log_type="application"` |
-| `<LOG_PATH>/errors/stys-error-*.json`   | `log_type="error"`       |
+| Host klasörü (örnek)                        | Loki label               |
+|---------------------------------------------|--------------------------|
+| `<LOG_PATH>/stys-*.json`                    | `log_type="application"` |
+| `<LOG_PATH>/stys-dev-*.json`                | `log_type="application"` |
+| `<LOG_PATH>/errors/stys-error-*.json`       | `log_type="error"`       |
+| `<LOG_PATH>/errors/stys-dev-error-*.json`   | `log_type="error"`       |
 
 ## Güvenlik Notu
 

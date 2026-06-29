@@ -5,7 +5,8 @@ param(
     [string]$RemoteDir = "/root/stys",
     [string]$ComposeFilePath = "docker-compose.yml",
     [Parameter(Mandatory = $true)][string]$Tag,
-    [switch]$AllowDirtyWorkingTree
+    [switch]$AllowDirtyWorkingTree,
+    [switch]$IncludeObservability
 )
 
 Set-StrictMode -Version Latest
@@ -133,9 +134,12 @@ Write-Host ""
     -BuildTime $BuildTime
 
 # --- 8. Remote deploy ---
-& (Join-Path $scriptDirectory "deploy-remote.ps1") `
-    -VpsHost $VpsHost `
-    -VpsUser $VpsUser `
-    -SshKeyPath $SshKeyPath `
-    -RemoteDir $RemoteDir `
-    -Tag "$Tag-$ShortGitSha"
+$remoteDeployParams = @{
+    VpsHost    = $VpsHost
+    VpsUser    = $VpsUser
+    SshKeyPath = $SshKeyPath
+    RemoteDir  = $RemoteDir
+    Tag        = "$Tag-$ShortGitSha"
+}
+if ($IncludeObservability) { $remoteDeployParams['IncludeObservability'] = $true }
+& (Join-Path $scriptDirectory "deploy-remote.ps1") @remoteDeployParams

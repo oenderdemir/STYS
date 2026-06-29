@@ -45,6 +45,16 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.observabi
 docker compose --env-file .env -f docker-compose.observability.yml up -d
 ```
 
+**VPS'e deploy (observability dahil):**
+```powershell
+.\scripts\deploy-all.ps1 -SshKeyPath .\scripts\id_ed25519 -Tag v1.0.13 -IncludeObservability
+```
+
+**VPS'e deploy (sadece STYS — eski davranış):**
+```powershell
+.\scripts\deploy-all.ps1 -SshKeyPath .\scripts\id_ed25519 -Tag v1.0.13
+```
+
 > STYS backend çalışmıyorsa log dosyaları oluşmaz; Alloy beklemeye geçer,
 > dosyalar oluşunca otomatik olarak işlemeye başlar.
 

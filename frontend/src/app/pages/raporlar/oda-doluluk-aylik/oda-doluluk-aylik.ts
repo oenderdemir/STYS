@@ -13,7 +13,6 @@ import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
-import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
@@ -40,7 +39,6 @@ interface SecenekOgesi {
         TableModule,
         TagModule,
         ToastModule,
-        ToolbarModule,
         TooltipModule
     ],
     providers: [MessageService],
@@ -210,11 +208,25 @@ export class OdaDolulukAylikComponent implements OnInit {
     }
 
     formatPara(tutar: number, paraBirimi: string | null | undefined): string {
-        return new Intl.NumberFormat('tr-TR', {
-            style: 'currency',
-            currency: paraBirimi ?? 'TRY',
-            minimumFractionDigits: 2
+        const birim = paraBirimi ?? 'TRY';
+        const sembol = birim === 'TRY' ? '₺' : birim;
+        const sayi = new Intl.NumberFormat('tr-TR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         }).format(tutar);
+        return `${sayi} ${sembol}`;
+    }
+
+    formatYuzde(value: number): string {
+        return `%${value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    get raporAltBaslik(): string {
+        if (!this.rapor) {
+            return '';
+        }
+        const ayLabel = this.aySecenekleri.find((a) => a.value === this.rapor!.ay)?.label ?? '';
+        return `${this.rapor.tesisAdi ?? ''} - ${ayLabel} ${this.rapor.yil}`;
     }
 
     durumLabel(durum: string): string {

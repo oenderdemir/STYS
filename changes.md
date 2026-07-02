@@ -6109,3 +6109,24 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Planı — Görsel İyileştirme
+
+### Yapılan İşler
+- Aylık Oda Planı ekranının filtre alanı, özet kartları, para/yüzde formatları ve matris görünümü görsel olarak iyileştirildi.
+
+### Frontend (sadece polish, backend değişmedi)
+- Sayfa üstüne sade bir başlık bloğu eklendi ("Aylık Oda Planı" + açıklama + "Raporlar" etiketi).
+- Filtre kartı yeniden düzenlendi: filtreler solda sabit genişlikli (`tesis-select` 220px, `ay-select` 140px, `yil-select` 110px) gruplanmış, aksiyon butonları (Rapor Getir/Excel/PDF) sağda ayrı bir grupta; karta hafif gölge/border-radius verildi.
+- Özet kartları ikonlarla (pi-building, pi-calendar-plus/minus, pi-chart-pie, pi-wallet, pi-chart-line, pi-exclamation-circle) yeniden tasarlandı; kartlar eşit yükseklikte, Doluluk Oranı kartı vurgulu (primary border), Kalan Tutar kartı uyarı vurgulu (orange border).
+- `formatPara` düzeltildi: artık "1.000,00 ₺" (TRY için ₺ sembolü, diğer para birimlerinde kod) sırasıyla gösteriyor.
+- Yeni `formatYuzde` helper'ı eklendi: "%0,74" formatında Türkçe yüzde gösterimi.
+- Matris tablosunun üstüne küçük bir toolbar eklendi ("Matris Görünümü" + tesis/dönem alt başlığı + Dolu/Boş/Doluluk etiketleri).
+- Dolu hücrelerde misafir adı artık okunabilir bir başlık, referans no muted küçük metin; ödeme eksik/çakışma uyarıları p-tag badge olarak gösteriliyor; boş hücreler nötr, dolu/ödeme eksik/çakışma hücreleri hover ile ayrışıyor.
+- Çakışma dialogunda oda no/tarih artık iki küçük bilgi kutusu olarak gösteriliyor, dialog responsive (`breakpoints`).
+- Kullanılmayan `ToolbarModule` importu kaldırıldı; stil tamamen component scss içinde, tema değişkenleri (`--surface-card`, `--text-color-secondary`, `--primary-color` vb.) kullanıldı.
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

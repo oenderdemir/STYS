@@ -1,93 +1,121 @@
 <p-toast></p-toast>
 
 <div class="oda-doluluk-aylik-page">
-    <p-card>
-        <p-toolbar>
-            <ng-template pTemplate="start">
-                <div class="filtre-alani">
-                    <div class="filtre-ogesi">
-                        <label for="tesisSelect">Tesis</label>
-                        <p-select
-                            id="tesisSelect"
-                            [options]="tesisler"
-                            optionLabel="ad"
-                            optionValue="id"
-                            [(ngModel)]="selectedTesisId"
-                            [loading]="tesislerYukleniyor"
-                            placeholder="Tesis seçiniz"
-                        ></p-select>
-                    </div>
+    <div class="sayfa-basligi">
+        <div class="sayfa-basligi-metin">
+            <h1>Aylık Oda Planı</h1>
+            <p>Seçilen tesis ve dönem için oda bazlı doluluk, tahsilat ve çakışma durumlarını görüntüleyin.</p>
+        </div>
+        <p-tag value="Raporlar" severity="secondary" styleClass="sayfa-etiketi"></p-tag>
+    </div>
 
-                    <div class="filtre-ogesi">
-                        <label for="aySelect">Ay</label>
-                        <p-select
-                            id="aySelect"
-                            [options]="aySecenekleri"
-                            optionLabel="label"
-                            optionValue="value"
-                            [(ngModel)]="selectedAy"
-                        ></p-select>
-                    </div>
-
-                    <div class="filtre-ogesi">
-                        <label for="yilSelect">Yıl</label>
-                        <p-select
-                            id="yilSelect"
-                            [options]="yilSecenekleri"
-                            optionLabel="label"
-                            optionValue="value"
-                            [(ngModel)]="selectedYil"
-                        ></p-select>
-                    </div>
-
-                    <div class="filtre-ogesi maskele-ogesi">
-                        <p-checkbox [(ngModel)]="maskele" [binary]="true" inputId="maskeleCheckbox"></p-checkbox>
-                        <label for="maskeleCheckbox">Kişisel verileri maskele</label>
-                    </div>
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
                 </div>
-            </ng-template>
 
-            <ng-template pTemplate="end">
+                <div class="filtre-ogesi">
+                    <label for="aySelect">Ay</label>
+                    <p-select
+                        id="aySelect"
+                        styleClass="ay-select"
+                        [options]="aySecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedAy"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="yilSelect">Yıl</label>
+                    <p-select
+                        id="yilSelect"
+                        styleClass="yil-select"
+                        [options]="yilSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedYil"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi maskele-ogesi">
+                    <p-checkbox [(ngModel)]="maskele" [binary]="true" inputId="maskeleCheckbox"></p-checkbox>
+                    <label for="maskeleCheckbox">Kişisel verileri maskele</label>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
                 <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
-                <button pButton type="button" label="Excel" icon="pi pi-file-excel" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
-                <button pButton type="button" label="PDF" icon="pi pi-file-pdf" class="p-button-outlined" (click)="exportPdf()"></button>
-            </ng-template>
-        </p-toolbar>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+                <button pButton type="button" label="PDF" icon="pi pi-file-pdf" severity="secondary" class="p-button-outlined" (click)="exportPdf()"></button>
+            </div>
+        </div>
     </p-card>
 
     @if (rapor) {
         <div class="ozet-kartlari">
             <p-card styleClass="ozet-kart">
+                <i class="pi pi-building ozet-ikon"></i>
                 <span class="ozet-baslik">Toplam Oda</span>
                 <span class="ozet-deger">{{ rapor.ozet.toplamOdaSayisi }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
+                <i class="pi pi-calendar-plus ozet-ikon"></i>
                 <span class="ozet-baslik">Dolu Oda/Gün</span>
                 <span class="ozet-deger">{{ rapor.ozet.doluOdaGunSayisi }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
+                <i class="pi pi-calendar-minus ozet-ikon"></i>
                 <span class="ozet-baslik">Boş Oda/Gün</span>
                 <span class="ozet-deger">{{ rapor.ozet.bosOdaGunSayisi }}</span>
             </p-card>
-            <p-card styleClass="ozet-kart">
+            <p-card styleClass="ozet-kart ozet-kart-vurgu">
+                <i class="pi pi-chart-pie ozet-ikon"></i>
                 <span class="ozet-baslik">Doluluk Oranı</span>
-                <span class="ozet-deger">%{{ rapor.ozet.dolulukOraniYuzde }}</span>
+                <span class="ozet-deger">{{ formatYuzde(rapor.ozet.dolulukOraniYuzde) }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
+                <i class="pi pi-wallet ozet-ikon"></i>
                 <span class="ozet-baslik">Ay İçinde Tahsil Edilen</span>
                 <span class="ozet-deger">{{ formatPara(rapor.ozet.ayIcindeTahsilEdilenTutar, 'TRY') }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
+                <i class="pi pi-chart-line ozet-ikon"></i>
                 <span class="ozet-baslik">Konaklayan Rezervasyonların Toplam Tahsilatı</span>
                 <span class="ozet-deger">{{ formatPara(rapor.ozet.konaklayanRezervasyonlarinToplamTahsilati, 'TRY') }}</span>
             </p-card>
-            <p-card styleClass="ozet-kart">
+            <p-card styleClass="ozet-kart ozet-kart-uyari">
+                <i class="pi pi-exclamation-circle ozet-ikon"></i>
                 <span class="ozet-baslik">Toplam Kalan Tutar</span>
                 <span class="ozet-deger">{{ formatPara(rapor.ozet.toplamKalanTutar, 'TRY') }}</span>
             </p-card>
         </div>
 
-        <p-card>
+        <p-card styleClass="matris-karti">
+            <div class="matris-toolbar">
+                <div class="matris-baslik">
+                    <span class="matris-baslik-ana">Matris Görünümü</span>
+                    <span class="matris-baslik-alt">{{ raporAltBaslik }}</span>
+                </div>
+                <div class="matris-ozet-etiketleri">
+                    <p-tag severity="success" value="Dolu: {{ rapor.ozet.doluOdaGunSayisi }}"></p-tag>
+                    <p-tag severity="secondary" value="Boş: {{ rapor.ozet.bosOdaGunSayisi }}"></p-tag>
+                    <p-tag severity="info" value="Doluluk: {{ formatYuzde(rapor.ozet.dolulukOraniYuzde) }}"></p-tag>
+                </div>
+            </div>
+
             <div class="matris-scroll">
                 <table class="matris-tablo">
                     <thead>
@@ -111,16 +139,18 @@
                                         (click)="hucreTikla(hucre, gun.tarih)"
                                     >
                                         @if (hucre.doluMu) {
-                                            <p-tag [severity]="hucreSeverity(hucre)" [value]="hucre.misafirAdiSoyadi ?? '-'"></p-tag>
-                                            <div class="hucre-detay">
-                                                <span>#{{ hucre.referansNo }}</span>
-                                                <span>{{ hucre.kisiSayisi }} kişi</span>
-                                                @if (hucre.odemesiEksikMi) {
-                                                    <span class="odeme-eksik-uyarisi">Ödeme eksik</span>
-                                                }
-                                                @if (hucre.cakismaVarMi) {
-                                                    <p-tag severity="danger" [value]="'Çakışma var (' + hucre.cakismaSayisi + ')'"></p-tag>
-                                                }
+                                            <div class="hucre-icerik">
+                                                <div class="misafir-adi">{{ hucre.misafirAdiSoyadi ?? '-' }}</div>
+                                                <div class="referans-no">#{{ hucre.referansNo }}</div>
+                                                <div class="hucre-meta-satiri">
+                                                    <span class="kisi-sayisi"><i class="pi pi-user"></i> {{ hucre.kisiSayisi }}</span>
+                                                    @if (hucre.odemesiEksikMi) {
+                                                        <p-tag severity="warn" value="Ödeme Eksik" styleClass="hucre-badge"></p-tag>
+                                                    }
+                                                    @if (hucre.cakismaVarMi) {
+                                                        <p-tag severity="danger" value="Çakışma ({{ hucre.cakismaSayisi }})" styleClass="hucre-badge"></p-tag>
+                                                    }
+                                                </div>
                                                 @if (hucre.tutarAciklamasi) {
                                                     <span class="tutar-aciklamasi" [pTooltip]="hucre.tutarAciklamasi" tooltipPosition="top">
                                                         {{ formatPara(hucre.toplamUcret, hucre.paraBirimi) }}
@@ -144,14 +174,21 @@
     [(visible)]="cakismaDialogVisible"
     [modal]="true"
     [style]="{ width: '50rem' }"
+    [breakpoints]="{ '960px': '90vw' }"
     (onHide)="cakismaDialogKapat()"
 >
     <div class="cakisma-dialog-ozet">
-        <span><strong>Oda No:</strong> {{ cakismaDialogOdaNo }}</span>
-        <span><strong>Tarih:</strong> {{ cakismaDialogTarih }}</span>
+        <div class="cakisma-bilgi-kutusu">
+            <span class="cakisma-bilgi-baslik">Oda No</span>
+            <span class="cakisma-bilgi-deger">{{ cakismaDialogOdaNo }}</span>
+        </div>
+        <div class="cakisma-bilgi-kutusu">
+            <span class="cakisma-bilgi-baslik">Tarih</span>
+            <span class="cakisma-bilgi-deger">{{ cakismaDialogTarih }}</span>
+        </div>
     </div>
 
-    <p-table [value]="cakismaDialogListesi">
+    <p-table [value]="cakismaDialogListesi" styleClass="cakisma-tablosu">
         <ng-template pTemplate="header">
             <tr>
                 <th>Referans No</th>

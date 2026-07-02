@@ -8,10 +8,13 @@ import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
+import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
 import { RezervasyonTesisDto } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
@@ -32,10 +35,13 @@ interface SecenekOgesi {
         ButtonModule,
         CardModule,
         CheckboxModule,
+        DialogModule,
         SelectModule,
+        TableModule,
         TagModule,
         ToastModule,
-        ToolbarModule
+        ToolbarModule,
+        TooltipModule
     ],
     providers: [MessageService],
     templateUrl: './oda-doluluk-aylik.html',
@@ -59,6 +65,11 @@ export class OdaDolulukAylikComponent implements OnInit {
 
     rapor: AylikOdaDolulukRaporDto | null = null;
     yukleniyor = false;
+
+    cakismaDialogVisible = false;
+    cakismaDialogOdaNo = '';
+    cakismaDialogTarih = '';
+    cakismaDialogListesi: OdaDolulukHucreDto['cakismalar'] = [];
 
     readonly aySecenekleri: SecenekOgesi[] = [
         { label: 'Ocak', value: 1 },
@@ -138,11 +149,37 @@ export class OdaDolulukAylikComponent implements OnInit {
             });
     }
 
-    hucreTikla(hucre: OdaDolulukHucreDto): void {
-        if (!hucre.doluMu || !hucre.rezervasyonId) {
+    hucreTikla(hucre: OdaDolulukHucreDto, gunTarihi: string): void {
+        if (!hucre.doluMu) {
+            return;
+        }
+
+        if (hucre.cakismaVarMi) {
+            this.cakismaDialogAc(hucre, gunTarihi);
+            return;
+        }
+
+        if (!hucre.rezervasyonId) {
             return;
         }
         this.router.navigate(['/rezervasyon-yonetimi'], { queryParams: { rezervasyonId: hucre.rezervasyonId } });
+    }
+
+    private cakismaDialogAc(hucre: OdaDolulukHucreDto, gunTarihi: string): void {
+        this.cakismaDialogOdaNo = hucre.odaNo;
+        this.cakismaDialogTarih = this.formatTarihKisa(gunTarihi);
+        this.cakismaDialogListesi = hucre.cakismalar;
+        this.cakismaDialogVisible = true;
+    }
+
+    cakismaDialogKapat(): void {
+        this.cakismaDialogVisible = false;
+        this.cakismaDialogListesi = [];
+    }
+
+    cakismaRezervasyonuAc(rezervasyonId: number): void {
+        this.router.navigate(['/rezervasyon-yonetimi'], { queryParams: { rezervasyonId } });
+        this.cakismaDialogKapat();
     }
 
     hucreSeverity(hucre: OdaDolulukHucreDto): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
@@ -163,8 +200,12 @@ export class OdaDolulukAylikComponent implements OnInit {
     }
 
     formatGunBasligi(tarihIso: string, gunAdi: string): string {
+        return `${this.formatTarihKisa(tarihIso)} ${gunAdi}`;
+    }
+
+    private formatTarihKisa(tarihIso: string): string {
         const tarih = new Date(tarihIso);
-        return `${tarih.getDate()} ${this.aySecenekleri[tarih.getMonth()].label} ${tarih.getFullYear()} ${gunAdi}`;
+        return `${tarih.getDate()} ${this.aySecenekleri[tarih.getMonth()].label} ${tarih.getFullYear()}`;
     }
 
     formatPara(tutar: number, paraBirimi: string | null | undefined): string {
@@ -173,6 +214,17 @@ export class OdaDolulukAylikComponent implements OnInit {
             currency: paraBirimi ?? 'TRY',
             minimumFractionDigits: 2
         }).format(tutar);
+    }
+
+    durumLabel(durum: string): string {
+        const map: Record<string, string> = {
+            Taslak: 'Taslak',
+            Onayli: 'Onaylı',
+            CheckInTamamlandi: 'Check-in Yapıldı',
+            CheckOutTamamlandi: 'Check-out Yapıldı',
+            Iptal: 'İptal'
+        };
+        return map[durum] ?? durum;
     }
 
     exportExcel(): void {

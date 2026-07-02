@@ -6061,3 +6061,27 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk ve Tahsilat Raporu — Tahsilat Netleştirme ve Çakışma Görünürlüğü
+
+### Yapılan İşler
+- Aylık oda doluluk raporunda ay içi tahsilat ile rezervasyon toplam tahsilatı ayrıştırıldı; oda/gün çakışmaları backend DTO ve frontend dialog ile görünür hale getirildi.
+
+### Backend
+- `OdaDolulukOzetDto` — `AyIcindeTahsilEdilenTutar`, `KonaklayanRezervasyonlarinToplamTahsilati`, `KonaklayanRezervasyonlarinToplamKalanTutari` eklendi; `ToplamTahsilat`/`ToplamKalanTutar` geriye uyumluluk için korunup bu yeni alanlara eşitlendi.
+- `OdaDolulukHucreDto` — `TutarAciklamasi`, `CakismaVarMi`, `CakismaSayisi`, `Cakismalar` eklendi; yeni `OdaDolulukCakismaDto`.
+- `OdaDolulukRaporService` — ödeme sorgusu ikiye ayrıldı (rezervasyon bazlı toplam ödeme vs. ay içinde tahsil edilen ödeme, iptal hariç); çakışan segment kayıtları artık tam liste olarak hücreye taşınıyor (maskele=true ise çakışan misafir adları da maskeleniyor).
+- `tests/STYS.Tests/OdaDolulukRaporServiceTests.cs` — ay içi/rezervasyon bazlı tahsilat ayrımı, çakışma tespiti ve çakışma maskeleme senaryoları eklendi (8/8 geçiyor).
+
+### Frontend
+- `oda-doluluk-aylik.dto.ts` — yeni alanlar ve `OdaDolulukCakismaDto` eklendi.
+- `oda-doluluk-aylik.ts/html/scss` — özet kartları "Ay İçinde Tahsil Edilen" ve "Konaklayan Rezervasyonların Toplam Tahsilatı" ile güncellendi; çakışmalı hücreler belirgin (conflict) stil ve "Çakışma var (N)" etiketiyle işaretlendi; çakışmalı hücreye tıklanınca doğrudan yönlendirme yerine p-dialog ile çakışan rezervasyon listesi (referans no, misafir, giriş/çıkış, durum, Aç butonu) gösteriliyor; tutar alanına `pTooltip` ile açıklama eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporServiceTests` başarılı — 8/8 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

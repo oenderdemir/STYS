@@ -74,8 +74,12 @@
                 <span class="ozet-deger">%{{ rapor.ozet.dolulukOraniYuzde }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
-                <span class="ozet-baslik">Toplam Tahsilat</span>
-                <span class="ozet-deger">{{ formatPara(rapor.ozet.toplamTahsilat, 'TRY') }}</span>
+                <span class="ozet-baslik">Ay İçinde Tahsil Edilen</span>
+                <span class="ozet-deger">{{ formatPara(rapor.ozet.ayIcindeTahsilEdilenTutar, 'TRY') }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Konaklayan Rezervasyonların Toplam Tahsilatı</span>
+                <span class="ozet-deger">{{ formatPara(rapor.ozet.konaklayanRezervasyonlarinToplamTahsilati, 'TRY') }}</span>
             </p-card>
             <p-card styleClass="ozet-kart">
                 <span class="ozet-baslik">Toplam Kalan Tutar</span>
@@ -102,7 +106,9 @@
                                     <td
                                         class="oda-kolonu"
                                         [class.hucre-dolu]="hucre.doluMu"
-                                        (click)="hucreTikla(hucre)"
+                                        [class.hucre-conflict]="hucre.cakismaVarMi"
+                                        [class.hucre-payment-missing]="hucre.odemesiEksikMi && !hucre.cakismaVarMi"
+                                        (click)="hucreTikla(hucre, gun.tarih)"
                                     >
                                         @if (hucre.doluMu) {
                                             <p-tag [severity]="hucreSeverity(hucre)" [value]="hucre.misafirAdiSoyadi ?? '-'"></p-tag>
@@ -111,6 +117,14 @@
                                                 <span>{{ hucre.kisiSayisi }} kişi</span>
                                                 @if (hucre.odemesiEksikMi) {
                                                     <span class="odeme-eksik-uyarisi">Ödeme eksik</span>
+                                                }
+                                                @if (hucre.cakismaVarMi) {
+                                                    <p-tag severity="danger" [value]="'Çakışma var (' + hucre.cakismaSayisi + ')'"></p-tag>
+                                                }
+                                                @if (hucre.tutarAciklamasi) {
+                                                    <span class="tutar-aciklamasi" [pTooltip]="hucre.tutarAciklamasi" tooltipPosition="top">
+                                                        {{ formatPara(hucre.toplamUcret, hucre.paraBirimi) }}
+                                                    </span>
                                                 }
                                             </div>
                                         }
@@ -124,3 +138,41 @@
         </p-card>
     }
 </div>
+
+<p-dialog
+    header="Oda/Gün Çakışması"
+    [(visible)]="cakismaDialogVisible"
+    [modal]="true"
+    [style]="{ width: '50rem' }"
+    (onHide)="cakismaDialogKapat()"
+>
+    <div class="cakisma-dialog-ozet">
+        <span><strong>Oda No:</strong> {{ cakismaDialogOdaNo }}</span>
+        <span><strong>Tarih:</strong> {{ cakismaDialogTarih }}</span>
+    </div>
+
+    <p-table [value]="cakismaDialogListesi">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Referans No</th>
+                <th>Misafir</th>
+                <th>Giriş</th>
+                <th>Çıkış</th>
+                <th>Durum</th>
+                <th></th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-cakisma>
+            <tr>
+                <td>{{ cakisma.referansNo }}</td>
+                <td>{{ cakisma.misafirAdiSoyadi ?? '-' }}</td>
+                <td>{{ formatGunBasligi(cakisma.girisTarihi, '') }}</td>
+                <td>{{ formatGunBasligi(cakisma.cikisTarihi, '') }}</td>
+                <td>{{ durumLabel(cakisma.rezervasyonDurumu) }}</td>
+                <td>
+                    <button pButton type="button" label="Aç" icon="pi pi-external-link" class="p-button-sm" (click)="cakismaRezervasyonuAc(cakisma.rezervasyonId)"></button>
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</p-dialog>

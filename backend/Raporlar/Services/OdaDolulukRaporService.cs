@@ -112,12 +112,24 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
 
         var rezervasyonIds = segmentKayitlari.Select(x => x.RezervasyonId).Distinct().ToList();
 
+        // A) Rezervasyon bazli toplam odeme: hucrelerdeki OdenenTutar/KalanTutar icin, odeme tarihinden bagimsiz.
         var odemeToplamlari = await _stysDbContext.RezervasyonOdemeler
             .AsNoTracking()
             .Where(o => rezervasyonIds.Contains(o.RezervasyonId))
             .GroupBy(o => o.RezervasyonId)
             .Select(g => new { RezervasyonId = g.Key, Toplam = g.Sum(x => x.OdemeTutari) })
             .ToDictionaryAsync(x => x.RezervasyonId, x => x.Toplam, cancellationToken);
+
+        // B) Ay icinde tahsil edilen odeme: odeme tarihi rapor ayi araliginda olan, iptal olmayan rezervasyonlarin odemeleri.
+        var ayIcindeTahsilEdilenTutar = await _stysDbContext.RezervasyonOdemeler
+            .AsNoTracking()
+            .Where(o => o.OdemeTarihi >= ayBaslangic
+                && o.OdemeTarihi < ayBitisExclusive
+                && o.Rezervasyon != null
+                && o.Rezervasyon.TesisId == tesisId
+                && o.Rezervasyon.AktifMi
+                && o.Rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal)
+            .SumAsync(o => (decimal?)o.OdemeTutari, cancellationToken) ?? 0m;
 
         var hucreKayitlari = new Dictionary<(int OdaId, DateTime Gun), List<SegmentOdaKaydi>>();
         foreach (var kayit in segmentKayitlari)
@@ -192,6 +204,7 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
                     hucre.ParaBirimi = kayit.ParaBirimi;
                     hucre.OdemesiEksikMi = odemesiEksikMi;
                     hucre.OdaDegisimiGerekliMi = false;
+                    hucre.TutarAciklamasi = "Tutar bilgisi rezervasyon toplamıdır.";
                     hucre.HucreRenkKodu = cakismaVarMi
                         ? "conflict"
                         : odemesiEksikMi
@@ -202,6 +215,23 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
                                 RezervasyonDurumlari.CheckInTamamlandi => "occupied",
                                 _ => "reserved"
                             };
+
+                    hucre.CakismaVarMi = cakismaVarMi;
+                    hucre.CakismaSayisi = eslesenler.Count;
+                    if (cakismaVarMi)
+                    {
+                        hucre.Cakismalar = eslesenler
+                            .Select(x => new OdaDolulukCakismaDto
+                            {
+                                RezervasyonId = x.RezervasyonId,
+                                ReferansNo = x.ReferansNo,
+                                MisafirAdiSoyadi = maskele ? MaskeleAdSoyad(x.MisafirAdiSoyadi) : x.MisafirAdiSoyadi,
+                                GirisTarihi = x.SegmentBaslangicTarihi,
+                                CikisTarihi = x.SegmentBitisTarihi,
+                                RezervasyonDurumu = x.RezervasyonDurumu
+                            })
+                            .ToList();
+                    }
 
                     doluOdaGunSayisi++;
                 }
@@ -220,6 +250,11 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
         var toplamOdaGunSayisi = odalar.Count * gunler.Count;
         var bosOdaGunSayisi = toplamOdaGunSayisi - doluOdaGunSayisi;
 
+        var konaklayanRezervasyonlarinToplamTahsilati = benzersizRezervasyonlar
+            .Sum(x => odemeToplamlari.GetValueOrDefault(x.RezervasyonId));
+        var konaklayanRezervasyonlarinToplamKalanTutari = benzersizRezervasyonlar
+            .Sum(x => Math.Max(0m, x.ToplamUcret - odemeToplamlari.GetValueOrDefault(x.RezervasyonId)));
+
         var ozet = new OdaDolulukOzetDto
         {
             ToplamOdaSayisi = odalar.Count,
@@ -230,9 +265,12 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
             DolulukOraniYuzde = toplamOdaGunSayisi > 0
                 ? Math.Round(doluOdaGunSayisi * 100m / toplamOdaGunSayisi, 2)
                 : 0m,
-            ToplamTahsilat = benzersizRezervasyonlar.Sum(x => odemeToplamlari.GetValueOrDefault(x.RezervasyonId)),
-            ToplamKalanTutar = benzersizRezervasyonlar.Sum(x =>
-                Math.Max(0m, x.ToplamUcret - odemeToplamlari.GetValueOrDefault(x.RezervasyonId)))
+            AyIcindeTahsilEdilenTutar = ayIcindeTahsilEdilenTutar,
+            KonaklayanRezervasyonlarinToplamTahsilati = konaklayanRezervasyonlarinToplamTahsilati,
+            KonaklayanRezervasyonlarinToplamKalanTutari = konaklayanRezervasyonlarinToplamKalanTutari,
+            // Geriye uyumluluk: ToplamTahsilat artik ay icinde tahsil edileni, ToplamKalanTutar konaklayan rezervasyonlarin kalanini gosterir.
+            ToplamTahsilat = ayIcindeTahsilEdilenTutar,
+            ToplamKalanTutar = konaklayanRezervasyonlarinToplamKalanTutari
         };
 
         return new AylikOdaDolulukRaporDto

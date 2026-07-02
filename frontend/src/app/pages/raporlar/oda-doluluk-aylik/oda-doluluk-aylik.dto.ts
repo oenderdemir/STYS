@@ -6,6 +6,15 @@ export interface OdaDolulukOdaDto {
     kapasite: number;
 }
 
+export interface OdaDolulukCakismaDto {
+    rezervasyonId: number;
+    referansNo: string;
+    misafirAdiSoyadi: string | null;
+    girisTarihi: string;
+    cikisTarihi: string;
+    rezervasyonDurumu: string;
+}
+
 export interface OdaDolulukHucreDto {
     odaId: number;
     odaNo: string;
@@ -25,6 +34,10 @@ export interface OdaDolulukHucreDto {
     odemesiEksikMi: boolean;
     odaDegisimiGerekliMi: boolean;
     hucreRenkKodu: string | null;
+    tutarAciklamasi: string | null;
+    cakismaVarMi: boolean;
+    cakismaSayisi: number;
+    cakismalar: OdaDolulukCakismaDto[];
 }
 
 export interface OdaDolulukGunDto {
@@ -42,6 +55,9 @@ export interface OdaDolulukOzetDto {
     dolulukOraniYuzde: number;
     toplamTahsilat: number;
     toplamKalanTutar: number;
+    ayIcindeTahsilEdilenTutar: number;
+    konaklayanRezervasyonlarinToplamTahsilati: number;
+    konaklayanRezervasyonlarinToplamKalanTutari: number;
 }
 
 export interface AylikOdaDolulukRaporDto {

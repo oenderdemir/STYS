@@ -135,6 +135,104 @@ public class OdaDolulukRaporServiceTests
         Assert.Equal("Ö**** D****", hucre.MisafirAdiSoyadi);
     }
 
+    // AyIcindeTahsilEdilenTutar sadece odeme tarihi rapor ayi icinde olan odemeleri toplamali;
+    // KonaklayanRezervasyonlarinToplamTahsilati ise odeme tarihinden bagimsiz tum odemeleri icermeli.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_AyIcindeTahsilEdilenSadeceOAyinOdemeleriniToplar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        var rezervasyonId = await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 0m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli);
+
+        await AddOdemeAsync(dbContext, rezervasyonId, new DateTime(2026, 6, 25), 100m);
+        await AddOdemeAsync(dbContext, rezervasyonId, new DateTime(2026, 7, 10), 200m);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: false);
+
+        Assert.Equal(200m, rapor.Ozet.AyIcindeTahsilEdilenTutar);
+        Assert.Equal(300m, rapor.Ozet.KonaklayanRezervasyonlarinToplamTahsilati);
+        Assert.Equal(200m, rapor.Ozet.ToplamTahsilat);
+    }
+
+    // Ayni oda/gun icin iki rezervasyon varsa hucre cakisma bilgisi tasimali.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_AyniOdaGunIkiRezervasyonVarsaCakismaBilgisiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 9),
+            cikisTarihi: new DateTime(2026, 7, 11),
+            toplamUcret: 200m,
+            odemeTutari: 200m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ayşe Yılmaz");
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: false);
+
+        var hucre = rapor.Gunler.Single(g => g.Tarih == new DateTime(2026, 7, 10)).Hucreler.Single(h => h.OdaId == 100);
+
+        Assert.True(hucre.CakismaVarMi);
+        Assert.Equal(2, hucre.CakismaSayisi);
+        Assert.Equal(2, hucre.Cakismalar.Count);
+        Assert.Equal("conflict", hucre.HucreRenkKodu);
+    }
+
+    // maskele=true iken cakisma listesindeki misafir adlari da maskelenmeli.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_MaskeleTrueIseCakismaMisafirAdlariMaskelenir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "ÖNDER DEMİR");
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 9),
+            cikisTarihi: new DateTime(2026, 7, 11),
+            toplamUcret: 200m,
+            odemeTutari: 200m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ayşe Yılmaz");
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: true);
+
+        var hucre = rapor.Gunler.Single(g => g.Tarih == new DateTime(2026, 7, 10)).Hucreler.Single(h => h.OdaId == 100);
+
+        Assert.True(hucre.CakismaVarMi);
+        Assert.All(hucre.Cakismalar, c => Assert.DoesNotContain(c.MisafirAdiSoyadi, new[] { "ÖNDER DEMİR", "Ayşe Yılmaz" }));
+        Assert.Contains(hucre.Cakismalar, c => c.MisafirAdiSoyadi == "Ö**** D****");
+    }
+
     private static OdaDolulukRaporService CreateService(StysAppDbContext dbContext)
     {
         return new OdaDolulukRaporService(
@@ -213,7 +311,7 @@ public class OdaDolulukRaporServiceTests
         await dbContext.SaveChangesAsync();
     }
 
-    private static async Task SeedRezervasyonAsync(
+    private static async Task<int> SeedRezervasyonAsync(
         StysAppDbContext dbContext,
         int odaId,
         DateTime girisTarihi,
@@ -273,6 +371,22 @@ public class OdaDolulukRaporServiceTests
                 OdemeTipi = OdemeTipleri.Nakit
             });
         }
+
+        await dbContext.SaveChangesAsync();
+
+        return rezervasyon.Id;
+    }
+
+    private static async Task AddOdemeAsync(StysAppDbContext dbContext, int rezervasyonId, DateTime odemeTarihi, decimal odemeTutari)
+    {
+        dbContext.RezervasyonOdemeler.Add(new RezervasyonOdeme
+        {
+            RezervasyonId = rezervasyonId,
+            OdemeTarihi = odemeTarihi,
+            OdemeTutari = odemeTutari,
+            ParaBirimi = "TRY",
+            OdemeTipi = OdemeTipleri.Nakit
+        });
 
         await dbContext.SaveChangesAsync();
     }

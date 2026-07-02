@@ -37,4 +37,12 @@ public class OdaDolulukHucreDto
     public bool OdaDegisimiGerekliMi { get; set; }
 
     public string? HucreRenkKodu { get; set; }
+
+    public string? TutarAciklamasi { get; set; }
+
+    public bool CakismaVarMi { get; set; }
+
+    public int CakismaSayisi { get; set; }
+
+    public List<OdaDolulukCakismaDto> Cakismalar { get; set; } = [];
 }

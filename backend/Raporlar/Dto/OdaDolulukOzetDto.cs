@@ -17,4 +17,10 @@ public class OdaDolulukOzetDto
     public decimal ToplamTahsilat { get; set; }
 
     public decimal ToplamKalanTutar { get; set; }
+
+    public decimal AyIcindeTahsilEdilenTutar { get; set; }
+
+    public decimal KonaklayanRezervasyonlarinToplamTahsilati { get; set; }
+
+    public decimal KonaklayanRezervasyonlarinToplamKalanTutari { get; set; }
 }

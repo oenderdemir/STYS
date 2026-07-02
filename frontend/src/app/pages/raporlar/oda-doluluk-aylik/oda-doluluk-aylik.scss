@@ -93,6 +93,16 @@
     td.hucre-dolu {
         cursor: pointer;
     }
+
+    td.hucre-payment-missing {
+        background: var(--red-50);
+        border-color: var(--red-200);
+    }
+
+    td.hucre-conflict {
+        background: var(--red-100);
+        border: 2px solid var(--red-500);
+    }
 }
 
 .hucre-detay {
@@ -107,4 +117,15 @@
 .odeme-eksik-uyarisi {
     color: var(--red-500);
     font-weight: 600;
+}
+
+.tutar-aciklamasi {
+    color: var(--text-color-secondary);
+    font-size: 0.7rem;
+}
+
+.cakisma-dialog-ozet {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
 }

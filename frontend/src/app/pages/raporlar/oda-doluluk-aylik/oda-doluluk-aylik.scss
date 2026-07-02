@@ -1,0 +1,110 @@
+.oda-doluluk-aylik-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.filtre-alani {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.filtre-ogesi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    label {
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+}
+
+.maskele-ogesi {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ozet-kartlari {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.ozet-kart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
+}
+
+.ozet-baslik {
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+}
+
+.ozet-deger {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.matris-scroll {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.matris-tablo {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+
+    th,
+    td {
+        border: 1px solid var(--surface-border);
+        padding: 0.5rem;
+        vertical-align: top;
+        white-space: nowrap;
+    }
+
+    th {
+        background: var(--surface-100);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .tarih-kolonu {
+        position: sticky;
+        left: 0;
+        background: var(--surface-0);
+        z-index: 2;
+        min-width: 200px;
+        white-space: normal;
+    }
+
+    .oda-kolonu {
+        min-width: 160px;
+        white-space: normal;
+    }
+
+    td.hucre-dolu {
+        cursor: pointer;
+    }
+}
+
+.hucre-detay {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-color-secondary);
+}
+
+.odeme-eksik-uyarisi {
+    color: var(--red-500);
+    font-weight: 600;
+}

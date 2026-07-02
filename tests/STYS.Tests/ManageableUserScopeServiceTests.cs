@@ -264,7 +264,8 @@ public class ManageableUserScopeServiceTests
             stysDb,
             identityDb,
             new FakeAccessScopeProvider(actorScope),
-            new FakeCurrentUserAccessor(actorUserId));
+            new FakeCurrentUserAccessor(actorUserId),
+            new FakeCurrentTenantAccessor());
     }
 
     private static StysAppDbContext CreateStysDbContext()
@@ -347,5 +348,16 @@ public class ManageableUserScopeServiceTests
         public string? GetCurrentUserName() => "test-actor";
 
         public Guid? GetCurrentUserId() => _userId;
+    }
+
+    private sealed class FakeCurrentTenantAccessor : ICurrentTenantAccessor
+    {
+        public int? GetCurrentKurumId() => null;
+
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+
+        public bool IsSuperAdmin() => false;
+
+        public bool IsKurumAdmin() => false;
     }
 }

@@ -1,0 +1,126 @@
+<p-toast></p-toast>
+
+<div class="oda-doluluk-aylik-page">
+    <p-card>
+        <p-toolbar>
+            <ng-template pTemplate="start">
+                <div class="filtre-alani">
+                    <div class="filtre-ogesi">
+                        <label for="tesisSelect">Tesis</label>
+                        <p-select
+                            id="tesisSelect"
+                            [options]="tesisler"
+                            optionLabel="ad"
+                            optionValue="id"
+                            [(ngModel)]="selectedTesisId"
+                            [loading]="tesislerYukleniyor"
+                            placeholder="Tesis seçiniz"
+                        ></p-select>
+                    </div>
+
+                    <div class="filtre-ogesi">
+                        <label for="aySelect">Ay</label>
+                        <p-select
+                            id="aySelect"
+                            [options]="aySecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="selectedAy"
+                        ></p-select>
+                    </div>
+
+                    <div class="filtre-ogesi">
+                        <label for="yilSelect">Yıl</label>
+                        <p-select
+                            id="yilSelect"
+                            [options]="yilSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            [(ngModel)]="selectedYil"
+                        ></p-select>
+                    </div>
+
+                    <div class="filtre-ogesi maskele-ogesi">
+                        <p-checkbox [(ngModel)]="maskele" [binary]="true" inputId="maskeleCheckbox"></p-checkbox>
+                        <label for="maskeleCheckbox">Kişisel verileri maskele</label>
+                    </div>
+                </div>
+            </ng-template>
+
+            <ng-template pTemplate="end">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" class="p-button-outlined" (click)="exportExcel()"></button>
+                <button pButton type="button" label="PDF" icon="pi pi-file-pdf" class="p-button-outlined" (click)="exportPdf()"></button>
+            </ng-template>
+        </p-toolbar>
+    </p-card>
+
+    @if (rapor) {
+        <div class="ozet-kartlari">
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Toplam Oda</span>
+                <span class="ozet-deger">{{ rapor.ozet.toplamOdaSayisi }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Dolu Oda/Gün</span>
+                <span class="ozet-deger">{{ rapor.ozet.doluOdaGunSayisi }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Boş Oda/Gün</span>
+                <span class="ozet-deger">{{ rapor.ozet.bosOdaGunSayisi }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Doluluk Oranı</span>
+                <span class="ozet-deger">%{{ rapor.ozet.dolulukOraniYuzde }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Toplam Tahsilat</span>
+                <span class="ozet-deger">{{ formatPara(rapor.ozet.toplamTahsilat, 'TRY') }}</span>
+            </p-card>
+            <p-card styleClass="ozet-kart">
+                <span class="ozet-baslik">Toplam Kalan Tutar</span>
+                <span class="ozet-deger">{{ formatPara(rapor.ozet.toplamKalanTutar, 'TRY') }}</span>
+            </p-card>
+        </div>
+
+        <p-card>
+            <div class="matris-scroll">
+                <table class="matris-tablo">
+                    <thead>
+                        <tr>
+                            <th class="tarih-kolonu">Tarih</th>
+                            @for (oda of rapor.odalar; track oda.odaId) {
+                                <th class="oda-kolonu">{{ oda.odaNo }} NO'LU ODA</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (gun of rapor.gunler; track gun.tarih) {
+                            <tr>
+                                <td class="tarih-kolonu">{{ formatGunBasligi(gun.tarih, gun.gunAdi) }}</td>
+                                @for (hucre of gun.hucreler; track hucre.odaId) {
+                                    <td
+                                        class="oda-kolonu"
+                                        [class.hucre-dolu]="hucre.doluMu"
+                                        (click)="hucreTikla(hucre)"
+                                    >
+                                        @if (hucre.doluMu) {
+                                            <p-tag [severity]="hucreSeverity(hucre)" [value]="hucre.misafirAdiSoyadi ?? '-'"></p-tag>
+                                            <div class="hucre-detay">
+                                                <span>#{{ hucre.referansNo }}</span>
+                                                <span>{{ hucre.kisiSayisi }} kişi</span>
+                                                @if (hucre.odemesiEksikMi) {
+                                                    <span class="odeme-eksik-uyarisi">Ödeme eksik</span>
+                                                }
+                                            </div>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </p-card>
+    }
+</div>

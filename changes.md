@@ -6029,3 +6029,35 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 6. Tevkifat bilgileri girilebilmeli
 7. Mevcut belgeler listelenebilmeli
 8. Belge düzenlenebilmeli
+
+---
+
+## Aylık Oda Doluluk ve Tahsilat Raporu
+
+### Yapılan İşler
+- Aylık oda doluluk raporu için backend endpoint, Angular ekran ve temel matris görünümü eklendi.
+
+### Backend
+- `backend/Raporlar/Dto/` — `AylikOdaDolulukRaporDto`, `OdaDolulukOdaDto`, `OdaDolulukGunDto`, `OdaDolulukHucreDto`, `OdaDolulukOzetDto`
+- `backend/Raporlar/Services/IOdaDolulukRaporService.cs`, `OdaDolulukRaporService.cs` — tesis erişim kontrolü, oda/segment/ödeme verilerini toplu çekip gün x oda matrisini bellekte üretir (AsNoTracking, N+1 yok)
+- `backend/Raporlar/Controllers/OdaDolulukRaporController.cs` — `GET /api/raporlar/oda-doluluk-aylik?tesisId=&yil=&ay=&maskele=`; Excel/PDF export için TODO endpointleri
+- `backend/StructurePermissions.cs`, `backend/ErisimTeshis/ErisimTeshisModulTanimlari.cs` — `OdaDolulukRaporuYonetimi.Menu/View` izinleri
+- `backend/Infrastructure/EntityFramework/Migrations/20260702090000_AddOdaDolulukRaporuPermissionsAndMenu.cs` — izin rolleri + "Raporlar > Aylık Oda Planı" menü kaydı
+- `backend/Program.cs` — `IOdaDolulukRaporService` DI kaydı
+- `tests/STYS.Tests/OdaDolulukRaporServiceTests.cs` — boş ay, 3 gecelik rezervasyon, çıkış günü sayılmama, iptal rezervasyon, eksik ödeme, maskeleme senaryoları
+
+### Frontend
+- `frontend/src/app/pages/raporlar/oda-doluluk-aylik/` — `OdaDolulukAylikComponent`, servis, DTO'lar, HTML/SCSS
+- `frontend/src/app.routes.ts` — `/raporlar/oda-doluluk-aylik` route (breadcrumb + permission)
+- Filtreler: tesis, ay, yıl, maskele checkbox; özet kartları; gün x oda matris tablosu; Excel/PDF butonları "yakında" mesajıyla placeholder
+
+### Notlar
+- Rezervasyon domaininde kurum/ünite alanı bulunmadığından `KurumUnite` alanı şimdilik `null` bırakıldı (TODO yorumu ile işaretli).
+- `tests/STYS.Tests/ManageableUserScopeServiceTests.cs` içindeki `CreateService` çağrısı, servise sonradan eklenmiş `ICurrentTenantAccessor` parametresini karşılamadığı için derlenmiyordu; test projesinin derlenip çalışabilmesi için minimal bir `FakeCurrentTenantAccessor` eklenip çağrıya bağlandı (bu PR'ın kapsamı dışında, önceden bozuk bir build hatasıydı).
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporServiceTests` başarılı — 5/5 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

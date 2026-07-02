@@ -8,6 +8,7 @@ namespace STYS.Raporlar.Services;
 public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
 {
     private static readonly CultureInfo TrCulture = new("tr-TR");
+    private static readonly string[] KisaGunAdlari = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 
     private const string RenkBos = "#FFFFFF";
     private const string RenkReserved = "#BDD7EE";
@@ -15,6 +16,10 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
     private const string RenkCheckedOut = "#D9D9D9";
     private const string RenkOdemeEksik = "#FFE699";
     private const string RenkCakisma = "#F8CBAD";
+    private const string RenkHeaderHafta = "#1F4E78";
+    private const string RenkHeaderHaftaSonu = "#2E5F8A";
+    private const string RenkHaftaSonuBos = "#F7F7F7";
+    private const int MisafirKisaMaxUzunluk = 14;
 
     private readonly IOdaDolulukRaporService _odaDolulukRaporService;
 
@@ -31,156 +36,309 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
         CancellationToken cancellationToken = default)
     {
         var rapor = await _odaDolulukRaporService.GetAylikOdaDolulukRaporuAsync(tesisId, yil, ay, maskele, cancellationToken);
-
-        using var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Aylık Oda Planı");
-
         var ayAdi = ToTitleCase(TrCulture.DateTimeFormat.GetMonthName(ay));
 
-        // ── Ust bilgi alani ──
-        ws.Cell(1, 1).Value = "Aylık Oda Doluluk ve Tahsilat Raporu";
-        ws.Cell(1, 1).Style.Font.Bold = true;
-        ws.Cell(1, 1).Style.Font.FontSize = 14;
+        using var workbook = new XLWorkbook();
 
-        ws.Cell(2, 1).Value = $"Tesis: {rapor.TesisAdi}";
-        ws.Cell(3, 1).Value = $"Dönem: {ayAdi} {yil}";
-        ws.Cell(4, 1).Value = $"Rapor Tarihi: {DateTime.Now:dd.MM.yyyy HH:mm}";
-        ws.Cell(5, 1).Value = $"Kişisel Veriler: {(maskele ? "Maskeli" : "Açık")}";
-
-        // ── Ozet alani ──
-        var ozetBaslangic = 7;
-        ws.Cell(ozetBaslangic, 1).Value = "ÖZET";
-        ws.Cell(ozetBaslangic, 1).Style.Font.Bold = true;
-        ws.Cell(ozetBaslangic, 1).Style.Font.FontSize = 12;
-
-        var oz = rapor.Ozet;
-        var ozetSatirlari = new (string Label, string Value)[]
-        {
-            ("Toplam Oda", oz.ToplamOdaSayisi.ToString()),
-            ("Gün Sayısı", oz.GunSayisi.ToString()),
-            ("Toplam Oda/Gün", oz.ToplamOdaGunSayisi.ToString()),
-            ("Dolu Oda/Gün", oz.DoluOdaGunSayisi.ToString()),
-            ("Boş Oda/Gün", oz.BosOdaGunSayisi.ToString()),
-            ("Doluluk Oranı", $"%{oz.DolulukOraniYuzde.ToString("0.00", TrCulture)}"),
-            ("Ay İçinde Tahsil Edilen", FormatPara(oz.AyIcindeTahsilEdilenTutar)),
-            ("Konaklayan Rezervasyonların Toplam Tahsilatı", FormatPara(oz.KonaklayanRezervasyonlarinToplamTahsilati)),
-            ("Konaklayan Rezervasyonların Toplam Kalan Tutarı", FormatPara(oz.KonaklayanRezervasyonlarinToplamKalanTutari))
-        };
-
-        var row = ozetBaslangic + 1;
-        foreach (var (label, value) in ozetSatirlari)
-        {
-            ws.Cell(row, 1).Value = label;
-            ws.Cell(row, 1).Style.Font.Bold = true;
-            ws.Cell(row, 2).Value = value;
-            row++;
-        }
-
-        // ── Matris tablosu ──
-        row += 1;
-        var tabloBaslangic = row;
-
-        ws.Cell(row, 1).Value = "Tarih";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        ws.Cell(row, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
-
-        for (var i = 0; i < rapor.Odalar.Count; i++)
-        {
-            var cell = ws.Cell(row, i + 2);
-            cell.Value = $"{rapor.Odalar[i].OdaNo} NO'LU ODA";
-            cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
-        }
-
-        var basliklarSatiri = row;
-        row++;
-
-        foreach (var gun in rapor.Gunler)
-        {
-            ws.Cell(row, 1).Value = $"{gun.Tarih.Day} {ayAdi} {gun.Tarih.Year} {gun.GunAdi}";
-            ws.Cell(row, 1).Style.Alignment.WrapText = true;
-
-            for (var i = 0; i < gun.Hucreler.Count; i++)
-            {
-                var hucre = gun.Hucreler[i];
-                var cell = ws.Cell(row, i + 2);
-                cell.Style.Alignment.WrapText = true;
-                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-
-                if (!hucre.DoluMu)
-                {
-                    continue;
-                }
-
-                cell.Value = HucreMetniOlustur(hucre);
-                cell.Style.Fill.BackgroundColor = XLColor.FromHtml(HucreRengi(hucre));
-            }
-
-            row++;
-        }
-
-        var tabloSonu = row - 1;
-
-        // ── Bicimlendirme ──
-        ws.Column(1).Width = 24;
-        for (var i = 0; i < rapor.Odalar.Count; i++)
-        {
-            ws.Column(i + 2).Width = 22;
-        }
-
-        for (var r = tabloBaslangic + 1; r <= tabloSonu; r++)
-        {
-            ws.Row(r).Height = 90;
-        }
-
-        ws.SheetView.Freeze(basliklarSatiri, 1);
-
-        var tabloAraligi = ws.Range(basliklarSatiri, 1, tabloSonu, rapor.Odalar.Count + 1);
-        tabloAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-        tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-        ws.Range(basliklarSatiri, 1, basliklarSatiri, rapor.Odalar.Count + 1).SetAutoFilter();
-
-        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
-        ws.PageSetup.PaperSize = XLPaperSize.A3Paper;
-        ws.PageSetup.PrintAreas.Clear();
-        ws.PageSetup.PrintAreas.Add(1, 1, tabloSonu, Math.Max(rapor.Odalar.Count + 1, 2));
+        BuildOzetSheet(workbook, rapor, ayAdi, maskele);
+        BuildOdaPlaniSheet(workbook, rapor, ayAdi);
+        BuildRezervasyonListesiSheet(workbook, rapor);
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
         return ms.ToArray();
     }
 
-    private static string HucreMetniOlustur(OdaDolulukHucreDto hucre)
+    private static void BuildOzetSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi, bool maskele)
     {
-        var satirlar = new List<string>
+        var ws = workbook.Worksheets.Add("Özet");
+
+        ws.Range(1, 1, 1, 8).Merge();
+        ws.Cell(1, 1).Value = "Aylık Oda Doluluk ve Tahsilat Raporu";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 16;
+
+        ws.Cell(3, 1).Value = "Tesis:";
+        ws.Cell(3, 1).Style.Font.Bold = true;
+        ws.Cell(3, 2).Value = rapor.TesisAdi;
+
+        ws.Cell(4, 1).Value = "Dönem:";
+        ws.Cell(4, 1).Style.Font.Bold = true;
+        ws.Cell(4, 2).Value = $"{ayAdi} {rapor.Yil}";
+
+        ws.Cell(5, 1).Value = "Rapor Tarihi:";
+        ws.Cell(5, 1).Style.Font.Bold = true;
+        ws.Cell(5, 2).Value = DateTime.Now.ToString("dd.MM.yyyy HH:mm", TrCulture);
+
+        ws.Cell(6, 1).Value = "Kişisel Veriler:";
+        ws.Cell(6, 1).Style.Font.Bold = true;
+        ws.Cell(6, 2).Value = maskele ? "Maskeli" : "Açık";
+
+        var oz = rapor.Ozet;
+        var kpiler = new (string Label, string Value)[]
         {
-            hucre.MisafirAdiSoyadi ?? "-",
-            hucre.ReferansNo ?? "-",
-            $"{hucre.KisiSayisi} kişi",
-            DurumLabel(hucre.RezervasyonDurumu)
+            ("Toplam Oda", oz.ToplamOdaSayisi.ToString(TrCulture)),
+            ("Gün Sayısı", oz.GunSayisi.ToString(TrCulture)),
+            ("Toplam Oda/Gün", oz.ToplamOdaGunSayisi.ToString(TrCulture)),
+            ("Dolu Oda/Gün", oz.DoluOdaGunSayisi.ToString(TrCulture)),
+            ("Boş Oda/Gün", oz.BosOdaGunSayisi.ToString(TrCulture)),
+            ("Doluluk Oranı", FormatYuzde(oz.DolulukOraniYuzde)),
+            ("Ay İçinde Tahsil Edilen", FormatPara(oz.AyIcindeTahsilEdilenTutar)),
+            ("Konaklayan Rezervasyonların Toplam Tahsilatı", FormatPara(oz.KonaklayanRezervasyonlarinToplamTahsilati)),
+            ("Konaklayan Rezervasyonların Toplam Kalan Tutarı", FormatPara(oz.KonaklayanRezervasyonlarinToplamKalanTutari))
         };
 
-        if (hucre.OdemesiEksikMi)
+        const int kpiBaseRow = 8;
+        const int kutuGenislik = 2;
+        const int kutuBosluk = 1;
+        const int satirdakiKutuSayisi = 3;
+
+        ws.Cell(kpiBaseRow - 1, 1).Value = "KPI ÖZETİ";
+        ws.Cell(kpiBaseRow - 1, 1).Style.Font.Bold = true;
+        ws.Cell(kpiBaseRow - 1, 1).Style.Font.FontSize = 12;
+
+        for (var i = 0; i < kpiler.Length; i++)
         {
-            satirlar.Add("Ödeme Eksik");
+            var satirIndex = i / satirdakiKutuSayisi;
+            var kutuIndex = i % satirdakiKutuSayisi;
+            var startCol = kutuIndex * (kutuGenislik + kutuBosluk) + 1;
+            var labelRow = kpiBaseRow + satirIndex * 3;
+            var valueRow = labelRow + 1;
+
+            var labelRange = ws.Range(labelRow, startCol, labelRow, startCol + kutuGenislik - 1);
+            labelRange.Merge();
+            var labelCell = ws.Cell(labelRow, startCol);
+            labelCell.Value = kpiler[i].Label;
+            labelCell.Style.Font.FontSize = 9;
+            labelCell.Style.Font.Bold = true;
+            labelCell.Style.Font.FontColor = XLColor.FromHtml("#666666");
+
+            var valueRange = ws.Range(valueRow, startCol, valueRow, startCol + kutuGenislik - 1);
+            valueRange.Merge();
+            var valueCell = ws.Cell(valueRow, startCol);
+            valueCell.Value = kpiler[i].Value;
+            valueCell.Style.Font.FontSize = 13;
+            valueCell.Style.Font.Bold = true;
+
+            var kutuAraligi = ws.Range(labelRow, startCol, valueRow, startCol + kutuGenislik - 1);
+            kutuAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            kutuAraligi.Style.Fill.BackgroundColor = XLColor.FromHtml("#F5F7FA");
         }
 
-        if (hucre.CakismaVarMi)
+        ws.Column(1).Width = 24;
+        for (var c = 2; c <= 8; c++)
         {
-            satirlar.Add($"ÇAKIŞMA VAR ({hucre.CakismaSayisi})");
-            satirlar.Add($"Ana: {hucre.MisafirAdiSoyadi ?? "-"} / {hucre.ReferansNo ?? "-"}");
-            for (var i = 0; i < hucre.Cakismalar.Count; i++)
+            ws.Column(c).Width = 16;
+        }
+
+        ws.SheetView.Freeze(2, 0);
+    }
+
+    private static void BuildOdaPlaniSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi)
+    {
+        var ws = workbook.Worksheets.Add("Oda Planı");
+
+        const int headerRow = 1;
+        const int ilkGunKolonu = 4;
+
+        ws.Cell(headerRow, 1).Value = "Oda No";
+        ws.Cell(headerRow, 2).Value = "Oda Tipi";
+        ws.Cell(headerRow, 3).Value = "Kapasite";
+
+        for (var g = 0; g < rapor.Gunler.Count; g++)
+        {
+            var gun = rapor.Gunler[g].Tarih;
+            var col = ilkGunKolonu + g;
+            var cell = ws.Cell(headerRow, col);
+            cell.Value = $"{gun.Day} {KisaGunAdi(gun)}";
+
+            var haftaSonuMu = gun.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml(haftaSonuMu ? RenkHeaderHaftaSonu : RenkHeaderHafta);
+        }
+
+        var basliklarAraligi = ws.Range(headerRow, 1, headerRow, ilkGunKolonu + rapor.Gunler.Count - 1);
+        basliklarAraligi.Style.Font.Bold = true;
+        basliklarAraligi.Style.Font.FontColor = XLColor.White;
+        basliklarAraligi.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        basliklarAraligi.Style.Fill.BackgroundColor = XLColor.FromHtml(RenkHeaderHafta);
+        for (var g = 0; g < rapor.Gunler.Count; g++)
+        {
+            var haftaSonuMu = rapor.Gunler[g].Tarih.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            if (haftaSonuMu)
             {
-                var c = hucre.Cakismalar[i];
-                satirlar.Add($"{i + 1}) {c.MisafirAdiSoyadi ?? "-"} / {c.ReferansNo} / {c.GirisTarihi:dd.MM}-{c.CikisTarihi:dd.MM}");
+                ws.Cell(headerRow, ilkGunKolonu + g).Style.Fill.BackgroundColor = XLColor.FromHtml(RenkHeaderHaftaSonu);
             }
         }
 
-        satirlar.Add($"Toplam: {FormatPara(hucre.ToplamUcret, hucre.ParaBirimi)}");
-        satirlar.Add($"Ödenen: {FormatPara(hucre.OdenenTutar, hucre.ParaBirimi)}");
-        satirlar.Add($"Kalan: {FormatPara(hucre.KalanTutar, hucre.ParaBirimi)}");
+        var satir = headerRow + 1;
+        for (var o = 0; o < rapor.Odalar.Count; o++)
+        {
+            var oda = rapor.Odalar[o];
+            ws.Cell(satir, 1).Value = oda.OdaNo;
+            ws.Cell(satir, 2).Value = oda.OdaTipiAdi ?? "-";
+            ws.Cell(satir, 3).Value = oda.Kapasite;
 
-        return string.Join("\n", satirlar);
+            for (var g = 0; g < rapor.Gunler.Count; g++)
+            {
+                var hucre = rapor.Gunler[g].Hucreler[o];
+                var cell = ws.Cell(satir, ilkGunKolonu + g);
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                cell.Style.Alignment.WrapText = true;
+
+                if (hucre.DoluMu)
+                {
+                    cell.Value = KisaHucreMetni(hucre);
+                    cell.Style.Fill.BackgroundColor = XLColor.FromHtml(HucreRengi(hucre));
+                }
+                else if (rapor.Gunler[g].Tarih.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                {
+                    cell.Style.Fill.BackgroundColor = XLColor.FromHtml(RenkHaftaSonuBos);
+                }
+            }
+
+            satir++;
+        }
+
+        var sonSatir = satir - 1;
+        var sonKolon = ilkGunKolonu + rapor.Gunler.Count - 1;
+
+        // ── Bicimlendirme ──
+        ws.Column(1).Width = 12;
+        ws.Column(2).Width = 18;
+        ws.Column(3).Width = 10;
+        for (var g = 0; g < rapor.Gunler.Count; g++)
+        {
+            ws.Column(ilkGunKolonu + g).Width = 13;
+        }
+
+        ws.Row(headerRow).Height = 30;
+        for (var r = headerRow + 1; r <= sonSatir; r++)
+        {
+            ws.Row(r).Height = 36;
+        }
+
+        ws.SheetView.Freeze(headerRow, 3);
+
+        var tabloAraligi = ws.Range(headerRow, 1, sonSatir, sonKolon);
+        tabloAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        ws.Range(headerRow, 1, sonSatir, 3).SetAutoFilter();
+
+        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        ws.PageSetup.PaperSize = XLPaperSize.A3Paper;
+        ws.PageSetup.FitToPages(1, 0);
+        ws.PageSetup.PrintAreas.Clear();
+        ws.PageSetup.PrintAreas.Add(headerRow, 1, sonSatir, sonKolon);
+    }
+
+    private static void BuildRezervasyonListesiSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor)
+    {
+        var ws = workbook.Worksheets.Add("Rezervasyon Listesi");
+
+        var basliklar = new[]
+        {
+            "Tarih", "Oda No", "Misafir", "Referans No", "Kişi Sayısı", "Giriş Tarihi", "Çıkış Tarihi",
+            "Durum", "Toplam Ücret", "Ödenen Tutar", "Kalan Tutar", "Para Birimi", "Ödeme Eksik Mi",
+            "Çakışma Var Mı", "Çakışma Sayısı"
+        };
+
+        for (var i = 0; i < basliklar.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = basliklar[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+
+        var eklenenler = new HashSet<(int RezervasyonId, int OdaId, DateTime Giris, DateTime Cikis)>();
+        var satir = 2;
+
+        foreach (var gun in rapor.Gunler)
+        {
+            foreach (var hucre in gun.Hucreler)
+            {
+                if (!hucre.DoluMu || !hucre.RezervasyonId.HasValue || !hucre.GirisTarihi.HasValue || !hucre.CikisTarihi.HasValue)
+                {
+                    continue;
+                }
+
+                var anahtar = (hucre.RezervasyonId.Value, hucre.OdaId, hucre.GirisTarihi.Value, hucre.CikisTarihi.Value);
+                if (!eklenenler.Add(anahtar))
+                {
+                    continue;
+                }
+
+                ws.Cell(satir, 1).Value = hucre.GirisTarihi.Value;
+                ws.Cell(satir, 1).Style.DateFormat.Format = "dd.MM.yyyy";
+                ws.Cell(satir, 2).Value = hucre.OdaNo;
+                ws.Cell(satir, 3).Value = hucre.MisafirAdiSoyadi ?? "-";
+                ws.Cell(satir, 4).Value = hucre.ReferansNo ?? "-";
+                ws.Cell(satir, 5).Value = hucre.KisiSayisi;
+                ws.Cell(satir, 6).Value = hucre.GirisTarihi.Value;
+                ws.Cell(satir, 6).Style.DateFormat.Format = "dd.MM.yyyy";
+                ws.Cell(satir, 7).Value = hucre.CikisTarihi.Value;
+                ws.Cell(satir, 7).Style.DateFormat.Format = "dd.MM.yyyy";
+                ws.Cell(satir, 8).Value = DurumLabel(hucre.RezervasyonDurumu);
+                ws.Cell(satir, 9).Value = FormatPara(hucre.ToplamUcret, hucre.ParaBirimi);
+                ws.Cell(satir, 10).Value = FormatPara(hucre.OdenenTutar, hucre.ParaBirimi);
+                ws.Cell(satir, 11).Value = FormatPara(hucre.KalanTutar, hucre.ParaBirimi);
+                ws.Cell(satir, 12).Value = hucre.ParaBirimi ?? "TRY";
+                ws.Cell(satir, 13).Value = hucre.OdemesiEksikMi ? "Evet" : "Hayır";
+                ws.Cell(satir, 14).Value = hucre.CakismaVarMi ? "Evet" : "Hayır";
+                ws.Cell(satir, 15).Value = hucre.CakismaSayisi;
+
+                if (hucre.CakismaVarMi)
+                {
+                    ws.Row(satir).Style.Fill.BackgroundColor = XLColor.FromHtml(RenkCakisma);
+                }
+                else if (hucre.OdemesiEksikMi)
+                {
+                    ws.Row(satir).Style.Fill.BackgroundColor = XLColor.FromHtml(RenkOdemeEksik);
+                }
+
+                satir++;
+            }
+        }
+
+        var sonSatir = Math.Max(satir - 1, 1);
+
+        ws.Column(1).Width = 12;
+        ws.Column(2).Width = 10;
+        ws.Column(3).Width = 24;
+        ws.Column(4).Width = 16;
+        ws.Column(5).Width = 12;
+        ws.Column(6).Width = 14;
+        ws.Column(7).Width = 14;
+        ws.Column(8).Width = 20;
+        ws.Column(9).Width = 16;
+        ws.Column(10).Width = 16;
+        ws.Column(11).Width = 16;
+        ws.Column(12).Width = 12;
+        ws.Column(13).Width = 14;
+        ws.Column(14).Width = 14;
+        ws.Column(15).Width = 14;
+
+        ws.SheetView.FreezeRows(1);
+        ws.Range(1, 1, sonSatir, basliklar.Length).SetAutoFilter();
+    }
+
+    private static string KisaHucreMetni(OdaDolulukHucreDto hucre)
+    {
+        if (hucre.CakismaVarMi)
+        {
+            return "ÇAKIŞMA";
+        }
+
+        var misafirKisa = KisaltMisafirVeyaReferans(hucre);
+        return hucre.OdemesiEksikMi ? $"{misafirKisa}\nEksik" : misafirKisa;
+    }
+
+    private static string KisaltMisafirVeyaReferans(OdaDolulukHucreDto hucre)
+    {
+        var kaynak = !string.IsNullOrWhiteSpace(hucre.MisafirAdiSoyadi) ? hucre.MisafirAdiSoyadi! : (hucre.ReferansNo ?? "-");
+        return kaynak.Length > MisafirKisaMaxUzunluk ? kaynak[..MisafirKisaMaxUzunluk] + "…" : kaynak;
     }
 
     private static string HucreRengi(OdaDolulukHucreDto hucre)
@@ -194,6 +352,11 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
             "reserved" => RenkReserved,
             _ => RenkBos
         };
+    }
+
+    private static string KisaGunAdi(DateTime tarih)
+    {
+        return KisaGunAdlari[(int)tarih.DayOfWeek];
     }
 
     private static string DurumLabel(string? durum)
@@ -211,7 +374,14 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
 
     private static string FormatPara(decimal tutar, string? paraBirimi = "TRY")
     {
-        return $"{tutar.ToString("#,##0.00", TrCulture)} {paraBirimi ?? "TRY"}";
+        var birim = paraBirimi ?? "TRY";
+        var sembol = birim == "TRY" ? "₺" : birim;
+        return $"{tutar.ToString("#,##0.00", TrCulture)} {sembol}";
+    }
+
+    private static string FormatYuzde(decimal deger)
+    {
+        return $"%{deger.ToString("0.00", TrCulture)}";
     }
 
     private static string ToTitleCase(string value)

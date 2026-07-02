@@ -6130,3 +6130,26 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk Excel Çıktısı — Workbook Yeniden Tasarımı
+
+### Yapılan İşler
+- Aylık oda doluluk Excel çıktısı yeniden tasarlandı; özet, oda planı ve rezervasyon listesi ayrı sheetlere bölündü, oda planı kompakt Oda x Gün takvimi olarak düzenlendi.
+
+### Backend (endpoint ve veri servisi değişmedi)
+- `OdaDolulukRaporExcelService` üç sheet üretecek şekilde yeniden yazıldı: `BuildOzetSheet`, `BuildOdaPlaniSheet`, `BuildRezervasyonListesiSheet` private metodlarına bölündü.
+  - **Özet**: başlık, tesis/dönem/rapor tarihi/maskeleme bilgisi ve 3 kolonlu KPI kutuları (toplam oda, gün sayısı, doluluk oranı, ay içi tahsilat, konaklayan toplam tahsilat/kalan vb.).
+  - **Oda Planı**: satırlar oda (Oda No/Oda Tipi/Kapasite), kolonlar gün ("1 Çar" gibi kısa başlık); dolu hücrede kısa metin (misafir kısaltması, ödeme eksikse "Eksik", çakışma varsa sadece "ÇAKIŞMA"); semantik renkler + hafta sonu kolon vurgusu; ilk 3 kolon + header freeze, A3 yatay print, fit-to-width.
+  - **Rezervasyon Listesi**: benzersiz RezervasyonId+OdaId+Giriş/Çıkış bazında tek satır; tüm detay alanları (misafir, tutar, ödeme/çakışma durumu); ödeme eksik/çakışma satırları hafif renkli, header sabit, autofilter açık.
+- Detaylı ödeme/çakışma metinleri artık matris hücresine değil Rezervasyon Listesi sheet'ine taşındı (yüksek satır/uzun metin sorunu giderildi).
+- `tests/STYS.Tests/OdaDolulukRaporExcelServiceTests.cs` güncellendi: 3 sheet varlığı, Özet başlığı, Oda Planı satır/kolon yapısı ve dolu hücre metni, Rezervasyon Listesi header'ı, çakışmalı hücrede "ÇAKIŞMA" metni test ediliyor (4/4 geçiyor).
+
+### Frontend
+- Değişiklik yok; Excel butonu aynı endpointi çağırmaya devam ediyor.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporExcel` başarılı — 4/4 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 12/12 geçti

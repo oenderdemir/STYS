@@ -18,9 +18,9 @@ namespace STYS.Tests;
 
 public class OdaDolulukRaporExcelServiceTests
 {
-    // Bos bir ay icin Excel binary uretimi bos donmemeli, sheet olusmali.
+    // Bos bir ay icin Excel binary uretimi bos donmemeli; workbook 3 sheet icermeli.
     [Fact]
-    public async Task OlusturAsync_BosAydaExcelBinaryUretilir()
+    public async Task OlusturAsync_BosAydaUcSheetliWorkbookUretilir()
     {
         await using var dbContext = CreateDbContext();
         await SeedOdaFixtureAsync(dbContext);
@@ -31,14 +31,22 @@ public class OdaDolulukRaporExcelServiceTests
         Assert.NotEmpty(bytes);
 
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
-        var ws = Assert.Single(workbook.Worksheets);
-        Assert.Equal("Aylık Oda Planı", ws.Name);
-        Assert.Equal("Aylık Oda Doluluk ve Tahsilat Raporu", ws.Cell(1, 1).GetString());
+        Assert.Equal(3, workbook.Worksheets.Count);
+        Assert.Contains(workbook.Worksheets, x => x.Name == "Özet");
+        Assert.Contains(workbook.Worksheets, x => x.Name == "Oda Planı");
+        Assert.Contains(workbook.Worksheets, x => x.Name == "Rezervasyon Listesi");
+
+        var ozetSheet = workbook.Worksheet("Özet");
+        Assert.Equal("Aylık Oda Doluluk ve Tahsilat Raporu", ozetSheet.Cell(1, 1).GetString());
+
+        var listeSheet = workbook.Worksheet("Rezervasyon Listesi");
+        Assert.Equal("Tarih", listeSheet.Cell(1, 1).GetString());
+        Assert.Equal("Oda No", listeSheet.Cell(1, 2).GetString());
     }
 
-    // Dolu rezervasyon iceren ay icin Excel ozet alaninda dogru degerler yer almali.
+    // Oda Plani sheet'i satirlarda oda no, kolonlarda gunleri icermeli ve dolu hucrede kisa metin gostermeli.
     [Fact]
-    public async Task OlusturAsync_DoluRezervasyonIcinOzetDegerleriDoner()
+    public async Task OlusturAsync_OdaPlaniSheetiOdaSatirVeGunKolonuIcerir()
     {
         await using var dbContext = CreateDbContext();
         await SeedOdaFixtureAsync(dbContext);
@@ -55,19 +63,49 @@ public class OdaDolulukRaporExcelServiceTests
         var service = CreateExcelService(dbContext);
         var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
 
-        Assert.NotEmpty(bytes);
-
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
-        var ws = workbook.Worksheets.Single();
+        var odaPlani = workbook.Worksheet("Oda Planı");
 
-        var tumHucreler = ws.CellsUsed().Select(c => c.GetString()).ToList();
-        Assert.Contains(tumHucreler, x => x.Contains("Dolu Oda/Gün"));
-        Assert.Contains(tumHucreler, x => x.Contains("Ali Veli"));
+        Assert.Equal("Oda No", odaPlani.Cell(1, 1).GetString());
+        Assert.Equal("101", odaPlani.Cell(2, 1).GetString());
+        Assert.Contains("1", odaPlani.Cell(1, 4).GetString());
+
+        var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
+        Assert.Contains(tumHucreler, x => x.StartsWith("Ali Veli"));
     }
 
-    // Cakismali hucre icin Excel uretimi hata vermemeli.
+    // Rezervasyon Listesi sheet'inde header satiri beklenen kolonlari icermeli.
     [Fact]
-    public async Task OlusturAsync_CakismaliHucreIcinHataVermez()
+    public async Task OlusturAsync_RezervasyonListesiSheetiHeaderIcerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var liste = workbook.Worksheet("Rezervasyon Listesi");
+
+        var headerHucreleri = liste.Row(1).CellsUsed().Select(c => c.GetString()).ToList();
+        Assert.Contains("Misafir", headerHucreleri);
+        Assert.Contains("Ödeme Eksik Mi", headerHucreleri);
+        Assert.Contains("Çakışma Var Mı", headerHucreleri);
+        Assert.Equal("Ali Veli", liste.Cell(2, 3).GetString());
+    }
+
+    // Cakismali hucre icin Excel uretimi hata vermemeli, Oda Plani hucresinde CAKISMA yazmali.
+    [Fact]
+    public async Task OlusturAsync_CakismaliHucreIcinHataVermezVeCakismaYazar()
     {
         await using var dbContext = CreateDbContext();
         await SeedOdaFixtureAsync(dbContext);
@@ -96,9 +134,9 @@ public class OdaDolulukRaporExcelServiceTests
         Assert.NotEmpty(bytes);
 
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
-        var ws = workbook.Worksheets.Single();
-        var tumHucreler = ws.CellsUsed().Select(c => c.GetString()).ToList();
-        Assert.Contains(tumHucreler, x => x.Contains("ÇAKIŞMA VAR"));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+        var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
+        Assert.Contains(tumHucreler, x => x == "ÇAKIŞMA");
     }
 
     private static OdaDolulukRaporExcelService CreateExcelService(StysAppDbContext dbContext)

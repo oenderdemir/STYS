@@ -14,10 +14,14 @@ namespace STYS.Raporlar.Controllers;
 public class OdaDolulukRaporController : UIController
 {
     private readonly IOdaDolulukRaporService _odaDolulukRaporService;
+    private readonly IOdaDolulukRaporExcelService _odaDolulukRaporExcelService;
 
-    public OdaDolulukRaporController(IOdaDolulukRaporService odaDolulukRaporService)
+    public OdaDolulukRaporController(
+        IOdaDolulukRaporService odaDolulukRaporService,
+        IOdaDolulukRaporExcelService odaDolulukRaporExcelService)
     {
         _odaDolulukRaporService = odaDolulukRaporService;
+        _odaDolulukRaporExcelService = odaDolulukRaporExcelService;
     }
 
     [HttpGet("oda-doluluk-aylik")]
@@ -33,6 +37,22 @@ public class OdaDolulukRaporController : UIController
         return Ok(rapor);
     }
 
-    // TODO: GET api/raporlar/oda-doluluk-aylik/excel - Excel export endpointi eklenecek.
+    [HttpGet("oda-doluluk-aylik/excel")]
+    [Permission(StructurePermissions.OdaDolulukRaporuYonetimi.View)]
+    public async Task<IActionResult> ExportExcel(
+        [FromQuery] int tesisId,
+        [FromQuery] int yil,
+        [FromQuery] int ay,
+        [FromQuery] bool maskele,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _odaDolulukRaporExcelService.OlusturAsync(tesisId, yil, ay, maskele, cancellationToken);
+        var fileName = $"oda-doluluk-raporu-{tesisId}-{yil}-{ay:00}.xlsx";
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
+
     // TODO: GET api/raporlar/oda-doluluk-aylik/pdf - PDF export endpointi eklenecek.
 }

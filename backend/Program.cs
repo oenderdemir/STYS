@@ -114,6 +114,7 @@ builder.Services.AddScoped<IKampTahsisService, KampTahsisService>();
 builder.Services.AddScoped<IKampRezervasyonService, KampRezervasyonService>();
 builder.Services.AddScoped<IRezervasyonService, RezervasyonService>();
 builder.Services.AddScoped<IOdaDolulukRaporService, OdaDolulukRaporService>();
+builder.Services.AddScoped<IOdaDolulukRaporExcelService, OdaDolulukRaporExcelService>();
 builder.Services.AddScoped<IRestoranService, RestoranService>();
 builder.Services.AddScoped<IRestoranMasaService, RestoranMasaService>();
 builder.Services.AddScoped<IRestoranMenuKategoriService, RestoranMenuKategoriService>();

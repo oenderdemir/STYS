@@ -49,7 +49,7 @@
 
             <ng-template pTemplate="end">
                 <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
-                <button pButton type="button" label="Excel" icon="pi pi-file-excel" class="p-button-outlined" (click)="exportExcel()"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
                 <button pButton type="button" label="PDF" icon="pi pi-file-pdf" class="p-button-outlined" (click)="exportPdf()"></button>
             </ng-template>
         </p-toolbar>

@@ -65,6 +65,7 @@ export class OdaDolulukAylikComponent implements OnInit {
 
     rapor: AylikOdaDolulukRaporDto | null = null;
     yukleniyor = false;
+    excelIndiriliyor = false;
 
     cakismaDialogVisible = false;
     cakismaDialogOdaNo = '';
@@ -228,7 +229,37 @@ export class OdaDolulukAylikComponent implements OnInit {
     }
 
     exportExcel(): void {
-        this.messageService.add({ severity: 'info', summary: 'Yakında', detail: 'Excel export özelliği yakında eklenecek.' });
+        if (!this.selectedTesisId) {
+            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen bir tesis seçiniz.' });
+            return;
+        }
+
+        this.excelIndiriliyor = true;
+        this.raporService
+            .exportExcel(this.selectedTesisId, this.selectedYil, this.selectedAy, this.maskele)
+            .pipe(finalize(() => { this.excelIndiriliyor = false; this.cdr.markForCheck(); }))
+            .subscribe({
+                next: (blob) => {
+                    this.downloadBlob(blob, `oda-doluluk-raporu-${this.selectedYil}-${this.selectedAy}.xlsx`);
+                },
+                error: (err: HttpErrorResponse) => {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Hata',
+                        detail: tryReadApiMessage(err) ?? 'Excel dosyası indirilemedi.'
+                    });
+                }
+            });
+    }
+
+    private downloadBlob(blob: Blob, fileName: string): void {
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        anchor.remove();
     }
 
     exportPdf(): void {

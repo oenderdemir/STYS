@@ -6085,3 +6085,27 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk ve Tahsilat Raporu — Excel Export
+
+### Yapılan İşler
+- Aylık oda doluluk raporuna Excel export endpointi ve frontend indirme aksiyonu eklendi; Excel çıktısında özet alanları, gün x oda matrisi, ödeme eksik ve çakışma stilleri gösterildi.
+
+### Backend
+- `backend/Raporlar/Services/IOdaDolulukRaporExcelService.cs`, `OdaDolulukRaporExcelService.cs` — mevcut `IOdaDolulukRaporService` çıktısını kullanarak ClosedXML ile tek sheet'lik ("Aylık Oda Planı") Excel üretir; üst bilgi, özet tablosu ve gün x oda matrisini (misafir, referans no, kişi sayısı, durum, ödeme eksik/çakışma uyarıları, tutar satırları) wrap-text ile yazar; semantik hücre renk koduna göre dolgu rengi uygular; freeze pane, autofilter, kenarlık, sütun genişliği ve A3 yatay print alanı ayarlanır.
+- `backend/Raporlar/Controllers/OdaDolulukRaporController.cs` — `GET /api/raporlar/oda-doluluk-aylik/excel?tesisId=&yil=&ay=&maskele=` eklendi, `oda-doluluk-raporu-{tesisId}-{yil}-{ay}.xlsx` adıyla dosya döner.
+- `backend/Program.cs` — `IOdaDolulukRaporExcelService` DI kaydı eklendi.
+- `tests/STYS.Tests/OdaDolulukRaporExcelServiceTests.cs` — boş ay, dolu rezervasyon özeti ve çakışmalı hücre senaryoları için Excel binary üretimi ClosedXML ile açılıp doğrulanıyor (3/3 geçiyor).
+
+### Frontend
+- `oda-doluluk-aylik.service.ts` — `exportExcel(tesisId, yil, ay, maskele)` metodu eklendi (blob response).
+- `oda-doluluk-aylik.ts/html` — Excel butonu artık gerçek exporta bağlı; tesis seçilmemişse uyarı verir, indirme sırasında loading durumu gösterir, dosyayı `oda-doluluk-raporu-{yil}-{ay}.xlsx` adıyla indirir. PDF butonu placeholder olarak kaldı.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 11/11 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

@@ -353,7 +353,7 @@
                         </span>
                     </div>
                 }
-                @if ((secilenBlok.uyarilar?.length ?? 0) > 0) {
+                @if (secilenBlok.uyarilar.length > 0) {
                     <div class="detay-uyarilar">
                         @for (u of secilenBlok.uyarilar; track u) {
                             <div class="detay-uyari"><i class="pi pi-exclamation-triangle"></i> {{ u }}</div>

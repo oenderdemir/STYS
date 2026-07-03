@@ -44,9 +44,9 @@ public class OdaDolulukRaporExcelServiceTests
         Assert.Equal("Oda No", listeSheet.Cell(1, 2).GetString());
     }
 
-    // Oda Plani sheet'i satirlarda oda no, kolonlarda gunleri icermeli ve dolu hucrede kisa metin gostermeli.
+    // matrisYonu verilmezse (null) Oda Plani sheet'i musteri formatinda (tarih-satir) uretilmeli.
     [Fact]
-    public async Task OlusturAsync_OdaPlaniSheetiOdaSatirVeGunKolonuIcerir()
+    public async Task OlusturAsync_MatrisYonuNullIseTarihSatirVarsayilanKullanilir()
     {
         await using var dbContext = CreateDbContext();
         await SeedOdaFixtureAsync(dbContext);
@@ -61,17 +61,114 @@ public class OdaDolulukRaporExcelServiceTests
             misafirAdiSoyadi: "Ali Veli");
 
         var service = CreateExcelService(dbContext);
-        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false, matrisYonu: null);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+
+        Assert.Equal("TARİH", odaPlani.Cell(1, 1).GetString());
+        Assert.Equal("GÜN", odaPlani.Cell(1, 2).GetString());
+        Assert.Contains("101", odaPlani.Cell(1, 3).GetString());
+
+        var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
+        Assert.Contains(tumHucreler, x => x.StartsWith("Ali Veli"));
+    }
+
+    // matrisYonu = "tarih-satir" acikca verildiginde de ayni musteri formati uretilmeli.
+    [Fact]
+    public async Task OlusturAsync_MatrisYonuTarihSatirIseTarihSatirFormatiUretilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false, matrisYonu: "tarih-satir");
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+
+        Assert.Equal("TARİH", odaPlani.Cell(1, 1).GetString());
+        Assert.Equal("GÜN", odaPlani.Cell(1, 2).GetString());
+        Assert.Contains("101", odaPlani.Cell(1, 3).GetString());
+    }
+
+    // matrisYonu = "oda-satir" ise eski kompakt oda-satir/gun-kolon formati korunmali.
+    [Fact]
+    public async Task OlusturAsync_MatrisYonuOdaSatirIseEskiKompaktFormatUretilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false, matrisYonu: "oda-satir");
 
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
         var odaPlani = workbook.Worksheet("Oda Planı");
 
         Assert.Equal("Oda No", odaPlani.Cell(1, 1).GetString());
+        Assert.Equal("Oda Tipi", odaPlani.Cell(1, 2).GetString());
         Assert.Equal("101", odaPlani.Cell(2, 1).GetString());
         Assert.Contains("1", odaPlani.Cell(1, 4).GetString());
 
         var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
         Assert.Contains(tumHucreler, x => x.StartsWith("Ali Veli"));
+    }
+
+    // Tarih-satir (musteri) goruniminde dolu hucrede durum/odeme metni yazilmamali; sadece renkle anlasilmali.
+    [Fact]
+    public async Task OlusturAsync_TarihSatirGorunumundeDurumMetniYazilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 100m,
+            rezervasyonDurumu: RezervasyonDurumlari.CheckInTamamlandi,
+            misafirAdiSoyadi: "Ali Veli");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false, matrisYonu: "tarih-satir");
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+
+        // Sadece veri hucrelerini kontrol et (legend alani ayri sutunlarda, kasten durum metni icerir).
+        var doluHucreMetni = odaPlani.Cell(11, 3).GetString();
+
+        Assert.Equal("Ali Veli", doluHucreMetni);
+        Assert.DoesNotContain("Onaylı", doluHucreMetni);
+        Assert.DoesNotContain("Check-in", doluHucreMetni);
+        Assert.DoesNotContain("Eksik", doluHucreMetni);
+    }
+
+    // Tarih-satir sheet'inde renk legend'i bulunmali.
+    [Fact]
+    public async Task OlusturAsync_TarihSatirSheetindeRenkLegendiBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+        var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
+
+        Assert.Contains(tumHucreler, x => x == "RENK AÇIKLAMALARI");
     }
 
     // Rezervasyon Listesi sheet'inde header satiri beklenen kolonlari icermeli.

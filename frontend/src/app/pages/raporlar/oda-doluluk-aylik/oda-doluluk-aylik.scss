@@ -75,6 +75,20 @@
     ::ng-deep .yil-select {
         width: 110px;
     }
+
+    ::ng-deep .excel-yonu-select {
+        width: 160px;
+    }
+}
+
+.excel-yonu-ogesi {
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--surface-border);
+
+    label {
+        color: var(--text-color-secondary);
+        font-weight: 500;
+    }
 }
 
 .maskele-ogesi {

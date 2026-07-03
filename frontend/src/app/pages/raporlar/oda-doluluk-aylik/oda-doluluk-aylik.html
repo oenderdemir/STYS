@@ -58,6 +58,19 @@
 
             <div class="aksiyon-grubu">
                 <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+
+                <div class="filtre-ogesi excel-yonu-ogesi">
+                    <label for="excelYonuSelect">Excel Matris Yönü</label>
+                    <p-select
+                        id="excelYonuSelect"
+                        styleClass="excel-yonu-select"
+                        [options]="matrisYonuSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="excelMatrisYonu"
+                    ></p-select>
+                </div>
+
                 <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
                 <button pButton type="button" label="PDF" icon="pi pi-file-pdf" severity="secondary" class="p-button-outlined" (click)="exportPdf()"></button>
             </div>

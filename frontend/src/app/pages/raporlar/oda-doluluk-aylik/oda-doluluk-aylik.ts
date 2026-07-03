@@ -25,6 +25,11 @@ interface SecenekOgesi {
     value: number;
 }
 
+interface MatrisYonuSecenegi {
+    label: string;
+    value: 'tarih-satir' | 'oda-satir';
+}
+
 @Component({
     selector: 'app-oda-doluluk-aylik',
     standalone: true,
@@ -64,6 +69,12 @@ export class OdaDolulukAylikComponent implements OnInit {
     rapor: AylikOdaDolulukRaporDto | null = null;
     yukleniyor = false;
     excelIndiriliyor = false;
+    excelMatrisYonu: 'tarih-satir' | 'oda-satir' = 'tarih-satir';
+
+    readonly matrisYonuSecenekleri: MatrisYonuSecenegi[] = [
+        { label: 'Tarihler satırda', value: 'tarih-satir' },
+        { label: 'Odalar satırda', value: 'oda-satir' }
+    ];
 
     cakismaDialogVisible = false;
     cakismaDialogOdaNo = '';
@@ -248,7 +259,7 @@ export class OdaDolulukAylikComponent implements OnInit {
 
         this.excelIndiriliyor = true;
         this.raporService
-            .exportExcel(this.selectedTesisId, this.selectedYil, this.selectedAy, this.maskele)
+            .exportExcel(this.selectedTesisId, this.selectedYil, this.selectedAy, this.maskele, this.excelMatrisYonu)
             .pipe(finalize(() => { this.excelIndiriliyor = false; this.cdr.markForCheck(); }))
             .subscribe({
                 next: (blob) => {

@@ -37,12 +37,19 @@ export class OdaDolulukAylikRaporService {
             );
     }
 
-    exportExcel(tesisId: number, yil: number, ay: number, maskele: boolean): Observable<Blob> {
+    exportExcel(
+        tesisId: number,
+        yil: number,
+        ay: number,
+        maskele: boolean,
+        matrisYonu: 'tarih-satir' | 'oda-satir' = 'tarih-satir'
+    ): Observable<Blob> {
         const params = new HttpParams()
             .set('tesisId', tesisId)
             .set('yil', yil)
             .set('ay', ay)
-            .set('maskele', maskele);
+            .set('maskele', maskele)
+            .set('matrisYonu', matrisYonu);
 
         return this.http.get(
             `${this.apiBaseUrl}/api/raporlar/oda-doluluk-aylik/excel`,

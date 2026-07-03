@@ -6153,3 +6153,28 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 - `dotnet build backend/STYS.csproj` başarılı — 0 error
 - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporExcel` başarılı — 4/4 geçti
 - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 12/12 geçti
+
+---
+
+## Aylık Oda Doluluk Excel Çıktısı — Müşteri Formatına Uyum
+
+### Yapılan İşler
+- Aylık oda doluluk Excel çıktısında müşteri formatına uygun Tarih x Oda görünümü varsayılan yapıldı; Excel matris yönü seçilebilir hale getirildi ve rezervasyon durumları Oda Planı sayfasında metin yerine renklerle gösterildi.
+
+### Backend (endpoint yolu değişmedi)
+- `GET /api/raporlar/oda-doluluk-aylik/excel` yeni opsiyonel `matrisYonu` query parametresi alıyor (`tarih-satir` varsayılan, `oda-satir` eski kompakt görünüm). `IOdaDolulukRaporExcelService.OlusturAsync` imzasına `string? matrisYonu = null` eklendi (geriye uyumlu — null/boş değer `tarih-satir` kabul ediliyor).
+- `OdaDolulukRaporExcelService`: `BuildOdaPlaniSheet` artık yönlendirici; `BuildTarihSatirOdaKolonSheet` (yeni varsayılan müşteri formatı: satırlar tarih, kolonlar oda, "TARİH/GÜN/{OdaNo} NO'LU ODA" başlıkları, kurumsal yeşil header) ve `BuildOdaSatirGunKolonSheet` (eski kompakt oda-satır/gün-kolon görünümü, `matrisYonu=oda-satir` ile erişilebilir) olarak ikiye ayrıldı.
+- Tarih-satır görünümünde dolu hücrede sadece kısa metin var (KurumÜnite → Misafir adı → Referans No sırasıyla, max 26 karakter); rezervasyon durumu, ödeme eksik, tutar bilgisi hücreye yazılmıyor — sadece hücre rengiyle anlaşılıyor. Çakışma istisna: hücrede "ÇAKIŞMA" yazıyor. Sheet'e "RENK AÇIKLAMALARI" legend'i eklendi (Onaylı/Rezerve, Check-in/Check-out Tamamlandı, Ödeme Eksik, Çakışma renk örnekleri).
+- Rezervasyon Listesi sheet'i değişmedi; tüm durum/tutar/çakışma detayları orada kalmaya devam ediyor.
+- `tests/STYS.Tests/OdaDolulukRaporExcelServiceTests.cs` güncellendi: matrisYonu null/"tarih-satir"/"oda-satir" senaryoları, tarih-satır görünümünde durum metni yazılmadığı, çakışma hücresinde "ÇAKIŞMA" yazdığı ve legend'in var olduğu test ediliyor (8/8 geçiyor).
+
+### Frontend
+- Filtre kartında Excel butonunun yanına "Excel Matris Yönü" seçimi (Tarihler satırda / Odalar satırda, varsayılan Tarihler satırda) eklendi; `OdaDolulukAylikRaporService.exportExcel` artık `matrisYonu` parametresi gönderiyor.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporExcel` başarılı — 8/8 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 16/16 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

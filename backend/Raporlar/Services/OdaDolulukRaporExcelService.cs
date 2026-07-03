@@ -19,7 +19,12 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
     private const string RenkHeaderHafta = "#1F4E78";
     private const string RenkHeaderHaftaSonu = "#2E5F8A";
     private const string RenkHaftaSonuBos = "#F7F7F7";
+    private const string RenkHeaderYesil = "#2E7D32";
     private const int MisafirKisaMaxUzunluk = 14;
+    private const int MisafirKisaMaxUzunlukTarihSatir = 26;
+
+    private const string MatrisYonuOdaSatir = "oda-satir";
+    private const string MatrisYonuTarihSatirVarsayilan = "tarih-satir";
 
     private readonly IOdaDolulukRaporService _odaDolulukRaporService;
 
@@ -33,15 +38,17 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
         int yil,
         int ay,
         bool maskele = false,
+        string? matrisYonu = null,
         CancellationToken cancellationToken = default)
     {
         var rapor = await _odaDolulukRaporService.GetAylikOdaDolulukRaporuAsync(tesisId, yil, ay, maskele, cancellationToken);
         var ayAdi = ToTitleCase(TrCulture.DateTimeFormat.GetMonthName(ay));
+        var yon = string.IsNullOrWhiteSpace(matrisYonu) ? MatrisYonuTarihSatirVarsayilan : matrisYonu.Trim().ToLowerInvariant();
 
         using var workbook = new XLWorkbook();
 
         BuildOzetSheet(workbook, rapor, ayAdi, maskele);
-        BuildOdaPlaniSheet(workbook, rapor, ayAdi);
+        BuildOdaPlaniSheet(workbook, rapor, ayAdi, yon);
         BuildRezervasyonListesiSheet(workbook, rapor);
 
         using var ms = new MemoryStream();
@@ -134,7 +141,138 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
         ws.SheetView.Freeze(2, 0);
     }
 
-    private static void BuildOdaPlaniSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi)
+    private static void BuildOdaPlaniSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi, string matrisYonu)
+    {
+        if (matrisYonu == MatrisYonuOdaSatir)
+        {
+            BuildOdaSatirGunKolonSheet(workbook, rapor, ayAdi);
+        }
+        else
+        {
+            BuildTarihSatirOdaKolonSheet(workbook, rapor, ayAdi);
+        }
+    }
+
+    private static void BuildTarihSatirOdaKolonSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi)
+    {
+        var ws = workbook.Worksheets.Add("Oda Planı");
+
+        const int headerRow = 1;
+        const int ilkOdaKolonu = 3;
+
+        ws.Cell(headerRow, 1).Value = "TARİH";
+        ws.Cell(headerRow, 2).Value = "GÜN";
+
+        for (var o = 0; o < rapor.Odalar.Count; o++)
+        {
+            ws.Cell(headerRow, ilkOdaKolonu + o).Value = $"{rapor.Odalar[o].OdaNo} NO'LU ODA";
+        }
+
+        var sonKolon = ilkOdaKolonu + rapor.Odalar.Count - 1;
+        var basliklarAraligi = ws.Range(headerRow, 1, headerRow, sonKolon);
+        basliklarAraligi.Style.Font.Bold = true;
+        basliklarAraligi.Style.Font.FontColor = XLColor.White;
+        basliklarAraligi.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        basliklarAraligi.Style.Fill.BackgroundColor = XLColor.FromHtml(RenkHeaderYesil);
+        basliklarAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        basliklarAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        var satir = headerRow + 1;
+        for (var g = 0; g < rapor.Gunler.Count; g++)
+        {
+            var gun = rapor.Gunler[g];
+            var haftaSonuMu = gun.Tarih.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+            ws.Cell(satir, 1).Value = $"{gun.Tarih.Day} {ayAdi} {gun.Tarih.Year}";
+            ws.Cell(satir, 2).Value = gun.GunAdi;
+            if (haftaSonuMu)
+            {
+                ws.Range(satir, 1, satir, 2).Style.Fill.BackgroundColor = XLColor.FromHtml(RenkHaftaSonuBos);
+            }
+
+            for (var o = 0; o < rapor.Odalar.Count; o++)
+            {
+                var hucre = gun.Hucreler[o];
+                var cell = ws.Cell(satir, ilkOdaKolonu + o);
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                cell.Style.Alignment.WrapText = true;
+
+                if (hucre.DoluMu)
+                {
+                    cell.Value = KisaHucreMetniTarihSatir(hucre);
+                    cell.Style.Fill.BackgroundColor = XLColor.FromHtml(HucreRengi(hucre));
+                }
+            }
+
+            satir++;
+        }
+
+        var sonSatir = satir - 1;
+
+        // ── Bicimlendirme ──
+        ws.Column(1).Width = 18;
+        ws.Column(2).Width = 14;
+        for (var o = 0; o < rapor.Odalar.Count; o++)
+        {
+            ws.Column(ilkOdaKolonu + o).Width = 24;
+        }
+
+        ws.Row(headerRow).Height = 28;
+        for (var r = headerRow + 1; r <= sonSatir; r++)
+        {
+            ws.Row(r).Height = 24;
+        }
+
+        ws.SheetView.Freeze(headerRow, 2);
+
+        var tabloAraligi = ws.Range(headerRow, 1, sonSatir, sonKolon);
+        tabloAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        BuildRenkLegend(ws, headerRow, sonKolon + 2);
+
+        ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        ws.PageSetup.PaperSize = XLPaperSize.A3Paper;
+        ws.PageSetup.FitToPages(1, 0);
+        ws.PageSetup.PrintAreas.Clear();
+        ws.PageSetup.PrintAreas.Add(headerRow, 1, sonSatir, sonKolon);
+    }
+
+    private static void BuildRenkLegend(IXLWorksheet ws, int baseRow, int baseCol)
+    {
+        ws.Range(baseRow, baseCol, baseRow, baseCol + 1).Merge();
+        var baslikCell = ws.Cell(baseRow, baseCol);
+        baslikCell.Value = "RENK AÇIKLAMALARI";
+        baslikCell.Style.Font.Bold = true;
+        baslikCell.Style.Font.FontSize = 11;
+
+        var girdiler = new (string Renk, string Aciklama)[]
+        {
+            (RenkReserved, "Onaylı / Rezerve"),
+            (RenkOccupied, "Check-in Tamamlandı"),
+            (RenkCheckedOut, "Check-out Tamamlandı"),
+            (RenkOdemeEksik, "Ödeme Eksik"),
+            (RenkCakisma, "Çakışma")
+        };
+
+        for (var i = 0; i < girdiler.Length; i++)
+        {
+            var row = baseRow + 1 + i;
+            var renkCell = ws.Cell(row, baseCol);
+            renkCell.Value = " ";
+            renkCell.Style.Fill.BackgroundColor = XLColor.FromHtml(girdiler[i].Renk);
+            renkCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+
+            var aciklamaCell = ws.Cell(row, baseCol + 1);
+            aciklamaCell.Value = girdiler[i].Aciklama;
+        }
+
+        ws.Column(baseCol).Width = 4;
+        ws.Column(baseCol + 1).Width = 24;
+    }
+
+    private static void BuildOdaSatirGunKolonSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor, string ayAdi)
     {
         var ws = workbook.Worksheets.Add("Oda Planı");
 
@@ -339,6 +477,25 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
     {
         var kaynak = !string.IsNullOrWhiteSpace(hucre.MisafirAdiSoyadi) ? hucre.MisafirAdiSoyadi! : (hucre.ReferansNo ?? "-");
         return kaynak.Length > MisafirKisaMaxUzunluk ? kaynak[..MisafirKisaMaxUzunluk] + "…" : kaynak;
+    }
+
+    // Tarih-satir (musteri) formatinda hucrede durum/odeme metni yazilmaz; sadece cakisma istisnadir.
+    private static string KisaHucreMetniTarihSatir(OdaDolulukHucreDto hucre)
+    {
+        if (hucre.CakismaVarMi)
+        {
+            return "ÇAKIŞMA";
+        }
+
+        var kaynak = !string.IsNullOrWhiteSpace(hucre.KurumUnite)
+            ? hucre.KurumUnite!
+            : !string.IsNullOrWhiteSpace(hucre.MisafirAdiSoyadi)
+                ? hucre.MisafirAdiSoyadi!
+                : (hucre.ReferansNo ?? "-");
+
+        return kaynak.Length > MisafirKisaMaxUzunlukTarihSatir
+            ? kaynak[..MisafirKisaMaxUzunlukTarihSatir] + "…"
+            : kaynak;
     }
 
     private static string HucreRengi(OdaDolulukHucreDto hucre)

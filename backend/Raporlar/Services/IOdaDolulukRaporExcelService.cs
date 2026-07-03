@@ -7,5 +7,6 @@ public interface IOdaDolulukRaporExcelService
         int yil,
         int ay,
         bool maskele = false,
+        string? matrisYonu = null,
         CancellationToken cancellationToken = default);
 }

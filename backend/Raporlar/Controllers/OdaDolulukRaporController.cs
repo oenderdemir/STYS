@@ -44,9 +44,10 @@ public class OdaDolulukRaporController : UIController
         [FromQuery] int yil,
         [FromQuery] int ay,
         [FromQuery] bool maskele,
+        [FromQuery] string? matrisYonu,
         CancellationToken cancellationToken)
     {
-        var bytes = await _odaDolulukRaporExcelService.OlusturAsync(tesisId, yil, ay, maskele, cancellationToken);
+        var bytes = await _odaDolulukRaporExcelService.OlusturAsync(tesisId, yil, ay, maskele, matrisYonu, cancellationToken);
         var fileName = $"oda-doluluk-raporu-{tesisId}-{yil}-{ay:00}.xlsx";
         return File(
             bytes,

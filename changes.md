@@ -6204,3 +6204,34 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk ve Tahsilat Raporu — PDF Export
+
+### Yapılan İşler
+- Aylık oda doluluk raporuna PDF export endpointi ve frontend indirme aksiyonu eklendi; PDF çıktısında tarih x oda matrisi, renk açıklamaları ve tahsilatlar bölümü gösterildi.
+
+### Backend
+- `GET /api/raporlar/oda-doluluk-aylik/pdf?tesisId=&yil=&ay=&maskele=` eklendi; `oda-doluluk-raporu-{tesisId}-{yil}-{ay}.pdf` adıyla dosya döner.
+- `backend/Raporlar/Services/IOdaDolulukRaporPdfService.cs`, `OdaDolulukRaporPdfService.cs` — mevcut `IOdaDolulukRaporService` çıktısını (aynı DTO, tekrar sorgu yok) iText7 (proje içinde zaten kullanılan kütüphane) ile A3 yatay PDF'e dönüştürür:
+  - Başlık, tesis/dönem/rapor tarihi/maskeleme bilgisi, özet kutuları (toplam oda, dolu/boş oda-gün, doluluk oranı, ay içi tahsilat, kalan tutar).
+  - Renk açıklamaları (Onaylı/Rezerve, Check-in/Check-out Tamamlandı, Ödeme Eksik, Çakışma) — Excel'deki legend ile aynı semantik.
+  - Tarih x Oda doluluk matrisi (müşteri formatı); oda sayısı 8'i aşarsa kolonlar sayfalara bölünür (her sayfada tarih/gün kolonları tekrarlanır), hücrelerde durum/ödeme metni yazılmaz, sadece renkle gösterilir (çakışma istisna: "ÇAKIŞMA" yazar).
+  - Ayrı son sayfada "TAHSİLATLAR" tablosu (Oda No, Makbuz No, Ödeme Yapan, Ünite, Tahsil Edilen); tahsilat yoksa bilgi metni gösterilir.
+  - Türkçe karakterler için: geliştirme/üretim ortamında bir Unicode TTF (Windows Segoe UI/Arial/Calibri veya yaygın Linux fontconfig yolları) bulunursa gömülü font ile tam destek sağlanır; hiçbiri bulunamazsa mevcut `OdemeRaporExportBuilder` örneğindeki gibi Cp1254 + ASCII normalizasyonuna düşülür (TODO: kalıcı çözüm için projeye lisanslı bir Unicode font asset olarak eklenmeli).
+- `Program.cs` — `IOdaDolulukRaporPdfService` DI kaydı eklendi.
+- `tests/STYS.Tests/OdaDolulukRaporPdfServiceTests.cs` — boş ay, dolu rezervasyon, tahsilatlı ay, çok oda (sayfalama), Türkçe karakterli misafir adı senaryolarında PDF üretiminin hata vermediği ve boş dönmediği doğrulanıyor (5/5 geçiyor).
+
+### Frontend
+- `oda-doluluk-aylik.service.ts` — `exportPdf(tesisId, yil, ay, maskele)` metodu eklendi (blob response).
+- `oda-doluluk-aylik.ts/html` — PDF butonu artık gerçek exporta bağlı (placeholder mesajı kaldırıldı); tesis seçilmemişse uyarı verir, `pdfIndiriliyor` loading durumu gösterir, dosyayı `oda-doluluk-raporu-{yil}-{ay}.pdf` adıyla indirir.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 27/27 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporExcel` başarılı — 11/11 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporPdf` başarılı — 5/5 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

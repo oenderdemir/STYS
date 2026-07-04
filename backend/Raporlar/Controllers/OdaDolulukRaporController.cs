@@ -15,13 +15,16 @@ public class OdaDolulukRaporController : UIController
 {
     private readonly IOdaDolulukRaporService _odaDolulukRaporService;
     private readonly IOdaDolulukRaporExcelService _odaDolulukRaporExcelService;
+    private readonly IOdaDolulukRaporPdfService _odaDolulukRaporPdfService;
 
     public OdaDolulukRaporController(
         IOdaDolulukRaporService odaDolulukRaporService,
-        IOdaDolulukRaporExcelService odaDolulukRaporExcelService)
+        IOdaDolulukRaporExcelService odaDolulukRaporExcelService,
+        IOdaDolulukRaporPdfService odaDolulukRaporPdfService)
     {
         _odaDolulukRaporService = odaDolulukRaporService;
         _odaDolulukRaporExcelService = odaDolulukRaporExcelService;
+        _odaDolulukRaporPdfService = odaDolulukRaporPdfService;
     }
 
     [HttpGet("oda-doluluk-aylik")]
@@ -55,5 +58,17 @@ public class OdaDolulukRaporController : UIController
             fileName);
     }
 
-    // TODO: GET api/raporlar/oda-doluluk-aylik/pdf - PDF export endpointi eklenecek.
+    [HttpGet("oda-doluluk-aylik/pdf")]
+    [Permission(StructurePermissions.OdaDolulukRaporuYonetimi.View)]
+    public async Task<IActionResult> ExportPdf(
+        [FromQuery] int tesisId,
+        [FromQuery] int yil,
+        [FromQuery] int ay,
+        [FromQuery] bool maskele,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _odaDolulukRaporPdfService.OlusturAsync(tesisId, yil, ay, maskele, cancellationToken);
+        var fileName = $"oda-doluluk-raporu-{tesisId}-{yil}-{ay:00}.pdf";
+        return File(bytes, "application/pdf", fileName);
+    }
 }

@@ -56,4 +56,17 @@ export class OdaDolulukAylikRaporService {
             { params, responseType: 'blob' }
         );
     }
+
+    exportPdf(tesisId: number, yil: number, ay: number, maskele: boolean): Observable<Blob> {
+        const params = new HttpParams()
+            .set('tesisId', tesisId)
+            .set('yil', yil)
+            .set('ay', ay)
+            .set('maskele', maskele);
+
+        return this.http.get(
+            `${this.apiBaseUrl}/api/raporlar/oda-doluluk-aylik/pdf`,
+            { params, responseType: 'blob' }
+        );
+    }
 }

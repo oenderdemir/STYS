@@ -69,6 +69,7 @@ export class OdaDolulukAylikComponent implements OnInit {
     rapor: AylikOdaDolulukRaporDto | null = null;
     yukleniyor = false;
     excelIndiriliyor = false;
+    pdfIndiriliyor = false;
     excelMatrisYonu: 'tarih-satir' | 'oda-satir' = 'tarih-satir';
 
     readonly matrisYonuSecenekleri: MatrisYonuSecenegi[] = [
@@ -286,6 +287,26 @@ export class OdaDolulukAylikComponent implements OnInit {
     }
 
     exportPdf(): void {
-        this.messageService.add({ severity: 'info', summary: 'Yakında', detail: 'PDF export özelliği yakında eklenecek.' });
+        if (!this.selectedTesisId) {
+            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Lütfen bir tesis seçiniz.' });
+            return;
+        }
+
+        this.pdfIndiriliyor = true;
+        this.raporService
+            .exportPdf(this.selectedTesisId, this.selectedYil, this.selectedAy, this.maskele)
+            .pipe(finalize(() => { this.pdfIndiriliyor = false; this.cdr.markForCheck(); }))
+            .subscribe({
+                next: (blob) => {
+                    this.downloadBlob(blob, `oda-doluluk-raporu-${this.selectedYil}-${this.selectedAy}.pdf`);
+                },
+                error: (err: HttpErrorResponse) => {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Hata',
+                        detail: tryReadApiMessage(err) ?? 'PDF dosyası indirilemedi.'
+                    });
+                }
+            });
     }
 }

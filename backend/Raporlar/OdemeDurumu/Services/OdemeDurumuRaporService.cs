@@ -93,7 +93,10 @@ public class OdemeDurumuRaporService : IOdemeDurumuRaporService
 
         var odaAtamalari = await _stysDbContext.RezervasyonSegmentOdaAtamalari
             .AsNoTracking()
-            .Where(a => rezervasyonIds.Contains(a.RezervasyonSegment!.RezervasyonId))
+            .Where(a => !a.IsDeleted
+                && a.RezervasyonSegment != null
+                && !a.RezervasyonSegment.IsDeleted
+                && rezervasyonIds.Contains(a.RezervasyonSegment.RezervasyonId))
             .Select(a => new { a.RezervasyonSegment!.RezervasyonId, a.OdaNoSnapshot })
             .ToListAsync(cancellationToken);
 
@@ -103,7 +106,7 @@ public class OdemeDurumuRaporService : IOdemeDurumuRaporService
 
         var odemeToplamlari = await _stysDbContext.RezervasyonOdemeler
             .AsNoTracking()
-            .Where(o => rezervasyonIds.Contains(o.RezervasyonId))
+            .Where(o => !o.IsDeleted && rezervasyonIds.Contains(o.RezervasyonId))
             .GroupBy(o => o.RezervasyonId)
             .Select(g => new
             {

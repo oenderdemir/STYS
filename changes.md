@@ -6359,3 +6359,28 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Ödeme Durumu Raporu — Veri Doğruluğu ve Excel İyileştirmeleri
+
+### Yapılan İşler
+- `OdemeDurumuRaporService` içindeki `RezervasyonOdemeler` ve `RezervasyonSegmentOdaAtamalari` sorgularına açık `!IsDeleted` filtreleri eklendi (global EF Core query filter zaten soft-delete kayıtları hariç tutuyordu; bu ekleme, projede yerleşik olan diğer servislerdeki savunmacı filtreleme kuralıyla tutarlılık ve okunabilirlik için yapıldı).
+- Excel tutar kolonları (Toplam Ücret, Ödenen Tutar, Kalan Tutar) artık para birimiyle formatlanıyor: `ParaFormati` helper'ı TRY için `#,##0.00 "₺"`, diğer para birimleri için `#,##0.00 "{ParaBirimi}"` formatı üretiyor; hem "Özet" sayfasındaki toplamlarda hem "Rezervasyonlar" sayfasındaki satır bazlı tutarlarda kullanılıyor.
+- "Rezervasyonlar" sayfasına "Para Birimi" kolonu eklendi (Kalan Tutar ile Ödeme Durumu arasına); sayfa artık 15 kolon içeriyor.
+- `KurumUnite` alanı için TODO yorumu güncellendi: "Rezervasyon veya musteri tarafinda kurum/unite bilgisi netlestiginde doldurulacak." (sistemde bu bilgiyi karşılayan bir kaynak alan bulunmuyor).
+
+### Backend
+- `tests/STYS.Tests/OdemeDurumuRaporServiceTests.cs`: silinmiş (soft-delete) ödeme kaydının borç hesabına dahil edilmediğini doğrulayan yeni test eklendi.
+- `tests/STYS.Tests/OdemeDurumuRaporExcelServiceTests.cs`: "Para Birimi" kolonunun oluştuğunu ve tutar hücrelerinin para birimi sembolüyle formatlandığını, borçlu/çıkış yapmış borçlu satır renklendirmesinin yeni kolon sırasıyla bozulmadığını ve silinmiş ödeme kaydının Excel çıktısına yansımadığını doğrulayan testler eklendi.
+- Mevcut Aylık Oda Planı ve Aylık Konaklayan Kişi Sayısı raporlarına dokunulmadı.
+
+### Frontend
+- Değişiklik yok.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdemeDurumu` başarılı — 20/20 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

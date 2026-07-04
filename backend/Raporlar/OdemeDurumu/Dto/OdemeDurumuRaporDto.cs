@@ -32,7 +32,7 @@ public class OdemeDurumuRezervasyonDto
     public string ReferansNo { get; set; } = string.Empty;
     public string MisafirAdiSoyadi { get; set; } = string.Empty;
 
-    // TODO: Kurum/unite bilgisi mevcut rezervasyon veri modelinde tutulmuyor; ileride eklenirse doldurulacak.
+    // TODO: Rezervasyon veya musteri tarafinda kurum/unite bilgisi netlestiginde doldurulacak.
     public string? KurumUnite { get; set; }
 
     public DateTime GirisTarihi { get; set; }

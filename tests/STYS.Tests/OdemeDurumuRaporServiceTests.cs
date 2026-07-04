@@ -67,6 +67,27 @@ public class OdemeDurumuRaporServiceTests
         Assert.False(kayit.BorcluMu);
     }
 
+    // Silinmis (soft-delete) odeme kaydi borc hesabina dahil edilmemeli.
+    [Fact]
+    public async Task GetRaporAsync_SilinmisOdemeKaydiBorcHesabinaDahilEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTesisAsync(dbContext);
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, girisTarihi: new DateTime(2026, 6, 10), cikisTarihi: new DateTime(2026, 6, 13), toplamUcret: 1000m, rezervasyonDurumu: RezervasyonDurumlari.Onayli);
+        await SeedOdemeAsync(dbContext, rezervasyon.Id, 400m);
+        var silinecekOdeme = await SeedOdemeAsync(dbContext, rezervasyon.Id, 600m);
+        dbContext.RezervasyonOdemeler.Remove(silinecekOdeme);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, new DateTime(2026, 6, 1), new DateTime(2026, 6, 30), "tumu");
+
+        var kayit = Assert.Single(rapor.Rezervasyonlar);
+        Assert.Equal(400m, kayit.OdenenTutar);
+        Assert.Equal(600m, kayit.KalanTutar);
+        Assert.Equal(1, kayit.OdemeSayisi);
+    }
+
     // Fazla odeme (toplam ucretten fazla) yapilirsa kalan tutar 0'a sabitlenmeli ve tamamen-odendi kabul edilmeli.
     [Fact]
     public async Task GetRaporAsync_FazlaOdemeVarsaKalanSifiraSabitlenirVeTamamenOdendiKabulEdilir()
@@ -283,18 +304,21 @@ public class OdemeDurumuRaporServiceTests
         return rezervasyon;
     }
 
-    private static async Task SeedOdemeAsync(StysAppDbContext dbContext, int rezervasyonId, decimal tutar)
+    private static async Task<RezervasyonOdeme> SeedOdemeAsync(StysAppDbContext dbContext, int rezervasyonId, decimal tutar)
     {
-        dbContext.RezervasyonOdemeler.Add(new RezervasyonOdeme
+        var odeme = new RezervasyonOdeme
         {
             RezervasyonId = rezervasyonId,
             OdemeTarihi = DateTime.UtcNow,
             OdemeTutari = tutar,
             ParaBirimi = "TRY",
             OdemeTipi = OdemeTipleri.Nakit
-        });
+        };
+        dbContext.RezervasyonOdemeler.Add(odeme);
 
         await dbContext.SaveChangesAsync();
+
+        return odeme;
     }
 
     private sealed class FakeUserAccessScopeService : IUserAccessScopeService

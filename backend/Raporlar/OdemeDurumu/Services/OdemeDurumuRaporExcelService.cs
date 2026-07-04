@@ -61,9 +61,9 @@ public class OdemeDurumuRaporExcelService : IOdemeDurumuRaporExcelService
         YazEtiketDeger(ws, ref satir, "Çıkış Yapmış Borçlu Rezervasyon Sayısı", rapor.Ozet.CikisYapmisBorcluRezervasyonSayisi);
 
         satir++;
-        YazEtiketDegerPara(ws, ref satir, "Toplam Ücret", rapor.Ozet.ToplamUcret);
-        YazEtiketDegerPara(ws, ref satir, "Toplam Ödenen Tutar", rapor.Ozet.ToplamOdenenTutar);
-        YazEtiketDegerPara(ws, ref satir, "Toplam Kalan Tutar", rapor.Ozet.ToplamKalanTutar);
+        YazEtiketDegerPara(ws, ref satir, "Toplam Ücret", rapor.Ozet.ToplamUcret, rapor.Ozet.ParaBirimi);
+        YazEtiketDegerPara(ws, ref satir, "Toplam Ödenen Tutar", rapor.Ozet.ToplamOdenenTutar, rapor.Ozet.ParaBirimi);
+        YazEtiketDegerPara(ws, ref satir, "Toplam Kalan Tutar", rapor.Ozet.ToplamKalanTutar, rapor.Ozet.ParaBirimi);
 
         ws.Column(1).Width = 40;
         ws.Column(2).Width = 24;
@@ -77,14 +77,23 @@ public class OdemeDurumuRaporExcelService : IOdemeDurumuRaporExcelService
         satir++;
     }
 
-    private static void YazEtiketDegerPara(IXLWorksheet ws, ref int satir, string etiket, decimal deger)
+    private static void YazEtiketDegerPara(IXLWorksheet ws, ref int satir, string etiket, decimal deger, string paraBirimi)
     {
         ws.Cell(satir, 1).Value = etiket;
         ws.Cell(satir, 1).Style.Font.Bold = true;
         var cell = ws.Cell(satir, 2);
         cell.Value = deger;
-        cell.Style.NumberFormat.Format = "#,##0.00";
+        cell.Style.NumberFormat.Format = ParaFormati(paraBirimi);
         satir++;
+    }
+
+    // Para birimi TRY ise ₺ sembolu, degilse ParaBirimi kodu tutar formatinin sonuna eklenir.
+    private static string ParaFormati(string paraBirimi)
+    {
+        var sembol = string.IsNullOrWhiteSpace(paraBirimi) || paraBirimi.Equals("TRY", StringComparison.OrdinalIgnoreCase)
+            ? "₺"
+            : paraBirimi;
+        return $"#,##0.00 \"{sembol}\"";
     }
 
     private static void YazRezervasyonlarSayfasi(XLWorkbook workbook, OdemeDurumuRaporDto rapor)
@@ -104,6 +113,7 @@ public class OdemeDurumuRaporExcelService : IOdemeDurumuRaporExcelService
             "Toplam Ücret",
             "Ödenen Tutar",
             "Kalan Tutar",
+            "Para Birimi",
             "Ödeme Durumu",
             "Son Ödeme Tarihi",
             "Çıkış Yapmış mı"
@@ -139,28 +149,31 @@ public class OdemeDurumuRaporExcelService : IOdemeDurumuRaporExcelService
             ws.Cell(satir, 7).Value = string.Join(", ", r.OdaNolari);
             ws.Cell(satir, 8).Value = r.KisiSayisi;
 
+            var paraFormati = ParaFormati(r.ParaBirimi);
+
             var toplamCell = ws.Cell(satir, 9);
             toplamCell.Value = r.ToplamUcret;
-            toplamCell.Style.NumberFormat.Format = "#,##0.00";
+            toplamCell.Style.NumberFormat.Format = paraFormati;
 
             var odenenCell = ws.Cell(satir, 10);
             odenenCell.Value = r.OdenenTutar;
-            odenenCell.Style.NumberFormat.Format = "#,##0.00";
+            odenenCell.Style.NumberFormat.Format = paraFormati;
 
             var kalanCell = ws.Cell(satir, 11);
             kalanCell.Value = r.KalanTutar;
-            kalanCell.Style.NumberFormat.Format = "#,##0.00";
+            kalanCell.Style.NumberFormat.Format = paraFormati;
 
-            ws.Cell(satir, 12).Value = r.OdemeDurumuLabel;
+            ws.Cell(satir, 12).Value = r.ParaBirimi;
+            ws.Cell(satir, 13).Value = r.OdemeDurumuLabel;
 
-            var sonOdemeCell = ws.Cell(satir, 13);
+            var sonOdemeCell = ws.Cell(satir, 14);
             if (r.SonOdemeTarihi.HasValue)
             {
                 sonOdemeCell.Value = r.SonOdemeTarihi.Value;
                 sonOdemeCell.Style.DateFormat.Format = "dd.MM.yyyy";
             }
 
-            ws.Cell(satir, 14).Value = r.CikisYapmisMi ? "Evet" : "Hayır";
+            ws.Cell(satir, 15).Value = r.CikisYapmisMi ? "Evet" : "Hayır";
 
             var satirAraligi = ws.Range(satir, 1, satir, basliklar.Length);
             if (r.CikisYapmisBorcluMu)

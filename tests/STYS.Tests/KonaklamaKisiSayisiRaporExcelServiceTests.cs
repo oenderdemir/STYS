@@ -1,4 +1,6 @@
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Packaging;
+using C = DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using STYS.AccessScope;
@@ -68,6 +70,40 @@ public class KonaklamaKisiSayisiRaporExcelServiceTests
         // Header row 4, ilk yil satiri row 5; kolon 1=YIL, 2=101, 3=102, 4=TOPLAM SAYI.
         Assert.Equal(2026, ws.Cell(5, 1).GetValue<int>());
         Assert.Equal(5, ws.Cell(5, 4).GetValue<int>());
+    }
+
+    // Excel workbook'unda oda bazli grafik gomulu olmali; TOPLAM SAYI kolonu grafigin veri araligina dahil edilmemeli.
+    [Fact]
+    public async Task OlusturAsync_GrafikIcerenExcelUretir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(dbContext, odaId: 100, girisTarihi: new DateTime(2026, 5, 10), cikisTarihi: new DateTime(2026, 5, 12), ayrilanKisiSayisi: 2);
+        await SeedRezervasyonAsync(dbContext, odaId: 101, girisTarihi: new DateTime(2026, 5, 10), cikisTarihi: new DateTime(2026, 5, 12), ayrilanKisiSayisi: 3);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 5, 2026, 2026);
+
+        using var stream = new MemoryStream(bytes);
+        using var document = SpreadsheetDocument.Open(stream, false);
+        var worksheetPart = document.WorkbookPart!.WorksheetParts.Single();
+        var drawingsPart = worksheetPart.GetPartsOfType<DrawingsPart>().Single();
+        var chartParts = drawingsPart.ChartParts.ToList();
+
+        Assert.Equal(2, chartParts.Count);
+
+        var odaBazliChart = chartParts
+            .Select(x => x.ChartSpace.Descendants<C.Title>().FirstOrDefault())
+            .First(t => t != null && t.InnerText.Contains("Oda Bazlı Konaklayan Kişi Sayısı Karşılaştırması"))!
+            .Ancestors<C.ChartSpace>()
+            .First();
+
+        var seriDegerFormulleri = odaBazliChart.Descendants<C.BarChartSeries>()
+            .Select(s => s.Descendants<C.NumberReference>().Single().Descendants<C.Formula>().Single().Text)
+            .ToList();
+
+        Assert.NotEmpty(seriDegerFormulleri);
+        Assert.All(seriDegerFormulleri, f => Assert.DoesNotContain("$D$", f));
     }
 
     private static KonaklamaKisiSayisiRaporExcelService CreateExcelService(StysAppDbContext dbContext)

@@ -6283,3 +6283,29 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Konaklayan Kişi Sayısı Excel — Grafik Desteği
+
+### Yapılan İşler
+- Aylık Konaklayan Kişi Sayısı Excel çıktısına oda bazlı yıllık karşılaştırma grafiği eklendi.
+
+### Backend (rapor hesaplama mantığı, mevcut tablo ve endpoint yolu değişmedi)
+- ClosedXML grafik üretmeyi desteklemiyor; bu yüzden ClosedXML'in ürettiği paket, Microsoft'un resmi OpenXML SDK'si olan `DocumentFormat.OpenXml` (zaten ClosedXML'in dolaylı bağımlılığı, ek lisans riski yok) ile yeniden açılıp iki gerçek Excel chart part'ı gömülüyor.
+- **Grafik 1 — "Oda Bazlı Konaklayan Kişi Sayısı Karşılaştırması"**: Clustered Column Chart; X ekseni oda başlıkları (101 NOLU ODA, 102 NOLU ODA...), her yıl ayrı seri. **TOPLAM SAYI kolonu bu grafiğin veri aralığına dahil edilmedi.**
+- **Grafik 2 (opsiyonel) — "Yıllara Göre Toplam Konaklayan Kişi Sayısı"**: Column Chart; X ekseni yıllar, tek seri TOPLAM SAYI değerleri; ana grafiğin sağında konumlandırıldı.
+- Grafikler tablodan birkaç satır sonra (A sütunundan başlayarak) yerleştirildi; oda sayısı arttıkça grafik genişliği otomatik artıyor.
+- TOPLAM SAYI kolonu artık ayrıca hafif farklı arka plan rengiyle (`#DDEBF7`) vurgulanıyor; diğer stil (bold header/yıl/border) korundu.
+- `tests/STYS.Tests/KonaklamaKisiSayisiRaporExcelServiceTests.cs` — yeni `OlusturAsync_GrafikIcerenExcelUretir` testi: workbook içinde `DrawingsPart` ve 2 `ChartPart` bulunduğunu, oda bazlı grafiğin başlığını ve seri veri formüllerinin TOPLAM SAYI kolonunu (D sütunu) içermediğini OpenXML SDK ile doğrudan doğruluyor.
+- `backend/STYS.csproj` — `DocumentFormat.OpenXml 3.0.1` doğrudan paket referansı eklendi (ClosedXML'in zaten kullandığı sürüm).
+
+### Frontend
+- Değişiklik yok; Excel butonu aynı endpointi çağırıyor.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter KonaklamaKisiSayisi` başarılı — 12/12 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

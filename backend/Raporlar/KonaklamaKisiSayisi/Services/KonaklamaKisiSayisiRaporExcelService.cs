@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using A = DocumentFormat.OpenXml.Drawing;
 using C = DocumentFormat.OpenXml.Drawing.Charts;
@@ -182,10 +181,76 @@ public class KonaklamaKisiSayisiRaporExcelService : IKonaklamaKisiSayisiRaporExc
 
         drawingsPart.WorksheetDrawing = worksheetDrawing;
 
-        worksheetPart.Worksheet.Append(new Ssheet.Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+        AddOrReplaceWorksheetDrawing(worksheetPart, drawingsPart);
         worksheetPart.Worksheet.Save();
 
         document.Save();
+    }
+
+    // Drawing elementi, OpenXML worksheet semasinda belirli bir sirada olmak zorunda (SpreadsheetML CT_Worksheet).
+    // Worksheet.Append(...) ile en sona eklemek tableParts/extLst gibi elemanlardan sonraya dusurebilir ve
+    // Excel'in dosyayi "bozuk/onarilsin mi" uyarisiyla acmasina yol acar. Bu yuzden dogru pozisyona InsertBefore/
+    // InsertAfter ile ekleniyor.
+    private static void AddOrReplaceWorksheetDrawing(
+        WorksheetPart worksheetPart,
+        DrawingsPart drawingsPart)
+    {
+        var worksheet = worksheetPart.Worksheet;
+        var relationshipId = worksheetPart.GetIdOfPart(drawingsPart);
+
+        var existingDrawing = worksheet.Elements<Ssheet.Drawing>().FirstOrDefault();
+        if (existingDrawing is not null)
+        {
+            existingDrawing.Id = relationshipId;
+            return;
+        }
+
+        var drawing = new Ssheet.Drawing { Id = relationshipId };
+
+        // drawing, tableParts'tan once gelmeli.
+        var tableParts = worksheet.Elements<Ssheet.TableParts>().FirstOrDefault();
+        if (tableParts is not null)
+        {
+            worksheet.InsertBefore(drawing, tableParts);
+            return;
+        }
+
+        // drawing, legacyDrawing / legacyDrawingHeaderFooter / picture / oleObjects / controls / webPublishItems / extLst oncesinde olmali.
+        var sonrakiElemanTipleri = new[]
+        {
+            typeof(Ssheet.LegacyDrawing),
+            typeof(Ssheet.LegacyDrawingHeaderFooter),
+            typeof(Ssheet.Picture),
+            typeof(Ssheet.OleObjects),
+            typeof(Ssheet.Controls),
+            typeof(Ssheet.WebPublishItems),
+            typeof(Ssheet.ExtensionList)
+        };
+        var anchor = worksheet.ChildElements.FirstOrDefault(x => sonrakiElemanTipleri.Contains(x.GetType()));
+
+        if (anchor is not null)
+        {
+            worksheet.InsertBefore(drawing, anchor);
+            return;
+        }
+
+        // En guvenli fallback: HeaderFooter varsa ondan sonra ekle.
+        var headerFooter = worksheet.Elements<Ssheet.HeaderFooter>().FirstOrDefault();
+        if (headerFooter is not null)
+        {
+            worksheet.InsertAfter(drawing, headerFooter);
+            return;
+        }
+
+        // PageSetup varsa ondan sonra ekle.
+        var pageSetup = worksheet.Elements<Ssheet.PageSetup>().FirstOrDefault();
+        if (pageSetup is not null)
+        {
+            worksheet.InsertAfter(drawing, pageSetup);
+            return;
+        }
+
+        worksheet.Append(drawing);
     }
 
     private static C.ChartSpace BuildClusteredColumnChartSpace(

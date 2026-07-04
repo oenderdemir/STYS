@@ -6309,3 +6309,23 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Konaklayan Kişi Sayısı Excel — Bozuk Dosya Uyarısı Düzeltmesi
+
+### Yapılan İşler
+- Aylık Konaklayan Kişi Sayısı grafik içeren Excel çıktısında OpenXML drawing elementi şema sırasına uygun konuma taşındı; Excel'in dosya onarım uyarısı vermesine neden olabilecek paket yapısı düzeltildi.
+
+### Backend (rapor hesaplama mantığı, tablo düzeni, grafik içeriği ve endpoint yolu değişmedi)
+- Kök neden: `worksheetPart.Worksheet.Append(new Ssheet.Drawing {...})` `<drawing>` elementini worksheet XML'inin en sonuna (ör. `<tableParts>` sonrasına) ekliyordu; SpreadsheetML şeması `drawing`'in `tableParts`/`extLst` gibi elemanlardan önce gelmesini zorunlu kılıyor, bu da Excel'in dosyayı "onarılsın mı" uyarısıyla açmasına yol açıyordu.
+- `KonaklamaKisiSayisiRaporExcelService`'e yeni `AddOrReplaceWorksheetDrawing` helper'ı eklendi: mevcut bir `Drawing` varsa ilişki id'sini günceller (mükerrer eklemez); yoksa `TableParts` → `LegacyDrawing`/`LegacyDrawingHeaderFooter`/`Picture`/`OleObjects`/`Controls`/`WebPublishItems`/`ExtensionList` → `HeaderFooter` → `PageSetup` sırasına göre doğru konuma `InsertBefore`/`InsertAfter` ile ekler; hiçbiri yoksa en güvenli fallback olarak sona ekler.
+- İki grafik ("Oda Bazlı Konaklayan Kişi Sayısı Karşılaştırması" ve "Yıllara Göre Toplam Konaklayan Kişi Sayısı") ve TOPLAM SAYI kolonunun ana grafiğe dahil edilmemesi davranışı korundu.
+- `tests/STYS.Tests/KonaklamaKisiSayisiRaporExcelServiceTests.cs`: `OlusturAsync_GrafikliExcel_OpenXmlValidationHatasiUretmez` (OpenXmlValidator ile şema/sıra hatası olmadığını doğrular) ve `OlusturAsync_DrawingElementiTablePartsOncesindeYerAlir` (Drawing elementinin TableParts/ExtensionList'ten önce geldiğini doğrular) testleri eklendi.
+
+### Frontend
+- Değişiklik yok.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter KonaklamaKisiSayisi` başarılı — 14/14 geçti

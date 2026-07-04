@@ -1,5 +1,7 @@
 using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Validation;
 using C = DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -104,6 +106,70 @@ public class KonaklamaKisiSayisiRaporExcelServiceTests
 
         Assert.NotEmpty(seriDegerFormulleri);
         Assert.All(seriDegerFormulleri, f => Assert.DoesNotContain("$D$", f));
+    }
+
+    // Grafikli Excel, OpenXmlValidator ile dogrulandiginda sema sirasi/tutarlilik hatasi uretmemeli
+    // (drawing elementinin worksheet semasinda yanlis konuma eklenmesi Excel'in "onarilsin mi" uyarisina yol acar).
+    [Fact]
+    public async Task OlusturAsync_GrafikliExcel_OpenXmlValidationHatasiUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(dbContext, odaId: 100, girisTarihi: new DateTime(2026, 5, 10), cikisTarihi: new DateTime(2026, 5, 12), ayrilanKisiSayisi: 2);
+        await SeedRezervasyonAsync(dbContext, odaId: 101, girisTarihi: new DateTime(2026, 5, 10), cikisTarihi: new DateTime(2026, 5, 12), ayrilanKisiSayisi: 3);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 5, 2026, 2026);
+
+        using var stream = new MemoryStream(bytes);
+        using var document = SpreadsheetDocument.Open(stream, false);
+
+        var validator = new OpenXmlValidator();
+        var hatalar = validator.Validate(document).ToList();
+
+        // Sema-sirasi/tutarlilik ile ilgili olmayan uyumluluk uyarilari (ornegin ClosedXML'in
+        // urettigi bazi opsiyonel eklentiler) elenip; ozellikle worksheet cocuk eleman sirasiyla
+        // ilgili hatalarin bulunmadigi dogrulaniyor.
+        var siraIleIlgiliHatalar = hatalar
+            .Where(h => h.Description.Contains("sequence", StringComparison.OrdinalIgnoreCase)
+                || h.Description.Contains("invalid child", StringComparison.OrdinalIgnoreCase)
+                || h.Description.Contains("Drawing", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Empty(siraIleIlgiliHatalar);
+    }
+
+    // Worksheet icinde Drawing elementi, varsa TableParts elementinden once gelmeli (OpenXML CT_Worksheet sema sirasi).
+    [Fact]
+    public async Task OlusturAsync_DrawingElementiTablePartsOncesindeYerAlir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(dbContext, odaId: 100, girisTarihi: new DateTime(2026, 5, 10), cikisTarihi: new DateTime(2026, 5, 12), ayrilanKisiSayisi: 2);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 5, 2026, 2026);
+
+        using var stream = new MemoryStream(bytes);
+        using var document = SpreadsheetDocument.Open(stream, false);
+        var worksheetPart = document.WorkbookPart!.WorksheetParts.Single();
+
+        var cocukElemanlar = worksheetPart.Worksheet.ChildElements.ToList();
+        var drawingIndex = cocukElemanlar.FindIndex(x => x is Drawing);
+
+        Assert.True(drawingIndex >= 0, "Worksheet icinde Drawing elementi bulunamadi.");
+
+        var tablePartsIndex = cocukElemanlar.FindIndex(x => x is TableParts);
+        if (tablePartsIndex >= 0)
+        {
+            Assert.True(drawingIndex < tablePartsIndex, "Drawing elementi TableParts elementinden once gelmeli.");
+        }
+
+        var extensionListIndex = cocukElemanlar.FindIndex(x => x is ExtensionList);
+        if (extensionListIndex >= 0)
+        {
+            Assert.True(drawingIndex < extensionListIndex, "Drawing elementi ExtensionList elementinden once gelmeli.");
+        }
     }
 
     private static KonaklamaKisiSayisiRaporExcelService CreateExcelService(StysAppDbContext dbContext)

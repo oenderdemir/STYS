@@ -6178,3 +6178,29 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk Raporuna Tahsilat Bölümü Eklendi
+
+### Yapılan İşler
+- Aylık oda doluluk raporuna müşteri örneğindeki tahsilat bölümü eklendi; rapor ayı içindeki tahsilatlar DTO ve Excel çıktısında ayrı tablo/sheet olarak gösterildi.
+
+### Backend (endpoint yolu ve mevcut alanlar değişmedi)
+- Yeni `OdaDolulukTahsilatDto` (backend/Raporlar/Dto/): RezervasyonId, OdaId/OdaNo, OdemeTarihi, OdemeTutari, ParaBirimi, OdemeTipi, Aciklama, MisafirAdiSoyadi, KurumUnite, ReferansNo, Giriş/Çıkış tarihleri, MakbuzNo, OdemeYapan. `AylikOdaDolulukRaporDto.Tahsilatlar` listesi eklendi.
+- `OdaDolulukRaporService`: rapor ayı içinde ödeme tarihi olan, tesis/aktif/iptal-hariç filtresine uyan her ödeme kaydı için (rezervasyon başına birden fazla ödeme olabilir, mükerrer değildir) bir `OdaDolulukTahsilatDto` üretiliyor; toplamı `Ozet.AyIcindeTahsilEdilenTutar` ile birebir uyumlu (aynı filtre). MakbuzNo/KurumÜnite alanları için TODO not bırakıldı (entity'de henüz yok); OdemeYapan/MisafirAdiSoyadi maskele=true ise maskeleniyor.
+- `OdaDolulukRaporExcelService`: `BuildTarihSatirOdaKolonSheet` (müşteri formatı) matrisin birkaç satır altına "TAHSİLATLAR" başlıklı, PDF örneğindeki kolonlarla (ODA NUMARASI, MAKBUZ NO, ÖDEME YAPAN, ÜNİTESİ, TAHSİL EDİLEN) bir tablo ekliyor; tahsilat yoksa "Bu dönem için tahsilat kaydı bulunamadı." satırı gösteriliyor. Bu tablo sadece `matrisYonu=tarih-satir` görünümünde eklendi (oda-satir görünümü değişmedi). Yeni ayrı "Tahsilatlar" sheet'i (Oda No, Misafir/Ödeme Yapan, Ünite, Referans No, Giriş/Çıkış Tarihi, Ödeme Tipi, Tahsil Edilen, Para Birimi, Açıklama) eklendi — workbook artık Özet, Oda Planı, Tahsilatlar, Rezervasyon Listesi olmak üzere 4 sheet içeriyor.
+- Rezervasyon durumları Oda Planı hücrelerinde hâlâ sadece renkle gösteriliyor; metin/renk davranışı değişmedi.
+- `tests/STYS.Tests/OdaDolulukRaporServiceTests.cs`: ay içi/ay dışı ödeme ayrımı, Tahsilatlar-Özet toplam uyumu, maskeleme senaryoları eklendi.
+- `tests/STYS.Tests/OdaDolulukRaporExcelServiceTests.cs`: 4 sheet doğrulaması, Oda Planı'nda "TAHSİLATLAR" başlığı ve kolonları, tahsilat yokken/varken bilgi mesajı ve tutar kontrolü eklendi.
+
+### Frontend
+- Değişiklik yok; Excel butonu aynı çalışıyor.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 22/22 geçti (11 rapor + 11 excel)
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporExcel` başarılı — 11/11 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

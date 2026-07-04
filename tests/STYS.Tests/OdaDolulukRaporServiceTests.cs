@@ -233,6 +233,98 @@ public class OdaDolulukRaporServiceTests
         Assert.Contains(hucre.Cakismalar, c => c.MisafirAdiSoyadi == "Ö**** D****");
     }
 
+    // Rapor ayi icindeki odeme Tahsilatlar listesine gelmeli, ay disindaki odeme gelmemeli.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_TahsilatlarSadeceAyIcindekiOdemeleriIcerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        var rezervasyonId = await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 0m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+
+        await AddOdemeAsync(dbContext, rezervasyonId, new DateTime(2026, 6, 25), 100m);
+        await AddOdemeAsync(dbContext, rezervasyonId, new DateTime(2026, 7, 10), 200m);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: false);
+
+        var tahsilat = Assert.Single(rapor.Tahsilatlar);
+        Assert.Equal(200m, tahsilat.OdemeTutari);
+        Assert.Equal(new DateTime(2026, 7, 10), tahsilat.OdemeTarihi);
+        Assert.Equal("101", tahsilat.OdaNo);
+        Assert.Equal("Ali Veli", tahsilat.MisafirAdiSoyadi);
+        Assert.Equal("Ali Veli", tahsilat.OdemeYapan);
+    }
+
+    // Tahsilatlar toplami Ozet.AyIcindeTahsilEdilenTutar ile uyumlu olmali.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_TahsilatlarToplamiOzetIleUyumluOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        var rezervasyonId1 = await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 5),
+            cikisTarihi: new DateTime(2026, 7, 7),
+            toplamUcret: 300m,
+            odemeTutari: 0m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+        var rezervasyonId2 = await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 101,
+            girisTarihi: new DateTime(2026, 7, 15),
+            cikisTarihi: new DateTime(2026, 7, 17),
+            toplamUcret: 250m,
+            odemeTutari: 0m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ayşe Yılmaz");
+
+        await AddOdemeAsync(dbContext, rezervasyonId1, new DateTime(2026, 7, 5), 150m);
+        await AddOdemeAsync(dbContext, rezervasyonId2, new DateTime(2026, 7, 15), 250m);
+        await AddOdemeAsync(dbContext, rezervasyonId2, new DateTime(2026, 6, 1), 50m);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: false);
+
+        Assert.Equal(2, rapor.Tahsilatlar.Count);
+        Assert.Equal(rapor.Ozet.AyIcindeTahsilEdilenTutar, rapor.Tahsilatlar.Sum(x => x.OdemeTutari));
+    }
+
+    // maskele=true iken tahsilat listesindeki odeme yapan/misafir adi maskelenmeli.
+    [Fact]
+    public async Task GetAylikOdaDolulukRaporuAsync_MaskeleTrueIseTahsilatOdemeYapanMaskelenir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        var rezervasyonId = await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 0m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "ÖNDER DEMİR");
+
+        await AddOdemeAsync(dbContext, rezervasyonId, new DateTime(2026, 7, 10), 300m);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetAylikOdaDolulukRaporuAsync(1, 2026, 7, maskele: true);
+
+        var tahsilat = Assert.Single(rapor.Tahsilatlar);
+        Assert.Equal("Ö**** D****", tahsilat.MisafirAdiSoyadi);
+        Assert.Equal("Ö**** D****", tahsilat.OdemeYapan);
+    }
+
     private static OdaDolulukRaporService CreateService(StysAppDbContext dbContext)
     {
         return new OdaDolulukRaporService(

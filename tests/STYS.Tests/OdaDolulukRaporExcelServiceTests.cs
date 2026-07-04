@@ -18,9 +18,9 @@ namespace STYS.Tests;
 
 public class OdaDolulukRaporExcelServiceTests
 {
-    // Bos bir ay icin Excel binary uretimi bos donmemeli; workbook 3 sheet icermeli.
+    // Bos bir ay icin Excel binary uretimi bos donmemeli; workbook 4 sheet icermeli.
     [Fact]
-    public async Task OlusturAsync_BosAydaUcSheetliWorkbookUretilir()
+    public async Task OlusturAsync_BosAydaDortSheetliWorkbookUretilir()
     {
         await using var dbContext = CreateDbContext();
         await SeedOdaFixtureAsync(dbContext);
@@ -31,9 +31,10 @@ public class OdaDolulukRaporExcelServiceTests
         Assert.NotEmpty(bytes);
 
         using var workbook = new XLWorkbook(new MemoryStream(bytes));
-        Assert.Equal(3, workbook.Worksheets.Count);
+        Assert.Equal(4, workbook.Worksheets.Count);
         Assert.Contains(workbook.Worksheets, x => x.Name == "Özet");
         Assert.Contains(workbook.Worksheets, x => x.Name == "Oda Planı");
+        Assert.Contains(workbook.Worksheets, x => x.Name == "Tahsilatlar");
         Assert.Contains(workbook.Worksheets, x => x.Name == "Rezervasyon Listesi");
 
         var ozetSheet = workbook.Worksheet("Özet");
@@ -42,6 +43,74 @@ public class OdaDolulukRaporExcelServiceTests
         var listeSheet = workbook.Worksheet("Rezervasyon Listesi");
         Assert.Equal("Tarih", listeSheet.Cell(1, 1).GetString());
         Assert.Equal("Oda No", listeSheet.Cell(1, 2).GetString());
+    }
+
+    // Oda Plani sheet'inde matris altinda "TAHSİLATLAR" basligi olmali.
+    [Fact]
+    public async Task OlusturAsync_OdaPlaniSheetindeTahsilatlarBasligiBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+        var tumHucreler = odaPlani.CellsUsed().Select(c => c.GetString()).ToList();
+
+        Assert.Contains(tumHucreler, x => x == "TAHSİLATLAR");
+        Assert.Contains(tumHucreler, x => x == "ODA NUMARASI");
+        Assert.Contains(tumHucreler, x => x == "MAKBUZ NO");
+        Assert.Contains(tumHucreler, x => x == "ÖDEME YAPAN");
+        Assert.Contains(tumHucreler, x => x == "ÜNİTESİ");
+        Assert.Contains(tumHucreler, x => x == "TAHSİL EDİLEN");
+    }
+
+    // Tahsilat yoksa Oda Plani ve Tahsilatlar sheet'lerinde bilgi mesaji gorunmeli.
+    [Fact]
+    public async Task OlusturAsync_TahsilatYokIseBilgiMesajiGosterilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+        var tahsilatlar = workbook.Worksheet("Tahsilatlar");
+
+        Assert.Contains(odaPlani.CellsUsed().Select(c => c.GetString()), x => x == "Bu dönem için tahsilat kaydı bulunamadı.");
+        Assert.Contains(tahsilatlar.CellsUsed().Select(c => c.GetString()), x => x == "Bu dönem için tahsilat kaydı bulunamadı.");
+    }
+
+    // Tahsilat varsa Oda Plani ve Tahsilatlar sheet'lerinde tutar gorunmeli.
+    [Fact]
+    public async Task OlusturAsync_TahsilatVarsaTahsilEdilenAlaninaTutarYazilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 100,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var odaPlani = workbook.Worksheet("Oda Planı");
+        var tahsilatlar = workbook.Worksheet("Tahsilatlar");
+
+        Assert.Contains(odaPlani.CellsUsed().Select(c => c.GetString()), x => x.Contains("300,00"));
+        Assert.Contains(tahsilatlar.CellsUsed().Select(c => c.GetString()), x => x.Contains("300,00"));
+        Assert.Equal("Ali Veli", tahsilatlar.Cell(2, 2).GetString());
     }
 
     // matrisYonu verilmezse (null) Oda Plani sheet'i musteri formatinda (tarih-satir) uretilmeli.

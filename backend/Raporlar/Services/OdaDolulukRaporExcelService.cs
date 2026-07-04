@@ -49,6 +49,7 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
 
         BuildOzetSheet(workbook, rapor, ayAdi, maskele);
         BuildOdaPlaniSheet(workbook, rapor, ayAdi, yon);
+        BuildTahsilatlarSheet(workbook, rapor);
         BuildRezervasyonListesiSheet(workbook, rapor);
 
         using var ms = new MemoryStream();
@@ -231,12 +232,149 @@ public class OdaDolulukRaporExcelService : IOdaDolulukRaporExcelService
         tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
 
         BuildRenkLegend(ws, headerRow, sonKolon + 2);
+        BuildTahsilatTablosuOdaPlani(ws, rapor, sonSatir + 3);
 
         ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
         ws.PageSetup.PaperSize = XLPaperSize.A3Paper;
         ws.PageSetup.FitToPages(1, 0);
         ws.PageSetup.PrintAreas.Clear();
         ws.PageSetup.PrintAreas.Add(headerRow, 1, sonSatir, sonKolon);
+    }
+
+    // Musteri PDF ornegindeki gibi doluluk matrisinin altina sade bir tahsilat tablosu ekler.
+    private static void BuildTahsilatTablosuOdaPlani(IXLWorksheet ws, AylikOdaDolulukRaporDto rapor, int baseRow)
+    {
+        var baslikCell = ws.Cell(baseRow, 1);
+        baslikCell.Value = "TAHSİLATLAR";
+        baslikCell.Style.Font.Bold = true;
+        baslikCell.Style.Font.FontSize = 12;
+
+        var headerRow = baseRow + 1;
+        var basliklar = new[] { "ODA NUMARASI", "MAKBUZ NO", "ÖDEME YAPAN", "ÜNİTESİ", "TAHSİL EDİLEN" };
+        for (var i = 0; i < basliklar.Length; i++)
+        {
+            var cell = ws.Cell(headerRow, i + 1);
+            cell.Value = basliklar[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9D9D9");
+        }
+
+        var satir = headerRow + 1;
+        if (rapor.Tahsilatlar.Count == 0)
+        {
+            ws.Range(satir, 1, satir, basliklar.Length).Merge();
+            ws.Cell(satir, 1).Value = "Bu dönem için tahsilat kaydı bulunamadı.";
+            satir++;
+        }
+        else
+        {
+            foreach (var tahsilat in rapor.Tahsilatlar)
+            {
+                ws.Cell(satir, 1).Value = tahsilat.OdaNo ?? "-";
+                // TODO: RezervasyonOdeme entity'sine MakbuzNo alani eklendiginde buradan doldurulacak.
+                ws.Cell(satir, 2).Value = tahsilat.MakbuzNo ?? "-";
+                ws.Cell(satir, 3).Value = tahsilat.OdemeYapan ?? tahsilat.MisafirAdiSoyadi ?? "-";
+                ws.Cell(satir, 4).Value = tahsilat.KurumUnite ?? "-";
+
+                var tutarCell = ws.Cell(satir, 5);
+                tutarCell.Value = FormatPara(tahsilat.OdemeTutari, tahsilat.ParaBirimi);
+                tutarCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+
+                satir++;
+            }
+        }
+
+        var sonSatir = satir - 1;
+        var tabloAraligi = ws.Range(headerRow, 1, sonSatir, basliklar.Length);
+        tabloAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+    }
+
+    private static void BuildTahsilatlarSheet(XLWorkbook workbook, AylikOdaDolulukRaporDto rapor)
+    {
+        var ws = workbook.Worksheets.Add("Tahsilatlar");
+
+        var basliklar = new[]
+        {
+            "Oda No", "Misafir / Ödeme Yapan", "Ünite", "Referans No", "Giriş Tarihi", "Çıkış Tarihi",
+            "Ödeme Tipi", "Tahsil Edilen", "Para Birimi", "Açıklama"
+        };
+
+        for (var i = 0; i < basliklar.Length; i++)
+        {
+            var cell = ws.Cell(1, i + 1);
+            cell.Value = basliklar[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#D9E1F2");
+        }
+
+        var satir = 2;
+        if (rapor.Tahsilatlar.Count == 0)
+        {
+            ws.Range(satir, 1, satir, basliklar.Length).Merge();
+            ws.Cell(satir, 1).Value = "Bu dönem için tahsilat kaydı bulunamadı.";
+            satir++;
+        }
+        else
+        {
+            // TODO: RezervasyonOdeme detaylari (MakbuzNo, gercek OdemeYapan, OdemeTipi) rapor DTO'suna eklendiginde buradan doldurulacak.
+            foreach (var tahsilat in rapor.Tahsilatlar)
+            {
+                ws.Cell(satir, 1).Value = tahsilat.OdaNo ?? "-";
+                ws.Cell(satir, 2).Value = tahsilat.OdemeYapan ?? tahsilat.MisafirAdiSoyadi ?? "-";
+                ws.Cell(satir, 3).Value = tahsilat.KurumUnite ?? "-";
+                ws.Cell(satir, 4).Value = tahsilat.ReferansNo ?? "-";
+
+                var girisCell = ws.Cell(satir, 5);
+                if (tahsilat.GirisTarihi.HasValue)
+                {
+                    girisCell.Value = tahsilat.GirisTarihi.Value;
+                    girisCell.Style.DateFormat.Format = "dd.MM.yyyy";
+                }
+                else
+                {
+                    girisCell.Value = "-";
+                }
+
+                var cikisCell = ws.Cell(satir, 6);
+                if (tahsilat.CikisTarihi.HasValue)
+                {
+                    cikisCell.Value = tahsilat.CikisTarihi.Value;
+                    cikisCell.Style.DateFormat.Format = "dd.MM.yyyy";
+                }
+                else
+                {
+                    cikisCell.Value = "-";
+                }
+
+                ws.Cell(satir, 7).Value = tahsilat.OdemeTipi ?? "-";
+
+                var tutarCell = ws.Cell(satir, 8);
+                tutarCell.Value = FormatPara(tahsilat.OdemeTutari, tahsilat.ParaBirimi);
+                tutarCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+
+                ws.Cell(satir, 9).Value = tahsilat.ParaBirimi;
+                ws.Cell(satir, 10).Value = tahsilat.Aciklama ?? "-";
+
+                satir++;
+            }
+        }
+
+        var sonSatir = Math.Max(satir - 1, 1);
+
+        ws.Column(1).Width = 12;
+        ws.Column(2).Width = 26;
+        ws.Column(3).Width = 20;
+        ws.Column(4).Width = 16;
+        ws.Column(5).Width = 14;
+        ws.Column(6).Width = 14;
+        ws.Column(7).Width = 16;
+        ws.Column(8).Width = 16;
+        ws.Column(9).Width = 12;
+        ws.Column(10).Width = 24;
+
+        ws.SheetView.FreezeRows(1);
+        ws.Range(1, 1, sonSatir, basliklar.Length).SetAutoFilter();
     }
 
     private static void BuildRenkLegend(IXLWorksheet ws, int baseRow, int baseCol)

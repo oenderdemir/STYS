@@ -121,7 +121,7 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
             .ToDictionaryAsync(x => x.RezervasyonId, x => x.Toplam, cancellationToken);
 
         // B) Ay icinde tahsil edilen odeme: odeme tarihi rapor ayi araliginda olan, iptal olmayan rezervasyonlarin odemeleri.
-        var ayIcindeTahsilEdilenTutar = await _stysDbContext.RezervasyonOdemeler
+        var ayIcindeOdemeKayitlari = await _stysDbContext.RezervasyonOdemeler
             .AsNoTracking()
             .Where(o => o.OdemeTarihi >= ayBaslangic
                 && o.OdemeTarihi < ayBitisExclusive
@@ -129,7 +129,20 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
                 && o.Rezervasyon.TesisId == tesisId
                 && o.Rezervasyon.AktifMi
                 && o.Rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal)
-            .SumAsync(o => (decimal?)o.OdemeTutari, cancellationToken) ?? 0m;
+            .Select(o => new
+            {
+                o.RezervasyonId,
+                o.OdemeTarihi,
+                o.OdemeTutari,
+                o.ParaBirimi,
+                o.OdemeTipi,
+                o.Aciklama,
+                ReferansNo = o.Rezervasyon!.ReferansNo,
+                MisafirAdiSoyadi = o.Rezervasyon.MisafirAdiSoyadi
+            })
+            .ToListAsync(cancellationToken);
+
+        var ayIcindeTahsilEdilenTutar = ayIcindeOdemeKayitlari.Sum(x => x.OdemeTutari);
 
         var hucreKayitlari = new Dictionary<(int OdaId, DateTime Gun), List<SegmentOdaKaydi>>();
         foreach (var kayit in segmentKayitlari)
@@ -247,6 +260,38 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
             .Select(g => g.First())
             .ToList();
 
+        var odaNoById = odalar.ToDictionary(x => x.OdaId, x => x.OdaNo);
+        var rezervasyonBilgisiById = benzersizRezervasyonlar.ToDictionary(x => x.RezervasyonId);
+
+        var tahsilatlar = ayIcindeOdemeKayitlari
+            .OrderBy(x => x.OdemeTarihi)
+            .Select(o =>
+            {
+                rezervasyonBilgisiById.TryGetValue(o.RezervasyonId, out var bilgi);
+                var misafirAdi = maskele ? MaskeleAdSoyad(o.MisafirAdiSoyadi) : o.MisafirAdiSoyadi;
+
+                return new OdaDolulukTahsilatDto
+                {
+                    RezervasyonId = o.RezervasyonId,
+                    OdaId = bilgi?.OdaId,
+                    OdaNo = bilgi is not null ? odaNoById.GetValueOrDefault(bilgi.OdaId) : null,
+                    OdemeTarihi = o.OdemeTarihi,
+                    OdemeTutari = o.OdemeTutari,
+                    ParaBirimi = o.ParaBirimi,
+                    OdemeTipi = o.OdemeTipi,
+                    Aciklama = o.Aciklama,
+                    MisafirAdiSoyadi = misafirAdi,
+                    // TODO: Rezervasyon domaininde kurum/unite alani bulunmuyor; ileride eklendiginde burada doldurulmali.
+                    KurumUnite = null,
+                    ReferansNo = o.ReferansNo,
+                    GirisTarihi = bilgi?.SegmentBaslangicTarihi,
+                    CikisTarihi = bilgi?.SegmentBitisTarihi,
+                    MakbuzNo = null,
+                    OdemeYapan = misafirAdi
+                };
+            })
+            .ToList();
+
         var toplamOdaGunSayisi = odalar.Count * gunler.Count;
         var bosOdaGunSayisi = toplamOdaGunSayisi - doluOdaGunSayisi;
 
@@ -283,7 +328,8 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
             BitisTarihi = ayBitis,
             Odalar = odalar,
             Gunler = gunler,
-            Ozet = ozet
+            Ozet = ozet,
+            Tahsilatlar = tahsilatlar
         };
     }
 

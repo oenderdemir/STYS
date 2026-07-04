@@ -19,4 +19,6 @@ public class AylikOdaDolulukRaporDto
     public List<OdaDolulukGunDto> Gunler { get; set; } = [];
 
     public OdaDolulukOzetDto Ozet { get; set; } = new();
+
+    public List<OdaDolulukTahsilatDto> Tahsilatlar { get; set; } = [];
 }

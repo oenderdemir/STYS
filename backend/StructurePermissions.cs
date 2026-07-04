@@ -269,6 +269,12 @@ public static class StructurePermissions
         public const string View = "KonaklamaKisiSayisiRaporuYonetimi.View";
     }
 
+    public static class OdemeDurumuRaporuYonetimi
+    {
+        public const string Menu = "OdemeDurumuRaporuYonetimi.Menu";
+        public const string View = "OdemeDurumuRaporuYonetimi.View";
+    }
+
     public static class RestoranYonetimi
     {
         public const string Menu = "RestoranYonetimi.Menu";

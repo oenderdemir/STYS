@@ -32,6 +32,7 @@ using STYS.Muhasebe.DonemKapanis.Services;
 using STYS.MusteriMenu.Services;
 using STYS.OdaTemizlik.Services;
 using STYS.Raporlar.KonaklamaKisiSayisi.Services;
+using STYS.Raporlar.OdemeDurumu.Services;
 using STYS.Raporlar.Services;
 using STYS.Rezervasyonlar.Services;
 using STYS.Restoranlar.Services;
@@ -119,6 +120,8 @@ builder.Services.AddScoped<IOdaDolulukRaporExcelService, OdaDolulukRaporExcelSer
 builder.Services.AddScoped<IOdaDolulukRaporPdfService, OdaDolulukRaporPdfService>();
 builder.Services.AddScoped<IKonaklamaKisiSayisiRaporService, KonaklamaKisiSayisiRaporService>();
 builder.Services.AddScoped<IKonaklamaKisiSayisiRaporExcelService, KonaklamaKisiSayisiRaporExcelService>();
+builder.Services.AddScoped<IOdemeDurumuRaporService, OdemeDurumuRaporService>();
+builder.Services.AddScoped<IOdemeDurumuRaporExcelService, OdemeDurumuRaporExcelService>();
 builder.Services.AddScoped<IRestoranService, RestoranService>();
 builder.Services.AddScoped<IRestoranMasaService, RestoranMasaService>();
 builder.Services.AddScoped<IRestoranMenuKategoriService, RestoranMenuKategoriService>();

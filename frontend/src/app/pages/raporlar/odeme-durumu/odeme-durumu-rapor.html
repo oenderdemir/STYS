@@ -1,0 +1,142 @@
+<p-toast></p-toast>
+
+<div class="odeme-durumu-page">
+    <div class="sayfa-basligi">
+        <h1>Ödeme Durumu / Borçlu Rezervasyonlar</h1>
+        <p>Seçilen tarih aralığındaki rezervasyonların ödeme durumunu görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="baslangicPicker">Başlangıç Tarihi</label>
+                    <p-datepicker
+                        id="baslangicPicker"
+                        [(ngModel)]="selectedBaslangic"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="bitisPicker">Bitiş Tarihi</label>
+                    <p-datepicker
+                        id="bitisPicker"
+                        [(ngModel)]="selectedBitis"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="odemeDurumuSelect">Ödeme Durumu</label>
+                    <p-select
+                        id="odemeDurumuSelect"
+                        styleClass="odeme-durumu-select"
+                        [options]="odemeDurumuSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedOdemeDurumu"
+                    ></p-select>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Rezervasyon</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Borçlu Rezervasyon</span>
+                    <span class="ozet-deger">{{ rapor.ozet.borcluRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Çıkış Yapmış Borçlu</span>
+                    <span class="ozet-deger">{{ rapor.ozet.cikisYapmisBorcluRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Ücret</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamUcret | number: '1.2-2' }} {{ rapor.ozet.paraBirimi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Ödenen</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamOdenenTutar | number: '1.2-2' }} {{ rapor.ozet.paraBirimi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-vurgu">
+                    <span class="ozet-etiket">Toplam Kalan Borç</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKalanTutar | number: '1.2-2' }} {{ rapor.ozet.paraBirimi }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <p-card>
+            <p-table [value]="rapor.rezervasyonlar" [scrollable]="true" dataKey="rezervasyonId">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Referans No</th>
+                        <th>Misafir</th>
+                        <th>Giriş</th>
+                        <th>Çıkış</th>
+                        <th>Durum</th>
+                        <th>Oda(lar)</th>
+                        <th>Kişi</th>
+                        <th>Toplam Ücret</th>
+                        <th>Ödenen</th>
+                        <th>Kalan</th>
+                        <th>Ödeme Durumu</th>
+                        <th>Çıkış Yapmış mı</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-r>
+                    <tr [class.satir-borclu]="r.kalanTutar > 0" [class.satir-cikis-borclu]="r.cikisYapmisBorcluMu">
+                        <td>{{ r.referansNo }}</td>
+                        <td>{{ r.misafirAdiSoyadi }}</td>
+                        <td>{{ r.girisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.cikisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.rezervasyonDurumuLabel }}</td>
+                        <td>{{ r.odaNolari.join(', ') }}</td>
+                        <td>{{ r.kisiSayisi }}</td>
+                        <td>{{ r.toplamUcret | number: '1.2-2' }}</td>
+                        <td>{{ r.odenenTutar | number: '1.2-2' }}</td>
+                        <td>{{ r.kalanTutar | number: '1.2-2' }}</td>
+                        <td><p-tag [value]="r.odemeDurumuLabel" [severity]="odemeDurumuSeverity(r.odemeDurumu)"></p-tag></td>
+                        <td>{{ r.cikisYapmisMi ? 'Evet' : 'Hayır' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="12">Seçilen kriterlere uygun rezervasyon bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

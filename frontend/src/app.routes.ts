@@ -43,6 +43,7 @@ import { RezervasyonDashboard } from './app/pages/rezervasyon-dashboard/rezervas
 import { OdaRezervasyonTakvimi } from './app/pages/oda-rezervasyon-takvimi/oda-rezervasyon-takvimi';
 import { OdaDolulukAylikComponent } from './app/pages/raporlar/oda-doluluk-aylik/oda-doluluk-aylik';
 import { KonaklamaKisiSayisiRaporComponent } from './app/pages/raporlar/konaklama-kisi-sayisi/konaklama-kisi-sayisi-rapor';
+import { OdemeDurumuRaporComponent } from './app/pages/raporlar/odeme-durumu/odeme-durumu-rapor';
 import { RestoranYonetimi } from './app/pages/restoran-yonetimi/restoran-yonetimi';
 import { RestoranMasaYonetimi } from './app/pages/restoran-yonetimi/restoran-masa-yonetimi';
 import { RestoranMenuYonetimi } from './app/pages/restoran-yonetimi/restoran-menu-yonetimi';
@@ -148,6 +149,7 @@ export const appRoutes: Routes = [
             { path: 'oda-rezervasyon-takvimi', component: OdaRezervasyonTakvimi, data: { breadcrumb: ['Rezervasyon Yönetimi', 'Oda Rezervasyon Takvimi'] } },
             { path: 'raporlar/oda-doluluk-aylik', component: OdaDolulukAylikComponent, data: { breadcrumb: ['Raporlar', 'Aylık Oda Planı'] } },
             { path: 'raporlar/konaklama-kisi-sayisi', component: KonaklamaKisiSayisiRaporComponent, data: { breadcrumb: ['Raporlar', 'Aylık Konaklayan Kişi Sayısı'] } },
+            { path: 'raporlar/odeme-durumu', component: OdemeDurumuRaporComponent, data: { breadcrumb: ['Raporlar', 'Ödeme Durumu / Borçlu Rezervasyonlar'] } },
             { path: 'restoran-yonetimi', component: RestoranYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Restoran Yonetimi'] } },
             { path: 'restoran-kategori-havuzu', component: RestoranKategoriHavuzuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Kategori Havuzu'] } },
             { path: 'restoran-masa-yonetimi', component: RestoranMasaYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Masa Yonetimi'] } },

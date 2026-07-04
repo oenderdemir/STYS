@@ -6329,3 +6329,33 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 ### Backend
 - `dotnet build backend/STYS.csproj` başarılı — 0 error
 - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter KonaklamaKisiSayisi` başarılı — 14/14 geçti
+
+---
+
+## Ödeme Durumu / Borçlu Rezervasyonlar Raporu
+
+### Yapılan İşler
+- Ödeme Durumu / Borçlu Rezervasyonlar Raporu eklendi; rezervasyonların toplam ücret, ödenen tutar, kalan borç ve ödeme durumu ekran/Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor muhasebe modülü değildir; gider/kâr hesabı yapılmaz ve yeni muhasebe entity'si oluşturulmadı. Mevcut `Rezervasyon`, `RezervasyonOdeme`, `RezervasyonSegment` ve `RezervasyonSegmentOdaAtama` kayıtları üzerinden üretilir.
+- `backend/Raporlar/OdemeDurumu/` altında yeni bir dikey dilim oluşturuldu: `Dto/OdemeDurumuRaporDto.cs` (rapor, özet ve rezervasyon satırı DTO'ları), `Services/OdemeDurumuRaporService.cs`, `Services/OdemeDurumuRaporExcelService.cs`, `Controllers/OdemeDurumuRaporController.cs` (`GET api/raporlar/odeme-durumu` ve `GET api/raporlar/odeme-durumu/excel`).
+- Rezervasyon filtreleme: `tesisId`, `AktifMi`, `RezervasyonDurumu != Iptal` ve `GirisTarihi < bitisExclusive && CikisTarihi > baslangic` tarih aralığı çakışması ile yapılır.
+- Ödeme durumu sınıflandırması: `OdenenTutar <= 0` → `odemesi-yok`; `KalanTutar > 0` → `kismi-odendi`; aksi halde `tamamen-odendi`. `KalanTutar`, fazla ödeme durumunda 0'a sabitlenir (tamamen ödendi kabul edilir).
+- `CikisYapmisMi`: `RezervasyonDurumu == CheckOutTamamlandi` veya `CikisTarihi` bugünden önce ise true. `CikisYapmisBorcluMu`: çıkış yapmış ve kalan borcu olan rezervasyonlar.
+- `odemeDurumu` sorgu filtresi: `tumu, borclu, odemesi-yok, kismi-odendi, tamamen-odendi, cikis-yapmis-borclu` (varsayılan `borclu`); geçersiz değer `BaseException` 400 fırlatır.
+- Varsayılan sıralama: `CikisYapmisBorcluMu` azalan, `KalanTutar` azalan, `GirisTarihi` artan.
+- Excel çıktısı iki sayfadan oluşur: "Özet" (tesis, tarih aralığı, filtre, tüm özet sayıları/tutarları) ve "Rezervasyonlar" (14 kolon, koşullu satır renklendirme: kalan borç varsa açık sarı, çıkış yapmış borçlu ise açık kırmızı).
+- `StructurePermissions.OdemeDurumuRaporuYonetimi.Menu/.View` izinleri, `ErisimTeshisModulTanimlari.cs`'e `odeme-durumu-raporu` kaydı ve `20260705090000_AddOdemeDurumuRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Mevcut Aylık Oda Planı ve Aylık Konaklayan Kişi Sayısı raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/odeme-durumu/` altında yeni standalone Angular sayfası eklendi: tesis/tarih aralığı/ödeme durumu filtreleri, özet kartları, rezervasyon tablosu (durum etiketleri, borçlu/çıkış yapmış borçlu satır vurgusu) ve Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/odeme-durumu` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdemeDurumu` başarılı — 16/16 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

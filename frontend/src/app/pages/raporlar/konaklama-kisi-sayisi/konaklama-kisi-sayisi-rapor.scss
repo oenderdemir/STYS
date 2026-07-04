@@ -1,0 +1,119 @@
+.konaklama-kisi-sayisi-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.sayfa-basligi {
+    padding: 0.25rem 0.25rem 0.5rem;
+
+    h1 {
+        margin: 0 0 0.2rem;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--text-color-secondary);
+    }
+}
+
+.filtre-karti {
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.filtre-satiri {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.filtre-grubu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.25rem;
+}
+
+.filtre-ogesi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-color-secondary);
+    }
+
+    ::ng-deep .tesis-select {
+        width: 220px;
+    }
+
+    ::ng-deep .ay-select {
+        width: 140px;
+    }
+
+    ::ng-deep .yil-select {
+        width: 110px;
+    }
+}
+
+.aksiyon-grubu {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.rapor-baslik {
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+}
+
+.matris-scroll {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.matris-tablo {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+
+    th,
+    td {
+        border: 1px solid var(--surface-border);
+        padding: 0.5rem 0.75rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    th {
+        background: var(--surface-100);
+        font-weight: 700;
+    }
+
+    .yil-kolonu {
+        font-weight: 700;
+        min-width: 90px;
+    }
+
+    .oda-kolonu {
+        min-width: 130px;
+    }
+
+    .toplam-kolonu {
+        font-weight: 700;
+        background: var(--surface-50);
+        min-width: 120px;
+    }
+}

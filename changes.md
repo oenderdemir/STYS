@@ -6255,3 +6255,31 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 - `dotnet build backend/STYS.csproj` başarılı — 0 error
 - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporPdf` başarılı — 6/6 geçti
 - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 28/28 geçti
+
+---
+
+## Aylık Konaklayan Kişi Sayısı Raporu (Yeni Rapor)
+
+### Yapılan İşler
+- Aylık Konaklayan Kişi Sayısı raporu eklendi; seçilen ay için yıllara göre oda bazlı konaklayan kişi sayıları hesaplandı, ekran ve Excel çıktısı oluşturuldu.
+
+### Backend
+- Yeni klasör: `backend/Raporlar/KonaklamaKisiSayisi/{Dto,Services,Controllers}` — bu rapor muhasebe/gider raporu değildir, sadece mevcut Rezervasyon/RezervasyonSegment/RezervasyonSegmentOdaAtama verilerinden üretilir; yeni entity eklenmedi.
+- `KonaklamaKisiSayisiRaporDto` ve alt DTO'ları (`Odalar`, `Yillar` → her yıl satırı `Hucreler` + `ToplamKisiSayisi`).
+- `IKonaklamaKisiSayisiRaporService` / `KonaklamaKisiSayisiRaporService`: seçilen ay+yıl aralığı (maks. 10 yıl) için her yılda o ayla çakışan segmentlerden oda bazlı `AyrilanKisiSayisi` topluyor; **RezervasyonId+OdaId tekil anahtarıyla** mükerrer segment sayımını engelliyor (kişi/gece değil, kişi sayısı raporu — koda yorum olarak eklendi); iptal rezervasyonlar ve pasif oda/bina/oda tipi hariç tutuluyor; `EnsureCanAccessTesisAsync` aynı Aylık Oda Planı mantığıyla tesis erişimini kontrol ediyor.
+- `IKonaklamaKisiSayisiRaporExcelService` / `KonaklamaKisiSayisiRaporExcelService`: ClosedXML ile "Konaklama Kişi Sayısı" sheet'i — ortalanmış başlık, YIL + oda kolonları + TOPLAM SAYI, bold header/yıl/toplam hücreleri, border'lı sade tablo.
+- `GET /api/raporlar/konaklama-kisi-sayisi` ve `GET /api/raporlar/konaklama-kisi-sayisi/excel` — `tesisId/ay/baslangicYil/bitisYil` validasyonlu (ay 1-12, yıl 2000-2100, başlangıç<=bitiş, aralık ≤10 yıl).
+- Yeni izinler: `KonaklamaKisiSayisiRaporuYonetimi.Menu` / `.View`; `AddKonaklamaKisiSayisiRaporuPermissionsAndMenu` migration'ı ile Admin/Tesis Yöneticisi/Resepsiyonist gruplarına atanıp "Raporlar > Aylık Konaklayan Kişi Sayısı" menü kaydı eklendi.
+- `tests/STYS.Tests/KonaklamaKisiSayisiRaporServiceTests.cs` (8 senaryo: boş ay, 3 gece tek sayım, ay dışına taşma, iptal hariç, mükerrer segment, farklı yıllar, toplam tutarlılığı, başlık formatı) ve `KonaklamaKisiSayisiRaporExcelServiceTests.cs` (3 senaryo) eklendi — Excel testi geliştirirken serviste "TOPLAM SAYI" kolonunun bir hücre kaydırmalı (off-by-one) yanlış konumlandığı gerçek bir hata bulunup düzeltildi.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/konaklama-kisi-sayisi/` — `KonaklamaKisiSayisiRaporComponent`, servis, DTO'lar, HTML/SCSS; filtreler (Tesis, Ay, Başlangıç/Bitiş Yılı), Rapor Getir/Excel butonları, yatay scroll destekli Yıl x Oda tablosu.
+- `frontend/src/app.routes.ts` — `/raporlar/konaklama-kisi-sayisi` route eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter KonaklamaKisiSayisi` başarılı — 11/11 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 28/28 geçti (regresyon yok)
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

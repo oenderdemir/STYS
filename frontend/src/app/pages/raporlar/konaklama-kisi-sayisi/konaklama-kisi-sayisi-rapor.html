@@ -1,0 +1,100 @@
+<p-toast></p-toast>
+
+<div class="konaklama-kisi-sayisi-page">
+    <div class="sayfa-basligi">
+        <h1>Aylık Konaklayan Kişi Sayısı</h1>
+        <p>Seçilen ay için yıllara göre oda bazlı konaklayan kişi sayılarını karşılaştırın.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="aySelect">Ay</label>
+                    <p-select
+                        id="aySelect"
+                        styleClass="ay-select"
+                        [options]="aySecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedAy"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="baslangicYilSelect">Başlangıç Yılı</label>
+                    <p-select
+                        id="baslangicYilSelect"
+                        styleClass="yil-select"
+                        [options]="yilSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedBaslangicYil"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="bitisYilSelect">Bitiş Yılı</label>
+                    <p-select
+                        id="bitisYilSelect"
+                        styleClass="yil-select"
+                        [options]="yilSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedBitisYil"
+                    ></p-select>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card>
+            <h2 class="rapor-baslik">{{ rapor.baslik }}</h2>
+
+            <div class="matris-scroll">
+                <table class="matris-tablo">
+                    <thead>
+                        <tr>
+                            <th class="yil-kolonu">YIL</th>
+                            @for (oda of rapor.odalar; track oda.odaId) {
+                                <th class="oda-kolonu">{{ oda.odaNo }} NOLU ODA</th>
+                            }
+                            <th class="toplam-kolonu">TOPLAM SAYI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (yilSatiri of rapor.yillar; track yilSatiri.yil) {
+                            <tr>
+                                <td class="yil-kolonu">{{ yilSatiri.yil }}</td>
+                                @for (hucre of yilSatiri.hucreler; track hucre.odaId) {
+                                    <td class="oda-kolonu">{{ hucre.kisiSayisi }}</td>
+                                }
+                                <td class="toplam-kolonu">{{ yilSatiri.toplamKisiSayisi }}</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </p-card>
+    }
+</div>

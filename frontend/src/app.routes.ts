@@ -42,6 +42,7 @@ import { RezervasyonYonetimi } from './app/pages/rezervasyon-yonetimi/rezervasyo
 import { RezervasyonDashboard } from './app/pages/rezervasyon-dashboard/rezervasyon-dashboard';
 import { OdaRezervasyonTakvimi } from './app/pages/oda-rezervasyon-takvimi/oda-rezervasyon-takvimi';
 import { OdaDolulukAylikComponent } from './app/pages/raporlar/oda-doluluk-aylik/oda-doluluk-aylik';
+import { KonaklamaKisiSayisiRaporComponent } from './app/pages/raporlar/konaklama-kisi-sayisi/konaklama-kisi-sayisi-rapor';
 import { RestoranYonetimi } from './app/pages/restoran-yonetimi/restoran-yonetimi';
 import { RestoranMasaYonetimi } from './app/pages/restoran-yonetimi/restoran-masa-yonetimi';
 import { RestoranMenuYonetimi } from './app/pages/restoran-yonetimi/restoran-menu-yonetimi';
@@ -146,6 +147,7 @@ export const appRoutes: Routes = [
             { path: 'rezervasyon-dashboard', component: RezervasyonDashboard, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Dashboard'] } },
             { path: 'oda-rezervasyon-takvimi', component: OdaRezervasyonTakvimi, data: { breadcrumb: ['Rezervasyon Yönetimi', 'Oda Rezervasyon Takvimi'], permissions: ['OdaRezervasyonTakvimiYonetimi.View'] } },
             { path: 'raporlar/oda-doluluk-aylik', component: OdaDolulukAylikComponent, data: { breadcrumb: ['Raporlar', 'Aylık Oda Planı'], permissions: ['OdaDolulukRaporuYonetimi.View'] } },
+            { path: 'raporlar/konaklama-kisi-sayisi', component: KonaklamaKisiSayisiRaporComponent, data: { breadcrumb: ['Raporlar', 'Aylık Konaklayan Kişi Sayısı'], permissions: ['KonaklamaKisiSayisiRaporuYonetimi.View'] } },
             { path: 'restoran-yonetimi', component: RestoranYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Restoran Yonetimi'] } },
             { path: 'restoran-kategori-havuzu', component: RestoranKategoriHavuzuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Kategori Havuzu'] } },
             { path: 'restoran-masa-yonetimi', component: RestoranMasaYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Masa Yonetimi'] } },

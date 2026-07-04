@@ -6235,3 +6235,23 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Aylık Oda Doluluk PDF — Çok Sayfalı Matriste Kolon Genişliği Sabitleme
+
+### Yapılan İşler
+- Aylık oda doluluk PDF çıktısında çok sayfalı oda matrislerinde tarih, gün ve oda kolon genişlikleri sabitlendi; son sayfada az oda kalsa bile tablo şablonu korunur hale getirildi.
+
+### Backend (endpoint ve diğer sayfalar değişmedi)
+- `OdaDolulukRaporPdfService.AddOdaPlaniTablosu`: kolon genişlik oranları artık her sayfada o sayfadaki gerçek oda sayısına göre değil, sabit `OdaSutunSayfaLimiti` (8) kadar oda kolonu varsayılarak hesaplanıyor. Önceki haliyle son sayfada (ör. 9 odalık bir ayda 2. sayfada tek kalan 109 no'lu oda) TARİH/GÜN/oda kolonları orantısal (percent-based) genişlik paylaşımı yüzünden önceki sayfalardan belirgin şekilde farklı görünüyordu — kök neden buydu.
+- Düzeltme: her matris sayfası artık TARİH + GÜN + tam 8 oda-kolonu şablonuyla çiziliyor; o sayfada gerçek oda sayısı 8'den azsa kalan slotlar boş header (yeşil arka plan, metinsiz) ve boş hücre (beyaz, border korunur) olarak dolduruluyor. Böylece kolon genişlikleri sayfadan sayfaya değişmiyor.
+- `tests/STYS.Tests/OdaDolulukRaporPdfServiceTests.cs`: 9 odalı (8+1) sınır senaryosu için yeni test eklendi — ikinci sayfada tek oda kalan durumda PDF üretiminin hatasız ve boş dönmediği doğrulanıyor.
+
+### Frontend
+- Değişiklik yok.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRaporPdf` başarılı — 6/6 geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaDolulukRapor` başarılı — 28/28 geçti

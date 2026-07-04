@@ -210,15 +210,20 @@ public class OdaDolulukRaporPdfService : IOdaDolulukRaporPdfService
         PdfFont regularFont,
         bool turkceDestekli)
     {
+        // Kolon sablonu her sayfada sabit kalsin: TARİH + GÜN + tam OdaSutunSayfaLimiti kadar oda kolonu.
+        // Son sayfada oda sayisi azsa bile kalan slotlar bos kolon olarak cizilir, boylece TARİH/GÜN/oda
+        // genislikleri sayfadan sayfaya degismez.
         var kolonGenislikleri = new List<float> { 1.6f, 1.3f };
-        kolonGenislikleri.AddRange(odaGrubu.Select(_ => 1f));
+        kolonGenislikleri.AddRange(Enumerable.Repeat(1f, OdaSutunSayfaLimiti));
         var table = new Table(UnitValue.CreatePercentArray(kolonGenislikleri.ToArray())).UseAllAvailableWidth();
 
         table.AddHeaderCell(HeaderHucre("TARİH", boldFont, turkceDestekli));
         table.AddHeaderCell(HeaderHucre("GÜN", boldFont, turkceDestekli));
-        foreach (var oda in odaGrubu)
+        for (var slot = 0; slot < OdaSutunSayfaLimiti; slot++)
         {
-            table.AddHeaderCell(HeaderHucre($"{oda.OdaNo} NO'LU ODA", boldFont, turkceDestekli));
+            table.AddHeaderCell(slot < odaGrubu.Count
+                ? HeaderHucre($"{odaGrubu[slot].OdaNo} NO'LU ODA", boldFont, turkceDestekli)
+                : BosHeaderHucre());
         }
 
         foreach (var gun in rapor.Gunler)
@@ -232,8 +237,15 @@ public class OdaDolulukRaporPdfService : IOdaDolulukRaporPdfService
                 .SetBorder(new SolidBorder(0.5f))
                 .SetPadding(2));
 
-            foreach (var oda in odaGrubu)
+            for (var slot = 0; slot < OdaSutunSayfaLimiti; slot++)
             {
+                if (slot >= odaGrubu.Count)
+                {
+                    table.AddCell(new Cell().SetBorder(new SolidBorder(0.5f)).SetPadding(2).SetBackgroundColor(RenkBos));
+                    continue;
+                }
+
+                var oda = odaGrubu[slot];
                 var odaIndex = rapor.Odalar.FindIndex(x => x.OdaId == oda.OdaId);
                 var hucre = gun.Hucreler[odaIndex];
 
@@ -257,6 +269,13 @@ public class OdaDolulukRaporPdfService : IOdaDolulukRaporPdfService
         }
 
         document.Add(table);
+    }
+
+    private static Cell BosHeaderHucre()
+    {
+        return new Cell()
+            .SetBackgroundColor(RenkHeader)
+            .SetBorder(new SolidBorder(0.5f));
     }
 
     private static void AddTahsilatlarBolumu(

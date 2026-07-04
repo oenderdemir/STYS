@@ -90,6 +90,29 @@ public class OdaDolulukRaporPdfServiceTests
         Assert.Null(exception);
     }
 
+    // 9 oda varsa (8+1) ikinci sayfada tek oda kalir; bu sinir senaryosunda da PDF uretimi hata vermemeli
+    // ve rapor sabit sayfa-basi kolon sablonuyla (bos oda kolonlariyla) uretilebilmelidir.
+    [Fact]
+    public async Task OlusturAsync_DokuzOdaIkinciSayfadaTekOdaKalinca_HataVermez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext, odaSayisi: 9);
+        await SeedRezervasyonAsync(
+            dbContext,
+            odaId: 108,
+            girisTarihi: new DateTime(2026, 7, 10),
+            cikisTarihi: new DateTime(2026, 7, 13),
+            toplamUcret: 300m,
+            odemeTutari: 300m,
+            rezervasyonDurumu: RezervasyonDurumlari.Onayli,
+            misafirAdiSoyadi: "Ali Veli");
+
+        var service = CreatePdfService(dbContext);
+        var bytes = await service.OlusturAsync(1, 2026, 7, maskele: false);
+
+        Assert.NotEmpty(bytes);
+    }
+
     // Turkce karakter iceren misafir adiyla PDF uretimi hata vermemeli.
     [Fact]
     public async Task OlusturAsync_TurkceKarakterliMisafirAdiIleHataVermez()

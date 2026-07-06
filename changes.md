@@ -6579,3 +6579,25 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Ortalama Konaklama Süresi Raporu — Doğruluk ve Tutarlılık Düzeltmeleri
+
+### Yapılan İşler
+- Ortalama Konaklama Süresi Raporu soft-delete rezervasyon filtresi açık hale getirildi; oda tipi filtresi uygulandığında rezervasyon satırındaki oda/oda tipi listeleri filtreyle uyumlu gösterildi.
+
+### Backend
+- `OrtalamaKonaklamaSuresiRaporService`'teki rezervasyon sorgusuna diğer raporlarla tutarlılık için açık `!r.IsDeleted` filtresi eklendi (global query filter zaten aynı sonucu sağlıyordu, ancak defense-in-depth ve okunabilirlik için diğer raporlardaki gibi açıkça belirtildi).
+- `odaTipiId` filtresi verildiğinde rezervasyon DTO'sundaki `OdaNolari` ve `OdaTipleri` artık yalnızca bu oda tipine ait segment/oda atamalarından hesaplanıyor; önceden rezervasyonun dönem içinde kullandığı tüm oda tiplerinden geliyordu. `odaTipiId` verilmediğinde önceki davranış (tüm oda tipleri) korunuyor.
+- Mevcut endpoint, permission ve ana gece sayısı hesaplama mantığı değişmedi.
+
+### Frontend
+- Değişiklik yok.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OrtalamaKonaklamaSuresi` başarılı — 22/22 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

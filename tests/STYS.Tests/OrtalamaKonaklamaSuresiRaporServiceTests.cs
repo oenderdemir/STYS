@@ -80,6 +80,23 @@ public class OrtalamaKonaklamaSuresiRaporServiceTests
         Assert.Empty(rapor.Rezervasyonlar);
     }
 
+    // Silinmis (soft-delete) rezervasyon rapora dahil edilmez.
+    [Fact]
+    public async Task GetRaporAsync_SilinmisRezervasyonDahilEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        var (rezervasyon, _, _) = await SeedRezervasyonDetayliAsync(dbContext, odaId: 100, girisTarihi: new DateTime(2026, 7, 1), cikisTarihi: new DateTime(2026, 7, 3));
+
+        rezervasyon.IsDeleted = true;
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, RaporBaslangic, RaporBitis);
+
+        Assert.Empty(rapor.Rezervasyonlar);
+    }
+
     // Silinmis segment/oda atamasi oda tipi filtresinde dikkate alinmaz.
     [Fact]
     public async Task GetRaporAsync_SilinmisOdaAtamasiOdaTipiFiltresindeDikkateAlinmaz()
@@ -111,6 +128,36 @@ public class OrtalamaKonaklamaSuresiRaporServiceTests
 
         var rezervasyon = Assert.Single(rapor.Rezervasyonlar);
         Assert.Equal("REF-SUIT", rezervasyon.ReferansNo);
+    }
+
+    // odaTipiId filtresi verildiginde rezervasyon DTO'sundaki OdaTipleri sadece filtrelenen oda tipini icerir.
+    [Fact]
+    public async Task GetRaporAsync_OdaTipiIdFiltresiVerildiginde_OdaTipleriSadeceFiltrelenenOdaTipiniIcerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonIkiOdaTipindeAsync(dbContext, girisTarihi: new DateTime(2026, 7, 1), cikisTarihi: new DateTime(2026, 7, 3));
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, RaporBaslangic, RaporBitis, odaTipiId: 20);
+
+        var rezervasyon = Assert.Single(rapor.Rezervasyonlar);
+        Assert.Equal(["Standart"], rezervasyon.OdaTipleri);
+    }
+
+    // odaTipiId filtresi verildiginde OdaNolari sadece filtrelenen oda tipine ait oda numaralarini icerir.
+    [Fact]
+    public async Task GetRaporAsync_OdaTipiIdFiltresiVerildiginde_OdaNolariSadeceFiltrelenenOdaTipineAitOdalariIcerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonIkiOdaTipindeAsync(dbContext, girisTarihi: new DateTime(2026, 7, 1), cikisTarihi: new DateTime(2026, 7, 3));
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, RaporBaslangic, RaporBitis, odaTipiId: 21);
+
+        var rezervasyon = Assert.Single(rapor.Rezervasyonlar);
+        Assert.Equal(["201"], rezervasyon.OdaNolari);
     }
 
     // 1-2 gece kisa konaklama olur.
@@ -347,6 +394,75 @@ public class OrtalamaKonaklamaSuresiRaporServiceTests
         await dbContext.SaveChangesAsync();
 
         return (rezervasyon, segment, atama);
+    }
+
+    // Tek rezervasyon, secilen aralikla cakisan iki ayri segmentte iki farkli oda tipine (Standart/Suit) atanir.
+    private static async Task<Rezervasyon> SeedRezervasyonIkiOdaTipindeAsync(
+        StysAppDbContext dbContext,
+        DateTime girisTarihi,
+        DateTime cikisTarihi)
+    {
+        var ortaTarih = girisTarihi.AddDays(1);
+
+        var rezervasyon = new Rezervasyon
+        {
+            ReferansNo = $"REF-{Guid.NewGuid():N}"[..12],
+            TesisId = 1,
+            KisiSayisi = 2,
+            GirisTarihi = girisTarihi,
+            CikisTarihi = cikisTarihi,
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            MisafirAdiSoyadi = "Test Misafir",
+            MisafirTelefon = "5550000000",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        };
+        dbContext.Rezervasyonlar.Add(rezervasyon);
+        await dbContext.SaveChangesAsync();
+
+        var segment1 = new RezervasyonSegment
+        {
+            RezervasyonId = rezervasyon.Id,
+            SegmentSirasi = 0,
+            BaslangicTarihi = girisTarihi,
+            BitisTarihi = ortaTarih
+        };
+        var segment2 = new RezervasyonSegment
+        {
+            RezervasyonId = rezervasyon.Id,
+            SegmentSirasi = 1,
+            BaslangicTarihi = ortaTarih,
+            BitisTarihi = cikisTarihi
+        };
+        dbContext.RezervasyonSegmentleri.AddRange(segment1, segment2);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.RezervasyonSegmentOdaAtamalari.AddRange(
+            new RezervasyonSegmentOdaAtama
+            {
+                RezervasyonSegmentId = segment1.Id,
+                OdaId = 100,
+                AyrilanKisiSayisi = 2,
+                OdaNoSnapshot = "101",
+                BinaAdiSnapshot = "Bina-1",
+                OdaTipiAdiSnapshot = "Standart",
+                KapasiteSnapshot = 2
+            },
+            new RezervasyonSegmentOdaAtama
+            {
+                RezervasyonSegmentId = segment2.Id,
+                OdaId = 101,
+                AyrilanKisiSayisi = 2,
+                OdaNoSnapshot = "201",
+                BinaAdiSnapshot = "Bina-1",
+                OdaTipiAdiSnapshot = "Suit",
+                KapasiteSnapshot = 4
+            });
+        await dbContext.SaveChangesAsync();
+
+        return rezervasyon;
     }
 
     private sealed class FakeUserAccessScopeService : IUserAccessScopeService

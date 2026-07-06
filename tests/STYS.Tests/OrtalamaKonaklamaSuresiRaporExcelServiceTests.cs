@@ -126,6 +126,25 @@ public class OrtalamaKonaklamaSuresiRaporExcelServiceTests
         Assert.True(rezervasyonlarWs.AutoFilter.IsEnabled);
     }
 
+    // odaTipiId filtresiyle Excel uretildiginde Rezervasyonlar sheetindeki Oda Tipi(leri) kolonu
+    // sadece filtrelenen oda tipini gostermeli (rezervasyon iki farkli oda tipine gecmis olsa bile).
+    [Fact]
+    public async Task OlusturAsync_OdaTipiIdFiltresiyleRezervasyonlarSheetiOdaTipleriKolonuSadeceFiltrelenenOdaTipiniGosterir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+        await SeedRezervasyonIkiOdaTipindeAsync(dbContext, girisTarihi: new DateTime(2026, 7, 1), cikisTarihi: new DateTime(2026, 7, 3), referansNo: "REF-IKI-TIP");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, RaporBaslangic, RaporBitis, odaTipiId: 20);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Rezervasyonlar");
+        var satir = ws.RowsUsed().Skip(1).Single(r => r.Cell(1).GetString() == "REF-IKI-TIP");
+
+        Assert.Equal("Standart", satir.Cell(8).GetString());
+    }
+
     private static OrtalamaKonaklamaSuresiRaporExcelService CreateExcelService(StysAppDbContext dbContext)
     {
         var raporService = new OrtalamaKonaklamaSuresiRaporService(
@@ -182,8 +201,20 @@ public class OrtalamaKonaklamaSuresiRaporExcelServiceTests
             AktifMi = true
         });
 
+        dbContext.OdaTipleri.Add(new OdaTipi
+        {
+            Id = 21,
+            TesisId = 1,
+            OdaSinifiId = 1,
+            Ad = "Suit",
+            Kapasite = 4,
+            PaylasimliMi = false,
+            AktifMi = true
+        });
+
         dbContext.Odalar.Add(new Oda { Id = 100, OdaNo = "101", BinaId = 10, TesisOdaTipiId = 20, KatNo = 1, AktifMi = true });
         dbContext.Odalar.Add(new Oda { Id = 101, OdaNo = "102", BinaId = 10, TesisOdaTipiId = 20, KatNo = 1, AktifMi = true });
+        dbContext.Odalar.Add(new Oda { Id = 102, OdaNo = "201", BinaId = 10, TesisOdaTipiId = 21, KatNo = 2, AktifMi = true });
 
         await dbContext.SaveChangesAsync();
     }
@@ -233,6 +264,74 @@ public class OrtalamaKonaklamaSuresiRaporExcelServiceTests
             OdaTipiAdiSnapshot = "Standart",
             KapasiteSnapshot = 2
         });
+        await dbContext.SaveChangesAsync();
+    }
+
+    // Tek rezervasyon, secilen aralikla cakisan iki ayri segmentte iki farkli oda tipine (Standart/Suit) atanir.
+    private static async Task SeedRezervasyonIkiOdaTipindeAsync(
+        StysAppDbContext dbContext,
+        DateTime girisTarihi,
+        DateTime cikisTarihi,
+        string? referansNo = null)
+    {
+        var ortaTarih = girisTarihi.AddDays(1);
+
+        var rezervasyon = new Rezervasyon
+        {
+            ReferansNo = referansNo ?? $"REF-{Guid.NewGuid():N}"[..12],
+            TesisId = 1,
+            KisiSayisi = 2,
+            GirisTarihi = girisTarihi,
+            CikisTarihi = cikisTarihi,
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            MisafirAdiSoyadi = "Test Misafir",
+            MisafirTelefon = "5550000000",
+            RezervasyonDurumu = RezervasyonDurumlari.Onayli,
+            AktifMi = true
+        };
+        dbContext.Rezervasyonlar.Add(rezervasyon);
+        await dbContext.SaveChangesAsync();
+
+        var segment1 = new RezervasyonSegment
+        {
+            RezervasyonId = rezervasyon.Id,
+            SegmentSirasi = 0,
+            BaslangicTarihi = girisTarihi,
+            BitisTarihi = ortaTarih
+        };
+        var segment2 = new RezervasyonSegment
+        {
+            RezervasyonId = rezervasyon.Id,
+            SegmentSirasi = 1,
+            BaslangicTarihi = ortaTarih,
+            BitisTarihi = cikisTarihi
+        };
+        dbContext.RezervasyonSegmentleri.AddRange(segment1, segment2);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.RezervasyonSegmentOdaAtamalari.AddRange(
+            new RezervasyonSegmentOdaAtama
+            {
+                RezervasyonSegmentId = segment1.Id,
+                OdaId = 100,
+                AyrilanKisiSayisi = 2,
+                OdaNoSnapshot = "101",
+                BinaAdiSnapshot = "Bina-1",
+                OdaTipiAdiSnapshot = "Standart",
+                KapasiteSnapshot = 2
+            },
+            new RezervasyonSegmentOdaAtama
+            {
+                RezervasyonSegmentId = segment2.Id,
+                OdaId = 102,
+                AyrilanKisiSayisi = 2,
+                OdaNoSnapshot = "201",
+                BinaAdiSnapshot = "Bina-1",
+                OdaTipiAdiSnapshot = "Suit",
+                KapasiteSnapshot = 4
+            });
         await dbContext.SaveChangesAsync();
     }
 

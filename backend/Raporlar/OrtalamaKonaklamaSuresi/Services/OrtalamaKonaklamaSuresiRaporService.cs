@@ -83,7 +83,8 @@ public class OrtalamaKonaklamaSuresiRaporService : IOrtalamaKonaklamaSuresiRapor
 
         var rezervasyonlar = await _stysDbContext.Rezervasyonlar
             .AsNoTracking()
-            .Where(r => r.TesisId == tesisId
+            .Where(r => !r.IsDeleted
+                && r.TesisId == tesisId
                 && r.AktifMi
                 && r.RezervasyonDurumu != RezervasyonDurumlari.Iptal
                 && r.GirisTarihi < bitisGunExclusive
@@ -172,6 +173,14 @@ public class OrtalamaKonaklamaSuresiRaporService : IOrtalamaKonaklamaSuresiRapor
             }
 
             var segmentKayitlari = segmentOdaByRezervasyonId.GetValueOrDefault(r.Id, []);
+            if (odaTipiId.HasValue)
+            {
+                // odaTipiId filtresi verildiginde rezervasyon satirindaki oda/oda tipi listeleri de
+                // sadece bu oda tipine ait segment/oda atamalarini yansitmali.
+                segmentKayitlari = segmentKayitlari
+                    .Where(x => x.OdaTipiId == odaTipiId.Value)
+                    .ToList();
+            }
 
             filtrelenmisRezervasyonlar.Add(new OrtalamaKonaklamaSuresiRezervasyonDto
             {

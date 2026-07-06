@@ -104,6 +104,24 @@ public class OdaTipiDolulukRaporExcelServiceTests
         Assert.Equal("0.00\"%\"", ws.Cell(2, 7).Style.NumberFormat.Format);
     }
 
+    // Ozet sheetinde Kisi-Gece notu bulunmali.
+    [Fact]
+    public async Task OlusturAsync_OzetSheetindeKisiGeceNotuBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, Baslangic, Bitis);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Özet");
+
+        Assert.Contains(
+            ws.CellsUsed().Select(c => c.GetString()),
+            x => x.Contains("Kişi-Gece değeri oda tipi kullanım yoğunluğu için yaklaşık metrik olarak hesaplanır"));
+    }
+
     // AutoFilter olusmali.
     [Fact]
     public async Task OlusturAsync_AutoFilterOlusur()

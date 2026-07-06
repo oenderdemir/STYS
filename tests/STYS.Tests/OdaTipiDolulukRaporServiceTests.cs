@@ -127,6 +127,33 @@ public class OdaTipiDolulukRaporServiceTests
         Assert.Equal(21, odaTipi.OdaTipiId);
     }
 
+    // odaTipiId verilince OdaTipiAdi, filtrelenmis (tesis/aktif) odalardan gelmeli.
+    [Fact]
+    public async Task GetRaporAsync_OdaTipiIdVerilinceOdaTipiAdiFiltrelenmisOdalardanGelir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, Baslangic, Bitis, odaTipiId: 21);
+
+        Assert.Equal("Suit", rapor.OdaTipiAdi);
+    }
+
+    // Ilgili odaTipiId icin tesiste aktif oda yoksa rapor bos gelir ve OdaTipiAdi null kalir.
+    [Fact]
+    public async Task GetRaporAsync_TesisteAktifOdaOlmayanOdaTipiIcinRaporBosGelirVeOdaTipiAdiNullKalir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, Baslangic, Bitis, odaTipiId: 999);
+
+        Assert.Empty(rapor.OdaTipleri);
+        Assert.Null(rapor.OdaTipiAdi);
+    }
+
     // ToplamOdaGunSayisi dogru hesaplanir.
     [Fact]
     public async Task GetRaporAsync_ToplamOdaGunSayisiDogruHesaplanir()

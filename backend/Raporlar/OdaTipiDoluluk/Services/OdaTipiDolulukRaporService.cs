@@ -61,16 +61,6 @@ public class OdaTipiDolulukRaporService : IOdaTipiDolulukRaporService
 
         var tesisAdi = await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
 
-        string? odaTipiAdi = null;
-        if (odaTipiId.HasValue)
-        {
-            odaTipiAdi = await _stysDbContext.OdaTipleri
-                .AsNoTracking()
-                .Where(x => x.Id == odaTipiId.Value)
-                .Select(x => x.Ad)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
         var baslangicGun = baslangic.Date;
         var bitisGun = bitis.Date;
         var bitisGunExclusive = bitisGun.AddDays(1);
@@ -100,6 +90,11 @@ public class OdaTipiDolulukRaporService : IOdaTipiDolulukRaporService
                 Kapasite = o.TesisOdaTipi.Kapasite
             })
             .ToListAsync(cancellationToken);
+
+        // OdaTipiAdi, erisim/tesis/aktif filtrelerinden gecen odalar sonucundan cozulur; boylece baska
+        // tesise ait veya silinmis/pasif bir oda tipinin adi rapor basliginda gorunmez. Bu tesiste ilgili
+        // oda tipine ait aktif oda yoksa null kalir (Excel'de "ID: {odaTipiId}" fallback'i devam eder).
+        var odaTipiAdi = odaTipiId.HasValue ? odalar.Select(x => x.OdaTipiAdi).FirstOrDefault() : null;
 
         var odaIds = odalar.Select(x => x.OdaId).ToHashSet();
 

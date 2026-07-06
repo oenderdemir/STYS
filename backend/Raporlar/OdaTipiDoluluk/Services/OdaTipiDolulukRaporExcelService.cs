@@ -78,6 +78,13 @@ public class OdaTipiDolulukRaporExcelService : IOdaTipiDolulukRaporExcelService
         musaitlikCell.Style.NumberFormat.Format = YuzdeFormati;
         satir++;
 
+        satir++;
+        var notCell = ws.Cell(satir, 1);
+        notCell.Value = "Not: Kişi-Gece değeri oda tipi kullanım yoğunluğu için yaklaşık metrik olarak hesaplanır.";
+        notCell.Style.Font.Italic = true;
+        notCell.Style.Font.FontColor = XLColor.FromHtml("#808080");
+        ws.Range(satir, 1, satir, 2).Merge();
+
         ws.Column(1).Width = 24;
         ws.Column(2).Width = 24;
     }

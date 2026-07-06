@@ -6525,3 +6525,25 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Oda Tipi Bazlı Doluluk Raporu — Detay İyileştirmeleri
+
+### Yapılan İşler
+- Oda Tipi Bazlı Doluluk Raporu oda tipi adı çözümlemesi tesis/aktif oda filtresine bağlandı; kişi-gece metriği için ekran ve Excel açıklaması eklendi.
+
+### Backend
+- `OdaTipiDolulukRaporService`'te `OdaTipiAdi` artık ayrı bir `OdaTipleri` sorgusuyla (yalnızca `Id` eşleşmesiyle) değil, tesis/aktif/silinmemiş filtrelerinden geçmiş `odalar` sonucundan (`odalar.Select(x => x.OdaTipiAdi).FirstOrDefault()`) çözülüyor. Böylece başka bir tesise ait veya silinmiş/pasif bir oda tipinin adı rapor başlığında görünemez; ilgili `odaTipiId` için tesiste aktif oda yoksa `OdaTipiAdi` null kalır ve Excel'deki `"ID: {odaTipiId}"` fallback'i devreye girer.
+- Excel "Özet" sayfasına, kişi-gece metriğinin yaklaşık bir hesaplama olduğunu belirten italik bir not eklendi: "Not: Kişi-Gece değeri oda tipi kullanım yoğunluğu için yaklaşık metrik olarak hesaplanır."
+- Mevcut endpoint, permission ve doluluk hesaplama mantığı değişmedi.
+
+### Frontend
+- Ana tablonun altına aynı açıklama metni eklendi: "Kişi-Gece değeri oda tipi kullanım yoğunluğu için yaklaşık metrik olarak hesaplanır."
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaTipiDoluluk` başarılı — 22/22 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

@@ -48,6 +48,7 @@ import { GunlukGirisCikisRaporComponent } from './app/pages/raporlar/gunluk-giri
 import { OdaMusaitlikRaporComponent } from './app/pages/raporlar/oda-musaitlik/oda-musaitlik-rapor';
 import { OdaTipiDolulukRaporComponent } from './app/pages/raporlar/oda-tipi-doluluk/oda-tipi-doluluk-rapor';
 import { OrtalamaKonaklamaSuresiRaporComponent } from './app/pages/raporlar/ortalama-konaklama-suresi/ortalama-konaklama-suresi-rapor';
+import { RezervasyonDurumDagilimiRaporComponent } from './app/pages/raporlar/rezervasyon-durum-dagilimi/rezervasyon-durum-dagilimi-rapor';
 import { RestoranYonetimi } from './app/pages/restoran-yonetimi/restoran-yonetimi';
 import { RestoranMasaYonetimi } from './app/pages/restoran-yonetimi/restoran-masa-yonetimi';
 import { RestoranMenuYonetimi } from './app/pages/restoran-yonetimi/restoran-menu-yonetimi';
@@ -158,6 +159,7 @@ export const appRoutes: Routes = [
             { path: 'raporlar/oda-musaitlik', component: OdaMusaitlikRaporComponent, data: { breadcrumb: ['Raporlar', 'Boş Oda / Müsaitlik Raporu'] } },
             { path: 'raporlar/oda-tipi-doluluk', component: OdaTipiDolulukRaporComponent, data: { breadcrumb: ['Raporlar', 'Oda Tipi Bazlı Doluluk Raporu'] } },
             { path: 'raporlar/ortalama-konaklama-suresi', component: OrtalamaKonaklamaSuresiRaporComponent, data: { breadcrumb: ['Raporlar', 'Ortalama Konaklama Süresi Raporu'] } },
+            { path: 'raporlar/rezervasyon-durum-dagilimi', component: RezervasyonDurumDagilimiRaporComponent, data: { breadcrumb: ['Raporlar', 'Rezervasyon Durum Dağılımı'] } },
             { path: 'restoran-yonetimi', component: RestoranYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Restoran Yonetimi'] } },
             { path: 'restoran-kategori-havuzu', component: RestoranKategoriHavuzuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Kategori Havuzu'] } },
             { path: 'restoran-masa-yonetimi', component: RestoranMasaYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Masa Yonetimi'] } },

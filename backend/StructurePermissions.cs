@@ -299,6 +299,12 @@ public static class StructurePermissions
         public const string View = "OrtalamaKonaklamaSuresiRaporuYonetimi.View";
     }
 
+    public static class RezervasyonDurumDagilimiRaporuYonetimi
+    {
+        public const string Menu = "RezervasyonDurumDagilimiRaporuYonetimi.Menu";
+        public const string View = "RezervasyonDurumDagilimiRaporuYonetimi.View";
+    }
+
     public static class RestoranYonetimi
     {
         public const string Menu = "RestoranYonetimi.Menu";

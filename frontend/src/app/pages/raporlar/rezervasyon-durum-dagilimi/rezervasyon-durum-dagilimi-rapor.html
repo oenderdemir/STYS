@@ -1,0 +1,229 @@
+<p-toast></p-toast>
+
+<div class="rezervasyon-durum-dagilimi-page">
+    <div class="sayfa-basligi">
+        <h1>Rezervasyon Durum Dağılımı</h1>
+        <p>Seçilen tarih aralığında rezervasyonların durumlarına göre dağılımını ve oranlarını görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="baslangicPicker">Başlangıç Tarihi</label>
+                    <p-datepicker
+                        id="baslangicPicker"
+                        [(ngModel)]="selectedBaslangic"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="bitisPicker">Bitiş Tarihi</label>
+                    <p-datepicker
+                        id="bitisPicker"
+                        [(ngModel)]="selectedBitis"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="odaTipiInput">Oda Tipi Id</label>
+                    <p-inputnumber
+                        id="odaTipiInput"
+                        [(ngModel)]="selectedOdaTipiId"
+                        [useGrouping]="false"
+                        placeholder="Tümü"
+                    ></p-inputnumber>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="durumSelect">Durum</label>
+                    <p-select
+                        id="durumSelect"
+                        styleClass="durum-select"
+                        [options]="durumSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedDurum"
+                        [showClear]="true"
+                        placeholder="Tümü"
+                    ></p-select>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Rezervasyon</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Gerçekleşen</span>
+                    <span class="ozet-deger">{{ rapor.ozet.gerceklesenRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Devam Eden</span>
+                    <span class="ozet-deger">{{ rapor.ozet.devamEdenRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-uyari">
+                    <span class="ozet-etiket">İptal</span>
+                    <span class="ozet-deger">{{ rapor.ozet.iptalSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-uyari">
+                    <span class="ozet-etiket">İptal Oranı</span>
+                    <span class="ozet-deger">%{{ rapor.ozet.iptalOrani | number: '1.2-2' }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-vurgu">
+                    <span class="ozet-etiket">Gerçekleşme Oranı</span>
+                    <span class="ozet-deger">%{{ rapor.ozet.gerceklesmeOrani | number: '1.2-2' }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <div class="grafik-grid">
+            <p-card>
+                <h3 class="tablo-basligi">Durum Dağılımı</h3>
+                <div class="grafik-alani">
+                    <p-chart type="doughnut" [data]="durumDagilimiChartData" [options]="durumDagilimiChartOptions" class="h-20rem"></p-chart>
+                </div>
+            </p-card>
+
+            <p-card>
+                <h3 class="tablo-basligi">Oda Tipi Bazlı Gerçekleşme / İptal</h3>
+                <div class="grafik-alani">
+                    <p-chart type="bar" [data]="odaTipiChartData" [options]="odaTipiChartOptions" class="h-20rem"></p-chart>
+                </div>
+            </p-card>
+        </div>
+
+        <p-card>
+            <h3 class="tablo-basligi">Durum Dağılımı Tablosu</h3>
+            <p-table [value]="rapor.durumlar" [scrollable]="true" dataKey="durum">
+                <ng-template #header>
+                    <tr>
+                        <th>Durum</th>
+                        <th>Rezervasyon Sayısı</th>
+                        <th>Kişi Sayısı</th>
+                        <th>Gece Sayısı</th>
+                        <th>Oran</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-d>
+                    <tr>
+                        <td><p-tag [value]="d.durumLabel" [severity]="durumSeverity(d.durum)"></p-tag></td>
+                        <td>{{ d.rezervasyonSayisi }}</td>
+                        <td>{{ d.kisiSayisi }}</td>
+                        <td>{{ d.geceSayisi }}</td>
+                        <td>%{{ d.oran | number: '1.2-2' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="5">Seçilen kriterlere uygun durum bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+
+        <p-card>
+            <h3 class="tablo-basligi">Oda Tipi Dağılımı</h3>
+            <p-table [value]="rapor.odaTipleri" [scrollable]="true" dataKey="odaTipiId">
+                <ng-template #header>
+                    <tr>
+                        <th>Oda Tipi</th>
+                        <th>Rezervasyon Sayısı</th>
+                        <th>İptal Sayısı</th>
+                        <th>Gerçekleşen Sayısı</th>
+                        <th>Kişi Sayısı</th>
+                        <th>Gece Sayısı</th>
+                        <th>İptal Oranı</th>
+                        <th>Gerçekleşme Oranı</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-odaTipi>
+                    <tr>
+                        <td>{{ odaTipi.odaTipiAdi }}</td>
+                        <td>{{ odaTipi.rezervasyonSayisi }}</td>
+                        <td>{{ odaTipi.iptalSayisi }}</td>
+                        <td>{{ odaTipi.gerceklesenSayisi }}</td>
+                        <td>{{ odaTipi.kisiSayisi }}</td>
+                        <td>{{ odaTipi.geceSayisi }}</td>
+                        <td>%{{ odaTipi.iptalOrani | number: '1.2-2' }}</td>
+                        <td>%{{ odaTipi.gerceklesmeOrani | number: '1.2-2' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="8">Seçilen kriterlere uygun oda tipi bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+
+        <p-card>
+            <h3 class="tablo-basligi">Rezervasyonlar</h3>
+            <p-table [value]="rapor.rezervasyonlar" [scrollable]="true" dataKey="rezervasyonId">
+                <ng-template #header>
+                    <tr>
+                        <th>Referans No</th>
+                        <th>Misafir</th>
+                        <th>Giriş</th>
+                        <th>Çıkış</th>
+                        <th>Gece</th>
+                        <th>Kişi</th>
+                        <th>Durum</th>
+                        <th>Oda(lar)</th>
+                        <th>Oda Tipi(leri)</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-r>
+                    <tr>
+                        <td>{{ r.referansNo }}</td>
+                        <td>{{ r.misafirAdiSoyadi }}</td>
+                        <td>{{ r.girisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.cikisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.geceSayisi }}</td>
+                        <td>{{ r.kisiSayisi }}</td>
+                        <td><p-tag [value]="r.rezervasyonDurumuLabel" [severity]="durumSeverity(r.rezervasyonDurumu)"></p-tag></td>
+                        <td>{{ r.odaNolari.join(', ') }}</td>
+                        <td>{{ r.odaTipleri.join(', ') }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="9">Seçilen kriterlere uygun rezervasyon bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

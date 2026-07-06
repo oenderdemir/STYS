@@ -6601,3 +6601,37 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Rezervasyon Durum Dağılımı Raporu
+
+### Yapılan İşler
+- Rezervasyon Durum Dağılımı Raporu eklendi; seçilen tarih aralığında rezervasyonların durum, oda tipi, iptal ve gerçekleşme oranları ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; tesis yönetimi ve rezervasyon performans analizi için hazırlanmıştır. Yeni entity oluşturulmadı — mevcut `Rezervasyon`, `RezervasyonSegment`, `RezervasyonSegmentOdaAtama`, `Oda`, `Bina` ve `OdaTipi` kayıtları üzerinden üretilir.
+- `backend/Raporlar/RezervasyonDurumDagilimi/` altında yeni bir dikey dilim oluşturuldu: `Dto/RezervasyonDurumDagilimiRaporDto.cs`, `Services/RezervasyonDurumDagilimiRaporService.cs`, `Services/RezervasyonDurumDagilimiRaporExcelService.cs`, `Controllers/RezervasyonDurumDagilimiRaporController.cs` (`GET api/raporlar/rezervasyon-durum-dagilimi` ve `GET api/raporlar/rezervasyon-durum-dagilimi/excel`).
+- **Önemli fark**: Bu raporun amacı durum dağılımıdır; diğer raporların aksine iptal rezervasyonlar hariç tutulmaz, bilinçli olarak dahil edilir. Yalnızca soft-delete (`!r.IsDeleted`) ve aktif olmayan (`r.AktifMi`) kayıtlar hariç tutulur.
+- Gece sayısı hesaplaması ve çıkış günü hariç tutma mantığı diğer raporlarla aynı; gece sayısı 0 olan rezervasyonlar rapora dahil edilmez.
+- `durum` sorgu filtresi kebab-case değerler alır (`taslak, onayli, check-in-tamamlandi, check-out-tamamlandi, iptal`) ve dahili olarak `RezervasyonDurumlari` sabitlerine eşlenir; geçersiz değer `BaseException` 400 fırlatır.
+- `odaTipiId` filtresi ve `OdaTipiAdi` çözümlemesi, Oda Tipi Bazlı Doluluk ve Ortalama Konaklama Süresi raporlarındaki güvenli/tutarlı yaklaşımla birebir aynı: tesis/aktif filtrelerinden geçen odalar üzerinden çözülür; rezervasyon satırındaki `OdaNolari`/`OdaTipleri` yalnızca filtrelenen oda tipine ait segment/oda atamalarını yansıtır.
+- Oda tipi kırılımı, aynı rezervasyonun dönem içinde farklı oda tiplerine geçmesi durumunda ilgili oda tiplerinin her birinde ayrı ayrı değerlendirilir (kodda açıklayan yorum var); `GerceklesenSayisi` (CheckIn+CheckOut) ve `IptalSayisi` her oda tipi grubunda ayrıca hesaplanır.
+- Genel özet: `GerceklesenRezervasyonSayisi = CheckInTamamlandi + CheckOutTamamlandi`, `DevamEdenRezervasyonSayisi = CheckInTamamlandi`, `IptalOrani`/`GerceklesmeOrani`/`CheckInOrani`/`CheckOutOrani` toplam rezervasyon sayısına göre 0-100 aralığında hesaplanır.
+- Validasyon: `tesisId > 0`; `baslangic <= bitis`; tarih aralığı en fazla 1 yıl; `odaTipiId` verilirse pozitif olmalı; `durum` verilirse desteklenen değerlerden biri olmalı.
+- Sıralama: durumlar `RezervasyonSayisi` azalan + `DurumLabel` artan; oda tipleri `RezervasyonSayisi` azalan + `OdaTipiAdi` artan; rezervasyonlar `GirisTarihi` artan + `RezervasyonDurumuLabel` artan + `MisafirAdiSoyadi` artan.
+- Excel çıktısı dört sayfadan oluşur: "Özet", "Durum Dağılımı" (5 kolon), "Oda Tipi Dağılımı" (8 kolon) ve "Rezervasyonlar" (9 kolon) — iptal satırları açık kırmızı, check-out tamamlandı açık yeşil, check-in tamamlandı açık mavi, onaylı açık sarı, taslak açık gri; oran alanları `0.00"%"` formatında (standart `0.00%` kullanılmadı); tüm veri sayfalarında AutoFilter + frozen header.
+- `StructurePermissions.RezervasyonDurumDagilimiRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `rezervasyon-durum-dagilimi-raporu` kaydı ve `20260710090000_AddRezervasyonDurumDagilimiRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı, Ödeme Durumu, Günlük Giriş-Çıkış, Boş Oda / Müsaitlik, Oda Tipi Bazlı Doluluk ve Ortalama Konaklama Süresi raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/rezervasyon-durum-dagilimi/` altında yeni standalone Angular sayfası eklendi: tesis/tarih aralığı/oda tipi/durum filtreleri, özet kartları, durum dağılımı doughnut grafiği + oda tipi bazlı gerçekleşme/iptal bar grafiği (PrimeNG `p-chart`), durum dağılımı tablosu, oda tipi dağılımı tablosu ve rezervasyonlar tablosu (durum badge'i); Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/rezervasyon-durum-dagilimi` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter RezervasyonDurumDagilimi` başarılı — 19/19 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

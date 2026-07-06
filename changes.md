@@ -6547,3 +6547,35 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Ortalama Konaklama Süresi Raporu
+
+### Yapılan İşler
+- Ortalama Konaklama Süresi Raporu eklendi; seçilen tarih aralığında rezervasyonların gece sayısı, ortalama konaklama süresi, kısa/orta/uzun konaklama dağılımı ve oda tipi kırılımı ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; tesis yönetimi ve rezervasyon analizi için hazırlanmıştır. Yeni entity oluşturulmadı — mevcut `Rezervasyon`, `RezervasyonSegment`, `RezervasyonSegmentOdaAtama`, `Oda`, `Bina` ve `OdaTipi` kayıtları üzerinden üretilir.
+- `backend/Raporlar/OrtalamaKonaklamaSuresi/` altında yeni bir dikey dilim oluşturuldu: `Dto/OrtalamaKonaklamaSuresiRaporDto.cs`, `Services/OrtalamaKonaklamaSuresiRaporService.cs`, `Services/OrtalamaKonaklamaSuresiRaporExcelService.cs`, `Controllers/OrtalamaKonaklamaSuresiRaporController.cs` (`GET api/raporlar/ortalama-konaklama-suresi` ve `GET api/raporlar/ortalama-konaklama-suresi/excel`).
+- Gece sayısı hesaplaması: `effectiveBaslangic = max(GirisTarihi.Date, baslangicGun)`, `effectiveBitisExclusive = min(CikisTarihi.Date, bitisGunExclusive)`, `geceSayisi = max(0, (effectiveBitisExclusive - effectiveBaslangic).Days)`; çıkış günü konaklama gecesine dahil edilmez. Gece sayısı 0 olan rezervasyonlar rapora dahil edilmez.
+- Konaklama grubu sınıflandırması: 1-2 gece "kısa", 3-7 gece "orta", 8+ gece "uzun".
+- `odaTipiId` filtresi verilirse, yalnızca seçilen tarih aralığıyla çakışan segment/oda atamaları içinde bu oda tipine ait odası olan rezervasyonlar dahil edilir; soft-delete edilmiş segment/oda ataması ve aktif olmayan/silinmiş oda/bina/oda tipi filtre dışında tutulur. `OdaTipiAdi`, Oda Tipi Bazlı Doluluk Raporu'nda olduğu gibi tesis/aktif filtrelerinden geçen odalar üzerinden çözülür (ayrı bir Id-only sorgu kullanılmaz).
+- Oda tipi kırılımı, aynı rezervasyonun dönem içinde farklı oda tiplerine geçmesi durumunda ilgili oda tiplerinin her birinde ayrı ayrı değerlendirilir (kodda bu davranış açıklayan yorum var).
+- Validasyon: `tesisId > 0`; `baslangic <= bitis`; tarih aralığı en fazla 1 yıl (366 gün, dahil sayım ile); `odaTipiId` verilirse pozitif olmalı — aksi halde `BaseException` 400.
+- Sıralama: rezervasyonlar `GeceSayisi` azalan, `GirisTarihi` artan, `MisafirAdiSoyadi` artan; oda tipleri `OrtalamaGeceSayisi` azalan, `OdaTipiAdi` artan.
+- Excel çıktısı üç sayfadan oluşur: "Özet" (tesis, tarih aralığı, oda tipi, tüm sayaçlar/ortalamalar), "Oda Tipi Özeti" (7 kolon, AutoFilter + frozen header) ve "Rezervasyonlar" (10 kolon: Referans No, Misafir, Giriş/Çıkış Tarihi, Gece Sayısı, Kişi Sayısı, Oda No(ları), Oda Tipi(leri), Rezervasyon Durumu, Konaklama Grubu; kısa konaklama açık yeşil, orta konaklama açık mavi, uzun konaklama açık turuncu satır rengiyle; ortalama gece decimal alanları `0.00` formatında; AutoFilter + frozen header).
+- `StructurePermissions.OrtalamaKonaklamaSuresiRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `ortalama-konaklama-suresi-raporu` kaydı ve `20260709090000_AddOrtalamaKonaklamaSuresiRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı, Ödeme Durumu, Günlük Giriş-Çıkış, Boş Oda / Müsaitlik ve Oda Tipi Bazlı Doluluk raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/ortalama-konaklama-suresi/` altında yeni standalone Angular sayfası eklendi: tesis/tarih aralığı/oda tipi filtreleri, özet kartları, kısa/orta/uzun konaklama dağılımı doughnut grafiği (PrimeNG `p-chart`), oda tipi özeti tablosu ve rezervasyonlar tablosu (konaklama grubu badge'i); Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/ortalama-konaklama-suresi` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OrtalamaKonaklamaSuresi` başarılı — 18/18 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

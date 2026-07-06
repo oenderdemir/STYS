@@ -281,6 +281,12 @@ public static class StructurePermissions
         public const string View = "GunlukGirisCikisRaporuYonetimi.View";
     }
 
+    public static class OdaMusaitlikRaporuYonetimi
+    {
+        public const string Menu = "OdaMusaitlikRaporuYonetimi.Menu";
+        public const string View = "OdaMusaitlikRaporuYonetimi.View";
+    }
+
     public static class RestoranYonetimi
     {
         public const string Menu = "RestoranYonetimi.Menu";

@@ -1,0 +1,174 @@
+.oda-musaitlik-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.sayfa-basligi {
+    padding: 0.25rem 0.25rem 0.5rem;
+
+    h1 {
+        margin: 0 0 0.2rem;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--text-color-secondary);
+    }
+}
+
+.filtre-karti {
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.filtre-satiri {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.filtre-grubu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.25rem;
+}
+
+.filtre-ogesi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-color-secondary);
+    }
+
+    ::ng-deep .tesis-select {
+        width: 220px;
+    }
+
+    ::ng-deep .durum-select {
+        width: 180px;
+    }
+
+    ::ng-deep p-inputnumber input {
+        width: 120px;
+    }
+}
+
+.aksiyon-grubu {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.ozet-karti {
+    border-radius: 12px;
+}
+
+.ozet-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.ozet-hucre {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    background: var(--surface-50);
+
+    &.ozet-hucre-vurgu {
+        background: #e2efda;
+    }
+}
+
+.ozet-etiket {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary);
+}
+
+.ozet-deger {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.rapor-baslik {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+}
+
+.matris-scroll {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.matris-tablo {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+
+    th,
+    td {
+        border: 1px solid var(--surface-border);
+        padding: 0.4rem 0.6rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    th {
+        background: #ddebf7;
+        font-weight: 700;
+    }
+
+    .oda-kolonu {
+        min-width: 100px;
+    }
+
+    .kapasite-kolonu {
+        min-width: 70px;
+    }
+
+    .gun-kolonu {
+        min-width: 60px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .hucre-bos {
+        background: #c6e0b4;
+    }
+
+    .hucre-dolu {
+        background: #f8cbad;
+    }
+}
+
+.satir-tamamen-bos {
+    td.oda-kolonu,
+    td.kapasite-kolonu {
+        background: #e2efda;
+    }
+}
+
+.satir-tamamen-dolu {
+    td.oda-kolonu,
+    td.kapasite-kolonu {
+        background: #fce4e4;
+    }
+}

@@ -1,0 +1,193 @@
+<p-toast></p-toast>
+
+<div class="oda-musaitlik-page">
+    <div class="sayfa-basligi">
+        <h1>Boş Oda / Müsaitlik Raporu</h1>
+        <p>Seçilen tarih aralığında odaların tamamen boş, tamamen dolu ve kısmen müsait durumlarını görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="baslangicPicker">Başlangıç Tarihi</label>
+                    <p-datepicker
+                        id="baslangicPicker"
+                        [(ngModel)]="selectedBaslangic"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="bitisPicker">Bitiş Tarihi</label>
+                    <p-datepicker
+                        id="bitisPicker"
+                        [(ngModel)]="selectedBitis"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="durumSelect">Durum</label>
+                    <p-select
+                        id="durumSelect"
+                        styleClass="durum-select"
+                        [options]="durumSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedDurum"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="odaTipiInput">Oda Tipi Id</label>
+                    <p-inputnumber
+                        id="odaTipiInput"
+                        [(ngModel)]="selectedOdaTipiId"
+                        [useGrouping]="false"
+                        placeholder="Tümü"
+                    ></p-inputnumber>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="kapasiteInput">Min. Kapasite</label>
+                    <p-inputnumber
+                        id="kapasiteInput"
+                        [(ngModel)]="selectedKapasite"
+                        [useGrouping]="false"
+                        placeholder="Tümü"
+                    ></p-inputnumber>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Oda</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamOdaSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Tamamen Boş</span>
+                    <span class="ozet-deger">{{ rapor.ozet.tamamenBosOdaSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Tamamen Dolu</span>
+                    <span class="ozet-deger">{{ rapor.ozet.tamamenDoluOdaSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Kısmen Müsait</span>
+                    <span class="ozet-deger">{{ rapor.ozet.kismenMusaitOdaSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Boş Oda/Gün</span>
+                    <span class="ozet-deger">{{ rapor.ozet.bosOdaGunSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-vurgu">
+                    <span class="ozet-etiket">Müsaitlik Oranı</span>
+                    <span class="ozet-deger">%{{ rapor.ozet.musaitlikOrani | number: '1.2-2' }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <p-card>
+            <h2 class="rapor-baslik">{{ rapor.baslik }}</h2>
+
+            <div class="matris-scroll">
+                <table class="matris-tablo">
+                    <thead>
+                        <tr>
+                            <th class="oda-kolonu">Oda No</th>
+                            <th class="oda-kolonu">Bina</th>
+                            <th class="oda-kolonu">Oda Tipi</th>
+                            <th class="kapasite-kolonu">Kapasite</th>
+                            @if (rapor.odalar.length > 0) {
+                                @for (gun of rapor.odalar[0].gunler; track gun.tarih) {
+                                    <th class="gun-kolonu">{{ gun.tarih | date: 'dd.MM' }}</th>
+                                }
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (oda of rapor.odalar; track oda.odaId) {
+                            <tr [class.satir-tamamen-bos]="oda.musaitlikDurumu === 'tamamen-bos'"
+                                [class.satir-tamamen-dolu]="oda.musaitlikDurumu === 'tamamen-dolu'">
+                                <td class="oda-kolonu">{{ oda.odaNo }}</td>
+                                <td class="oda-kolonu">{{ oda.binaAdi }}</td>
+                                <td class="oda-kolonu">{{ oda.odaTipiAdi }}</td>
+                                <td class="kapasite-kolonu">{{ oda.kapasite }}</td>
+                                @for (gun of oda.gunler; track gun.tarih) {
+                                    <td class="gun-kolonu" [class.hucre-dolu]="gun.doluMu" [class.hucre-bos]="gun.bosMu"
+                                        [title]="gun.doluMu ? (gun.misafirAdiSoyadi + ' (' + gun.referansNo + ') - ' + gun.rezervasyonDurumuLabel) : ''">
+                                        {{ gun.doluMu ? 'DOLU' : 'BOŞ' }}
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </p-card>
+
+        <p-card>
+            <p-table [value]="rapor.odalar" [scrollable]="true" dataKey="odaId">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Oda No</th>
+                        <th>Bina</th>
+                        <th>Oda Tipi</th>
+                        <th>Kapasite</th>
+                        <th>Durum</th>
+                        <th>Boş Gün</th>
+                        <th>Dolu Gün</th>
+                        <th>Müsaitlik Oranı</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-oda>
+                    <tr>
+                        <td>{{ oda.odaNo }}</td>
+                        <td>{{ oda.binaAdi }}</td>
+                        <td>{{ oda.odaTipiAdi }}</td>
+                        <td>{{ oda.kapasite }}</td>
+                        <td><p-tag [value]="oda.musaitlikDurumuLabel" [severity]="musaitlikDurumuSeverity(oda.musaitlikDurumu)"></p-tag></td>
+                        <td>{{ oda.bosGunSayisi }}</td>
+                        <td>{{ oda.doluGunSayisi }}</td>
+                        <td>%{{ oda.musaitlikOrani | number: '1.2-2' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="8">Seçilen kriterlere uygun oda bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

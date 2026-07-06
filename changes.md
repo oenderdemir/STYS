@@ -6437,3 +6437,34 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Boş Oda / Müsaitlik Raporu
+
+### Yapılan İşler
+- Boş Oda / Müsaitlik Raporu eklendi; seçilen tarih aralığında odaların tamamen boş, tamamen dolu ve kısmen müsait durumları ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; resepsiyon ve tesis yönetimi için hazırlanmıştır. Yeni entity oluşturulmadı — mevcut `Oda`, `Bina`, `OdaTipi`, `Rezervasyon`, `RezervasyonSegment` ve `RezervasyonSegmentOdaAtama` kayıtları üzerinden üretilir.
+- `backend/Raporlar/OdaMusaitlik/` altında yeni bir dikey dilim oluşturuldu: `Dto/OdaMusaitlikRaporDto.cs`, `Services/OdaMusaitlikRaporService.cs`, `Services/OdaMusaitlikRaporExcelService.cs`, `Controllers/OdaMusaitlikRaporController.cs` (`GET api/raporlar/oda-musaitlik` ve `GET api/raporlar/oda-musaitlik/excel`).
+- Odalar tesise, aktif/silinmemiş binaya ve aktif/silinmemiş oda tipine göre filtrelenir; `odaTipiId` ve `kapasite` (minimum) opsiyonel filtreleri desteklenir. Oda-atama eşleştirmesi, Aylık Oda Doluluk raporundaki `OdaAtamalari.Where(a => odaIds.Contains(a.OdaId))` yaklaşımıyla birebir aynı mantıkla yapılır.
+- Konaklama geceleme mantığı: her gün için `gun >= segment.BaslangicTarihi.Date && gun < segment.BitisTarihi.Date` kontrolü yapılır; çıkış günü oda tekrar kullanılabilir kabul edildiği için dolu gün hesabına dahil edilmez.
+- Oda müsaitlik durumu: `BosGunSayisi == ToplamGunSayisi` → `tamamen-bos`; `DoluGunSayisi == ToplamGunSayisi` → `tamamen-dolu`; aksi halde `kismen-musait`. `durum` sorgu filtresi: `tumu, tamamen-bos, tamamen-dolu, kismen-musait` (varsayılan `tumu`); özet, filtre uygulandıktan sonraki liste üzerinden hesaplanır.
+- Aynı oda/gün için birden fazla rezervasyon bulunursa dolu kabul edilip ilk rezervasyon bilgisi gösterilir; kodda ileride çakışma detaylarının gösterilebileceğine dair TODO bırakıldı.
+- Validasyon: `tesisId > 0`; `baslangic <= bitis`; tarih aralığı en fazla 60 gün; `durum` desteklenen değerlerden biri; `odaTipiId`/`kapasite` verilirse pozitif olmalı — aksi halde `BaseException` 400.
+- Excel çıktısı üç sayfadan oluşur: "Özet" (tesis, tarih aralığı, filtreler, tüm sayaçlar/oranlar), "Müsaitlik Matrisi" (Oda No/Bina/Oda Tipi/Kapasite + her gün için bir kolon; BOŞ hücreler açık yeşil, DOLU hücreler açık kırmızı/pembe, dolu hücrelerde misafir/referans no/durum bilgisi hücre notu olarak eklenir; tamamen boş/dolu odaların bilgi kolonları hafif renklendirilir) ve "Oda Listesi" (Oda No, Bina, Oda Tipi, Kapasite, Durum, Toplam/Boş/Dolu Gün, Müsaitlik Oranı — yüzde formatlı, autofilter, frozen header).
+- `StructurePermissions.OdaMusaitlikRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `oda-musaitlik-raporu` kaydı ve `20260707090000_AddOdaMusaitlikRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı, Ödeme Durumu ve Günlük Giriş-Çıkış raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/oda-musaitlik/` altında yeni standalone Angular sayfası eklendi: tesis/tarih aralığı/durum/oda tipi/kapasite filtreleri, özet kartları, yatay scroll destekli müsaitlik matrisi (BOŞ/DOLU renkli hücreler, tooltip'te misafir/referans/durum bilgisi) ve oda listesi tablosu; Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/oda-musaitlik` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaMusaitlik` başarılı — 19/19 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

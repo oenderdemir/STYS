@@ -10,6 +10,10 @@ public class OdaMusaitlikRaporExcelService : IOdaMusaitlikRaporExcelService
     private const string RenkHeader = "#DDEBF7";
     private const string RenkTamamenBosSatir = "#E2EFDA";
     private const string RenkTamamenDoluSatir = "#FCE4E4";
+
+    // DTO'daki oran degerleri 0-100 araliginda hesaplanip donduruluyor (orn. 42.86), 0-1 araliginda degil.
+    // Bu yuzden standart Excel yuzde formati "0.00%" (deger * 100 gosterir) kullanilmamali; literal "%" sonekiyle
+    // "0.00\"%\"" formati deger uzerinde ek carpma yapmadan dogru gosterim saglar.
     private const string YuzdeFormati = "0.00\"%\"";
 
     private const int SabitKolonSayisi = 4;
@@ -55,7 +59,7 @@ public class OdaMusaitlikRaporExcelService : IOdaMusaitlikRaporExcelService
         YazEtiketDeger(ws, ref satir, "Tesis", rapor.TesisAdi ?? string.Empty);
         YazEtiketDeger(ws, ref satir, "Tarih Aralığı", $"{rapor.Baslangic:dd.MM.yyyy} - {rapor.Bitis:dd.MM.yyyy}");
         YazEtiketDeger(ws, ref satir, "Durum Filtresi", DurumLabel(rapor.Durum));
-        YazEtiketDeger(ws, ref satir, "Oda Tipi", rapor.OdaTipiId?.ToString() ?? "Tümü");
+        YazEtiketDeger(ws, ref satir, "Oda Tipi", rapor.OdaTipiId.HasValue ? (rapor.OdaTipiAdi ?? $"ID: {rapor.OdaTipiId}") : "Tümü");
         YazEtiketDeger(ws, ref satir, "Kapasite", rapor.Kapasite?.ToString() ?? "Tümü");
 
         satir++;
@@ -139,9 +143,9 @@ public class OdaMusaitlikRaporExcelService : IOdaMusaitlikRaporExcelService
                 if (gun.DoluMu)
                 {
                     var comment = cell.CreateComment();
-                    comment.AddText($"Misafir: {gun.MisafirAdiSoyadi}");
-                    comment.AddNewLine().AddText($"Referans No: {gun.ReferansNo}");
-                    comment.AddNewLine().AddText($"Durum: {gun.RezervasyonDurumuLabel}");
+                    comment.AddText($"Misafir: {(string.IsNullOrWhiteSpace(gun.MisafirAdiSoyadi) ? "-" : gun.MisafirAdiSoyadi)}");
+                    comment.AddNewLine().AddText($"Referans No: {(string.IsNullOrWhiteSpace(gun.ReferansNo) ? "-" : gun.ReferansNo)}");
+                    comment.AddNewLine().AddText($"Durum: {(string.IsNullOrWhiteSpace(gun.RezervasyonDurumuLabel) ? "-" : gun.RezervasyonDurumuLabel)}");
                 }
             }
 
@@ -152,6 +156,11 @@ public class OdaMusaitlikRaporExcelService : IOdaMusaitlikRaporExcelService
         var tabloAraligi = ws.Range(1, 1, sonSatir, sonKolon);
         tabloAraligi.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         tabloAraligi.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        if (sonSatir > 1)
+        {
+            tabloAraligi.SetAutoFilter();
+        }
 
         ws.Column(1).Width = 12;
         ws.Column(2).Width = 16;

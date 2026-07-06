@@ -8,6 +8,7 @@ public class OdaMusaitlikRaporDto
     public DateTime Bitis { get; set; }
     public string Durum { get; set; } = "tumu";
     public int? OdaTipiId { get; set; }
+    public string? OdaTipiAdi { get; set; }
     public int? Kapasite { get; set; }
     public string Baslik { get; set; } = "";
 

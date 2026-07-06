@@ -6468,3 +6468,28 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Boş Oda / Müsaitlik Raporu — Doğruluk ve Excel Kullanılabilirlik Düzeltmeleri
+
+### Yapılan İşler
+- Boş Oda / Müsaitlik Raporu tarih aralığı validasyonu dahil gün sayısına göre düzeltildi; Excel özetinde oda tipi adı gösterildi ve müsaitlik matrisine filtre desteği eklendi.
+
+### Backend
+- Tarih aralığı validasyonu düzeltildi: `(bitis - baslangic).TotalDays > 60` yerine dahil gün sayısı (`(bitis - baslangic).TotalDays + 1`) 60'ı aşarsa hata verilir; böylece 60 günlük aralık artık doğru şekilde kabul edilirken 61 gün reddedilir.
+- `OdaMusaitlikRaporDto`'ya `OdaTipiAdi` alanı eklendi; `odaTipiId` verildiğinde servis `OdaTipleri` tablosundan adı çözümleyip DTO'ya doldurur.
+- `OdaMusaitlikRaporExcelService`: Özet sayfasındaki "Oda Tipi" alanı artık ID yerine oda tipi adını gösterir (ad bulunamazsa `ID: {id}` ile geri döner); `YuzdeFormati` sabitine, DTO'daki oranın 0-100 aralığında olduğunu ve standart `"0.00%"` formatına çevrilmemesi gerektiğini açıklayan yorum eklendi.
+- Müsaitlik Matrisi sayfasına AutoFilter eklendi (Oda No, Bina, Oda Tipi, Kapasite kolonları üzerinden filtrelenebilir).
+- Dolu hücre yorumlarında (comment) misafir adı, referans no veya durum boş/null ise "-" gösterilir.
+- Mevcut endpoint, permission ve müsaitlik hesaplama mantığı değişmedi.
+
+### Frontend
+- `oda-musaitlik-rapor.dto.ts`'e `odaTipiAdi` alanı eklendi; ekranda rapor başlığının altında seçili oda tipi adı gösterilir (oda tipi filtresi uygulandığında).
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaMusaitlik` başarılı — 25/25 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

@@ -208,6 +208,49 @@ public class OdaMusaitlikRaporServiceTests
         Assert.Equal(rapor.Odalar.Sum(x => x.BosGunSayisi), rapor.Ozet.BosOdaGunSayisi);
     }
 
+    // 60 gunluk (dahil) tarih araligi kabul edilir.
+    [Fact]
+    public async Task GetRaporAsync_AltmisGunlukAralikKabulEdilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var altmisGunlukBitis = Baslangic.AddDays(59);
+        var rapor = await service.GetRaporAsync(1, Baslangic, altmisGunlukBitis, "tumu");
+
+        Assert.Equal(60, rapor.Ozet.ToplamGunSayisi);
+    }
+
+    // 61 gunluk (dahil) tarih araligi hata verir.
+    [Fact]
+    public async Task GetRaporAsync_AltmisBirGunlukAralikHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var altmisBirGunlukBitis = Baslangic.AddDays(60);
+
+        var exception = await Assert.ThrowsAsync<BaseException>(
+            () => service.GetRaporAsync(1, Baslangic, altmisBirGunlukBitis, "tumu"));
+
+        Assert.Equal(400, exception.ErrorCode);
+    }
+
+    // OdaTipiAdi filtre verilince (odaTipiId ile) dolu gelir.
+    [Fact]
+    public async Task GetRaporAsync_OdaTipiIdVerilinceOdaTipiAdiDoluGelir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateService(dbContext);
+        var rapor = await service.GetRaporAsync(1, Baslangic, Bitis, "tumu", odaTipiId: 21);
+
+        Assert.Equal("Suit", rapor.OdaTipiAdi);
+    }
+
     // Yetkisiz tesis icin 403 doner.
     [Fact]
     public async Task GetRaporAsync_YetkisizTesisIcin403Doner()

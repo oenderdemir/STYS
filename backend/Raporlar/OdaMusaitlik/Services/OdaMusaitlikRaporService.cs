@@ -56,7 +56,9 @@ public class OdaMusaitlikRaporService : IOdaMusaitlikRaporService
             throw new BaseException("Baslangic tarihi bitis tarihinden buyuk olamaz.", 400);
         }
 
-        if ((bitis.Date - baslangic.Date).TotalDays > MaksimumGunAraligi)
+        // Baslangic ve bitis tarihleri dahil sayilir; ornegin 01.07-07.07 araligi 7 (dahil) gun demektir.
+        var toplamGunSayisiKontrol = (int)(bitis.Date - baslangic.Date).TotalDays + 1;
+        if (toplamGunSayisiKontrol > MaksimumGunAraligi)
         {
             throw new BaseException($"Tarih araligi en fazla {MaksimumGunAraligi} gun olabilir.", 400);
         }
@@ -79,10 +81,20 @@ public class OdaMusaitlikRaporService : IOdaMusaitlikRaporService
 
         var tesisAdi = await EnsureCanAccessTesisAsync(tesisId, cancellationToken);
 
+        string? odaTipiAdi = null;
+        if (odaTipiId.HasValue)
+        {
+            odaTipiAdi = await _stysDbContext.OdaTipleri
+                .AsNoTracking()
+                .Where(x => x.Id == odaTipiId.Value)
+                .Select(x => x.Ad)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         var baslangicGun = baslangic.Date;
         var bitisGun = bitis.Date;
         var bitisGunExclusive = bitisGun.AddDays(1);
-        var toplamGunSayisi = (int)(bitisGun - baslangicGun).TotalDays + 1;
+        var toplamGunSayisi = toplamGunSayisiKontrol;
 
         var odaQuery = _stysDbContext.Odalar
             .AsNoTracking()
@@ -265,6 +277,7 @@ public class OdaMusaitlikRaporService : IOdaMusaitlikRaporService
             Bitis = bitisGun,
             Durum = filtre,
             OdaTipiId = odaTipiId,
+            OdaTipiAdi = odaTipiAdi,
             Kapasite = kapasite,
             Baslik = $"{baslangicGun:dd.MM.yyyy} - {bitisGun:dd.MM.yyyy} BOŞ ODA / MÜSAİTLİK RAPORU",
             Ozet = ozet,

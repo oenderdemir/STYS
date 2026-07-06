@@ -48,6 +48,7 @@ export interface OdaMusaitlikRaporDto {
     bitis: string;
     durum: string;
     odaTipiId: number | null;
+    odaTipiAdi: string | null;
     kapasite: number | null;
     baslik: string;
 

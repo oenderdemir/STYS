@@ -130,6 +130,58 @@ public class OdaMusaitlikRaporExcelServiceTests
         Assert.Contains("%", ws.Cell(2, 9).Style.NumberFormat.Format);
     }
 
+    // Ozet sheetinde Oda Tipi alani ID yerine ad gostermeli.
+    [Fact]
+    public async Task OlusturAsync_OzetSheetindeOdaTipiAdiGosterilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, Baslangic, Bitis, "tumu", odaTipiId: 20);
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Özet");
+
+        var etiketHucresi = ws.CellsUsed().Single(c => c.GetString() == "Oda Tipi");
+        var degerHucresi = ws.Cell(etiketHucresi.Address.RowNumber, etiketHucresi.Address.ColumnNumber + 1);
+
+        Assert.Equal("Standart", degerHucresi.GetString());
+        Assert.NotEqual("20", degerHucresi.GetString());
+    }
+
+    // Musaitlik Matrisi sheetinde AutoFilter olusmali.
+    [Fact]
+    public async Task OlusturAsync_MusaitlikMatrisiSheetindeAutoFilterOlusur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, Baslangic, Bitis, "tumu");
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Müsaitlik Matrisi");
+
+        Assert.True(ws.AutoFilter.IsEnabled);
+    }
+
+    // Yuzde formati 0.00"%" olarak korunmali (deger 0-100 araliginda oldugu icin standart "0.00%" kullanilmamali).
+    [Fact]
+    public async Task OlusturAsync_YuzdeFormatiKorunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedOdaFixtureAsync(dbContext);
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, Baslangic, Bitis, "tumu");
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Oda Listesi");
+
+        Assert.Equal("0.00\"%\"", ws.Cell(2, 9).Style.NumberFormat.Format);
+    }
+
     private static OdaMusaitlikRaporExcelService CreateExcelService(StysAppDbContext dbContext)
     {
         var raporService = new OdaMusaitlikRaporService(

@@ -119,6 +119,9 @@
 
         <p-card>
             <h2 class="rapor-baslik">{{ rapor.baslik }}</h2>
+            @if (rapor.odaTipiAdi) {
+                <p class="rapor-alt-baslik">Oda Tipi: {{ rapor.odaTipiAdi }}</p>
+            }
 
             <div class="matris-scroll">
                 <table class="matris-tablo">

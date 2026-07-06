@@ -44,6 +44,7 @@ import { OdaRezervasyonTakvimi } from './app/pages/oda-rezervasyon-takvimi/oda-r
 import { OdaDolulukAylikComponent } from './app/pages/raporlar/oda-doluluk-aylik/oda-doluluk-aylik';
 import { KonaklamaKisiSayisiRaporComponent } from './app/pages/raporlar/konaklama-kisi-sayisi/konaklama-kisi-sayisi-rapor';
 import { OdemeDurumuRaporComponent } from './app/pages/raporlar/odeme-durumu/odeme-durumu-rapor';
+import { GunlukGirisCikisRaporComponent } from './app/pages/raporlar/gunluk-giris-cikis/gunluk-giris-cikis-rapor';
 import { RestoranYonetimi } from './app/pages/restoran-yonetimi/restoran-yonetimi';
 import { RestoranMasaYonetimi } from './app/pages/restoran-yonetimi/restoran-masa-yonetimi';
 import { RestoranMenuYonetimi } from './app/pages/restoran-yonetimi/restoran-menu-yonetimi';
@@ -150,6 +151,7 @@ export const appRoutes: Routes = [
             { path: 'raporlar/oda-doluluk-aylik', component: OdaDolulukAylikComponent, data: { breadcrumb: ['Raporlar', 'Aylık Oda Planı'] } },
             { path: 'raporlar/konaklama-kisi-sayisi', component: KonaklamaKisiSayisiRaporComponent, data: { breadcrumb: ['Raporlar', 'Aylık Konaklayan Kişi Sayısı'] } },
             { path: 'raporlar/odeme-durumu', component: OdemeDurumuRaporComponent, data: { breadcrumb: ['Raporlar', 'Ödeme Durumu / Borçlu Rezervasyonlar'] } },
+            { path: 'raporlar/gunluk-giris-cikis', component: GunlukGirisCikisRaporComponent, data: { breadcrumb: ['Raporlar', 'Günlük Giriş-Çıkış Listesi'] } },
             { path: 'restoran-yonetimi', component: RestoranYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Restoran Yonetimi'] } },
             { path: 'restoran-kategori-havuzu', component: RestoranKategoriHavuzuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Kategori Havuzu'] } },
             { path: 'restoran-masa-yonetimi', component: RestoranMasaYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Masa Yonetimi'] } },

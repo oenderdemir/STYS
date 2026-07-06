@@ -1,0 +1,133 @@
+<p-toast></p-toast>
+
+<div class="gunluk-giris-cikis-page">
+    <div class="sayfa-basligi">
+        <h1>Günlük Giriş-Çıkış Listesi</h1>
+        <p>Seçilen tarihte giriş yapacak, çıkış yapacak ve konaklamaya devam eden rezervasyonları görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="tarihPicker">Tarih</label>
+                    <p-datepicker
+                        id="tarihPicker"
+                        [(ngModel)]="selectedTarih"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="listeTipiSelect">Liste Tipi</label>
+                    <p-select
+                        id="listeTipiSelect"
+                        styleClass="liste-tipi-select"
+                        [options]="listeTipiSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedListeTipi"
+                    ></p-select>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Giriş</span>
+                    <span class="ozet-deger">{{ rapor.ozet.girisSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Çıkış</span>
+                    <span class="ozet-deger">{{ rapor.ozet.cikisSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Devam Eden</span>
+                    <span class="ozet-deger">{{ rapor.ozet.devamEdenSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-vurgu">
+                    <span class="ozet-etiket">Geciken Çıkış</span>
+                    <span class="ozet-deger">{{ rapor.ozet.gecikenCikisSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Kişi</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKisiSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Kalan</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKalanTutar | number: '1.2-2' }} {{ rapor.ozet.paraBirimi }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <p-card>
+            <p-table [value]="rapor.rezervasyonlar" [scrollable]="true" dataKey="rezervasyonId">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Durum</th>
+                        <th>Referans No</th>
+                        <th>Misafir</th>
+                        <th>Oda(lar)</th>
+                        <th>Kişi</th>
+                        <th>Giriş</th>
+                        <th>Çıkış</th>
+                        <th>Rez. Durumu</th>
+                        <th>Toplam Ücret</th>
+                        <th>Ödenen</th>
+                        <th>Kalan</th>
+                        <th>Açıklama</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-r>
+                    <tr [class.satir-geciken-cikis]="r.gecikenCikisMi"
+                        [class.satir-giris]="!r.gecikenCikisMi && r.girisYapacakMi"
+                        [class.satir-cikis]="!r.gecikenCikisMi && !r.girisYapacakMi && r.cikisYapacakMi"
+                        [class.satir-devam-eden]="!r.gecikenCikisMi && !r.girisYapacakMi && !r.cikisYapacakMi && r.devamEdiyorMu">
+                        <td><p-tag [value]="r.listeDurumuLabel" [severity]="listeDurumuSeverity(r.listeDurumu)"></p-tag></td>
+                        <td>{{ r.referansNo }}</td>
+                        <td>{{ r.misafirAdiSoyadi }}</td>
+                        <td>{{ r.odaNolari.join(', ') }}</td>
+                        <td>{{ r.kisiSayisi }}</td>
+                        <td>{{ r.girisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.cikisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.rezervasyonDurumuLabel }}</td>
+                        <td>{{ r.toplamUcret | number: '1.2-2' }}</td>
+                        <td>{{ r.odenenTutar | number: '1.2-2' }}</td>
+                        <td [class.kalan-tutar-uyari]="r.kalanTutar > 0">{{ r.kalanTutar | number: '1.2-2' }}</td>
+                        <td>{{ r.aciklama }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="12">Seçilen kriterlere uygun rezervasyon bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

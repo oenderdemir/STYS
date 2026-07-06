@@ -6384,3 +6384,33 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Günlük Giriş-Çıkış Listesi Raporu
+
+### Yapılan İşler
+- Günlük Giriş-Çıkış Listesi raporu eklendi; seçilen tarih için giriş, çıkış, devam eden ve geciken çıkış rezervasyonları ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; resepsiyon operasyonu için hazırlanmıştır. Yeni entity oluşturulmadı — mevcut `Rezervasyon`, `RezervasyonSegment`, `RezervasyonSegmentOdaAtama`, `RezervasyonOdeme` ve `Oda` kayıtları üzerinden üretilir.
+- `backend/Raporlar/GunlukGirisCikis/` altında yeni bir dikey dilim oluşturuldu: `Dto/GunlukGirisCikisRaporDto.cs`, `Services/GunlukGirisCikisRaporService.cs`, `Services/GunlukGirisCikisRaporExcelService.cs`, `Controllers/GunlukGirisCikisRaporController.cs` (`GET api/raporlar/gunluk-giris-cikis` ve `GET api/raporlar/gunluk-giris-cikis/excel`).
+- Sınıflandırma önceliği: geciken-çıkış > giriş/çıkış (günübirlik) > giriş > çıkış > devam-eden. Giriş: `GirisTarihi.Date == gun`; Çıkış: `CikisTarihi.Date == gun`; Devam eden: `GirisTarihi.Date < gun && CikisTarihi.Date > gun`; Geciken çıkış: `CikisTarihi.Date < gun && RezervasyonDurumu != CheckOutTamamlandi && RezervasyonDurumu != Iptal`.
+- `listeTipi` sorgu filtresi: `tumu, girisler, cikislar, devam-edenler, geciken-cikislar` (varsayılan `tumu`); geçersiz değer `BaseException` 400 fırlatır. İptal ve aktif olmayan rezervasyonlar rapora hiç girmez.
+- Oda numaraları, seçilen günle çakışan segment/atamalardan alınır (`segment.BaslangicTarihi < sonrakiGun && segment.BitisTarihi > gun`); ödeme toplamlarında ve oda atamalarında `!IsDeleted` (soft-delete) filtreleri uygulanır. Borç durumu rezervasyonun tüm ödemeleri üzerinden hesaplanır, tarih sadece rapora girecek rezervasyonları belirler.
+- Varsayılan sıralama: `GecikenCikisMi` azalan, `GirisYapacakMi` azalan, `CikisYapacakMi` azalan, `GirisTarihi` artan, ilk oda no'su artan, misafir adı artan. Özet, filtre uygulandıktan sonraki liste üzerinden hesaplanır.
+- Excel çıktısı iki sayfadan oluşur: "Özet" (tesis, tarih, liste tipi, tüm sayaçlar/toplamlar) ve "Liste" (14 kolon: Liste Durumu, Referans No, Misafir, Kurum/Ünite, Oda No(ları), Kişi Sayısı, Giriş/Çıkış Tarihi, Rezervasyon Durumu, Toplam Ücret, Ödenen Tutar, Kalan Tutar, Para Birimi, Açıklama) — geciken çıkış kırmızı/pembe, giriş açık yeşil, çıkış açık mavi, devam eden açık gri satır rengiyle; kalan tutar > 0 ise hücre ayrıca vurgulanır; tutarlar TRY için ₺, diğer birimler için kod ile formatlanır.
+- `StructurePermissions.GunlukGirisCikisRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `gunluk-giris-cikis-raporu` kaydı ve `20260706090000_AddGunlukGirisCikisRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı ve Ödeme Durumu raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/gunluk-giris-cikis/` altında yeni standalone Angular sayfası eklendi: tesis/tarih/liste tipi filtreleri, özet kartları (giriş, çıkış, devam eden, geciken çıkış, toplam kişi, toplam kalan), rezervasyon tablosu (durum badge'i, satır renklendirme, kalan tutar uyarısı) ve Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/gunluk-giris-cikis` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter GunlukGirisCikis` başarılı — 18/18 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

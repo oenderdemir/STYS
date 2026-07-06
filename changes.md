@@ -6493,3 +6493,35 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Oda Tipi Bazlı Doluluk Raporu
+
+### Yapılan İşler
+- Oda Tipi Bazlı Doluluk Raporu eklendi; seçilen tarih aralığında oda tiplerine göre oda/gün, doluluk oranı, müsaitlik oranı, rezervasyon ve kişi-gece metrikleri ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; tesis yönetimi ve kapasite planlaması için hazırlanmıştır. Yeni entity oluşturulmadı — mevcut `Oda`, `Bina`, `OdaTipi`, `Rezervasyon`, `RezervasyonSegment` ve `RezervasyonSegmentOdaAtama` kayıtları üzerinden üretilir.
+- `backend/Raporlar/OdaTipiDoluluk/` altında yeni bir dikey dilim oluşturuldu: `Dto/OdaTipiDolulukRaporDto.cs`, `Services/OdaTipiDolulukRaporService.cs`, `Services/OdaTipiDolulukRaporExcelService.cs`, `Controllers/OdaTipiDolulukRaporController.cs` (`GET api/raporlar/oda-tipi-doluluk` ve `GET api/raporlar/oda-tipi-doluluk/excel`).
+- Konaklama geceleme mantığı Boş Oda / Müsaitlik Raporu ile birebir aynı: her gün için `gun >= segment.BaslangicTarihi.Date && gun < segment.BitisTarihi.Date` kontrolü yapılır; çıkış günü oda tekrar kullanılabilir kabul edildiği için dolu gün hesabına dahil edilmez.
+- Odalar oda tipine göre gruplanır; her grup için `OdaSayisi`, `ToplamKapasite`, `ToplamOdaGunSayisi` (`OdaSayisi * ToplamGunSayisi`), `DoluOdaGunSayisi`, `BosOdaGunSayisi`, `DolulukOrani` ve `MusaitlikOrani` hesaplanır. Aynı oda/gün için birden fazla rezervasyon varsa yine 1 dolu oda/gün sayılır; kodda çakışma raporunun ileride ayrıca ele alınabileceğine dair TODO bırakıldı.
+- `ToplamRezervasyonSayisi` ve `ToplamKonaklayanKisiSayisi`, ilgili oda tipinde en az bir oda ataması olan rezervasyonları `RezervasyonId` üzerinden tekilleştirerek hesaplanır (aynı rezervasyon birden fazla segmentte olsa bile tek sayılır). `ToplamKisiGeceSayisi`, her segment/oda atamasının aralıkla kesişen gece sayısı ile rezervasyon kişi sayısının çarpımı toplanarak yaklaşık şekilde hesaplanır; kodda bunun oda tipi kullanım yoğunluğu için yaklaşık bir metrik olduğu ve aynı rezervasyon aynı gece birden fazla odaya atanmışsa kişi sayısının tekrar sayılabileceği belirtildi.
+- Validasyon: `tesisId > 0`; `baslangic <= bitis`; tarih aralığı en fazla 1 yıl (366 gün, dahil sayım ile); `odaTipiId` verilirse pozitif olmalı — aksi halde `BaseException` 400. `odaTipiId` verildiğinde oda tipi adı `OdaTipleri` tablosundan çözümlenip DTO'ya (`OdaTipiAdi`) doldurulur.
+- Sıralama: oda tipi satırları `DolulukOrani` azalan, `OdaTipiAdi` artan; oda tipi içindeki oda detayları `BinaAdi` sonra `OdaNo` artan.
+- Özet, `odaTipiId` filtresi varsa yalnızca filtrelenen oda tipi üzerinden hesaplanır (filtre zaten oda sorgusunda uygulandığı için özet doğal olarak buna göre şekillenir).
+- Excel çıktısı üç sayfadan oluşur: "Özet" (tesis, tarih aralığı, oda tipi adı, tüm sayaçlar/oranlar), "Oda Tipi Doluluk" (11 kolon: Oda Tipi, Oda Sayısı, Toplam Kapasite, Toplam/Dolu/Boş Oda-Gün, Doluluk/Müsaitlik Oranı, Rezervasyon Sayısı, Konaklayan Kişi Sayısı, Kişi-Gece; doluluk oranı ≥%80 olan satırlar vurgulanır; AutoFilter + frozen header) ve "Oda Detayları" (oda tipi, oda no, bina, kapasite, gün sayıları, doluluk oranı; AutoFilter + frozen header). Yüzde formatı, `Boş Oda / Müsaitlik Raporu`'nda olduğu gibi DTO'daki 0-100 aralığındaki değerlerle uyumlu `0.00"%"` biçiminde tutuldu (standart `0.00%` kullanılmadı).
+- `StructurePermissions.OdaTipiDolulukRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `oda-tipi-doluluk-raporu` kaydı ve `20260708090000_AddOdaTipiDolulukRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı, Ödeme Durumu, Günlük Giriş-Çıkış ve Boş Oda / Müsaitlik raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/oda-tipi-doluluk/` altında yeni standalone Angular sayfası eklendi: tesis/tarih aralığı/oda tipi filtreleri, özet kartları, oda tipi bazlı doluluk oranı bar grafiği (PrimeNG `p-chart`), açılır/kapanır (row expansion) oda tipi tablosu ve her satırda oda detayları; Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/oda-tipi-doluluk` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter OdaTipiDoluluk` başarılı — 19/19 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

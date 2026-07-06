@@ -1,0 +1,181 @@
+<p-toast></p-toast>
+
+<div class="oda-tipi-doluluk-page">
+    <div class="sayfa-basligi">
+        <h1>Oda Tipi Bazlı Doluluk Raporu</h1>
+        <p>Seçilen tarih aralığında oda tiplerine göre doluluk ve müsaitlik oranlarını görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="baslangicPicker">Başlangıç Tarihi</label>
+                    <p-datepicker
+                        id="baslangicPicker"
+                        [(ngModel)]="selectedBaslangic"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="bitisPicker">Bitiş Tarihi</label>
+                    <p-datepicker
+                        id="bitisPicker"
+                        [(ngModel)]="selectedBitis"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="odaTipiInput">Oda Tipi Id</label>
+                    <p-inputnumber
+                        id="odaTipiInput"
+                        [(ngModel)]="selectedOdaTipiId"
+                        [useGrouping]="false"
+                        placeholder="Tümü"
+                    ></p-inputnumber>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Oda Tipi</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamOdaTipiSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Oda</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamOdaSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Kapasite</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKapasite }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Dolu Oda/Gün</span>
+                    <span class="ozet-deger">{{ rapor.ozet.doluOdaGunSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Boş Oda/Gün</span>
+                    <span class="ozet-deger">{{ rapor.ozet.bosOdaGunSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-vurgu">
+                    <span class="ozet-etiket">Doluluk Oranı</span>
+                    <span class="ozet-deger">%{{ rapor.ozet.dolulukOrani | number: '1.2-2' }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <p-card>
+            <h2 class="rapor-baslik">{{ rapor.baslik }}</h2>
+            <div class="grafik-alani">
+                <p-chart type="bar" [data]="chartData" [options]="chartOptions" class="h-20rem"></p-chart>
+            </div>
+        </p-card>
+
+        <p-card>
+            <p-table [value]="rapor.odaTipleri" dataKey="odaTipiId" [expandedRowKeys]="expandedRowKeys">
+                <ng-template #header>
+                    <tr>
+                        <th style="width: 3rem"></th>
+                        <th>Oda Tipi</th>
+                        <th>Oda Sayısı</th>
+                        <th>Toplam Kapasite</th>
+                        <th>Dolu Oda/Gün</th>
+                        <th>Boş Oda/Gün</th>
+                        <th>Doluluk Oranı</th>
+                        <th>Müsaitlik Oranı</th>
+                        <th>Rezervasyon</th>
+                        <th>Konaklayan Kişi</th>
+                        <th>Kişi-Gece</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-odaTipi let-expanded="expanded">
+                    <tr>
+                        <td>
+                            <p-button type="button" [pRowToggler]="odaTipi" [text]="true" [rounded]="true" [plain]="true" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"></p-button>
+                        </td>
+                        <td>{{ odaTipi.odaTipiAdi }}</td>
+                        <td>{{ odaTipi.odaSayisi }}</td>
+                        <td>{{ odaTipi.toplamKapasite }}</td>
+                        <td>{{ odaTipi.doluOdaGunSayisi }}</td>
+                        <td>{{ odaTipi.bosOdaGunSayisi }}</td>
+                        <td>%{{ odaTipi.dolulukOrani | number: '1.2-2' }}</td>
+                        <td>%{{ odaTipi.musaitlikOrani | number: '1.2-2' }}</td>
+                        <td>{{ odaTipi.toplamRezervasyonSayisi }}</td>
+                        <td>{{ odaTipi.toplamKonaklayanKisiSayisi }}</td>
+                        <td>{{ odaTipi.toplamKisiGeceSayisi }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #expandedrow let-odaTipi>
+                    <tr>
+                        <td colspan="11">
+                            <div class="oda-detay-tablosu">
+                                <table class="detay-tablo">
+                                    <thead>
+                                        <tr>
+                                            <th>Oda No</th>
+                                            <th>Bina</th>
+                                            <th>Kapasite</th>
+                                            <th>Toplam Gün</th>
+                                            <th>Dolu Gün</th>
+                                            <th>Boş Gün</th>
+                                            <th>Doluluk Oranı</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @for (oda of odaTipi.odalar; track oda.odaId) {
+                                            <tr>
+                                                <td>{{ oda.odaNo }}</td>
+                                                <td>{{ oda.binaAdi }}</td>
+                                                <td>{{ oda.kapasite }}</td>
+                                                <td>{{ oda.toplamGunSayisi }}</td>
+                                                <td>{{ oda.doluGunSayisi }}</td>
+                                                <td>{{ oda.bosGunSayisi }}</td>
+                                                <td>%{{ oda.dolulukOrani | number: '1.2-2' }}</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="11">Seçilen kriterlere uygun oda tipi bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

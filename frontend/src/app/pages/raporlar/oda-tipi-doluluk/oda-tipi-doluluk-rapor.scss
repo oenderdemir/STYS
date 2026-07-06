@@ -1,0 +1,137 @@
+.oda-tipi-doluluk-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.sayfa-basligi {
+    padding: 0.25rem 0.25rem 0.5rem;
+
+    h1 {
+        margin: 0 0 0.2rem;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--text-color-secondary);
+    }
+}
+
+.filtre-karti {
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.filtre-satiri {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.filtre-grubu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.25rem;
+}
+
+.filtre-ogesi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-color-secondary);
+    }
+
+    ::ng-deep .tesis-select {
+        width: 220px;
+    }
+
+    ::ng-deep p-inputnumber input {
+        width: 120px;
+    }
+}
+
+.aksiyon-grubu {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.ozet-karti {
+    border-radius: 12px;
+}
+
+.ozet-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.ozet-hucre {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    background: var(--surface-50);
+
+    &.ozet-hucre-vurgu {
+        background: #e2efda;
+    }
+}
+
+.ozet-etiket {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary);
+}
+
+.ozet-deger {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.rapor-baslik {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 1rem;
+}
+
+.grafik-alani {
+    height: 20rem;
+}
+
+.oda-detay-tablosu {
+    padding: 0.75rem;
+    overflow-x: auto;
+}
+
+.detay-tablo {
+    border-collapse: collapse;
+    width: 100%;
+
+    th,
+    td {
+        border: 1px solid var(--surface-border);
+        padding: 0.4rem 0.6rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    th {
+        background: var(--surface-100);
+        font-weight: 700;
+    }
+}

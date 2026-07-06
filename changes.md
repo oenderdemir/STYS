@@ -6635,3 +6635,36 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Geciken Check-in / Giriş Yapmayan Rezervasyonlar Raporu
+
+### Yapılan İşler
+- Geciken Check-in / Giriş Yapmayan Rezervasyonlar Raporu eklendi; referans tarihine göre bugün giriş yapması gereken, geciken ve kritik geciken check-in bekleyen rezervasyonlar ekran ve Excel çıktısı olarak raporlandı.
+
+### Backend
+- Bu rapor bir muhasebe raporu değildir; resepsiyon ve tesis yönetimi için operasyonel bir takip raporudur. Yeni entity oluşturulmadı — mevcut `Rezervasyon`, `RezervasyonSegment`, `RezervasyonSegmentOdaAtama`, `Oda`, `Bina`, `OdaTipi` ve `RezervasyonOdeme` kayıtları üzerinden üretilir.
+- `backend/Raporlar/GecikenCheckIn/` altında yeni bir dikey dilim oluşturuldu: `Dto/GecikenCheckInRaporDto.cs`, `Services/GecikenCheckInRaporService.cs`, `Services/GecikenCheckInRaporExcelService.cs`, `Controllers/GecikenCheckInRaporController.cs` (`GET api/raporlar/geciken-check-in` ve `GET api/raporlar/geciken-check-in/excel`).
+- Projede mevcut bir date/time provider abstraction'ı bulunmuyor; bu yüzden "bugün" tek bir noktadan (`referansTarihi ?? DateTime.Now`) alınıyor ve testlerde `referansTarihi` parametresi açıkça verilerek `DateTime.Now`'a bağımlı olmadan doğrulanıyor.
+- Yalnızca henüz check-in yapılmamış (`Taslak`/`Onayli`) ve giriş tarihi referans tarihine kadar (dahil) olan rezervasyonlar dahil edilir; `CheckInTamamlandi`, `CheckOutTamamlandi` ve `Iptal` durumları ile gelecek tarihli, soft-delete edilmiş ve aktif olmayan rezervasyonlar hariç tutulur.
+- Gecikme sınıflandırması: `gecikenGunSayisi == 0` → "Bugün Giriş"; `1-2` → "Geciken"; `3+` → "Kritik Geciken". Negatif gecikme (gelecek tarihli) zaten SQL filtresiyle elenir.
+- `odaTipiId` ve `OdaTipiAdi` çözümlemesi, önceki raporlardaki güvenli/tutarlı yaklaşımla birebir aynı: tesis/aktif filtrelerinden geçen odalar üzerinden çözülür; rezervasyon satırındaki `OdaNolari`/`OdaTipleri` yalnızca filtrelenen oda tipine ait segment/oda atamalarını yansıtır.
+- Ödeme bilgileri (`OdenenTutar`, `KalanTutar`) rezervasyonun tüm ödeme kayıtları üzerinden (tarih filtresi uygulanmadan) hesaplanır; `RezervasyonOdemeler` sorgusunda `!IsDeleted` filtresi uygulanır.
+- Validasyon: `tesisId > 0`; `odaTipiId` verilirse pozitif olmalı; `gecikmeDurumu` verilirse desteklenen değerlerden (`tumu, bugun-giris, geciken, kritik-geciken`) biri olmalı.
+- Sıralama: `GecikenGunSayisi` azalan, `GirisTarihi` artan, `MisafirAdiSoyadi` artan.
+- Excel çıktısı iki sayfadan oluşur: "Özet" ve "Rezervasyonlar" (15 kolon) — bugün giriş satırları açık mavi, geciken satırlar açık sarı, kritik geciken satırlar açık kırmızı; Kalan Tutar > 0 hücresi, Günlük Giriş-Çıkış Listesi raporunda düzeltildiği gibi önce satır rengi sonra hücre dikkat rengi uygulanarak vurgulanır (satır rengi tarafından ezilmez); tutarlar para birimine göre (`TRY` için ₺, diğerleri için kod) formatlanır; AutoFilter + frozen header.
+- `StructurePermissions.GecikenCheckInRaporuYonetimi.Menu/.View` izinleri (yalnızca görüntüleme + Excel; Manage yok), `ErisimTeshisModulTanimlari.cs`'e `geciken-check-in-raporu` kaydı ve `20260711090000_AddGecikenCheckInRaporuPermissionsAndMenu.cs` idempotent SQL migration'ı eklendi (Admin/TesisYöneticisi/Resepsiyonist gruplarına Menu+View, Raporlar menüsü altına yeni menü öğesi).
+- Tesis erişim kontrolü mevcut raporlardaki `EnsureCanAccessTesisAsync` mantığıyla aynı: kurum kontrolü, scoped tesis kontrolü, yetkisiz tesis için 403.
+- Mevcut Aylık Oda Planı, Aylık Konaklayan Kişi Sayısı, Ödeme Durumu, Günlük Giriş-Çıkış, Boş Oda / Müsaitlik, Oda Tipi Bazlı Doluluk, Ortalama Konaklama Süresi ve Rezervasyon Durum Dağılımı raporlarına dokunulmadı; PDF export bu fazda yok.
+
+### Frontend
+- `frontend/src/app/pages/raporlar/geciken-check-in/` altında yeni standalone Angular sayfası eklendi: tesis/referans tarihi/oda tipi/gecikme durumu filtreleri, özet kartları, gecikme durumu badge'li rezervasyon tablosu (kritik geciken satırlar belirgin renklendirilir, kalan tutar > 0 için görsel uyarı); Excel indirme butonu.
+- `app.routes.ts`'e `raporlar/geciken-check-in` rotası eklendi.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter GecikenCheckIn` başarılı — 21/21 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

@@ -305,6 +305,12 @@ public static class StructurePermissions
         public const string View = "RezervasyonDurumDagilimiRaporuYonetimi.View";
     }
 
+    public static class GecikenCheckInRaporuYonetimi
+    {
+        public const string Menu = "GecikenCheckInRaporuYonetimi.Menu";
+        public const string View = "GecikenCheckInRaporuYonetimi.View";
+    }
+
     public static class RestoranYonetimi
     {
         public const string Menu = "RestoranYonetimi.Menu";

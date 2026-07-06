@@ -1,0 +1,138 @@
+<p-toast></p-toast>
+
+<div class="geciken-check-in-page">
+    <div class="sayfa-basligi">
+        <h1>Geciken Check-in Raporu</h1>
+        <p>Giriş tarihi geçmiş veya bugün olan, ancak check-in işlemi tamamlanmamış rezervasyonları görüntüleyin.</p>
+    </div>
+
+    <p-card styleClass="filtre-karti">
+        <div class="filtre-satiri">
+            <div class="filtre-grubu">
+                <div class="filtre-ogesi">
+                    <label for="tesisSelect">Tesis</label>
+                    <p-select
+                        id="tesisSelect"
+                        styleClass="tesis-select"
+                        [options]="tesisler"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedTesisId"
+                        [loading]="tesislerYukleniyor"
+                        placeholder="Tesis seçiniz"
+                    ></p-select>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="referansTarihiPicker">Referans Tarihi</label>
+                    <p-datepicker
+                        id="referansTarihiPicker"
+                        [(ngModel)]="selectedReferansTarihi"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        appendTo="body"
+                    ></p-datepicker>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="odaTipiInput">Oda Tipi Id</label>
+                    <p-inputnumber
+                        id="odaTipiInput"
+                        [(ngModel)]="selectedOdaTipiId"
+                        [useGrouping]="false"
+                        placeholder="Tümü"
+                    ></p-inputnumber>
+                </div>
+
+                <div class="filtre-ogesi">
+                    <label for="gecikmeDurumuSelect">Gecikme Durumu</label>
+                    <p-select
+                        id="gecikmeDurumuSelect"
+                        styleClass="gecikme-durumu-select"
+                        [options]="gecikmeDurumuSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="selectedGecikmeDurumu"
+                    ></p-select>
+                </div>
+            </div>
+
+            <div class="aksiyon-grubu">
+                <button pButton type="button" label="Rapor Getir" icon="pi pi-search" (click)="raporGetir()" [loading]="yukleniyor"></button>
+                <button pButton type="button" label="Excel" icon="pi pi-file-excel" severity="success" class="p-button-outlined" (click)="exportExcel()" [loading]="excelIndiriliyor"></button>
+            </div>
+        </div>
+    </p-card>
+
+    @if (rapor) {
+        <p-card styleClass="ozet-karti">
+            <div class="ozet-grid">
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Rezervasyon</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamRezervasyonSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Bugün Giriş</span>
+                    <span class="ozet-deger">{{ rapor.ozet.bugunGirisSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-uyari">
+                    <span class="ozet-etiket">Geciken</span>
+                    <span class="ozet-deger">{{ rapor.ozet.gecikenSayisi }}</span>
+                </div>
+                <div class="ozet-hucre ozet-hucre-kritik">
+                    <span class="ozet-etiket">Kritik Geciken</span>
+                    <span class="ozet-deger">{{ rapor.ozet.kritikGecikenSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Kişi</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKisiSayisi }}</span>
+                </div>
+                <div class="ozet-hucre">
+                    <span class="ozet-etiket">Toplam Kalan Tutar</span>
+                    <span class="ozet-deger">{{ rapor.ozet.toplamKalanTutar | number: '1.2-2' }}</span>
+                </div>
+            </div>
+        </p-card>
+
+        <p-card>
+            <p-table [value]="rapor.rezervasyonlar" [scrollable]="true" dataKey="rezervasyonId">
+                <ng-template #header>
+                    <tr>
+                        <th>Referans No</th>
+                        <th>Misafir</th>
+                        <th>Telefon</th>
+                        <th>Giriş</th>
+                        <th>Çıkış</th>
+                        <th>Geciken Gün</th>
+                        <th>Gecikme Durumu</th>
+                        <th>Oda(lar)</th>
+                        <th>Oda Tipi(leri)</th>
+                        <th>Rez. Durumu</th>
+                        <th>Kalan Tutar</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-r>
+                    <tr [class.satir-kritik-geciken]="r.gecikmeDurumu === 'kritik-geciken'">
+                        <td>{{ r.referansNo }}</td>
+                        <td>{{ r.misafirAdiSoyadi }}</td>
+                        <td>{{ r.misafirTelefon }}</td>
+                        <td>{{ r.girisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.cikisTarihi | date: 'dd.MM.yyyy' }}</td>
+                        <td>{{ r.gecikenGunSayisi }}</td>
+                        <td><p-tag [value]="r.gecikmeDurumuLabel" [severity]="gecikmeDurumuSeverity(r.gecikmeDurumu)"></p-tag></td>
+                        <td>{{ r.odaNolari.join(', ') }}</td>
+                        <td>{{ r.odaTipleri.join(', ') }}</td>
+                        <td>{{ r.rezervasyonDurumuLabel }}</td>
+                        <td [class.kalan-tutar-uyari]="r.kalanTutar > 0">{{ r.kalanTutar | number: '1.2-2' }} {{ r.paraBirimi }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="11">Seçilen kriterlere uygun rezervasyon bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

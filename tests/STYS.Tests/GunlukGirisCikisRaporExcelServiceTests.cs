@@ -101,6 +101,29 @@ public class GunlukGirisCikisRaporExcelServiceTests
         Assert.Contains("₺", satir.Cell(12).Style.NumberFormat.Format);
     }
 
+    // Satir durum rengi olan (giris) ve KalanTutar > 0 olan bir kayitta, Kalan Tutar hucresinin
+    // dikkat rengi satir renginin altinda kalmamali; diger hucrelerde satir rengi korunmali.
+    [Fact]
+    public async Task OlusturAsync_KalanTutarDikkatRengiSatirRengiTarafindanEzilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTesisAsync(dbContext);
+        await SeedRezervasyonAsync(dbContext, girisTarihi: SeciliGun, cikisTarihi: SeciliGun.AddDays(3), toplamUcret: 1000m, rezervasyonDurumu: RezervasyonDurumlari.Onayli, referansNo: "REF-GIRIS-BORCLU");
+
+        var service = CreateExcelService(dbContext);
+        var bytes = await service.OlusturAsync(1, SeciliGun, "tumu");
+
+        using var workbook = new XLWorkbook(new MemoryStream(bytes));
+        var ws = workbook.Worksheet("Liste");
+        var satir = ws.RowsUsed().Skip(1).Single(r => r.Cell(2).GetString() == "REF-GIRIS-BORCLU");
+
+        Assert.Equal(XLColor.FromHtml("#E2EFDA"), satir.Cell(1).Style.Fill.BackgroundColor);
+        Assert.Equal(XLColor.FromHtml("#E2EFDA"), satir.Cell(6).Style.Fill.BackgroundColor);
+        Assert.Equal(XLColor.FromHtml("#FFC7CE"), satir.Cell(12).Style.Fill.BackgroundColor);
+        Assert.True(satir.Cell(12).Style.Font.Bold);
+        Assert.Contains("₺", satir.Cell(12).Style.NumberFormat.Format);
+    }
+
     private static GunlukGirisCikisRaporExcelService CreateExcelService(StysAppDbContext dbContext)
     {
         var raporService = new GunlukGirisCikisRaporService(

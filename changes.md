@@ -6414,3 +6414,26 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Günlük Giriş-Çıkış Listesi Excel — Kalan Tutar Vurgusu Düzeltmesi
+
+### Yapılan İşler
+- Günlük Giriş-Çıkış Listesi Excel çıktısında kalan tutar hücresi uyarı renginin satır durum rengi tarafından ezilmesi engellendi.
+
+### Backend
+- Kök neden: `YazListeSayfasi` metodunda Kalan Tutar hücresine önce dikkat rengi uygulanıyor, ardından tüm satıra liste durumu rengi (giriş/çıkış/devam eden/geciken çıkış) veriliyordu; bu da satır rengi Kalan Tutar hücresinin arka planını eziyordu.
+- Renklendirme sırası değiştirildi: önce satır durum rengi uygulanır, ardından `KalanTutar > 0` ise yalnızca o hücre `RenkKalanTutarDikkat` ile (bold, number format korunarak) yeniden boyanır.
+- `tests/STYS.Tests/GunlukGirisCikisRaporExcelServiceTests.cs`: `OlusturAsync_KalanTutarDikkatRengiSatirRengiTarafindanEzilmez` testi eklendi; giriş satırı rengiyle (`#E2EFDA`) birlikte Kalan Tutar hücresinin `#FFC7CE` dikkat rengini ve bold/number format özelliklerini koruduğunu doğrular.
+- Rapor hesaplama mantığı, tablo düzeni ve endpoint yolu değişmedi.
+
+### Frontend
+- Değişiklik yok.
+
+### Backend
+- `dotnet build backend/STYS.csproj` başarılı — 0 error
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter GunlukGirisCikis` başarılı — 19/19 geçti
+
+### Frontend
+- `npx ng build --configuration development` başarılı — 0 error

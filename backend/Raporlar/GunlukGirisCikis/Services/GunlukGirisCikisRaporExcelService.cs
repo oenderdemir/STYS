@@ -143,20 +143,23 @@ public class GunlukGirisCikisRaporExcelService : IGunlukGirisCikisRaporExcelServ
             var kalanCell = ws.Cell(satir, 12);
             kalanCell.Value = r.KalanTutar;
             kalanCell.Style.NumberFormat.Format = paraFormati;
-            if (r.KalanTutar > 0m)
-            {
-                kalanCell.Style.Font.Bold = true;
-                kalanCell.Style.Fill.BackgroundColor = XLColor.FromHtml(RenkKalanTutarDikkat);
-            }
 
             ws.Cell(satir, 13).Value = r.ParaBirimi;
             ws.Cell(satir, 14).Value = r.Aciklama ?? string.Empty;
 
+            // Once satir durum rengi uygulanir, ardindan Kalan Tutar > 0 ise o hucre ayrica
+            // dikkat rengiyle boyanir; aksi halde satir rengi bu uyariyi ezerdi.
             var satirAraligi = ws.Range(satir, 1, satir, basliklar.Length);
             var satirRengi = SatirRengi(r);
             if (satirRengi is not null)
             {
                 satirAraligi.Style.Fill.BackgroundColor = XLColor.FromHtml(satirRengi);
+            }
+
+            if (r.KalanTutar > 0m)
+            {
+                kalanCell.Style.Font.Bold = true;
+                kalanCell.Style.Fill.BackgroundColor = XLColor.FromHtml(RenkKalanTutarDikkat);
             }
 
             satir++;

@@ -4,6 +4,8 @@ using STYS.Iller.Entities;
 using STYS.Kamp.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.OdaTipleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
@@ -39,9 +41,22 @@ public class Tesis : BaseEntity<int>, ITenantEntity
     [MaxLength(16)]
     public string EkHizmetPaketCakismaPolitikasi { get; set; } = EkHizmetPaketCakismaPolitikalari.OnayIste;
 
+    /// <summary>Rezervasyon misafirinin TCKN/telefon ile mevcut bir cari karta eslenemedigi durumlarda
+    /// dusulecek varsayilan "Rezervasyon Misafirleri" cari karti. Bos ise odeme ekraninda kullanicidan
+    /// cari kart secimi istenir; otomatik cari kart OLUSTURULMAZ.</summary>
+    public int? RezervasyonMisafirVarsayilanCariKartId { get; set; }
+
+    /// <summary>Rezervasyon tahsilat fisinde alacak tarafinin hangi hesaba yazilacagini belirler
+    /// (bkz. RezervasyonTahsilatAlacakHesapTipleri). Varsayilan: cari hesap.</summary>
+    [Required]
+    [MaxLength(16)]
+    public string RezervasyonTahsilatAlacakHesapTipi { get; set; } = RezervasyonTahsilatAlacakHesapTipleri.Cari;
+
     public bool AktifMi { get; set; } = true;
 
     public Kurum? Kurum { get; set; }
+
+    public CariKart? RezervasyonMisafirVarsayilanCariKart { get; set; }
 
     public Il? Il { get; set; }
 

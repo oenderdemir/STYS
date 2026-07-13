@@ -28,10 +28,12 @@ import { tryReadApiMessage } from '../../../../core/api';
 import { UiSeverity } from '../../../../core/ui/ui-severity.constants';
 import { EkHizmetPaketCakismaPolitikalari } from '../../../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
 import {
+    RezervasyonCariKartSecenekDto,
     RezervasyonEkHizmetDto,
     RezervasyonEkHizmetMisafirSecenekDto,
     RezervasyonEkHizmetSecenekleriDto,
     RezervasyonEkHizmetTarifeSecenekDto,
+    RezervasyonKasaBankaHesapSecenekDto,
     RezervasyonOdemeDto,
     RezervasyonOdemeOzetDto
 } from '../../rezervasyon-yonetimi.dto';
@@ -89,18 +91,42 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     odemeTutari: number | null = null;
     odemeTipi = 'Nakit';
     odemeAciklama = '';
+    kasaBankaHesapId: number | null = null;
+    kasaBankaHesapSecenekleri: RezervasyonKasaBankaHesapSecenekDto[] = [];
+    kasaBankaHesapYukleniyor = false;
+
+    cariKartSecimiGerekli = false;
+    cariKartId: number | null = null;
+    cariKartSecenekleri: RezervasyonCariKartSecenekDto[] = [];
+    cariKartAramaMetni = '';
+    cariKartYukleniyor = false;
+    private sonOdemeIstegi: { odemeTutari: number; odemeTipi: string; aciklama: string | null } | null = null;
+
+    iptalEdilenOdemeId: number | null = null;
 
     private odemeLoadSeq = 0;
     private ekHizmetSecenekLoadSeq = 0;
+    private kasaBankaHesapLoadSeq = 0;
+    private cariKartLoadSeq = 0;
 
     private readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
     private readonly durumCheckOutTamamlandi = 'CheckOutTamamlandi';
     private readonly durumIptal = 'Iptal';
+    private readonly odemeDurumuIptal = 'Iptal';
 
     readonly odemeTipleri = [
         { label: 'Nakit', value: 'Nakit' },
-        { label: 'Kredi Karti', value: 'KrediKarti' }
+        { label: 'Kredi Karti / POS', value: 'KrediKarti' },
+        { label: 'Havale/EFT', value: 'HavaleEft' }
     ];
+
+    // Backend OdemeYontemleri.NakitHareketiGerektirenler ile ayni liste — bu odeme
+    // tiplerinde kasa/banka/POS hesabi secimi zorunludur.
+    private readonly nakitHareketiGerektirenler = ['Nakit', 'KrediKarti', 'HavaleEft'];
+
+    get kasaBankaHesapGerekli(): boolean {
+        return this.nakitHareketiGerektirenler.includes(this.odemeTipi);
+    }
 
     get ekHizmetMisafirSecenekleri(): RezervasyonEkHizmetMisafirSecenekDto[] {
         return this.odemeEkHizmetSecenekleri?.misafirler ?? [];
@@ -159,6 +185,11 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         return this.odemeOzeti.odemeler.filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0));
     }
 
+    /** Iptal edilmis tahsilatlar tabloda gorunmeye devam eder ama bakiye hesaplarina dahil edilmez. */
+    get aktifTahsilatKayitlari(): RezervasyonOdemeDto[] {
+        return this.tahsilatKayitlari.filter((x) => x.durum !== this.odemeDurumuIptal);
+    }
+
     get restoranUcretlendirmeToplami(): number {
         return this.restoranUcretlendirmeKayitlari.reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
     }
@@ -172,7 +203,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     }
 
     get odemeDialogOdenenToplam(): number {
-        return this.tahsilatKayitlari.reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
+        return this.aktifTahsilatKayitlari.reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
     }
 
     get odemeDialogKalanTutar(): number {
@@ -193,6 +224,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             this.resetFormState();
             this.loadOdemeOzeti(this.rezervasyonId!);
             this.loadEkHizmetSecenekleri(this.rezervasyonId!);
+            this.loadKasaBankaHesapSecenekleri();
             return;
         }
 
@@ -393,6 +425,11 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             });
     }
 
+    onOdemeTipiChange(): void {
+        this.kasaBankaHesapId = null;
+        this.loadKasaBankaHesapSecenekleri();
+    }
+
     kaydetOdeme(): void {
         if (!this.rezervasyonId || !this.odemeOzeti || this.saving) {
             return;
@@ -409,12 +446,28 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             return;
         }
 
+        if (this.kasaBankaHesapGerekli && !this.kasaBankaHesapId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: `'${this.odemeTipi}' odeme tipi icin kasa/banka/POS hesabi seciniz.` });
+            return;
+        }
+
+        this.sonOdemeIstegi = { odemeTutari: tutar, odemeTipi: this.odemeTipi, aciklama: this.normalizeOptional(this.odemeAciklama) };
+        this.executeKaydetOdeme();
+    }
+
+    private executeKaydetOdeme(): void {
+        if (!this.rezervasyonId || !this.sonOdemeIstegi) {
+            return;
+        }
+
         this.saving = true;
         this.service
             .kaydetOdeme(this.rezervasyonId, {
-                odemeTutari: tutar,
-                odemeTipi: this.odemeTipi,
-                aciklama: this.normalizeOptional(this.odemeAciklama)
+                odemeTutari: this.sonOdemeIstegi.odemeTutari,
+                odemeTipi: this.sonOdemeIstegi.odemeTipi,
+                kasaBankaHesapId: this.kasaBankaHesapId,
+                cariKartId: this.cariKartId,
+                aciklama: this.sonOdemeIstegi.aciklama
             })
             .pipe(
                 finalize(() => {
@@ -427,13 +480,151 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
                     this.odemeOzeti = result;
                     this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
                     this.odemeAciklama = '';
+                    this.sonOdemeIstegi = null;
+                    this.cariKartSecimiGerekli = false;
+                    this.cariKartId = null;
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
+                    this.saved.emit(result);
+                    this.cdr.markForCheck();
+                },
+                error: (error: unknown) => {
+                    if (error instanceof HttpErrorResponse && error.status === 422) {
+                        // Cari kart otomatik belirlenemedi — kullanicidan secim istenir (bkz. backend
+                        // RezervasyonOdemeMuhasebeService.ResolveCariKartIdAsync).
+                        this.cariKartSecimiGerekli = true;
+                        this.loadCariKartSecenekleri();
+                        this.messageService.add({ severity: UiSeverity.Warn, summary: 'Cari Kart Secimi Gerekli', detail: this.resolveErrorMessage(error) });
+                        this.cdr.markForCheck();
+                        return;
+                    }
+
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    cariKartSeciminiOnayla(): void {
+        if (!this.cariKartId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Lutfen bir cari kart seciniz.' });
+            return;
+        }
+
+        this.executeKaydetOdeme();
+    }
+
+    cariKartSeciminiIptalEt(): void {
+        this.cariKartSecimiGerekli = false;
+        this.cariKartId = null;
+        this.sonOdemeIstegi = null;
+    }
+
+    iptalEtOdeme(odeme: RezervasyonOdemeDto): void {
+        if (!this.rezervasyonId || this.iptalEdilenOdemeId) {
+            return;
+        }
+
+        if (!window.confirm(`${this.formatCurrency(odeme.odemeTutari, odeme.paraBirimi)} tutarindaki odeme iptal edilsin mi? Bu islem geri alinamaz.`)) {
+            return;
+        }
+
+        const rezervasyonId = this.rezervasyonId;
+        this.iptalEdilenOdemeId = odeme.id;
+        this.service
+            .iptalOdeme(rezervasyonId, odeme.id, { aciklama: null })
+            .pipe(
+                finalize(() => {
+                    this.iptalEdilenOdemeId = null;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.odemeOzeti = result;
+                    this.odemeTutari = this.getOdemeGorunumKalanTutar(result) > 0 ? this.getOdemeGorunumKalanTutar(result) : null;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme iptal edildi.' });
                     this.saved.emit(result);
                     this.cdr.markForCheck();
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
                     this.cdr.markForCheck();
+                }
+            });
+    }
+
+    isOdemeIptalEdilebilir(odeme: RezervasyonOdemeDto): boolean {
+        return odeme.durum !== this.odemeDurumuIptal && this.rezervasyonDurumu !== this.durumIptal;
+    }
+
+    private loadKasaBankaHesapSecenekleri(): void {
+        if (!this.rezervasyonId || !this.kasaBankaHesapGerekli) {
+            this.kasaBankaHesapSecenekleri = [];
+            return;
+        }
+
+        const seq = ++this.kasaBankaHesapLoadSeq;
+        this.kasaBankaHesapYukleniyor = true;
+        this.service
+            .getKasaBankaHesapSecenekleri(this.rezervasyonId, this.odemeTipi)
+            .pipe(
+                finalize(() => {
+                    if (seq === this.kasaBankaHesapLoadSeq) {
+                        this.kasaBankaHesapYukleniyor = false;
+                        this.cdr.markForCheck();
+                    }
+                })
+            )
+            .subscribe({
+                next: (secenekler) => {
+                    if (seq === this.kasaBankaHesapLoadSeq) {
+                        this.kasaBankaHesapSecenekleri = secenekler;
+                        if (!secenekler.some((x) => x.id === this.kasaBankaHesapId)) {
+                            this.kasaBankaHesapId = secenekler.length === 1 ? secenekler[0].id : null;
+                        }
+                        this.cdr.markForCheck();
+                    }
+                },
+                error: (error: unknown) => {
+                    if (seq === this.kasaBankaHesapLoadSeq) {
+                        this.kasaBankaHesapSecenekleri = [];
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.cdr.markForCheck();
+                    }
+                }
+            });
+    }
+
+    loadCariKartSecenekleri(): void {
+        if (!this.rezervasyonId) {
+            return;
+        }
+
+        const seq = ++this.cariKartLoadSeq;
+        this.cariKartYukleniyor = true;
+        this.service
+            .getCariKartSecenekleri(this.rezervasyonId, this.cariKartAramaMetni)
+            .pipe(
+                finalize(() => {
+                    if (seq === this.cariKartLoadSeq) {
+                        this.cariKartYukleniyor = false;
+                        this.cdr.markForCheck();
+                    }
+                })
+            )
+            .subscribe({
+                next: (secenekler) => {
+                    if (seq === this.cariKartLoadSeq) {
+                        this.cariKartSecenekleri = secenekler;
+                        this.cdr.markForCheck();
+                    }
+                },
+                error: (error: unknown) => {
+                    if (seq === this.cariKartLoadSeq) {
+                        this.cariKartSecenekleri = [];
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                        this.cdr.markForCheck();
+                    }
                 }
             });
     }
@@ -640,7 +831,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             .reduce((sum, x) => sum + Math.abs(Number(x.odemeTutari ?? 0)), 0);
 
         const tahsilatToplami = (ozet.odemeler ?? [])
-            .filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0))
+            .filter((x) => !(x.odemeTipi === 'OdayaEkle' || x.odemeTutari < 0) && x.durum !== this.odemeDurumuIptal)
             .reduce((sum, x) => sum + Number(x.odemeTutari ?? 0), 0);
 
         const toplamBorc = (ozet.konaklamaUcreti ?? 0) + (ozet.ekHizmetToplami ?? 0) + restoranUcretlendirmeToplami;
@@ -690,15 +881,25 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.odemeTutari = null;
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
+        this.kasaBankaHesapId = null;
+        this.kasaBankaHesapSecenekleri = [];
+        this.cariKartSecimiGerekli = false;
+        this.cariKartId = null;
+        this.cariKartSecenekleri = [];
+        this.cariKartAramaMetni = '';
+        this.sonOdemeIstegi = null;
     }
 
     private reset(): void {
         ++this.odemeLoadSeq;
         ++this.ekHizmetSecenekLoadSeq;
+        ++this.kasaBankaHesapLoadSeq;
+        ++this.cariKartLoadSeq;
         this.resetFormState();
         this.loading = false;
         this.saving = false;
         this.ekHizmetSaving = false;
+        this.iptalEdilenOdemeId = null;
     }
 
     private resetEkHizmetForm(): void {

@@ -13,5 +13,19 @@ public class RezervasyonOdemeDto
     public string OdemeTipi { get; set; } = string.Empty;
 
     public string? Aciklama { get; set; }
+
+    public string Durum { get; set; } = "Aktif";
+
+    public DateTime? IptalTarihi { get; set; }
+
+    public string? IptalAciklama { get; set; }
+
+    public int? KasaBankaHesapId { get; set; }
+
+    public string? KasaBankaHesapAdi { get; set; }
+
+    public int? TahsilatOdemeBelgesiId { get; set; }
+
+    public string? TahsilatOdemeBelgesiNo { get; set; }
 }
 

@@ -22,6 +22,9 @@ import {
     RezervasyonKonaklayanPlanKaydetRequestDto,
     RezervasyonListeDto,
     RezervasyonMisafirTipiDto,
+    RezervasyonCariKartSecenekDto,
+    RezervasyonKasaBankaHesapSecenekDto,
+    RezervasyonOdemeIptalRequestDto,
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
     RezervasyonOdaDegisimKaydetRequestDto,
@@ -443,6 +446,48 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme kaydedilemedi.');
+            })
+        );
+    }
+
+    iptalOdeme(rezervasyonId: number, odemeId: number, request: RezervasyonOdemeIptalRequestDto): Observable<RezervasyonOdemeOzetDto> {
+        return this.http.post<ApiResponse<RezervasyonOdemeOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/odemeler/${odemeId}/iptal`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme iptal edilemedi.');
+            })
+        );
+    }
+
+    getKasaBankaHesapSecenekleri(rezervasyonId: number, odemeTipi: string): Observable<RezervasyonKasaBankaHesapSecenekDto[]> {
+        const params = new HttpParams().set('odemeTipi', odemeTipi);
+        return this.http.get<ApiResponse<RezervasyonKasaBankaHesapSecenekDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/kasa-banka-hesap-secenekleri`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kasa/banka hesap secenekleri alinamadi.');
+            })
+        );
+    }
+
+    getCariKartSecenekleri(rezervasyonId: number, arama?: string): Observable<RezervasyonCariKartSecenekDto[]> {
+        let params = new HttpParams();
+        if (arama && arama.trim().length > 0) {
+            params = params.set('arama', arama.trim());
+        }
+
+        return this.http.get<ApiResponse<RezervasyonCariKartSecenekDto[]>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/cari-kart-secenekleri`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Cari kart secenekleri alinamadi.');
             })
         );
     }

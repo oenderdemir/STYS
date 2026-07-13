@@ -125,3 +125,8 @@
 .rez-odeme-table-cell {
     white-space: nowrap;
 }
+
+:host ::ng-deep .rez-odeme-row-iptal {
+    opacity: 0.55;
+    text-decoration: line-through;
+}

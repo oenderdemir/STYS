@@ -121,6 +121,7 @@ builder.Services.AddScoped<IKampBasvuruService, KampBasvuruService>();
 builder.Services.AddScoped<IKampTahsisService, KampTahsisService>();
 builder.Services.AddScoped<IKampRezervasyonService, KampRezervasyonService>();
 builder.Services.AddScoped<IRezervasyonService, RezervasyonService>();
+builder.Services.AddScoped<IRezervasyonOdemeMuhasebeService, RezervasyonOdemeMuhasebeService>();
 builder.Services.AddScoped<IOdaDolulukRaporService, OdaDolulukRaporService>();
 builder.Services.AddScoped<IOdaDolulukRaporExcelService, OdaDolulukRaporExcelService>();
 builder.Services.AddScoped<IOdaDolulukRaporPdfService, OdaDolulukRaporPdfService>();
@@ -177,6 +178,7 @@ builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, SatisFaturasiMuha
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, AlisTevkifatliFaturaMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, AlisFaturasiMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisService, SatisBelgesiMuhasebeFisService>();
+builder.Services.AddScoped<STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.ITahsilatOdemeBelgesiMuhasebeFisService, STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.TahsilatOdemeBelgesiMuhasebeFisService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 

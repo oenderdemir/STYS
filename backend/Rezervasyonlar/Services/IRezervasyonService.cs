@@ -71,6 +71,12 @@ public interface IRezervasyonService
 
     Task<RezervasyonOdemeOzetDto> KaydetOdemeAsync(int rezervasyonId, RezervasyonOdemeKaydetRequestDto request, CancellationToken cancellationToken = default);
 
+    Task<RezervasyonOdemeOzetDto> IptalOdemeAsync(int rezervasyonId, int odemeId, RezervasyonOdemeIptalRequestDto request, CancellationToken cancellationToken = default);
+
+    Task<List<RezervasyonKasaBankaHesapSecenekDto>> GetKasaBankaHesapSecenekleriAsync(int rezervasyonId, string odemeTipi, CancellationToken cancellationToken = default);
+
+    Task<List<RezervasyonCariKartSecenekDto>> GetCariKartSecenekleriAsync(int rezervasyonId, string? arama, CancellationToken cancellationToken = default);
+
     Task<RezervasyonDetayDto> GuncelleKonaklamaHakkiDurumuAsync(
         int rezervasyonId,
         int hakId,

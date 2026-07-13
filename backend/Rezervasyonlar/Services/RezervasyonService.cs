@@ -16,6 +16,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Licensing;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
 using STYS.Rezervasyonlar.Dto;
@@ -37,6 +38,7 @@ public class RezervasyonService : IRezervasyonService
     private readonly ILicenseService _licenseService;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IDomainOperationLogger _domainLogger;
+    private readonly IRezervasyonOdemeMuhasebeService _rezervasyonOdemeMuhasebeService;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
@@ -45,7 +47,8 @@ public class RezervasyonService : IRezervasyonService
         IHttpContextAccessor httpContextAccessor,
         ILicenseService licenseService,
         ICurrentTenantAccessor currentTenantAccessor,
-        IDomainOperationLogger domainLogger)
+        IDomainOperationLogger domainLogger,
+        IRezervasyonOdemeMuhasebeService rezervasyonOdemeMuhasebeService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -54,6 +57,7 @@ public class RezervasyonService : IRezervasyonService
         _licenseService = licenseService;
         _currentTenantAccessor = currentTenantAccessor;
         _domainLogger = domainLogger;
+        _rezervasyonOdemeMuhasebeService = rezervasyonOdemeMuhasebeService;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -672,6 +676,7 @@ public class RezervasyonService : IRezervasyonService
                 x.Rezervasyon != null
                 && x.Rezervasyon.AktifMi
                 && x.Rezervasyon.TesisId == tesisId
+                && x.Durum == RezervasyonOdemeDurumlari.Aktif
                 && x.OdemeTarihi >= kpiBaslangic
                 && x.OdemeTarihi < kpiBitisExclusive)
             .SumAsync(x => (decimal?)x.OdemeTutari, cancellationToken) ?? 0m;
@@ -681,6 +686,7 @@ public class RezervasyonService : IRezervasyonService
                 x.Rezervasyon != null
                 && x.Rezervasyon.AktifMi
                 && x.Rezervasyon.TesisId == tesisId
+                && x.Durum == RezervasyonOdemeDurumlari.Aktif
                 && x.OdemeTarihi >= kpiBaslangic
                 && x.OdemeTarihi < kpiBitisExclusive)
             .GroupBy(x => x.OdemeTarihi.Date)
@@ -696,6 +702,7 @@ public class RezervasyonService : IRezervasyonService
                 x.Rezervasyon != null
                 && x.Rezervasyon.AktifMi
                 && x.Rezervasyon.TesisId == tesisId
+                && x.Durum == RezervasyonOdemeDurumlari.Aktif
                 && x.OdemeTarihi >= kpiBaslangic
                 && x.OdemeTarihi < kpiBitisExclusive)
             .GroupBy(x => x.OdemeTipi)
@@ -2595,10 +2602,7 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Check-out icin once check-in tamamlanmalidir.", 400);
         }
 
-        var odenenTutar = await _stysDbContext.RezervasyonOdemeler
-            .Where(x => x.RezervasyonId == reservation.Id)
-            .Select(x => (decimal?)x.OdemeTutari)
-            .SumAsync(cancellationToken) ?? 0m;
+        var odenenTutar = await GetToplamOdenenTutarAsync(reservation.Id, cancellationToken);
 
         var ekHizmetToplami = await GetRezervasyonEkHizmetToplamiAsync(rezervasyonId, cancellationToken);
         var kalanTutar = (reservation.ToplamUcret + ekHizmetToplami) - odenenTutar;
@@ -3012,13 +3016,21 @@ public class RezervasyonService : IRezervasyonService
                 OdemeTutari = x.OdemeTutari,
                 ParaBirimi = x.ParaBirimi,
                 OdemeTipi = x.OdemeTipi,
-                Aciklama = x.Aciklama
+                Aciklama = x.Aciklama,
+                Durum = x.Durum,
+                IptalTarihi = x.IptalTarihi,
+                IptalAciklama = x.IptalAciklama,
+                KasaBankaHesapId = x.KasaBankaHesapId,
+                KasaBankaHesapAdi = x.KasaBankaHesap != null ? x.KasaBankaHesap.Ad : null,
+                TahsilatOdemeBelgesiId = x.TahsilatOdemeBelgesiId,
+                TahsilatOdemeBelgesiNo = x.TahsilatOdemeBelgesi != null ? x.TahsilatOdemeBelgesi.BelgeNo : null
             })
             .ToListAsync(cancellationToken);
 
         var ekHizmetToplami = ekHizmetler.Sum(x => x.ToplamTutar);
         var toplamUcret = reservation.ToplamUcret + ekHizmetToplami;
-        var odenenTutar = odemeler.Sum(x => x.OdemeTutari);
+        // Iptal edilen odemeler bakiyeyi etkilemez.
+        var odenenTutar = odemeler.Where(x => x.Durum == RezervasyonOdemeDurumlari.Aktif).Sum(x => x.OdemeTutari);
         var kalanTutar = Math.Max(0m, toplamUcret - odenenTutar);
 
         return new RezervasyonOdemeOzetDto
@@ -3354,10 +3366,7 @@ public class RezervasyonService : IRezervasyonService
         var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
         await EnsureReservationAllowsPaymentCreateAsync(reservation);
 
-        var odenenTutar = await _stysDbContext.RezervasyonOdemeler
-            .Where(x => x.RezervasyonId == reservation.Id)
-            .Select(x => (decimal?)x.OdemeTutari)
-            .SumAsync(cancellationToken) ?? 0m;
+        var odenenTutar = await GetToplamOdenenTutarAsync(reservation.Id, cancellationToken);
 
         var ekHizmetToplami = await GetRezervasyonEkHizmetToplamiAsync(rezervasyonId, cancellationToken);
         var toplamUcret = reservation.ToplamUcret + ekHizmetToplami;
@@ -3375,36 +3384,55 @@ public class RezervasyonService : IRezervasyonService
         var yeniOdenenTutar = odenenTutar + request.OdemeTutari;
         var yeniKalanTutar = Math.Max(0m, toplamUcret - yeniOdenenTutar);
 
-        await _stysDbContext.RezervasyonOdemeler.AddAsync(new RezervasyonOdeme
+        // RezervasyonOdeme ve TahsilatOdemeBelgesi ayni transaction icinde olusur: muhasebe
+        // entegrasyonu basarisiz olursa RezervasyonOdeme de geri alinir, veri tutarsizligi olmaz.
+        await using var transaction = await _stysDbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            RezervasyonId = reservation.Id,
-            OdemeTarihi = DateTime.UtcNow,
-            OdemeTutari = request.OdemeTutari,
-            ParaBirimi = reservation.ParaBirimi,
-            OdemeTipi = normalizedOdemeTipi,
-            Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim()
-        }, cancellationToken);
-
-        AppendHistoryEntry(
-            rezervasyonId,
-            RezervasyonGecmisIslemTipleri.OdemeKaydedildi,
-            "Rezervasyona odeme eklendi.",
-            new
+            var odeme = new RezervasyonOdeme
             {
-                OdenenTutar = odenenTutar,
-                KalanTutar = kalanTutar
-            },
-            new
-            {
+                RezervasyonId = reservation.Id,
+                OdemeTarihi = DateTime.UtcNow,
                 OdemeTutari = request.OdemeTutari,
+                ParaBirimi = reservation.ParaBirimi,
                 OdemeTipi = normalizedOdemeTipi,
-                Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim(),
-                OdenenTutar = yeniOdenenTutar,
-                KalanTutar = yeniKalanTutar
-            });
+                Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim()
+            };
+            await _stysDbContext.RezervasyonOdemeler.AddAsync(odeme, cancellationToken);
+            await _stysDbContext.SaveChangesAsync(cancellationToken); // Id uretilsin
 
-        await _stysDbContext.SaveChangesAsync(cancellationToken);
+            await _rezervasyonOdemeMuhasebeService.TahsilatOlusturAsync(
+                reservation, odeme, request.KasaBankaHesapId, request.CariKartId, cancellationToken);
 
+            AppendHistoryEntry(
+                rezervasyonId,
+                RezervasyonGecmisIslemTipleri.OdemeKaydedildi,
+                "Rezervasyona odeme eklendi.",
+                new
+                {
+                    OdenenTutar = odenenTutar,
+                    KalanTutar = kalanTutar
+                },
+                new
+                {
+                    OdemeTutari = request.OdemeTutari,
+                    OdemeTipi = normalizedOdemeTipi,
+                    Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim(),
+                    OdenenTutar = yeniOdenenTutar,
+                    KalanTutar = yeniKalanTutar
+                });
+
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+
+        // Bildirim COMMIT'TEN SONRA gonderilir: muhasebe adimi basarisiz olup transaction geri
+        // alinirsa kullaniciya yanlis "odeme alindi" bildirimi gitmemis olur.
         await _bildirimService.PublishToTesisUsersAsync(
             reservation.TesisId,
             new BildirimOlusturRequestDto
@@ -3447,6 +3475,123 @@ public class RezervasyonService : IRezervasyonService
             });
             throw;
         }
+    }
+
+    public async Task<RezervasyonOdemeOzetDto> IptalOdemeAsync(
+        int rezervasyonId,
+        int odemeId,
+        RezervasyonOdemeIptalRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        var odeme = await _stysDbContext.RezervasyonOdemeler
+            .FirstOrDefaultAsync(x => x.Id == odemeId && x.RezervasyonId == reservation.Id, cancellationToken);
+
+        if (odeme is null)
+        {
+            throw new BaseException("Odeme kaydi bulunamadi.", 404);
+        }
+
+        if (odeme.Durum == RezervasyonOdemeDurumlari.Iptal)
+        {
+            throw new BaseException("Odeme zaten iptal edilmis.", 409);
+        }
+
+        var aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim();
+
+        // Fiziksel silme YOK: Durum=Iptal + bagli TahsilatOdemeBelgesi/MuhasebeFis icin
+        // mevcut iptal/ters kayit mekanizmalari, tek transaction icinde.
+        await using var transaction = await _stysDbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await _rezervasyonOdemeMuhasebeService.TahsilatIptalEtAsync(odeme, aciklama, cancellationToken);
+
+            odeme.Durum = RezervasyonOdemeDurumlari.Iptal;
+            odeme.IptalTarihi = DateTime.UtcNow;
+            odeme.IptalAciklama = aciklama;
+
+            AppendHistoryEntry(
+                rezervasyonId,
+                RezervasyonGecmisIslemTipleri.OdemeKaydedildi,
+                "Rezervasyon odemesi iptal edildi.",
+                new { OdemeId = odeme.Id, OdemeTutari = odeme.OdemeTutari, OdemeTipi = odeme.OdemeTipi },
+                new { OdemeId = odeme.Id, IptalAciklama = aciklama });
+
+            await _stysDbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+
+        return await GetOdemeOzetiAsync(rezervasyonId, cancellationToken);
+    }
+
+    public async Task<List<RezervasyonKasaBankaHesapSecenekDto>> GetKasaBankaHesapSecenekleriAsync(
+        int rezervasyonId,
+        string odemeTipi,
+        CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        if (!OdemeYontemleri.UygunKasaBankaHesapTipleri.TryGetValue(odemeTipi, out var uygunTipler))
+        {
+            throw new BaseException("Gecersiz odeme tipi.", 400);
+        }
+
+        return await _stysDbContext.KasaBankaHesaplari
+            .Where(x => !x.IsDeleted
+                        && x.AktifMi
+                        && uygunTipler.Contains(x.Tip)
+                        && (x.TesisId == reservation.TesisId || x.TesisId == null))
+            .OrderBy(x => x.Kod)
+            .Select(x => new RezervasyonKasaBankaHesapSecenekDto
+            {
+                Id = x.Id,
+                Ad = x.Ad,
+                Tip = x.Tip,
+                Kod = x.Kod
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<RezervasyonCariKartSecenekDto>> GetCariKartSecenekleriAsync(
+        int rezervasyonId,
+        string? arama,
+        CancellationToken cancellationToken = default)
+    {
+        var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
+
+        var query = _stysDbContext.CariKartlar.Where(x =>
+            !x.IsDeleted
+            && x.AktifMi
+            && x.TesisId == reservation.TesisId
+            && (x.CariTipi == STYS.Muhasebe.CariKartlar.Entities.CariKartTipleri.Musteri
+                || x.CariTipi == STYS.Muhasebe.CariKartlar.Entities.CariKartTipleri.KurumsalMusteri));
+
+        if (!string.IsNullOrWhiteSpace(arama))
+        {
+            var normalized = arama.Trim();
+            query = query.Where(x =>
+                x.UnvanAdSoyad.Contains(normalized)
+                || (x.VergiNoTckn != null && x.VergiNoTckn.Contains(normalized))
+                || (x.Telefon != null && x.Telefon.Contains(normalized)));
+        }
+
+        return await query
+            .OrderBy(x => x.UnvanAdSoyad)
+            .Take(50)
+            .Select(x => new RezervasyonCariKartSecenekDto
+            {
+                Id = x.Id,
+                UnvanAdSoyad = x.UnvanAdSoyad,
+                VergiNoTckn = x.VergiNoTckn,
+                Telefon = x.Telefon
+            })
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<RezervasyonDetayDto> GuncelleKonaklamaHakkiDurumuAsync(
@@ -3764,6 +3909,7 @@ public class RezervasyonService : IRezervasyonService
                 x.Rezervasyon != null
                 && x.Rezervasyon.AktifMi
                 && normalizedTesisIds.Contains(x.Rezervasyon.TesisId)
+                && x.Durum == RezervasyonOdemeDurumlari.Aktif
                 && x.OdemeTarihi >= rangeStart
                 && x.OdemeTarihi < rangeEndExclusive)
             .Select(x => new
@@ -4560,6 +4706,11 @@ public class RezervasyonService : IRezervasyonService
         if (odemeTipi.Equals(OdemeTipleri.KrediKarti, StringComparison.OrdinalIgnoreCase))
         {
             return OdemeTipleri.KrediKarti;
+        }
+
+        if (odemeTipi.Equals(OdemeTipleri.HavaleEft, StringComparison.OrdinalIgnoreCase))
+        {
+            return OdemeTipleri.HavaleEft;
         }
 
         throw new BaseException("Gecersiz odeme tipi.", 400);
@@ -5438,7 +5589,7 @@ public class RezervasyonService : IRezervasyonService
     private async Task<decimal> GetToplamOdenenTutarAsync(int rezervasyonId, CancellationToken cancellationToken)
     {
         return await _stysDbContext.RezervasyonOdemeler
-            .Where(x => x.RezervasyonId == rezervasyonId)
+            .Where(x => x.RezervasyonId == rezervasyonId && x.Durum == RezervasyonOdemeDurumlari.Aktif)
             .Select(x => (decimal?)x.OdemeTutari)
             .SumAsync(cancellationToken) ?? 0m;
     }

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.EkHizmetler.Entities;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -64,6 +65,13 @@ public class Rezervasyon : BaseEntity<int>
     public string RezervasyonDurumu { get; set; } = RezervasyonDurumlari.Onayli;
 
     public bool AktifMi { get; set; } = true;
+
+    /// <summary>Rezervasyon sahibi/kurum cari karti. Otomatik OLUSTURULMAZ; RezervasyonOdemeMuhasebeService
+    /// TCKN/VKN veya guvenli telefon eslesmesiyle mevcut karti bulur, bulamazsa tesisin varsayilan
+    /// "Rezervasyon Misafirleri" cari kartina duser ya da kullanicidan secim ister.</summary>
+    public int? CariKartId { get; set; }
+
+    public CariKart? CariKart { get; set; }
 
     public Tesis? Tesis { get; set; }
 

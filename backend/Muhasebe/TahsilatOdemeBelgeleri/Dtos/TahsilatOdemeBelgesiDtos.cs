@@ -16,6 +16,9 @@ public class TahsilatOdemeBelgesiDto : BaseRdbmsDto<int>
     public int? KaynakId { get; set; }
     public int? KapatilacakCariHareketId { get; set; }
     public string Durum { get; set; } = string.Empty;
+    public int? KasaBankaHesapId { get; set; }
+    public int? MuhasebeFisId { get; set; }
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
 }
 
 public class CreateTahsilatOdemeBelgesiRequest

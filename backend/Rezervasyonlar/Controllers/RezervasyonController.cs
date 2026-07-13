@@ -301,6 +301,40 @@ public class RezervasyonController : UIController
         return Ok(result);
     }
 
+    [HttpPost("kayitlar/{rezervasyonId:int}/odemeler/{odemeId:int}/iptal")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonOdemeOzetDto>> IptalOdeme(
+        [FromRoute] int rezervasyonId,
+        [FromRoute] int odemeId,
+        [FromBody] RezervasyonOdemeIptalRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.IptalOdemeAsync(rezervasyonId, odemeId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("kayitlar/{rezervasyonId:int}/kasa-banka-hesap-secenekleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<List<RezervasyonKasaBankaHesapSecenekDto>>> GetKasaBankaHesapSecenekleri(
+        [FromRoute] int rezervasyonId,
+        [FromQuery] string odemeTipi,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetKasaBankaHesapSecenekleriAsync(rezervasyonId, odemeTipi, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("kayitlar/{rezervasyonId:int}/cari-kart-secenekleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<List<RezervasyonCariKartSecenekDto>>> GetCariKartSecenekleri(
+        [FromRoute] int rezervasyonId,
+        [FromQuery] string? arama,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetCariKartSecenekleriAsync(rezervasyonId, arama, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPut("kayitlar/{rezervasyonId:int}/konaklama-haklari/{hakId:int}/durum")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
     public async Task<ActionResult<RezervasyonDetayDto>> GuncelleKonaklamaHakkiDurumu(

@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -43,8 +45,22 @@ public class TahsilatOdemeBelgesi : BaseEntity<int>
     [MaxLength(16)]
     public string Durum { get; set; } = TahsilatOdemeBelgeDurumlari.Aktif;
 
+    /// <summary>Parayi fiilen alan/veren kasa/banka/POS hesabi. Fis uretiminde borc tarafini belirler.
+    /// Nakit hareketi doguran odeme yontemlerinde (bkz. OdemeYontemleri.NakitHareketiGerektirenler) zorunludur.</summary>
+    public int? KasaBankaHesapId { get; set; }
+
+    /// <summary>Bu belgeden uretilen muhasebe fisi. Fis uretimi ayri, opsiyonel bir aksiyondur
+    /// (bkz. ITahsilatOdemeBelgesiMuhasebeFisService) — belge olusurken otomatik doldurulmaz.</summary>
+    public int? MuhasebeFisId { get; set; }
+
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
+
     public CariKart? CariKart { get; set; }
 
     public CariHareket? KapatilacakCariHareket { get; set; }
+
+    public KasaBankaHesap? KasaBankaHesap { get; set; }
+
+    public MuhasebeFis? MuhasebeFis { get; set; }
 }
 

@@ -537,6 +537,13 @@ export interface RezervasyonOdemeDto {
     paraBirimi: string;
     odemeTipi: string;
     aciklama: string | null;
+    durum: string;
+    iptalTarihi: string | null;
+    iptalAciklama: string | null;
+    kasaBankaHesapId: number | null;
+    kasaBankaHesapAdi: string | null;
+    tahsilatOdemeBelgesiId: number | null;
+    tahsilatOdemeBelgesiNo: string | null;
 }
 
 export interface RezervasyonOdemeOzetDto {
@@ -555,7 +562,27 @@ export interface RezervasyonOdemeOzetDto {
 export interface RezervasyonOdemeKaydetRequestDto {
     odemeTutari: number;
     odemeTipi: string;
+    kasaBankaHesapId: number | null;
+    cariKartId: number | null;
     aciklama: string | null;
+}
+
+export interface RezervasyonOdemeIptalRequestDto {
+    aciklama: string | null;
+}
+
+export interface RezervasyonKasaBankaHesapSecenekDto {
+    id: number;
+    ad: string;
+    tip: string;
+    kod: string;
+}
+
+export interface RezervasyonCariKartSecenekDto {
+    id: number;
+    unvanAdSoyad: string;
+    vergiNoTckn: string | null;
+    telefon: string | null;
 }
 
 export interface RezervasyonEkHizmetDto {

@@ -6,6 +6,9 @@ public static class MuhasebeAnaHesapKodlari
     public const string CariTedarikci = "3.32.320";
     public const string CariMusteri = "1.12.120";
 
+    // Avanslar
+    public const string AlinanSiparisAvanslari = "3.40.340";
+
     // Finansal hesaplar
     public const string FinansalKasa = "1.10.100";
     public const string FinansalBanka = "1.10.102";

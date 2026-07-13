@@ -299,12 +299,12 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-12 gap-3 mb-4">
-                    <div class="col-span-12 md:col-span-4">
+                <div class="grid grid-cols-12 gap-3 mb-3">
+                    <div class="col-span-12 md:col-span-3">
                         <label for="odemeTutari" class="block font-medium mb-2">Odeme Tutari</label>
                         <input pInputText id="odemeTutari" class="w-full" type="number" min="0" step="0.01" [(ngModel)]="odemeTutari" [disabled]="saving" />
                     </div>
-                    <div class="col-span-12 md:col-span-4">
+                    <div class="col-span-12 md:col-span-3">
                         <label for="odemeTipi" class="block font-medium mb-2">Odeme Tipi</label>
                         <p-select
                             inputId="odemeTipi"
@@ -316,29 +316,113 @@
                             [showClear]="false"
                             [disabled]="saving"
                             [(ngModel)]="odemeTipi"
+                            (ngModelChange)="onOdemeTipiChange()"
                         />
                     </div>
-                    <div class="col-span-12 md:col-span-4">
+                    @if (kasaBankaHesapGerekli) {
+                        <div class="col-span-12 md:col-span-3">
+                            <label for="kasaBankaHesap" class="block font-medium mb-2">Kasa / Banka / POS Hesabi</label>
+                            <p-select
+                                inputId="kasaBankaHesap"
+                                class="w-full"
+                                [options]="kasaBankaHesapSecenekleri"
+                                optionLabel="ad"
+                                optionValue="id"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="saving || kasaBankaHesapYukleniyor"
+                                [placeholder]="kasaBankaHesapYukleniyor ? 'Yukleniyor...' : 'Hesap seciniz'"
+                                [(ngModel)]="kasaBankaHesapId"
+                            />
+                            @if (!kasaBankaHesapYukleniyor && kasaBankaHesapSecenekleri.length === 0) {
+                                <div class="text-xs text-orange-600 mt-1">Bu tesis icin '{{ odemeTipi }}' tipinde tanimli hesap bulunamadi.</div>
+                            }
+                        </div>
+                    }
+                    <div class="col-span-12" [class.md:col-span-3]="kasaBankaHesapGerekli" [class.md:col-span-6]="!kasaBankaHesapGerekli">
                         <label for="odemeAciklama" class="block font-medium mb-2">Aciklama</label>
                         <input pInputText id="odemeAciklama" class="w-full" [(ngModel)]="odemeAciklama" [disabled]="saving" />
                     </div>
                 </div>
 
-                <p-table class="rez-odeme-history-table" [value]="tahsilatKayitlari" [tableStyle]="{ 'min-width': '42rem' }">
+                @if (cariKartSecimiGerekli) {
+                    <div class="rez-odeme-panel mb-4" style="border: 1px solid var(--orange-400, #fb923c); background: var(--orange-50, #fff7ed);">
+                        <div class="rez-odeme-panel-title mb-2">Cari Kart Secimi Gerekli</div>
+                        <div class="text-sm text-color-secondary mb-3">
+                            Bu misafir icin otomatik bir cari kart eslesmesi bulunamadi. Tahsilatin muhasebeye islenebilmesi icin bir cari kart seciniz.
+                        </div>
+                        <div class="grid grid-cols-12 gap-3 items-end">
+                            <div class="col-span-12 md:col-span-5">
+                                <label for="cariKartArama" class="block font-medium mb-2">Ara (ad, TCKN/VKN, telefon)</label>
+                                <input pInputText id="cariKartArama" class="w-full" [(ngModel)]="cariKartAramaMetni" (keyup.enter)="loadCariKartSecenekleri()" [disabled]="cariKartYukleniyor" />
+                            </div>
+                            <div class="col-span-12 md:col-span-2">
+                                <p-button label="Ara" icon="pi pi-search" [loading]="cariKartYukleniyor" (onClick)="loadCariKartSecenekleri()" />
+                            </div>
+                            <div class="col-span-12 md:col-span-5">
+                                <label for="cariKartSecim" class="block font-medium mb-2">Cari Kart</label>
+                                <p-select
+                                    inputId="cariKartSecim"
+                                    class="w-full"
+                                    [options]="cariKartSecenekleri"
+                                    optionLabel="unvanAdSoyad"
+                                    optionValue="id"
+                                    [appendTo]="'body'"
+                                    [showClear]="false"
+                                    [disabled]="cariKartYukleniyor"
+                                    placeholder="Cari kart seciniz"
+                                    [(ngModel)]="cariKartId"
+                                />
+                            </div>
+                        </div>
+                        <div class="rez-odeme-action-row mt-3">
+                            <p-button label="Vazgec" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="cariKartSeciminiIptalEt()" />
+                            <p-button label="Cari Karti Onayla ve Odemeyi Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!cariKartId" (onClick)="cariKartSeciminiOnayla()" />
+                        </div>
+                    </div>
+                }
+
+                <p-table class="rez-odeme-history-table" [value]="tahsilatKayitlari" [tableStyle]="{ 'min-width': '48rem' }">
                     <ng-template #header>
                         <tr>
                             <th>Tarih</th>
                             <th>Tip</th>
+                            <th>Kasa/Banka</th>
                             <th>Tutar</th>
                             <th>Aciklama</th>
+                            <th>Muhasebe</th>
+                            <th class="w-16">Islem</th>
                         </tr>
                     </ng-template>
                     <ng-template #body let-odeme>
-                        <tr>
+                        <tr [class.rez-odeme-row-iptal]="odeme.durum === 'Iptal'">
                             <td>{{ formatDateTime(odeme.odemeTarihi) }}</td>
                             <td>{{ getOdemeTipiEtiket(odeme.odemeTipi) }}</td>
+                            <td>{{ odeme.kasaBankaHesapAdi || '-' }}</td>
                             <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
                             <td>{{ odeme.aciklama || '-' }}</td>
+                            <td>
+                                @if (odeme.durum === 'Iptal') {
+                                    <p-tag severity="danger" value="Iptal" />
+                                } @else if (odeme.tahsilatOdemeBelgesiNo) {
+                                    <p-tag severity="success" [value]="odeme.tahsilatOdemeBelgesiNo" [pTooltip]="'Muhasebeye islendi'" />
+                                } @else {
+                                    <p-tag severity="warn" value="Islenmedi" />
+                                }
+                            </td>
+                            <td>
+                                @if (isOdemeIptalEdilebilir(odeme)) {
+                                    <p-button
+                                        icon="pi pi-times"
+                                        size="small"
+                                        severity="danger"
+                                        [text]="true"
+                                        [loading]="iptalEdilenOdemeId === odeme.id"
+                                        [disabled]="!!iptalEdilenOdemeId"
+                                        [pTooltip]="'Odemeyi iptal et'"
+                                        (onClick)="iptalEtOdeme(odeme)" />
+                                }
+                            </td>
                         </tr>
                     </ng-template>
                 </p-table>

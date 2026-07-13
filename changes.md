@@ -6668,3 +6668,62 @@ Satış Belgeleri ekranı açıldığında SQL Server'da `Invalid column name` h
 
 ### Frontend
 - `npx ng build --configuration development` başarılı — 0 error
+
+---
+
+## Rezervasyon Ödeme → Muhasebe (TahsilatOdemeBelgesi) Entegrasyonu
+
+### Yapılan İşler
+Rezervasyon ödeme ekranında alınan ödemeler, doğrudan gelir kaydı oluşturmadan `TahsilatOdemeBelgesi`
+üzerinden muhasebeye tahsilat/avans olarak işlendi. Muhasebe fişi üretimi ayrı, isteğe bağlı bir
+aksiyon olarak tasarlandı — ödeme kaydı sırasında otomatik fiş oluşmaz. Ayrıntılı bulgular ve mimari
+kararlar için bkz. `docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md`.
+
+### Yeni Dosyalar
+- backend/Rezervasyonlar/Entities/RezervasyonOdemeDurumlari.cs — Aktif/Iptal sabitleri
+- backend/Rezervasyonlar/Services/IRezervasyonOdemeMuhasebeService.cs
+- backend/Rezervasyonlar/Services/RezervasyonOdemeMuhasebeService.cs — cari kart çözümleme + TahsilatOdemeBelgesi oluşturma/iptal
+- backend/Rezervasyonlar/Dto/RezervasyonOdemeIptalRequestDto.cs
+- backend/Rezervasyonlar/Dto/RezervasyonKasaBankaHesapSecenekDto.cs
+- backend/Rezervasyonlar/Dto/RezervasyonCariKartSecenekDto.cs
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Entities/RezervasyonTahsilatAlacakHesapTipleri.cs — Cari/AlinanAvans
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/ITahsilatOdemeBelgesiMuhasebeFisService.cs
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiMuhasebeFisService.cs — ayrı/manuel tetiklenen fiş üretimi
+- backend/Infrastructure/EntityFramework/Migrations/20260713155404_AddRezervasyonOdemeMuhasebeEntegrasyonu.cs (+Designer) — **veritabanına henüz uygulanmadı**
+- docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md
+
+### Güncellenen Dosyalar
+- backend/Rezervasyonlar/Entities/RezervasyonOdeme.cs — KasaBankaHesapId, TahsilatOdemeBelgesiId, Durum, IptalTarihi, IptalAciklama
+- backend/Rezervasyonlar/Entities/Rezervasyon.cs — CariKartId (otomatik doldurulmaz)
+- backend/Rezervasyonlar/OdemeTipleri.cs — HavaleEft eklendi, Muhasebe.OdemeYontemleri ile hizalandı
+- backend/Rezervasyonlar/Dto/RezervasyonOdemeDto.cs — Durum, KasaBankaHesapId/Adi, TahsilatOdemeBelgesiId/No
+- backend/Rezervasyonlar/Dto/RezervasyonOdemeKaydetRequestDto.cs — KasaBankaHesapId, CariKartId
+- backend/Rezervasyonlar/Services/IRezervasyonService.cs — IptalOdemeAsync, GetKasaBankaHesapSecenekleriAsync, GetCariKartSecenekleriAsync
+- backend/Rezervasyonlar/Services/RezervasyonService.cs — KaydetOdemeAsync transaction'a alındı, bildirim commit sonrasına taşındı; IptalOdemeAsync, GetKasaBankaHesapSecenekleriAsync, GetCariKartSecenekleriAsync eklendi; bakiye sorguları Durum==Aktif filtreler
+- backend/Rezervasyonlar/Controllers/RezervasyonController.cs — odemeler/{id}/iptal, kasa-banka-hesap-secenekleri, cari-kart-secenekleri uç noktaları
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Entities/TahsilatOdemeBelgesi.cs — KasaBankaHesapId, MuhasebeFisId, MuhasebeFisOlusturmaTarihi
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Entities/OdemeYontemleri.cs — NakitHareketiGerektirenler, UygunKasaBankaHesapTipleri
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Dtos/TahsilatOdemeBelgesiDtos.cs — yeni alanlar
+- backend/Muhasebe/Common/Constants/MuhasebeKaynakModulleri.cs — Rezervasyon sabiti
+- backend/Muhasebe/Common/Constants/MuhasebeAnaHesapKodlari.cs — AlinanSiparisAvanslari
+- backend/Tesisler/Entities/Tesis.cs — RezervasyonMisafirVarsayilanCariKartId, RezervasyonTahsilatAlacakHesapTipi
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs — yeni kolon/FK/index konfigürasyonları
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs
+- backend/Program.cs — IRezervasyonOdemeMuhasebeService, ITahsilatOdemeBelgesiMuhasebeFisService servis kayıtları
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.dto.ts — yeni alanlar/DTO'lar
+- frontend/src/app/pages/rezervasyon-yonetimi/rezervasyon-yonetimi.service.ts — iptalOdeme, getKasaBankaHesapSecenekleri, getCariKartSecenekleri
+- frontend/src/app/pages/rezervasyon-yonetimi/components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog.ts — ödeme tipine göre kasa/banka seçimi, cari kart seçim akışı (HTTP 422), iptal aksiyonu
+- frontend/src/app/pages/rezervasyon-yonetimi/components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog.html
+- frontend/src/app/pages/rezervasyon-yonetimi/components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog.scss
+
+### Önemli Not
+İlk `dotnet ef migrations add` denemesi, `migrations remove` komutunun model snapshot dosyasını
+bozması nedeniyle 102 tabloyu yeniden oluşturan tehlikeli bir migration üretti. Bu migration
+**uygulanmadan** fark edildi, snapshot git'ten geri yüklendi ve migration temiz durumdan güvenli
+şekilde (sadece AddColumn/CreateIndex/AddForeignKey) yeniden üretildi. Ayrıntı için bkz.
+`docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md`.
+
+### Build
+- Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
+- Frontend: `npx ng build --configuration development` başarılı — 0 error
+- Migration: üretildi, **veritabanına henüz uygulanmadı** (kullanıcı onayı bekleniyor)

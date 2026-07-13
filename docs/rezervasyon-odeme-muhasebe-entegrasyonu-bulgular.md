@@ -135,3 +135,27 @@ imzasına `bool requireCariMuhasebeHesabi` parametresi eklendi:
   okuyup `requireCariMuhasebeHesabi = (tipi != AlinanAvans)` olarak hesaplıyor ve bunu geçiriyor —
   böylece `AlinanAvans` modundaki tesislerde, muhasebe hesap planı bağlantısı olmayan bir misafir cari
   kartıyla da rezervasyon tahsilatı sorunsuz oluşturulabiliyor.
+
+## 8. Dördüncü tur — uçtan uca test (gerçek SQL Server test DB'sine karşı)
+
+Üç commit (`1a93b5d`, `e4942fa`, `82cc2a4`) merge öncesi test edildi: `dotnet clean/restore/build`,
+migration/snapshot tutarlılığı (`ZZZ_CheckNoPendingChanges` boş diff verdi), tam migration script
+üretimi ve 12 alan/index'in script içinde doğrulanması, yerel docker test DB'sine (`stys-mssql`,
+`localhost:14333/STYSDB`) migration uygulaması ve 8 senaryonun tamamının gerçek DB'ye karşı çalıştırılması.
+
+**Bulunan ve düzeltilen hata:** `tests/STYS.Tests/RezervasyonServiceTests.cs` derlenmiyordu —
+`CreateService` helper'ı, `RezervasyonService` constructor'ına eklenen `IRezervasyonOdemeMuhasebeService`
+parametresini geçmiyordu. Düzeltme: `FakeRezervasyonOdemeMuhasebeService` eklendi; bu Fake gerçek
+servisin gözlemlenebilir davranışını (KasaBankaHesapId zorunluluğu) yansıtır ama InMemory provider'ın
+desteklemediği TahsilatOdemeBelgesi/unique-index/transaction zincirini üretmez — o yüzden asıl 8
+senaryo doğrulaması ayrı, gerçek SQL Server'a karşı çalışan `RezervasyonOdemeMuhasebeIntegrationTests.cs`
+dosyasında yapıldı (InMemory provider unique index/FK/savepoint semantiğini desteklemediğinden
+mevcut InMemory tabanlı test konvansiyonu bu senaryolar için yetersizdi).
+
+**Pre-existing, bu değişikliklerle ilgisiz bulgu:** `RezervasyonServiceTests.cs` içindeki 72/144 test
+`"Aktif kurum bilgisi bulunamadi"` hatasıyla başarısız oluyor (seed helper'ları `ApplyTenantRules`
+için tenant context sağlamıyor). Bu değişikliklerden önceki commit'te (`a0a2ba5`) izole bir
+`git worktree` ile dogrulandi: aynı 72/72 sonuç. Regresyon değil, ayrı bir iş kalemi.
+
+**8 senaryo sonucu:** Tümü başarılı, iki ayrı çalıştırmada tutarlı, test sonrası DB'de kalıntı kalmadı.
+Ayrıntı ve senaryo bazlı sonuç tablosu bu konuşmanın test raporunda mevcuttur.

@@ -2660,7 +2660,8 @@ public class RezervasyonServiceTests
             httpContextAccessor,
             new FakeLicenseService(),
             new FakeCurrentTenantAccessor(),
-            null!);
+            null!,
+            new FakeRezervasyonOdemeMuhasebeService());
     }
 
     private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()
@@ -4015,5 +4016,38 @@ public class RezervasyonServiceTests
         public bool IsSuperAdmin() => true;
 
         public bool IsKurumAdmin() => false;
+    }
+
+    /// <summary>
+    /// InMemory provider gercek TahsilatOdemeBelgesi/CariKart/KasaBankaHesap muhasebe zincirini
+    /// (unique index, FK, SqlException tabanli retry) desteklemedigi icin bu Fake, gercek
+    /// RezervasyonOdemeMuhasebeService'in SADECE KaydetOdemeAsync'i cagiran testler acisindan
+    /// gozlemlenebilir davranisini (KasaBankaHesapId zorunlulugu) yansitir; TahsilatOdemeBelgesi
+    /// uretmez. Muhasebe entegrasyonunun uctan uca davranisi ayri, gercek SQL Server'a karsi
+    /// calisan bir test dosyasinda dogrulanir.
+    /// </summary>
+    private sealed class FakeRezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
+    {
+        private static readonly string[] NakitHareketiGerektirenler = ["Nakit", "KrediKarti", "HavaleEft"];
+
+        public Task TahsilatOlusturAsync(
+            Rezervasyon rezervasyon,
+            RezervasyonOdeme odeme,
+            int? kasaBankaHesapId,
+            int? cariKartIdOverride,
+            CancellationToken cancellationToken = default)
+        {
+            if (NakitHareketiGerektirenler.Contains(odeme.OdemeTipi) && !kasaBankaHesapId.HasValue)
+            {
+                throw new BaseException(
+                    $"'{odeme.OdemeTipi}' odeme tipi icin kasa/banka/POS hesabi secimi zorunludur.", 400);
+            }
+
+            odeme.KasaBankaHesapId = kasaBankaHesapId;
+            return Task.CompletedTask;
+        }
+
+        public Task TahsilatIptalEtAsync(RezervasyonOdeme odeme, string? iptalAciklama, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

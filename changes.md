@@ -6774,3 +6774,30 @@ modundaki tesislerde, muhasebe hesap plani baglantisi olmayan bir cari kartla re
 ### Build
 - Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
 - Migration/model degisikligi yok bu turda
+
+---
+
+## Rezervasyon Ödeme → Muhasebe Entegrasyonu — Uctan Uca Test (4. Tur)
+
+### Yapılan İşler
+Commitler (1a93b5d, e4942fa, 82cc2a4) merge oncesi test edildi: dotnet clean/restore/build, migration/
+snapshot tutarliligi, tam migration script uretimi + 12 alan/index dogrulamasi, yerel docker test DB'sine
+(stys-mssql, localhost:14333/STYSDB) migration uygulanmasi, ve 8 senaryonun tamami gercek SQL Server'a
+karsi calistirildi (InMemory provider unique index/FK/savepoint semantigini desteklemedigi icin).
+Test sirasinda tests/STYS.Tests/RezervasyonServiceTests.cs'in derlenmedigi (compile blocker) tespit
+edilip duzeltildi. Ayrinti: docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md (§8).
+
+### Yeni Dosyalar
+- tests/STYS.Tests/RezervasyonOdemeMuhasebeIntegrationTests.cs — 8 senaryonun tamamini gercek SQL Server test DB'sine karsi dogrulayan entegrasyon testi
+
+### Güncellenen Dosyalar
+- tests/STYS.Tests/RezervasyonServiceTests.cs — CreateService helper'ina FakeRezervasyonOdemeMuhasebeService eklendi (yeni constructor parametresi nedeniyle derlenmiyordu)
+- docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md — §8 eklendi
+
+### Test Sonucu
+- Backend: dotnet build basarili — 0 error
+- Migration: ZZZ_CheckNoPendingChanges bos diff verdi (model/snapshot uyumlu); test DB'sine basariyla uygulandi
+- Senaryo 1-8: 8/8 basarili, iki ayri calistirmada tutarli
+- Pre-existing, bu degisikliklerle ilgisiz: RezervasyonServiceTests.cs icinde 72/144 test "Aktif kurum
+  bilgisi bulunamadi" hatasiyla basarisiz — a0a2ba5 (bu entegrasyondan onceki commit) uzerinde izole
+  worktree ile dogrulandi, ayni sonuc — regresyon degil

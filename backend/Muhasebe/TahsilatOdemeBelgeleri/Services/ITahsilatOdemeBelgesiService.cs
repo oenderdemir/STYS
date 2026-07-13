@@ -9,6 +9,8 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
     Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default);
     Task IptalEtAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <summary>requireCariMuhasebeHesabi: Rezervasyon gibi "AlinanAvans" moduna gecebilen
+    /// kaynaklar icin false gecirilebilir — bkz. implementasyondaki XML dokumantasyonu.</summary>
     Task ValidateOlusturmaAsync(
         int cariKartId,
         string belgeTipi,
@@ -16,5 +18,6 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
         string durum,
         DateTime belgeTarihi,
         int? kapatilacakCariHareketId,
+        bool requireCariMuhasebeHesabi,
         CancellationToken cancellationToken = default);
 }

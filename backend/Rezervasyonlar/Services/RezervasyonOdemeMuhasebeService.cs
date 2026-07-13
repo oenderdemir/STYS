@@ -75,6 +75,17 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
             await EnsureKasaBankaHesabiUygunAsync(rezervasyon.TesisId, kasaBankaHesapId.Value, odeme.OdemeTipi, cancellationToken);
         }
 
+        // Alacak hesabi tesis konfigurasyonuna gore cari karttan degil MuhasebeAnaHesapKodlari.
+        // AlinanSiparisAvanslari'ndan cozulecekse (bkz. TahsilatOdemeBelgesiMuhasebeFisService.
+        // ResolveAlacakHesabiAsync), cari kartin kendi MuhasebeHesapPlaniId baglantisina burada
+        // ihtiyac yoktur — ValidateOlusturmaAsync bu kontrolu atlar.
+        var alacakHesapTipi = await _dbContext.Tesisler
+            .AsNoTracking()
+            .Where(x => x.Id == rezervasyon.TesisId)
+            .Select(x => x.RezervasyonTahsilatAlacakHesapTipi)
+            .FirstOrDefaultAsync(cancellationToken) ?? RezervasyonTahsilatAlacakHesapTipleri.Cari;
+        var requireCariMuhasebeHesabi = alacakHesapTipi != RezervasyonTahsilatAlacakHesapTipleri.AlinanAvans;
+
         // TahsilatOdemeBelgesi burada TahsilatOdemeBelgesiService.AddAsync yerine dogrudan
         // DbContext uzerinden ekleniyor (cross-aggregate/ambient transaction gerekcesiyle),
         // ama AddAsync'in yaptigi tum dogrulamalar (cari kart/hesap plani, tesis erisimi, belge/odeme
@@ -86,6 +97,7 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
             TahsilatOdemeBelgeDurumlari.Aktif,
             odeme.OdemeTarihi,
             kapatilacakCariHareketId: null,
+            requireCariMuhasebeHesabi,
             cancellationToken);
 
         // BelgeNo uretimi MAX+1 sorgusuna dayandigindan yaris durumuna acik; ambient transaction

@@ -84,8 +84,13 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public override async Task<TahsilatOdemeBelgesiDto> AddAsync(TahsilatOdemeBelgesiDto dto)
     {
+        // Genel TahsilatOdemeBelgesi ekrani (Muhasebe > Tahsilat/Odeme Belgeleri) her zaman cari
+        // hesap uzerinden calisir; alacak/borc hesabi CariKart.MuhasebeHesapPlaniId'den cozulur —
+        // bu yuzden burada requireCariMuhasebeHesabi hep true'dur. Rezervasyon gibi Tesis bazinda
+        // "AlinanAvans" moduna gecebilen kaynaklar icin bkz. RezervasyonOdemeMuhasebeService.
         await ValidateOlusturmaAsync(
             dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum, dto.BelgeTarihi, dto.KapatilacakCariHareketId,
+            requireCariMuhasebeHesabi: true,
             CancellationToken.None);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
@@ -132,7 +137,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         }
 
         await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, CancellationToken.None);
-        await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
+        await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum, requireCariMuhasebeHesabi: true);
         await EnsureOpenPeriodAsync(dto.CariKartId, dto.BelgeTarihi, CancellationToken.None);
         await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
 
@@ -239,6 +244,13 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     /// Baska modullerin (ornegin RezervasyonOdemeMuhasebeService) DbContext uzerinden dogrudan
     /// TahsilatOdemeBelgesi ekleyecegi durumlarda AddAsync'in validasyonlarini atlamamak icin
     /// public olarak disari acilir.
+    ///
+    /// requireCariMuhasebeHesabi: cari kartin MuhasebeHesapPlaniId'sinin zorunlu olup olmadigini
+    /// belirler. Genel TahsilatOdemeBelgesi ekrani (AddAsync/UpdateAsync) icin her zaman true'dur —
+    /// alacak/borc hesabi orada dogrudan CariKart.MuhasebeHesapPlaniId'den cozulur. Rezervasyon gibi
+    /// tesis bazinda "AlinanAvans" moduna gecebilen kaynaklarda (bkz. Tesis.RezervasyonTahsilatAlacakHesapTipi,
+    /// TahsilatOdemeBelgesiMuhasebeFisService.ResolveAlacakHesabiAsync) alacak hesabi cari karttan degil
+    /// MuhasebeAnaHesapKodlari.AlinanSiparisAvanslari'ndan cozuldugu icin bu kontrol false gecirilebilir.
     /// </summary>
     public async Task ValidateOlusturmaAsync(
         int cariKartId,
@@ -247,14 +259,15 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         string durum,
         DateTime belgeTarihi,
         int? kapatilacakCariHareketId,
+        bool requireCariMuhasebeHesabi,
         CancellationToken cancellationToken = default)
     {
-        await ValidateAsync(cariKartId, belgeTipi, odemeYontemi, durum);
+        await ValidateAsync(cariKartId, belgeTipi, odemeYontemi, durum, requireCariMuhasebeHesabi);
         await EnsureOpenPeriodAsync(cariKartId, belgeTarihi, cancellationToken);
         await ValidateKapatilacakCariHareketAsync(cariKartId, kapatilacakCariHareketId);
     }
 
-    private async Task ValidateAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum)
+    private async Task ValidateAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum, bool requireCariMuhasebeHesabi)
     {
         if (cariKartId <= 0)
         {
@@ -266,7 +279,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         {
             throw new BaseException("Cari kart bulunamadi.", 400);
         }
-        if (!cari.MuhasebeHesapPlaniId.HasValue)
+        if (requireCariMuhasebeHesabi && !cari.MuhasebeHesapPlaniId.HasValue)
         {
             throw new BaseException("Seçilen cari kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
         }

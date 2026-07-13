@@ -117,3 +117,21 @@ tekrar riske atmamak için `dotnet ef migrations add` çalıştırılmadı — s
 güncellendi). Doğrulama için geçici bir `dotnet ef migrations add ZZZ_CheckNoPendingChanges` denemesi
 yapıldı; **boş** (0 operasyon) migration üretmesi, elle yapılan snapshot düzenlemesinin modelle tam
 örtüştüğünü doğruladı. Bu geçici dosyalar `dotnet ef migrations remove` KULLANILMADAN elle silindi.
+
+## 7. Üçüncü tur — Fix #5'in eksik kalan yarısı
+
+İkinci tur düzeltmesinde `TahsilatOdemeBelgesiMuhasebeFisService.ResolveAlacakHesabiAsync`'teki
+koşulsuz `CariKart.MuhasebeHesapPlaniId` zorunluluğu giderilmişti, ancak **fiş üretiminden önceki**
+`TahsilatOdemeBelgesiService.ValidateAsync` (AddAsync/`ValidateOlusturmaAsync` üzerinden) hâlâ
+koşulsuzdu — yani `AlinanAvans` modunda dahi `RezervasyonOdemeMuhasebeService.TahsilatOlusturAsync`,
+cari kartın `MuhasebeHesapPlaniId`'si boşsa `TahsilatOdemeBelgesi` oluşturma aşamasında (fiş üretiminden
+çok önce) hatayla karşılaşıyordu.
+
+Çözüm: `ValidateAsync`/`ValidateOlusturmaAsync`/`ITahsilatOdemeBelgesiService.ValidateOlusturmaAsync`
+imzasına `bool requireCariMuhasebeHesabi` parametresi eklendi:
+- Genel `TahsilatOdemeBelgesi` ekranı (`AddAsync`, `UpdateAsync`) her zaman `true` geçiriyor — bu ekran
+  her durumda cari hesap üzerinden çalışır.
+- `RezervasyonOdemeMuhasebeService.TahsilatOlusturAsync`, çağrıdan önce `Tesis.RezervasyonTahsilatAlacakHesapTipi`'ni
+  okuyup `requireCariMuhasebeHesabi = (tipi != AlinanAvans)` olarak hesaplıyor ve bunu geçiriyor —
+  böylece `AlinanAvans` modundaki tesislerde, muhasebe hesap planı bağlantısı olmayan bir misafir cari
+  kartıyla da rezervasyon tahsilatı sorunsuz oluşturulabiliyor.

@@ -6752,3 +6752,25 @@ zorunluluğu ve normalize edilmemiş odemeTipi. Ayrıntı için bkz.
 ### Build
 - Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
 - Migration: elle guncellendi, gecici `dotnet ef migrations add ZZZ_CheckNoPendingChanges` denemesi ile snapshot/model tutarliligi dogrulandi (0 operasyon urettigi icin dogrulama basarili, gecici dosyalar elle silindi); **veritabanına henüz uygulanmadı**
+
+---
+
+## Rezervasyon Ödeme → Muhasebe Entegrasyonu — Fix #5 Eksik Kalan Yarısı (3. Tur)
+
+### Yapılan İşler
+İkinci turda `TahsilatOdemeBelgesiMuhasebeFisService.ResolveAlacakHesabiAsync`'teki kosulsuz
+`CariKart.MuhasebeHesapPlaniId` zorunlulugu giderilmisti, ancak fis uretiminden once calisan
+`TahsilatOdemeBelgesiService.ValidateAsync` (belge olusturma asamasi) hala kosulsuzdu. `AlinanAvans`
+modundaki tesislerde, muhasebe hesap plani baglantisi olmayan bir cari kartla rezervasyon tahsilati
+`TahsilatOdemeBelgesi` olusturma asamasinda hataya dusuyordu. Ayrinti: bkz.
+`docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md` (§7).
+
+### Güncellenen Dosyalar
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs — ValidateAsync/ValidateOlusturmaAsync'e requireCariMuhasebeHesabi parametresi eklendi; AddAsync/UpdateAsync hep true geciriyor
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/ITahsilatOdemeBelgesiService.cs — ValidateOlusturmaAsync imzasina requireCariMuhasebeHesabi eklendi
+- backend/Rezervasyonlar/Services/RezervasyonOdemeMuhasebeService.cs — TahsilatOlusturAsync, Tesis.RezervasyonTahsilatAlacakHesapTipi'ne gore requireCariMuhasebeHesabi hesaplayip geciriyor
+- docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md — §7 eklendi
+
+### Build
+- Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
+- Migration/model degisikligi yok bu turda

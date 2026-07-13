@@ -3537,7 +3537,11 @@ public class RezervasyonService : IRezervasyonService
     {
         var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
 
-        if (!OdemeYontemleri.UygunKasaBankaHesapTipleri.TryGetValue(odemeTipi, out var uygunTipler))
+        // KaydetOdemeAsync ile ayni normalizasyon: buyuk/kucuk harf farkliligi veya trim edilmemis
+        // deger nedeniyle burada farkli bir sonucun (veya sessizce bos listenin) donmesi engellenir.
+        var normalizedOdemeTipi = NormalizeOdemeTipi(odemeTipi);
+
+        if (!OdemeYontemleri.UygunKasaBankaHesapTipleri.TryGetValue(normalizedOdemeTipi, out var uygunTipler))
         {
             throw new BaseException("Gecersiz odeme tipi.", 400);
         }

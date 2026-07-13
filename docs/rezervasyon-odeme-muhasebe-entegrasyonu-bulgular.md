@@ -77,3 +77,43 @@ planı detaylarını göstermez).
 ## 5. Değişen/eklenen dosyalar
 
 Ayrıntılı liste için `changes.md` içindeki ilgili tur girdisine bakınız.
+
+## 6. İkinci tur — kod inceleme düzeltmeleri
+
+İlk uygulamanın kod incelemesinde 6 madde tespit edildi ve düzeltildi:
+
+1. **Nested transaction riski:** `RezervasyonService.IptalOdemeAsync` transaction açıyor, içeride
+   çağrılan `TahsilatOdemeBelgesiService.IptalEtAsync` da koşulsuz `BeginTransactionAsync` açıyordu.
+   `IptalEtAsync` artık `CariHareketKapamaService.GeriAlAsync` ile aynı `ownsTransaction` desenini
+   kullanıyor — ambient transaction varsa kendi transaction'ını açmıyor/kapatmıyor.
+2. **Atlanan validasyonlar:** `RezervasyonOdemeMuhasebeService.TahsilatOlusturAsync`,
+   `TahsilatOdemeBelgesi`'ni `TahsilatOdemeBelgesiService.AddAsync` yerine doğrudan `DbContext` ile
+   eklediği için `ValidateAsync`/`EnsureOpenPeriodAsync`/`ValidateKapatilacakCariHareketAsync`
+   atlanıyordu. Bu üçü `ITahsilatOdemeBelgesiService.ValidateOlusturmaAsync(...)` adıyla ortak,
+   public bir metoda çıkarıldı; hem `AddAsync` hem `RezervasyonOdemeMuhasebeService` aynı metodu
+   çağırıyor — tek doğrulama kaynağı korunuyor.
+3. **Yetersiz duplicate koruması:** `RezervasyonOdemeler.TahsilatOdemeBelgesiId` üzerindeki unique
+   index tek başına yeterli değildi (uygulama dışı/elle DB erişiminde aynı kaynaktan ikinci belge
+   üretilebilirdi). `TahsilatOdemeBelgeleri` üzerinde `(KaynakModul, KaynakId)` için
+   `IsDeleted = 0 AND KaynakId IS NOT NULL` filtreli unique index eklendi — iki katmanlı savunma.
+4. **BelgeNo race condition:** `GenerateBelgeNoAsync` MAX+1 sorgusuna dayandığından yarış durumuna
+   açıktı. `BelgeNo` üzerindeki mevcut unique index korunarak, ambient transaction içinde
+   `IDbContextTransaction.CreateSavepointAsync`/`RollbackToSavepointAsync` ile 3 denemelik güvenli
+   retry eklendi (`SatisBelgesiMuhasebeFisService`'teki retry desenine benzer, ancak burada iç içe
+   transaction yerine savepoint kullanıldı çünkü çağrı zaten ambient transaction içinde çalışıyor).
+5. **Koşulsuz cari kart hesap planı zorunluluğu:** `TahsilatOdemeBelgesiMuhasebeFisService`,
+   `Tesis.RezervasyonTahsilatAlacakHesapTipi = AlinanAvans` olsa bile `CariKart.MuhasebeHesapPlaniId`
+   zorunlu tutuyordu (ve `ResolveAlacakHesabiAsync` içinde null-forgiving operatörle potansiyel
+   `NullReferenceException` riski vardı). Kontrol artık yalnızca `Cari` modunda, `ResolveAlacakHesabiAsync`
+   içinde koşullu olarak çalışıyor.
+6. **Normalize edilmemiş odemeTipi:** `GetKasaBankaHesapSecenekleriAsync`, `KaydetOdemeAsync`'in
+   kullandığı `NormalizeOdemeTipi` metodunu kullanmıyordu; büyük/küçük harf farkı olan bir değer
+   sessizce boş liste veya "Gecersiz odeme tipi" hatası dönebiliyordu. Artık aynı normalizasyon
+   uygulanıyor.
+
+**Migration güncellemesi:** Fix #3'teki yeni index, henüz veritabanına uygulanmamış olan
+`20260713155404_AddRezervasyonOdemeMuhasebeEntegrasyonu.cs` migration dosyasına elle eklendi (aracı
+tekrar riske atmamak için `dotnet ef migrations add` çalıştırılmadı — snapshot dosyası da elle
+güncellendi). Doğrulama için geçici bir `dotnet ef migrations add ZZZ_CheckNoPendingChanges` denemesi
+yapıldı; **boş** (0 operasyon) migration üretmesi, elle yapılan snapshot düzenlemesinin modelle tam
+örtüştüğünü doğruladı. Bu geçici dosyalar `dotnet ef migrations remove` KULLANILMADAN elle silindi.

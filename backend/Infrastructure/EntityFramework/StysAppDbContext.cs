@@ -1913,6 +1913,13 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KapatilacakCariHareketId)
                 .HasFilter("[IsDeleted] = 0 AND [KapatilacakCariHareketId] IS NOT NULL");
 
+            // Ayni kaynak kayittan (ornegin RezervasyonOdeme) ikinci bir tahsilat/odeme belgesi
+            // uretilmesini veritabani seviyesinde de imkansiz kilar (uygulama ici dedup kontrolune
+            // ek savunma hatti — ozellikle KaynakModul='Rezervasyon' senaryosu icin).
+            entity.HasIndex(x => new { x.KaynakModul, x.KaynakId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KaynakId] IS NOT NULL");
+
             entity.HasOne(x => x.CariKart)
                 .WithMany(x => x.TahsilatOdemeBelgeleri)
                 .HasForeignKey(x => x.CariKartId)

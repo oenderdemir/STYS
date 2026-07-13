@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
@@ -74,32 +75,78 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
             await EnsureKasaBankaHesabiUygunAsync(rezervasyon.TesisId, kasaBankaHesapId.Value, odeme.OdemeTipi, cancellationToken);
         }
 
-        var belgeNo = await GenerateBelgeNoAsync(rezervasyon.TesisId, odeme.OdemeTarihi.Year, cancellationToken);
+        // TahsilatOdemeBelgesi burada TahsilatOdemeBelgesiService.AddAsync yerine dogrudan
+        // DbContext uzerinden ekleniyor (cross-aggregate/ambient transaction gerekcesiyle),
+        // ama AddAsync'in yaptigi tum dogrulamalar (cari kart/hesap plani, tesis erisimi, belge/odeme
+        // yontemi/durum gecerliligi, acik muhasebe donemi) ValidateOlusturmaAsync ile aynen calistirilir.
+        await _tahsilatOdemeBelgesiService.ValidateOlusturmaAsync(
+            cariKartId,
+            TahsilatOdemeBelgeTipleri.Tahsilat,
+            odeme.OdemeTipi,
+            TahsilatOdemeBelgeDurumlari.Aktif,
+            odeme.OdemeTarihi,
+            kapatilacakCariHareketId: null,
+            cancellationToken);
 
-        var belge = new TahsilatOdemeBelgesi
+        // BelgeNo uretimi MAX+1 sorgusuna dayandigindan yaris durumuna acik; ambient transaction
+        // icinde savepoint ile guvenli retry uygulanir (unique index BelgeNo uzerinde zaten mevcut).
+        const int maxRetry = 3;
+        for (var attempt = 0; attempt < maxRetry; attempt++)
         {
-            BelgeNo = belgeNo,
-            BelgeTarihi = odeme.OdemeTarihi,
-            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
-            CariKartId = cariKartId,
-            Tutar = odeme.OdemeTutari,
-            ParaBirimi = odeme.ParaBirimi,
-            OdemeYontemi = odeme.OdemeTipi,
-            Aciklama = $"Rezervasyon tahsilati - {rezervasyon.ReferansNo}",
-            KaynakModul = MuhasebeKaynakModulleri.Rezervasyon,
-            KaynakId = odeme.Id,
-            // Bilerek NULL: henuz kapatilacak bir fatura/cari hareket yok — bu saf bir
-            // tahsilat/avans kaydidir. Gelir, fatura/konaklama kapanis akisinda olusur.
-            KapatilacakCariHareketId = null,
-            KasaBankaHesapId = kasaBankaHesapId,
-            Durum = TahsilatOdemeBelgeDurumlari.Aktif
-        };
+            var belgeNo = await GenerateBelgeNoAsync(rezervasyon.TesisId, odeme.OdemeTarihi.Year, cancellationToken);
 
-        await _dbContext.TahsilatOdemeBelgeleri.AddAsync(belge, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            var belge = new TahsilatOdemeBelgesi
+            {
+                BelgeNo = belgeNo,
+                BelgeTarihi = odeme.OdemeTarihi,
+                BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+                CariKartId = cariKartId,
+                Tutar = odeme.OdemeTutari,
+                ParaBirimi = odeme.ParaBirimi,
+                OdemeYontemi = odeme.OdemeTipi,
+                Aciklama = $"Rezervasyon tahsilati - {rezervasyon.ReferansNo}",
+                KaynakModul = MuhasebeKaynakModulleri.Rezervasyon,
+                KaynakId = odeme.Id,
+                // Bilerek NULL: henuz kapatilacak bir fatura/cari hareket yok — bu saf bir
+                // tahsilat/avans kaydidir. Gelir, fatura/konaklama kapanis akisinda olusur.
+                KapatilacakCariHareketId = null,
+                KasaBankaHesapId = kasaBankaHesapId,
+                Durum = TahsilatOdemeBelgeDurumlari.Aktif
+            };
 
-        odeme.TahsilatOdemeBelgesiId = belge.Id;
-        odeme.KasaBankaHesapId = kasaBankaHesapId;
+            var ambientTransaction = _dbContext.Database.CurrentTransaction;
+            var savepointName = $"tahsilat_belge_olustur_{attempt}";
+            if (ambientTransaction is not null)
+            {
+                await ambientTransaction.CreateSavepointAsync(savepointName, cancellationToken);
+            }
+
+            try
+            {
+                await _dbContext.TahsilatOdemeBelgeleri.AddAsync(belge, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                odeme.TahsilatOdemeBelgesiId = belge.Id;
+                odeme.KasaBankaHesapId = kasaBankaHesapId;
+                return;
+            }
+            catch (DbUpdateException ex) when (IsUniqueConflict(ex) && attempt < maxRetry - 1)
+            {
+                if (ambientTransaction is not null)
+                {
+                    await ambientTransaction.RollbackToSavepointAsync(savepointName, cancellationToken);
+                }
+
+                _dbContext.Entry(belge).State = EntityState.Detached;
+            }
+        }
+
+        throw new BaseException("Tahsilat belge numarasi uretilemedi. Lutfen tekrar deneyiniz.", 500);
+    }
+
+    private static bool IsUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);
     }
 
     public async Task TahsilatIptalEtAsync(

@@ -131,6 +131,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 table: "Rezervasyonlar",
                 column: "CariKartId");
 
+            migrationBuilder.CreateIndex(
+                name: "IX_TahsilatOdemeBelgeleri_KaynakModul_KaynakId",
+                schema: "muhasebe",
+                table: "TahsilatOdemeBelgeleri",
+                columns: new[] { "KaynakModul", "KaynakId" },
+                unique: true,
+                filter: "[IsDeleted] = 0 AND [KaynakId] IS NOT NULL");
+
             migrationBuilder.AddForeignKey(
                 name: "FK_Rezervasyonlar_CariKartlar_CariKartId",
                 schema: "dbo",
@@ -254,6 +262,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 name: "IX_Rezervasyonlar_CariKartId",
                 schema: "dbo",
                 table: "Rezervasyonlar");
+
+            migrationBuilder.DropIndex(
+                name: "IX_TahsilatOdemeBelgeleri_KaynakModul_KaynakId",
+                schema: "muhasebe",
+                table: "TahsilatOdemeBelgeleri");
 
             migrationBuilder.DropColumn(
                 name: "RezervasyonMisafirVarsayilanCariKartId",

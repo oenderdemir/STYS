@@ -6727,3 +6727,28 @@ bozması nedeniyle 102 tabloyu yeniden oluşturan tehlikeli bir migration ürett
 - Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
 - Frontend: `npx ng build --configuration development` başarılı — 0 error
 - Migration: üretildi, **veritabanına henüz uygulanmadı** (kullanıcı onayı bekleniyor)
+
+---
+
+## Rezervasyon Ödeme → Muhasebe Entegrasyonu — Kod İnceleme Düzeltmeleri (2. Tur)
+
+### Yapılan İşler
+Önceki turun kod incelemesinde tespit edilen 6 madde düzeltildi: nested transaction riski, atlanan
+validasyonlar, yetersiz duplicate koruması, BelgeNo race condition, koşulsuz cari kart hesap planı
+zorunluluğu ve normalize edilmemiş odemeTipi. Ayrıntı için bkz.
+`docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md` (§6).
+
+### Güncellenen Dosyalar
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiService.cs — IptalEtAsync artik ambient transaction'i algiliyor (ownsTransaction deseni); AddAsync'in validasyonlari public ValidateOlusturmaAsync metoduna cikarildi
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/ITahsilatOdemeBelgesiService.cs — ValidateOlusturmaAsync imzasi eklendi
+- backend/Rezervasyonlar/Services/RezervasyonOdemeMuhasebeService.cs — TahsilatOlusturAsync artik ValidateOlusturmaAsync'i cagiriyor; BelgeNo uretimi savepoint tabanli 3 denemelik retry ile korunuyor
+- backend/Muhasebe/TahsilatOdemeBelgeleri/Services/TahsilatOdemeBelgesiMuhasebeFisService.cs — CariKart.MuhasebeHesapPlaniId kontrolu sadece RezervasyonTahsilatAlacakHesapTipi=Cari modunda calisiyor (AlinanAvans modunda gerekmiyor)
+- backend/Rezervasyonlar/Services/RezervasyonService.cs — GetKasaBankaHesapSecenekleriAsync artik NormalizeOdemeTipi kullaniyor
+- backend/Infrastructure/EntityFramework/StysAppDbContext.cs — TahsilatOdemeBelgeleri(KaynakModul, KaynakId) filtreli unique index eklendi
+- backend/Infrastructure/EntityFramework/Migrations/StysAppDbContextModelSnapshot.cs — yeni index elle eklendi (dotnet ef araci tekrar kullanilmadi, bkz. bulgular dosyasi)
+- backend/Infrastructure/EntityFramework/Migrations/20260713155404_AddRezervasyonOdemeMuhasebeEntegrasyonu.cs — yeni index icin CreateIndex/DropIndex elle eklendi
+- docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md — §6 eklendi
+
+### Build
+- Backend: `dotnet build` (STYS.csproj) başarılı — 0 error
+- Migration: elle guncellendi, gecici `dotnet ef migrations add ZZZ_CheckNoPendingChanges` denemesi ile snapshot/model tutarliligi dogrulandi (0 operasyon urettigi icin dogrulama basarili, gecici dosyalar elle silindi); **veritabanına henüz uygulanmadı**

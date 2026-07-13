@@ -84,9 +84,9 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public override async Task<TahsilatOdemeBelgesiDto> AddAsync(TahsilatOdemeBelgesiDto dto)
     {
-        await ValidateAsync(dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum);
-        await EnsureOpenPeriodAsync(dto.CariKartId, dto.BelgeTarihi, CancellationToken.None);
-        await ValidateKapatilacakCariHareketAsync(dto.CariKartId, dto.KapatilacakCariHareketId);
+        await ValidateOlusturmaAsync(
+            dto.CariKartId, dto.BelgeTipi, dto.OdemeYontemi, dto.Durum, dto.BelgeTarihi, dto.KapatilacakCariHareketId,
+            CancellationToken.None);
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
@@ -151,7 +151,15 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // Ambient transaction farkindaligi: bu metod baska bir servisin (ornegin
+        // RezervasyonOdemeMuhasebeService.TahsilatIptalEtAsync) acik transaction'i icinde
+        // cagrilabilir. Kendi transaction'ini yalniz kendisi baslattiysa acar/kapatir —
+        // aksi halde ic ice BeginTransactionAsync cagrisi (ve "zaten aktif transaction var"
+        // hatasi) onlenir; CariHareketKapamaService.GeriAlAsync ile ayni desen.
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
         try
         {
             var visible = await GetByIdAsync(id);
@@ -177,11 +185,18 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
             existing.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             throw;
         }
     }
@@ -216,6 +231,27 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();
         var includeQuery = BuildScopedIncludeQuery(scope, include);
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
+    }
+
+    /// <summary>
+    /// AddAsync ile ayni dogrulama zinciri (cari kart/hesap plani, tesis erisimi, belge/odeme
+    /// yontemi/durum gecerliligi, acik muhasebe donemi, kapatilacak cari hareket uygunlugu).
+    /// Baska modullerin (ornegin RezervasyonOdemeMuhasebeService) DbContext uzerinden dogrudan
+    /// TahsilatOdemeBelgesi ekleyecegi durumlarda AddAsync'in validasyonlarini atlamamak icin
+    /// public olarak disari acilir.
+    /// </summary>
+    public async Task ValidateOlusturmaAsync(
+        int cariKartId,
+        string belgeTipi,
+        string odemeYontemi,
+        string durum,
+        DateTime belgeTarihi,
+        int? kapatilacakCariHareketId,
+        CancellationToken cancellationToken = default)
+    {
+        await ValidateAsync(cariKartId, belgeTipi, odemeYontemi, durum);
+        await EnsureOpenPeriodAsync(cariKartId, belgeTarihi, cancellationToken);
+        await ValidateKapatilacakCariHareketAsync(cariKartId, kapatilacakCariHareketId);
     }
 
     private async Task ValidateAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum)

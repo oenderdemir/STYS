@@ -66,8 +66,10 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
         if (belgeOnOkuma.CariKart is null)
             throw new BaseException("Belgede tanimli cari kart bulunamadi.", 404);
 
-        if (!belgeOnOkuma.CariKart.MuhasebeHesapPlaniId.HasValue)
-            throw new BaseException("Belgedeki cari kartin muhasebe hesap plani baglantisi yok.", 400);
+        // CariKart.MuhasebeHesapPlaniId sadece alacak hesabi "Cari" modundaysa zorunludur;
+        // "AlinanAvans" modunda alacak hesabi MuhasebeAnaHesapKodlari.AlinanSiparisAvanslari
+        // uzerinden cozulur ve cari kartin kendi hesap plani baglantisina ihtiyac duyulmaz
+        // (bkz. ResolveAlacakHesabiAsync).
 
         if (!belgeOnOkuma.KasaBankaHesap.MuhasebeHesapPlaniId.HasValue)
             throw new BaseException("Belgedeki kasa/banka/POS hesabinin muhasebe hesap plani baglantisi yok.", 400);
@@ -192,7 +194,12 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
             return await GetHesapPlaniByAnaKodAsync(MuhasebeAnaHesapKodlari.AlinanSiparisAvanslari, tesisId, cancellationToken);
         }
 
-        return await GetHesapPlaniByIdAsync(cariKart.MuhasebeHesapPlaniId!.Value, cancellationToken);
+        if (!cariKart.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException("Belgedeki cari kartin muhasebe hesap plani baglantisi yok.", 400);
+        }
+
+        return await GetHesapPlaniByIdAsync(cariKart.MuhasebeHesapPlaniId.Value, cancellationToken);
     }
 
     private async Task<MuhasebeHesapPlani> GetHesapPlaniByIdAsync(int id, CancellationToken cancellationToken)

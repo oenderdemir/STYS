@@ -8,4 +8,13 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
 {
     Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default);
     Task IptalEtAsync(int id, CancellationToken cancellationToken = default);
+
+    Task ValidateOlusturmaAsync(
+        int cariKartId,
+        string belgeTipi,
+        string odemeYontemi,
+        string durum,
+        DateTime belgeTarihi,
+        int? kapatilacakCariHareketId,
+        CancellationToken cancellationToken = default);
 }

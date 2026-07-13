@@ -5120,6 +5120,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasIndex("BelgeTarihi", "BelgeTipi")
                         .HasFilter("[IsDeleted] = 0");
 
+                    b.HasIndex("KaynakModul", "KaynakId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0 AND [KaynakId] IS NOT NULL");
+
                     b.ToTable("TahsilatOdemeBelgeleri", "muhasebe");
                 });
 

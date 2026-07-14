@@ -219,11 +219,16 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         await dbContext.Rezervasyonlar
             .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
             .ExecuteDeleteAsync();
+        // TahsilatOdemeBelgeleri.KapatilacakCariHareketId CariHareketler'e FK Restrict ile bagli
+        // oldugundan (retroaktif kapama senaryolarinda doldurulur), CariHareketler'den ONCE silinmeli.
+        await dbContext.TahsilatOdemeBelgeleri
+            .Where(x => x.CariKart != null && (x.CariKart.TesisId == tesisCariId || x.CariKart.TesisId == tesisAvansId))
+            .ExecuteDeleteAsync();
         await dbContext.CariHareketler
             .Where(x => x.CariKart != null && x.CariKart.TesisId == tesisCariId)
             .ExecuteDeleteAsync();
-        await dbContext.TahsilatOdemeBelgeleri
-            .Where(x => x.CariKart != null && (x.CariKart.TesisId == tesisCariId || x.CariKart.TesisId == tesisAvansId))
+        await dbContext.SatisBelgeleri
+            .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
             .ExecuteDeleteAsync();
         await dbContext.CariKartlar
             .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
@@ -476,8 +481,228 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Senaryo 9 (Gelir Tahakkuku) — Eszamanli iki "Gelir Belgesi Olustur" cagrisi
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo9_EszamanliGelirBelgesiOlusturma_YalnizcaBirBelgeKalir()
+    {
+        await using var seedContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonCheckOutTamamlandiAsync(seedContext, TesisCariId, "Senaryo9 Misafir", "555-0009");
+        var rezervasyonId = rezervasyon.Id;
+        // Cari kart cozumlemesinin (422) yarisi engellememesi icin dogrudan atanir — burada test
+        // edilen SatisBelgesi/Rezervasyon.SatisBelgesiId uzerindeki yaris durumudur.
+        rezervasyon.CariKartId = CariKartWithHesapAId;
+        await seedContext.SaveChangesAsync();
+
+        // Iki bagimsiz DbContext/servis grafi ile gercek eszamanlilik simule edilir.
+        await using var dbContext1 = CreateDbContext();
+        await using var dbContext2 = CreateDbContext();
+        var service1 = CreateRezervasyonGelirTahakkukService(dbContext1);
+        var service2 = CreateRezervasyonGelirTahakkukService(dbContext2);
+
+        var sonuclar = await Task.WhenAll(
+            SafeOlusturTaslakAsync(service1, rezervasyonId),
+            SafeOlusturTaslakAsync(service2, rezervasyonId));
+
+        // Ikisinden en az biri basarili olmali; SatisBelgesi(KaynakModul,KaynakTipi,KaynakId) uzerindeki
+        // mevcut unique index (StysAppDbContext.cs) veya Rezervasyon.SatisBelgesiId uzerindeki yeni
+        // filtrelenmis unique index sayesinde nihai durumda tam olarak BIR belge kalir.
+        Assert.Contains(sonuclar, x => x);
+
+        await using var verifyContext = CreateDbContext();
+        var belgeSayisi = await verifyContext.SatisBelgeleri.CountAsync(x =>
+            !x.IsDeleted && x.KaynakId == rezervasyonId.ToString());
+        Assert.Equal(1, belgeSayisi);
+    }
+
+    private static async Task<bool> SafeOlusturTaslakAsync(IRezervasyonGelirTahakkukService service, int rezervasyonId)
+    {
+        try
+        {
+            await service.OlusturTaslakAsync(rezervasyonId);
+            return true;
+        }
+        catch (BaseException)
+        {
+            return false;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 10 (Gelir Tahakkuku) — Kapatilmis bir tahsilat iptal edilir, geri alma calisir
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo10_KapatilmisTahsilatIptalEdilir_GeriAlmaFaturaKalanTutariniArtirir()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonCheckOutTamamlandiAsync(dbContext, TesisCariId, "Senaryo10 Misafir", "555-0010");
+        var rezervasyonId = rezervasyon.Id;
+        rezervasyon.CariKartId = CariKartWithHesapAId;
+        await dbContext.SaveChangesAsync();
+
+        var (odeme, belge) = await SeedTahsilatOdemeBelgesiAsync(dbContext, rezervasyonId, CariKartWithHesapAId, 400m, "S10-TAH-1");
+        var faturaHareket = await SeedFaturaCariHareketiAsync(dbContext, rezervasyon, CariKartWithHesapAId, 1000m);
+
+        var gelirService = CreateRezervasyonGelirTahakkukService(dbContext);
+        var kapamaSonucu = await gelirService.KapatOncekiTahsilatlariAsync(rezervasyonId);
+        Assert.Equal(1, kapamaSonucu.BasariliSayisi);
+
+        var kapamaService = CreateCariHareketKapamaService(dbContext);
+        await kapamaService.GeriAlAsync(belge.Id);
+
+        await using var verifyContext = CreateDbContext();
+        var faturaGuncel = await verifyContext.CariHareketler.SingleAsync(x => x.Id == faturaHareket.Id);
+        Assert.Equal(1000m, faturaGuncel.KalanTutar);
+        Assert.False(faturaGuncel.KapandiMi);
+
+        var belgeGuncel = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belge.Id);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, belgeGuncel.Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 11 (Gelir Tahakkuku) — Donem kapaliyken kapama geri alma engellenir
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo11_DonemKapaliyken_KapamaGeriAlmaEngellenir()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonCheckOutTamamlandiAsync(dbContext, TesisCariId, "Senaryo11 Misafir", "555-0011");
+        var rezervasyonId = rezervasyon.Id;
+        rezervasyon.CariKartId = CariKartWithHesapAId;
+        await dbContext.SaveChangesAsync();
+
+        var (_, belge) = await SeedTahsilatOdemeBelgesiAsync(dbContext, rezervasyonId, CariKartWithHesapAId, 400m, "S11-TAH-1");
+        await SeedFaturaCariHareketiAsync(dbContext, rezervasyon, CariKartWithHesapAId, 1000m);
+
+        var gelirService = CreateRezervasyonGelirTahakkukService(dbContext);
+        await gelirService.KapatOncekiTahsilatlariAsync(rezervasyonId);
+
+        // Tahsilatin BelgeTarihi'ni acik donemin disina (kapali bir doneme) tasi.
+        belge.BelgeTarihi = new DateTime(2019, 1, 1);
+        await dbContext.SaveChangesAsync();
+
+        var kapamaService = CreateCariHareketKapamaService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() => kapamaService.GeriAlAsync(belge.Id));
+        Assert.Equal(400, ex.ErrorCode);
+
+        await using var verifyContext = CreateDbContext();
+        var belgeGuncel = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belge.Id);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, belgeGuncel.Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Yardimcilar
     // ─────────────────────────────────────────────────────────────
+
+    private static async Task<Rezervasyon> SeedRezervasyonCheckOutTamamlandiAsync(
+        StysAppDbContext dbContext, int tesisId, string misafirAdSoyad, string telefon)
+    {
+        var rezervasyon = new Rezervasyon
+        {
+            ReferansNo = $"{TestMarker}-{Guid.NewGuid():N}"[..20],
+            TesisId = tesisId,
+            KisiSayisi = 1,
+            GirisTarihi = new DateTime(2026, 6, 1),
+            CikisTarihi = new DateTime(2026, 6, 3),
+            ToplamBazUcret = 1000m,
+            ToplamUcret = 1000m,
+            ParaBirimi = "TRY",
+            MisafirAdiSoyadi = misafirAdSoyad,
+            MisafirTelefon = telefon,
+            RezervasyonDurumu = RezervasyonDurumlari.CheckOutTamamlandi,
+            AktifMi = true
+        };
+        dbContext.Rezervasyonlar.Add(rezervasyon);
+        await dbContext.SaveChangesAsync();
+        return rezervasyon;
+    }
+
+    private static async Task<(RezervasyonOdeme Odeme, TahsilatOdemeBelgesi Belge)> SeedTahsilatOdemeBelgesiAsync(
+        StysAppDbContext dbContext, int rezervasyonId, int cariKartId, decimal tutar, string belgeNo)
+    {
+        var odeme = new RezervasyonOdeme
+        {
+            RezervasyonId = rezervasyonId,
+            OdemeTarihi = DateTime.UtcNow,
+            OdemeTutari = tutar,
+            ParaBirimi = "TRY",
+            OdemeTipi = OdemeTipleri.Nakit
+        };
+        dbContext.RezervasyonOdemeler.Add(odeme);
+        await dbContext.SaveChangesAsync();
+
+        var belge = new TahsilatOdemeBelgesi
+        {
+            BelgeNo = belgeNo,
+            BelgeTarihi = DateTime.UtcNow,
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariKartId,
+            Tutar = tutar,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeTipleri.Nakit,
+            KaynakModul = MuhasebeKaynakModulleri.Rezervasyon,
+            KaynakId = odeme.Id,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        dbContext.TahsilatOdemeBelgeleri.Add(belge);
+        await dbContext.SaveChangesAsync();
+
+        return (odeme, belge);
+    }
+
+    /// <summary>
+    /// SatisBelgesiMuhasebeFisService.CreateCariHareketAsync'in urettigi fatura CariHareket'iyle
+    /// ayni semada, dogrudan seed edilir — bu testlerin odagi retroaktif kapama/geri-alma mantigi
+    /// oldugu icin (KapatOncekiTahsilatlariAsync ve CariHareketKapamaService), fatura onay/fis
+    /// zincirinin tamamini yeniden kurmak gerekmez.
+    /// </summary>
+    private static async Task<CariHareket> SeedFaturaCariHareketiAsync(
+        StysAppDbContext dbContext, Rezervasyon rezervasyon, int cariKartId, decimal genelToplam)
+    {
+        var satisBelgesi = new STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi
+        {
+            BelgeNo = $"{TestMarker}-FAT-{Guid.NewGuid():N}"[..24],
+            BelgeTipi = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiTipi.SatisFaturasi,
+            Durum = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiDurumu.MuhasebeOnaylandi,
+            KaynakModul = STYS.Muhasebe.SatisBelgeleri.Enums.SatisKaynakModulu.Otel,
+            KaynakTipi = "RezervasyonCheckout",
+            KaynakId = rezervasyon.Id.ToString(),
+            TesisId = rezervasyon.TesisId,
+            CariKartId = cariKartId,
+            BelgeTarihi = DateTime.UtcNow,
+            GenelToplam = genelToplam,
+            MuhasebeFisId = null
+        };
+        dbContext.SatisBelgeleri.Add(satisBelgesi);
+        await dbContext.SaveChangesAsync();
+
+        rezervasyon.SatisBelgesiId = satisBelgesi.Id;
+        await dbContext.SaveChangesAsync();
+
+        var faturaHareket = new CariHareket
+        {
+            CariKartId = cariKartId,
+            HareketTarihi = DateTime.UtcNow,
+            BelgeTuru = "SatisFaturasi",
+            BelgeNo = satisBelgesi.BelgeNo,
+            BorcTutari = genelToplam,
+            AlacakTutari = 0m,
+            KapananTutar = 0m,
+            KalanTutar = genelToplam,
+            ParaBirimi = "TRY",
+            Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
+            KaynakId = satisBelgesi.Id
+        };
+        dbContext.CariHareketler.Add(faturaHareket);
+        await dbContext.SaveChangesAsync();
+
+        return faturaHareket;
+    }
 
     private static async Task<Rezervasyon> SeedRezervasyonAsync(
         StysAppDbContext dbContext, int tesisId, string misafirAdSoyad, string telefon)

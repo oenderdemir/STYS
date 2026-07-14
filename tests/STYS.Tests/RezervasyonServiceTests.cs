@@ -1745,6 +1745,31 @@ public class RezervasyonServiceTests
         Assert.Equal(KonaklayanKatilimDurumlari.Ayrildi, guest.KatilimDurumu);
     }
 
+    // Gelir Tahakkuku Senaryo 9: gelir belgesi taslagi olusturma basarisiz olsa bile
+    // check-out islemi commit edilmis kalmalidir (best-effort izolasyonu).
+    [Fact]
+    public async Task CheckOut_GelirBelgesiTaslakBasarisizOlsaBileCheckOutTamamlanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 9960, segmentId: 9961, withPlan: true);
+
+        var fakeGelirTahakkuk = new FakeRezervasyonGelirTahakkukService { FailOnOlustur = true };
+        var service = CreateService(dbContext, rezervasyonGelirTahakkukService: fakeGelirTahakkuk);
+        await service.TamamlaCheckInAsync(9960);
+        await service.KaydetOdemeAsync(9960, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 1000m,
+            OdemeTipi = OdemeTipleri.Nakit
+        });
+
+        var result = await service.TamamlaCheckOutAsync(9960);
+
+        Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, result.RezervasyonDurumu);
+        var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 9960);
+        Assert.Equal(RezervasyonDurumlari.CheckOutTamamlandi, updated.RezervasyonDurumu);
+        Assert.Equal(1, fakeGelirTahakkuk.OlusturCagriSayisi);
+    }
+
     // Check-in yapilsa bile kalan bakiye varsa check-out engellenmeli.
     [Fact]
     public async Task CheckOut_OdemeTamamlanmadiysaHataVerir()

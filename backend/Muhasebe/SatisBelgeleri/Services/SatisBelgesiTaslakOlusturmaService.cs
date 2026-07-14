@@ -235,6 +235,7 @@ public class SatisBelgesiTaslakOlusturmaService : ISatisBelgesiTaslakOlusturmaSe
             KaynakTipi = request.KaynakTipi,
             KaynakId = request.KaynakId,
             TesisId = resolvedTesisId,
+            CariKartId = request.CariKartId,
             BelgeTarihi = request.BelgeTarihi,
             VadeTarihi = request.VadeTarihi,
             KurumsalMi = request.KurumsalMi,

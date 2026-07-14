@@ -15,6 +15,11 @@ public class SatisBelgesiTaslakOlusturRequest
 
     public int? TesisId { get; set; }
 
+    /// <summary>Belgenin bağlanacağı cari kart. Boş bırakılırsa CreateAsync'in cari kart
+    /// gerektirmeyen taslak modu geçerli olur, ama bu durumda SatisBelgesiMuhasebeFisService
+    /// hiçbir CariHareket üretmez — operasyon modülleri gelir tahakkuku bekliyorsa doldurmalıdır.</summary>
+    public int? CariKartId { get; set; }
+
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
 

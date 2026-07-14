@@ -16,6 +16,7 @@ using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.MisafirTipleri.Entities;
+using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.OdaKullanimBloklari;
 using STYS.OdaKullanimBloklari.Entities;
 using STYS.Odalar.Entities;
@@ -2637,7 +2638,8 @@ public class RezervasyonServiceTests
     private static RezervasyonService CreateService(
         StysAppDbContext dbContext,
         DomainAccessScope? scope = null,
-        IReadOnlyCollection<string>? permissions = null)
+        IReadOnlyCollection<string>? permissions = null,
+        IRezervasyonGelirTahakkukService? rezervasyonGelirTahakkukService = null)
     {
         var httpContextAccessor = new HttpContextAccessor
         {
@@ -2661,7 +2663,8 @@ public class RezervasyonServiceTests
             new FakeLicenseService(),
             new FakeCurrentTenantAccessor(),
             null!,
-            new FakeRezervasyonOdemeMuhasebeService());
+            new FakeRezervasyonOdemeMuhasebeService(),
+            rezervasyonGelirTahakkukService ?? new FakeRezervasyonGelirTahakkukService());
     }
 
     private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()
@@ -4049,5 +4052,31 @@ public class RezervasyonServiceTests
 
         public Task TahsilatIptalEtAsync(RezervasyonOdeme odeme, string? iptalAciklama, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+    }
+
+    /// <summary>Check-out'un best-effort gelir belgesi tetiklemesini gerçek muhasebe altyapısına
+    /// bağlamadan doğrulamak için kullanılan sahte servis. FailOnOlustur=true verilirse
+    /// check-out'un bu hatayı yuttuğunu (best-effort) kanıtlamak için istisna fırlatır.</summary>
+    private sealed class FakeRezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
+    {
+        public bool FailOnOlustur { get; set; }
+        public int OlusturCagriSayisi { get; private set; }
+
+        public Task<SatisBelgesiDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+        {
+            OlusturCagriSayisi++;
+            if (FailOnOlustur)
+            {
+                throw new BaseException("Test: gelir belgesi taslagi olusturulamadi.", 500);
+            }
+
+            return Task.FromResult(new SatisBelgesiDto { Id = 1, BelgeNo = "TEST-1" });
+        }
+
+        public Task<RezervasyonGelirOzetiDto> GetGelirOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new RezervasyonGelirOzetiDto { RezervasyonId = rezervasyonId });
+
+        public Task<RezervasyonTahsilatKapamaSonucuDto> KapatOncekiTahsilatlariAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new RezervasyonTahsilatKapamaSonucuDto());
     }
 }

@@ -15,13 +15,16 @@ public class RezervasyonController : UIController
 {
     private readonly IRezervasyonService _rezervasyonService;
     private readonly IRezervasyonSatisBelgesiService _rezervasyonSatisBelgesiService;
+    private readonly IRezervasyonGelirTahakkukService _rezervasyonGelirTahakkukService;
 
     public RezervasyonController(
         IRezervasyonService rezervasyonService,
-        IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService)
+        IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService,
+        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService)
     {
         _rezervasyonService = rezervasyonService;
         _rezervasyonSatisBelgesiService = rezervasyonSatisBelgesiService;
+        _rezervasyonGelirTahakkukService = rezervasyonGelirTahakkukService;
     }
 
     [HttpGet("tesisler")]
@@ -428,6 +431,41 @@ public class RezervasyonController : UIController
     {
         var result = await _rezervasyonSatisBelgesiService.SatisBelgesiTaslagiOlusturAsync(
             rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("kayitlar/{rezervasyonId:int}/gelir-ozeti")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.View)]
+    public async Task<ActionResult<RezervasyonGelirOzetiDto>> GetGelirOzeti(
+        [FromRoute] int rezervasyonId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonGelirTahakkukService.GetGelirOzetiAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Idempotent: gelir belgesi zaten varsa yenisini yaratmaz, mevcudunu döner.
+    /// Check-out'un best-effort otomatik denemesi başarısız olduğunda elle tekrar deneme
+    /// içindir.</summary>
+    [HttpPost("kayitlar/{rezervasyonId:int}/gelir-belgesi-olustur")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<SatisBelgesiDto>> OlusturGelirBelgesi(
+        [FromRoute] int rezervasyonId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonGelirTahakkukService.OlusturTaslakAsync(rezervasyonId, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Yalnızca satış belgesi onaylanıp SatisBelgesi kaynaklı CariHareket oluştuktan
+    /// sonra çalışır — otomatik zincirlenmez, muhasebe ekibinin ayrı, bilinçli aksiyonudur.</summary>
+    [HttpPost("kayitlar/{rezervasyonId:int}/tahsilatlari-kapat")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonTahsilatKapamaSonucuDto>> KapatTahsilatlar(
+        [FromRoute] int rezervasyonId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonGelirTahakkukService.KapatOncekiTahsilatlariAsync(rezervasyonId, cancellationToken);
         return Ok(result);
     }
 }

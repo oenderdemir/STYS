@@ -39,6 +39,7 @@ public class RezervasyonService : IRezervasyonService
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IDomainOperationLogger _domainLogger;
     private readonly IRezervasyonOdemeMuhasebeService _rezervasyonOdemeMuhasebeService;
+    private readonly IRezervasyonGelirTahakkukService _rezervasyonGelirTahakkukService;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
@@ -48,7 +49,8 @@ public class RezervasyonService : IRezervasyonService
         ILicenseService licenseService,
         ICurrentTenantAccessor currentTenantAccessor,
         IDomainOperationLogger domainLogger,
-        IRezervasyonOdemeMuhasebeService rezervasyonOdemeMuhasebeService)
+        IRezervasyonOdemeMuhasebeService rezervasyonOdemeMuhasebeService,
+        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -58,6 +60,7 @@ public class RezervasyonService : IRezervasyonService
         _currentTenantAccessor = currentTenantAccessor;
         _domainLogger = domainLogger;
         _rezervasyonOdemeMuhasebeService = rezervasyonOdemeMuhasebeService;
+        _rezervasyonGelirTahakkukService = rezervasyonGelirTahakkukService;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -2656,6 +2659,51 @@ public class RezervasyonService : IRezervasyonService
             TesisId = reservation.TesisId,
             KurumId = _currentTenantAccessor.GetCurrentKurumId()
         });
+
+        // Gelir belgesi (SatisBelgesi) taslagi best-effort olusturulur: check-out'un kendi
+        // transaction'i yukarida zaten commit edildi (SaveChangesAsync, satir 2641), bu blok
+        // TAMAMEN AYRI bir islemdir ve check-out'u ASLA basarisiz saymaz — muhasebe hesap plani
+        // konfigurasyonu eksik/hatali olsa bile resepsiyon check-out'u tamamlayabilmelidir.
+        // Basarisiz olursa hata loglanir ve (mumkunse) uyari bildirimi uretilir; gelir belgesi
+        // daha sonra "Gelir Belgesi Olustur" butonuyla elle tekrar denenebilir.
+        try
+        {
+            await _rezervasyonGelirTahakkukService.OlusturTaslakAsync(rezervasyonId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _domainLogger.Failed("Reservation.CheckOut.GelirBelgesiTaslakBasarisiz", ex, new
+            {
+                ReservationId = reservation.Id,
+                ReferansNo = reservation.ReferansNo,
+                TesisId = reservation.TesisId
+            });
+
+            try
+            {
+                await _bildirimService.PublishToTesisUsersAsync(
+                    reservation.TesisId,
+                    new BildirimOlusturRequestDto
+                    {
+                        Tip = "GelirBelgesiTaslakBasarisiz",
+                        Baslik = "Gelir Belgesi Taslagi Olusturulamadi",
+                        Mesaj = $"{reservation.ReferansNo} referansli rezervasyon icin check-out sonrasi gelir belgesi " +
+                                "taslagi otomatik olusturulamadi. Lutfen rezervasyon ekranindan 'Gelir Belgesi Olustur' " +
+                                "aksiyonuyla elle deneyiniz.",
+                        Severity = BildirimSeverityleri.Warn,
+                        Link = "/rezervasyon-yonetimi"
+                    },
+                    cancellationToken);
+            }
+            catch (Exception bildirimEx)
+            {
+                // Bildirim uretimi de best-effort — ikinci bir hata check-out sonucunu etkilemez.
+                _domainLogger.Failed("Reservation.CheckOut.GelirBelgesiBildirimBasarisiz", bildirimEx, new
+                {
+                    ReservationId = reservation.Id
+                });
+            }
+        }
 
         return ToSaveResult(reservation);
     }

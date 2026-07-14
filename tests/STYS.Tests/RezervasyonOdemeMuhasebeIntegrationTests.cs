@@ -21,6 +21,10 @@ using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Repositories;
+using STYS.Muhasebe.SatisBelgeleri.Mapping;
+using STYS.Muhasebe.SatisBelgeleri.Repositories;
+using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Mapping;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
@@ -524,6 +528,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             cfg.AddProfile<CariKartProfile>();
             cfg.AddProfile<CariHareketProfile>();
             cfg.AddProfile<MuhasebeDonemProfile>();
+            cfg.AddProfile<SatisBelgesiProfile>();
         }, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
         return config.CreateMapper();
@@ -557,7 +562,66 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         return new RezervasyonOdemeMuhasebeService(
             dbContext,
             CreateTahsilatOdemeBelgesiService(dbContext),
-            new FakeMuhasebeFisService());
+            new FakeMuhasebeFisService(),
+            new RezervasyonCariKartResolver(dbContext));
+    }
+
+    private static ICariHareketKapamaService CreateCariHareketKapamaService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var tahsilatRepo = new TahsilatOdemeBelgesiRepository(dbContext, mapper);
+        var cariHareketRepo = new CariHareketRepository(dbContext, mapper);
+        var muhasebeDonemService = CreateMuhasebeDonemService(dbContext);
+        var userAccessScope = new FakeUserAccessScopeService();
+        return new CariHareketKapamaService(
+            dbContext, tahsilatRepo, cariHareketRepo, muhasebeDonemService, userAccessScope, mapper);
+    }
+
+    private static ISatisBelgesiService CreateSatisBelgesiService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var satisBelgesiRepo = new SatisBelgesiRepository(dbContext, mapper);
+        var muhasebeFisRepo = new MuhasebeFisRepository(dbContext, mapper);
+        return new SatisBelgesiService(
+            satisBelgesiRepo,
+            dbContext,
+            mapper,
+            muhasebeFisRepo,
+            new FakeMuhasebeFisService(),
+            new FakeUserAccessScopeService(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SatisBelgesiService>.Instance,
+            new FakeDomainOperationLogger());
+    }
+
+    private static ISatisBelgesiTaslakOlusturmaService CreateSatisBelgesiTaslakOlusturmaService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var satisBelgesiRepo = new SatisBelgesiRepository(dbContext, mapper);
+        return new SatisBelgesiTaslakOlusturmaService(
+            CreateSatisBelgesiService(dbContext),
+            satisBelgesiRepo,
+            new FakeUserAccessScopeService(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SatisBelgesiTaslakOlusturmaService>.Instance);
+    }
+
+    private static IRezervasyonSatisBelgesiService CreateRezervasyonSatisBelgesiService(StysAppDbContext dbContext)
+    {
+        return new RezervasyonSatisBelgesiService(
+            dbContext,
+            new FakeUserAccessScopeService(),
+            CreateSatisBelgesiTaslakOlusturmaService(dbContext),
+            new RezervasyonCariKartResolver(dbContext),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<RezervasyonSatisBelgesiService>.Instance);
+    }
+
+    private static IRezervasyonGelirTahakkukService CreateRezervasyonGelirTahakkukService(StysAppDbContext dbContext)
+    {
+        return new RezervasyonGelirTahakkukService(
+            dbContext,
+            new FakeUserAccessScopeService(),
+            CreateRezervasyonSatisBelgesiService(dbContext),
+            CreateSatisBelgesiService(dbContext),
+            CreateCariHareketKapamaService(dbContext));
     }
 
     private static RezervasyonService CreateRezervasyonService(StysAppDbContext dbContext)
@@ -571,7 +635,8 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             new FakeLicenseService(),
             new FakeCurrentTenantAccessor(),
             new FakeDomainOperationLogger(),
-            CreateRezervasyonOdemeMuhasebeService(dbContext));
+            CreateRezervasyonOdemeMuhasebeService(dbContext),
+            CreateRezervasyonGelirTahakkukService(dbContext));
     }
 
     private sealed class FakeCurrentUserAccessor : TOD.Platform.Security.Auth.Services.ICurrentUserAccessor

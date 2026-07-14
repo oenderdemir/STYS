@@ -1134,6 +1134,12 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.RezervasyonDurumu })
                 .HasFilter("[IsDeleted] = 0");
 
+            // Ayni rezervasyondan ikinci bir gelir/satis belgesi taslagi uretilmesini veritabani
+            // seviyesinde de imkansiz kilar (uygulama ici idempotency kontrolune ek savunma hatti).
+            entity.HasIndex(x => x.SatisBelgesiId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [SatisBelgesiId] IS NOT NULL");
+
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
@@ -1147,6 +1153,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.CariKart)
                 .WithMany()
                 .HasForeignKey(x => x.CariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SatisBelgesi)
+                .WithMany()
+                .HasForeignKey(x => x.SatisBelgesiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

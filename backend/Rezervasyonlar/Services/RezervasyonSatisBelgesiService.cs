@@ -6,6 +6,7 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Services;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -23,20 +24,28 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     private readonly Infrastructure.EntityFramework.StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
+    private readonly IRezervasyonCariKartResolver _cariKartResolver;
     private readonly ILogger<RezervasyonSatisBelgesiService> _logger;
 
     private const string KaynakTipiRezervasyonCheckout = "RezervasyonCheckout";
+
+    /// <summary>Ek hizmet ve restoran (OdayaEkle) satırlarında kullanılan varsayılan KDV oranı.
+    /// BİLİNEN SINIRLAMA: ne RezervasyonEkHizmet ne de restoran siparişi (OdayaEkle) satır bazında
+    /// KDV kırılımı taşıyor — gerçek oran bundan farklıysa (örn. alkollü içecek) bu bir veri
+    /// doğruluğu açığıdır. Kapsamlı çözüm ilgili modüllerin KDV bilgisi taşımasını gerektirir.</summary>
     private const decimal VarsayilanKdvOrani = 10m;
 
     public RezervasyonSatisBelgesiService(
         Infrastructure.EntityFramework.StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
         ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        IRezervasyonCariKartResolver cariKartResolver,
         ILogger<RezervasyonSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _taslakOlusturmaService = taslakOlusturmaService;
+        _cariKartResolver = cariKartResolver;
         _logger = logger;
     }
 
@@ -73,8 +82,11 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                 400);
         }
 
-        // 6. Satış satırlarını oluştur (KDV override bilgileriyle)
+        // 6. Satış satırlarını oluştur (konaklama + ek hizmet + restoran, KDV override bilgileriyle)
         var satirlar = await BuildSatirlarAsync(rezervasyon, geceSayisi, request, cancellationToken);
+
+        // 6b. Cari kart çözümle (Faz 1'deki tahsilat kademesiyle aynı resolver — asla otomatik oluşturmaz)
+        var cariKartId = await _cariKartResolver.ResolveAsync(rezervasyon, request.CariKartIdOverride, cancellationToken);
 
         // 7. Müşteri bilgilerini çözümle (request öncelikli, rezervasyon fallback)
         var musteriBilgi = ResolveMusteriBilgileri(request, rezervasyon);
@@ -99,6 +111,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
             KaynakTipi = KaynakTipiRezervasyonCheckout,
             KaynakId = rezervasyonId.ToString(),
             TesisId = rezervasyon.TesisId,
+            CariKartId = cariKartId,
             BelgeTarihi = belgeTarihi,
             VadeTarihi = request.VadeTarihi,
             KurumsalMi = musteriBilgi.kurumsalMi,
@@ -254,6 +267,63 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                 KdvOrani = kdvOrani,
                 KdvIstisnaTanimId = kdvIstisnaTanimId,
                 KaynakSatirId = $"{rezervasyon.Id}_{geceTarihi:yyyyMMdd}"
+            });
+        }
+
+        // Ek hizmetler — check-out'un kalan bakiye kontrolü bu tutarları da kapsadığı için
+        // (bkz. RezervasyonService.GetRezervasyonEkHizmetToplamiAsync), faturaya dahil edilmeleri
+        // gerekir; aksi halde tahsil edilen toplam faturanın GenelToplam'ini aşar.
+        var ekHizmetler = await _dbContext.RezervasyonEkHizmetler
+            .AsNoTracking()
+            .Where(x => x.RezervasyonId == rezervasyon.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var ekHizmet in ekHizmetler)
+        {
+            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            {
+                SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
+                Aciklama = $"Ek hizmet — {ekHizmet.TarifeAdiSnapshot} ({ekHizmet.HizmetTarihi:dd.MM.yyyy})",
+                Miktar = ekHizmet.Miktar > 0 ? ekHizmet.Miktar : 1,
+                BirimFiyat = ekHizmet.Miktar > 0
+                    ? Math.Round(ekHizmet.ToplamTutar / ekHizmet.Miktar, 2, MidpointRounding.AwayFromZero)
+                    : ekHizmet.ToplamTutar,
+                KdvUygulamaTipi = kdvUygulamaTipi,
+                KdvOrani = kdvOrani,
+                KdvIstisnaTanimId = kdvIstisnaTanimId,
+                KaynakSatirId = $"{rezervasyon.Id}_ekhizmet_{ekHizmet.Id}"
+            });
+        }
+
+        // Restoran (OdayaEkle) — RestoranOdemeService.CreateOdayaEkleOdemeAsync ayrı bir tutar
+        // tablosuna değil, negatif OdemeTutari ile doğrudan RezervasyonOdemeler'e yazıyor. Bunlar
+        // da tahsil edilen toplamın parçası olduğu için faturaya dahil edilmezse fatura tutarı
+        // tahsilattan az kalır ve kapama matematiği bozulur.
+        var restoranOdemeleri = await _dbContext.RezervasyonOdemeler
+            .AsNoTracking()
+            .Where(x => x.RezervasyonId == rezervasyon.Id && x.OdemeTipi == OdemeYontemleri.OdayaEkle)
+            .ToListAsync(cancellationToken);
+
+        foreach (var restoranOdeme in restoranOdemeleri)
+        {
+            var tutar = Math.Abs(restoranOdeme.OdemeTutari);
+            if (tutar <= 0m)
+            {
+                continue;
+            }
+
+            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            {
+                SatirTipi = SatisBelgesiSatirTipi.YiyecekIcecek,
+                Aciklama = restoranOdeme.Aciklama is { Length: > 0 }
+                    ? restoranOdeme.Aciklama
+                    : $"Restoran — {restoranOdeme.OdemeTarihi:dd.MM.yyyy}",
+                Miktar = 1,
+                BirimFiyat = tutar,
+                KdvUygulamaTipi = kdvUygulamaTipi,
+                KdvOrani = kdvOrani,
+                KdvIstisnaTanimId = kdvIstisnaTanimId,
+                KaynakSatirId = $"{rezervasyon.Id}_restoran_{restoranOdeme.Id}"
             });
         }
 

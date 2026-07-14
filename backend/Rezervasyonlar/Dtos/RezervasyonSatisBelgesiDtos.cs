@@ -59,4 +59,8 @@ public class RezervasyonSatisBelgesiTaslakRequest
 
     /// <summary>KDV istisna tanım Id'si. Verilirse satırlar bu istisna ile oluşturulur.</summary>
     public int? KdvIstisnaTanimId { get; set; }
+
+    /// <summary>Cari kart otomatik çözümlenemezse (422) kullanıcının elle seçtiği cari kart.
+    /// Boşsa IRezervasyonCariKartResolver'ın standart kademesi uygulanır.</summary>
+    public int? CariKartIdOverride { get; set; }
 }

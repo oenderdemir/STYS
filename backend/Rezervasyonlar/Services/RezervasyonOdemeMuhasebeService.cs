@@ -1,7 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
-using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -27,15 +26,18 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
     private readonly StysAppDbContext _dbContext;
     private readonly ITahsilatOdemeBelgesiService _tahsilatOdemeBelgesiService;
     private readonly IMuhasebeFisService _muhasebeFisService;
+    private readonly IRezervasyonCariKartResolver _cariKartResolver;
 
     public RezervasyonOdemeMuhasebeService(
         StysAppDbContext dbContext,
         ITahsilatOdemeBelgesiService tahsilatOdemeBelgesiService,
-        IMuhasebeFisService muhasebeFisService)
+        IMuhasebeFisService muhasebeFisService,
+        IRezervasyonCariKartResolver cariKartResolver)
     {
         _dbContext = dbContext;
         _tahsilatOdemeBelgesiService = tahsilatOdemeBelgesiService;
         _muhasebeFisService = muhasebeFisService;
+        _cariKartResolver = cariKartResolver;
     }
 
     public async Task TahsilatOlusturAsync(
@@ -57,7 +59,7 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
             throw new BaseException("Bu rezervasyon odemesi icin zaten bir tahsilat belgesi olusturulmus.", 409);
         }
 
-        var cariKartId = await ResolveCariKartIdAsync(rezervasyon, cariKartIdOverride, cancellationToken);
+        var cariKartId = await _cariKartResolver.ResolveAsync(rezervasyon, cariKartIdOverride, cancellationToken);
         if (rezervasyon.CariKartId != cariKartId)
         {
             rezervasyon.CariKartId = cariKartId;
@@ -204,92 +206,6 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
         // varsa CariHareket'i CariHareketKapamaService.GeriAlAsync ile ters cevirir ve
         // belge.Durum = Iptal yazar. Ambient transaction algilanip yeniden transaction acmaz.
         await _tahsilatOdemeBelgesiService.IptalEtAsync(belge.Id, cancellationToken);
-    }
-
-    /// <summary>
-    /// Cari kart cozumleme sirasi (revizyon #5):
-    ///   1) Rezervasyon.CariKartId onbellekte varsa kullan
-    ///   2) Kullanici acikca bir cari kart secmisse (cariKartIdOverride) onu kullan (dogrulanir)
-    ///   3) TCKN/VKN esleşmesi VEYA "guvenli" telefon esleşmesi (telefon + ad-soyad birlikte
-    ///      esleşmeli — sadece telefonla eslesme aile bireylerini karistirabileceginden yetersizdir)
-    ///      ile ayni tesiste mevcut bir Musteri/KurumsalMusteri cari kart varsa kullan
-    ///   4) Tesisin konfigure edilmis "Rezervasyon Misafirleri" varsayilan cari karti varsa kullan
-    ///   5) Hicbiri yoksa OTOMATIK CARI KART OLUSTURULMAZ — kullanicidan secim istenir (422)
-    /// </summary>
-    private async Task<int> ResolveCariKartIdAsync(Rezervasyon rezervasyon, int? cariKartIdOverride, CancellationToken cancellationToken)
-    {
-        if (rezervasyon.CariKartId.HasValue)
-        {
-            return rezervasyon.CariKartId.Value;
-        }
-
-        if (cariKartIdOverride.HasValue)
-        {
-            var secilen = await _dbContext.CariKartlar.FirstOrDefaultAsync(
-                x => !x.IsDeleted && x.Id == cariKartIdOverride.Value, cancellationToken);
-
-            if (secilen is null || !secilen.AktifMi)
-            {
-                throw new BaseException("Secilen cari kart bulunamadi veya pasif durumda.", 400);
-            }
-
-            if (secilen.TesisId.HasValue && secilen.TesisId.Value != rezervasyon.TesisId)
-            {
-                throw new BaseException("Secilen cari kart bu rezervasyonun tesisiyle uyumlu degil.", 400);
-            }
-
-            return secilen.Id;
-        }
-
-        var tcknVeyaTelefonEslesen = await FindEslesenCariKartAsync(rezervasyon, cancellationToken);
-        if (tcknVeyaTelefonEslesen.HasValue)
-        {
-            return tcknVeyaTelefonEslesen.Value;
-        }
-
-        var tesis = await _dbContext.Tesisler
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == rezervasyon.TesisId, cancellationToken);
-
-        if (tesis?.RezervasyonMisafirVarsayilanCariKartId is int varsayilanCariKartId)
-        {
-            var varsayilan = await _dbContext.CariKartlar
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == varsayilanCariKartId && x.AktifMi, cancellationToken);
-
-            if (varsayilan is not null)
-            {
-                return varsayilan.Id;
-            }
-        }
-
-        throw new BaseException(
-            "Rezervasyon icin cari kart otomatik belirlenemedi. Lutfen bir cari kart seciniz " +
-            "(veya tesis ayarlarindan varsayilan 'Rezervasyon Misafirleri' cari kartini tanimlayiniz).",
-            CariKartSecimiGerekliStatusCode);
-    }
-
-    private async Task<int?> FindEslesenCariKartAsync(Rezervasyon rezervasyon, CancellationToken cancellationToken)
-    {
-        var tcknVkn = rezervasyon.TcKimlikNo?.Trim();
-        var telefon = rezervasyon.MisafirTelefon?.Trim();
-        var adSoyad = rezervasyon.MisafirAdiSoyadi?.Trim();
-
-        var aday = await _dbContext.CariKartlar
-            .Where(x => !x.IsDeleted
-                        && x.AktifMi
-                        && x.TesisId == rezervasyon.TesisId
-                        && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
-                        && (
-                            (!string.IsNullOrEmpty(tcknVkn) && x.VergiNoTckn == tcknVkn)
-                            || (!string.IsNullOrEmpty(telefon) && !string.IsNullOrEmpty(adSoyad)
-                                && x.Telefon == telefon && x.UnvanAdSoyad == adSoyad)
-                        ))
-            // TCKN eslesmesi telefon+ad eslesmesinden daha guvenilir — once onu tercih et.
-            .OrderByDescending(x => !string.IsNullOrEmpty(tcknVkn) && x.VergiNoTckn == tcknVkn)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return aday?.Id;
     }
 
     private async Task EnsureKasaBankaHesabiUygunAsync(int tesisId, int kasaBankaHesapId, string odemeTipi, CancellationToken cancellationToken)

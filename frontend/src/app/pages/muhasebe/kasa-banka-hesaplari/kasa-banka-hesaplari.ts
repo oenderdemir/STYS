@@ -198,6 +198,18 @@ export class KasaBankaHesaplariPage implements OnInit {
             return;
         }
 
+        if (this.model.tip === 'Banka' || this.model.tip === 'DovizHesabi') {
+            if (!this.model.bankaAdi?.trim()) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Banka/Doviz tipi hesap icin banka adi zorunludur.' });
+                return;
+            }
+
+            if (!this.model.hesapNo?.trim() && !this.model.iban?.trim()) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Banka/Doviz tipi hesap icin hesap no veya IBAN zorunludur.' });
+                return;
+            }
+        }
+
         const payload: CreateKasaBankaHesapRequest | UpdateKasaBankaHesapRequest = {
             tesisId,
             tip: this.model.tip,

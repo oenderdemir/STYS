@@ -12,6 +12,7 @@ import {
     inject
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -33,6 +34,7 @@ import {
     RezervasyonEkHizmetMisafirSecenekDto,
     RezervasyonEkHizmetSecenekleriDto,
     RezervasyonEkHizmetTarifeSecenekDto,
+    RezervasyonGelirOzetiDto,
     RezervasyonKasaBankaHesapSecenekDto,
     RezervasyonOdemeDto,
     RezervasyonOdemeOzetDto
@@ -46,6 +48,7 @@ import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi.service';
     imports: [
         CommonModule,
         FormsModule,
+        RouterLink,
         ButtonModule,
         CheckboxModule,
         ConfirmDialogModule,
@@ -104,10 +107,16 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
 
     iptalEdilenOdemeId: number | null = null;
 
+    gelirOzeti: RezervasyonGelirOzetiDto | null = null;
+    gelirYukleniyor = false;
+    gelirBelgesiOlusturuluyor = false;
+    tahsilatlarKapatiliyor = false;
+
     private odemeLoadSeq = 0;
     private ekHizmetSecenekLoadSeq = 0;
     private kasaBankaHesapLoadSeq = 0;
     private cariKartLoadSeq = 0;
+    private gelirOzetiLoadSeq = 0;
 
     private readonly durumCheckInTamamlandi = 'CheckInTamamlandi';
     private readonly durumCheckOutTamamlandi = 'CheckOutTamamlandi';
@@ -214,6 +223,88 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         return !this.odemeOzeti || this.loading || this.odemeDialogKalanTutar <= 0;
     }
 
+    /** Check-out oncesi gelir belgesi olamayacagi icin panel yalnizca check-out sonrasi anlamlidir. */
+    get gelirPaneliGoster(): boolean {
+        return this.rezervasyonDurumu === this.durumCheckOutTamamlandi;
+    }
+
+    get gelirBelgesiYok(): boolean {
+        return !this.gelirOzeti?.satisBelgesiId;
+    }
+
+    get gelirDurumEtiketi(): string {
+        const durum = this.gelirOzeti?.satisBelgesiDurumu;
+        switch (durum) {
+            case 'Taslak':
+                return 'Taslak';
+            case 'MuhasebeOnayinda':
+                return 'Muhasebe Onayinda';
+            case 'MuhasebeOnaylandi':
+                return 'Onaylandi';
+            case 'Reddedildi':
+                return 'Reddedildi';
+            case 'FaturaKesildi':
+                return 'Fatura Kesildi';
+            case 'MusteriyeGonderildi':
+                return 'Musteriye Gonderildi';
+            case 'IptalEdildi':
+                return 'Iptal Edildi';
+            default:
+                return 'Olusturulmadi';
+        }
+    }
+
+    get gelirDurumSeverity(): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+        const durum = this.gelirOzeti?.satisBelgesiDurumu;
+        if (durum === 'MuhasebeOnaylandi' || durum === 'FaturaKesildi' || durum === 'MusteriyeGonderildi') {
+            return UiSeverity.Success;
+        }
+
+        if (durum === 'Reddedildi' || durum === 'IptalEdildi') {
+            return UiSeverity.Danger;
+        }
+
+        if (durum === 'MuhasebeOnayinda' || durum === 'Taslak') {
+            return UiSeverity.Info;
+        }
+
+        return UiSeverity.Secondary;
+    }
+
+    get tahsilatKapamaDurumEtiketi(): string {
+        switch (this.gelirOzeti?.tahsilatKapamaDurumu) {
+            case 'TamKapatildi':
+                return 'Tam Kapatildi';
+            case 'KismenKapatildi':
+                return 'Kismen Kapatildi';
+            case 'Hata':
+                return 'Hata';
+            case 'Kapatilmadi':
+            default:
+                return 'Kapatilmadi';
+        }
+    }
+
+    get tahsilatKapamaDurumSeverity(): 'success' | 'warn' | 'danger' | 'secondary' {
+        switch (this.gelirOzeti?.tahsilatKapamaDurumu) {
+            case 'TamKapatildi':
+                return UiSeverity.Success;
+            case 'KismenKapatildi':
+                return UiSeverity.Warn;
+            case 'Hata':
+                return UiSeverity.Danger;
+            case 'Kapatilmadi':
+            default:
+                return UiSeverity.Secondary;
+        }
+    }
+
+    /** Kural: satis belgesi onaylanip SatisBelgesi kaynakli CariHareket olusmadan tahsilatlar
+     * kapatilamaz — bkz. backend RezervasyonGelirTahakkukService.KapatOncekiTahsilatlariAsync. */
+    get tahsilatlariKapatDisabled(): boolean {
+        return !this.gelirOzeti?.muhasebeFisId || this.tahsilatlarKapatiliyor || this.gelirOzeti?.tahsilatKapamaDurumu === 'TamKapatildi';
+    }
+
     ngOnChanges(changes: SimpleChanges): void {
         const shouldLoad =
             this.visible &&
@@ -225,6 +316,9 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             this.loadOdemeOzeti(this.rezervasyonId!);
             this.loadEkHizmetSecenekleri(this.rezervasyonId!);
             this.loadKasaBankaHesapSecenekleri();
+            if (this.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
+                this.loadGelirOzeti(this.rezervasyonId!);
+            }
             return;
         }
 
@@ -555,6 +649,103 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
 
     isOdemeIptalEdilebilir(odeme: RezervasyonOdemeDto): boolean {
         return odeme.durum !== this.odemeDurumuIptal && this.rezervasyonDurumu !== this.durumIptal;
+    }
+
+    /** Check-out sonrasi otomatik best-effort taslak basarisiz olduysa (veya yeniden denemek
+     * icin) elle tetiklenir. Idempotenttir — belge zaten varsa yenisini yaratmaz. */
+    olusturGelirBelgesi(): void {
+        if (!this.rezervasyonId || this.gelirBelgesiOlusturuluyor) {
+            return;
+        }
+
+        const rezervasyonId = this.rezervasyonId;
+        this.gelirBelgesiOlusturuluyor = true;
+        this.service
+            .olusturGelirBelgesi(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.gelirBelgesiOlusturuluyor = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Gelir belgesi taslagi olusturuldu.' });
+                    this.loadGelirOzeti(rezervasyonId);
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    /** Yalnizca satis belgesi onaylanip fis olustuktan sonra anlamlidir — ayri, bilincli aksiyon.
+     * Otomatik zincirlenmez (bkz. backend RezervasyonGelirTahakkukService). */
+    kapatTahsilatlar(): void {
+        if (!this.rezervasyonId || this.tahsilatlariKapatDisabled) {
+            return;
+        }
+
+        const rezervasyonId = this.rezervasyonId;
+        this.tahsilatlarKapatiliyor = true;
+        this.service
+            .kapatTahsilatlar(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    this.tahsilatlarKapatiliyor = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (sonuc) => {
+                    this.gelirOzeti = sonuc.ozet;
+                    const detail = sonuc.hataliSayisi > 0
+                        ? `${sonuc.basariliSayisi} tahsilat kapatildi, ${sonuc.hataliSayisi} tahsilat hata verdi.`
+                        : `${sonuc.basariliSayisi} tahsilat kapatildi.`;
+                    this.messageService.add({
+                        severity: sonuc.hataliSayisi > 0 ? UiSeverity.Warn : UiSeverity.Success,
+                        summary: 'Tahsilatlar Kapatildi',
+                        detail
+                    });
+                    this.cdr.markForCheck();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
+    private loadGelirOzeti(rezervasyonId: number): void {
+        const seq = ++this.gelirOzetiLoadSeq;
+        this.gelirYukleniyor = true;
+        this.service
+            .getGelirOzeti(rezervasyonId)
+            .pipe(
+                finalize(() => {
+                    if (seq === this.gelirOzetiLoadSeq) {
+                        this.gelirYukleniyor = false;
+                        this.cdr.markForCheck();
+                    }
+                })
+            )
+            .subscribe({
+                next: (ozet) => {
+                    if (seq === this.gelirOzetiLoadSeq) {
+                        this.gelirOzeti = ozet;
+                        this.cdr.markForCheck();
+                    }
+                },
+                error: () => {
+                    // Gelir ozeti best-effort bir gosterimdir — yuklenemezse odeme paneli
+                    // calismaya devam etmelidir, ayrica hata mesaji gostermeye gerek yok.
+                    if (seq === this.gelirOzetiLoadSeq) {
+                        this.gelirOzeti = null;
+                        this.cdr.markForCheck();
+                    }
+                }
+            });
     }
 
     private loadKasaBankaHesapSecenekleri(): void {
@@ -888,6 +1079,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.cariKartSecenekleri = [];
         this.cariKartAramaMetni = '';
         this.sonOdemeIstegi = null;
+        this.gelirOzeti = null;
     }
 
     private reset(): void {
@@ -895,11 +1087,15 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         ++this.ekHizmetSecenekLoadSeq;
         ++this.kasaBankaHesapLoadSeq;
         ++this.cariKartLoadSeq;
+        ++this.gelirOzetiLoadSeq;
         this.resetFormState();
         this.loading = false;
         this.saving = false;
         this.ekHizmetSaving = false;
         this.iptalEdilenOdemeId = null;
+        this.gelirYukleniyor = false;
+        this.gelirBelgesiOlusturuluyor = false;
+        this.tahsilatlarKapatiliyor = false;
     }
 
     private resetEkHizmetForm(): void {

@@ -559,6 +559,41 @@ export interface RezervasyonOdemeOzetDto {
     odemeler: RezervasyonOdemeDto[];
 }
 
+/** Kapatilmadi | KismenKapatildi | TamKapatildi | Hata — bkz. backend TahsilatKapamaDurumlari. */
+export type TahsilatKapamaDurumu = 'Kapatilmadi' | 'KismenKapatildi' | 'TamKapatildi' | 'Hata';
+
+export interface RezervasyonGelirOzetiDto {
+    rezervasyonId: number;
+    referansNo: string;
+    satisBelgesiId: number | null;
+    satisBelgesiNo: string | null;
+    satisBelgesiDurumu: string | null;
+    genelToplam: number | null;
+    muhasebeFisId: number | null;
+    tahsilatKapamaDurumu: TahsilatKapamaDurumu;
+    tahsilatToplamSayisi: number;
+    tahsilatKapaliSayisi: number;
+    tahsilatHataliSayisi: number;
+}
+
+/** Muhasebe > Satis Belgeleri ekranindaki tam SatisBelgesiDto'nun rezervasyon panelinin
+ * ihtiyac duydugu alt kumesi. */
+export interface RezervasyonGelirBelgesiSonucuDto {
+    id: number;
+    belgeNo: string;
+    durum: string;
+    genelToplam: number;
+    muhasebeFisId: number | null;
+}
+
+export interface RezervasyonTahsilatKapamaSonucuDto {
+    basariliSayisi: number;
+    hataliSayisi: number;
+    atlananSayisi: number;
+    hatalar: string[];
+    ozet: RezervasyonGelirOzetiDto;
+}
+
 export interface RezervasyonOdemeKaydetRequestDto {
     odemeTutari: number;
     odemeTipi: string;

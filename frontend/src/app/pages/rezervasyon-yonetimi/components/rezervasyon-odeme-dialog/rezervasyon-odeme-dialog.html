@@ -427,6 +427,84 @@
                     </ng-template>
                 </p-table>
             </div>
+
+            @if (gelirPaneliGoster) {
+                <div class="rez-odeme-panel">
+                    <div class="rez-odeme-panel-header">
+                        <div>
+                            <div class="rez-odeme-panel-title">Konaklama Geliri</div>
+                            <div class="rez-odeme-panel-subtitle">Gelir belgesi ve onceki tahsilatlarin kapama durumu.</div>
+                        </div>
+                    </div>
+
+                    @if (gelirYukleniyor) {
+                        <div class="text-sm text-color-secondary">Gelir ozeti yukleniyor...</div>
+                    } @else {
+                        <div class="rez-odeme-summary-grid mb-3">
+                            <div class="rez-odeme-summary-card">
+                                <div class="rez-odeme-summary-label">Gelir Durumu</div>
+                                <div class="rez-odeme-summary-value">
+                                    <p-tag [severity]="gelirDurumSeverity" [value]="gelirDurumEtiketi" />
+                                </div>
+                            </div>
+                            <div class="rez-odeme-summary-card">
+                                <div class="rez-odeme-summary-label">Gelir Belgesi No</div>
+                                <div class="rez-odeme-summary-value">{{ gelirOzeti?.satisBelgesiNo || '-' }}</div>
+                            </div>
+                            <div class="rez-odeme-summary-card">
+                                <div class="rez-odeme-summary-label">Muhasebe Fisi</div>
+                                <div class="rez-odeme-summary-value">
+                                    @if (gelirOzeti?.muhasebeFisId) {
+                                        <p-tag severity="success" value="Olusturuldu" />
+                                    } @else {
+                                        <p-tag severity="secondary" value="Olusturulmadi" />
+                                    }
+                                </div>
+                            </div>
+                            <div class="rez-odeme-summary-card">
+                                <div class="rez-odeme-summary-label">Tahsilat Kapama Durumu</div>
+                                <div class="rez-odeme-summary-value">
+                                    <p-tag [severity]="tahsilatKapamaDurumSeverity" [value]="tahsilatKapamaDurumEtiketi" />
+                                </div>
+                                @if ((gelirOzeti?.tahsilatToplamSayisi ?? 0) > 0) {
+                                    <div class="text-xs text-color-secondary mt-1">
+                                        {{ gelirOzeti?.tahsilatKapaliSayisi }} / {{ gelirOzeti?.tahsilatToplamSayisi }} kapatildi
+                                        @if ((gelirOzeti?.tahsilatHataliSayisi ?? 0) > 0) {
+                                            ({{ gelirOzeti?.tahsilatHataliSayisi }} hatali)
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="rez-odeme-action-row">
+                            @if (gelirBelgesiYok) {
+                                <p-button
+                                    label="Gelir Belgesi Olustur"
+                                    icon="pi pi-file-plus"
+                                    [loading]="gelirBelgesiOlusturuluyor"
+                                    (onClick)="olusturGelirBelgesi()" />
+                            } @else {
+                                <p-button
+                                    label="Gelir Belgesini Goruntule"
+                                    icon="pi pi-external-link"
+                                    severity="secondary"
+                                    [outlined]="true"
+                                    routerLink="/muhasebe/satis-belgeleri" />
+                            }
+                            <p-button
+                                label="Tahsilatlari Kapat"
+                                icon="pi pi-lock"
+                                severity="secondary"
+                                [outlined]="true"
+                                [loading]="tahsilatlarKapatiliyor"
+                                [disabled]="tahsilatlariKapatDisabled"
+                                [pTooltip]="!gelirOzeti?.muhasebeFisId ? 'Once gelir belgesi onaylanip muhasebe fisi olusturulmalidir.' : ''"
+                                (onClick)="kapatTahsilatlar()" />
+                        </div>
+                    }
+                </div>
+            }
         }
     </div>
 

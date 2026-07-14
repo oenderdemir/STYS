@@ -27,6 +27,9 @@ import {
     RezervasyonOdemeIptalRequestDto,
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
+    RezervasyonGelirOzetiDto,
+    RezervasyonGelirBelgesiSonucuDto,
+    RezervasyonTahsilatKapamaSonucuDto,
     RezervasyonOdaDegisimKaydetRequestDto,
     RezervasyonOdaDegisimSecenekDto,
     RezervasyonOdaTipiDto,
@@ -446,6 +449,44 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme kaydedilemedi.');
+            })
+        );
+    }
+
+    getGelirOzeti(rezervasyonId: number): Observable<RezervasyonGelirOzetiDto> {
+        return this.http.get<ApiResponse<RezervasyonGelirOzetiDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/gelir-ozeti`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Gelir ozeti alinamadi.');
+            })
+        );
+    }
+
+    /** Idempotenttir: gelir belgesi zaten varsa yenisini yaratmaz, mevcudunu doner. */
+    olusturGelirBelgesi(rezervasyonId: number): Observable<RezervasyonGelirBelgesiSonucuDto> {
+        return this.http.post<ApiResponse<RezervasyonGelirBelgesiSonucuDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/gelir-belgesi-olustur`, {}).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Gelir belgesi olusturulamadi.');
+            })
+        );
+    }
+
+    /** Yalnizca satis belgesi onaylanip fis olustuktan sonra cagrilabilir — ayri, bilincli aksiyon. */
+    kapatTahsilatlar(rezervasyonId: number): Observable<RezervasyonTahsilatKapamaSonucuDto> {
+        return this.http.post<ApiResponse<RezervasyonTahsilatKapamaSonucuDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/tahsilatlari-kapat`, {}).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tahsilatlar kapatilamadi.');
             })
         );
     }

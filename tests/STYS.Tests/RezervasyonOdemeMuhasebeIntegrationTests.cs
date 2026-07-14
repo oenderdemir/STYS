@@ -41,19 +41,48 @@ using TOD.Platform.SharedKernel.Exceptions;
 namespace STYS.Tests;
 
 /// <summary>
-/// Rezervasyon odeme -> muhasebe tahsilat entegrasyonunu GERCEK SQL Server test veritabanina
-/// (appsettings.Development.json'daki docker mssql konteynerine) karsi dogrulayan, tek seferlik
-/// scratch entegrasyon testi. Mevcut proje konvansiyonu (RezervasyonServiceTests, TesisServiceTests)
+/// [Fact] yerine kullanilir: STYS_INTEGRATION_TEST_CONNECTION_STRING ortam degiskeni tanimli
+/// degilse testi calistirmadan "Skipped" olarak isaretler. Boylece normal "dotnet test" akisi
+/// yerel/gercek bir SQL Server'a bagimli olmaz; entegrasyon testleri sadece bu degisken acikca
+/// verildiginde calisir.
+/// </summary>
+public sealed class IntegrationFactAttribute : FactAttribute
+{
+    public const string ConnectionStringEnvVar = "STYS_INTEGRATION_TEST_CONNECTION_STRING";
+
+    public IntegrationFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ConnectionStringEnvVar)))
+        {
+            Skip = $"{ConnectionStringEnvVar} ortam degiskeni tanimli degil — entegrasyon testi atlandi. " +
+                   "Calistirmak icin: STYS_INTEGRATION_TEST_CONNECTION_STRING=\"...\" dotnet test --filter Category=Integration";
+        }
+    }
+}
+
+/// <summary>
+/// Rezervasyon odeme -> muhasebe tahsilat entegrasyonunu GERCEK SQL Server test veritabanina karsi
+/// dogrulayan entegrasyon testi. Mevcut proje konvansiyonu (RezervasyonServiceTests, TesisServiceTests)
 /// InMemory provider kullaniyor; ancak bu senaryolarin cogu (unique index, FK, savepoint/transaction
 /// davranisi) InMemory tarafindan desteklenmedigi icin burada gercek SQL Server kullanilir.
 ///
-/// Not: Test verileri 970000+ araliginda sabit ID'lerle seed edilir ve TestFixture.DisposeAsync
-/// icinde temizlenir.
+/// Calistirma:
+///   Normal test       : dotnet test  (bu sinif STYS_INTEGRATION_TEST_CONNECTION_STRING tanimli
+///                        degilse otomatik atlanir — yerel SQL Server GEREKMEZ)
+///   Entegrasyon testi  : STYS_INTEGRATION_TEST_CONNECTION_STRING="Server=...;Database=...;User Id=...;Password=...;"
+///                        dotnet test --filter Category=Integration
+///
+/// Baglanti dizesi ornegi icin bkz. docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md.
+/// Gercek/hard-coded bir sifre burada TUTULMAZ.
+///
+/// Not: Test verileri her calistirmada benzersiz (Guid tabanli) degerlerle seed edilir ve
+/// DisposeAsync icinde temizlenir.
 /// </summary>
+[Trait("Category", "Integration")]
 public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 {
-    private const string ConnectionString =
-        "Server=localhost,14333;Database=STYSDB;User Id=sa;Password=Strong!Pass1;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True";
+    private static readonly string? ConnectionString =
+        Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);
 
     private const string TestMarker = "IKT-970"; // Kod/Ad alanlarina konan ayirt edici imza — temizlik bu izle yapilir.
 
@@ -77,6 +106,14 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        // Savunma amacli ikinci kontrol: IntegrationFactAttribute testi zaten Skip eder, ama xUnit
+        // surumleri arasinda IAsyncLifetime cagrilma zamanlamasi farklilasabilir — baglanti dizesi
+        // yoksa burada da hicbir DB islemi yapilmadan sessizce cikilir.
+        if (string.IsNullOrWhiteSpace(ConnectionString))
+        {
+            return;
+        }
+
         await using var dbContext = CreateDbContext();
 
         // Testler paralel calisabildigi icin (xUnit varsayilani) benzersiz bir suffix kullanilir —
@@ -150,6 +187,11 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        if (string.IsNullOrWhiteSpace(ConnectionString))
+        {
+            return;
+        }
+
         await using var dbContext = CreateDbContext();
         await CleanupAsync(dbContext, TesisCariId, TesisAvansId, KurumId);
     }
@@ -205,7 +247,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 1 — Normal nakit odeme
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo1_NormalNakitOdeme_TahsilatOdemeBelgesiOlusur()
     {
         await using var dbContext = CreateDbContext();
@@ -236,7 +278,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 2 — Kasa/Banka hesabi bos
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo2_KasaBankaHesabiBos_400DonerVeHicbirSeyOlusmaz()
     {
         await using var dbContext = CreateDbContext();
@@ -262,7 +304,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 3 — Cari kart bulunamiyor
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo3_CariKartBulunamiyor_422DonerVeHicbirSeyOlusmaz()
     {
         await using var dbContext = CreateDbContext();
@@ -288,7 +330,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 4 — Alinan Avans modu (CariKart.MuhasebeHesapPlaniId bos olabilir)
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo4_AlinanAvansModu_HesapPlaniBosOlsaDaOdemeEngellenmez()
     {
         await using var dbContext = CreateDbContext();
@@ -313,7 +355,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 5 — Cari modu, cari kartin hesap plani bos -> hata beklenir
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo5_CariModuHesapPlaniBos_HataDoner()
     {
         await using var dbContext = CreateDbContext();
@@ -339,7 +381,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 6 — Odeme iptali
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo6_OdemeIptali_DurumIptalOlurVeBakiyeArtar()
     {
         await using var dbContext = CreateDbContext();
@@ -375,7 +417,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 7 — Duplicate kontrol (ayni RezervasyonOdeme.Id icin ikinci belge)
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo7_AyniOdemeIcinIkinciBelgeEngellenir()
     {
         await using var dbContext = CreateDbContext();
@@ -410,7 +452,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
     // Senaryo 8 — Kasa/Banka hesabi tipi uyumsuz
     // ─────────────────────────────────────────────────────────────
-    [Fact]
+    [IntegrationFact]
     public async Task Senaryo8_KasaBankaTipiUyumsuz_400Doner()
     {
         await using var dbContext = CreateDbContext();
@@ -458,6 +500,15 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 
     private static StysAppDbContext CreateDbContext()
     {
+        if (string.IsNullOrWhiteSpace(ConnectionString))
+        {
+            // Buraya normalde ulasilmaz: IntegrationFactAttribute baglanti dizesi yoksa testi
+            // Skip eder. Yine de dogrudan cagrilirsa sessizce bir yerel DB'ye baglanmak yerine
+            // acik bir hata ile durur.
+            throw new InvalidOperationException(
+                $"{IntegrationFactAttribute.ConnectionStringEnvVar} ortam degiskeni tanimli degil.");
+        }
+
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
             .UseSqlServer(ConnectionString)
             .Options;

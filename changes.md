@@ -6801,3 +6801,24 @@ edilip duzeltildi. Ayrinti: docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgula
 - Pre-existing, bu degisikliklerle ilgisiz: RezervasyonServiceTests.cs icinde 72/144 test "Aktif kurum
   bilgisi bulunamadi" hatasiyla basarisiz — a0a2ba5 (bu entegrasyondan onceki commit) uzerinde izole
   worktree ile dogrulandi, ayni sonuc — regresyon degil
+
+---
+
+## Rezervasyon Ödeme → Muhasebe Entegrasyonu — Entegrasyon Testi Izolasyonu (5. Tur)
+
+### Yapılan İşler
+RezervasyonOdemeMuhasebeIntegrationTests.cs'teki hard-coded SQL Server baglanti dizesi (sifre dahil)
+ve testlerin normal `dotnet test` akisinda calismaya calisip yerel SQL Server olmadan basarisiz olmasi
+duzeltildi. Ayrinti: docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md (§9).
+
+### Güncellenen Dosyalar
+- tests/STYS.Tests/RezervasyonOdemeMuhasebeIntegrationTests.cs — baglanti dizesi STYS_INTEGRATION_TEST_CONNECTION_STRING ortam degiskeninden okunuyor (hard-coded deger kaldirildi); ozel IntegrationFactAttribute eklendi (degisken tanimli degilse Skip); sinifa [Trait("Category","Integration")] eklendi; InitializeAsync/DisposeAsync/CreateDbContext'e savunma amacli null-check eklendi
+- docs/rezervasyon-odeme-muhasebe-entegrasyonu-bulgular.md — §9 eklendi
+
+### Test Sonucu
+- Backend: dotnet build basarili — 0 error
+- Ortam degiskeni tanimsizken `dotnet test`: 8/8 Skipped, 21ms, hic DB baglantisi yok
+- Ortam degiskeni tanimliyken `dotnet test --filter Category=Integration`: 8/8 Passed
+- Calistirma komutlari:
+  - Normal test: `dotnet test`
+  - Entegrasyon testi: `STYS_INTEGRATION_TEST_CONNECTION_STRING="..." dotnet test --filter Category=Integration`

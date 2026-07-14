@@ -159,3 +159,40 @@ için tenant context sağlamıyor). Bu değişikliklerden önceki commit'te (`a0
 
 **8 senaryo sonucu:** Tümü başarılı, iki ayrı çalıştırmada tutarlı, test sonrası DB'de kalıntı kalmadı.
 Ayrıntı ve senaryo bazlı sonuç tablosu bu konuşmanın test raporunda mevcuttur.
+
+## 9. Beşinci tur — entegrasyon testlerinin izolasyonu (merge öncesi düzeltme)
+
+İlk halinde `RezervasyonOdemeMuhasebeIntegrationTests.cs` bağlantı dizesini kod içinde sabit (hard-coded,
+şifre dahil) tutuyordu ve testler düz `[Fact]` olduğu için normal `dotnet test` akışında da
+çalışmaya çalışıp yerel SQL Server olmadan başarısız oluyordu. Düzeltildi:
+
+- Bağlantı dizesi artık **`STYS_INTEGRATION_TEST_CONNECTION_STRING`** ortam değişkeninden okunuyor;
+  kod içinde hiçbir sabit/şifre yok.
+- Özel bir `IntegrationFactAttribute : FactAttribute` eklendi: bu değişken tanımlı değilse xUnit'in
+  `Skip` mekanizmasıyla testi **çalıştırmadan** "Skipped" olarak işaretler. `InitializeAsync`,
+  `DisposeAsync` ve `CreateDbContext` içinde de aynı kontrol savunma amaçlı tekrarlandı (xUnit
+  sürümleri arasında `IAsyncLifetime` çağrılma zamanlaması farklılaşabildiği için).
+- Sınıfa `[Trait("Category", "Integration")]` eklendi.
+- Doğrulandı: değişken tanımsızken `dotnet test` → **8/8 Skipped, 21ms, hiç DB bağlantısı yok**;
+  değişken tanımlıyken `dotnet test --filter Category=Integration` → **8/8 Passed**.
+
+### Çalıştırma komutları
+
+```bash
+# Normal test (yerel SQL Server GEREKMEZ — entegrasyon testleri otomatik atlanır)
+dotnet test
+
+# Entegrasyon testleri (gercek/test SQL Server'a karsi calisir)
+STYS_INTEGRATION_TEST_CONNECTION_STRING="Server=<host>,<port>;Database=<db>;User Id=<user>;Password=<password>;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True" \
+  dotnet test --filter Category=Integration
+```
+
+Yerel docker test ortamı için örnek (gerçek şifre burada **verilmez** — kendi ortamınızdaki değeri
+kullanın, örn. `docker-compose.yml` içindeki `SA_PASSWORD` veya ekip içi paylaşılan secret):
+
+```
+STYS_INTEGRATION_TEST_CONNECTION_STRING="Server=localhost,14333;Database=STYSDB;User Id=sa;Password=<yerel-test-sifreniz>;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True"
+```
+
+PowerShell'de: `$env:STYS_INTEGRATION_TEST_CONNECTION_STRING = "..."` şeklinde tanımlanıp aynı
+`dotnet test --filter Category=Integration` komutu çalıştırılır.

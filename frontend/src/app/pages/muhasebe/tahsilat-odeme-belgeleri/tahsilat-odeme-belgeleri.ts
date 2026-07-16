@@ -11,8 +11,10 @@ import { SelectModule } from 'primeng/select';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
@@ -25,7 +27,7 @@ import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.servic
 @Component({
     selector: 'app-tahsilat-odeme-belgeleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './tahsilat-odeme-belgeleri.html',
     providers: [ConfirmationService, MessageService]
 })
@@ -285,6 +287,36 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
                             severity: UiSeverity.Success,
                             summary: 'Başarılı',
                             detail: 'Kapama geri alındı.'
+                        });
+                    },
+                    error: (error: unknown) => this.showError(error)
+                });
+            }
+        });
+    }
+
+    /** Ayri, bilincli bir aksiyondur — belge olusurken/odeme kaydedilirken otomatik cagrilmaz. */
+    muhasebeFisiOlustur(item: TahsilatOdemeBelgesiModel): void {
+        if (!item.id) {
+            return;
+        }
+
+        this.confirmationService.confirm({
+            key: 'muhasebeFisiOlustur',
+            header: 'Fiş Oluşturma Onayı',
+            icon: 'pi pi-file',
+            message: `"${item.belgeNo}" için muhasebe fişi oluşturmak istediğinize emin misiniz?`,
+            acceptLabel: 'Evet',
+            rejectLabel: 'Vazgeç',
+            accept: () => {
+                this.service.muhasebeFisiOlustur(item.id!).subscribe({
+                    next: () => {
+                        this.load();
+                        this.loadOzet();
+                        this.messageService.add({
+                            severity: UiSeverity.Success,
+                            summary: 'Başarılı',
+                            detail: 'Muhasebe fişi oluşturuldu.'
                         });
                     },
                     error: (error: unknown) => this.showError(error)

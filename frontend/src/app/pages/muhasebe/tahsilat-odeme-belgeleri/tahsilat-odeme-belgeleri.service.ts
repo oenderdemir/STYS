@@ -52,6 +52,16 @@ export class TahsilatOdemeBelgeleriService {
         }));
     }
 
+    /** Ayri, bilincli bir aksiyondur — belge olusurken otomatik cagrilmaz. */
+    muhasebeFisiOlustur(id: number): Observable<TahsilatOdemeBelgesiModel> {
+        return this.http.post<ApiResponse<TahsilatOdemeBelgesiModel>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/${id}/muhasebe-fisi-olustur`, {}).pipe(map((envelope) => {
+            if (envelope.success && envelope.data) {
+                return envelope.data;
+            }
+            throw new Error(tryReadApiMessage(envelope) ?? 'Muhasebe fisi olusturulamadi.');
+        }));
+    }
+
     getGunlukOzet(gun?: string | null, tesisId?: number | null): Observable<TahsilatOdemeOzetModel> {
         let params = new HttpParams();
         if (gun) {

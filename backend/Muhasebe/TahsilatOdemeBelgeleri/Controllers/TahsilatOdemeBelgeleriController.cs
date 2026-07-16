@@ -14,15 +14,18 @@ public class TahsilatOdemeBelgeleriController : UIController
 {
     private readonly ITahsilatOdemeBelgesiService _service;
     private readonly ICariHareketKapamaService _cariHareketKapamaService;
+    private readonly ITahsilatOdemeBelgesiMuhasebeFisService _muhasebeFisService;
     private readonly IMapper _mapper;
 
     public TahsilatOdemeBelgeleriController(
         ITahsilatOdemeBelgesiService service,
         ICariHareketKapamaService cariHareketKapamaService,
+        ITahsilatOdemeBelgesiMuhasebeFisService muhasebeFisService,
         IMapper mapper)
     {
         _service = service;
         _cariHareketKapamaService = cariHareketKapamaService;
+        _muhasebeFisService = muhasebeFisService;
         _mapper = mapper;
     }
 
@@ -95,4 +98,11 @@ public class TahsilatOdemeBelgeleriController : UIController
         await _cariHareketKapamaService.GeriAlAsync(id, cancellationToken);
         return Ok();
     }
+
+    /// <summary>Ayri, bilincli bir aksiyondur — belge olusurken/odeme kaydedilirken otomatik
+    /// cagrilmaz (bkz. ITahsilatOdemeBelgesiMuhasebeFisService).</summary>
+    [HttpPost("{id:int}/muhasebe-fisi-olustur")]
+    [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.Manage)]
+    public async Task<ActionResult<TahsilatOdemeBelgesiDto>> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)
+        => Ok(await _muhasebeFisService.FisOlusturAsync(id, cancellationToken));
 }

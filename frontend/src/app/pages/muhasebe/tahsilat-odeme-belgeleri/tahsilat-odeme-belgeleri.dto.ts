@@ -12,6 +12,8 @@ export interface TahsilatOdemeBelgesiModel {
     kaynakId?: number | null;
     kapatilacakCariHareketId?: number | null;
     durum: string;
+    muhasebeFisId?: number | null;
+    muhasebeFisOlusturmaTarihi?: string | null;
 }
 
 export interface CreateTahsilatOdemeBelgesiRequest extends Omit<TahsilatOdemeBelgesiModel, 'id'> {}

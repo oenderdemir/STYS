@@ -28,6 +28,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../../core/api';
 import { UiSeverity } from '../../../../core/ui/ui-severity.constants';
 import { EkHizmetPaketCakismaPolitikalari } from '../../../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
+import { CARI_TIPLERI, CreateCariKartRequest } from '../../../muhasebe/cari-kartlar/cari-kartlar.dto';
+import { CariKartlarService } from '../../../muhasebe/cari-kartlar/cari-kartlar.service';
 import {
     RezervasyonCariKartSecenekDto,
     RezervasyonEkHizmetDto,
@@ -69,10 +71,15 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     @Input() rezervasyonId: number | null = null;
     @Input() referansNo = '';
     @Input() rezervasyonDurumu: string | null = null;
+    @Input() tesisId: number | null = null;
+    @Input() misafirAdiSoyadi = '';
+    @Input() misafirTelefon = '';
+    @Input() misafirTcKimlikNo: string | null = null;
     @Output() visibleChange = new EventEmitter<boolean>();
     @Output() saved = new EventEmitter<RezervasyonOdemeOzetDto>();
 
     private readonly service = inject(RezervasyonYonetimiService);
+    private readonly cariKartlarService = inject(CariKartlarService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -104,6 +111,10 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     cariKartAramaMetni = '';
     cariKartYukleniyor = false;
     private sonOdemeIstegi: { odemeTutari: number; odemeTipi: string; aciklama: string | null } | null = null;
+
+    yeniCariKartDialogVisible = false;
+    yeniCariKartKaydediliyor = false;
+    yeniCariKartModel = { unvanAdSoyad: '', vergiNoTckn: '', telefon: '' };
 
     iptalEdilenOdemeId: number | null = null;
 
@@ -613,6 +624,66 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.sonOdemeIstegi = null;
     }
 
+    /** Ekranlar arasi gecis yapmadan, misafir bilgileriyle onceden doldurulmus minimal bir
+     * formla hizlica Musteri tipinde cari kart olusturur. */
+    openYeniCariKartDialog(): void {
+        this.yeniCariKartModel = {
+            unvanAdSoyad: this.misafirAdiSoyadi?.trim() || '',
+            vergiNoTckn: this.misafirTcKimlikNo?.trim() || '',
+            telefon: this.misafirTelefon?.trim() || ''
+        };
+        this.yeniCariKartDialogVisible = true;
+    }
+
+    yeniCariKartDialoguKapat(): void {
+        this.yeniCariKartDialogVisible = false;
+    }
+
+    kaydetYeniCariKart(): void {
+        if (!this.yeniCariKartModel.unvanAdSoyad.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Ad Soyad zorunludur.' });
+            return;
+        }
+
+        const request: CreateCariKartRequest = {
+            tesisId: this.tesisId,
+            cariTipi: CARI_TIPLERI.Musteri,
+            cariKodu: null,
+            unvanAdSoyad: this.yeniCariKartModel.unvanAdSoyad.trim(),
+            vergiNoTckn: this.normalizeOptional(this.yeniCariKartModel.vergiNoTckn),
+            telefon: this.normalizeOptional(this.yeniCariKartModel.telefon),
+            aktifMi: true,
+            eFaturaMukellefiMi: false,
+            eArsivKapsamindaMi: false,
+            bankaHesaplari: [],
+            yetkiliKisiler: []
+        };
+
+        this.yeniCariKartKaydediliyor = true;
+        this.cariKartlarService
+            .create(request)
+            .pipe(finalize(() => {
+                this.yeniCariKartKaydediliyor = false;
+                this.cdr.markForCheck();
+            }))
+            .subscribe({
+                next: (result) => {
+                    this.yeniCariKartDialogVisible = false;
+                    this.cariKartSecenekleri = [
+                        { id: result.id!, unvanAdSoyad: result.unvanAdSoyad, vergiNoTckn: result.vergiNoTckn ?? null, telefon: result.telefon ?? null },
+                        ...this.cariKartSecenekleri.filter((x) => x.id !== result.id)
+                    ];
+                    this.cariKartId = result.id!;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: `Cari kart olusturuldu: ${result.unvanAdSoyad}` });
+                    this.cdr.markForCheck();
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                    this.cdr.markForCheck();
+                }
+            });
+    }
+
     iptalEtOdeme(odeme: RezervasyonOdemeDto): void {
         if (!this.rezervasyonId || this.iptalEdilenOdemeId) {
             return;
@@ -1080,6 +1151,8 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.cariKartAramaMetni = '';
         this.sonOdemeIstegi = null;
         this.gelirOzeti = null;
+        this.yeniCariKartDialogVisible = false;
+        this.yeniCariKartModel = { unvanAdSoyad: '', vergiNoTckn: '', telefon: '' };
     }
 
     private reset(): void {

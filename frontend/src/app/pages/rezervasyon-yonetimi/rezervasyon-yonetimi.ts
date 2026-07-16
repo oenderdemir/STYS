@@ -115,6 +115,10 @@ export class RezervasyonYonetimi implements OnInit {
     odemeRezervasyonId: number | null = null;
     odemeReferansNo = '';
     odemeRezervasyonDurumu: string | null = null;
+    odemeTesisId: number | null = null;
+    odemeMisafirAdiSoyadi = '';
+    odemeMisafirTelefon = '';
+    odemeMisafirTcKimlikNo: string | null = null;
     odaDegisimDialogVisible = false;
     odaDegisimRezervasyonId: number | null = null;
     odaDegisimReferansNo = '';
@@ -1687,6 +1691,10 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeRezervasyonId = kayit.id;
         this.odemeReferansNo = kayit.referansNo;
         this.odemeRezervasyonDurumu = kayit.rezervasyonDurumu;
+        this.odemeTesisId = kayit.tesisId;
+        this.odemeMisafirAdiSoyadi = kayit.misafirAdiSoyadi;
+        this.odemeMisafirTelefon = kayit.misafirTelefon;
+        this.odemeMisafirTcKimlikNo = kayit.tcKimlikNo;
         this.odemeDialogVisible = true;
     }
 
@@ -1695,6 +1703,10 @@ export class RezervasyonYonetimi implements OnInit {
         this.odemeRezervasyonId = null;
         this.odemeReferansNo = '';
         this.odemeRezervasyonDurumu = null;
+        this.odemeTesisId = null;
+        this.odemeMisafirAdiSoyadi = '';
+        this.odemeMisafirTelefon = '';
+        this.odemeMisafirTcKimlikNo = null;
     }
 
     onOdemeSaved(result: RezervasyonOdemeOzetDto): void {

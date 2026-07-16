@@ -375,9 +375,12 @@
                                 />
                             </div>
                         </div>
-                        <div class="rez-odeme-action-row mt-3">
-                            <p-button label="Vazgec" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="cariKartSeciminiIptalEt()" />
-                            <p-button label="Cari Karti Onayla ve Odemeyi Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!cariKartId" (onClick)="cariKartSeciminiOnayla()" />
+                        <div class="rez-odeme-action-row mt-3 justify-content-between">
+                            <p-button label="Yeni Cari Kart Olustur" icon="pi pi-user-plus" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="openYeniCariKartDialog()" />
+                            <div class="flex gap-2">
+                                <p-button label="Vazgec" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="cariKartSeciminiIptalEt()" />
+                                <p-button label="Cari Karti Onayla ve Odemeyi Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!cariKartId" (onClick)="cariKartSeciminiOnayla()" />
+                            </div>
                         </div>
                     </div>
                 }
@@ -513,5 +516,35 @@
             <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || ekHizmetSaving" (onClick)="kapat()" />
             <p-button label="Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled" (onClick)="kaydetOdeme()" />
         </div>
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    header="Yeni Cari Kart"
+    [(visible)]="yeniCariKartDialogVisible"
+    [modal]="true"
+    [style]="{ width: '32rem', 'max-width': '95vw' }"
+    [appendTo]="'body'"
+>
+    <div class="text-sm text-color-secondary mb-3">
+        Bu misafir icin hizlica bir Musteri cari karti olusturulacak. Kaydedince otomatik secilip odeme akisina devam edebilirsiniz.
+    </div>
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label for="yeniCariUnvan" class="block font-medium mb-2">Ad Soyad</label>
+            <input pInputText id="yeniCariUnvan" class="w-full" [(ngModel)]="yeniCariKartModel.unvanAdSoyad" [disabled]="yeniCariKartKaydediliyor" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="yeniCariTckn" class="block font-medium mb-2">TC Kimlik No</label>
+            <input pInputText id="yeniCariTckn" class="w-full" [(ngModel)]="yeniCariKartModel.vergiNoTckn" [disabled]="yeniCariKartKaydediliyor" />
+        </div>
+        <div class="col-span-12 md:col-span-6">
+            <label for="yeniCariTelefon" class="block font-medium mb-2">Telefon</label>
+            <input pInputText id="yeniCariTelefon" class="w-full" [(ngModel)]="yeniCariKartModel.telefon" [disabled]="yeniCariKartKaydediliyor" />
+        </div>
+    </div>
+    <ng-template #footer>
+        <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" [disabled]="yeniCariKartKaydediliyor" (onClick)="yeniCariKartDialoguKapat()" />
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="yeniCariKartKaydediliyor" (onClick)="kaydetYeniCariKart()" />
     </ng-template>
 </p-dialog>

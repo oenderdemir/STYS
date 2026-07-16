@@ -178,7 +178,12 @@ export class MuhasebeFislerComponent implements OnInit {
         if (tesis) {
             this.filter.tesisId = tesis.id;
         }
-        // Trigger initial search after context is ready
+        // Tesis context hazir oldugunda listeyi otomatik yukle (readQueryParams sadece
+        // fisNo/id query param'i varsa kendi ara() cagrisini yapar — o durumda burada
+        // tekrar cagirmaya gerek yok, cift yukleme olur).
+        if (!this.route.snapshot.queryParamMap.get('fisNo') && !this.route.snapshot.queryParamMap.get('id')) {
+            this.ara();
+        }
         this.cdr.detectChanges();
     }
 
@@ -234,6 +239,10 @@ export class MuhasebeFislerComponent implements OnInit {
         this.service.countFiltered(normalized).subscribe({
             next: (count) => {
                 this.totalCount = count;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.showError(error);
             }
         });
     }

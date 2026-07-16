@@ -54,8 +54,7 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
         if (belgeOnOkuma.Durum != TahsilatOdemeBelgeDurumlari.Aktif)
             throw new BaseException($"Belge 'Aktif' durumda degil. Mevcut durum: {belgeOnOkuma.Durum}", 400);
 
-        if (belgeOnOkuma.MuhasebeFisId.HasValue)
-            throw new BaseException("Bu belge icin daha once muhasebe fisi olusturulmus.", 409);
+        await EnsureFisOlusturulabilirAsync(belgeOnOkuma, cancellationToken);
 
         if (belgeOnOkuma.Tutar <= 0)
             throw new BaseException("Belge tutari sifirdan buyuk olmalidir.", 400);
@@ -95,14 +94,17 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
                 if (belge is null)
                     throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
 
-                if (belge.MuhasebeFisId.HasValue)
-                    throw new BaseException("Bu belge icin daha once muhasebe fisi olusturulmus.", 409);
+                await EnsureFisOlusturulabilirAsync(belge, cancellationToken);
 
+                // MuhasebeFisService.IptalEtAsync ters kayit fisine de ayni KaynakModul/KaynakId'yi
+                // kopyalar (bkz. o metodun 5. adimi) — ters kaydin kendisi Durum=TersKayit tasir,
+                // Iptal degil. Bu yuzden yalnizca Taslak/Onayli (fiilen "acik/engelleyici" olan)
+                // durumlar burada engelleyici sayilir; Iptal VE TersKayit ikisi de "serbest" demektir.
                 var mevcutFis = await _dbContext.MuhasebeFisler
                     .Where(f => !f.IsDeleted
                                 && f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
                                 && f.KaynakId == tahsilatOdemeBelgesiId
-                                && f.Durum != MuhasebeFisDurumlari.Iptal)
+                                && (f.Durum == MuhasebeFisDurumlari.Taslak || f.Durum == MuhasebeFisDurumlari.Onayli))
                     .Select(f => new { f.Id, f.FisNo })
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -182,6 +184,43 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
         }
 
         throw new BaseException("Fis numarasi uretilemedi. Lutfen tekrar deneyiniz.", 500);
+    }
+
+    /// <summary>
+    /// MuhasebeFisId'nin doluluguna degil, baglantili fisin GUNCEL durumuna gore karar verir —
+    /// SatisBelgesiService.ThrowIfMuhasebeFisiIslemiEngellerAsync ile ayni "durum bazli, MuhasebeFisId
+    /// hic sifirlanmaz" deseni (bkz. TahsilatOdemeBelgesiDto.MuhasebeFisDurumu). Fis iptal edilse bile
+    /// (MuhasebeFisService.IptalEtAsync kaynak modulden bagimsiz calisir, TahsilatOdemeBelgesi'ye hic
+    /// dokunmaz) MuhasebeFisId hep son baglanti fisi gosterir; "serbest mi" sorusu her zaman burada,
+    /// canli fis durumu okunarak cevaplanir.
+    /// </summary>
+    private async Task EnsureFisOlusturulabilirAsync(TahsilatOdemeBelgesi belge, CancellationToken cancellationToken)
+    {
+        if (!belge.MuhasebeFisId.HasValue)
+            return; // Fis yok -> serbest
+
+        var fis = await _dbContext.MuhasebeFisler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value, cancellationToken);
+
+        if (fis is null || fis.IsDeleted)
+            throw new BaseException(
+                "Belgeye bagli muhasebe fisi bulunamadi veya silinmis. Sistem yoneticinize basvurun.", 400);
+
+        switch (fis.Durum)
+        {
+            case MuhasebeFisDurumlari.Iptal:
+                return; // Ters kayit olusturulmus, muhasebe etkisi sifirlanmis -> serbest
+
+            case MuhasebeFisDurumlari.Taslak:
+            case MuhasebeFisDurumlari.Onayli:
+                throw new BaseException(
+                    $"Bu belge icin daha once muhasebe fisi olusturulmus (Fis No: {fis.FisNo}, Durum: {fis.Durum}).", 409);
+
+            default:
+                throw new BaseException(
+                    $"Belgeye bagli muhasebe fisi beklenmeyen bir durumda ({fis.Durum}). Sistem yoneticinize basvurun.", 400);
+        }
     }
 
     private async Task<MuhasebeHesapPlani> ResolveAlacakHesabiAsync(int tesisId, STYS.Muhasebe.CariKartlar.Entities.CariKart cariKart, CancellationToken cancellationToken)

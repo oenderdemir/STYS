@@ -14,6 +14,9 @@ export interface TahsilatOdemeBelgesiModel {
     durum: string;
     muhasebeFisId?: number | null;
     muhasebeFisOlusturmaTarihi?: string | null;
+    /** Bagli MuhasebeFis'in guncel durumu (Taslak/Onayli/Iptal/TersKayit). muhasebeFisId dolu
+     * olsa bile bu deger 'Iptal' ise belge yeniden fislenebilir. */
+    muhasebeFisDurumu?: string | null;
 }
 
 export interface CreateTahsilatOdemeBelgesiRequest extends Omit<TahsilatOdemeBelgesiModel, 'id'> {}

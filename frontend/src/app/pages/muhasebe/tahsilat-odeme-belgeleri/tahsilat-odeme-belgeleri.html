@@ -31,10 +31,12 @@
             <td>{{ item.belgeNo }}</td><td>{{ item.belgeTarihi | date: 'dd.MM.yyyy HH:mm' }}</td><td>{{ item.belgeTipi }}</td><td>{{ item.cariKartId }}</td>
             <td>{{ item.tutar | number: '1.2-2' }} {{ item.paraBirimi }}</td><td>{{ item.odemeYontemi }}</td>
             <td>
-                @if (item.muhasebeFisId) {
-                <p-tag severity="success" [value]="'Fis #' + item.muhasebeFisId" [pTooltip]="'Muhasebeye islendi'" />
-                } @else {
+                @if (!item.muhasebeFisId) {
                 <p-tag severity="warn" value="Islenmedi" />
+                } @else if (item.muhasebeFisDurumu === 'Iptal') {
+                <p-tag severity="secondary" [value]="'Fis #' + item.muhasebeFisId + ' (Iptal)'" [pTooltip]="'Fis iptal edildi — yeniden fis olusturulabilir'" />
+                } @else {
+                <p-tag severity="success" [value]="'Fis #' + item.muhasebeFisId" [pTooltip]="'Muhasebeye islendi'" />
                 }
             </td>
             <td>
@@ -43,7 +45,7 @@
                     @if (item.kapatilacakCariHareketId && item.durum === 'Aktif') {
                     <p-button icon="pi pi-undo" size="small" severity="secondary" [outlined]="true" (onClick)="geriAl(item)" />
                     }
-                    @if (item.durum === 'Aktif' && !item.muhasebeFisId) {
+                    @if (item.durum === 'Aktif' && (!item.muhasebeFisId || item.muhasebeFisDurumu === 'Iptal')) {
                     <p-button icon="pi pi-file" size="small" severity="info" [outlined]="true" [pTooltip]="'Muhasebe fisi olustur'" (onClick)="muhasebeFisiOlustur(item)" />
                     }
                     @if (item.durum === 'Aktif') {

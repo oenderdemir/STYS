@@ -380,6 +380,10 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         return query =>
         {
             var result = include is null ? query : include(query);
+            // MuhasebeFisDurumu mapping'i (bkz. TahsilatOdemeBelgesiProfile) icin her zaman gerekli —
+            // MuhasebeFisId dolu olsa bile baglantili fisin Durum'u "Iptal" ise belge yeniden
+            // fislenebilir kabul edilir (SatisBelgesi'ndeki durum-bazli desenle ayni).
+            result = result.Include(x => x.MuhasebeFis);
             if (scope.IsScoped)
             {
                 result = result.Where(x =>

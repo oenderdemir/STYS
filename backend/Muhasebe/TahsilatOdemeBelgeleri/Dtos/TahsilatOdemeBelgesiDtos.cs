@@ -19,6 +19,13 @@ public class TahsilatOdemeBelgesiDto : BaseRdbmsDto<int>
     public int? KasaBankaHesapId { get; set; }
     public int? MuhasebeFisId { get; set; }
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
+
+    /// <summary>Baglı MuhasebeFis'in guncel Durum'u (Taslak/Onayli/Iptal/TersKayit). MuhasebeFisId
+    /// dolu olsa bile bu deger "Iptal" ise belge yeniden fislenebilir durumdadir — bkz.
+    /// TahsilatOdemeBelgesiMuhasebeFisService.FisOlusturAsync ve SatisBelgesiService'teki
+    /// ThrowIfMuhasebeFisiIslemiEngellerAsync ile ayni "durum bazli, MuhasebeFisId hic sifirlanmaz"
+    /// deseni.</summary>
+    public string? MuhasebeFisDurumu { get; set; }
 }
 
 public class CreateTahsilatOdemeBelgesiRequest

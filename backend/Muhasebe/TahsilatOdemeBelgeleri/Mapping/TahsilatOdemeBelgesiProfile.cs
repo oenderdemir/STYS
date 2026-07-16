@@ -8,7 +8,10 @@ public class TahsilatOdemeBelgesiProfile : Profile
 {
     public TahsilatOdemeBelgesiProfile()
     {
-        CreateMap<TahsilatOdemeBelgesi, TahsilatOdemeBelgesiDto>().ReverseMap();
+        CreateMap<TahsilatOdemeBelgesi, TahsilatOdemeBelgesiDto>()
+            .ForMember(d => d.MuhasebeFisDurumu, opt => opt.MapFrom(s => s.MuhasebeFis != null ? s.MuhasebeFis.Durum : null))
+            .ReverseMap()
+            .ForMember(s => s.MuhasebeFis, opt => opt.Ignore());
         CreateMap<CreateTahsilatOdemeBelgesiRequest, TahsilatOdemeBelgesiDto>();
         CreateMap<UpdateTahsilatOdemeBelgesiRequest, TahsilatOdemeBelgesiDto>();
     }

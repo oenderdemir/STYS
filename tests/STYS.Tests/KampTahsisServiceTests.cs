@@ -141,7 +141,7 @@ public class KampTahsisServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        return new StysAppDbContext(options);
+        return new StysAppDbContext(options, null, new FakeCurrentTenantAccessor());
     }
 
     private static async Task SeedFixtureAsync(StysAppDbContext dbContext, bool atamaEkle = true)
@@ -156,6 +156,7 @@ public class KampTahsisServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             IlId = 1,
             Ad = "Test Kamp Tesisi",
             Telefon = "000",
@@ -166,6 +167,7 @@ public class KampTahsisServiceTests
         dbContext.KampProgramlari.Add(new KampProgrami
         {
             Id = 1,
+            KurumId = 1,
             Kod = "YAZ",
             Ad = "Yaz Kampi",
             Yil = 2025,

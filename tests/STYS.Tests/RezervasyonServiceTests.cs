@@ -2761,6 +2761,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3156,6 +3157,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3254,6 +3256,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3317,6 +3320,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3390,6 +3394,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3488,6 +3493,7 @@ public class RezervasyonServiceTests
         dbContext.Tesisler.Add(new Tesis
         {
             Id = 1,
+            KurumId = 1,
             Ad = "Test Tesis",
             IlId = 1,
             Telefon = "000",
@@ -3587,6 +3593,7 @@ public class RezervasyonServiceTests
             new Tesis
             {
                 Id = 1,
+                KurumId = 1,
                 Ad = "Alpha Konukevi",
                 IlId = 1,
                 Telefon = "000",
@@ -3598,6 +3605,7 @@ public class RezervasyonServiceTests
             new Tesis
             {
                 Id = 2,
+                KurumId = 1,
                 Ad = "Beta Konukevi",
                 IlId = 1,
                 Telefon = "111",

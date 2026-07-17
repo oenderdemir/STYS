@@ -33,7 +33,10 @@ public class TenantSecurityTests
             .SingleOrDefault(x => x.AttributeType == typeof(PermissionAttribute));
 
         Assert.NotNull(attributeData);
-        Assert.Empty(attributeData!.ConstructorArguments);
+
+        var permissionsArgument = Assert.Single(attributeData!.ConstructorArguments);
+        var permissions = Assert.IsAssignableFrom<System.Collections.ObjectModel.ReadOnlyCollection<CustomAttributeTypedArgument>>(permissionsArgument.Value);
+        Assert.Empty(permissions);
     }
 
     [Fact]

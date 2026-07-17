@@ -5,6 +5,7 @@ using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
 using STYS.Kamp.Services;
 using STYS.Tesisler.Entities;
+using TOD.Platform.Security.Auth.Services;
 
 namespace STYS.Tests;
 
@@ -102,13 +103,14 @@ public class KampKurallariTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        return new StysAppDbContext(options);
+        return new StysAppDbContext(options, null, new FakeCurrentTenantAccessor());
     }
 
     private static async Task<int> SeedLookupDataAsync(StysAppDbContext dbContext)
     {
         var kampProgrami = new KampProgrami
         {
+            KurumId = 1,
             Kod = "GENEL",
             Ad = "Genel Kamp Programi",
             Yil = 2025,
@@ -155,6 +157,17 @@ public class KampKurallariTests
 
         await dbContext.SaveChangesAsync();
         return kampProgrami.Id;
+    }
+
+    private sealed class FakeCurrentTenantAccessor : ICurrentTenantAccessor
+    {
+        public int? GetCurrentKurumId() => null;
+
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+
+        public bool IsSuperAdmin() => true;
+
+        public bool IsKurumAdmin() => false;
     }
 
     private sealed class FakeKampParametreService : IKampParametreService

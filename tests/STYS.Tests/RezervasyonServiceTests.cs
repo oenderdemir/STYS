@@ -1804,11 +1804,18 @@ public class RezervasyonServiceTests
         reservation.KisiSayisi = 2;
         dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan
         {
-            Id = 10972,
+            Id = 19972,
             RezervasyonId = 9972,
             SiraNo = 2,
             AdSoyad = "Bekleyen Misafir",
             KatilimDurumu = KonaklayanKatilimDurumlari.Bekleniyor
+        });
+        dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
+        {
+            Id = 19973,
+            RezervasyonKonaklayanId = 19972,
+            RezervasyonSegmentId = 9973,
+            OdaId = 101
         });
         await dbContext.SaveChangesAsync();
 
@@ -1817,7 +1824,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(9972, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1000m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.TamamlaCheckOutAsync(9972));
@@ -1860,7 +1868,7 @@ public class RezervasyonServiceTests
 
         Assert.Equal(400, exception.ErrorCode);
         var updated = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 9981);
-        Assert.Equal(RezervasyonDurumlari.Onayli, updated.RezervasyonDurumu);
+        Assert.Equal(RezervasyonDurumlari.CheckInTamamlandi, updated.RezervasyonDurumu);
     }
 
     // Iptal durumundaki rezervasyonun odalari hala musaitse iptal geri alinarak Taslak'a donmeli.
@@ -2005,6 +2013,10 @@ public class RezervasyonServiceTests
             birimFiyat: 90m,
             ad: "Sabah Servisi",
             paketIcerikHizmetKodu: KonaklamaTipiIcerikHizmetKodlari.Kahvalti);
+
+        // Paket icerigi uyarisi rezervasyonun KonaklamaTipiId'sine bagli; shared fixture bunu set etmiyor.
+        var rezervasyon = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 10082);
+        rezervasyon.KonaklamaTipiId = 1;
 
         dbContext.KonaklamaTipiIcerikKalemleri.Add(new KonaklamaTipiIcerikKalemi
         {
@@ -2328,7 +2340,7 @@ public class RezervasyonServiceTests
         {
             RezervasyonKonaklayanId = 2013,
             EkHizmetTarifeId = 8015,
-            HizmetTarihi = new DateTime(2026, 3, 8, 12, 0, 0),
+            HizmetTarihi = new DateTime(2026, 3, 8, 15, 0, 0),
             Miktar = 1
         });
 
@@ -2338,7 +2350,7 @@ public class RezervasyonServiceTests
         {
             RezervasyonKonaklayanId = 2013,
             EkHizmetTarifeId = 8015,
-            HizmetTarihi = new DateTime(2026, 3, 8, 13, 0, 0),
+            HizmetTarihi = new DateTime(2026, 3, 8, 16, 0, 0),
             Miktar = 2,
             BirimFiyat = 95m,
             Aciklama = "Ozel kampanya"

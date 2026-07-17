@@ -842,7 +842,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
                     if (seq === this.kasaBankaHesapLoadSeq) {
                         this.kasaBankaHesapSecenekleri = secenekler;
                         if (!secenekler.some((x) => x.id === this.kasaBankaHesapId)) {
-                            this.kasaBankaHesapId = secenekler.length === 1 ? secenekler[0].id : null;
+                            this.kasaBankaHesapId = secenekler.length > 0 ? secenekler[0].id : null;
                         }
                         this.cdr.markForCheck();
                     }

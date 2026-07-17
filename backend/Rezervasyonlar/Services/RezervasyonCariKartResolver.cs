@@ -22,11 +22,9 @@ public class RezervasyonCariKartResolver : IRezervasyonCariKartResolver
 
     public async Task<int> ResolveAsync(Rezervasyon rezervasyon, int? cariKartIdOverride, CancellationToken cancellationToken = default)
     {
-        if (rezervasyon.CariKartId.HasValue)
-        {
-            return rezervasyon.CariKartId.Value;
-        }
-
+        // Override her zaman en yuksek onceliklidir: rezervasyonun bir ana/varsayilan cari karti
+        // olsa bile, cagiran bu belge/odeme icin farkli bir cari secmis olabilir (orn. rezervasyonun
+        // bir kismini bir misafir, kalanini baska bir misafir odedi).
         if (cariKartIdOverride.HasValue)
         {
             var secilen = await _dbContext.CariKartlar.FirstOrDefaultAsync(
@@ -43,6 +41,11 @@ public class RezervasyonCariKartResolver : IRezervasyonCariKartResolver
             }
 
             return secilen.Id;
+        }
+
+        if (rezervasyon.CariKartId.HasValue)
+        {
+            return rezervasyon.CariKartId.Value;
         }
 
         var tcknVeyaTelefonEslesen = await FindEslesenCariKartAsync(rezervasyon, cancellationToken);

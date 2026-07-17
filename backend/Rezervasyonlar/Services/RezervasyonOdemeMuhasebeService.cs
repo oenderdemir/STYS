@@ -60,7 +60,12 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
         }
 
         var cariKartId = await _cariKartResolver.ResolveAsync(rezervasyon, cariKartIdOverride, cancellationToken);
-        if (rezervasyon.CariKartId != cariKartId)
+
+        // Rezervasyonun ana/varsayilan carisi yalnizca ilk kez belirlenirken yazilir. Sonraki
+        // odemeler icin cariKartIdOverride farkli bir cari getirebilir (rezervasyonun bir kismini
+        // baska bir misafir odemis olabilir) — bu durumda rezervasyonun ana carisi (fatura/gelir
+        // belgesi bu alandan cozulur) sessizce degistirilmemelidir.
+        if (!rezervasyon.CariKartId.HasValue)
         {
             rezervasyon.CariKartId = cariKartId;
         }

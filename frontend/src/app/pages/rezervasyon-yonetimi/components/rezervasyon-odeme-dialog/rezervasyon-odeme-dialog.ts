@@ -106,6 +106,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     kasaBankaHesapYukleniyor = false;
 
     cariKartSecimiGerekli = false;
+    cariKartOverrideGoster = false;
     cariKartId: number | null = null;
     cariKartSecenekleri: RezervasyonCariKartSecenekDto[] = [];
     cariKartAramaMetni = '';
@@ -146,6 +147,21 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
 
     get kasaBankaHesapGerekli(): boolean {
         return this.nakitHareketiGerektirenler.includes(this.odemeTipi);
+    }
+
+    /** Zorunlu (422) veya kullanicinin kendi istegiyle actigi opsiyonel cari secim paneli. */
+    get cariKartPaneliGoster(): boolean {
+        return this.cariKartSecimiGerekli || this.cariKartOverrideGoster;
+    }
+
+    /** Rezervasyonun bir kismini baska bir misafirin odemesi durumunda, bu odeme icin
+     * secilmis (rezervasyonun ana carisinden farkli olabilecek) cari kartin adi. */
+    get cariKartOverrideAdi(): string | null {
+        if (!this.cariKartId) {
+            return null;
+        }
+
+        return this.cariKartSecenekleri.find((x) => x.id === this.cariKartId)?.unvanAdSoyad ?? null;
     }
 
     get ekHizmetMisafirSecenekleri(): RezervasyonEkHizmetMisafirSecenekDto[] {
@@ -587,6 +603,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
                     this.odemeAciklama = '';
                     this.sonOdemeIstegi = null;
                     this.cariKartSecimiGerekli = false;
+                    this.cariKartOverrideGoster = false;
                     this.cariKartId = null;
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Odeme kaydedildi.' });
                     this.saved.emit(result);
@@ -620,8 +637,33 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
 
     cariKartSeciminiIptalEt(): void {
         this.cariKartSecimiGerekli = false;
+        this.cariKartOverrideGoster = false;
         this.cariKartId = null;
         this.sonOdemeIstegi = null;
+    }
+
+    /** Rezervasyonun zaten bir ana carisi olsa bile, kullanici bu odemeyi bilincli olarak
+     * farkli bir cariye (orn. rezervasyonun bir kismini odeyen baska bir misafir) kaydetmek
+     * isteyebilir. Panel burada acilir/kapanir; asil kaydetme normal "Odeme Kaydet" akisiyla
+     * olur — secilen cariKartId, backend'e override olarak gonderilir. */
+    toggleCariKartOverride(): void {
+        if (this.cariKartSecimiGerekli || this.saving) {
+            return;
+        }
+
+        this.cariKartOverrideGoster = !this.cariKartOverrideGoster;
+        if (this.cariKartOverrideGoster && this.cariKartSecenekleri.length === 0) {
+            this.loadCariKartSecenekleri();
+        }
+    }
+
+    cariKartOverrideOnayla(): void {
+        this.cariKartOverrideGoster = false;
+    }
+
+    cariKartOverrideTemizle(): void {
+        this.cariKartId = null;
+        this.cariKartOverrideGoster = false;
     }
 
     /** Ekranlar arasi gecis yapmadan, misafir bilgileriyle onceden doldurulmus minimal bir
@@ -1146,6 +1188,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.kasaBankaHesapId = null;
         this.kasaBankaHesapSecenekleri = [];
         this.cariKartSecimiGerekli = false;
+        this.cariKartOverrideGoster = false;
         this.cariKartId = null;
         this.cariKartSecenekleri = [];
         this.cariKartAramaMetni = '';

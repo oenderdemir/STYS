@@ -9,6 +9,7 @@ public sealed class SatisBelgesiMuhasebeFisContext
     public string FisNo { get; init; } = string.Empty;
     public string BelgeNo { get; init; } = string.Empty;
     public int CariHesapPlaniId { get; init; }
+    public int? CariKartId { get; init; }
     public int GelirHesapPlaniId { get; init; }
     public int? KdvHesapPlaniId { get; init; }
     public int? StokHesapPlaniId { get; init; }

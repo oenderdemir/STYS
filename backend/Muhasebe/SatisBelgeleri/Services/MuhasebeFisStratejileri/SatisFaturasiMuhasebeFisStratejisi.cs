@@ -25,7 +25,8 @@ public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFi
                 SiraNo = 1,
                 Borc = belge.GenelToplam,
                 Alacak = 0,
-                Aciklama = $"Satış belgesi alacağı - {belge.BelgeNo}"
+                Aciklama = $"Satış belgesi alacağı - {belge.BelgeNo}",
+                CariKartId = context.CariKartId
             },
             new()
             {

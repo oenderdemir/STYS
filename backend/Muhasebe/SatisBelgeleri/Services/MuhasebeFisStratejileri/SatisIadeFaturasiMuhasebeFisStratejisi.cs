@@ -69,7 +69,8 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
             SiraNo = siraNo,
             Borc = 0,
             Alacak = belge.GenelToplam,
-            Aciklama = $"Alıcı borcu iadesi - {belge.BelgeNo}"
+            Aciklama = $"Alıcı borcu iadesi - {belge.BelgeNo}",
+            CariKartId = context.CariKartId
         });
 
         var toplamBorc = satirlar.Sum(x => x.Borc);

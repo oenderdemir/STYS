@@ -215,6 +215,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         donemNo,
                         belgeOnOkuma.BelgeTarihi,
                         belgeOnOkuma.BelgeNo,
+                        belgeOnOkuma.CariKartId,
                         cancellationToken)
                 };
 
@@ -457,9 +458,14 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         int donemNo,
         DateTime fisTarihi,
         string belgeNo,
+        int? cariKartId,
         CancellationToken cancellationToken)
     {
-        var cari = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.CariMusteri, tesisId, cancellationToken);
+        // Borç/alacak cari satırı, belgenin kendi müşterisinin (SatisBelgesi.CariKartId)
+        // hesap planı kaydına yazılmalıdır — tesisteki "CariMusteri" ana kodu altındaki
+        // rastgele/ilk detay hesaba değil (aksi halde fatura tamamen farklı bir müşterinin
+        // cari hesabına borç kaydedilmiş olur).
+        var cariHesabi = await GetCariMuhasebeHesabiAsync(cariKartId, tesisId, cancellationToken);
         var gelir = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.GelirSatis, tesisId, cancellationToken);
         var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken);
 
@@ -471,10 +477,53 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             FisTarihi = fisTarihi,
             FisNo = string.Empty,
             BelgeNo = belgeNo,
-            CariHesapPlaniId = cari.Id,
+            CariHesapPlaniId = cariHesabi.Id,
+            CariKartId = cariKartId,
             GelirHesapPlaniId = gelir.Id,
             KdvHesapPlaniId = kdv.Id
         };
+    }
+
+    /// <summary>
+    /// Satış belgesinin kendi cari kartına bağlı hesap planı kaydını döner. Cari kart
+    /// veya onun MuhasebeHesapPlaniId'si eksikse (veri tutarsızlığı) açık bir hata verir —
+    /// asla tesisteki başka bir cariye ait detay hesaba sessizce düşmez.
+    /// </summary>
+    private async Task<MuhasebeHesapPlani> GetCariMuhasebeHesabiAsync(
+        int? cariKartId,
+        int tesisId,
+        CancellationToken cancellationToken)
+    {
+        if (!cariKartId.HasValue)
+            throw new BaseException("Satış belgesinde cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.", 400);
+
+        var hesap = await _dbContext.CariKartlar
+            .AsNoTracking()
+            .Where(x => x.Id == cariKartId.Value && !x.IsDeleted)
+            .Select(x => x.MuhasebeHesapPlaniId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!hesap.HasValue)
+            throw new BaseException(
+                $"Cari kart (Id: {cariKartId.Value}) için hesap planı bağlantısı bulunamadı.",
+                400);
+
+        var hesapPlani = await _dbContext.MuhasebeHesapPlanlari
+            .AsNoTracking()
+            .Where(x => x.Id == hesap.Value
+                        && !x.IsDeleted
+                        && x.AktifMi
+                        && x.HareketGorebilirMi
+                        && x.DetayHesapMi
+                        && (x.TesisId == tesisId || x.TesisId == null))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (hesapPlani is null)
+            throw new BaseException(
+                $"Cari kartın (Id: {cariKartId.Value}) bağlı olduğu hesap planı kaydı aktif/hareket görebilir/detay hesap değil.",
+                400);
+
+        return hesapPlani;
     }
 
     private async Task<SatisBelgesiMuhasebeFisContext> BuildAlisFisContextAsync(
@@ -977,6 +1026,11 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             Aciklama = $"{aciklamaPrefix} - {belge.BelgeNo}",
             BorcTutari = borcTutari,
             AlacakTutari = alacakTutari,
+            // Hareket henuz hic kapanmamistir — kapama tutari kadar KalanTutar
+            // dusurulecektir (bkz. CariHareketKapamaService). Bu alan set edilmezse
+            // varsayilan 0 kalir ve hareket olusturuldugu andan itibaren "kapali"
+            // sayilir, dolayisiyla tahsilatlar hicbir zaman kapatilamaz.
+            KalanTutar = borcTutari + alacakTutari,
             ParaBirimi = "TRY",
             VadeTarihi = belge.VadeTarihi,
             Durum = CariHareketDurumlari.Aktif,

@@ -7,7 +7,7 @@ public static class MuhasebeAnaHesapKodlari
     public const string CariMusteri = "1.12.120";
 
     // Avanslar
-    public const string AlinanSiparisAvanslari = "3.40.340";
+    public const string AlinanSiparisAvanslari = "3.34.340";
 
     // Finansal hesaplar
     public const string FinansalKasa = "1.10.100";
@@ -23,15 +23,15 @@ public static class MuhasebeAnaHesapKodlari
     public const string Demirbas = "2.55.255";
 
     // Gelir tablosu
-    public const string GelirSatis = "6.00.600";
-    public const string IndirimIade = "6.10.610";
-    public const string SatisIade = "6.10.610";
+    public const string GelirSatis = "6.60.600";
+    public const string IndirimIade = "6.61.610";
+    public const string SatisIade = "6.61.610";
 
     // Gider
     public const string GiderHizmetMaliyet = "7.40.740";
     public const string GiderGenelYonetim = "7.70.770";
 
     // KDV
-    public const string KDVHesaplanan = "3.91.391";
-    public const string KDVIndirilecek = "1.91.191";
+    public const string KDVHesaplanan = "3.39.391";
+    public const string KDVIndirilecek = "1.19.191";
 }

@@ -58,7 +58,8 @@ public sealed class SatisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMu
                 SiraNo = 1,
                 Borc = belge.GenelToplam,
                 Alacak = 0,
-                Aciklama = $"Satış alacağı - {belge.BelgeNo}"
+                Aciklama = $"Satış alacağı - {belge.BelgeNo}",
+                CariKartId = context.CariKartId
             }
         };
 

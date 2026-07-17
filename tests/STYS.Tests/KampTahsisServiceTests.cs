@@ -6,6 +6,7 @@ using STYS.Kamp.Entities;
 using STYS.Kamp.Services;
 using STYS.Iller.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -92,7 +93,7 @@ public class KampTahsisServiceTests
         await dbContext.SaveChangesAsync();
 
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), null!);
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), new NoOpDomainOperationLogger());
         var result = await service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
             KampDonemiId = 10,
@@ -124,7 +125,7 @@ public class KampTahsisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedFixtureAsync(dbContext, atamaEkle: false);
         var fakeParams = new FakeKampParametreService();
-        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), null!);
+        var service = new KampTahsisService(dbContext, fakeParams, new FakeCurrentTenantAccessor(), new NoOpDomainOperationLogger());
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.OtomatikKararUygulaAsync(new KampTahsisOtomatikKararRequestDto
         {
@@ -246,5 +247,24 @@ public class KampTahsisServiceTests
         public bool IsSuperAdmin() => true;
 
         public bool IsKurumAdmin() => false;
+    }
+
+    private sealed class NoOpDomainOperationLogger : IDomainOperationLogger
+    {
+        public void Started(string eventName, object payload)
+        {
+        }
+
+        public void Completed(string eventName, object payload)
+        {
+        }
+
+        public void Warning(string eventName, object payload)
+        {
+        }
+
+        public void Failed(string eventName, Exception exception, object payload)
+        {
+        }
     }
 }

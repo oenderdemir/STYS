@@ -27,6 +27,7 @@ using STYS.Rezervasyonlar.Entities;
 using STYS.Rezervasyonlar.Services;
 using STYS.SezonKurallari.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Licensing.Abstractions;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -741,7 +742,10 @@ public class RezervasyonServiceTests
         await using var dbContext = CreateDbContext();
         await SeedReservationFixtureWithTenRoomsAsync(dbContext);
 
-        var service = CreateService(dbContext, DomainAccessScope.Scoped([], [2], []));
+        var service = CreateService(
+            dbContext,
+            DomainAccessScope.Scoped([], [2], []),
+            currentTenantAccessor: new FakeScopedCurrentTenantAccessor(1));
         var tesisler = await service.GetErisilebilirTesislerAsync();
 
         var tesis = Assert.Single(tesisler);
@@ -1734,7 +1738,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(996, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1000m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
         var result = await service.TamamlaCheckOutAsync(996);
 
@@ -1759,7 +1764,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(9960, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1000m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var result = await service.TamamlaCheckOutAsync(9960);
@@ -1846,7 +1852,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(9981, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 100m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var exception = await Assert.ThrowsAsync<BaseException>(() => service.IptalEtAsync(9981));
@@ -1911,6 +1918,7 @@ public class RezervasyonServiceTests
         {
             OdemeTutari = 300m,
             OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1,
             Aciklama = "Pesin odeme"
         });
 
@@ -2393,7 +2401,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(1016, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 100m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var ikinciOzet = await service.KaydetEkHizmetAsync(1016, new RezervasyonEkHizmetKaydetRequestDto
@@ -2433,7 +2442,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(1018, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1200m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var silEx = await Assert.ThrowsAsync<BaseException>(() => service.SilEkHizmetAsync(1018, hizmet.Id));
@@ -2463,7 +2473,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(1020, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1100m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var silEx = await Assert.ThrowsAsync<BaseException>(() => service.SilEkHizmetAsync(1020, hizmet.Id));
@@ -2493,7 +2504,8 @@ public class RezervasyonServiceTests
         await service.KaydetOdemeAsync(1022, new RezervasyonOdemeKaydetRequestDto
         {
             OdemeTutari = 1200m,
-            OdemeTipi = OdemeTipleri.Nakit
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = 1
         });
 
         var guncelleEx = await Assert.ThrowsAsync<BaseException>(() => service.GuncelleEkHizmetAsync(1022, hizmet.Id, new RezervasyonEkHizmetKaydetRequestDto
@@ -2664,7 +2676,8 @@ public class RezervasyonServiceTests
         StysAppDbContext dbContext,
         DomainAccessScope? scope = null,
         IReadOnlyCollection<string>? permissions = null,
-        IRezervasyonGelirTahakkukService? rezervasyonGelirTahakkukService = null)
+        IRezervasyonGelirTahakkukService? rezervasyonGelirTahakkukService = null,
+        ICurrentTenantAccessor? currentTenantAccessor = null)
     {
         var httpContextAccessor = new HttpContextAccessor
         {
@@ -2686,8 +2699,8 @@ public class RezervasyonServiceTests
             new FakeBildirimService(),
             httpContextAccessor,
             new FakeLicenseService(),
-            new FakeCurrentTenantAccessor(),
-            null!,
+            currentTenantAccessor ?? new FakeCurrentTenantAccessor(),
+            new NoOpDomainOperationLogger(),
             new FakeRezervasyonOdemeMuhasebeService(),
             rezervasyonGelirTahakkukService ?? new FakeRezervasyonGelirTahakkukService());
     }
@@ -3979,6 +3992,31 @@ public class RezervasyonServiceTests
             AktifMi = true
         });
 
+        // TesisId=1 kullanan fixture'lar icin varsayilan misafir/konaklama tipi izinleri.
+        dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
+        {
+            Id = 9901,
+            TesisId = 1,
+            MisafirTipiId = 1,
+            AktifMi = true
+        });
+
+        dbContext.TesisMisafirTipleri.Add(new TesisMisafirTipi
+        {
+            Id = 9902,
+            TesisId = 1,
+            MisafirTipiId = 2,
+            AktifMi = true
+        });
+
+        dbContext.TesisKonaklamaTipleri.Add(new TesisKonaklamaTipi
+        {
+            Id = 9903,
+            TesisId = 1,
+            KonaklamaTipiId = 1,
+            AktifMi = true
+        });
+
         await dbContext.SaveChangesAsync();
     }
 
@@ -4052,6 +4090,45 @@ public class RezervasyonServiceTests
         public bool IsSuperAdmin() => true;
 
         public bool IsKurumAdmin() => false;
+    }
+
+    // GetErisilebilirTesislerAsync gibi CurrentKurumId'nin dolu olmasini zorunlu tutan
+    // (superadmin bypass'i olmayan) uc noktalari test etmek icin kullanilir.
+    private sealed class FakeScopedCurrentTenantAccessor : ICurrentTenantAccessor
+    {
+        private readonly int _kurumId;
+
+        public FakeScopedCurrentTenantAccessor(int kurumId)
+        {
+            _kurumId = kurumId;
+        }
+
+        public int? GetCurrentKurumId() => _kurumId;
+
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [_kurumId];
+
+        public bool IsSuperAdmin() => true;
+
+        public bool IsKurumAdmin() => false;
+    }
+
+    private sealed class NoOpDomainOperationLogger : IDomainOperationLogger
+    {
+        public void Started(string eventName, object payload)
+        {
+        }
+
+        public void Completed(string eventName, object payload)
+        {
+        }
+
+        public void Warning(string eventName, object payload)
+        {
+        }
+
+        public void Failed(string eventName, Exception exception, object payload)
+        {
+        }
     }
 
     /// <summary>

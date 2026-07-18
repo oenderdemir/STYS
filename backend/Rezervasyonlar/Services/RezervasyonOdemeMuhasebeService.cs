@@ -193,18 +193,20 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value, cancellationToken);
 
-            if (fis is not null && fis.Durum == MuhasebeFisDurumlari.Taslak)
+            // Fis Taslak veya Onayli ise (aktif muhasebe etkisi var demektir) odeme iptali
+            // reddedilir. Rezervasyon odeme iptali (RezervasyonYonetimi.Manage) hicbir kosulda
+            // otomatik muhasebe fisi iptali/ters kayit uretmez — bu, MuhasebeFisYonetimi.Manage
+            // yetkisi gerektiren, muhasebenin bilincli olarak yapmasi gereken bir islemdir.
+            if (fis is not null
+                && (fis.Durum == MuhasebeFisDurumlari.Taslak || fis.Durum == MuhasebeFisDurumlari.Onayli))
             {
                 throw new BaseException(
-                    "Bu tahsilat icin taslak durumda bir muhasebe fisi var. Odemeyi iptal etmeden once " +
-                    "fisi Muhasebe > Fisler ekranindan siliniz ya da onaylayiniz.", 409);
+                    "Bu odeme icin muhasebe fisi olusturulmus. Once muhasebe fisi muhasebe ekranindan " +
+                    "iptal edilmelidir.", 409);
             }
 
-            if (fis is not null)
-            {
-                // Onaylanmis/kesinlesmis fis — dogrudan silinemez, mevcut ters kayit mekanizmasi kullanilir.
-                await _muhasebeFisService.IptalEtAsync(fis.Id, iptalAciklama, cancellationToken);
-            }
+            // Durum Iptal veya TersKayit ise muhasebe etkisi zaten kapatilmis kabul edilir;
+            // burada yeniden IptalEtAsync cagrilmaz (zaten iptal fis uzerinde islem yapilamaz).
         }
 
         // TahsilatOdemeBelgesiService.IptalEtAsync zaten acik donem kontrolu yapar,

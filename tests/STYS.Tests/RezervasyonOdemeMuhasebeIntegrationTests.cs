@@ -17,8 +17,10 @@ using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Mapping;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
@@ -108,6 +110,13 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     private int CariKartNoHesapAId;   // TesisCari, MuhasebeHesapPlaniId bos
     private int CariKartNoHesapBId;   // TesisAvans, MuhasebeHesapPlaniId bos
 
+    // Paylasilan TestMarker ile degil, bu ornege ozel uniqueSuffix ile filtrelenir — ayni sinifin
+    // testleri xUnit'te paralel calisabildigi icin (her IntegrationFact kendi InitializeAsync/
+    // DisposeAsync'ini alir), global TestMarker ile filtrelemek baska bir es zamanli testin
+    // MuhasebeHesapPlanlari kaydini silip onun canli MuhasebeFisSatirlari'nin FK Restrict
+    // hatasina dusmesine yol acabilirdi (bkz. CleanupAsync).
+    private string _uniqueSuffix = TestMarker;
+
     public async Task InitializeAsync()
     {
         // Savunma amacli ikinci kontrol: IntegrationFactAttribute testi zaten Skip eder, ama xUnit
@@ -123,6 +132,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         // Testler paralel calisabildigi icin (xUnit varsayilani) benzersiz bir suffix kullanilir —
         // Il.Ad ve Kurumlar.Kod alanlarinda unique index oldugundan sabit degerler carpisir.
         var uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        _uniqueSuffix = uniqueSuffix;
 
         var kurum = new Kurum { Kod = uniqueSuffix, Ad = "Test Kurum " + uniqueSuffix, AktifMi = true };
         dbContext.Kurumlar.Add(kurum);
@@ -155,6 +165,14 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         await dbContext.SaveChangesAsync();
         TesisCariId = tesisCari.Id;
         TesisAvansId = tesisAvans.Id;
+
+        // MuhasebeHesapBakiyeGuncellemeService (OnaylaAsync/IptalEtAsync sirasinda cagrilir), her
+        // detay hesabin TamKod'undaki "." ile ayrilan ust segmentlerinin de bir hesap plani kaydi
+        // olarak var olmasini bekler (GetUstHesapKodlari) — aksi halde "Ust muhasebe hesabi
+        // bulunamadi" hatasi verir. Bu yuzden detay hesaplardan once bir ana hesap seed edilir.
+        var hesapAna = new MuhasebeHesapPlani { Kod = uniqueSuffix, TamKod = uniqueSuffix, Ad = "Test Ana Hesap", AktifMi = true, DetayHesapMi = false, HareketGorebilirMi = false, HesapTipi = HesapTipi.AnaHesap };
+        dbContext.MuhasebeHesapPlanlari.Add(hesapAna);
+        await dbContext.SaveChangesAsync();
 
         var hesapKasa = new MuhasebeHesapPlani { Kod = uniqueSuffix + "-KASA", TamKod = uniqueSuffix + ".KASA", Ad = "Test Kasa", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap };
         var hesapBanka = new MuhasebeHesapPlani { Kod = uniqueSuffix + "-BANKA", TamKod = uniqueSuffix + ".BANKA", Ad = "Test Banka", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap };
@@ -197,10 +215,10 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         }
 
         await using var dbContext = CreateDbContext();
-        await CleanupAsync(dbContext, TesisCariId, TesisAvansId, KurumId);
+        await CleanupAsync(dbContext, TesisCariId, TesisAvansId, KurumId, _uniqueSuffix);
     }
 
-    private static async Task CleanupAsync(StysAppDbContext dbContext, int tesisCariId, int tesisAvansId, int kurumId)
+    private static async Task CleanupAsync(StysAppDbContext dbContext, int tesisCariId, int tesisAvansId, int kurumId, string uniqueSuffix)
     {
         if (kurumId <= 0)
         {
@@ -224,6 +242,17 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         await dbContext.TahsilatOdemeBelgeleri
             .Where(x => x.CariKart != null && (x.CariKart.TesisId == tesisCariId || x.CariKart.TesisId == tesisAvansId))
             .ExecuteDeleteAsync();
+        // MuhasebeFisSatirlari -> MuhasebeHesapPlanlari/CariKartlar/KasaBankaHesaplari Restrict FK
+        // ile bagli oldugundan, fis satirlari (ve fisler) o tablolardan ONCE silinmeli.
+        var fisIds = await dbContext.MuhasebeFisler
+            .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (fisIds.Count > 0)
+        {
+            await dbContext.MuhasebeFisSatirlari.Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
+            await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
         await dbContext.CariHareketler
             .Where(x => x.CariKart != null && x.CariKart.TesisId == tesisCariId)
             .ExecuteDeleteAsync();
@@ -239,14 +268,26 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         await dbContext.MuhasebeDonemler
             .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
             .ExecuteDeleteAsync();
+        // MuhasebeHesapBakiyeGuncellemeService (OnaylaAsync/IptalEtAsync) MuhasebeHesapBakiyeleri
+        // satirlari uretir; bunlar da MuhasebeHesapPlanlari'na Restrict FK ile bagli.
+        await dbContext.MuhasebeHesapBakiyeleri
+            .Where(x => x.TesisId == tesisCariId || x.TesisId == tesisAvansId)
+            .ExecuteDeleteAsync();
+        // Global TestMarker DEGIL: es zamanli calisan diger IntegrationFact ornekleri de ayni
+        // TestMarker on ekini kullaniyor; bu ornegin kendi uniqueSuffix'iyle filtrelenmezse
+        // baska bir calisan testin hala canli MuhasebeFisSatirlari referanslayan hesap plani
+        // silinmeye calisilir ve FK Restrict hatasi olusur.
         await dbContext.MuhasebeHesapPlanlari
-            .Where(x => x.Kod != null && x.Kod.StartsWith(TestMarker))
+            .Where(x => x.Kod != null && x.Kod.StartsWith(uniqueSuffix))
             .ExecuteDeleteAsync();
         await dbContext.Tesisler
             .Where(x => x.Id == tesisCariId || x.Id == tesisAvansId)
             .ExecuteDeleteAsync();
+        // Burada da global TestMarker degil, ornege ozel uniqueSuffix kullanilir (bkz. yukaridaki
+        // MuhasebeHesapPlanlari notu) — aksi halde es zamanli baska bir testin Tesisler kaydinin
+        // hala referansladigi bir Il silinmeye calisilip FK Restrict hatasi olusabilir.
         await dbContext.Iller
-            .Where(x => x.Ad != null && x.Ad.Contains(TestMarker))
+            .Where(x => x.Ad != null && x.Ad.Contains(uniqueSuffix))
             .ExecuteDeleteAsync();
         await dbContext.Kurumlar
             .Where(x => x.Id == kurumId)
@@ -307,7 +348,11 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 
         await using var verifyContext = CreateDbContext();
         Assert.False(await verifyContext.RezervasyonOdemeler.AnyAsync(x => x.RezervasyonId == rezervasyonId));
-        Assert.False(await verifyContext.TahsilatOdemeBelgeleri.AnyAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.Rezervasyon));
+        // Not: TahsilatOdemeBelgesi.KaynakId her zaman bu rezervasyonun bir RezervasyonOdeme.Id'sine
+        // esittir; yukaridaki satir hicbir odeme olusmadigini zaten kanitliyor, bu yuzden
+        // KaynakModul=Rezervasyon icin GLOBAL bir kontrol (once burada vardi) gereksiz VE es zamanli
+        // calisan diger IntegrationFact testleriyle (kendi rezervasyonlari icin gecerli belge
+        // olusturanlar) yanlis pozitif cakismaya yol aciyordu — kaldirildi.
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -595,6 +640,259 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Senaryo 12 — Taslak durumda muhasebe fisi olan odeme iptal edilemez
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo12_TaslakFisliOdeme_IptalEngellenir()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, TesisCariId, "Senaryo12 Misafir", "555-0012");
+        var rezervasyonId = rezervasyon.Id;
+        var service = CreateRezervasyonService(dbContext);
+
+        await service.KaydetOdemeAsync(rezervasyonId, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 100m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = KasaBankaNakitAId,
+            CariKartId = CariKartWithHesapAId
+        });
+
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.RezervasyonId == rezervasyonId);
+        var belgeId = odeme.TahsilatOdemeBelgesiId!.Value;
+
+        var fisService = CreateTahsilatOdemeBelgesiMuhasebeFisService(dbContext);
+        await fisService.FisOlusturAsync(belgeId);
+
+        var fis = await dbContext.MuhasebeFisler.SingleAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+        Assert.Equal(MuhasebeFisDurumlari.Taslak, fis.Durum);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.IptalOdemeAsync(rezervasyonId, odeme.Id, new RezervasyonOdemeIptalRequestDto { Aciklama = "Test" }));
+        Assert.Equal(409, ex.ErrorCode);
+
+        await using var verifyContext = CreateDbContext();
+        Assert.Equal(RezervasyonOdemeDurumlari.Aktif, (await verifyContext.RezervasyonOdemeler.SingleAsync(x => x.Id == odeme.Id)).Durum);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, (await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId)).Durum);
+        Assert.Equal(MuhasebeFisDurumlari.Taslak, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == fis.Id)).Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 13 — Onayli muhasebe fisi olan odeme iptal edilemez;
+    // otomatik ters kayit uretilmez
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo13_OnayliFisliOdeme_IptalEngellenirVeOtomatikTersKayitOlusmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, TesisCariId, "Senaryo13 Misafir", "555-0013");
+        var rezervasyonId = rezervasyon.Id;
+        var service = CreateRezervasyonService(dbContext);
+
+        await service.KaydetOdemeAsync(rezervasyonId, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 100m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = KasaBankaNakitAId,
+            CariKartId = CariKartWithHesapAId
+        });
+
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.RezervasyonId == rezervasyonId);
+        var belgeId = odeme.TahsilatOdemeBelgesiId!.Value;
+
+        var fisService = CreateTahsilatOdemeBelgesiMuhasebeFisService(dbContext);
+        await fisService.FisOlusturAsync(belgeId);
+        var fis = await dbContext.MuhasebeFisler.SingleAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+
+        var muhasebeFisService = CreateMuhasebeFisService(dbContext);
+        await muhasebeFisService.OnaylaAsync(fis.Id);
+
+        // Bu cagri, sadece RezervasyonYonetimi.Manage yetkisiyle korunan
+        // RezervasyonController.IptalOdeme uc noktasinin arkasindaki servis cagrisiyla ayni —
+        // MuhasebeFisYonetimi.Manage yetkisi hic devreye girmemeli.
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.IptalOdemeAsync(rezervasyonId, odeme.Id, new RezervasyonOdemeIptalRequestDto { Aciklama = "Test" }));
+        Assert.Equal(409, ex.ErrorCode);
+
+        await using var verifyContext = CreateDbContext();
+        Assert.Equal(RezervasyonOdemeDurumlari.Aktif, (await verifyContext.RezervasyonOdemeler.SingleAsync(x => x.Id == odeme.Id)).Durum);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, (await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId)).Durum);
+        Assert.Equal(MuhasebeFisDurumlari.Onayli, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == fis.Id)).Durum);
+
+        // Otomatik ters kayit uretilmedi: belgeye bagli fis sayisi hala 1.
+        var fisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+        Assert.Equal(1, fisSayisi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 14 — Iptal durumundaki muhasebe fisi olan odeme iptal edilebilir;
+    // yeniden ters kayit uretilmez
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo14_IptalFisliOdeme_IptalEdilebilirVeYenidenTersKayitUretilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, TesisCariId, "Senaryo14 Misafir", "555-0014");
+        var rezervasyonId = rezervasyon.Id;
+        var service = CreateRezervasyonService(dbContext);
+
+        await service.KaydetOdemeAsync(rezervasyonId, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 100m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = KasaBankaNakitAId,
+            CariKartId = CariKartWithHesapAId
+        });
+
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.RezervasyonId == rezervasyonId);
+        var belgeId = odeme.TahsilatOdemeBelgesiId!.Value;
+
+        var fisService = CreateTahsilatOdemeBelgesiMuhasebeFisService(dbContext);
+        await fisService.FisOlusturAsync(belgeId);
+        var fis = await dbContext.MuhasebeFisler.SingleAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+
+        var muhasebeFisService = CreateMuhasebeFisService(dbContext);
+        await muhasebeFisService.OnaylaAsync(fis.Id);
+        // Muhasebe ekranindan (MuhasebeFisYonetimi.Manage) bilincli olarak iptal edilmis —
+        // bu, orijinal fisi Durum=Iptal yapar ve ayrica bir "TERS-" ters kayit fisi uretir.
+        await muhasebeFisService.IptalEtAsync(fis.Id, "Muhasebe iptali");
+
+        var ozetSonra = await service.IptalOdemeAsync(rezervasyonId, odeme.Id, new RezervasyonOdemeIptalRequestDto { Aciklama = "Test" });
+        Assert.Equal(0m, ozetSonra.OdenenTutar);
+
+        await using var verifyContext = CreateDbContext();
+        Assert.Equal(RezervasyonOdemeDurumlari.Iptal, (await verifyContext.RezervasyonOdemeler.SingleAsync(x => x.Id == odeme.Id)).Durum);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, (await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId)).Durum);
+        Assert.Equal(MuhasebeFisDurumlari.Iptal, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == fis.Id)).Durum);
+
+        // Muhasebenin kendi iptalinden gelen 1 ters kayit disinda YENI bir ters kayit uretilmedi:
+        // orijinal fis + tek ters kayit = toplam 2.
+        var fisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+        Assert.Equal(2, fisSayisi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 15 — Bagli fis TersKayit durumundaysa odeme iptalini engellemez
+    // (belge.MuhasebeFisId normal akista hep orijinal fise isaret eder ve onun
+    // durumu Iptal olur; bu senaryo savunma amacli olarak TersKayit durumunun
+    // da "serbest" sayildigini dogrudan test eder).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo15_TersKayitDurumundakiFis_OdemeIptaliniEngellemez()
+    {
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, TesisCariId, "Senaryo15 Misafir", "555-0015");
+        var rezervasyonId = rezervasyon.Id;
+        var service = CreateRezervasyonService(dbContext);
+
+        await service.KaydetOdemeAsync(rezervasyonId, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 100m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = KasaBankaNakitAId,
+            CariKartId = CariKartWithHesapAId
+        });
+
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.RezervasyonId == rezervasyonId);
+        var belgeId = odeme.TahsilatOdemeBelgesiId!.Value;
+        var belge = await dbContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+
+        var tersKayitFis = new MuhasebeFis
+        {
+            TesisId = TesisCariId,
+            MaliYil = 2026,
+            Donem = 1,
+            FisNo = $"{TestMarker}-TERS-{Guid.NewGuid():N}"[..24],
+            FisTarihi = DateTime.UtcNow,
+            FisTipi = MuhasebeFisTipleri.Duzeltme,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi,
+            KaynakId = belgeId,
+            Durum = MuhasebeFisDurumlari.TersKayit,
+            Aciklama = "Senaryo15 sentetik ters kayit"
+        };
+        dbContext.MuhasebeFisler.Add(tersKayitFis);
+        await dbContext.SaveChangesAsync();
+        belge.MuhasebeFisId = tersKayitFis.Id;
+        await dbContext.SaveChangesAsync();
+
+        var ozetSonra = await service.IptalOdemeAsync(rezervasyonId, odeme.Id, new RezervasyonOdemeIptalRequestDto { Aciklama = "Test" });
+        Assert.Equal(0m, ozetSonra.OdenenTutar);
+
+        await using var verifyContext = CreateDbContext();
+        Assert.Equal(RezervasyonOdemeDurumlari.Iptal, (await verifyContext.RezervasyonOdemeler.SingleAsync(x => x.Id == odeme.Id)).Durum);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, (await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId)).Durum);
+        // MuhasebeFisService.IptalEtAsync hic cagrilmadi: TersKayit fis degismeden kaldi.
+        Assert.Equal(MuhasebeFisDurumlari.TersKayit, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == tersKayitFis.Id)).Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 16 — Yetki felsefesi: RezervasyonYonetimi.Manage, dolayli olarak
+    // MuhasebeFisYonetimi.Manage gerektiren bir islem tetikleyemez.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo16_RezervasyonYonetimiYetkisi_MuhasebeFisIptaliniTetikleyemez()
+    {
+        // Uc noktalarin yetki kapsami degismedi: RezervasyonController.IptalOdeme hala sadece
+        // RezervasyonYonetimi.Manage istiyor; MuhasebeFisController.IptalEt hala ayrica
+        // MuhasebeFisYonetimi.Manage istiyor. Duzeltme bu iki yetkiyi birbirine baglamiyor,
+        // servis katmaninda otomatik cagriyi tamamen kaldiriyor.
+        var rezervasyonEndpoint = typeof(STYS.Rezervasyonlar.Controllers.RezervasyonController)
+            .GetMethod(nameof(STYS.Rezervasyonlar.Controllers.RezervasyonController.IptalOdeme));
+        var rezervasyonPermissionCodes = GetPermissionCodes(rezervasyonEndpoint!);
+        Assert.Contains(StructurePermissions.RezervasyonYonetimi.Manage, rezervasyonPermissionCodes);
+        Assert.DoesNotContain(StructurePermissions.MuhasebeFisYonetimi.Manage, rezervasyonPermissionCodes);
+
+        var muhasebeFisEndpoint = typeof(STYS.Muhasebe.MuhasebeFisleri.Controllers.MuhasebeFisController)
+            .GetMethod(nameof(STYS.Muhasebe.MuhasebeFisleri.Controllers.MuhasebeFisController.IptalEt));
+        var muhasebeFisPermissionCodes = GetPermissionCodes(muhasebeFisEndpoint!);
+        Assert.Contains(StructurePermissions.MuhasebeFisYonetimi.Manage, muhasebeFisPermissionCodes);
+
+        // Fonksiyonel dogrulama: RezervasyonController.IptalOdeme'nin cagirdigi tam servis zinciri
+        // (CreateRezervasyonService) — yalnizca RezervasyonYonetimi.Manage'in koruyabildigi yol —
+        // onayli fisli bir odemeyi iptal edemiyor ve muhasebe fisine dokunmuyor.
+        await using var dbContext = CreateDbContext();
+        var rezervasyon = await SeedRezervasyonAsync(dbContext, TesisCariId, "Senaryo16 Misafir", "555-0016");
+        var rezervasyonId = rezervasyon.Id;
+        var service = CreateRezervasyonService(dbContext);
+
+        await service.KaydetOdemeAsync(rezervasyonId, new RezervasyonOdemeKaydetRequestDto
+        {
+            OdemeTutari = 100m,
+            OdemeTipi = OdemeTipleri.Nakit,
+            KasaBankaHesapId = KasaBankaNakitAId,
+            CariKartId = CariKartWithHesapAId
+        });
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.RezervasyonId == rezervasyonId);
+        var belgeId = odeme.TahsilatOdemeBelgesiId!.Value;
+
+        var fisService = CreateTahsilatOdemeBelgesiMuhasebeFisService(dbContext);
+        await fisService.FisOlusturAsync(belgeId);
+        var fis = await dbContext.MuhasebeFisler.SingleAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+        await CreateMuhasebeFisService(dbContext).OnaylaAsync(fis.Id);
+
+        await Assert.ThrowsAsync<BaseException>(() =>
+            service.IptalOdemeAsync(rezervasyonId, odeme.Id, new RezervasyonOdemeIptalRequestDto { Aciklama = "Test" }));
+
+        await using var verifyContext = CreateDbContext();
+        Assert.Equal(MuhasebeFisDurumlari.Onayli, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == fis.Id)).Durum);
+    }
+
+    private static List<string> GetPermissionCodes(System.Reflection.MethodInfo endpoint)
+    {
+        var attributeData = endpoint.GetCustomAttributesData()
+            .Single(x => x.AttributeType == typeof(TOD.Platform.AspNetCore.Authorization.PermissionAttribute));
+        var permissionsArgument = Assert.Single(attributeData.ConstructorArguments);
+        var permissions = (System.Collections.ObjectModel.ReadOnlyCollection<System.Reflection.CustomAttributeTypedArgument>)permissionsArgument.Value!;
+        return permissions.Select(x => (string)x.Value!).ToList();
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Yardimcilar
     // ─────────────────────────────────────────────────────────────
 
@@ -754,6 +1052,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             cfg.AddProfile<CariHareketProfile>();
             cfg.AddProfile<MuhasebeDonemProfile>();
             cfg.AddProfile<SatisBelgesiProfile>();
+            cfg.AddProfile<MuhasebeFisProfile>();
         }, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
         return config.CreateMapper();
@@ -789,6 +1088,25 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             CreateTahsilatOdemeBelgesiService(dbContext),
             new FakeMuhasebeFisService(),
             new RezervasyonCariKartResolver(dbContext));
+    }
+
+    private static IMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var repository = new MuhasebeFisRepository(dbContext, mapper);
+        return new MuhasebeFisService(
+            repository,
+            mapper,
+            dbContext,
+            CreateMuhasebeDonemService(dbContext),
+            new MuhasebeHesapBakiyeGuncellemeService(dbContext),
+            new FakeUserAccessScopeService(),
+            new FakeDomainOperationLogger());
+    }
+
+    private static ITahsilatOdemeBelgesiMuhasebeFisService CreateTahsilatOdemeBelgesiMuhasebeFisService(StysAppDbContext dbContext)
+    {
+        return new TahsilatOdemeBelgesiMuhasebeFisService(dbContext, CreateMapper(), CreateMuhasebeDonemService(dbContext));
     }
 
     private static ICariHareketKapamaService CreateCariHareketKapamaService(StysAppDbContext dbContext)

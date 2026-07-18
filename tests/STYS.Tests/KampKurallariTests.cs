@@ -69,8 +69,10 @@ public class KampKurallariTests
 
         Assert.Equal(5668.75m, onizleme.GunlukToplamTutar);
         Assert.Equal(28343.75m, onizleme.DonemToplamTutar);
-        Assert.Equal(6800m, onizleme.AvansToplamTutar);
-        Assert.Equal(21543.75m, onizleme.KalanOdemeTutari);
+        // Avans, her katilimcinin kendi tipine (Kamu/Diger) gore Math.Min(avans sabiti, gunluk tutar*gun sayisi)
+        // ile hesaplaniyor: 1*1700 (kamu yetiskin) + 3*2550 (diger yetiskin/cocuk/bebek, hepsi capped) = 9350.
+        Assert.Equal(9350m, onizleme.AvansToplamTutar);
+        Assert.Equal(18993.75m, onizleme.KalanOdemeTutari);
     }
 
     [Fact]

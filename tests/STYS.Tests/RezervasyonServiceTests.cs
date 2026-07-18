@@ -704,6 +704,28 @@ public class RezervasyonServiceTests
             rezervasyonId: 960,
             odaNoSnapshot: "ODA-2");
 
+        // ODA-2 paylasimli oldugu icin, mevcut dolulugun cinsiyeti bilinmiyorsa
+        // GetRoomAvailabilitiesAsync odayi guvenlik amacli tamamen disliyor;
+        // SeedExistingReservationAsync konaklayan/cinsiyet kaydi eklemedigi icin
+        // bu bilgiyi burada tamamliyoruz.
+        dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan
+        {
+            Id = 9601,
+            RezervasyonId = 960,
+            SiraNo = 1,
+            AdSoyad = "Mevcut Misafir",
+            Cinsiyet = KonaklayanCinsiyetleri.Erkek,
+            KatilimDurumu = KonaklayanKatilimDurumlari.Geldi
+        });
+        dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
+        {
+            Id = 9602,
+            RezervasyonKonaklayanId = 9601,
+            RezervasyonSegmentId = 961,
+            OdaId = 101
+        });
+        await dbContext.SaveChangesAsync();
+
         var service = CreateService(dbContext);
         var scenarios = await service.GetKonaklamaSenaryolariAsync(new KonaklamaSenaryoAramaRequestDto
         {

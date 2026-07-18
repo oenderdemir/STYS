@@ -347,7 +347,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         };
 
         // 4. Satırları oluştur ve KDV hesapla
-        foreach (var satirRequest in request.Satirlar)
+        foreach (var satirRequest in request.Satirlar ?? [])
         {
             await ValidateSatirRequestAsync(satirRequest, belge, cancellationToken);
             var satir = CreateSatirFromRequest(satirRequest);

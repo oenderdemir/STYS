@@ -2215,7 +2215,7 @@ public class RezervasyonService : IRezervasyonService
         await EnsureSeasonRuleComplianceAsync(request.TesisId, request.GirisTarihi, request.CikisTarihi, cancellationToken);
         await ValidateAppliedDiscountPermissionsAsync(request, cancellationToken);
 
-        var distinctRoomIds = request.Segmentler
+        var distinctRoomIds = (request.Segmentler ?? [])
             .SelectMany(x => x.OdaAtamalari)
             .Select(x => x.OdaId)
             .Distinct()
@@ -2250,7 +2250,7 @@ public class RezervasyonService : IRezervasyonService
             throw new BaseException("Secilen odalardan en az biri gecersiz veya secilen tesise ait degil.", 400);
         }
 
-        foreach (var segment in request.Segmentler)
+        foreach (var segment in request.Segmentler ?? [])
         {
             var segmentRoomIds = segment.OdaAtamalari
                 .Select(x => x.OdaId)
@@ -2322,12 +2322,12 @@ public class RezervasyonService : IRezervasyonService
             ToplamBazUcret = request.ToplamBazUcret > 0 ? request.ToplamBazUcret : request.ToplamUcret,
             ToplamUcret = request.ToplamUcret,
             ParaBirimi = string.IsNullOrWhiteSpace(request.ParaBirimi) ? "TRY" : request.ParaBirimi.Trim().ToUpperInvariant(),
-            UygulananIndirimlerJson = SerializeAppliedDiscounts(request.UygulananIndirimler),
+            UygulananIndirimlerJson = SerializeAppliedDiscounts(request.UygulananIndirimler ?? []),
             RezervasyonDurumu = RezervasyonDurumlari.Taslak,
             AktifMi = true
         };
 
-        var orderedSegments = request.Segmentler
+        var orderedSegments = (request.Segmentler ?? [])
             .OrderBy(x => x.BaslangicTarihi)
             .ThenBy(x => x.BitisTarihi)
             .ToList();

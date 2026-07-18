@@ -190,7 +190,7 @@ public class KampBasvuruService : IKampBasvuruService
 
         if (kampDonemi.AyniAileIcinTekBasvuruMu)
         {
-            var tercihDonemleri = request.Tercihler
+            var tercihDonemleri = (request.Tercihler ?? [])
                 .Select(x => x.KampDonemiId)
                 .Where(x => x > 0)
                 .Distinct()
@@ -218,7 +218,7 @@ public class KampBasvuruService : IKampBasvuruService
             HizmetYiliSnapshot = Math.Max(request.HizmetYili, 0),
             EvcilHayvanGetirecekMi = request.EvcilHayvanGetirecekMi,
             Durum = KampBasvuruDurumlari.Beklemede,
-            KatilimciSayisi = request.Katilimcilar.Count,
+            KatilimciSayisi = (request.Katilimcilar ?? []).Count,
             OncelikSirasi = onizleme.OncelikSirasi,
             Puan = onizleme.Puan,
             GunlukToplamTutar = onizleme.GunlukToplamTutar,
@@ -229,7 +229,7 @@ public class KampBasvuruService : IKampBasvuruService
             BuzdolabiTalepEdildiMi = request.BuzdolabiTalepEdildiMi,
             TelevizyonTalepEdildiMi = request.TelevizyonTalepEdildiMi,
             KlimaTalepEdildiMi = request.KlimaTalepEdildiMi,
-            Tercihler = request.Tercihler.Select(x => new KampBasvuruTercih
+            Tercihler = (request.Tercihler ?? []).Select(x => new KampBasvuruTercih
             {
                 TercihSirasi = x.TercihSirasi,
                 KampDonemiId = x.KampDonemiId,
@@ -238,7 +238,7 @@ public class KampBasvuruService : IKampBasvuruService
                     ? request.KonaklamaBirimiTipi
                     : x.KonaklamaBirimiTipi.Trim()
             }).ToList(),
-            Katilimcilar = request.Katilimcilar.Select(x => new KampBasvuruKatilimci
+            Katilimcilar = (request.Katilimcilar ?? []).Select(x => new KampBasvuruKatilimci
             {
                 AdSoyad = x.AdSoyad.Trim(),
                 TcKimlikNo = NormalizeNullable(x.TcKimlikNo),

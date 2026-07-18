@@ -7,9 +7,11 @@ using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Mapping;
 using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariHareketler.Services;
+using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariKartlar.Mapping;
 using STYS.Muhasebe.CariKartlar.Repositories;
+using STYS.Muhasebe.CariKartlar.Services;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
@@ -883,6 +885,88 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         Assert.Equal(MuhasebeFisDurumlari.Onayli, (await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == fis.Id)).Durum);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 17 — Hizli cari kart olusturma uc noktasinin yetki kapsami:
+    // CariKartYonetimi.Manage sahipleri de kullanabilir, ama genel CariKart
+    // View/Manage uc noktalariyla karistirilmamali.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public void Senaryo17_CariKartHizliOlustur_YetkiKapsami_ManageVeQuickCreateKabulEder()
+    {
+        var endpoint = typeof(STYS.Rezervasyonlar.Controllers.RezervasyonController)
+            .GetMethod(nameof(STYS.Rezervasyonlar.Controllers.RezervasyonController.CariKartHizliOlustur));
+        var permissionCodes = GetPermissionCodes(endpoint!);
+
+        Assert.Contains(StructurePermissions.CariKartYonetimi.QuickCreate, permissionCodes);
+        Assert.Contains(StructurePermissions.CariKartYonetimi.Manage, permissionCodes);
+
+        // Genel cari kart listeleme/olusturma uc noktalari QuickCreate'i kabul etmemeli —
+        // Resepsiyonist'e (yalnizca QuickCreate sahibi) genel CariKart ekranina erisim acilmamali.
+        var listEndpoint = typeof(STYS.Muhasebe.CariKartlar.Controllers.CariKartlarController)
+            .GetMethod(nameof(STYS.Muhasebe.CariKartlar.Controllers.CariKartlarController.GetList));
+        var listPermissionCodes = GetPermissionCodes(listEndpoint!);
+        Assert.DoesNotContain(StructurePermissions.CariKartYonetimi.QuickCreate, listPermissionCodes);
+
+        var createEndpoint = typeof(STYS.Muhasebe.CariKartlar.Controllers.CariKartlarController)
+            .GetMethod(nameof(STYS.Muhasebe.CariKartlar.Controllers.CariKartlarController.Create));
+        var createPermissionCodes = GetPermissionCodes(createEndpoint!);
+        Assert.DoesNotContain(StructurePermissions.CariKartYonetimi.QuickCreate, createPermissionCodes);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 18 — Hizli cari kart olusturma, minimum alanlarla gecerli bir
+    // Musteri tipinde cari kart uretir (RezervasyonController.CariKartHizliOlustur
+    // ile ayni DTO sekli).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo18_CariKartHizliOlustur_MinimumAlanlarlaMusteriCariKartUretir()
+    {
+        await using var dbContext = CreateDbContext();
+        var cariKartService = CreateCariKartService(dbContext);
+
+        var dto = new CariKartDto
+        {
+            TesisId = TesisCariId,
+            CariTipi = CariKartTipleri.Musteri,
+            UnvanAdSoyad = "Senaryo18 Hizli Misafir",
+            VergiNoTckn = "11111111111",
+            Telefon = "555-0018",
+            AktifMi = true,
+            EFaturaMukellefiMi = false,
+            EArsivKapsamindaMi = false
+        };
+
+        var result = await cariKartService.AddAsync(dto);
+
+        Assert.True(result.Id > 0);
+        Assert.Equal(CariKartTipleri.Musteri, result.CariTipi);
+        Assert.Equal("Senaryo18 Hizli Misafir", result.UnvanAdSoyad);
+        Assert.Equal(TesisCariId, result.TesisId);
+        Assert.True(result.AktifMi);
+        Assert.NotNull(result.MuhasebeHesapPlaniId);
+        Assert.False(result.EFaturaMukellefiMi);
+        Assert.False(result.EArsivKapsamindaMi);
+        Assert.Empty(result.BankaHesaplari);
+        Assert.Empty(result.YetkiliKisiler);
+
+        await using var verifyContext = CreateDbContext();
+        var kayitli = await verifyContext.CariKartlar.SingleAsync(x => x.Id == result.Id);
+        Assert.Equal("Senaryo18 Hizli Misafir", kayitli.UnvanAdSoyad);
+
+        // CleanupAsync, TesisId'ye gore CariKartlar'i temizler ama bu test AddAsync'in ana hesap
+        // altinda urettigi GERCEK (uniqueSuffix ile ilgisiz, ana hesap plani "1.12.120" hiyerarsisi
+        // altindaki) detay hesabi kapsamaz — burada elle temizlenir.
+        var detayHesapId = result.MuhasebeHesapPlaniId;
+        await verifyContext.CariKartlar.Where(x => x.Id == result.Id).ExecuteDeleteAsync();
+        if (detayHesapId.HasValue)
+        {
+            await verifyContext.MuhasebeHesapPlanlari.Where(x => x.Id == detayHesapId.Value).ExecuteDeleteAsync();
+            await verifyContext.Set<MuhasebeHesapKoduSayac>()
+                .Where(x => x.TesisId == TesisCariId && x.AnaHesapKodu == MuhasebeAnaHesapKodlari.CariMusteri)
+                .ExecuteDeleteAsync();
+        }
+    }
+
     private static List<string> GetPermissionCodes(System.Reflection.MethodInfo endpoint)
     {
         var attributeData = endpoint.GetCustomAttributesData()
@@ -1107,6 +1191,18 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     private static ITahsilatOdemeBelgesiMuhasebeFisService CreateTahsilatOdemeBelgesiMuhasebeFisService(StysAppDbContext dbContext)
     {
         return new TahsilatOdemeBelgesiMuhasebeFisService(dbContext, CreateMapper(), CreateMuhasebeDonemService(dbContext));
+    }
+
+    private static ICariKartService CreateCariKartService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var repository = new CariKartRepository(dbContext, mapper);
+        return new CariKartService(
+            repository,
+            dbContext,
+            new FakeUserAccessScopeService(),
+            new MuhasebeDetayHesapService(dbContext),
+            mapper);
     }
 
     private static ICariHareketKapamaService CreateCariHareketKapamaService(StysAppDbContext dbContext)

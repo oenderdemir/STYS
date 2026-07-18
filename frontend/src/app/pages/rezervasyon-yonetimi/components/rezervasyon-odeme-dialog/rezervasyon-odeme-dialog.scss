@@ -130,3 +130,13 @@
     opacity: 0.55;
     text-decoration: line-through;
 }
+
+.rez-odeme-fis-link {
+    color: var(--text-color-secondary);
+    display: inline-flex;
+    align-items: center;
+
+    &:hover {
+        color: var(--primary-color);
+    }
+}

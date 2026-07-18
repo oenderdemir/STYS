@@ -544,6 +544,9 @@ export interface RezervasyonOdemeDto {
     kasaBankaHesapAdi: string | null;
     tahsilatOdemeBelgesiId: number | null;
     tahsilatOdemeBelgesiNo: string | null;
+    muhasebeFisId: number | null;
+    muhasebeFisDurumu: string | null;
+    muhasebeFisNo: string | null;
 }
 
 export interface RezervasyonOdemeOzetDto {
@@ -604,6 +607,15 @@ export interface RezervasyonOdemeKaydetRequestDto {
 
 export interface RezervasyonOdemeIptalRequestDto {
     aciklama: string | null;
+}
+
+/** Genel CreateCariKartRequest'in tersine, sadece rezervasyon odeme ekranindaki hizli cari kart
+ * olusturma uc noktasinin kabul ettigi sinirli alanlar. */
+export interface RezervasyonCariKartHizliOlusturRequestDto {
+    tesisId: number;
+    unvanAdSoyad: string;
+    vergiNoTckn: string | null;
+    telefon: string | null;
 }
 
 export interface RezervasyonKasaBankaHesapSecenekDto {

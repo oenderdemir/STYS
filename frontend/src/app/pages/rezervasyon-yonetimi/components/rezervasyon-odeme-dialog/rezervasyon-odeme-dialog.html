@@ -432,13 +432,22 @@
                             <td>{{ formatCurrency(odeme.odemeTutari, odeme.paraBirimi) }}</td>
                             <td>{{ odeme.aciklama || '-' }}</td>
                             <td>
-                                @if (odeme.durum === 'Iptal') {
-                                    <p-tag severity="danger" value="Iptal" />
-                                } @else if (odeme.tahsilatOdemeBelgesiNo) {
-                                    <p-tag severity="success" [value]="odeme.tahsilatOdemeBelgesiNo" [pTooltip]="'Muhasebeye islendi'" />
-                                } @else {
-                                    <p-tag severity="warn" value="Islenmedi" />
-                                }
+                                <div class="flex align-items-center gap-2">
+                                    @if (odeme.durum === 'Iptal') {
+                                        <p-tag severity="danger" value="Iptal" />
+                                    } @else {
+                                        <p-tag [severity]="getMuhasebeFisEtiketSeverity(odeme)" [value]="getMuhasebeFisEtiket(odeme)" />
+                                    }
+                                    @if (odeme.muhasebeFisId && canViewMuhasebeFisi()) {
+                                        <a
+                                            [routerLink]="getMuhasebeFisRoute()"
+                                            [queryParams]="getMuhasebeFisQueryParams(odeme)"
+                                            pTooltip="Fise git"
+                                            class="rez-odeme-fis-link">
+                                            <i class="pi pi-external-link"></i>
+                                        </a>
+                                    }
+                                </div>
                             </td>
                             <td>
                                 @if (isOdemeIptalEdilebilir(odeme)) {
@@ -451,6 +460,14 @@
                                         [disabled]="!!iptalEdilenOdemeId"
                                         [pTooltip]="'Odemeyi iptal et'"
                                         (onClick)="iptalEtOdeme(odeme)" />
+                                } @else if (odemeIptalDisabledAciklama(odeme)) {
+                                    <p-button
+                                        icon="pi pi-times"
+                                        size="small"
+                                        severity="danger"
+                                        [text]="true"
+                                        [disabled]="true"
+                                        [pTooltip]="odemeIptalDisabledAciklama(odeme) ?? ''" />
                                 }
                             </td>
                         </tr>

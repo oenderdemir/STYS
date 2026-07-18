@@ -1,12 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Licensing;
+using STYS.Muhasebe.CariKartlar.Dtos;
+using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.CariKartlar.Services;
 using STYS.Rezervasyonlar.Reporting;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
 using TOD.Platform.Licensing.AspNetCore;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Controllers;
 
@@ -16,15 +20,18 @@ public class RezervasyonController : UIController
     private readonly IRezervasyonService _rezervasyonService;
     private readonly IRezervasyonSatisBelgesiService _rezervasyonSatisBelgesiService;
     private readonly IRezervasyonGelirTahakkukService _rezervasyonGelirTahakkukService;
+    private readonly ICariKartService _cariKartService;
 
     public RezervasyonController(
         IRezervasyonService rezervasyonService,
         IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService,
-        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService)
+        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService,
+        ICariKartService cariKartService)
     {
         _rezervasyonService = rezervasyonService;
         _rezervasyonSatisBelgesiService = rezervasyonSatisBelgesiService;
         _rezervasyonGelirTahakkukService = rezervasyonGelirTahakkukService;
+        _cariKartService = cariKartService;
     }
 
     [HttpGet("tesisler")]
@@ -335,6 +342,42 @@ public class RezervasyonController : UIController
         CancellationToken cancellationToken)
     {
         var result = await _rezervasyonService.GetCariKartSecenekleriAsync(rezervasyonId, arama, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>Rezervasyon odeme ekranindan, genel cari kart yonetimi ekranina erisim gerektirmeden
+    /// Musteri tipinde, sinirli alanlarla hizli cari kart olusturur. CariKartYonetimi.Manage
+    /// sahipleri de (Muhasebe/Yonetici) bu uc noktayi kullanabilir; ayrica genel CariKartYonetimi.View/
+    /// Manage gerektiren cari kart ekranlarina erisim vermez.</summary>
+    [HttpPost("cari-kart-hizli-olustur")]
+    [Permission(StructurePermissions.CariKartYonetimi.Manage, StructurePermissions.CariKartYonetimi.QuickCreate)]
+    public async Task<ActionResult<CariKartDto>> CariKartHizliOlustur(
+        [FromBody] RezervasyonCariKartHizliOlusturRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (request.TesisId <= 0)
+        {
+            throw new BaseException("Tesis secimi zorunludur.", 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.UnvanAdSoyad))
+        {
+            throw new BaseException("Ad Soyad zorunludur.", 400);
+        }
+
+        var dto = new CariKartDto
+        {
+            TesisId = request.TesisId,
+            CariTipi = CariKartTipleri.Musteri,
+            UnvanAdSoyad = request.UnvanAdSoyad.Trim(),
+            VergiNoTckn = string.IsNullOrWhiteSpace(request.VergiNoTckn) ? null : request.VergiNoTckn.Trim(),
+            Telefon = string.IsNullOrWhiteSpace(request.Telefon) ? null : request.Telefon.Trim(),
+            AktifMi = true,
+            EFaturaMukellefiMi = false,
+            EArsivKapsamindaMi = false
+        };
+
+        var result = await _cariKartService.AddAsync(dto);
         return Ok(result);
     }
 

@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
+import { CariKartModel } from '../muhasebe/cari-kartlar/cari-kartlar.dto';
 import {
     KonaklamaSenaryoAramaRequestDto,
     KonaklamaSenaryoDto,
@@ -35,6 +36,7 @@ import {
     RezervasyonOdaTipiDto,
     RezervasyonAramaRequestDto,
     RezervasyonAramaSonucDto,
+    RezervasyonCariKartHizliOlusturRequestDto,
     RezervasyonTesisDto,
     SenaryoFiyatHesaplaRequestDto,
     SenaryoFiyatHesaplamaSonucuDto,
@@ -499,6 +501,20 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Odeme iptal edilemedi.');
+            })
+        );
+    }
+
+    /** Genel CariKartlarService.create()'ten farkli olarak, sadece rezervasyon odeme ekranindaki
+     * hizli cari kart olusturma uc noktasini (CariKartYonetimi.QuickCreate yeterli) kullanir. */
+    cariKartHizliOlustur(request: RezervasyonCariKartHizliOlusturRequestDto): Observable<CariKartModel> {
+        return this.http.post<ApiResponse<CariKartModel>>(`${this.apiBaseUrl}/ui/rezervasyon/cari-kart-hizli-olustur`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Cari kart olusturulamadi.');
             })
         );
     }

@@ -27,5 +27,11 @@ public class RezervasyonOdemeDto
     public int? TahsilatOdemeBelgesiId { get; set; }
 
     public string? TahsilatOdemeBelgesiNo { get; set; }
+
+    public int? MuhasebeFisId { get; set; }
+
+    public string? MuhasebeFisDurumu { get; set; }
+
+    public string? MuhasebeFisNo { get; set; }
 }
 

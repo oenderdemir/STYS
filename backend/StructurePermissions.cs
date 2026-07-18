@@ -365,6 +365,11 @@ public static class StructurePermissions
         public const string Menu = "CariKartYonetimi.Menu";
         public const string View = "CariKartYonetimi.View";
         public const string Manage = "CariKartYonetimi.Manage";
+
+        /// <summary>Genel cari kart yonetimi ekranina erisim vermez; sadece rezervasyon odeme
+        /// ekranindan sinirli alanlarla (Musteri tipinde) hizli cari kart olusturma icin
+        /// kullanilir (bkz. RezervasyonController.CariKartHizliOlustur).</summary>
+        public const string QuickCreate = "CariKartYonetimi.QuickCreate";
     }
 
     public static class CariHareketYonetimi

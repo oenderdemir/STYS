@@ -3071,7 +3071,14 @@ public class RezervasyonService : IRezervasyonService
                 KasaBankaHesapId = x.KasaBankaHesapId,
                 KasaBankaHesapAdi = x.KasaBankaHesap != null ? x.KasaBankaHesap.Ad : null,
                 TahsilatOdemeBelgesiId = x.TahsilatOdemeBelgesiId,
-                TahsilatOdemeBelgesiNo = x.TahsilatOdemeBelgesi != null ? x.TahsilatOdemeBelgesi.BelgeNo : null
+                TahsilatOdemeBelgesiNo = x.TahsilatOdemeBelgesi != null ? x.TahsilatOdemeBelgesi.BelgeNo : null,
+                MuhasebeFisId = x.TahsilatOdemeBelgesi != null ? x.TahsilatOdemeBelgesi.MuhasebeFisId : null,
+                MuhasebeFisDurumu = x.TahsilatOdemeBelgesi != null && x.TahsilatOdemeBelgesi.MuhasebeFis != null
+                    ? x.TahsilatOdemeBelgesi.MuhasebeFis.Durum
+                    : null,
+                MuhasebeFisNo = x.TahsilatOdemeBelgesi != null && x.TahsilatOdemeBelgesi.MuhasebeFis != null
+                    ? x.TahsilatOdemeBelgesi.MuhasebeFis.FisNo
+                    : null
             })
             .ToListAsync(cancellationToken);
 

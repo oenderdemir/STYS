@@ -27,10 +27,10 @@ import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../../core/api';
 import { UiSeverity } from '../../../../core/ui/ui-severity.constants';
+import { AuthService } from '../../../auth';
 import { EkHizmetPaketCakismaPolitikalari } from '../../../tesis-yonetimi/ek-hizmet-paket-cakisma-politikasi.constants';
-import { CARI_TIPLERI, CreateCariKartRequest } from '../../../muhasebe/cari-kartlar/cari-kartlar.dto';
-import { CariKartlarService } from '../../../muhasebe/cari-kartlar/cari-kartlar.service';
 import {
+    RezervasyonCariKartHizliOlusturRequestDto,
     RezervasyonCariKartSecenekDto,
     RezervasyonEkHizmetDto,
     RezervasyonEkHizmetMisafirSecenekDto,
@@ -79,10 +79,10 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     @Output() saved = new EventEmitter<RezervasyonOdemeOzetDto>();
 
     private readonly service = inject(RezervasyonYonetimiService);
-    private readonly cariKartlarService = inject(CariKartlarService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private readonly authService = inject(AuthService);
 
     loading = false;
     saving = false;
@@ -687,23 +687,21 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             return;
         }
 
-        const request: CreateCariKartRequest = {
+        if (!this.tesisId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Tesis bilgisi bulunamadi.' });
+            return;
+        }
+
+        const request: RezervasyonCariKartHizliOlusturRequestDto = {
             tesisId: this.tesisId,
-            cariTipi: CARI_TIPLERI.Musteri,
-            cariKodu: null,
             unvanAdSoyad: this.yeniCariKartModel.unvanAdSoyad.trim(),
             vergiNoTckn: this.normalizeOptional(this.yeniCariKartModel.vergiNoTckn),
-            telefon: this.normalizeOptional(this.yeniCariKartModel.telefon),
-            aktifMi: true,
-            eFaturaMukellefiMi: false,
-            eArsivKapsamindaMi: false,
-            bankaHesaplari: [],
-            yetkiliKisiler: []
+            telefon: this.normalizeOptional(this.yeniCariKartModel.telefon)
         };
 
         this.yeniCariKartKaydediliyor = true;
-        this.cariKartlarService
-            .create(request)
+        this.service
+            .cariKartHizliOlustur(request)
             .pipe(finalize(() => {
                 this.yeniCariKartKaydediliyor = false;
                 this.cdr.markForCheck();
@@ -761,7 +759,80 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     }
 
     isOdemeIptalEdilebilir(odeme: RezervasyonOdemeDto): boolean {
-        return odeme.durum !== this.odemeDurumuIptal && this.rezervasyonDurumu !== this.durumIptal;
+        if (odeme.durum === this.odemeDurumuIptal || this.rezervasyonDurumu === this.durumIptal) {
+            return false;
+        }
+
+        // Taslak/Onayli muhasebe fisi varsa iptal backend'de zaten engellenir (409); burada
+        // sadece ayni kurali frontend'de de yansitip kullaniciya onceden aciklayici bir durum
+        // sunuyoruz — asil koruma backend'de kalir.
+        return odeme.muhasebeFisDurumu !== 'Taslak' && odeme.muhasebeFisDurumu !== 'Onayli';
+    }
+
+    odemeIptalDisabledAciklama(odeme: RezervasyonOdemeDto): string | null {
+        if (odeme.muhasebeFisDurumu === 'Taslak' || odeme.muhasebeFisDurumu === 'Onayli') {
+            return 'Bu odeme icin muhasebe fisi olusturulmus. Once muhasebe fisi muhasebe ekranindan iptal edilmelidir.';
+        }
+
+        return null;
+    }
+
+    getMuhasebeFisEtiket(odeme: RezervasyonOdemeDto): string {
+        if (!odeme.muhasebeFisId) {
+            return 'Islenmedi';
+        }
+
+        const durumEtiketi = this.getMuhasebeFisDurumEtiket(odeme.muhasebeFisDurumu);
+        return odeme.muhasebeFisNo ? `Fis #${odeme.muhasebeFisNo} - ${durumEtiketi}` : `Fis - ${durumEtiketi}`;
+    }
+
+    getMuhasebeFisEtiketSeverity(odeme: RezervasyonOdemeDto): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        if (!odeme.muhasebeFisId) {
+            return 'warn';
+        }
+
+        switch (odeme.muhasebeFisDurumu) {
+            case 'Onayli':
+                return 'success';
+            case 'Taslak':
+                return 'warn';
+            case 'Iptal':
+                return 'danger';
+            case 'TersKayit':
+                return 'info';
+            default:
+                return 'secondary';
+        }
+    }
+
+    private getMuhasebeFisDurumEtiket(durum: string | null): string {
+        switch (durum) {
+            case 'Taslak':
+                return 'Taslak';
+            case 'Onayli':
+                return 'Onayli';
+            case 'Iptal':
+                return 'Iptal';
+            case 'TersKayit':
+                return 'Ters Kayit';
+            default:
+                return durum ?? '-';
+        }
+    }
+
+    /** Kullanicinin muhasebe fisi ekranini goruntuleme yetkisi varsa "Fise Git" linki gosterilir;
+     * link salt navigasyondur, herhangi bir fis aksiyonu (onay/iptal) sunmaz. Gorunurluk sadece
+     * UX icindir — hedef route zaten kendi backend permission'iyla korunur. */
+    canViewMuhasebeFisi(): boolean {
+        return this.authService.hasPermission('MuhasebeFisYonetimi.View');
+    }
+
+    getMuhasebeFisRoute(): string[] {
+        return ['/muhasebe/fisler'];
+    }
+
+    getMuhasebeFisQueryParams(odeme: RezervasyonOdemeDto): { id: number; fisNo: string | null } | null {
+        return odeme.muhasebeFisId ? { id: odeme.muhasebeFisId, fisNo: odeme.muhasebeFisNo } : null;
     }
 
     /** Check-out sonrasi otomatik best-effort taslak basarisiz olduysa (veya yeniden denemek

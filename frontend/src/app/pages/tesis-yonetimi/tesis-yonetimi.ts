@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -26,6 +26,7 @@ import { TesisYonetimiService } from './tesis-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, TesisDialog],
     templateUrl: './tesis-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class TesisYonetimi implements OnDestroy {

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -26,6 +26,7 @@ import { RestoranYonetimiService } from './restoran-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './restoran-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RestoranYonetimi implements OnInit {
@@ -141,15 +142,15 @@ export class RestoranYonetimi implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateRestoranRequest)
-            : this.service.create(payload as CreateRestoranRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateRestoranRequest) : this.service.create(payload as CreateRestoranRequest);
 
         request$
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
@@ -248,10 +249,12 @@ export class RestoranYonetimi implements OnInit {
             yoneticiAdaylari: this.canManage && this.canAssignRestoranYonetici ? this.service.getYoneticiAdaylari() : of([]),
             garsonAdaylari: this.canManage && this.canAssignRestoranGarsonu ? this.service.getGarsonAdaylari() : of([])
         })
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ tesisler, restoranlar, yoneticiAdaylari, garsonAdaylari }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
@@ -267,11 +270,14 @@ export class RestoranYonetimi implements OnInit {
 
     private loadRestoranlar(): void {
         this.loading = true;
-        this.service.getAll(this.selectedTesisId)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getAll(this.selectedTesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.restoranlar = items;

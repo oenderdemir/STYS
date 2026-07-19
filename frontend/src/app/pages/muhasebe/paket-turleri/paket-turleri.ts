@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -24,6 +24,7 @@ import { PaketTurleriService } from './paket-turleri.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, MuhasebeTesisContextBarComponent, TableModule, ToastModule, ToolbarModule],
     templateUrl: './paket-turleri.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class PaketTurleriPage implements OnInit {
@@ -58,22 +59,27 @@ export class PaketTurleriPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -101,9 +107,7 @@ export class PaketTurleriPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload) : this.service.create(payload);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {

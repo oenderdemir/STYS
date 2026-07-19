@@ -1,12 +1,7 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { parseApiDate, toLocalDateString } from '../../../core/utils/date-time.util';
-import {
-    FormBuilder,
-    FormGroup,
-    ReactiveFormsModule,
-    Validators
-} from '@angular/forms';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -58,6 +53,7 @@ import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './kdv-istisna-tanimlari.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrls: ['./kdv-istisna-tanimlari.component.scss']
 })
 export class KdvIstisnaTanimlariComponent implements OnInit {
@@ -93,10 +89,7 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
         { label: 'Hayır', value: false }
     ];
 
-    readonly FILTER_UYGULAMA_TIPI_SECENEKLERI: Array<{ label: string; value: KdvUygulamaTipi | null }> = [
-        { label: 'Tümü', value: null },
-        ...ISTISNA_SECENEKLERI
-    ];
+    readonly FILTER_UYGULAMA_TIPI_SECENEKLERI: Array<{ label: string; value: KdvUygulamaTipi | null }> = [{ label: 'Tümü', value: null }, ...ISTISNA_SECENEKLERI];
 
     ngOnInit(): void {
         this.tesisContext.initialize().subscribe({ error: () => void 0 });
@@ -235,12 +228,8 @@ export class KdvIstisnaTanimlariComponent implements OnInit {
 
         const formValue = this.editForm.value;
 
-        const baslangicDate: Date | null = formValue.gecerlilikBaslangicTarihi instanceof Date
-            ? formValue.gecerlilikBaslangicTarihi
-            : null;
-        const bitisDate: Date | null = formValue.gecerlilikBitisTarihi instanceof Date
-            ? formValue.gecerlilikBitisTarihi
-            : null;
+        const baslangicDate: Date | null = formValue.gecerlilikBaslangicTarihi instanceof Date ? formValue.gecerlilikBaslangicTarihi : null;
+        const bitisDate: Date | null = formValue.gecerlilikBitisTarihi instanceof Date ? formValue.gecerlilikBitisTarihi : null;
 
         if (baslangicDate && bitisDate && bitisDate.getTime() <= baslangicDate.getTime()) {
             this.messageService.add({

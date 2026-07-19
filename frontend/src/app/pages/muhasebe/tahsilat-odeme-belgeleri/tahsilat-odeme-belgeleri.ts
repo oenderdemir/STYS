@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -27,8 +27,25 @@ import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.servic
 @Component({
     selector: 'app-tahsilat-odeme-belgeleri-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        ConfirmDialogModule,
+        DialogModule,
+        SelectModule,
+        InputNumberModule,
+        InputTextModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     templateUrl: './tahsilat-odeme-belgeleri.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [ConfirmationService, MessageService]
 })
 export class TahsilatOdemeBelgeleriPage implements OnInit {
@@ -104,22 +121,27 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     loadOzet(): void {
@@ -181,9 +203,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateTahsilatOdemeBelgesiRequest)
-            : this.service.create(payload as CreateTahsilatOdemeBelgesiRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateTahsilatOdemeBelgesiRequest) : this.service.create(payload as CreateTahsilatOdemeBelgesiRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -204,9 +224,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
 
         this.cariKartService.getAll().subscribe({
             next: (items) => {
-                this.cariKartlar = items
-                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
-                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+                this.cariKartlar = items.filter((x) => !x.tesisId || x.tesisId === tesisId).map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
                 this.cdr.detectChanges();
             }
         });
@@ -347,4 +365,3 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }
-

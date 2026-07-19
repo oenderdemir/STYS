@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -26,6 +26,7 @@ import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './muhasebe-hesap-plani.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class MuhasebeHesapPlaniPage implements OnInit {
@@ -51,19 +52,24 @@ export class MuhasebeHesapPlaniPage implements OnInit {
 
     load(): void {
         this.loading = true;
-        this.service.getTreeRoots().pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (items) => {
-                this.treeRecords = items.map((item) => this.mapToNode(item));
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getTreeRoots()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (items) => {
+                    this.treeRecords = items.map((item) => this.mapToNode(item));
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     onNodeExpand(event: { node: TreeNode<MuhasebeHesapPlaniModel> }): void {
@@ -119,9 +125,7 @@ export class MuhasebeHesapPlaniPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateMuhasebeHesapPlaniRequest)
-            : this.service.create(payload as CreateMuhasebeHesapPlaniRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateMuhasebeHesapPlaniRequest) : this.service.create(payload as CreateMuhasebeHesapPlaniRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {

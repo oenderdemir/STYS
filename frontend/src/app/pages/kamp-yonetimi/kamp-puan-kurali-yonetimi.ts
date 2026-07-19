@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -22,6 +22,7 @@ import { AuthService } from '../auth';
     imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kamp-puan-kurali-yonetimi.html',
     styleUrl: './kamp-puan-kurali-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KampPuanKuraliYonetimiPage implements OnInit {
@@ -48,17 +49,17 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     get filteredProgramParametreAyarlari(): KampProgramiParametreAyariDto[] {
         if (!this.selectedProgramId) return [];
-        return this.programParametreAyarlari.filter(x => x.kampProgramiId === this.selectedProgramId);
+        return this.programParametreAyarlari.filter((x) => x.kampProgramiId === this.selectedProgramId);
     }
 
     get filteredKuralSetleri(): KampPuanKuralSetiDto[] {
         if (!this.selectedProgramId) return [];
-        return this.kuralSetleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+        return this.kuralSetleri.filter((x) => x.kampProgramiId === this.selectedProgramId);
     }
 
     get filteredBasvuruSahibiTipleri(): KampPuanBasvuruSahibiTipiDto[] {
         if (!this.selectedProgramId) return [];
-        return this.basvuruSahibiTipleri.filter(x => x.kampProgramiId === this.selectedProgramId).sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
+        return this.basvuruSahibiTipleri.filter((x) => x.kampProgramiId === this.selectedProgramId).sort((a, b) => a.oncelikSirasi - b.oncelikSirasi);
     }
 
     get globalBasvuruSahibiTipiOptions(): Array<{ id: number; label: string }> {
@@ -84,10 +85,12 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         this.loading = true;
         this.service
             .getKampPuanKuraliYonetimBaglam()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
@@ -126,7 +129,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     addProgramParametreAyari(): void {
         if (!this.selectedProgramId) return;
         // Check if parametre already exists for this program
-        if (this.programParametreAyarlari.some(x => x.kampProgramiId === this.selectedProgramId)) {
+        if (this.programParametreAyarlari.some((x) => x.kampProgramiId === this.selectedProgramId)) {
             this.messageService.add({ severity: 'warning', summary: 'Uyarı', detail: 'Bu program için zaten bir parametre bulunmaktadır.' });
             return;
         }
@@ -146,7 +149,7 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
 
     addBasvuruSahibiTipi(): void {
         if (!this.selectedProgramId) return;
-        const programTipleri = this.basvuruSahibiTipleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+        const programTipleri = this.basvuruSahibiTipleri.filter((x) => x.kampProgramiId === this.selectedProgramId);
         const maxOncelik = programTipleri.length > 0 ? Math.max(...programTipleri.map((x) => x.oncelikSirasi)) : 0;
         const defaultTip = this.globalBasvuruSahibiTipleri[0];
         this.basvuruSahibiTipleri = [
@@ -166,7 +169,6 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
         ];
     }
 
-
     removeKuralSeti(index: number): void {
         this.kuralSetleri = this.kuralSetleri.filter((_, i) => i !== index);
     }
@@ -176,11 +178,11 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     removeProgramParametreAyariByItem(item: KampProgramiParametreAyariDto): void {
-        this.programParametreAyarlari = this.programParametreAyarlari.filter(x => x.kampProgramiId !== item.kampProgramiId || x.kamuAvansKisiBasi !== item.kamuAvansKisiBasi);
+        this.programParametreAyarlari = this.programParametreAyarlari.filter((x) => x.kampProgramiId !== item.kampProgramiId || x.kamuAvansKisiBasi !== item.kamuAvansKisiBasi);
     }
 
     removeKuralSetiByItem(item: KampPuanKuralSetiDto): void {
-        this.kuralSetleri = this.kuralSetleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.id === item.id));
+        this.kuralSetleri = this.kuralSetleri.filter((x) => !(x.kampProgramiId === item.kampProgramiId && x.id === item.id));
     }
 
     removeBasvuruSahibiTipi(index: number): void {
@@ -188,9 +190,8 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
     }
 
     removeBasvuruSahibiTipiByItem(item: KampPuanBasvuruSahibiTipiDto): void {
-        this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter(x => !(x.kampProgramiId === item.kampProgramiId && x.kampBasvuruSahibiTipiId === item.kampBasvuruSahibiTipiId));
+        this.basvuruSahibiTipleri = this.basvuruSahibiTipleri.filter((x) => !(x.kampProgramiId === item.kampProgramiId && x.kampBasvuruSahibiTipiId === item.kampBasvuruSahibiTipiId));
     }
-
 
     save(): void {
         if (this.saving || !this.canManage) {
@@ -205,10 +206,12 @@ export class KampPuanKuraliYonetimiPage implements OnInit {
                 programParametreAyarlari: this.programParametreAyarlari,
                 yasUcretKurali: this.yasUcretKurali
             })
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));

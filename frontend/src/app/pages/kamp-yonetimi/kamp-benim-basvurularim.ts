@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -14,6 +14,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     standalone: true,
     imports: [CommonModule, ButtonModule, DialogModule, TableModule, TagModule, ToolbarModule],
     templateUrl: './kamp-benim-basvurularim.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './kamp-benim-basvurularim.scss'
 })
 export class KampBenimBasvurularimPage implements OnInit {
@@ -57,11 +58,14 @@ export class KampBenimBasvurularimPage implements OnInit {
         this.loading = true;
         this.hataMesaji = null;
 
-        this.service.getBenimKampBasvurularim()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getBenimKampBasvurularim()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.kayitlar = items;

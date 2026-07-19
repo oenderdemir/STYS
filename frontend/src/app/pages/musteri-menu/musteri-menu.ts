@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -18,6 +18,7 @@ import { MusteriMenuService } from './musteri-menu.service';
     standalone: true,
     imports: [CommonModule, FormsModule, CardModule, DialogModule, ButtonModule, InputTextModule, ChipModule, TagModule, SkeletonModule, DividerModule],
     templateUrl: './musteri-menu.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './musteri-menu.scss'
 })
 export class MusteriMenuPage implements OnInit {
@@ -95,26 +96,24 @@ export class MusteriMenuPage implements OnInit {
     private load(restoranId: number): void {
         this.loading = true;
         this.errorMessage = null;
-        this.service
-            .getByRestoranId(restoranId)
-            .subscribe({
-                next: (data) => {
-                    setTimeout(() => {
-                        this.seciliKategoriId = data.kategoriler[0]?.id ?? null;
-                        this.menu = data;
-                        this.updateGorunenKategoriler();
-                        this.loading = false;
-                        this.cdr.detectChanges();
-                    });
-                },
-                error: (error: Error) => {
-                    setTimeout(() => {
-                        this.errorMessage = error.message;
-                        this.loading = false;
-                        this.cdr.detectChanges();
-                    });
-                }
-            });
+        this.service.getByRestoranId(restoranId).subscribe({
+            next: (data) => {
+                setTimeout(() => {
+                    this.seciliKategoriId = data.kategoriler[0]?.id ?? null;
+                    this.menu = data;
+                    this.updateGorunenKategoriler();
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                });
+            },
+            error: (error: Error) => {
+                setTimeout(() => {
+                    this.errorMessage = error.message;
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                });
+            }
+        });
     }
 
     private updateGorunenKategoriler(): void {
@@ -124,9 +123,7 @@ export class MusteriMenuPage implements OnInit {
         }
 
         const query = this.aramaMetni.trim().toLocaleLowerCase('tr-TR');
-        const base = this.seciliKategoriId
-            ? this.menu.kategoriler.filter((x) => x.id === this.seciliKategoriId)
-            : this.menu.kategoriler;
+        const base = this.seciliKategoriId ? this.menu.kategoriler.filter((x) => x.id === this.seciliKategoriId) : this.menu.kategoriler;
 
         if (!query) {
             this.gorunenKategoriler = base;

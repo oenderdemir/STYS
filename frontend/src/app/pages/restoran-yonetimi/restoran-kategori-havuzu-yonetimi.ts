@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -18,13 +18,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import {
-    CreateRestoranGlobalMenuKategoriRequest,
-    RestoranGlobalMenuKategoriModel,
-    RestoranModel,
-    SaveRestoranKategoriAtamaRequest,
-    UpdateRestoranGlobalMenuKategoriRequest
-} from './restoran-yonetimi.dto';
+import { CreateRestoranGlobalMenuKategoriRequest, RestoranGlobalMenuKategoriModel, RestoranModel, SaveRestoranKategoriAtamaRequest, UpdateRestoranGlobalMenuKategoriRequest } from './restoran-yonetimi.dto';
 import { RestoranMenuYonetimiService } from './restoran-menu-yonetimi.service';
 import { RestoranYonetimiService } from './restoran-yonetimi.service';
 
@@ -33,6 +27,7 @@ import { RestoranYonetimiService } from './restoran-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, MultiSelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './restoran-kategori-havuzu-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RestoranKategoriHavuzuYonetimi implements OnInit {
@@ -105,15 +100,18 @@ export class RestoranKategoriHavuzuYonetimi implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.kategoriDialogMode === 'edit'
-            ? this.menuService.updateGlobalKategori(this.kategoriModel.id, payload as UpdateRestoranGlobalMenuKategoriRequest)
-            : this.menuService.createGlobalKategori(payload as CreateRestoranGlobalMenuKategoriRequest);
+        const request$ =
+            this.kategoriDialogMode === 'edit'
+                ? this.menuService.updateGlobalKategori(this.kategoriModel.id, payload as UpdateRestoranGlobalMenuKategoriRequest)
+                : this.menuService.createGlobalKategori(payload as CreateRestoranGlobalMenuKategoriRequest);
 
         request$
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.kategoriDialogVisible = false;
@@ -179,11 +177,14 @@ export class RestoranKategoriHavuzuYonetimi implements OnInit {
             seciliGlobalKategoriIdleri: [...this.seciliGlobalKategoriIdleri]
         };
 
-        this.menuService.saveKategoriAtamalari(payload)
-            .pipe(finalize(() => {
-                this.atamaSaving = false;
-                this.cdr.detectChanges();
-            }))
+        this.menuService
+            .saveKategoriAtamalari(payload)
+            .pipe(
+                finalize(() => {
+                    this.atamaSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.seciliGlobalKategoriIdleri = [...baglam.seciliGlobalKategoriIdleri];
@@ -201,10 +202,12 @@ export class RestoranKategoriHavuzuYonetimi implements OnInit {
             restoranlar: this.restoranService.getAll(),
             kategoriler: this.menuService.getGlobalKategoriler()
         })
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ restoranlar, kategoriler }) => {
                     this.restoranlar = restoranlar;

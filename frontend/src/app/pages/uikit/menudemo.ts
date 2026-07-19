@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { BreadcrumbModule } from 'primeng/breadcrumb';
 import { TieredMenuModule } from 'primeng/tieredmenu';
 import { ContextMenuModule } from 'primeng/contextmenu';
@@ -37,6 +37,7 @@ import { InputIcon, InputIconModule } from 'primeng/inputicon';
         IconField,
         InputIcon
     ],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
         <div class="card">
             <div class="font-semibold text-xl mb-4">Menubar</div>

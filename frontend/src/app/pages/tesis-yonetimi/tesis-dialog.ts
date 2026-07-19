@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -17,15 +17,9 @@ import { TesisDto } from './tesis-yonetimi.dto';
     selector: 'app-tesis-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, MultiSelectModule, SelectModule, ToggleSwitchModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '40rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '95vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '40rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -39,18 +33,7 @@ import { TesisDto } from './tesis-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="ilId" class="block font-medium mb-2">Il</label>
-                    <p-select
-                        inputId="ilId"
-                        [options]="iller"
-                        optionLabel="ad"
-                        optionValue="id"
-                        [(ngModel)]="workingModel.ilId"
-                        [showClear]="true"
-                        [filter]="true"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="ilId" [options]="iller" optionLabel="ad" optionValue="id" [(ngModel)]="workingModel.ilId" [showClear]="true" [filter]="true" appendTo="body" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="telefon" class="block font-medium mb-2">Telefon</label>
@@ -157,7 +140,20 @@ import { TesisDto } from './tesis-yonetimi.dto';
 export class TesisDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null, muhasebeciUserIds: null };
+    @Input() model: TesisDto = {
+        ad: '',
+        ilId: 0,
+        telefon: '',
+        adres: '',
+        eposta: null,
+        girisSaati: '14:00',
+        cikisSaati: '10:00',
+        ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste,
+        aktifMi: true,
+        yoneticiUserIds: null,
+        resepsiyonistUserIds: null,
+        muhasebeciUserIds: null
+    };
     @Input() iller: IlDto[] = [];
     @Input() yoneticiAdaylari: ManagerCandidateDto[] = [];
     @Input() resepsiyonistAdaylari: ManagerCandidateDto[] = [];
@@ -172,33 +168,40 @@ export class TesisDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<TesisDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: TesisDto = { ad: '', ilId: 0, telefon: '', adres: '', eposta: null, girisSaati: '14:00', cikisSaati: '10:00', ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste, aktifMi: true, yoneticiUserIds: null, resepsiyonistUserIds: null, muhasebeciUserIds: null };
+    workingModel: TesisDto = {
+        ad: '',
+        ilId: 0,
+        telefon: '',
+        adres: '',
+        eposta: null,
+        girisSaati: '14:00',
+        cikisSaati: '10:00',
+        ekHizmetPaketCakismaPolitikasi: EkHizmetPaketCakismaPolitikalari.OnayIste,
+        aktifMi: true,
+        yoneticiUserIds: null,
+        resepsiyonistUserIds: null,
+        muhasebeciUserIds: null
+    };
     readonly ekHizmetPaketCakismaPolitikasiSecenekleri = EkHizmetPaketCakismaPolitikasiSecenekleri;
 
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
             value: item.id,
-            label: item.adSoyad && item.adSoyad.trim().length > 0
-                ? `${item.userName} - ${item.adSoyad}`
-                : item.userName
+            label: item.adSoyad && item.adSoyad.trim().length > 0 ? `${item.userName} - ${item.adSoyad}` : item.userName
         }));
     }
 
     get resepsiyonistSecenekleri(): Array<{ label: string; value: string }> {
         return this.resepsiyonistAdaylari.map((item) => ({
             value: item.id,
-            label: item.adSoyad && item.adSoyad.trim().length > 0
-                ? `${item.userName} - ${item.adSoyad}`
-                : item.userName
+            label: item.adSoyad && item.adSoyad.trim().length > 0 ? `${item.userName} - ${item.adSoyad}` : item.userName
         }));
     }
 
     get muhasebeciSecenekleri(): Array<{ label: string; value: string }> {
         return this.muhasebeciAdaylari.map((item) => ({
             value: item.id,
-            label: item.adSoyad && item.adSoyad.trim().length > 0
-                ? `${item.userName} - ${item.adSoyad}`
-                : item.userName
+            label: item.adSoyad && item.adSoyad.trim().length > 0 ? `${item.userName} - ${item.adSoyad}` : item.userName
         }));
     }
 
@@ -253,12 +256,14 @@ export class TesisDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return (this.workingModel.ad?.trim() ?? '').length > 0
-            && !!this.workingModel.ilId
-            && (this.workingModel.telefon?.trim() ?? '').length > 0
-            && (this.workingModel.adres?.trim() ?? '').length > 0
-            && (this.workingModel.girisSaati?.trim() ?? '').length > 0
-            && (this.workingModel.cikisSaati?.trim() ?? '').length > 0;
+        return (
+            (this.workingModel.ad?.trim() ?? '').length > 0 &&
+            !!this.workingModel.ilId &&
+            (this.workingModel.telefon?.trim() ?? '').length > 0 &&
+            (this.workingModel.adres?.trim() ?? '').length > 0 &&
+            (this.workingModel.girisSaati?.trim() ?? '').length > 0 &&
+            (this.workingModel.cikisSaati?.trim() ?? '').length > 0
+        );
     }
 
     submit(): void {
@@ -277,9 +282,9 @@ export class TesisDialog implements OnChanges {
             cikisSaati: this.normalizeSaat(this.workingModel.cikisSaati, '10:00'),
             ekHizmetPaketCakismaPolitikasi: this.workingModel.ekHizmetPaketCakismaPolitikasi || EkHizmetPaketCakismaPolitikalari.OnayIste,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.canAssignTesisYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
-            resepsiyonistUserIds: this.canAssignResepsiyonist ? this.workingModel.resepsiyonistUserIds ?? [] : null,
-            muhasebeciUserIds: this.canAssignMuhasebeci ? this.workingModel.muhasebeciUserIds ?? [] : null
+            yoneticiUserIds: this.canAssignTesisYoneticisi ? (this.workingModel.yoneticiUserIds ?? []) : null,
+            resepsiyonistUserIds: this.canAssignResepsiyonist ? (this.workingModel.resepsiyonistUserIds ?? []) : null,
+            muhasebeciUserIds: this.canAssignMuhasebeci ? (this.workingModel.muhasebeciUserIds ?? []) : null
         });
     }
 

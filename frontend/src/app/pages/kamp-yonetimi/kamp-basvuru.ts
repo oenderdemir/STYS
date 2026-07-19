@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
 import { toLocalDateString } from '../../core/utils/date-time.util';
@@ -36,6 +36,7 @@ interface KampTercihSatiri {
     standalone: true,
     imports: [CommonModule, FormsModule, ReactiveFormsModule, RouterLink, ButtonModule, DatePickerModule],
     templateUrl: './kamp-basvuru.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './kamp-basvuru.scss'
 })
 export class KampBasvuruPage implements OnInit, OnDestroy {
@@ -105,23 +106,32 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             this.loadBasvurular();
         }
 
-        this.form.get('kampDonemiId')?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe((value) => {
-            this.updateDonemSelection(Number(value));
-            this.triggerPreview();
-        });
+        this.form
+            .get('kampDonemiId')
+            ?.valueChanges.pipe(takeUntil(this.destroy$))
+            .subscribe((value) => {
+                this.updateDonemSelection(Number(value));
+                this.triggerPreview();
+            });
 
-        this.form.get('tesisId')?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe((value) => {
-            this.updateTesisSelection(Number(value));
-            this.triggerPreview();
-        });
+        this.form
+            .get('tesisId')
+            ?.valueChanges.pipe(takeUntil(this.destroy$))
+            .subscribe((value) => {
+                this.updateTesisSelection(Number(value));
+                this.triggerPreview();
+            });
 
-        this.form.get('basvuruSahibiTipi')?.valueChanges.pipe(takeUntil(this.destroy$)).subscribe((value) => {
-            const first = this.katilimcilar.at(0);
-            if (first) {
-                first.patchValue({ katilimciTipi: this.getVarsayilanKatilimciTipiKodu(value ?? '') }, { emitEvent: false });
-            }
-            this.triggerPreview();
-        });
+        this.form
+            .get('basvuruSahibiTipi')
+            ?.valueChanges.pipe(takeUntil(this.destroy$))
+            .subscribe((value) => {
+                const first = this.katilimcilar.at(0);
+                if (first) {
+                    first.patchValue({ katilimciTipi: this.getVarsayilanKatilimciTipiKodu(value ?? '') }, { emitEvent: false });
+                }
+                this.triggerPreview();
+            });
 
         this.form.valueChanges.pipe(debounceTime(350), takeUntil(this.destroy$)).subscribe(() => this.triggerPreview());
     }
@@ -198,7 +208,8 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
         this.kaydediliyor = true;
         this.hataMesaji = null;
-        this.kampService.createKampBasvurusu(payload)
+        this.kampService
+            .createKampBasvurusu(payload)
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (result) => {
@@ -226,7 +237,8 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
         this.sorgulaniyor = true;
         this.sorguHataMesaji = null;
-        this.kampService.getKampBasvuruByBasvuruNo(basvuruNo)
+        this.kampService
+            .getKampBasvuruByBasvuruNo(basvuruNo)
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (result) => {
@@ -243,7 +255,8 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
     private loadBaglam(): void {
         this.yukleniyor = true;
-        this.kampService.getKampBasvuruBaglam()
+        this.kampService
+            .getKampBasvuruBaglam()
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (baglam) => {
@@ -281,10 +294,11 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     }
 
     private loadBasvurular(): void {
-        this.kampService.getBenimKampBasvurularim()
+        this.kampService
+            .getBenimKampBasvurularim()
             .pipe(takeUntil(this.destroy$))
             .subscribe({
-                next: (items) => this.benimBasvurularim = items,
+                next: (items) => (this.benimBasvurularim = items),
                 error: () => {
                     this.benimBasvurularim = [];
                 }
@@ -328,14 +342,15 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             return;
         }
 
-        this.kampService.onizleKampBasvurusu(payload)
+        this.kampService
+            .onizleKampBasvurusu(payload)
             .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (result) => {
                     this.onizleme = result;
                     this.syncGecmisKatilimYillari(result.gecmisKatilimYillari ?? []);
                 },
-                error: () => this.onizleme = null
+                error: () => (this.onizleme = null)
             });
     }
 
@@ -378,7 +393,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             katilimcilar: katilimcilar.map((x) => ({
                 adSoyad: x.adSoyad ?? '',
                 tcKimlikNo: x.tcKimlikNo ?? null,
-                dogumTarihi: toLocalDateString(x.dogumTarihi as unknown as Date) ?? (x.dogumTarihi ?? ''),
+                dogumTarihi: toLocalDateString(x.dogumTarihi as unknown as Date) ?? x.dogumTarihi ?? '',
                 basvuruSahibiMi: !!x.basvuruSahibiMi,
                 katilimciTipi: x.katilimciTipi ?? this.getVarsayilanEkKatilimciTipiKodu(),
                 akrabalikTipi: x.akrabalikTipi ?? this.getVarsayilanEkKatilimciAkrabalikKodu(),
@@ -403,9 +418,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
 
     private getVarsayilanKatilimciTipiKodu(basvuruSahibiTipiKodu: string): string {
         const sahipTipi = this.basvuruSahibiTipleri.find((x) => x.kod === basvuruSahibiTipiKodu);
-        return sahipTipi?.varsayilanKatilimciTipiKodu
-            ?? this.katilimciTipleri[0]?.kod
-            ?? '';
+        return sahipTipi?.varsayilanKatilimciTipiKodu ?? this.katilimciTipleri[0]?.kod ?? '';
     }
 
     private getVarsayilanEkKatilimciTipiKodu(): string {
@@ -413,14 +426,11 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
     }
 
     private getBasvuruSahibiAkrabalikKodu(): string {
-        return this.akrabalikTipleri.find((x) => x.basvuruSahibiAkrabaligiMi)?.kod
-            ?? this.akrabalikTipleri[0]?.kod
-            ?? '';
+        return this.akrabalikTipleri.find((x) => x.basvuruSahibiAkrabaligiMi)?.kod ?? this.akrabalikTipleri[0]?.kod ?? '';
     }
 
     private getVarsayilanEkKatilimciAkrabalikKodu(): string {
-        return this.akrabalikTipleri.find((x) => !x.basvuruSahibiAkrabaligiMi)?.kod
-            ?? this.getBasvuruSahibiAkrabalikKodu();
+        return this.akrabalikTipleri.find((x) => !x.basvuruSahibiAkrabaligiMi)?.kod ?? this.getBasvuruSahibiAkrabalikKodu();
     }
 
     getTesisKapasiteOzeti(tesis: KampBasvuruTesisSecenekDto): string {
@@ -465,11 +475,10 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
         return Array.from(map.values())
             .map((x) => ({
                 ...x,
-                donemSecenekleri: x.donemSecenekleri
-                    .sort((a, b) => {
-                        const dateCmp = a.konaklamaBaslangicTarihi.localeCompare(b.konaklamaBaslangicTarihi);
-                        return dateCmp !== 0 ? dateCmp : a.ad.localeCompare(b.ad, 'tr');
-                    })
+                donemSecenekleri: x.donemSecenekleri.sort((a, b) => {
+                    const dateCmp = a.konaklamaBaslangicTarihi.localeCompare(b.konaklamaBaslangicTarihi);
+                    return dateCmp !== 0 ? dateCmp : a.ad.localeCompare(b.ad, 'tr');
+                })
             }))
             .sort((a, b) => a.tesisAd.localeCompare(b.tesisAd, 'tr'));
     }
@@ -514,9 +523,7 @@ export class KampBasvuruPage implements OnInit, OnDestroy {
             return;
         }
 
-        this.form.patchValue(
-            { kampDonemiId: ilk.kampDonemiId, tesisId: ilk.tesisId },
-            { emitEvent: false });
+        this.form.patchValue({ kampDonemiId: ilk.kampDonemiId, tesisId: ilk.tesisId }, { emitEvent: false });
         this.updateDonemSelection(ilk.kampDonemiId);
         this.updateTesisSelection(ilk.tesisId);
     }

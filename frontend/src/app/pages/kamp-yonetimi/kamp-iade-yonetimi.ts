@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -18,6 +18,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, DatePickerModule, TableModule, TagModule, ToolbarModule],
     templateUrl: './kamp-iade-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './kamp-iade-yonetimi.scss'
 })
 export class KampIadeYonetimiPage implements OnInit {
@@ -71,11 +72,14 @@ export class KampIadeYonetimiPage implements OnInit {
         this.sonuc = null;
         this.hataMesaji = null;
 
-        this.service.getKampBasvuruById(item.id)
-            .pipe(finalize(() => {
-                this.detayLoading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampBasvuruById(item.id)
+            .pipe(
+                finalize(() => {
+                    this.detayLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (detay) => {
                     this.selectedBasvuru = detay;
@@ -101,22 +105,25 @@ export class KampIadeYonetimiPage implements OnInit {
         this.hesapliyor = true;
         this.sonuc = null;
 
-        this.service.hesaplaIadeKarari({
-            basvuruDurumu: this.selectedBasvuru.durum,
-            kampDonemiId: this.selectedBasvuru.kampDonemiId,
-            kampBaslangicTarihi: this.selectedBasvuru.konaklamaBaslangicTarihi,
-            toplamGunSayisi: this.toplamGunSayisi,
-            vazgecmeTarihi: toLocalDateString(this.vazgecmeTarihi),
-            avansTutari: this.selectedBasvuru.avansToplamTutar,
-            donemToplamTutari: this.selectedBasvuru.donemToplamTutar,
-            odenenToplamTutar: this.odenenToplamTutar,
-            mazeretliZorunluAyrilisMi: this.mazeretliZorunluAyrilisMi,
-            kullanilmayanGunSayisi: Math.max(0, this.kullanilmayanGunSayisi)
-        })
-            .pipe(finalize(() => {
-                this.hesapliyor = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .hesaplaIadeKarari({
+                basvuruDurumu: this.selectedBasvuru.durum,
+                kampDonemiId: this.selectedBasvuru.kampDonemiId,
+                kampBaslangicTarihi: this.selectedBasvuru.konaklamaBaslangicTarihi,
+                toplamGunSayisi: this.toplamGunSayisi,
+                vazgecmeTarihi: toLocalDateString(this.vazgecmeTarihi),
+                avansTutari: this.selectedBasvuru.avansToplamTutar,
+                donemToplamTutari: this.selectedBasvuru.donemToplamTutar,
+                odenenToplamTutar: this.odenenToplamTutar,
+                mazeretliZorunluAyrilisMi: this.mazeretliZorunluAyrilisMi,
+                kullanilmayanGunSayisi: Math.max(0, this.kullanilmayanGunSayisi)
+            })
+            .pipe(
+                finalize(() => {
+                    this.hesapliyor = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result) => {
                     this.sonuc = result;
@@ -145,11 +152,14 @@ export class KampIadeYonetimiPage implements OnInit {
 
     private loadBaglam(): void {
         this.loading = true;
-        this.service.getKampTahsisBaglam()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampTahsisBaglam()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.baglam = baglam;
@@ -164,11 +174,14 @@ export class KampIadeYonetimiPage implements OnInit {
 
     private loadListe(): void {
         this.loading = true;
-        this.service.getKampTahsisleri(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampTahsisleri(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.kayitlar = items;

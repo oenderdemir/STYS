@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -28,6 +28,7 @@ import { KonaklamaTipiYonetimiService } from './konaklama-tipi-yonetimi.service'
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './konaklama-tipi-yonetimi.html',
     styleUrl: './konaklama-tipi-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KonaklamaTipiYonetimi implements OnInit {
@@ -99,10 +100,12 @@ export class KonaklamaTipiYonetimi implements OnInit {
 
         this.service
             .getTesisIcerikOverride(this.selectedTesisId, item.konaklamaTipiId)
-            .pipe(finalize(() => {
-                this.loadingOverride = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingOverride = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.overrideItems = items;
@@ -132,10 +135,12 @@ export class KonaklamaTipiYonetimi implements OnInit {
         this.savingOverride = true;
         this.service
             .kaydetTesisIcerikOverride(this.selectedTesisId, this.selectedOverrideTip.konaklamaTipiId, this.overrideItems)
-            .pipe(finalize(() => {
-                this.savingOverride = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingOverride = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.overrideItems = items;
@@ -180,17 +185,17 @@ export class KonaklamaTipiYonetimi implements OnInit {
             return;
         }
 
-        const konaklamaTipiIds = this.tesisAtamalari
-            .filter((x) => x.tesisteKullanilabilirMi && x.globalAktifMi)
-            .map((x) => x.konaklamaTipiId);
+        const konaklamaTipiIds = this.tesisAtamalari.filter((x) => x.tesisteKullanilabilirMi && x.globalAktifMi).map((x) => x.konaklamaTipiId);
 
         this.savingAtamalar = true;
         this.service
             .kaydetTesisAtamalari(this.selectedTesisId, konaklamaTipiIds)
-            .pipe(finalize(() => {
-                this.savingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;
@@ -216,15 +221,15 @@ export class KonaklamaTipiYonetimi implements OnInit {
         this.loadingBaglam = true;
         this.service
             .getYonetimBaglam()
-            .pipe(finalize(() => {
-                this.loadingBaglam = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingBaglam = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
-                    this.tesisSecenekleri = baglam.tesisler
-                        .map((x) => ({ label: x.ad, value: x.id }))
-                        .sort((a, b) => a.label.localeCompare(b.label));
+                    this.tesisSecenekleri = baglam.tesisler.map((x) => ({ label: x.ad, value: x.id })).sort((a, b) => a.label.localeCompare(b.label));
 
                     if (this.selectedTesisId && !this.tesisSecenekleri.some((x) => x.value === this.selectedTesisId)) {
                         this.selectedTesisId = null;
@@ -256,10 +261,12 @@ export class KonaklamaTipiYonetimi implements OnInit {
         this.loadingAtamalar = true;
         this.service
             .getTesisAtamalari(this.selectedTesisId)
-            .pipe(finalize(() => {
-                this.loadingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;

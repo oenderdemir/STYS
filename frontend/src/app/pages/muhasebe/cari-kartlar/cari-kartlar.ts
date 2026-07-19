@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -25,8 +25,24 @@ import { CariKartlarService } from './cari-kartlar.service';
 @Component({
     selector: 'app-cari-kartlar-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, DatePickerModule, SelectModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        ConfirmDialogModule,
+        DialogModule,
+        DatePickerModule,
+        SelectModule,
+        InputTextModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     templateUrl: './cari-kartlar.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class CariKartlarPage implements OnInit {
@@ -115,23 +131,28 @@ export class CariKartlarPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.filteredRecords = [...paged.items];
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.filteredRecords = [...paged.items];
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -153,18 +174,23 @@ export class CariKartlarPage implements OnInit {
 
         this.dialogMode = 'edit';
         this.loading = true;
-        this.service.getById(item.id).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (detail) => {
-                this.model = this.mapToModel(detail);
-                this.syncDateFieldsFromModel();
-                this.dialogVisible = true;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+        this.service
+            .getById(item.id)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (detail) => {
+                    this.model = this.mapToModel(detail);
+                    this.syncDateFieldsFromModel();
+                    this.dialogVisible = true;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     save(): void {
@@ -177,9 +203,7 @@ export class CariKartlarPage implements OnInit {
             return;
         }
 
-        const tesisId = this.dialogMode === 'create'
-            ? this.getSeciliTesisIdOrWarn()
-            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        const tesisId = this.dialogMode === 'create' ? this.getSeciliTesisIdOrWarn() : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
         if (tesisId === null) {
             return;
         }
@@ -204,7 +228,7 @@ export class CariKartlarPage implements OnInit {
         const payload: CreateCariKartRequest | UpdateCariKartRequest = {
             tesisId,
             cariTipi: this.model.cariTipi,
-            cariKodu: this.isCariKoduReadOnly() ? null : (this.model.cariKodu?.trim() || null),
+            cariKodu: this.isCariKoduReadOnly() ? null : this.model.cariKodu?.trim() || null,
             unvanAdSoyad: this.model.unvanAdSoyad.trim(),
             vergiNoTckn: this.model.vergiNoTckn?.trim() || null,
             vergiDairesi: this.model.vergiDairesi?.trim() || null,
@@ -225,9 +249,7 @@ export class CariKartlarPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateCariKartRequest)
-            : this.service.create(payload as CreateCariKartRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateCariKartRequest) : this.service.create(payload as CreateCariKartRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -294,18 +316,23 @@ export class CariKartlarPage implements OnInit {
 
         this.syncModelDatesFromUi();
         this.duzeltmeSaving = true;
-        this.service.acilisBakiyesiDuzelt(this.duzeltmeCariKart.id, this.duzeltmeModel).pipe(finalize(() => {
-            this.duzeltmeSaving = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: () => {
-                this.duzeltmeDialogVisible = false;
-                this.duzeltmeCariKart = null;
-                this.load();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Açılış bakiyesi düzeltildi.' });
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+        this.service
+            .acilisBakiyesiDuzelt(this.duzeltmeCariKart.id, this.duzeltmeModel)
+            .pipe(
+                finalize(() => {
+                    this.duzeltmeSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.duzeltmeDialogVisible = false;
+                    this.duzeltmeCariKart = null;
+                    this.load();
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Açılış bakiyesi düzeltildi.' });
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     private createEmpty(): CariKartModel {
@@ -439,13 +466,7 @@ export class CariKartlarPage implements OnInit {
 
     private normalizeYetkiliKisiler(kisiler: CariKartYetkiliKisiModel[]): CariKartYetkiliKisiModel[] {
         return (kisiler ?? [])
-            .filter((kisi) => !!kisi && (
-                !!kisi.adSoyad?.trim() ||
-                !!kisi.gorevUnvan?.trim() ||
-                !!kisi.telefon?.trim() ||
-                !!kisi.eposta?.trim() ||
-                !!kisi.aciklama?.trim()
-            ))
+            .filter((kisi) => !!kisi && (!!kisi.adSoyad?.trim() || !!kisi.gorevUnvan?.trim() || !!kisi.telefon?.trim() || !!kisi.eposta?.trim() || !!kisi.aciklama?.trim()))
             .map((kisi) => ({
                 ...kisi,
                 id: kisi.id ?? null,

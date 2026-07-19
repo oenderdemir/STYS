@@ -1,6 +1,6 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -15,13 +15,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    MuavinDefterFilterModel,
-    MuavinDefterModel,
-    MuavinDefterSatirModel,
-    createDefaultMuavinDefterFilter,
-    normalizeMuavinDefterFilter
-} from '../models/muavin-defter.model';
+import { MuavinDefterFilterModel, MuavinDefterModel, MuavinDefterSatirModel, createDefaultMuavinDefterFilter, normalizeMuavinDefterFilter } from '../models/muavin-defter.model';
 import { MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
@@ -59,22 +53,10 @@ const DONEM_SECENEKLERI: DonemSecenek[] = [
 @Component({
     selector: 'app-muavin-defter',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        CheckboxModule,
-        DatePickerModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        ToolbarModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DatePickerModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     providers: [MessageService],
     templateUrl: './muavin-defter.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrls: ['./muavin-defter.component.scss']
 })
 export class MuavinDefterComponent implements OnInit {
@@ -138,22 +120,25 @@ export class MuavinDefterComponent implements OnInit {
         }
 
         this.hesapPlaniLoadPromise = new Promise<void>((resolve, reject) => {
-            this.hesapPlaniService.getTree().pipe(
-                finalize(() => {
-                    this.hesapPlaniLoadPromise = null;
-                    this.cdr.detectChanges();
-                })
-            ).subscribe({
-                next: (tree) => {
-                    this.hesapPlaniTree = tree;
-                    this.hesapPlaniLoaded = true;
-                    resolve();
-                },
-                error: (error: unknown) => {
-                    void this.showError(error);
-                    reject(error);
-                }
-            });
+            this.hesapPlaniService
+                .getTree()
+                .pipe(
+                    finalize(() => {
+                        this.hesapPlaniLoadPromise = null;
+                        this.cdr.detectChanges();
+                    })
+                )
+                .subscribe({
+                    next: (tree) => {
+                        this.hesapPlaniTree = tree;
+                        this.hesapPlaniLoaded = true;
+                        resolve();
+                    },
+                    error: (error: unknown) => {
+                        void this.showError(error);
+                        reject(error);
+                    }
+                });
         });
 
         return this.hesapPlaniLoadPromise;
@@ -224,17 +209,22 @@ export class MuavinDefterComponent implements OnInit {
         this.result = null;
         this.loading = true;
 
-        this.raporService.getMuavinDefter(normalized).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (data) => {
-                this.result = data;
-            },
-            error: (error: unknown) => {
-                void this.showError(error);
-            }
-        });
+        this.raporService
+            .getMuavinDefter(normalized)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (data) => {
+                    this.result = data;
+                },
+                error: (error: unknown) => {
+                    void this.showError(error);
+                }
+            });
     }
 
     async exportExcel(): Promise<void> {
@@ -243,18 +233,23 @@ export class MuavinDefterComponent implements OnInit {
 
         this.exporting = true;
 
-        this.raporService.exportMuavinDefterExcel(normalized).pipe(finalize(() => {
-            this.exporting = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (blob) => {
-                this.downloadBlob(blob, this.createExcelFileName());
-                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muavin defter Excel dosyası indiriliyor.' });
-            },
-            error: (error: unknown) => {
-                void this.showError(error);
-            }
-        });
+        this.raporService
+            .exportMuavinDefterExcel(normalized)
+            .pipe(
+                finalize(() => {
+                    this.exporting = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (blob) => {
+                    this.downloadBlob(blob, this.createExcelFileName());
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Muavin defter Excel dosyası indiriliyor.' });
+                },
+                error: (error: unknown) => {
+                    void this.showError(error);
+                }
+            });
     }
 
     private downloadBlob(blob: Blob, fileName: string): void {
@@ -312,58 +307,85 @@ export class MuavinDefterComponent implements OnInit {
 
     getBakiyeTipiSeverity(bakiyeTipi: string): 'success' | 'danger' | 'secondary' {
         switch (bakiyeTipi) {
-            case 'Borc': return 'danger';
-            case 'Alacak': return 'success';
-            default: return 'secondary';
+            case 'Borc':
+                return 'danger';
+            case 'Alacak':
+                return 'success';
+            default:
+                return 'secondary';
         }
     }
 
     getBakiyeTipiLabel(bakiyeTipi: string): string {
         switch (bakiyeTipi) {
-            case 'Borc': return 'Borç';
-            case 'Alacak': return 'Alacak';
-            case 'Sifir': return 'Sıfır';
-            default: return bakiyeTipi;
+            case 'Borc':
+                return 'Borç';
+            case 'Alacak':
+                return 'Alacak';
+            case 'Sifir':
+                return 'Sıfır';
+            default:
+                return bakiyeTipi;
         }
     }
 
     getDurumLabel(durum: string): string {
         switch (durum) {
-            case MuhasebeFisDurumlari.Taslak: return 'Taslak';
-            case MuhasebeFisDurumlari.Onayli: return 'Onaylı';
-            case MuhasebeFisDurumlari.Iptal: return 'İptal';
-            case MuhasebeFisDurumlari.TersKayit: return 'Ters Kayıt';
-            default: return durum;
+            case MuhasebeFisDurumlari.Taslak:
+                return 'Taslak';
+            case MuhasebeFisDurumlari.Onayli:
+                return 'Onaylı';
+            case MuhasebeFisDurumlari.Iptal:
+                return 'İptal';
+            case MuhasebeFisDurumlari.TersKayit:
+                return 'Ters Kayıt';
+            default:
+                return durum;
         }
     }
 
     getFisTipiLabel(fisTipi: string): string {
         switch (fisTipi) {
-            case 'Mahsup': return 'Mahsup';
-            case 'Tahsil': return 'Tahsil';
-            case 'Tediye': return 'Tediye';
-            case 'Devir': return 'Devir';
-            case 'Acilis': return 'Açılış';
-            case 'Stok': return 'Stok';
-            case 'Tasinir': return 'Taşınır';
-            default: return fisTipi;
+            case 'Mahsup':
+                return 'Mahsup';
+            case 'Tahsil':
+                return 'Tahsil';
+            case 'Tediye':
+                return 'Tediye';
+            case 'Devir':
+                return 'Devir';
+            case 'Acilis':
+                return 'Açılış';
+            case 'Stok':
+                return 'Stok';
+            case 'Tasinir':
+                return 'Taşınır';
+            default:
+                return fisTipi;
         }
     }
 
     getDurumSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (durum) {
-            case MuhasebeFisDurumlari.Onayli: return 'success';
-            case MuhasebeFisDurumlari.Taslak: return 'warn';
-            case MuhasebeFisDurumlari.Iptal: return 'danger';
-            case MuhasebeFisDurumlari.TersKayit: return 'info';
-            default: return 'secondary';
+            case MuhasebeFisDurumlari.Onayli:
+                return 'success';
+            case MuhasebeFisDurumlari.Taslak:
+                return 'warn';
+            case MuhasebeFisDurumlari.Iptal:
+                return 'danger';
+            case MuhasebeFisDurumlari.TersKayit:
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
     getFisTipiSeverity(fisTipi: string): 'info' | 'secondary' {
         switch (fisTipi) {
-            case 'Mahsup': return 'info';
-            default: return 'secondary';
+            case 'Mahsup':
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
@@ -496,9 +518,7 @@ export class MuavinDefterComponent implements OnInit {
             }
 
             if (error.status) {
-                return error.statusText?.trim().length
-                    ? `HTTP ${error.status}: ${error.statusText}`
-                    : `HTTP ${error.status}`;
+                return error.statusText?.trim().length ? `HTTP ${error.status}: ${error.statusText}` : `HTTP ${error.status}`;
             }
         }
 

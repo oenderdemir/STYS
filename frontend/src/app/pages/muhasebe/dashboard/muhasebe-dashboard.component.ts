@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, effect, inject } from '@angular/core';
+import { Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -18,11 +18,7 @@ import { MuhasebeDashboardService } from '../services/muhasebe-dashboard.service
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    MuhasebeDashboardFilterModel,
-    MuhasebeDashboardModel,
-    createDefaultDashboardFilter
-} from '../models/muhasebe-dashboard.model';
+import { MuhasebeDashboardFilterModel, MuhasebeDashboardModel, createDefaultDashboardFilter } from '../models/muhasebe-dashboard.model';
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const suankiYil = new Date().getFullYear();
@@ -54,6 +50,7 @@ const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (()
     ],
     providers: [MessageService],
     templateUrl: './muhasebe-dashboard.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './muhasebe-dashboard.component.scss'
 })
 export class MuhasebeDashboardComponent implements OnInit {
@@ -68,10 +65,7 @@ export class MuhasebeDashboardComponent implements OnInit {
 
     maliYilSecenekleri = MALI_YIL_SECENEKLERI;
 
-    donemSecenekleri: Array<{ label: string; value: number | null }> = [
-        { label: 'Tümü', value: null },
-        ...Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1 }))
-    ];
+    donemSecenekleri: Array<{ label: string; value: number | null }> = [{ label: 'Tümü', value: null }, ...Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1 }))];
     private contextInitialized = false;
     private currentTesisId: number | null = null;
 
@@ -111,17 +105,18 @@ export class MuhasebeDashboardComponent implements OnInit {
         this.filter.tesisId = tesisId;
         this.loading = true;
         this.dashboard = null;
-        this.dashboardService.getDashboard(this.filter).pipe(
-            finalize(() => (this.loading = false))
-        ).subscribe({
-            next: (data) => {
-                this.dashboard = data;
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.dashboard = null;
-            }
-        });
+        this.dashboardService
+            .getDashboard(this.filter)
+            .pipe(finalize(() => (this.loading = false)))
+            .subscribe({
+                next: (data) => {
+                    this.dashboard = data;
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.dashboard = null;
+                }
+            });
     }
 
     onFilterChange(): void {
@@ -157,51 +152,76 @@ export class MuhasebeDashboardComponent implements OnInit {
 
     getDurumLabel(durum: string): string {
         switch (durum) {
-            case 'Taslak': return 'Taslak';
-            case 'Onayli': return 'Onaylı';
-            case 'Iptal': return 'İptal';
-            case 'TersKayit': return 'Ters Kayıt';
-            default: return durum;
+            case 'Taslak':
+                return 'Taslak';
+            case 'Onayli':
+                return 'Onaylı';
+            case 'Iptal':
+                return 'İptal';
+            case 'TersKayit':
+                return 'Ters Kayıt';
+            default:
+                return durum;
         }
     }
 
     getDurumSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (durum) {
-            case 'Onayli': return 'success';
-            case 'Taslak': return 'warn';
-            case 'Iptal': return 'danger';
-            case 'TersKayit': return 'info';
-            default: return 'secondary';
+            case 'Onayli':
+                return 'success';
+            case 'Taslak':
+                return 'warn';
+            case 'Iptal':
+                return 'danger';
+            case 'TersKayit':
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
     getFisTipiLabel(fisTipi: string): string {
         switch (fisTipi) {
-            case 'Mahsup': return 'Mahsup';
-            case 'Tahsil': return 'Tahsil';
-            case 'Tediye': return 'Tediye';
-            case 'Tasinir': return 'Taşınır';
-            case 'Amortisman': return 'Amortisman';
-            default: return fisTipi;
+            case 'Mahsup':
+                return 'Mahsup';
+            case 'Tahsil':
+                return 'Tahsil';
+            case 'Tediye':
+                return 'Tediye';
+            case 'Tasinir':
+                return 'Taşınır';
+            case 'Amortisman':
+                return 'Amortisman';
+            default:
+                return fisTipi;
         }
     }
 
     getFisTipiSeverity(fisTipi: string): 'info' | 'secondary' {
         switch (fisTipi) {
-            case 'Mahsup': return 'info';
-            case 'Tahsil': return 'info';
-            case 'Tediye': return 'info';
-            default: return 'secondary';
+            case 'Mahsup':
+                return 'info';
+            case 'Tahsil':
+                return 'info';
+            case 'Tediye':
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
     getUyariSeverity(severity: string): 'warn' | 'info' | 'error' | 'success' | 'secondary' {
         switch (severity) {
-            case 'warn': return 'warn';
-            case 'info': return 'info';
-            case 'danger': return 'error';
-            case 'error': return 'error';
-            default: return 'info';
+            case 'warn':
+                return 'warn';
+            case 'info':
+                return 'info';
+            case 'danger':
+                return 'error';
+            case 'error':
+                return 'error';
+            default:
+                return 'info';
         }
     }
 

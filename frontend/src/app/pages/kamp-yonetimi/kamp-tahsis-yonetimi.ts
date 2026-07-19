@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -22,6 +22,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, TableModule, TagModule, ToastModule, ToolbarModule, KampBasvuruDetayDialogComponent],
     templateUrl: './kamp-tahsis-yonetimi.html',
     styleUrl: './kamp-tahsis-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KampTahsisYonetimiPage implements OnInit {
@@ -91,14 +92,17 @@ export class KampTahsisYonetimiPage implements OnInit {
         }
 
         this.otomatikTahsisCalisiyor = true;
-        this.service.uygulaOtomatikKampTahsisi({
-            kampDonemiId: this.selectedKampDonemiId,
-            tesisId: this.selectedTesisId
-        })
-            .pipe(finalize(() => {
-                this.otomatikTahsisCalisiyor = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .uygulaOtomatikKampTahsisi({
+                kampDonemiId: this.selectedKampDonemiId,
+                tesisId: this.selectedTesisId
+            })
+            .pipe(
+                finalize(() => {
+                    this.otomatikTahsisCalisiyor = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result) => {
                     this.messageService.add({
@@ -121,11 +125,14 @@ export class KampTahsisYonetimiPage implements OnInit {
         }
 
         this.kararKaydediliyorId = item.id;
-        this.service.kararVerKampTahsisi(item.id, { durum })
-            .pipe(finalize(() => {
-                this.kararKaydediliyorId = null;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .kararVerKampTahsisi(item.id, { durum })
+            .pipe(
+                finalize(() => {
+                    this.kararKaydediliyorId = null;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.messageService.add({ severity: 'success', summary: 'Basarili', detail: 'Tahsis karari kaydedildi.' });
@@ -154,11 +161,14 @@ export class KampTahsisYonetimiPage implements OnInit {
 
     private loadBaglam(): void {
         this.loading = true;
-        this.service.getKampTahsisBaglam()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampTahsisBaglam()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.baglam = baglam;
@@ -173,11 +183,14 @@ export class KampTahsisYonetimiPage implements OnInit {
 
     private loadListe(): void {
         this.loading = true;
-        this.service.getKampTahsisleri(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampTahsisleri(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.kayitlar = items;
@@ -212,11 +225,14 @@ export class KampTahsisYonetimiPage implements OnInit {
         }
 
         this.rezervasyonUretiliyorId = item.id;
-        this.service.uretKampRezervasyon(item.id)
-            .pipe(finalize(() => {
-                this.rezervasyonUretiliyorId = null;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .uretKampRezervasyon(item.id)
+            .pipe(
+                finalize(() => {
+                    this.rezervasyonUretiliyorId = null;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result: KampRezervasyonUretSonucDto) => {
                     this.messageService.add({
@@ -239,11 +255,14 @@ export class KampTahsisYonetimiPage implements OnInit {
         }
 
         this.noShowIptalCalisiyor = true;
-        this.service.noShowIptalUygula(this.selectedKampDonemiId)
-            .pipe(finalize(() => {
-                this.noShowIptalCalisiyor = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .noShowIptalUygula(this.selectedKampDonemiId)
+            .pipe(
+                finalize(() => {
+                    this.noShowIptalCalisiyor = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result: KampNoShowIptalSonucDto) => {
                     this.messageService.add({

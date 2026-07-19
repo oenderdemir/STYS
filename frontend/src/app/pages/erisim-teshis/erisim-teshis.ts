@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, computed, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -13,16 +13,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';
 import { tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import {
-    ErisimTeshisIstekDto,
-    ErisimTeshisIslemSonucDto,
-    ErisimTeshisKullaniciGrupDto,
-    ErisimTeshisMenuSeviyeDto,
-    ErisimTeshisModulDto,
-    ErisimTeshisReferansDto,
-    ErisimTeshisSonucDto,
-    ErisimTeshisTesisDto
-} from './erisim-teshis.dto';
+import { ErisimTeshisIstekDto, ErisimTeshisIslemSonucDto, ErisimTeshisKullaniciGrupDto, ErisimTeshisMenuSeviyeDto, ErisimTeshisModulDto, ErisimTeshisReferansDto, ErisimTeshisSonucDto, ErisimTeshisTesisDto } from './erisim-teshis.dto';
 import { ErisimTeshisService } from './erisim-teshis.service';
 
 @Component({
@@ -31,6 +22,7 @@ import { ErisimTeshisService } from './erisim-teshis.service';
     imports: [CommonModule, FormsModule, ButtonModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './erisim-teshis.html',
     styleUrl: './erisim-teshis.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class ErisimTeshis implements OnInit {
@@ -75,7 +67,12 @@ export class ErisimTeshis implements OnInit {
 
     get menuPathSegments(): string[] {
         const menuPath = this.sonuc?.menuGorunumu.menuYolu?.trim();
-        return menuPath ? menuPath.split('>').map((x) => x.trim()).filter((x) => x.length > 0) : [];
+        return menuPath
+            ? menuPath
+                  .split('>')
+                  .map((x) => x.trim())
+                  .filter((x) => x.length > 0)
+            : [];
     }
 
     get menuChain(): ErisimTeshisMenuSeviyeDto[] {

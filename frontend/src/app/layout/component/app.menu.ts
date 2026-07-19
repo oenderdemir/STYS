@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, signal, viewChild, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AppMenuitem } from './app.menuitem';
@@ -23,43 +23,14 @@ interface MenuSearchResult {
     standalone: true,
     imports: [CommonModule, AppMenuitem, RouterModule, ButtonModule, InputTextModule],
     styleUrl: './app.menu.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
         <div class="layout-menu-search" [class.layout-menu-search--open]="searchExpanded()">
-            <button
-                pButton
-                type="button"
-                icon="pi pi-search"
-                [text]="true"
-                [rounded]="true"
-                severity="secondary"
-                class="layout-menu-search-toggle"
-                (click)="openSearch()"
-                aria-label="Menüde ara">
-            </button>
+            <button pButton type="button" icon="pi pi-search" [text]="true" [rounded]="true" severity="secondary" class="layout-menu-search-toggle" (click)="openSearch()" aria-label="Menüde ara"></button>
 
             @if (searchExpanded()) {
-                <input
-                    #searchInput
-                    pInputText
-                    type="text"
-                    [value]="searchTerm()"
-                    (input)="searchTerm.set($any($event.target).value)"
-                    (keydown.escape)="closeSearch()"
-                    placeholder="Menüde ara..."
-                    autocomplete="off"
-                    class="layout-menu-search-input"
-                />
-                <button
-                    pButton
-                    type="button"
-                    icon="pi pi-times"
-                    [text]="true"
-                    [rounded]="true"
-                    severity="secondary"
-                    class="layout-menu-search-close"
-                    (click)="closeSearch()"
-                    aria-label="Kapat">
-                </button>
+                <input #searchInput pInputText type="text" [value]="searchTerm()" (input)="searchTerm.set($any($event.target).value)" (keydown.escape)="closeSearch()" placeholder="Menüde ara..." autocomplete="off" class="layout-menu-search-input" />
+                <button pButton type="button" icon="pi pi-times" [text]="true" [rounded]="true" severity="secondary" class="layout-menu-search-close" (click)="closeSearch()" aria-label="Kapat"></button>
             }
         </div>
 
@@ -174,9 +145,7 @@ export class AppMenu {
             const isLeaf = !item.items?.length;
 
             if (isLeaf && (item.routerLink || item.url)) {
-                const routeText = item.routerLink
-                    ? (Array.isArray(item.routerLink) ? item.routerLink[0] : String(item.routerLink))
-                    : (item.url ?? '');
+                const routeText = item.routerLink ? (Array.isArray(item.routerLink) ? item.routerLink[0] : String(item.routerLink)) : (item.url ?? '');
 
                 results.push({
                     label,
@@ -198,14 +167,6 @@ export class AppMenu {
     }
 
     private normalizeText(value: string): string {
-        return value
-            .toLowerCase()
-            .replace(/ç/g, 'c')
-            .replace(/ğ/g, 'g')
-            .replace(/ı/g, 'i')
-            .replace(/ö/g, 'o')
-            .replace(/ş/g, 's')
-            .replace(/ü/g, 'u')
-            .replace(/i̇/g, 'i');
+        return value.toLowerCase().replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u').replace(/i̇/g, 'i');
     }
 }

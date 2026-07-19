@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -24,6 +24,7 @@ import { UlkeYonetimiService } from './ulke-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, UlkeDialog],
     templateUrl: './ulke-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class UlkeYonetimi implements OnDestroy {
@@ -125,10 +126,7 @@ export class UlkeYonetimi implements OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedUlke.id
-                ? this.service.updateUlke(this.selectedUlke.id, payload)
-                : this.service.createUlke(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedUlke.id ? this.service.updateUlke(this.selectedUlke.id, payload) : this.service.createUlke(payload);
 
         this.saving = true;
         save$

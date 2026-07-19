@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -9,12 +9,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TextareaModule } from 'primeng/textarea';
 import { CrudDialogMode } from '../../core/ui/crud-dialog-mode.type';
-import {
-    KonaklamaTipiIcerikHizmetSecenekleri,
-    KonaklamaTipiIcerikKullanimNoktasiSecenekleri,
-    KonaklamaTipiIcerikKullanimTipiSecenekleri,
-    KonaklamaTipiIcerikPeriyotSecenekleri
-} from './konaklama-tipi-icerik.constants';
+import { KonaklamaTipiIcerikHizmetSecenekleri, KonaklamaTipiIcerikKullanimNoktasiSecenekleri, KonaklamaTipiIcerikKullanimTipiSecenekleri, KonaklamaTipiIcerikPeriyotSecenekleri } from './konaklama-tipi-icerik.constants';
 import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonetimi.dto';
 
 @Component({
@@ -22,16 +17,9 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, CheckboxModule, SelectModule, InputNumberModule, TextareaModule],
     styleUrl: './konaklama-tipi-dialog.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '76rem', 'max-width': '96vw' }"
-            [breakpoints]="{ '1200px': '94vw', '960px': '96vw' }"
-            styleClass="konaklama-tipi-dialog"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '76rem', 'max-width': '96vw' }" [breakpoints]="{ '1200px': '94vw', '960px': '96vw' }" styleClass="konaklama-tipi-dialog" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -56,143 +44,135 @@ import { KonaklamaTipiDto, KonaklamaTipiIcerikDto } from './konaklama-tipi-yonet
 
                 <div class="span-12">
                     <div class="dialog-section">
-                    <div class="flex flex-column md:flex-row md:items-start md:justify-content-between gap-3 mb-3">
-                        <div>
-                            <div class="font-medium">Paket Icerigi</div>
-                            <div class="text-sm text-color-secondary">Bu konaklama tipinin icine dahil olan hizmetleri acikca tanimlayin.</div>
-                        </div>
-                        @if (!isReadOnly) {
-                            <p-button label="Icerik Ekle" icon="pi pi-plus" size="small" [disabled]="saving" (onClick)="addIcerikKalemi()" />
-                        }
-                    </div>
-
-                    @if (workingModel.icerikKalemleri.length === 0) {
-                        <div class="border-1 border-200 border-round p-3 text-sm text-color-secondary">
-                            Bu paket icin henuz icerik tanimlanmadi. Ornegin Oda Kahvalti icin Kahvalti ekleyebilirsin.
-                        </div>
-                    } @else {
-                        @if (!isReadOnly) {
-                            <div class="icerik-toolbar">
-                                <span class="text-sm text-color-secondary">Hazir icerik ekle:</span>
-                                <p-button label="Kahvalti" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('kahvalti')" />
-                                <p-button label="Ogle Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('ogleYemegi')" />
-                                <p-button label="Aksam Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('aksamYemegi')" />
+                        <div class="flex flex-column md:flex-row md:items-start md:justify-content-between gap-3 mb-3">
+                            <div>
+                                <div class="font-medium">Paket Icerigi</div>
+                                <div class="text-sm text-color-secondary">Bu konaklama tipinin icine dahil olan hizmetleri acikca tanimlayin.</div>
                             </div>
-                        }
-                        <div class="icerik-list">
-                            @for (item of workingModel.icerikKalemleri; track trackIcerikKalemi($index, item)) {
-                                <div class="icerik-item">
-                                    <div class="icerik-item-header">
-                                        <div>
-                                            <div class="icerik-item-title">{{ item.hizmetAdi || 'Yeni Icerik Kalemi' }}</div>
-                                            <div class="icerik-item-subtitle">{{ item.periyotAdi || 'Periyot secilmedi' }} • {{ item.kullanimNoktasiAdi || 'Kullanim noktasi secilmedi' }}</div>
-                                        </div>
-                                        <div class="icerik-item-actions">
-                                            <p-button
-                                                [icon]="isExpanded($index) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-                                                severity="secondary"
-                                                [text]="true"
-                                                [disabled]="saving"
-                                                (onClick)="toggleExpanded($index)"
-                                            />
-                                            @if (!isReadOnly) {
-                                                <p-button icon="pi pi-trash" severity="danger" [outlined]="true" [disabled]="saving" (onClick)="removeIcerikKalemi($index)" />
-                                            }
-                                        </div>
-                                    </div>
-
-                                    @if (isExpanded($index)) {
-                                    <div class="icerik-grid">
-                                        <div class="span-4">
-                                            <label class="block font-medium mb-2">Hizmet</label>
-                                            <p-select
-                                                [options]="hizmetSecenekleri"
-                                                optionLabel="label"
-                                                optionValue="value"
-                                                [(ngModel)]="item.hizmetKodu"
-                                                [disabled]="isReadOnly || saving"
-                                                [appendTo]="'body'"
-                                                class="w-full"
-                                                placeholder="Hizmet seciniz"
-                                                (ngModelChange)="syncIcerikAdlari(item)"
-                                            />
-                                        </div>
-                                        <div class="span-2">
-                                            <label class="block font-medium mb-2">Miktar</label>
-                                            <p-inputnumber [(ngModel)]="item.miktar" [min]="1" [useGrouping]="false" [disabled]="isReadOnly || saving" styleClass="w-full" />
-                                        </div>
-                                        <div class="span-3">
-                                            <label class="block font-medium mb-2">Periyot</label>
-                                            <p-select
-                                                [options]="periyotSecenekleri"
-                                                optionLabel="label"
-                                                optionValue="value"
-                                                [(ngModel)]="item.periyot"
-                                                [disabled]="isReadOnly || saving"
-                                                [appendTo]="'body'"
-                                                class="w-full"
-                                                placeholder="Periyot seciniz"
-                                                (ngModelChange)="syncIcerikAdlari(item)"
-                                            />
-                                        </div>
-                                        <div class="span-3">
-                                            <label class="block font-medium mb-2">Kullanim Tipi</label>
-                                            <p-select
-                                                [options]="kullanimTipiSecenekleri"
-                                                optionLabel="label"
-                                                optionValue="value"
-                                                [(ngModel)]="item.kullanimTipi"
-                                                [disabled]="isReadOnly || saving"
-                                                [appendTo]="'body'"
-                                                class="w-full"
-                                                placeholder="Kullanim tipi seciniz"
-                                                (ngModelChange)="syncIcerikAdlari(item)"
-                                            />
-                                        </div>
-                                        <div class="span-4">
-                                            <label class="block font-medium mb-2">Kullanim Noktasi</label>
-                                            <p-select
-                                                [options]="kullanimNoktasiSecenekleri"
-                                                optionLabel="label"
-                                                optionValue="value"
-                                                [(ngModel)]="item.kullanimNoktasi"
-                                                [disabled]="isReadOnly || saving"
-                                                [appendTo]="'body'"
-                                                class="w-full"
-                                                placeholder="Kullanim noktasi seciniz"
-                                                (ngModelChange)="syncIcerikAdlari(item)"
-                                            />
-                                        </div>
-                                        <div class="span-4">
-                                            <div class="check-group">
-                                            <div>
-                                                <p-checkbox [inputId]="'checkin-' + $index" [(ngModel)]="item.checkInGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
-                                                <label [for]="'checkin-' + $index" class="ml-2">Check-in gunu gecerli</label>
-                                            </div>
-                                            <div>
-                                                <p-checkbox [inputId]="'checkout-' + $index" [(ngModel)]="item.checkOutGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
-                                                <label [for]="'checkout-' + $index" class="ml-2">Check-out gunu gecerli</label>
-                                            </div>
-                                            </div>
-                                        </div>
-                                        <div class="span-4">
-                                            <label class="block font-medium mb-2">Saat Araligi</label>
-                                            <div class="time-range">
-                                                <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBaslangicSaati" [disabled]="isReadOnly || saving" />
-                                                <span class="time-separator">-</span>
-                                                <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBitisSaati" [disabled]="isReadOnly || saving" />
-                                            </div>
-                                        </div>
-                                        <div class="span-12">
-                                            <label class="block font-medium mb-2">Aciklama</label>
-                                            <textarea pInputTextarea rows="2" class="w-full" [(ngModel)]="item.aciklama" [disabled]="isReadOnly || saving" maxlength="256"></textarea>
-                                        </div>
-                                    </div>
-                                    }
-                                </div>
+                            @if (!isReadOnly) {
+                                <p-button label="Icerik Ekle" icon="pi pi-plus" size="small" [disabled]="saving" (onClick)="addIcerikKalemi()" />
                             }
                         </div>
-                    }
+
+                        @if (workingModel.icerikKalemleri.length === 0) {
+                            <div class="border-1 border-200 border-round p-3 text-sm text-color-secondary">Bu paket icin henuz icerik tanimlanmadi. Ornegin Oda Kahvalti icin Kahvalti ekleyebilirsin.</div>
+                        } @else {
+                            @if (!isReadOnly) {
+                                <div class="icerik-toolbar">
+                                    <span class="text-sm text-color-secondary">Hazir icerik ekle:</span>
+                                    <p-button label="Kahvalti" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('kahvalti')" />
+                                    <p-button label="Ogle Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('ogleYemegi')" />
+                                    <p-button label="Aksam Yemegi" size="small" severity="secondary" [outlined]="true" [disabled]="saving" (onClick)="addPreset('aksamYemegi')" />
+                                </div>
+                            }
+                            <div class="icerik-list">
+                                @for (item of workingModel.icerikKalemleri; track trackIcerikKalemi($index, item)) {
+                                    <div class="icerik-item">
+                                        <div class="icerik-item-header">
+                                            <div>
+                                                <div class="icerik-item-title">{{ item.hizmetAdi || 'Yeni Icerik Kalemi' }}</div>
+                                                <div class="icerik-item-subtitle">{{ item.periyotAdi || 'Periyot secilmedi' }} • {{ item.kullanimNoktasiAdi || 'Kullanim noktasi secilmedi' }}</div>
+                                            </div>
+                                            <div class="icerik-item-actions">
+                                                <p-button [icon]="isExpanded($index) ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" severity="secondary" [text]="true" [disabled]="saving" (onClick)="toggleExpanded($index)" />
+                                                @if (!isReadOnly) {
+                                                    <p-button icon="pi pi-trash" severity="danger" [outlined]="true" [disabled]="saving" (onClick)="removeIcerikKalemi($index)" />
+                                                }
+                                            </div>
+                                        </div>
+
+                                        @if (isExpanded($index)) {
+                                            <div class="icerik-grid">
+                                                <div class="span-4">
+                                                    <label class="block font-medium mb-2">Hizmet</label>
+                                                    <p-select
+                                                        [options]="hizmetSecenekleri"
+                                                        optionLabel="label"
+                                                        optionValue="value"
+                                                        [(ngModel)]="item.hizmetKodu"
+                                                        [disabled]="isReadOnly || saving"
+                                                        [appendTo]="'body'"
+                                                        class="w-full"
+                                                        placeholder="Hizmet seciniz"
+                                                        (ngModelChange)="syncIcerikAdlari(item)"
+                                                    />
+                                                </div>
+                                                <div class="span-2">
+                                                    <label class="block font-medium mb-2">Miktar</label>
+                                                    <p-inputnumber [(ngModel)]="item.miktar" [min]="1" [useGrouping]="false" [disabled]="isReadOnly || saving" styleClass="w-full" />
+                                                </div>
+                                                <div class="span-3">
+                                                    <label class="block font-medium mb-2">Periyot</label>
+                                                    <p-select
+                                                        [options]="periyotSecenekleri"
+                                                        optionLabel="label"
+                                                        optionValue="value"
+                                                        [(ngModel)]="item.periyot"
+                                                        [disabled]="isReadOnly || saving"
+                                                        [appendTo]="'body'"
+                                                        class="w-full"
+                                                        placeholder="Periyot seciniz"
+                                                        (ngModelChange)="syncIcerikAdlari(item)"
+                                                    />
+                                                </div>
+                                                <div class="span-3">
+                                                    <label class="block font-medium mb-2">Kullanim Tipi</label>
+                                                    <p-select
+                                                        [options]="kullanimTipiSecenekleri"
+                                                        optionLabel="label"
+                                                        optionValue="value"
+                                                        [(ngModel)]="item.kullanimTipi"
+                                                        [disabled]="isReadOnly || saving"
+                                                        [appendTo]="'body'"
+                                                        class="w-full"
+                                                        placeholder="Kullanim tipi seciniz"
+                                                        (ngModelChange)="syncIcerikAdlari(item)"
+                                                    />
+                                                </div>
+                                                <div class="span-4">
+                                                    <label class="block font-medium mb-2">Kullanim Noktasi</label>
+                                                    <p-select
+                                                        [options]="kullanimNoktasiSecenekleri"
+                                                        optionLabel="label"
+                                                        optionValue="value"
+                                                        [(ngModel)]="item.kullanimNoktasi"
+                                                        [disabled]="isReadOnly || saving"
+                                                        [appendTo]="'body'"
+                                                        class="w-full"
+                                                        placeholder="Kullanim noktasi seciniz"
+                                                        (ngModelChange)="syncIcerikAdlari(item)"
+                                                    />
+                                                </div>
+                                                <div class="span-4">
+                                                    <div class="check-group">
+                                                        <div>
+                                                            <p-checkbox [inputId]="'checkin-' + $index" [(ngModel)]="item.checkInGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
+                                                            <label [for]="'checkin-' + $index" class="ml-2">Check-in gunu gecerli</label>
+                                                        </div>
+                                                        <div>
+                                                            <p-checkbox [inputId]="'checkout-' + $index" [(ngModel)]="item.checkOutGunuGecerliMi" [binary]="true" [disabled]="isReadOnly || saving" />
+                                                            <label [for]="'checkout-' + $index" class="ml-2">Check-out gunu gecerli</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="span-4">
+                                                    <label class="block font-medium mb-2">Saat Araligi</label>
+                                                    <div class="time-range">
+                                                        <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBaslangicSaati" [disabled]="isReadOnly || saving" />
+                                                        <span class="time-separator">-</span>
+                                                        <input pInputText type="time" class="w-full" [(ngModel)]="item.kullanimBitisSaati" [disabled]="isReadOnly || saving" />
+                                                    </div>
+                                                </div>
+                                                <div class="span-12">
+                                                    <label class="block font-medium mb-2">Aciklama</label>
+                                                    <textarea pInputTextarea rows="2" class="w-full" [(ngModel)]="item.aciklama" [disabled]="isReadOnly || saving" maxlength="256"></textarea>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -279,13 +259,13 @@ export class KonaklamaTipiDialog implements OnChanges {
     canSubmit(): boolean {
         const kod = this.workingModel.kod?.trim() ?? '';
         const ad = this.workingModel.ad?.trim() ?? '';
-        return kod.length > 0 && ad.length > 0
-            && this.workingModel.icerikKalemleri.every((item) =>
-                (item.hizmetKodu?.trim().length ?? 0) > 0
-                && (item.periyot?.trim().length ?? 0) > 0
-                && (item.kullanimTipi?.trim().length ?? 0) > 0
-                && (item.kullanimNoktasi?.trim().length ?? 0) > 0
-                && (item.miktar ?? 0) > 0);
+        return (
+            kod.length > 0 &&
+            ad.length > 0 &&
+            this.workingModel.icerikKalemleri.every(
+                (item) => (item.hizmetKodu?.trim().length ?? 0) > 0 && (item.periyot?.trim().length ?? 0) > 0 && (item.kullanimTipi?.trim().length ?? 0) > 0 && (item.kullanimNoktasi?.trim().length ?? 0) > 0 && (item.miktar ?? 0) > 0
+            )
+        );
     }
 
     submit(): void {

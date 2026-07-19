@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -54,6 +54,7 @@ interface Secenek<T = number> {
     ],
     providers: [MessageService],
     templateUrl: './kdv-beyanname-hazirlik-kontrol.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './kdv-beyanname-hazirlik-kontrol.component.scss'
 })
 export class KdvBeyannameHazirlikKontrolComponent implements OnInit {
@@ -104,7 +105,7 @@ export class KdvBeyannameHazirlikKontrolComponent implements OnInit {
     private loadDepolar(): void {
         this.depolarService.getAll().subscribe({
             next: (depolar) => {
-                this.depoSecenekleri = depolar.map(d => ({
+                this.depoSecenekleri = depolar.map((d) => ({
                     label: d.ad ?? d.kod ?? `Depo #${d.id}`,
                     value: d.id!
                 }));
@@ -130,20 +131,23 @@ export class KdvBeyannameHazirlikKontrolComponent implements OnInit {
         this.filter.tesisId = tesisId;
         this.loading = true;
         this.clearResults();
-        this.kontrolService.kontrolEt(this.filter).pipe(
-            finalize(() => {
-                this.loading = false;
-                this.cdr.markForCheck();
-            })
-        ).subscribe({
-            next: (data) => {
-                this.result = data;
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.result = null;
-            }
-        });
+        this.kontrolService
+            .kontrolEt(this.filter)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: (data) => {
+                    this.result = data;
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.result = null;
+                }
+            });
     }
 
     onFilterChange(): void {
@@ -159,19 +163,27 @@ export class KdvBeyannameHazirlikKontrolComponent implements OnInit {
 
     getDurumSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' | 'contrast' {
         switch (durum) {
-            case 'Basarili': return 'success';
-            case 'Uyari': return 'warn';
-            case 'Bloklayici': return 'danger';
-            default: return 'info';
+            case 'Basarili':
+                return 'success';
+            case 'Uyari':
+                return 'warn';
+            case 'Bloklayici':
+                return 'danger';
+            default:
+                return 'info';
         }
     }
 
     getDurumIcon(durum: string): string {
         switch (durum) {
-            case 'Basarili': return 'pi pi-check-circle';
-            case 'Uyari': return 'pi pi-exclamation-triangle';
-            case 'Bloklayici': return 'pi pi-times-circle';
-            default: return 'pi pi-info-circle';
+            case 'Basarili':
+                return 'pi pi-check-circle';
+            case 'Uyari':
+                return 'pi pi-exclamation-triangle';
+            case 'Bloklayici':
+                return 'pi pi-times-circle';
+            default:
+                return 'pi pi-info-circle';
         }
     }
 

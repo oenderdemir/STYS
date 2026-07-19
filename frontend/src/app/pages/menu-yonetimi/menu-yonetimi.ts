@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -47,6 +47,7 @@ interface MenuItemEditModel {
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, DividerModule, InputTextModule, MultiSelectModule, SelectModule, ToastModule, ToolbarModule, TreeTableModule],
     templateUrl: './menu-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class MenuYonetimi implements OnInit {
@@ -154,13 +155,12 @@ export class MenuYonetimi implements OnInit {
             queryParams: this.selectedMenuItem.queryParams.trim() || null,
             parentId: this.selectedParentId || null,
             menuOrder: this.selectedMenuItem.menuOrder ?? 0,
-            roles: this.selectedRoleIds.map((roleId) => ({ id: roleId } as RoleResponseDto)),
+            roles: this.selectedRoleIds.map((roleId) => ({ id: roleId }) as RoleResponseDto),
             items: []
         };
 
         this.saving = true;
-        const save$: Observable<unknown> =
-            this.isEditMode && this.selectedMenuItem.id ? this.service.updateMenuItem(this.selectedMenuItem.id, payload) : this.service.createMenuItem(payload);
+        const save$: Observable<unknown> = this.isEditMode && this.selectedMenuItem.id ? this.service.updateMenuItem(this.selectedMenuItem.id, payload) : this.service.createMenuItem(payload);
 
         save$
             .pipe(

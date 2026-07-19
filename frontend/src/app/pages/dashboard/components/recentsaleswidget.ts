@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { RippleModule } from 'primeng/ripple';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
@@ -34,6 +34,7 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
             </ng-template>
         </p-table>
     </div>`,
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [ProductService]
 })
 export class RecentSalesWidget {
@@ -42,6 +43,6 @@ export class RecentSalesWidget {
     productService = inject(ProductService);
 
     ngOnInit() {
-        this.productService.getProductsSmall().then((data) => (this.products.set(data)));
+        this.productService.getProductsSmall().then((data) => this.products.set(data));
     }
 }

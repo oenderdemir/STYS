@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -12,15 +12,9 @@ import { MisafirTipiDto } from './misafir-tipi-yonetimi.dto';
     selector: 'app-misafir-tipi-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, CheckboxModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '34rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '90vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '34rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '90vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />

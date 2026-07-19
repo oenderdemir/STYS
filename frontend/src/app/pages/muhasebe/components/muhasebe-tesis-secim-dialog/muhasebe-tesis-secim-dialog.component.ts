@@ -1,13 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { SelectModule } from 'primeng/select';
-import {
-    MuhasebeTesisContextService,
-    MuhasebeTesisModel
-} from '../../services/muhasebe-tesis-context.service';
+import { MuhasebeTesisContextService, MuhasebeTesisModel } from '../../services/muhasebe-tesis-context.service';
 
 /**
  * Zorunlu tesis seçim dialog'u.
@@ -29,28 +26,14 @@ import {
 @Component({
     selector: 'app-muhasebe-tesis-secim-dialog',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        DialogModule,
-        SelectModule
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [(visible)]="dialogVisible"
-            [modal]="true"
-            [closable]="false"
-            [draggable]="false"
-            header="Çalışma Tesisi Seçimi"
-            styleClass="tesis-secim-dialog"
-            [style]="{ width: '460px' }">
-
+        <p-dialog [(visible)]="dialogVisible" [modal]="true" [closable]="false" [draggable]="false" header="Çalışma Tesisi Seçimi" styleClass="tesis-secim-dialog" [style]="{ width: '460px' }">
             <div class="flex flex-col gap-4">
                 <div class="text-surface-600 dark:text-surface-400 text-sm leading-relaxed">
                     <i class="pi pi-info-circle mr-2 text-primary"></i>
-                    Muhasebe işlemlerine devam edebilmek için lütfen çalışacağınız tesisi seçiniz.
-                    Bu seçim sayfa yenilense dahi hatırlanacaktır.
+                    Muhasebe işlemlerine devam edebilmek için lütfen çalışacağınız tesisi seçiniz. Bu seçim sayfa yenilense dahi hatırlanacaktır.
                 </div>
 
                 <div class="field">
@@ -66,7 +49,8 @@ import {
                         [loading]="tesislerLoading()"
                         [filter]="true"
                         filterBy="label"
-                        (onChange)="onTesisSecildi()" />
+                        (onChange)="onTesisSecildi()"
+                    />
                 </div>
 
                 @if (tesislerError()) {
@@ -77,12 +61,7 @@ import {
                 }
 
                 <div class="flex justify-end pt-2">
-                    <p-button
-                        label="Tesisi Seç ve Devam Et"
-                        icon="pi pi-check"
-                        [disabled]="!secilenTesisId() || tesislerLoading()"
-                        [loading]="tesislerLoading()"
-                        (onClick)="onKaydet()" />
+                    <p-button label="Tesisi Seç ve Devam Et" icon="pi pi-check" [disabled]="!secilenTesisId() || tesislerLoading()" [loading]="tesislerLoading()" (onClick)="onKaydet()" />
                 </div>
             </div>
         </p-dialog>
@@ -140,7 +119,7 @@ export class MuhasebeTesisSecimDialogComponent {
         if (!id) return;
 
         const tesisler = this.context.tesisler();
-        const secilen = tesisler.find(t => t.id === id);
+        const secilen = tesisler.find((t) => t.id === id);
         if (secilen) {
             this.context.selectTesis(secilen);
         }

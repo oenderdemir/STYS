@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize, forkJoin, Observable, of } from 'rxjs';
@@ -27,6 +27,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, SelectModule, InputTextModule, TableModule, TextareaModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-tanim-yonetimi.html',
     styleUrl: './ek-hizmet-tanim-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class EkHizmetTanimYonetimi implements OnInit {
@@ -125,10 +126,12 @@ export class EkHizmetTanimYonetimi implements OnInit {
 
         this.saving = true;
         (operations.length > 0 ? forkJoin(operations) : of([]))
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Global ek hizmet tanimlari kaydedildi.' });
@@ -167,10 +170,12 @@ export class EkHizmetTanimYonetimi implements OnInit {
         this.loading = true;
         this.service
             .getGlobalTanimlar()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.rows = items.map((item) => this.toFormRow(item));

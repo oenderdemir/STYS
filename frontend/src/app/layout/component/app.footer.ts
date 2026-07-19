@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 @Component({
     standalone: true,
@@ -9,20 +9,23 @@ import { Component } from '@angular/core';
             <span>by TOD</span>
         </div>
     `,
-    styles: [`
-        .footer-brand {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: .5rem;
-            flex-wrap: wrap;
-        }
+    changeDetection: ChangeDetectionStrategy.Eager,
+    styles: [
+        `
+            .footer-brand {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
 
-        .footer-brand-logo {
-            height: 1.75rem;
-            width: auto;
-            object-fit: contain;
-        }
-    `]
+            .footer-brand-logo {
+                height: 1.75rem;
+                width: auto;
+                object-fit: contain;
+            }
+        `
+    ]
 })
 export class AppFooter {}

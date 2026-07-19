@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -27,6 +27,7 @@ import { KasaHareketleriService } from './kasa-hareketleri.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './kasa-hareketleri.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KasaHareketleriPage implements OnInit {
@@ -98,22 +99,27 @@ export class KasaHareketleriPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -160,9 +166,7 @@ export class KasaHareketleriPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateKasaHareketRequest)
-            : this.service.create(payload as CreateKasaHareketRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateKasaHareketRequest) : this.service.create(payload as CreateKasaHareketRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -183,17 +187,13 @@ export class KasaHareketleriPage implements OnInit {
 
         this.cariKartService.getAll().subscribe({
             next: (items) => {
-                this.cariKartlar = items
-                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
-                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+                this.cariKartlar = items.filter((x) => !x.tesisId || x.tesisId === tesisId).map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
                 this.cdr.detectChanges();
             }
         });
         this.kasaBankaHesapService.getByTip('NakitKasa', true).subscribe({
             next: (items) => {
-                this.kasaHesaplar = items
-                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
-                    .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+                this.kasaHesaplar = items.filter((x) => !x.tesisId || x.tesisId === tesisId).map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id!, tesisId: x.tesisId ?? null }));
                 this.cdr.detectChanges();
             }
         });
@@ -264,4 +264,3 @@ export class KasaHareketleriPage implements OnInit {
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }
-

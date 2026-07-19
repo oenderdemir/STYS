@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -28,8 +28,26 @@ import { TasinirKartlariService } from './tasinir-kartlari.service';
 @Component({
     selector: 'app-tasinir-kartlari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, AutoCompleteModule, InputNumberModule, InputTextModule, SelectModule, CheckboxModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        ConfirmDialogModule,
+        DialogModule,
+        AutoCompleteModule,
+        InputNumberModule,
+        InputTextModule,
+        SelectModule,
+        CheckboxModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     templateUrl: './tasinir-kartlari.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class TasinirKartlariPage implements OnInit {
@@ -106,23 +124,28 @@ export class TasinirKartlariPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.applyClientFilter();
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.applyClientFilter();
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -169,32 +192,35 @@ export class TasinirKartlariPage implements OnInit {
         const requestSeq = ++this.tasinirKodSearchSeq;
         this.tasinirKodLoading = true;
 
-        this.tasinirKodService.searchPaged(1, 30, query).pipe(finalize(() => {
-            if (requestSeq === this.tasinirKodSearchSeq) {
-                this.tasinirKodLoading = false;
-                this.cdr.detectChanges();
-            }
-        })).subscribe({
-            next: (paged) => {
-                if (requestSeq !== this.tasinirKodSearchSeq) {
-                    return;
-                }
+        this.tasinirKodService
+            .searchPaged(1, 30, query)
+            .pipe(
+                finalize(() => {
+                    if (requestSeq === this.tasinirKodSearchSeq) {
+                        this.tasinirKodLoading = false;
+                        this.cdr.detectChanges();
+                    }
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    if (requestSeq !== this.tasinirKodSearchSeq) {
+                        return;
+                    }
 
-                this.tasinirKodSearchResults = paged.items
-                    .filter((x) => x.aktifMi)
-                    .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                if (requestSeq !== this.tasinirKodSearchSeq) {
-                    return;
-                }
+                    this.tasinirKodSearchResults = paged.items.filter((x) => x.aktifMi).map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    if (requestSeq !== this.tasinirKodSearchSeq) {
+                        return;
+                    }
 
-                this.tasinirKodSearchResults = [];
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+                    this.tasinirKodSearchResults = [];
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     onTasinirKodSelect(event?: { value?: { label: string; value: number } }): void {
@@ -242,9 +268,7 @@ export class TasinirKartlariPage implements OnInit {
             return;
         }
 
-        const tesisId = this.dialogMode === 'create'
-            ? this.getSeciliTesisIdOrWarn()
-            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        const tesisId = this.dialogMode === 'create' ? this.getSeciliTesisIdOrWarn() : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
         if (tesisId === null) {
             return;
         }
@@ -265,9 +289,7 @@ export class TasinirKartlariPage implements OnInit {
             aciklama: this.model.aciklama?.trim() || null
         };
 
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload) : this.service.create(payload);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -342,9 +364,7 @@ export class TasinirKartlariPage implements OnInit {
         this.service.getPaketTurleri().subscribe({
             next: (items) => {
                 this.paketTurleri = items.filter((x) => x.aktifMi);
-                this.paketTuruSecenekleri = this.paketTurleri
-                    .map((x) => ({ label: `${x.ad} (${x.kisaAd})`, value: x.ad }))
-                    .sort((a, b) => a.label.localeCompare(b.label));
+                this.paketTuruSecenekleri = this.paketTurleri.map((x) => ({ label: `${x.ad} (${x.kisaAd})`, value: x.ad })).sort((a, b) => a.label.localeCompare(b.label));
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {

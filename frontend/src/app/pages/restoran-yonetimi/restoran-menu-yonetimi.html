@@ -11,16 +11,7 @@
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6 lg:col-span-4">
             <label class="block font-medium mb-2">Restoran</label>
-            <p-select
-                class="w-full"
-                [options]="restoranlar"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedRestoranId"
-                [showClear]="false"
-                [appendTo]="'body'"
-                placeholder="Restoran Secin"
-                (onChange)="onRestoranChange()" />
+            <p-select class="w-full" [options]="restoranlar" optionLabel="ad" optionValue="id" [(ngModel)]="selectedRestoranId" [showClear]="false" [appendTo]="'body'" placeholder="Restoran Secin" (onChange)="onRestoranChange()" />
         </div>
     </div>
 </div>
@@ -34,65 +25,63 @@
                 <input pInputText [(ngModel)]="urunAramaMetni" placeholder="Urun ara (ad/aciklama)" />
             </p-inputgroup>
             @if (canManage) {
-                <p-button label="Urun Ekle" icon="pi pi-plus" size="small" (onClick)="openNewUrun(kategoriGruplari[0]?.id)" [disabled]="!selectedRestoranId || !hasKategori" />
+            <p-button label="Urun Ekle" icon="pi pi-plus" size="small" (onClick)="openNewUrun($safeNavigationMigration(kategoriGruplari[0]?.id))" [disabled]="!selectedRestoranId || !hasKategori" />
             }
         </div>
     </div>
 
     @if (selectedRestoranId && !hasKategori) {
-        <p-tag value="Bu restoran icin atanmis kategori bulunmuyor." severity="warn" />
-    }
+    <p-tag value="Bu restoran icin atanmis kategori bulunmuyor." severity="warn" />
+    } @for (grup of kategoriGruplari; track grup.id) {
+    <p-panel class="mb-3" [toggleable]="true" [collapsed]="false" [header]="grup.ad + ' (' + getFiltrelenmisUrunler(grup).length + ')'">
+        <ng-template #icons>
+            @if (canManage) {
+            <p-button label="Urun Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" (onClick)="openNewUrun(grup.id)" />
+            }
+        </ng-template>
 
-    @for (grup of kategoriGruplari; track grup.id) {
-        <p-panel class="mb-3" [toggleable]="true" [collapsed]="false" [header]="grup.ad + ' (' + getFiltrelenmisUrunler(grup).length + ')'">
-            <ng-template #icons>
-                @if (canManage) {
-                    <p-button label="Urun Ekle" icon="pi pi-plus" size="small" severity="secondary" [outlined]="true" (onClick)="openNewUrun(grup.id)" />
-                }
+        <p-table [value]="getFiltrelenmisUrunler(grup)" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '44rem', 'table-layout': 'fixed' }">
+            <ng-template #colgroup>
+                <colgroup>
+                    <col style="width: 35%" />
+                    <col style="width: 18%" />
+                    <col style="width: 12%" />
+                    <col style="width: 18%" />
+                    <col style="width: 17%" />
+                </colgroup>
             </ng-template>
-
-            <p-table [value]="getFiltrelenmisUrunler(grup)" [loading]="loading" dataKey="id" [tableStyle]="{ 'min-width': '44rem', 'table-layout': 'fixed' }">
-                <ng-template #colgroup>
-                    <colgroup>
-                        <col style="width: 35%" />
-                        <col style="width: 18%" />
-                        <col style="width: 12%" />
-                        <col style="width: 18%" />
-                        <col style="width: 17%" />
-                    </colgroup>
-                </ng-template>
-                <ng-template #header>
-                    <tr>
-                        <th class="text-left">Ad</th>
-                        <th class="text-left">Fiyat</th>
-                        <th class="text-left">Sure</th>
-                        <th class="text-left">Durum</th>
-                        <th class="text-left">Islem</th>
-                    </tr>
-                </ng-template>
-                <ng-template #body let-item>
-                    <tr>
-                        <td>{{ item.ad }}</td>
-                        <td>{{ item.fiyat | number: '1.2-2' }} {{ item.paraBirimi }}</td>
-                        <td>{{ item.hazirlamaSuresiDakika }} dk</td>
-                        <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
-                        <td>
-                            <div class="flex gap-2">
-                                @if (canManage) {
-                                    <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEditUrun(item)" />
-                                    <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteUrun(item)" />
-                                }
-                            </div>
-                        </td>
-                    </tr>
-                </ng-template>
-                <ng-template #emptymessage>
-                    <tr>
-                        <td colspan="5" class="text-center py-3">Bu kategoride urun yok.</td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </p-panel>
+            <ng-template #header>
+                <tr>
+                    <th class="text-left">Ad</th>
+                    <th class="text-left">Fiyat</th>
+                    <th class="text-left">Sure</th>
+                    <th class="text-left">Durum</th>
+                    <th class="text-left">Islem</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-item>
+                <tr>
+                    <td>{{ item.ad }}</td>
+                    <td>{{ item.fiyat | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+                    <td>{{ item.hazirlamaSuresiDakika }} dk</td>
+                    <td><p-tag [value]="item.aktifMi ? 'Aktif' : 'Pasif'" [severity]="item.aktifMi ? 'success' : 'secondary'" [rounded]="true" /></td>
+                    <td>
+                        <div class="flex gap-2">
+                            @if (canManage) {
+                            <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEditUrun(item)" />
+                            <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="deleteUrun(item)" />
+                            }
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template #emptymessage>
+                <tr>
+                    <td colspan="5" class="text-center py-3">Bu kategoride urun yok.</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </p-panel>
     }
 </div>
 
@@ -100,15 +89,7 @@
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12">
             <label class="block font-medium mb-2">Kategori</label>
-            <p-select
-                class="w-full"
-                [options]="kategoriler"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="urunModel.restoranMenuKategoriId"
-                [appendTo]="'body'"
-                [showClear]="false"
-                placeholder="Kategori Secin" />
+            <p-select class="w-full" [options]="kategoriler" optionLabel="ad" optionValue="id" [(ngModel)]="urunModel.restoranMenuKategoriId" [appendTo]="'body'" [showClear]="false" placeholder="Kategori Secin" />
         </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -16,15 +16,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    MizanFilterModel,
-    MizanKarsilastirmaModel,
-    MizanKarsilastirmaSatirModel,
-    MizanModel,
-    MizanSatirModel,
-    createDefaultMizanFilter,
-    normalizeMizanFilter
-} from '../models/mizan.model';
+import { MizanFilterModel, MizanKarsilastirmaModel, MizanKarsilastirmaSatirModel, MizanModel, MizanSatirModel, createDefaultMizanFilter, normalizeMizanFilter } from '../models/mizan.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 
 const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
@@ -53,22 +45,10 @@ const PAGE_SIZE_SECENEKLERI: Array<{ label: string; value: number }> = [
 @Component({
     selector: 'app-hizli-mizan',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        DecimalPipe,
-        ButtonModule,
-        CheckboxModule,
-        InputTextModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    imports: [CommonModule, FormsModule, DecimalPipe, ButtonModule, CheckboxModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './hizli-mizan.component.html',
     styleUrls: ['./hizli-mizan.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class HizliMizanComponent implements OnInit {
@@ -145,21 +125,26 @@ export class HizliMizanComponent implements OnInit {
         this.loading = true;
         this.result = null;
         this.karsilastirmaSonucu = null;
-        this.service.getHizliMizan(normalizedFilter).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (mizan) => {
-                this.result = mizan;
-                this.filter.page = normalizedFilter.page;
-                this.filter.pageSize = normalizedFilter.pageSize;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getHizliMizan(normalizedFilter)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (mizan) => {
+                    this.result = mizan;
+                    this.filter.page = normalizedFilter.page;
+                    this.filter.pageSize = normalizedFilter.pageSize;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     karsilastir(): void {
@@ -172,11 +157,14 @@ export class HizliMizanComponent implements OnInit {
         this.karsilastirmaLoading = true;
         this.karsilastirmaSonucu = null;
 
-        this.service.karsilastirMizan(normalizedFilter)
-            .pipe(finalize(() => {
-                this.karsilastirmaLoading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .karsilastirMizan(normalizedFilter)
+            .pipe(
+                finalize(() => {
+                    this.karsilastirmaLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result) => {
                     this.karsilastirmaSonucu = result;
@@ -314,22 +302,27 @@ export class HizliMizanComponent implements OnInit {
         const normalizedFilter = normalizeMizanFilter({ ...this.filter });
 
         this.exporting = true;
-        this.service.exportMizanBakiyeExcel(normalizedFilter).pipe(finalize(() => {
-            this.exporting = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (blob) => {
-                this.downloadBlob(blob, this.createExcelFileName());
-                this.messageService.add({
-                    severity: UiSeverity.Success,
-                    summary: 'Dışa Aktarım',
-                    detail: 'Hızlı mizan Excel dosyası indiriliyor.'
-                });
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .exportMizanBakiyeExcel(normalizedFilter)
+            .pipe(
+                finalize(() => {
+                    this.exporting = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (blob) => {
+                    this.downloadBlob(blob, this.createExcelFileName());
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Dışa Aktarım',
+                        detail: 'Hızlı mizan Excel dosyası indiriliyor.'
+                    });
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     private downloadBlob(blob: Blob, fileName: string): void {

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -18,15 +18,9 @@ import { BinaDto, BinaIsletmeAlaniDto } from './bina-yonetimi.dto';
     selector: 'app-bina-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, MultiSelectModule, SelectModule, ToggleSwitchModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '35rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '95vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '35rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -40,18 +34,7 @@ import { BinaDto, BinaIsletmeAlaniDto } from './bina-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="tesisId" class="block font-medium mb-2">Tesis</label>
-                    <p-select
-                        inputId="tesisId"
-                        [options]="tesisler"
-                        optionLabel="ad"
-                        optionValue="id"
-                        [(ngModel)]="workingModel.tesisId"
-                        [showClear]="true"
-                        [filter]="true"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="tesisId" [options]="tesisler" optionLabel="ad" optionValue="id" [(ngModel)]="workingModel.tesisId" [showClear]="true" [filter]="true" appendTo="body" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="katSayisi" class="block font-medium mb-2">Kat Sayisi</label>
@@ -154,9 +137,7 @@ export class BinaDialog implements OnChanges {
     get yoneticiSecenekleri(): Array<{ label: string; value: string }> {
         return this.yoneticiAdaylari.map((item) => ({
             value: item.id,
-            label: item.adSoyad && item.adSoyad.trim().length > 0
-                ? `${item.userName} - ${item.adSoyad}`
-                : item.userName
+            label: item.adSoyad && item.adSoyad.trim().length > 0 ? `${item.userName} - ${item.adSoyad}` : item.userName
         }));
     }
 
@@ -212,10 +193,7 @@ export class BinaDialog implements OnChanges {
 
     canSubmit(): boolean {
         const isletmeAlanlariValid = (this.workingModel.isletmeAlanlari ?? []).every((item) => !!item.isletmeAlaniSinifiId);
-        return (this.workingModel.ad?.trim() ?? '').length > 0
-            && !!this.workingModel.tesisId
-            && (this.workingModel.katSayisi ?? 0) > 0
-            && isletmeAlanlariValid;
+        return (this.workingModel.ad?.trim() ?? '').length > 0 && !!this.workingModel.tesisId && (this.workingModel.katSayisi ?? 0) > 0 && isletmeAlanlariValid;
     }
 
     submit(): void {
@@ -229,7 +207,7 @@ export class BinaDialog implements OnChanges {
             tesisId: this.workingModel.tesisId,
             katSayisi: this.workingModel.katSayisi,
             aktifMi: this.workingModel.aktifMi,
-            yoneticiUserIds: this.canAssignBinaYoneticisi ? this.workingModel.yoneticiUserIds ?? [] : null,
+            yoneticiUserIds: this.canAssignBinaYoneticisi ? (this.workingModel.yoneticiUserIds ?? []) : null,
             isletmeAlanlari: this.getSanitizedIsletmeAlanlari()
         });
     }
@@ -257,10 +235,7 @@ export class BinaDialog implements OnChanges {
             return;
         }
 
-        this.workingModel.isletmeAlanlari = [
-            ...(this.workingModel.isletmeAlanlari ?? []),
-            { isletmeAlaniSinifiId: 0, ozelAd: null, aktifMi: true }
-        ];
+        this.workingModel.isletmeAlanlari = [...(this.workingModel.isletmeAlanlari ?? []), { isletmeAlaniSinifiId: 0, ozelAd: null, aktifMi: true }];
     }
 
     removeIsletmeAlaniRow(index: number): void {

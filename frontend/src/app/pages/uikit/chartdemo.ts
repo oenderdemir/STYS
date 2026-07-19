@@ -1,12 +1,13 @@
-import {Component, effect, inject, signal} from '@angular/core';
-import {ChartModule} from 'primeng/chart';
-import {FluidModule} from 'primeng/fluid';
-import {LayoutService} from '@/app/layout/service/layout.service';
+import { Component, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { ChartModule } from 'primeng/chart';
+import { FluidModule } from 'primeng/fluid';
+import { LayoutService } from '@/app/layout/service/layout.service';
 
 @Component({
     selector: 'app-chart-demo',
     standalone: true,
     imports: [ChartModule, FluidModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
         <p-fluid class="grid grid-cols-12 gap-8">
             <div class="col-span-12 xl:col-span-6">
@@ -52,29 +53,29 @@ export class ChartDemo {
     layoutService = inject(LayoutService);
 
     lineData = signal<any>(null);
-    
+
     barData = signal<any>(null);
-    
+
     pieData = signal<any>(null);
-    
+
     polarData = signal<any>(null);
-    
+
     radarData = signal<any>(null);
 
     lineOptions = signal<any>(null);
-    
+
     barOptions = signal<any>(null);
-    
+
     pieOptions = signal<any>(null);
-    
+
     polarOptions = signal<any>(null);
-    
+
     radarOptions = signal<any>(null);
 
     chartEffect = effect(() => {
         this.layoutService.layoutConfig().darkTheme;
         setTimeout(() => this.initCharts(), 150);
-    })
+    });
 
     initCharts() {
         const documentStyle = getComputedStyle(document.documentElement);

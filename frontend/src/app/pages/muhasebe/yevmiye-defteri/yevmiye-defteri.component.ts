@@ -1,6 +1,6 @@
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -14,12 +14,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    MuhasebeFisFilterModel,
-    createDefaultFisFilter,
-    normalizeFisFilter,
-    MuhasebeFisDurumlari
-} from '../models/muhasebe-fis.model';
+import { MuhasebeFisFilterModel, createDefaultFisFilter, normalizeFisFilter, MuhasebeFisDurumlari } from '../models/muhasebe-fis.model';
 import { YevmiyeDefteriModel, YevmiyeDefteriSatirModel } from '../models/yevmiye-defteri.model';
 import { MuhasebeRaporService } from '../services/muhasebe-rapor.service';
 interface DonemSecenek {
@@ -84,21 +79,10 @@ const DURUM_SECENEKLERI: DurumSecenek[] = [
 @Component({
     selector: 'app-yevmiye-defteri',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        DatePickerModule,
-        SelectModule,
-        TableModule,
-        TagModule,
-        ToastModule,
-        ToolbarModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, DatePickerModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     providers: [MessageService],
     templateUrl: './yevmiye-defteri.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrls: ['./yevmiye-defteri.component.scss']
 })
 export class YevmiyeDefteriComponent implements OnInit {
@@ -159,17 +143,22 @@ export class YevmiyeDefteriComponent implements OnInit {
         this.result = null;
         this.loading = true;
 
-        this.raporService.getYevmiyeDefteri(normalized).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (data) => {
-                this.result = data;
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.raporService
+            .getYevmiyeDefteri(normalized)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (data) => {
+                    this.result = data;
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     temizle(): void {
@@ -186,41 +175,61 @@ export class YevmiyeDefteriComponent implements OnInit {
 
     getDurumLabel(durum: string): string {
         switch (durum) {
-            case MuhasebeFisDurumlari.Taslak: return 'Taslak';
-            case MuhasebeFisDurumlari.Onayli: return 'Onaylı';
-            case MuhasebeFisDurumlari.Iptal: return 'İptal';
-            case MuhasebeFisDurumlari.TersKayit: return 'Ters Kayıt';
-            default: return durum;
+            case MuhasebeFisDurumlari.Taslak:
+                return 'Taslak';
+            case MuhasebeFisDurumlari.Onayli:
+                return 'Onaylı';
+            case MuhasebeFisDurumlari.Iptal:
+                return 'İptal';
+            case MuhasebeFisDurumlari.TersKayit:
+                return 'Ters Kayıt';
+            default:
+                return durum;
         }
     }
 
     getFisTipiLabel(fisTipi: string): string {
         switch (fisTipi) {
-            case 'Mahsup': return 'Mahsup';
-            case 'Tahsil': return 'Tahsil';
-            case 'Tediye': return 'Tediye';
-            case 'Devir': return 'Devir';
-            case 'Acilis': return 'Açılış';
-            case 'Stok': return 'Stok';
-            case 'Tasinir': return 'Taşınır';
-            default: return fisTipi;
+            case 'Mahsup':
+                return 'Mahsup';
+            case 'Tahsil':
+                return 'Tahsil';
+            case 'Tediye':
+                return 'Tediye';
+            case 'Devir':
+                return 'Devir';
+            case 'Acilis':
+                return 'Açılış';
+            case 'Stok':
+                return 'Stok';
+            case 'Tasinir':
+                return 'Taşınır';
+            default:
+                return fisTipi;
         }
     }
 
     getDurumSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (durum) {
-            case MuhasebeFisDurumlari.Onayli: return 'success';
-            case MuhasebeFisDurumlari.Taslak: return 'warn';
-            case MuhasebeFisDurumlari.Iptal: return 'danger';
-            case MuhasebeFisDurumlari.TersKayit: return 'info';
-            default: return 'secondary';
+            case MuhasebeFisDurumlari.Onayli:
+                return 'success';
+            case MuhasebeFisDurumlari.Taslak:
+                return 'warn';
+            case MuhasebeFisDurumlari.Iptal:
+                return 'danger';
+            case MuhasebeFisDurumlari.TersKayit:
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
     getFisTipiSeverity(fisTipi: string): 'info' | 'secondary' {
         switch (fisTipi) {
-            case 'Mahsup': return 'info';
-            default: return 'secondary';
+            case 'Mahsup':
+                return 'info';
+            default:
+                return 'secondary';
         }
     }
 
@@ -235,18 +244,23 @@ export class YevmiyeDefteriComponent implements OnInit {
         const normalized = normalizeFisFilter(this.filter);
         this.exporting = true;
 
-        this.raporService.exportYevmiyeDefteriExcel(normalized).pipe(finalize(() => {
-            this.exporting = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (blob) => {
-                this.downloadBlob(blob, this.createExcelFileName());
-                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Excel dosyası indiriliyor.' });
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.raporService
+            .exportYevmiyeDefteriExcel(normalized)
+            .pipe(
+                finalize(() => {
+                    this.exporting = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (blob) => {
+                    this.downloadBlob(blob, this.createExcelFileName());
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Excel dosyası indiriliyor.' });
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     private downloadBlob(blob: Blob, fileName: string): void {

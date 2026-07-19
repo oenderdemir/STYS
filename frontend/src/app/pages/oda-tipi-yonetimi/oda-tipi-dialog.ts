@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -16,15 +16,9 @@ import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
     selector: 'app-oda-tipi-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToggleSwitchModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '46rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '95vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '46rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -34,18 +28,7 @@ import { OdaSinifiDto, OdaTipiDto } from './oda-tipi-yonetimi.dto';
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 md:col-span-6">
                     <label for="tesisId" class="block font-medium mb-2">Tesis</label>
-                    <p-select
-                        inputId="tesisId"
-                        [options]="tesisler"
-                        optionLabel="ad"
-                        optionValue="id"
-                        [(ngModel)]="workingModel.tesisId"
-                        [showClear]="true"
-                        [filter]="true"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="tesisId" [options]="tesisler" optionLabel="ad" optionValue="id" [(ngModel)]="workingModel.tesisId" [showClear]="true" [filter]="true" appendTo="body" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="odaSinifiId" class="block font-medium mb-2">Oda Sinifi</label>
@@ -218,9 +201,7 @@ export class OdaTipiDialog implements OnChanges {
 
     get visibleOdaOzellikleri(): OdaOzellikDto[] {
         const selectedFeatureIds = new Set((this.workingModel.odaOzellikDegerleri ?? []).map((item) => item.odaOzellikId));
-        return [...this.odaOzellikleri]
-            .filter((item) => item.aktifMi || selectedFeatureIds.has(item.id ?? 0))
-            .sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+        return [...this.odaOzellikleri].filter((item) => item.aktifMi || selectedFeatureIds.has(item.id ?? 0)).sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
     }
 
     get groupedOdaOzellikleri(): Array<{ key: OdaOzellikVeriTipi; label: string; icon: string; items: OdaOzellikDto[] }> {
@@ -243,10 +224,7 @@ export class OdaTipiDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return !!this.workingModel.tesisId
-            && !!this.workingModel.odaSinifiId
-            && (this.workingModel.ad?.trim() ?? '').length > 0
-            && (this.workingModel.kapasite ?? 0) > 0;
+        return !!this.workingModel.tesisId && !!this.workingModel.odaSinifiId && (this.workingModel.ad?.trim() ?? '').length > 0 && (this.workingModel.kapasite ?? 0) > 0;
     }
 
     submit(): void {
@@ -328,10 +306,7 @@ export class OdaTipiDialog implements OnChanges {
             return;
         }
 
-        this.workingModel.odaOzellikDegerleri = [
-            ...(this.workingModel.odaOzellikDegerleri ?? []),
-            { odaOzellikId: ozellikId, deger: value }
-        ];
+        this.workingModel.odaOzellikDegerleri = [...(this.workingModel.odaOzellikDegerleri ?? []), { odaOzellikId: ozellikId, deger: value }];
     }
 
     private getSanitizedFeatureValues(): Array<{ odaOzellikId: number; deger: string }> {

@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, ChangeDetectionStrategy } from '@angular/core';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -18,6 +18,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     imports: [CommonModule, ButtonModule, DialogModule, TableModule, TagModule, ToastModule],
     templateUrl: './kamp-basvuru-detay-dialog.html',
     styleUrl: './kamp-basvuru-detay-dialog.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KampBasvuruDetayDialogComponent implements OnChanges {
@@ -74,11 +75,14 @@ export class KampBasvuruDetayDialogComponent implements OnChanges {
         }
 
         this.iptalEdilenKatilimciId = katilimciId;
-        this.service.katilimciIptalEt(this.detay.id, katilimciId)
-            .pipe(finalize(() => {
-                this.iptalEdilenKatilimciId = null;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .katilimciIptalEt(this.detay.id, katilimciId)
+            .pipe(
+                finalize(() => {
+                    this.iptalEdilenKatilimciId = null;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (result) => {
                     if (result.uyariMesaji) {
@@ -99,11 +103,14 @@ export class KampBasvuruDetayDialogComponent implements OnChanges {
 
     private loadDetail(id: number): void {
         this.loading = true;
-        this.service.getKampBasvuruById(id)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampBasvuruById(id)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (detay) => {
                     this.detay = detay;

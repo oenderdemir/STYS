@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
@@ -30,6 +30,7 @@ interface SelectOption<T = string | number> {
     imports: [CommonModule, FormsModule, ButtonModule, IconFieldModule, InputIconModule, InputTextModule, MenuModule, PaginatorModule, SelectModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './oda-temizlik-yonetimi.html',
     providers: [MessageService],
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './oda-temizlik-yonetimi.scss'
 })
 export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
@@ -310,9 +311,7 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
             )
             .subscribe({
                 next: (tesisler) => {
-                    this.tesisOptions = tesisler
-                        .map((x) => ({ label: x.ad, value: x.id }))
-                        .sort((a, b) => a.label.localeCompare(b.label));
+                    this.tesisOptions = tesisler.map((x) => ({ label: x.ad, value: x.id })).sort((a, b) => a.label.localeCompare(b.label));
 
                     if (!this.selectedTesisId && this.tesisOptions.length > 0) {
                         this.selectedTesisId = this.tesisOptions[0].value;
@@ -334,15 +333,7 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
 
         this.loading = true;
         this.service
-            .getPaged(
-                this.pageNumber,
-                this.pageSize,
-                this.searchQuery,
-                this.sortBy,
-                this.sortDir,
-                this.selectedTesisId,
-                this.selectedDurum
-            )
+            .getPaged(this.pageNumber, this.pageSize, this.searchQuery, this.sortBy, this.sortDir, this.selectedTesisId, this.selectedDurum)
             .pipe(
                 finalize(() => {
                     this.loading = false;

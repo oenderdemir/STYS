@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { toLocalDateString } from '../../core/utils/date-time.util';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
@@ -27,6 +27,7 @@ import { OdaFiyatYonetimiService } from './oda-fiyat-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DatePickerModule, InputTextModule, SelectModule, TagModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './oda-fiyat-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class OdaFiyatYonetimi implements OnInit {
@@ -208,18 +209,14 @@ export class OdaFiyatYonetimi implements OnInit {
             return;
         }
 
-        const usageModes = this.selectedOdaTipi.paylasimliMi
-            ? modes.filter((mode) => mode === 'KisiBasi')
-            : modes;
+        const usageModes = this.selectedOdaTipi.paylasimliMi ? modes.filter((mode) => mode === 'KisiBasi') : modes;
 
         if (usageModes.length === 0) {
             this.messageService.add({ severity: UiSeverity.Info, summary: 'Uygun Degil', detail: 'Paylasimli oda tiplerinde ozel kullanim satiri olusturulmaz.' });
             return;
         }
 
-        const existingKeys = new Set(
-            this.fiyatSatirlari.map((row) => `${row.konaklamaTipiId ?? 0}-${row.misafirTipiId ?? 0}-${row.kullanimSekli}`)
-        );
+        const existingKeys = new Set(this.fiyatSatirlari.map((row) => `${row.konaklamaTipiId ?? 0}-${row.misafirTipiId ?? 0}-${row.kullanimSekli}`));
 
         const defaultDate = this.todayDate();
         const newRows: OdaFiyatFormRow[] = [];
@@ -256,9 +253,7 @@ export class OdaFiyatYonetimi implements OnInit {
             return;
         }
 
-        this.fiyatSatirlari = markAsNewOzelKullanim
-            ? [...newRows, ...this.fiyatSatirlari]
-            : [...this.fiyatSatirlari, ...newRows];
+        this.fiyatSatirlari = markAsNewOzelKullanim ? [...newRows, ...this.fiyatSatirlari] : [...this.fiyatSatirlari, ...newRows];
         this.messageService.add({ severity: UiSeverity.Success, summary: 'Satirlar Olusturuldu', detail: `${newRows.length} eksik fiyat satiri eklendi.` });
     }
 
@@ -338,10 +333,7 @@ export class OdaFiyatYonetimi implements OnInit {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
                     this.odaTipleri = [...odaTipleri].sort((a, b) => a.ad.localeCompare(b.ad));
 
-                    if (
-                        this.selectedTesisId &&
-                        !this.tesisler.some((x) => x.id === this.selectedTesisId)
-                    ) {
+                    if (this.selectedTesisId && !this.tesisler.some((x) => x.id === this.selectedTesisId)) {
                         this.selectedTesisId = null;
                     }
 
@@ -555,9 +547,7 @@ export class OdaFiyatYonetimi implements OnInit {
     }
 
     getZeroPriceRowMessage(row: OdaFiyatFormRow): string {
-        return row.kullanimSekli === 'OzelKullanim'
-            ? 'Ozel kullanim fiyatı henuz girilmedi.'
-            : 'Kisi basi fiyat henuz girilmedi.';
+        return row.kullanimSekli === 'OzelKullanim' ? 'Ozel kullanim fiyatı henuz girilmedi.' : 'Kisi basi fiyat henuz girilmedi.';
     }
 
     isNewOzelKullanimRow(row: OdaFiyatFormRow): boolean {
@@ -578,10 +568,7 @@ export class OdaFiyatYonetimi implements OnInit {
             return false;
         }
 
-        const siblingRows = this.fiyatSatirlari.filter((item) =>
-            item.konaklamaTipiId === row.konaklamaTipiId &&
-            item.misafirTipiId === row.misafirTipiId
-        );
+        const siblingRows = this.fiyatSatirlari.filter((item) => item.konaklamaTipiId === row.konaklamaTipiId && item.misafirTipiId === row.misafirTipiId);
 
         const hasKisiBasi = siblingRows.some((item) => item.kullanimSekli === 'KisiBasi');
         const hasOzelKullanim = siblingRows.some((item) => item.kullanimSekli === 'OzelKullanim');

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -37,6 +37,7 @@ interface UserGroupEditModel {
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, DividerModule, IconFieldModule, InputIconModule, InputTextModule, MultiSelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kullanici-grup-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class KullaniciGrupYonetimi implements OnInit {
@@ -123,14 +124,11 @@ export class KullaniciGrupYonetimi implements OnInit {
             id: this.selectedUserGroup.id ?? null,
             name,
             defaultRoute,
-            roles: this.selectedRoleIds.map((roleId) => ({ id: roleId } as RoleResponseDto))
+            roles: this.selectedRoleIds.map((roleId) => ({ id: roleId }) as RoleResponseDto)
         };
 
         this.saving = true;
-        const save$: Observable<unknown> =
-            this.isEditMode && this.selectedUserGroup.id
-                ? this.service.updateUserGroup(this.selectedUserGroup.id, payload)
-                : this.service.createUserGroup(payload);
+        const save$: Observable<unknown> = this.isEditMode && this.selectedUserGroup.id ? this.service.updateUserGroup(this.selectedUserGroup.id, payload) : this.service.createUserGroup(payload);
 
         save$
             .pipe(

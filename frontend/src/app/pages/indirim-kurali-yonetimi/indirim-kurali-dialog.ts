@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -38,15 +38,9 @@ interface IndirimKuraliWorkingModel {
     selector: 'app-indirim-kurali-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, DatePickerModule, InputTextModule, SelectModule, MultiSelectModule, CheckboxModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '56rem', 'max-width': '96vw' }"
-            [breakpoints]="{ '960px': '92vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '56rem', 'max-width': '96vw' }" [breakpoints]="{ '960px': '92vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -78,7 +72,17 @@ interface IndirimKuraliWorkingModel {
 
                 <div class="col-span-12 md:col-span-4">
                     <label for="kapsamTipi" class="block font-medium mb-2">Kapsam</label>
-                    <p-select inputId="kapsamTipi" class="w-full" [options]="kapsamTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.kapsamTipi" [appendTo]="'body'" [disabled]="isReadOnly || saving || !canCreateSystemRule" (ngModelChange)="onKapsamTipiChanged()" />
+                    <p-select
+                        inputId="kapsamTipi"
+                        class="w-full"
+                        [options]="kapsamTipiOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        [(ngModel)]="workingModel.kapsamTipi"
+                        [appendTo]="'body'"
+                        [disabled]="isReadOnly || saving || !canCreateSystemRule"
+                        (ngModelChange)="onKapsamTipiChanged()"
+                    />
                 </div>
                 <div class="col-span-12 md:col-span-8">
                     <label for="tesisId" class="block font-medium mb-2">Tesis</label>
@@ -97,11 +101,35 @@ interface IndirimKuraliWorkingModel {
 
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic</label>
-                    <p-datepicker id="baslangicTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.baslangicTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
+                    <p-datepicker
+                        id="baslangicTarihi"
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="workingModel.baslangicTarihi"
+                        [disabled]="isReadOnly || saving"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                    />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="bitisTarihi" class="block font-medium mb-2">Bitis</label>
-                    <p-datepicker id="bitisTarihi" class="w-full" styleClass="w-full" inputStyleClass="w-full" [(ngModel)]="workingModel.bitisTarihi" [disabled]="isReadOnly || saving" dateFormat="dd.mm.yy" [firstDayOfWeek]="1" [showIcon]="true" [showButtonBar]="true" appendTo="body" />
+                    <p-datepicker
+                        id="bitisTarihi"
+                        class="w-full"
+                        styleClass="w-full"
+                        inputStyleClass="w-full"
+                        [(ngModel)]="workingModel.bitisTarihi"
+                        [disabled]="isReadOnly || saving"
+                        dateFormat="dd.mm.yy"
+                        [firstDayOfWeek]="1"
+                        [showIcon]="true"
+                        [showButtonBar]="true"
+                        appendTo="body"
+                    />
                 </div>
 
                 <div class="col-span-12 md:col-span-6">

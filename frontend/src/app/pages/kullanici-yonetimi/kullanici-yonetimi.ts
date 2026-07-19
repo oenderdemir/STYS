@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -43,8 +43,26 @@ type ScopedCreateType = 'tesisYonetici' | 'resepsiyonist' | 'binaYonetici' | 're
 @Component({
     selector: 'app-kullanici-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, DividerModule, IconFieldModule, InputIconModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        CheckboxModule,
+        ConfirmDialogModule,
+        DialogModule,
+        DividerModule,
+        IconFieldModule,
+        InputIconModule,
+        InputTextModule,
+        MultiSelectModule,
+        SelectModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule
+    ],
     templateUrl: './kullanici-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class KullaniciYonetimi implements OnInit {
@@ -90,8 +108,7 @@ export class KullaniciYonetimi implements OnInit {
 
     get canAssignTesisYoneticisi(): boolean {
         // Tesis yoneticisi baska tesis yoneticisi olusturamaz; sadece KurumAdmin veya SuperAdmin olusturabilir
-        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir')
-            && (this.authService.isSuperAdminUser() || this.authService.isKurumAdminUser());
+        return this.authService.hasPermission('KullaniciAtama.TesisYoneticisiAtayabilir') && (this.authService.isSuperAdminUser() || this.authService.isKurumAdminUser());
     }
 
     get canAssignBinaYoneticisi(): boolean {
@@ -111,9 +128,7 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     get isScopedTesisManager(): boolean {
-        return this.canManage
-            && this.authService.hasPermission('TesisYonetimi.Manage')
-            && !this.authService.hasPermission('KullaniciTipi.Admin');
+        return this.canManage && this.authService.hasPermission('TesisYonetimi.Manage') && !this.authService.hasPermission('KullaniciTipi.Admin');
     }
 
     get isSuperAdminUser(): boolean {
@@ -204,7 +219,7 @@ export class KullaniciYonetimi implements OnInit {
             email: this.selectedUser.email ?? null,
             avatarPath: this.selectedUser.avatarPath ?? null,
             status: this.selectedUser.status,
-            userGroups: this.selectedUserGroupIds.map((groupId) => ({ id: groupId } as UserGroupRequestDto))
+            userGroups: this.selectedUserGroupIds.map((groupId) => ({ id: groupId }) as UserGroupRequestDto)
         };
 
         if (!payload.userName) {
@@ -225,16 +240,11 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
-        const isScopedCreate = !this.isEditMode
-            && this.isScopedTesisManager
-            && !!this.selectedTesisIdForCreate
-            && (
-                this.scopedCreateType === 'tesisYonetici'
-                || this.scopedCreateType === 'resepsiyonist'
-                || this.scopedCreateType === 'binaYonetici'
-                || this.scopedCreateType === 'restoranYonetici'
-                || this.scopedCreateType === 'garson'
-            );
+        const isScopedCreate =
+            !this.isEditMode &&
+            this.isScopedTesisManager &&
+            !!this.selectedTesisIdForCreate &&
+            (this.scopedCreateType === 'tesisYonetici' || this.scopedCreateType === 'resepsiyonist' || this.scopedCreateType === 'binaYonetici' || this.scopedCreateType === 'restoranYonetici' || this.scopedCreateType === 'garson');
 
         const createKurumId = this.resolveCreateKurumId();
         if (!this.isEditMode && !this.scopedCreateType && createKurumId === null) {
@@ -255,16 +265,16 @@ export class KullaniciYonetimi implements OnInit {
             this.isEditMode && this.selectedUser.id
                 ? this.service.updateUser(this.selectedUser.id, payload)
                 : isScopedCreate && this.scopedCreateType === 'tesisYonetici' && this.selectedTesisIdForCreate
-                    ? this.service.createTesisYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
-                    : isScopedCreate && this.scopedCreateType === 'resepsiyonist' && this.selectedTesisIdForCreate
+                  ? this.service.createTesisYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
+                  : isScopedCreate && this.scopedCreateType === 'resepsiyonist' && this.selectedTesisIdForCreate
                     ? this.service.createResepsiyonistUserForTesis(this.selectedTesisIdForCreate, payload)
                     : isScopedCreate && this.scopedCreateType === 'binaYonetici' && this.selectedTesisIdForCreate
-                        ? this.service.createBinaYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
-                        : isScopedCreate && this.scopedCreateType === 'restoranYonetici' && this.selectedTesisIdForCreate
-                            ? this.service.createRestoranYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
-                            : isScopedCreate && this.scopedCreateType === 'garson' && this.selectedTesisIdForCreate
-                                ? this.service.createGarsonUserForTesis(this.selectedTesisIdForCreate, payload)
-                    : this.service.createUser(payload);
+                      ? this.service.createBinaYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
+                      : isScopedCreate && this.scopedCreateType === 'restoranYonetici' && this.selectedTesisIdForCreate
+                        ? this.service.createRestoranYoneticisiUserForTesis(this.selectedTesisIdForCreate, payload)
+                        : isScopedCreate && this.scopedCreateType === 'garson' && this.selectedTesisIdForCreate
+                          ? this.service.createGarsonUserForTesis(this.selectedTesisIdForCreate, payload)
+                          : this.service.createUser(payload);
 
         this.saving = true;
         request$
@@ -475,9 +485,7 @@ export class KullaniciYonetimi implements OnInit {
             .subscribe({
                 next: ({ users, userGroups, tesisler, kurumlar }) => {
                     this.users = users;
-                    this.allUserGroups = userGroups
-                        .map((userGroup) => this.mapToUserGroupOption(userGroup))
-                        .filter((groupOption) => this.canAssignGroup(groupOption));
+                    this.allUserGroups = userGroups.map((userGroup) => this.mapToUserGroupOption(userGroup)).filter((groupOption) => this.canAssignGroup(groupOption));
                     this.tesisler = [...tesisler].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     this.kurumOptions = [...kurumlar].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                     if (!this.isEditMode && !this.scopedCreateType) {
@@ -547,30 +555,32 @@ export class KullaniciYonetimi implements OnInit {
             return;
         }
 
-        const markerRole = type === 'tesisYonetici'
-            ? 'KullaniciAtama.TesisYoneticisiAtanabilir'
-            : type === 'resepsiyonist'
-                ? 'KullaniciAtama.ResepsiyonistAtanabilir'
-                : type === 'binaYonetici'
+        const markerRole =
+            type === 'tesisYonetici'
+                ? 'KullaniciAtama.TesisYoneticisiAtanabilir'
+                : type === 'resepsiyonist'
+                  ? 'KullaniciAtama.ResepsiyonistAtanabilir'
+                  : type === 'binaYonetici'
                     ? 'KullaniciAtama.BinaYoneticisiAtanabilir'
                     : type === 'restoranYonetici'
-                        ? 'KullaniciAtama.RestoranYoneticisiAtanabilir'
-                        : 'KullaniciAtama.RestoranGarsonuAtanabilir';
+                      ? 'KullaniciAtama.RestoranYoneticisiAtanabilir'
+                      : 'KullaniciAtama.RestoranGarsonuAtanabilir';
 
         const groupId = this.findGroupIdByMarkerRole(markerRole);
         if (!groupId) {
             this.messageService.add({
                 severity: UiSeverity.Warn,
                 summary: 'Grup Bulunamadi',
-                detail: type === 'tesisYonetici'
-                    ? 'Tesis yoneticisi grubuna ait atanabilir kayit bulunamadi.'
-                    : type === 'resepsiyonist'
-                        ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
-                        : type === 'binaYonetici'
+                detail:
+                    type === 'tesisYonetici'
+                        ? 'Tesis yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+                        : type === 'resepsiyonist'
+                          ? 'Resepsiyonist grubuna ait atanabilir kayit bulunamadi.'
+                          : type === 'binaYonetici'
                             ? 'Bina yoneticisi grubuna ait atanabilir kayit bulunamadi.'
                             : type === 'restoranYonetici'
-                                ? 'Restoran yoneticisi grubuna ait atanabilir kayit bulunamadi.'
-                                : 'Garson grubuna ait atanabilir kayit bulunamadi.'
+                              ? 'Restoran yoneticisi grubuna ait atanabilir kayit bulunamadi.'
+                              : 'Garson grubuna ait atanabilir kayit bulunamadi.'
             });
             return;
         }
@@ -585,36 +595,24 @@ export class KullaniciYonetimi implements OnInit {
     }
 
     private findGroupIdByMarkerRole(markerRole: string): string | null {
-        const preferredGroupName = markerRole === 'KullaniciAtama.TesisYoneticisiAtanabilir'
-            ? 'TesisYoneticiGrubu'
-            : markerRole === 'KullaniciAtama.RestoranYoneticisiAtanabilir'
-            ? 'RestoranYoneticiGrubu'
-            : markerRole === 'KullaniciAtama.RestoranGarsonuAtanabilir'
-                ? 'GarsonGrubu'
-                : null;
+        const preferredGroupName =
+            markerRole === 'KullaniciAtama.TesisYoneticisiAtanabilir'
+                ? 'TesisYoneticiGrubu'
+                : markerRole === 'KullaniciAtama.RestoranYoneticisiAtanabilir'
+                  ? 'RestoranYoneticiGrubu'
+                  : markerRole === 'KullaniciAtama.RestoranGarsonuAtanabilir'
+                    ? 'GarsonGrubu'
+                    : null;
 
-        const preferredGroup = preferredGroupName
-            ? this.allUserGroups.find(group =>
-                group.label === preferredGroupName
-                && group.roleNames.includes(markerRole)
-                && !this.isAdminGroup(group.roleNames))
-            : null;
+        const preferredGroup = preferredGroupName ? this.allUserGroups.find((group) => group.label === preferredGroupName && group.roleNames.includes(markerRole) && !this.isAdminGroup(group.roleNames)) : null;
 
-        const matchedGroup = preferredGroup ?? this.allUserGroups.find(
-            (group) => group.roleNames.includes(markerRole) && !this.isAdminGroup(group.roleNames)
-        );
+        const matchedGroup = preferredGroup ?? this.allUserGroups.find((group) => group.roleNames.includes(markerRole) && !this.isAdminGroup(group.roleNames));
         return matchedGroup?.value ?? null;
     }
 
     private extractSelectedRoleNames(selectedGroupIds: string[]): string[] {
         const selectedGroupSet = new Set(selectedGroupIds);
-        return [
-            ...new Set(
-                this.allUserGroups
-                    .filter((groupOption) => selectedGroupSet.has(groupOption.value))
-                    .flatMap((groupOption) => groupOption.roleNames)
-            )
-        ].sort();
+        return [...new Set(this.allUserGroups.filter((groupOption) => selectedGroupSet.has(groupOption.value)).flatMap((groupOption) => groupOption.roleNames))].sort();
     }
 
     private isTesisYoneticisiGroup(roleNames: string[]): boolean {

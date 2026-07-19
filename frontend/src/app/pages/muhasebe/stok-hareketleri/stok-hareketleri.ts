@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -57,6 +57,7 @@ import { StokHareketleriService } from './stok-hareketleri.service';
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './stok-hareketleri.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService, DialogService]
 })
 export class StokHareketleriPage implements OnInit {
@@ -98,7 +99,7 @@ export class StokHareketleriPage implements OnInit {
     /** Hareket tipi + KDV uygulama tipine göre filtrelenmiş istisna tanımları. */
     filteredKdvIstisnaTanimOptions: Array<{ label: string; value: number }> = [];
     /** Tevkifatlı hariç KDV uygulama tipi seçenekleri. */
-    filteredKdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI.filter(s => s.value !== 5);
+    filteredKdvUygulamaTipiSecenekleri = KDV_UYGULAMA_TIPI_SECENEKLERI.filter((s) => s.value !== 5);
     readonly kdvOraniSecenekleri = [
         { label: '%0', value: 0 },
         { label: '%1', value: 1 },
@@ -168,9 +169,7 @@ export class StokHareketleriPage implements OnInit {
 
         this.depolarService.getAll().subscribe({
             next: (items) => {
-                this.depoOptions = items
-                    .filter((x) => x.aktifMi && (!x.tesisId || x.tesisId === tesisId))
-                    .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+                this.depoOptions = items.filter((x) => x.aktifMi && (!x.tesisId || x.tesisId === tesisId)).map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
                 if (this.selectedDepoId && !this.depoOptions.some((x) => x.value === this.selectedDepoId)) {
                     this.selectedDepoId = undefined;
                 }
@@ -187,9 +186,7 @@ export class StokHareketleriPage implements OnInit {
         });
         this.cariKartService.getAll().subscribe({
             next: (items) => {
-                this.cariKartOptions = items
-                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
-                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
+                this.cariKartOptions = items.filter((x) => !x.tesisId || x.tesisId === tesisId).map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id! }));
                 this.cdr.detectChanges();
             }
         });
@@ -223,22 +220,27 @@ export class StokHareketleriPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedDepoId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId, this.selectedDepoId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     loadSummary(): void {
@@ -305,17 +307,17 @@ export class StokHareketleriPage implements OnInit {
         }
 
         if (this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: "KDV'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur." });
             return;
         }
 
         if (this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'KDV\'li işlemlerde istisna tanımı seçilemez.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: "KDV'li işlemlerde istisna tanımı seçilemez." });
             return;
         }
 
         if (this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li işlemlerde KDV oranı 0\'dan büyük olmalıdır.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: "KDV'li işlemlerde KDV oranı 0'dan büyük olmalıdır." });
             return;
         }
 
@@ -344,9 +346,7 @@ export class StokHareketleriPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload) : this.service.create(payload);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -466,14 +466,12 @@ export class StokHareketleriPage implements OnInit {
         // Frontend pre-check: bu kaynaktan (StokHareket) zaten aktif bir fiş var mı?
         this.muhasebeFisService.getByKaynak('StokHareket', row.id!).subscribe({
             next: (fisler) => {
-                const aktifFis = fisler.find(f => f.durum !== MuhasebeFisDurumlari.Iptal);
+                const aktifFis = fisler.find((f) => f.durum !== MuhasebeFisDurumlari.Iptal);
                 if (aktifFis) {
                     this.messageService.add({
                         severity: UiSeverity.Warn,
                         summary: 'Fiş Zaten Mevcut',
-                        detail: `Bu stok hareketi için zaten bir muhasebe fişi oluşturulmuş. ` +
-                            `Mevcut fiş: ${aktifFis.fisNo} (Durum: ${aktifFis.durum}). ` +
-                            `Yeni fiş oluşturmak için önce mevcut fişi iptal ediniz.`
+                        detail: `Bu stok hareketi için zaten bir muhasebe fişi oluşturulmuş. ` + `Mevcut fiş: ${aktifFis.fisNo} (Durum: ${aktifFis.durum}). ` + `Yeni fiş oluşturmak için önce mevcut fişi iptal ediniz.`
                     });
                     return;
                 }
@@ -594,7 +592,7 @@ export class StokHareketleriPage implements OnInit {
 
     /** Resolve KDV uygulama tipi label for display in table. */
     getKdvUygulamaTipiLabel(tip: number): string {
-        return this.kdvUygulamaTipiLabels[tip as KdvUygulamaTipi] ?? 'KDV\'li';
+        return this.kdvUygulamaTipiLabels[tip as KdvUygulamaTipi] ?? "KDV'li";
     }
 
     /** Çıkış etkisi olan hareket tipleri (backend StokHareketTipleri.CikisEtkisi ile aynı). */
@@ -629,7 +627,7 @@ export class StokHareketleriPage implements OnInit {
 
     getKdvOraniSecenekleri(currentValue?: number | null): Array<{ label: string; value: number }> {
         const base = [...this.kdvOraniSecenekleri];
-        if (currentValue !== null && currentValue !== undefined && !base.some(x => x.value === currentValue)) {
+        if (currentValue !== null && currentValue !== undefined && !base.some((x) => x.value === currentValue)) {
             base.push({ label: `%${currentValue}`, value: currentValue });
         }
         return base;
@@ -662,7 +660,7 @@ export class StokHareketleriPage implements OnInit {
             }
         }
 
-        this.filteredKdvIstisnaTanimOptions = this.kdvIstisnaTanimAllOptions.filter(o => filteredIds.has(o.value));
+        this.filteredKdvIstisnaTanimOptions = this.kdvIstisnaTanimAllOptions.filter((o) => filteredIds.has(o.value));
 
         // Eğer mevcut seçili istisna artık listede yoksa temizle
         if (this.model.kdvIstisnaTanimId && !filteredIds.has(this.model.kdvIstisnaTanimId)) {

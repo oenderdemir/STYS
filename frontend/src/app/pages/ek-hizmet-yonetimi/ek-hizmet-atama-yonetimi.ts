@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -25,6 +25,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-atama-yonetimi.html',
     styleUrl: './ek-hizmet-atama-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class EkHizmetAtamaYonetimi implements OnInit {
@@ -88,10 +89,12 @@ export class EkHizmetAtamaYonetimi implements OnInit {
         this.saving = true;
         this.service
             .kaydetTesisAtamalari(this.selectedTesisId, ids)
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.atamalar = items;
@@ -113,13 +116,15 @@ export class EkHizmetAtamaYonetimi implements OnInit {
         this.loadingBaglam = true;
         this.tesisService
             .getTesisler()
-            .pipe(finalize(() => {
-                this.loadingBaglam = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingBaglam = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (tesisler) => {
-                    this.tesisSecenekleri = tesisler.filter(x => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
+                    this.tesisSecenekleri = tesisler.filter((x) => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
                     if (this.selectedTesisId && !this.tesisSecenekleri.some((x) => x.value === this.selectedTesisId)) {
                         this.selectedTesisId = null;
                     }
@@ -150,10 +155,12 @@ export class EkHizmetAtamaYonetimi implements OnInit {
         this.loadingAtamalar = true;
         this.service
             .getTesisAtamalari(this.selectedTesisId)
-            .pipe(finalize(() => {
-                this.loadingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.atamalar = items;

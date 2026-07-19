@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -18,66 +18,35 @@ import { TenantBrandingService } from '../../core/tenant-branding/tenant-brandin
     selector: 'app-login',
     standalone: true,
     imports: [ButtonModule, CheckboxModule, InputTextModule, PasswordModule, FormsModule, RouterModule, RippleModule, AppFloatingConfigurator],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
         <app-floating-configurator />
         <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-screen overflow-hidden">
             <div class="flex flex-col items-center justify-center">
                 <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                     <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
-
                         <div class="mb-8 flex flex-col items-center">
-                            <img
-                                [src]="brandingLogoUrl"
-                                style="max-width:220px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block;"
-                                [alt]="brandingKurumAdi"
-                                (error)="onBrandLogoError($event)"
-                            />
+                            <img [src]="brandingLogoUrl" style="max-width:220px;max-height:120px;width:auto;height:auto;object-fit:contain;display:block;" [alt]="brandingKurumAdi" (error)="onBrandLogoError($event)" />
                             @if (brandingKurumAdi !== 'STYS') {
                                 <div class="text-surface-900 dark:text-surface-0 text-2xl font-semibold mt-4 text-center">
                                     {{ brandingKurumAdi }}
                                 </div>
                             }
-                            <span class="text-muted-color font-medium mt-3">
-                                Lütfen Giriş Yapınız
-                            </span>
+                            <span class="text-muted-color font-medium mt-3"> Lütfen Giriş Yapınız </span>
                         </div>
 
                         <div>
                             <label for="username1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Kullanıcı Adı</label>
-                            <input
-                                pInputText
-                                id="username1"
-                                type="text"
-                                placeholder="Kullanıcı Adı"
-                                class="w-full md:w-120 mb-8"
-                                [(ngModel)]="userName"
-                                [disabled]="isSubmitting"
-                                (keyup.enter)="signIn()"
-                            />
+                            <input pInputText id="username1" type="text" placeholder="Kullanıcı Adı" class="w-full md:w-120 mb-8" [(ngModel)]="userName" [disabled]="isSubmitting" (keyup.enter)="signIn()" />
 
                             <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Parola</label>
-                            <p-password
-                                id="password1"
-                                [(ngModel)]="password"
-                                placeholder="Parola"
-                                [toggleMask]="true"
-                                styleClass="mb-4"
-                                [fluid]="true"
-                                [feedback]="false"
-                                [disabled]="isSubmitting"
-                                (keyup.enter)="signIn()"
-                            ></p-password>
+                            <p-password id="password1" [(ngModel)]="password" placeholder="Parola" [toggleMask]="true" styleClass="mb-4" [fluid]="true" [feedback]="false" [disabled]="isSubmitting" (keyup.enter)="signIn()"></p-password>
 
                             @if (errorMessage) {
                                 <small class="block mb-4 text-red-500">{{ errorMessage }}</small>
                             }
 
-                            <p-button
-                                [label]="isSubmitting ? 'Kontrol Ediliyor...' : 'Giriş Yap'"
-                                styleClass="w-full"
-                                [disabled]="isSubmitting || !userName || !password"
-                                (onClick)="signIn()"
-                            ></p-button>
+                            <p-button [label]="isSubmitting ? 'Kontrol Ediliyor...' : 'Giriş Yap'" styleClass="w-full" [disabled]="isSubmitting || !userName || !password" (onClick)="signIn()"></p-button>
                         </div>
                     </div>
                 </div>
@@ -148,7 +117,8 @@ export class Login implements OnInit {
                 next: (response: LoginResponseDto) => {
                     this.authService.storeSession(response);
                     const landingRoute = this.authService.getLandingRoute(this.getReturnUrl());
-                    void this.router.navigateByUrl(landingRoute)
+                    void this.router
+                        .navigateByUrl(landingRoute)
                         .then((navigated) => {
                             if (!navigated) {
                                 void this.router.navigateByUrl(this.getReturnUrl());

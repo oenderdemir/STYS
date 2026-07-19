@@ -1,16 +1,16 @@
-import {Component, OnInit} from '@angular/core';
-import {ConfirmationService, MessageService} from 'primeng/api';
-import {ButtonModule} from 'primeng/button';
-import {DialogModule} from 'primeng/dialog';
-import {ToastModule} from 'primeng/toast';
-import {DrawerModule} from 'primeng/drawer';
-import {Popover, PopoverModule} from 'primeng/popover';
-import {ConfirmPopupModule} from 'primeng/confirmpopup';
-import {InputTextModule} from 'primeng/inputtext';
-import {FormsModule} from '@angular/forms';
-import {TooltipModule} from 'primeng/tooltip';
-import {TableModule} from 'primeng/table';
-import {Product, ProductService} from '@/app/pages/service/product.service';
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { ConfirmationService, MessageService } from 'primeng/api';
+import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
+import { ToastModule } from 'primeng/toast';
+import { DrawerModule } from 'primeng/drawer';
+import { Popover, PopoverModule } from 'primeng/popover';
+import { ConfirmPopupModule } from 'primeng/confirmpopup';
+import { InputTextModule } from 'primeng/inputtext';
+import { FormsModule } from '@angular/forms';
+import { TooltipModule } from 'primeng/tooltip';
+import { TableModule } from 'primeng/table';
+import { Product, ProductService } from '@/app/pages/service/product.service';
 
 @Component({
     selector: 'app-overlay-demo',
@@ -141,6 +141,7 @@ import {Product, ProductService} from '@/app/pages/service/product.service';
             </div>
         </div>
     </div>`,
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [ConfirmationService, MessageService, ProductService]
 })
 export class OverlayDemo implements OnInit {

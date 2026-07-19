@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 @Component({
     selector: 'app-documentation',
@@ -51,6 +51,7 @@ ng serve</code></pre>
             </p>
         </div>
     `,
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './documentation.scss'
 })
 export class Documentation {}

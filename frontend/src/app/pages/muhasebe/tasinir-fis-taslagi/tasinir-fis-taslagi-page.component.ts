@@ -1,4 +1,4 @@
-import { Component, OnInit, effect, inject } from '@angular/core';
+import { Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -12,13 +12,9 @@ import { TasinirMuhasebeFisTaslagiDialogComponent } from './tasinir-muhasebe-fis
 @Component({
     selector: 'app-tasinir-fis-taslagi-page',
     standalone: true,
-    imports: [
-        ButtonModule,
-        ToastModule,
-        MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
-    ],
+    imports: [ButtonModule, ToastModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './tasinir-fis-taslagi-page.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [DialogService, MessageService]
 })
 export class TasinirFisTaslagiPageComponent implements OnInit {

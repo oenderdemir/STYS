@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize, Observable } from 'rxjs';
@@ -28,6 +28,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, KampDonemiDialog],
     templateUrl: './kamp-donemi-tanim-yonetimi.html',
     styleUrl: './kamp-donemi-tanim-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
@@ -76,7 +77,7 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
         if (!this.selectedProgramId) {
             return this.kampDonemleri;
         }
-        return this.kampDonemleri.filter(x => x.kampProgramiId === this.selectedProgramId);
+        return this.kampDonemleri.filter((x) => x.kampProgramiId === this.selectedProgramId);
     }
 
     get programOptions(): Array<{ label: string; value: number }> {
@@ -177,17 +178,16 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedKampDonemi.id
-                ? this.service.updateKampDonemi(this.selectedKampDonemi.id, payload)
-                : this.service.createKampDonemi(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedKampDonemi.id ? this.service.updateKampDonemi(this.selectedKampDonemi.id, payload) : this.service.createKampDonemi(payload);
 
         this.saving = true;
         save$
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
@@ -233,11 +233,14 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
 
     private loadContextAndPage(): void {
         this.loading = true;
-        this.service.getKampDonemiYonetimBaglam()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampDonemiYonetimBaglam()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.programlar = [...baglam.programlar].sort((a, b) => a.ad.localeCompare(b.ad));
@@ -256,10 +259,12 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
         this.loading = true;
         this.service
             .getKampDonemleriPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (pagedResponse) => {
                     if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
@@ -289,10 +294,12 @@ export class KampDonemiTanimYonetimi implements OnInit, OnDestroy {
         this.saving = true;
         this.service
             .getKampDonemiById(id)
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (item) => {
                     this.selectedKampDonemi = item;

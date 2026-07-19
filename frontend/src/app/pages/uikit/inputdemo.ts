@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
 import { CommonModule } from '@angular/common';
@@ -235,6 +235,7 @@ import { Country } from '@/app/pages/service/customer.service';
                 </div>
             </div>
         </p-fluid>`,
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [CountryService, NodeService]
 })
 export class InputDemo implements OnInit {

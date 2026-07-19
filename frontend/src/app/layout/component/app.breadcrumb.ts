@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router, RouterModule } from '@angular/router';
 import { filter } from 'rxjs';
 import { MenuItem } from 'primeng/api';
@@ -16,6 +16,7 @@ import { BreadcrumbModule } from 'primeng/breadcrumb';
             </div>
         }
     `,
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './app.breadcrumb.scss'
 })
 export class AppBreadcrumb implements OnInit {
@@ -26,9 +27,7 @@ export class AppBreadcrumb implements OnInit {
 
     ngOnInit(): void {
         this.rebuild();
-        this.router.events
-            .pipe(filter((event) => event instanceof NavigationEnd))
-            .subscribe(() => this.rebuild());
+        this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe(() => this.rebuild());
     }
 
     private rebuild(): void {

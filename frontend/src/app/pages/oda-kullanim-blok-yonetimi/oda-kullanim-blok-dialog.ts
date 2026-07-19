@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -20,15 +20,9 @@ interface SelectOption<T = string | number> {
     selector: 'app-oda-kullanim-blok-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, CheckboxModule, DatePickerModule, SelectModule, TextareaModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '44rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '92vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '44rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '92vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -38,16 +32,7 @@ interface SelectOption<T = string | number> {
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 md:col-span-6">
                     <label for="blokTipi" class="block font-medium mb-2">Blok Tipi</label>
-                    <p-select
-                        inputId="blokTipi"
-                        class="w-full"
-                        [options]="blokTipiOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        [(ngModel)]="workingModel.blokTipi"
-                        [appendTo]="'body'"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="blokTipi" class="w-full" [options]="blokTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.blokTipi" [appendTo]="'body'" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6 flex items-center pt-6">
                     <p-checkbox inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [binary]="true" [disabled]="isReadOnly || saving" />
@@ -55,18 +40,7 @@ interface SelectOption<T = string | number> {
                 </div>
                 <div class="col-span-12">
                     <label for="odaId" class="block font-medium mb-2">Oda</label>
-                    <p-select
-                        inputId="odaId"
-                        class="w-full"
-                        [options]="odaOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        [(ngModel)]="workingModel.odaId"
-                        [appendTo]="'body'"
-                        [filter]="true"
-                        [showClear]="false"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="odaId" class="w-full" [options]="odaOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.odaId" [appendTo]="'body'" [filter]="true" [showClear]="false" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="baslangicTarihi" class="block font-medium mb-2">Baslangic Tarihi</label>
@@ -104,15 +78,7 @@ interface SelectOption<T = string | number> {
                 </div>
                 <div class="col-span-12">
                     <label for="aciklama" class="block font-medium mb-2">Aciklama</label>
-                    <textarea
-                        id="aciklama"
-                        pTextarea
-                        rows="4"
-                        class="w-full"
-                        [(ngModel)]="workingModel.aciklama"
-                        maxlength="512"
-                        [disabled]="isReadOnly || saving"
-                    ></textarea>
+                    <textarea id="aciklama" pTextarea rows="4" class="w-full" [(ngModel)]="workingModel.aciklama" maxlength="512" [disabled]="isReadOnly || saving"></textarea>
                 </div>
             </div>
 

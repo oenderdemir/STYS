@@ -1,13 +1,14 @@
-import {Component} from '@angular/core';
-import {TimelineModule} from 'primeng/timeline';
-import {CardModule} from 'primeng/card';
-import {CommonModule} from '@angular/common';
-import {ButtonModule} from 'primeng/button';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { TimelineModule } from 'primeng/timeline';
+import { CardModule } from 'primeng/card';
+import { CommonModule } from '@angular/common';
+import { ButtonModule } from 'primeng/button';
 
 @Component({
     selector: 'app-timeline-demo',
     standalone: true,
     imports: [CommonModule, TimelineModule, ButtonModule, CardModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `<div class="grid grid-cols-12 gap-8">
         <div class="col-span-12 sm:col-span-6">
             <div class="card">

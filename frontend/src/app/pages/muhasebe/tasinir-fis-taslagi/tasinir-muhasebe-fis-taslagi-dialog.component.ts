@@ -1,5 +1,5 @@
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
@@ -16,11 +16,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
-import {
-    TasinirMuhasebeFisiOlusturRequestModel,
-    TasinirMuhasebeFisiOlusturResultModel,
-    createDefaultTasinirFisRequest
-} from '../models/tasinir-muhasebe-fis.model';
+import { TasinirMuhasebeFisiOlusturRequestModel, TasinirMuhasebeFisiOlusturResultModel, createDefaultTasinirFisRequest } from '../models/tasinir-muhasebe-fis.model';
 import { TasinirMuhasebeFisService } from '../services/tasinir-muhasebe-fis.service';
 
 const DONEM_SECENEKLERI: Array<{ label: string; value: number | null }> = [
@@ -51,20 +47,10 @@ const KDV_ORAN_SECENEKLERI: Array<{ label: string; value: number | null }> = [
 @Component({
     selector: 'app-tasinir-muhasebe-fis-taslagi-dialog',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        DecimalPipe,
-        ButtonModule,
-        CheckboxModule,
-        DatePickerModule,
-        InputNumberModule,
-        InputTextModule,
-        SelectModule,
-        ToastModule
-    ],
+    imports: [CommonModule, FormsModule, DecimalPipe, ButtonModule, CheckboxModule, DatePickerModule, InputNumberModule, InputTextModule, SelectModule, ToastModule],
     templateUrl: './tasinir-muhasebe-fis-taslagi-dialog.component.html',
     styleUrls: ['./tasinir-muhasebe-fis-taslagi-dialog.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
@@ -86,21 +72,51 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
     ngOnInit(): void {
         const data = this.config.data as Partial<TasinirMuhasebeFisiOlusturRequestModel> | undefined;
         if (data) {
-            if (data.tasinirKodu != null) { this.request.tasinirKodu = data.tasinirKodu; }
-            if (data.tutar != null) { this.request.tutar = data.tutar; }
-            if (data.referansTipi != null) { this.request.referansTipi = data.referansTipi; }
-            if (data.referansId != null) { this.request.referansId = data.referansId; }
-            if (data.aciklama != null) { this.request.aciklama = data.aciklama; }
-            if (data.belgeNo != null) { this.request.belgeNo = data.belgeNo; }
-            if (data.fisTarihi != null) { this.request.fisTarihi = data.fisTarihi; }
-            if (data.maliYil != null) { this.request.maliYil = data.maliYil; }
-            if (data.donem != null) { this.request.donem = data.donem; }
-            if (data.alacakHesapKodu != null) { this.request.alacakHesapKodu = data.alacakHesapKodu; }
-            if (data.kdvUygulamaTipi != null) { this.request.kdvUygulamaTipi = data.kdvUygulamaTipi; }
-            if (data.kdvIstisnaKodu != null) { this.request.kdvIstisnaKodu = data.kdvIstisnaKodu; }
-            if (data.kdvIstisnaAciklamasi != null) { this.request.kdvIstisnaAciklamasi = data.kdvIstisnaAciklamasi; }
-            if (data.hareketTipi != null) { this.request.hareketTipi = data.hareketTipi; }
-            if (data.kdvTutari != null) { this.request.kdvTutari = data.kdvTutari; }
+            if (data.tasinirKodu != null) {
+                this.request.tasinirKodu = data.tasinirKodu;
+            }
+            if (data.tutar != null) {
+                this.request.tutar = data.tutar;
+            }
+            if (data.referansTipi != null) {
+                this.request.referansTipi = data.referansTipi;
+            }
+            if (data.referansId != null) {
+                this.request.referansId = data.referansId;
+            }
+            if (data.aciklama != null) {
+                this.request.aciklama = data.aciklama;
+            }
+            if (data.belgeNo != null) {
+                this.request.belgeNo = data.belgeNo;
+            }
+            if (data.fisTarihi != null) {
+                this.request.fisTarihi = data.fisTarihi;
+            }
+            if (data.maliYil != null) {
+                this.request.maliYil = data.maliYil;
+            }
+            if (data.donem != null) {
+                this.request.donem = data.donem;
+            }
+            if (data.alacakHesapKodu != null) {
+                this.request.alacakHesapKodu = data.alacakHesapKodu;
+            }
+            if (data.kdvUygulamaTipi != null) {
+                this.request.kdvUygulamaTipi = data.kdvUygulamaTipi;
+            }
+            if (data.kdvIstisnaKodu != null) {
+                this.request.kdvIstisnaKodu = data.kdvIstisnaKodu;
+            }
+            if (data.kdvIstisnaAciklamasi != null) {
+                this.request.kdvIstisnaAciklamasi = data.kdvIstisnaAciklamasi;
+            }
+            if (data.hareketTipi != null) {
+                this.request.hareketTipi = data.hareketTipi;
+            }
+            if (data.kdvTutari != null) {
+                this.request.kdvTutari = data.kdvTutari;
+            }
         }
         this.request.tesisId = this.tesisContext.seciliTesis()?.id ?? null;
     }
@@ -239,23 +255,26 @@ export class TasinirMuhasebeFisTaslagiDialogComponent implements OnInit {
             kdvTutari: this.request.kdvTutari
         };
 
-        this.service.createTasinirFisTaslagi(payload).pipe(
-            finalize(() => {
-                this.loading = false;
-            })
-        ).subscribe({
-            next: (result) => {
-                this.result = result;
-                this.messageService.add({
-                    severity: UiSeverity.Success,
-                    summary: 'Başarılı',
-                    detail: `Taşınır muhasebe fişi (${result.fisNo}) taslak olarak oluşturuldu.`
-                });
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .createTasinirFisTaslagi(payload)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.result = result;
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Başarılı',
+                        detail: `Taşınır muhasebe fişi (${result.fisNo}) taslak olarak oluşturuldu.`
+                    });
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     kapat(): void {

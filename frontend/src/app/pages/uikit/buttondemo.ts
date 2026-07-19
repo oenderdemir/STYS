@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ButtonGroupModule } from 'primeng/buttongroup';
@@ -8,6 +8,7 @@ import { SplitButtonModule } from 'primeng/splitbutton';
     selector: 'app-button-demo',
     standalone: true,
     imports: [ButtonModule, ButtonGroupModule, SplitButtonModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `<div class="flex flex-col md:flex-row gap-8">
         <div class="md:w-1/2">
             <div class="card flex flex-col gap-4">

@@ -1,5 +1,5 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -21,12 +21,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    CreateMuhasebeDonemRequest,
-    MuhasebeDonemDto,
-    UpdateMuhasebeDonemRequest,
-    createDefaultDonemFilter
-} from '../models/muhasebe-donem.model';
+import { CreateMuhasebeDonemRequest, MuhasebeDonemDto, UpdateMuhasebeDonemRequest, createDefaultDonemFilter } from '../models/muhasebe-donem.model';
 import { MuhasebeDonemService } from '../services/muhasebe-donem.service';
 
 interface DonemDialogModel {
@@ -44,9 +39,7 @@ interface DonemDialogModel {
 
 const MALI_YIL_SECENEKLERI: Array<{ label: string; value: number | null }> = (() => {
     const currentYear = new Date().getFullYear();
-    const options: Array<{ label: string; value: number | null }> = [
-        { label: 'Tümü', value: null }
-    ];
+    const options: Array<{ label: string; value: number | null }> = [{ label: 'Tümü', value: null }];
     for (let y = currentYear - 3; y <= currentYear + 3; y++) {
         options.push({ label: String(y), value: y });
     }
@@ -83,6 +76,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
     ],
     templateUrl: './muhasebe-donemler.component.html',
     styleUrl: './muhasebe-donemler.component.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class MuhasebeDonemlerComponent implements OnInit {
@@ -153,20 +147,25 @@ export class MuhasebeDonemlerComponent implements OnInit {
     loadDonemler(): void {
         const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
         this.loading = true;
-        this.service.getAll(tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (records) => {
-                this.allRecords = Array.isArray(records) ? records : [];
-                this.applyFilter();
-            },
-            error: (error: unknown) => {
-                this.allRecords = [];
-                this.filteredRecords = [];
-                this.showError(error);
-            }
-        });
+        this.service
+            .getAll(tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (records) => {
+                    this.allRecords = Array.isArray(records) ? records : [];
+                    this.applyFilter();
+                },
+                error: (error: unknown) => {
+                    this.allRecords = [];
+                    this.filteredRecords = [];
+                    this.showError(error);
+                }
+            });
     }
 
     applyFilter(): void {
@@ -174,15 +173,15 @@ export class MuhasebeDonemlerComponent implements OnInit {
         let result = [...source];
 
         if (this.filter.tesisId != null) {
-            result = result.filter(r => r.tesisId === this.filter.tesisId);
+            result = result.filter((r) => r.tesisId === this.filter.tesisId);
         }
 
         if (this.filter.maliYil != null) {
-            result = result.filter(r => r.maliYil === this.filter.maliYil);
+            result = result.filter((r) => r.maliYil === this.filter.maliYil);
         }
 
         if (this.filter.kapaliMi != null) {
-            result = result.filter(r => r.kapaliMi === this.filter.kapaliMi);
+            result = result.filter((r) => r.kapaliMi === this.filter.kapaliMi);
         }
 
         // Sort: by MaliYil desc, then DonemNo desc
@@ -259,19 +258,24 @@ export class MuhasebeDonemlerComponent implements OnInit {
                 bitisTarihi: toLocalDateString(this.model.bitisTarihi) ?? '',
                 aciklama: this.model.aciklama || null
             };
-            this.service.create(request).pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            })).subscribe({
-                next: () => {
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem oluşturuldu.' });
-                    this.dialogVisible = false;
-                    this.loadDonemler();
-                },
-                error: (error: unknown) => {
-                    this.showError(error);
-                }
-            });
+            this.service
+                .create(request)
+                .pipe(
+                    finalize(() => {
+                        this.saving = false;
+                        this.cdr.detectChanges();
+                    })
+                )
+                .subscribe({
+                    next: () => {
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem oluşturuldu.' });
+                        this.dialogVisible = false;
+                        this.loadDonemler();
+                    },
+                    error: (error: unknown) => {
+                        this.showError(error);
+                    }
+                });
         } else {
             const request: UpdateMuhasebeDonemRequest = {
                 tesisId: this.model.tesisId,
@@ -282,19 +286,24 @@ export class MuhasebeDonemlerComponent implements OnInit {
                 kapaliMi: this.model.kapaliMi,
                 aciklama: this.model.aciklama || null
             };
-            this.service.update(this.model.id, request).pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            })).subscribe({
-                next: () => {
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem güncellendi.' });
-                    this.dialogVisible = false;
-                    this.loadDonemler();
-                },
-                error: (error: unknown) => {
-                    this.showError(error);
-                }
-            });
+            this.service
+                .update(this.model.id, request)
+                .pipe(
+                    finalize(() => {
+                        this.saving = false;
+                        this.cdr.detectChanges();
+                    })
+                )
+                .subscribe({
+                    next: () => {
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem güncellendi.' });
+                        this.dialogVisible = false;
+                        this.loadDonemler();
+                    },
+                    error: (error: unknown) => {
+                        this.showError(error);
+                    }
+                });
         }
     }
 
@@ -317,18 +326,23 @@ export class MuhasebeDonemlerComponent implements OnInit {
         this.kapatilanDonemId = item.id;
         this.cdr.detectChanges();
 
-        this.service.kapat(item.id).pipe(finalize(() => {
-            this.kapatilanDonemId = null;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: () => {
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem kapatıldı.' });
-                this.loadDonemler();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .kapat(item.id)
+            .pipe(
+                finalize(() => {
+                    this.kapatilanDonemId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem kapatıldı.' });
+                    this.loadDonemler();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     confirmAc(item: MuhasebeDonemDto): void {
@@ -350,18 +364,23 @@ export class MuhasebeDonemlerComponent implements OnInit {
         this.acilanDonemId = item.id;
         this.cdr.detectChanges();
 
-        this.service.ac(item.id).pipe(finalize(() => {
-            this.acilanDonemId = null;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: () => {
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem açıldı.' });
-                this.loadDonemler();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .ac(item.id)
+            .pipe(
+                finalize(() => {
+                    this.acilanDonemId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem açıldı.' });
+                    this.loadDonemler();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     confirmDelete(item: MuhasebeDonemDto): void {
@@ -388,18 +407,23 @@ export class MuhasebeDonemlerComponent implements OnInit {
         this.silinenDonemId = item.id;
         this.cdr.detectChanges();
 
-        this.service.delete(item.id).pipe(finalize(() => {
-            this.silinenDonemId = null;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: () => {
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem silindi.' });
-                this.loadDonemler();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .delete(item.id)
+            .pipe(
+                finalize(() => {
+                    this.silinenDonemId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem silindi.' });
+                    this.loadDonemler();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     isEditingDisabled(item: MuhasebeDonemDto): boolean {

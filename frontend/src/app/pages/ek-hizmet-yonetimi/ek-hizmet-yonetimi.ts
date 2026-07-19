@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -29,6 +29,7 @@ import { EkHizmetYonetimiService } from './ek-hizmet-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DatePickerModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './ek-hizmet-yonetimi.html',
     styleUrl: './ek-hizmet-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class EkHizmetYonetimi implements OnInit {
@@ -126,27 +127,32 @@ export class EkHizmetYonetimi implements OnInit {
             return;
         }
 
-        const payload = this.tarifeler.map((row) => ({
-            id: row.id ?? null,
-            tesisId: this.selectedTesisId!,
-            ekHizmetId: row.ekHizmetId,
-            ekHizmetAdi: '',
-            ekHizmetAciklama: null,
-            birimAdi: '',
-            birimFiyat: row.birimFiyat ?? 0,
-            paraBirimi: (row.paraBirimi || 'TRY').trim().toUpperCase(),
-            baslangicTarihi: toLocalDateString(row.baslangicTarihi) ?? '',
-            bitisTarihi: toLocalDateString(row.bitisTarihi) ?? '',
-            aktifMi: row.aktifMi
-        } as EkHizmetTarifeDto));
+        const payload = this.tarifeler.map(
+            (row) =>
+                ({
+                    id: row.id ?? null,
+                    tesisId: this.selectedTesisId!,
+                    ekHizmetId: row.ekHizmetId,
+                    ekHizmetAdi: '',
+                    ekHizmetAciklama: null,
+                    birimAdi: '',
+                    birimFiyat: row.birimFiyat ?? 0,
+                    paraBirimi: (row.paraBirimi || 'TRY').trim().toUpperCase(),
+                    baslangicTarihi: toLocalDateString(row.baslangicTarihi) ?? '',
+                    bitisTarihi: toLocalDateString(row.bitisTarihi) ?? '',
+                    aktifMi: row.aktifMi
+                }) as EkHizmetTarifeDto
+        );
 
         this.savingTarifeler = true;
         this.service
             .upsertTarifeler(this.selectedTesisId, payload)
-            .pipe(finalize(() => {
-                this.savingTarifeler = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingTarifeler = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tarifeler = items.map((item) => this.toTarifeFormRow(item));
@@ -169,10 +175,12 @@ export class EkHizmetYonetimi implements OnInit {
         this.loadingReferences = true;
         this.tesisService
             .getTesisler()
-            .pipe(finalize(() => {
-                this.loadingReferences = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingReferences = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (tesisler) => {
                     this.tesisler = tesisler;
@@ -210,10 +218,12 @@ export class EkHizmetYonetimi implements OnInit {
             hizmetler: this.service.getHizmetlerByTesis(this.selectedTesisId),
             tarifeler: this.service.getTarifelerByTesis(this.selectedTesisId)
         })
-            .pipe(finalize(() => {
-                this.loadingTesisData = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingTesisData = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ hizmetler, tarifeler }) => {
                     this.hizmetSecenekleri = hizmetler;

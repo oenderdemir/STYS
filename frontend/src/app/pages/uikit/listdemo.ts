@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DataViewModule } from 'primeng/dataview';
@@ -150,6 +150,7 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
         </div>
     </div>`,
     styleUrl: './listdemo.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [ProductService]
 })
 export class ListDemo {

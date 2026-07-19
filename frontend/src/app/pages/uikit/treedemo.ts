@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { TreeNode } from 'primeng/api';
 import { TreeModule } from 'primeng/tree';
 import { FormsModule } from '@angular/forms';
@@ -40,6 +40,7 @@ import { NodeService } from '@/app/pages/service/node.service';
             </p-treetable>
         </div>
     `,
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [NodeService]
 })
 export class TreeDemo implements OnInit {

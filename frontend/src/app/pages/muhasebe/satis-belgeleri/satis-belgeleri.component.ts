@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { toLocalDateString } from '../../../core/utils/date-time.util';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -62,9 +62,9 @@ import {
     createDefaultSatisBelgesiFilter,
     createEmptySatisBelgesiSatiri,
     createEmptyCreateSatisBelgesiRequest,
-    getMusteriDisplayName,
+    getMusteriDisplayName
 } from '../models/satis-belgesi.model';
-import { FluidModule } from "primeng/fluid";
+import { FluidModule } from 'primeng/fluid';
 
 type SatirParametreKey = 'indirim' | 'tevkifat' | 'otv' | 'oiv' | 'konaklamaVergisi';
 
@@ -80,33 +80,34 @@ interface SatirParametreDurumu {
     selector: 'app-satis-belgeleri',
     standalone: true,
     imports: [
-    CommonModule,
-    FormsModule,
-    ReactiveFormsModule,
-    AutoCompleteModule,
-    ButtonModule,
-    CardModule,
-    ConfirmDialogModule,
-    DatePickerModule,
-    DialogModule,
-    InputNumberModule,
-    InputTextModule,
-    MenuModule,
-    SelectModule,
-    TableModule,
-    TabsModule,
-    TagModule,
-    TextareaModule,
-    ToastModule,
-    ToggleSwitchModule,
-    ToolbarModule,
-    TooltipModule,
-    MuhasebeTesisSecimDialogComponent,
-    MuhasebeTesisContextBarComponent,
-    FluidModule
-],
+        CommonModule,
+        FormsModule,
+        ReactiveFormsModule,
+        AutoCompleteModule,
+        ButtonModule,
+        CardModule,
+        ConfirmDialogModule,
+        DatePickerModule,
+        DialogModule,
+        InputNumberModule,
+        InputTextModule,
+        MenuModule,
+        SelectModule,
+        TableModule,
+        TabsModule,
+        TagModule,
+        TextareaModule,
+        ToastModule,
+        ToggleSwitchModule,
+        ToolbarModule,
+        TooltipModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent,
+        FluidModule
+    ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './satis-belgeleri.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './satis-belgeleri.component.scss'
 })
 export class SatisBelgeleriComponent implements OnInit {
@@ -186,8 +187,7 @@ export class SatisBelgeleriComponent implements OnInit {
     belgeTipiSecenekleri: Array<{ value: number; label: string }> = [];
     kaynakModulSecenekleri = Object.entries(this.kaynakModulLabels).map(([k, v]) => ({ value: Number(k), label: v }));
     satirTipiSecenekleri = Object.entries(this.satirTipiLabels).map(([k, v]) => ({ value: Number(k), label: v }));
-    kdvUygulamaTipiSecenekleri = Object.entries(this.kdvUygulamaTipiLabels)
-        .map(([k, v]) => ({ value: Number(k), label: v }));
+    kdvUygulamaTipiSecenekleri = Object.entries(this.kdvUygulamaTipiLabels).map(([k, v]) => ({ value: Number(k), label: v }));
     readonly kdvOraniSecenekleri = [
         { label: '%0', value: 0 },
         { label: '%1', value: 1 },
@@ -196,14 +196,7 @@ export class SatisBelgeleriComponent implements OnInit {
         { label: '%18', value: 18 },
         { label: '%20', value: 20 }
     ];
-    readonly satirKartRenkSiniflari = [
-        'document-line-card--tone-1',
-        'document-line-card--tone-2',
-        'document-line-card--tone-3',
-        'document-line-card--tone-4',
-        'document-line-card--tone-5',
-        'document-line-card--tone-6'
-    ];
+    readonly satirKartRenkSiniflari = ['document-line-card--tone-1', 'document-line-card--tone-2', 'document-line-card--tone-3', 'document-line-card--tone-4', 'document-line-card--tone-5', 'document-line-card--tone-6'];
     tevkifatSecenekleri = [
         { label: '2/10', value: '2/10' },
         { label: '3/10', value: '3/10' },
@@ -216,53 +209,54 @@ export class SatisBelgeleriComponent implements OnInit {
 
     getMusteriDisplay = getMusteriDisplayName;
 
-    private readonly tesisDegisimEffect = effect(() => {
-        if (!this.tesisHazir()) {
-            return;
-        }
+    private readonly tesisDegisimEffect = effect(
+        () => {
+            if (!this.tesisHazir()) {
+                return;
+            }
 
-        const tesis = this.tesisContext.seciliTesis();
-        const tesisId = tesis?.id ?? null;
-        if (!tesisId) {
-            return;
-        }
+            const tesis = this.tesisContext.seciliTesis();
+            const tesisId = tesis?.id ?? null;
+            if (!tesisId) {
+                return;
+            }
 
-        if (this.lastLoadedTesisId === tesisId) {
-            return;
-        }
+            if (this.lastLoadedTesisId === tesisId) {
+                return;
+            }
 
-        const tesisDegisti = this.lastLoadedTesisId !== null && this.lastLoadedTesisId !== tesisId;
-        this.lastLoadedTesisId = tesisId;
+            const tesisDegisti = this.lastLoadedTesisId !== null && this.lastLoadedTesisId !== tesisId;
+            this.lastLoadedTesisId = tesisId;
 
-        if (tesisDegisti && this.dialogVisible()) {
-            this.dialogVisible.set(false);
-            this.messageService.add({
-                severity: 'warn',
-                summary: 'Çalışma Tesisi Değişti',
-                detail: 'Çalışma tesisi değiştiği için açık form kapatıldı.'
-            });
-            this.formData.set(createEmptyCreateSatisBelgesiRequest());
-            this.selectedCari.set(null);
-            this.manuelMusteriGirisi.set(false);
-        }
+            if (tesisDegisti && this.dialogVisible()) {
+                this.dialogVisible.set(false);
+                this.messageService.add({
+                    severity: 'warn',
+                    summary: 'Çalışma Tesisi Değişti',
+                    detail: 'Çalışma tesisi değiştiği için açık form kapatıldı.'
+                });
+                this.formData.set(createEmptyCreateSatisBelgesiRequest());
+                this.selectedCari.set(null);
+                this.manuelMusteriGirisi.set(false);
+            }
 
-        this.loadLookupLists(tesisId);
-        this.loadBelgeler();
-    }, { allowSignalWrites: true });
+            this.loadLookupLists(tesisId);
+            this.loadBelgeler();
+        },
+        { allowSignalWrites: true }
+    );
 
     ngOnInit(): void {
-        this.route.data
-            .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe(data => {
-                const nextMode = data['belgeModu'] === 'alis' ? 'alis' : 'satis';
-                const previousMode = this.belgeModu();
-                this.applyBelgeModu(nextMode);
+        this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data) => {
+            const nextMode = data['belgeModu'] === 'alis' ? 'alis' : 'satis';
+            const previousMode = this.belgeModu();
+            this.applyBelgeModu(nextMode);
 
-                if (previousMode !== nextMode && this.tesisHazir() && this.tesisContext.seciliTesis()?.id) {
-                    this.loadLookupLists(this.tesisContext.seciliTesis()!.id);
-                    this.loadBelgeler();
-                }
-            });
+            if (previousMode !== nextMode && this.tesisHazir() && this.tesisContext.seciliTesis()?.id) {
+                this.loadLookupLists(this.tesisContext.seciliTesis()!.id);
+                this.loadBelgeler();
+            }
+        });
 
         this.tesisContext.initialize().subscribe({
             next: () => {
@@ -307,35 +301,34 @@ export class SatisBelgeleriComponent implements OnInit {
 
     loadPaketTurleri(): void {
         this.paketTurleriLoading.set(true);
-        this.paketTurleriService.getAll().pipe(
-            finalize(() => this.paketTurleriLoading.set(false))
-        ).subscribe({
-            next: (data) => {
-                const aktifPaketTurleri = data
-                    .filter(t => t.aktifMi)
-                    .sort((a, b) => (a.kisaAd || a.ad || '').localeCompare(b.kisaAd || b.ad || ''));
+        this.paketTurleriService
+            .getAll()
+            .pipe(finalize(() => this.paketTurleriLoading.set(false)))
+            .subscribe({
+                next: (data) => {
+                    const aktifPaketTurleri = data.filter((t) => t.aktifMi).sort((a, b) => (a.kisaAd || a.ad || '').localeCompare(b.kisaAd || b.ad || ''));
 
-                const secenekler = aktifPaketTurleri.map(t => ({
-                    label: t.kisaAd ? `${t.kisaAd} - ${t.ad}` : t.ad,
-                    value: t.ad
-                }));
-                this.paketTurleri.set(aktifPaketTurleri);
+                    const secenekler = aktifPaketTurleri.map((t) => ({
+                        label: t.kisaAd ? `${t.kisaAd} - ${t.ad}` : t.ad,
+                        value: t.ad
+                    }));
+                    this.paketTurleri.set(aktifPaketTurleri);
 
-                if (secenekler.length === 0) {
-                    this.messageService.add({
-                        severity: 'warn',
-                        summary: 'Paket Türleri',
-                        detail: 'Aktif paket türü bulunamadı. Birim alanı varsayılan Adet ile devam edecek.'
-                    });
+                    if (secenekler.length === 0) {
+                        this.messageService.add({
+                            severity: 'warn',
+                            summary: 'Paket Türleri',
+                            detail: 'Aktif paket türü bulunamadı. Birim alanı varsayılan Adet ile devam edecek.'
+                        });
+                    }
+
+                    this.paketTuruSecenekleri.set(secenekler.length > 0 ? secenekler : [{ label: 'Adet', value: 'Adet' }]);
+                },
+                error: (err) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Paket türleri yüklenemedi: ' + err.message });
+                    this.paketTuruSecenekleri.set([{ label: 'Adet', value: 'Adet' }]);
                 }
-
-                this.paketTuruSecenekleri.set(secenekler.length > 0 ? secenekler : [{ label: 'Adet', value: 'Adet' }]);
-            },
-            error: (err) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Paket türleri yüklenemedi: ' + err.message });
-                this.paketTuruSecenekleri.set([{ label: 'Adet', value: 'Adet' }]);
-            }
-        });
+            });
     }
 
     applyBelgeModu(mod: 'satis' | 'alis'): void {
@@ -353,7 +346,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
     getBelgeTipiSecenekleri(): Array<{ value: number; label: string }> {
         const tipler = this.isAlisMode() ? ALIS_BELGE_TIPLERI : SATIS_BELGE_TIPLERI;
-        return tipler.map(tip => ({ value: tip, label: this.getBelgeTipiLabel(tip) }));
+        return tipler.map((tip) => ({ value: tip, label: this.getBelgeTipiLabel(tip) }));
     }
 
     getDefaultBelgeTipi(): SatisBelgesiTipi {
@@ -373,7 +366,7 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     getDialogHeader(): string {
-        return this.isAlisMode() ? (this.isEditing() ? 'Alış Belgesi Düzenle' : 'Yeni Alış Belgesi') : (this.isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi');
+        return this.isAlisMode() ? (this.isEditing() ? 'Alış Belgesi Düzenle' : 'Yeni Alış Belgesi') : this.isEditing() ? 'Satış Belgesi Düzenle' : 'Yeni Satış Belgesi';
     }
 
     getCariPanelTitle(): string {
@@ -385,31 +378,23 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     getCariPlaceholder(): string {
-        return this.isAlisMode()
-            ? 'Tedarikçi cari seçiniz (unvan, vergi no veya TCKN ile arayın)...'
-            : 'Cari kart seçiniz (unvan, vergi no veya TCKN ile arayın)...';
+        return this.isAlisMode() ? 'Tedarikçi cari seçiniz (unvan, vergi no veya TCKN ile arayın)...' : 'Cari kart seçiniz (unvan, vergi no veya TCKN ile arayın)...';
     }
 
     getCariHelperText(): string {
-        return this.isAlisMode()
-            ? 'Tedarikçi seçtiğinizde bilgiler otomatik doldurulur.'
-            : 'Cari kart seçtiğinizde müşteri bilgileri otomatik doldurulur.';
+        return this.isAlisMode() ? 'Tedarikçi seçtiğinizde bilgiler otomatik doldurulur.' : 'Cari kart seçtiğinizde müşteri bilgileri otomatik doldurulur.';
     }
 
     getCariEmptyStateTitle(): string {
-        return this.isAlisMode()
-            ? 'Tedarikçi bilgisi bekleniyor'
-            : 'Cari bilgisi bekleniyor';
+        return this.isAlisMode() ? 'Tedarikçi bilgisi bekleniyor' : 'Cari bilgisi bekleniyor';
     }
 
     getCariEmptyStateMessage(): string {
-        return this.isAlisMode()
-            ? 'Tedarikçi cari kart seçiniz veya manuel cari bilgisi girişi seçeneğini açınız.'
-            : 'Cari kart seçiniz veya manuel müşteri bilgisi girişi seçeneğini açınız.';
+        return this.isAlisMode() ? 'Tedarikçi cari kart seçiniz veya manuel cari bilgisi girişi seçeneğini açınız.' : 'Cari kart seçiniz veya manuel müşteri bilgisi girişi seçeneğini açınız.';
     }
 
     getOtomatikCariTagValue(): string {
-        return this.isAlisMode() ? 'Tedarikçiden otomatik' : 'Cari\'den otomatik';
+        return this.isAlisMode() ? 'Tedarikçiden otomatik' : "Cari'den otomatik";
     }
 
     getCariOzetBasligi(): string {
@@ -437,72 +422,59 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     getCariTipleriForMode(): string[] {
-        return this.isAlisMode()
-            ? [CARI_KART_TIPLERI.Tedarikci]
-            : [CARI_KART_TIPLERI.Musteri, CARI_KART_TIPLERI.KurumsalMusteri];
+        return this.isAlisMode() ? [CARI_KART_TIPLERI.Tedarikci] : [CARI_KART_TIPLERI.Musteri, CARI_KART_TIPLERI.KurumsalMusteri];
     }
 
     loadCariKartlar(tesisId: number): void {
         this.cariKartlarLoading.set(true);
-        this.cariKartService.getAll(tesisId).pipe(
-            finalize(() => this.cariKartlarLoading.set(false))
-        ).subscribe({
-            next: (data) => {
-                const allowedTypes = this.getCariTipleriForMode();
-                const cariList = data
-                    .filter(c => c.aktifMi && allowedTypes.includes(c.cariTipi))
-                    .sort((a, b) => (a.cariKodu ?? '').localeCompare(b.cariKodu ?? ''));
-                this.cariKartlar.set(cariList);
-                this.filteredCariKartlar = [...cariList];
-                this.syncSelectedCariWithLookup(cariList);
-            },
-            error: (err) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Cari kartlar yüklenemedi: ' + err.message });
-            }
-        });
+        this.cariKartService
+            .getAll(tesisId)
+            .pipe(finalize(() => this.cariKartlarLoading.set(false)))
+            .subscribe({
+                next: (data) => {
+                    const allowedTypes = this.getCariTipleriForMode();
+                    const cariList = data.filter((c) => c.aktifMi && allowedTypes.includes(c.cariTipi)).sort((a, b) => (a.cariKodu ?? '').localeCompare(b.cariKodu ?? ''));
+                    this.cariKartlar.set(cariList);
+                    this.filteredCariKartlar = [...cariList];
+                    this.syncSelectedCariWithLookup(cariList);
+                },
+                error: (err) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Cari kartlar yüklenemedi: ' + err.message });
+                }
+            });
     }
 
     loadDepolar(tesisId: number): void {
         this.depolarLoading.set(true);
-        this.depoService.getAll(tesisId).pipe(
-            finalize(() => this.depolarLoading.set(false))
-        ).subscribe({
-            next: (data) => {
-                const depolar = data
-                    .filter(d => d.aktifMi)
-                    .sort((a, b) => (a.kod ?? '').localeCompare(b.kod ?? ''));
-                this.depoSecenekleri.set(
-                    depolar
-                        .filter(d => !!d.id)
-                        .map(d => ({ label: `${d.kod} - ${d.ad}`, value: d.id! }))
-                );
-            },
-            error: (err) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Depolar yüklenemedi: ' + err.message });
-            }
-        });
+        this.depoService
+            .getAll(tesisId)
+            .pipe(finalize(() => this.depolarLoading.set(false)))
+            .subscribe({
+                next: (data) => {
+                    const depolar = data.filter((d) => d.aktifMi).sort((a, b) => (a.kod ?? '').localeCompare(b.kod ?? ''));
+                    this.depoSecenekleri.set(depolar.filter((d) => !!d.id).map((d) => ({ label: `${d.kod} - ${d.ad}`, value: d.id! })));
+                },
+                error: (err) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Depolar yüklenemedi: ' + err.message });
+                }
+            });
     }
 
     loadTasinirKartlar(tesisId: number): void {
         this.tasinirKartlarLoading.set(true);
-        this.tasinirKartService.getAll(tesisId).pipe(
-            finalize(() => this.tasinirKartlarLoading.set(false))
-        ).subscribe({
-            next: (data) => {
-                const kartlar = data
-                    .filter(k => k.aktifMi)
-                    .sort((a, b) => (a.stokKodu ?? '').localeCompare(b.stokKodu ?? ''));
-                this.tasinirKartlar.set(kartlar);
-                this.tasinirKartSecenekleri.set(
-                    kartlar
-                        .filter(k => !!k.id)
-                        .map(k => ({ label: `${k.stokKodu} - ${k.ad} (${k.birim})`, value: k.id! }))
-                );
-            },
-            error: (err) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Taşınır kartlar yüklenemedi: ' + err.message });
-            }
-        });
+        this.tasinirKartService
+            .getAll(tesisId)
+            .pipe(finalize(() => this.tasinirKartlarLoading.set(false)))
+            .subscribe({
+                next: (data) => {
+                    const kartlar = data.filter((k) => k.aktifMi).sort((a, b) => (a.stokKodu ?? '').localeCompare(b.stokKodu ?? ''));
+                    this.tasinirKartlar.set(kartlar);
+                    this.tasinirKartSecenekleri.set(kartlar.filter((k) => !!k.id).map((k) => ({ label: `${k.stokKodu} - ${k.ad} (${k.birim})`, value: k.id! })));
+                },
+                error: (err) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'Taşınır kartlar yüklenemedi: ' + err.message });
+                }
+            });
     }
 
     loadKdvIstisnaTanimlari(): void {
@@ -514,28 +486,27 @@ export class SatisBelgeleriComponent implements OnInit {
         } else {
             filter.satisIslemlerindeKullanilirMi = true;
         }
-        this.kdvIstisnaTanimService.filter(filter).pipe(
-            finalize(() => this.kdvIstisnaTanimlariLoading.set(false))
-        ).subscribe({
-            next: (data) => {
-                const list = data
-                    .filter(t => t.aktifMi && (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi))
-                    .sort((a, b) => `${a.kod} ${a.ad}`.localeCompare(`${b.kod} ${b.ad}`));
-                this.kdvIstisnaTanimlari.set(list);
-            },
-            error: (err) => {
-                this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'KDV istisna tanımları yüklenemedi: ' + err.message });
-            }
-        });
+        this.kdvIstisnaTanimService
+            .filter(filter)
+            .pipe(finalize(() => this.kdvIstisnaTanimlariLoading.set(false)))
+            .subscribe({
+                next: (data) => {
+                    const list = data.filter((t) => t.aktifMi && (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi)).sort((a, b) => `${a.kod} ${a.ad}`.localeCompare(`${b.kod} ${b.ad}`));
+                    this.kdvIstisnaTanimlari.set(list);
+                },
+                error: (err) => {
+                    this.messageService.add({ severity: 'error', summary: 'Hata', detail: 'KDV istisna tanımları yüklenemedi: ' + err.message });
+                }
+            });
     }
 
     onFilterFieldChange<K extends keyof SatisBelgesiFilterDto>(key: K, value: SatisBelgesiFilterDto[K]): void {
-        this.filter.update(f => ({ ...f, [key]: value }));
+        this.filter.update((f) => ({ ...f, [key]: value }));
         this.loadBelgeler();
     }
 
     updateFormField<K extends keyof CreateSatisBelgesiRequest>(key: K, value: CreateSatisBelgesiRequest[K]): void {
-        this.formData.update(f => ({ ...f, [key]: value }));
+        this.formData.update((f) => ({ ...f, [key]: value }));
     }
 
     onFilterChange(): void {
@@ -553,16 +524,14 @@ export class SatisBelgeleriComponent implements OnInit {
             return;
         }
 
-        const matched = cariList.find(c =>
-            c.id === current.id ||
-            (!!c.vergiNoTckn && c.vergiNoTckn === current.vergiNoTckn && c.unvanAdSoyad === current.unvanAdSoyad));
+        const matched = cariList.find((c) => c.id === current.id || (!!c.vergiNoTckn && c.vergiNoTckn === current.vergiNoTckn && c.unvanAdSoyad === current.unvanAdSoyad));
 
         if (matched) {
             this.selectedCari.set(matched);
-            this.formData.update(f => ({ ...f, cariKartId: matched.id ?? null }));
+            this.formData.update((f) => ({ ...f, cariKartId: matched.id ?? null }));
         } else if (!this.manuelMusteriGirisi()) {
             this.selectedCari.set(null);
-            this.formData.update(f => ({ ...f, cariKartId: null }));
+            this.formData.update((f) => ({ ...f, cariKartId: null }));
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Cari Kart Uyarısı',
@@ -574,16 +543,17 @@ export class SatisBelgeleriComponent implements OnInit {
     private syncSelectedCariFromBelge(belge: SatisBelgesiDto): void {
         const cariList = this.cariKartlar();
         const matched = belge.cariKartId
-            ? cariList.find(c => c.id === belge.cariKartId)
-            : cariList.find(c =>
-                (belge.musteriVergiNo && c.vergiNoTckn === belge.musteriVergiNo) ||
-                (belge.musteriTcKimlikNo && c.vergiNoTckn === belge.musteriTcKimlikNo) ||
-                (belge.kurumsalMi && c.unvanAdSoyad === belge.musteriUnvan) ||
-                (!belge.kurumsalMi && c.unvanAdSoyad === belge.musteriAdSoyad)
-            );
+            ? cariList.find((c) => c.id === belge.cariKartId)
+            : cariList.find(
+                  (c) =>
+                      (belge.musteriVergiNo && c.vergiNoTckn === belge.musteriVergiNo) ||
+                      (belge.musteriTcKimlikNo && c.vergiNoTckn === belge.musteriTcKimlikNo) ||
+                      (belge.kurumsalMi && c.unvanAdSoyad === belge.musteriUnvan) ||
+                      (!belge.kurumsalMi && c.unvanAdSoyad === belge.musteriAdSoyad)
+              );
 
         this.selectedCari.set(matched ?? null);
-        this.formData.update(f => ({ ...f, cariKartId: matched?.id ?? belge.cariKartId ?? null }));
+        this.formData.update((f) => ({ ...f, cariKartId: matched?.id ?? belge.cariKartId ?? null }));
     }
 
     // ── Cari Kart AutoComplete ──
@@ -595,19 +565,15 @@ export class SatisBelgeleriComponent implements OnInit {
             this.filteredCariKartlar = [...allCari];
             return;
         }
-        this.filteredCariKartlar = allCari.filter(c =>
-            (c.unvanAdSoyad ?? '').toLowerCase().includes(query) ||
-            (c.vergiNoTckn ?? '').toLowerCase().includes(query) ||
-            (c.cariKodu ?? '').toLowerCase().includes(query)
-        );
+        this.filteredCariKartlar = allCari.filter((c) => (c.unvanAdSoyad ?? '').toLowerCase().includes(query) || (c.vergiNoTckn ?? '').toLowerCase().includes(query) || (c.cariKodu ?? '').toLowerCase().includes(query));
     }
 
     onCariKartSecildi(cari: CariKartModel | null): void {
         if (!cari) {
             this.selectedCari.set(null);
-            this.formData.update(f => ({ ...f, cariKartId: null }));
+            this.formData.update((f) => ({ ...f, cariKartId: null }));
             if (!this.manuelMusteriGirisi()) {
-                this.formData.update(f => ({
+                this.formData.update((f) => ({
                     ...f,
                     kurumsalMi: false,
                     musteriUnvan: null,
@@ -627,14 +593,12 @@ export class SatisBelgeleriComponent implements OnInit {
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Cari Tipi Uyuşmuyor',
-                detail: this.isAlisMode()
-                    ? 'Alış belgelerinde yalnızca tedarikçi cari kartları seçilebilir.'
-                    : 'Satış belgelerinde yalnızca müşteri cari kartları seçilebilir.'
+                detail: this.isAlisMode() ? 'Alış belgelerinde yalnızca tedarikçi cari kartları seçilebilir.' : 'Satış belgelerinde yalnızca müşteri cari kartları seçilebilir.'
             });
             this.selectedCari.set(null);
-            this.formData.update(f => ({ ...f, cariKartId: null }));
+            this.formData.update((f) => ({ ...f, cariKartId: null }));
             if (!this.manuelMusteriGirisi()) {
-                this.formData.update(f => ({
+                this.formData.update((f) => ({
                     ...f,
                     kurumsalMi: false,
                     musteriUnvan: null,
@@ -652,13 +616,13 @@ export class SatisBelgeleriComponent implements OnInit {
 
         this.manuelMusteriGirisi.set(false);
         this.selectedCari.set(cari);
-        this.formData.update(f => ({ ...f, cariKartId: cari.id ?? null }));
+        this.formData.update((f) => ({ ...f, cariKartId: cari.id ?? null }));
         // Satışta müşteri tipi, alışta tedarikçi snapshot'ı kurumsal varsayılır
         const kurumsalMi = this.isAlisMode() || cari.cariTipi === 'KurumsalMusteri';
 
         // Manuel müşteri girişi kapalıyken cari bilgilerini form alanlarına yaz
         if (!this.manuelMusteriGirisi()) {
-            this.formData.update(f => ({
+            this.formData.update((f) => ({
                 ...f,
                 kurumsalMi,
                 musteriUnvan: kurumsalMi ? cari.unvanAdSoyad : null,
@@ -677,7 +641,7 @@ export class SatisBelgeleriComponent implements OnInit {
         this.manuelMusteriGirisi.set(value);
         if (value) {
             this.selectedCari.set(null);
-            this.formData.update(f => ({ ...f, cariKartId: null }));
+            this.formData.update((f) => ({ ...f, cariKartId: null }));
         } else if (this.selectedCari()) {
             // Manuel mod kapandı — seçili cari varsa bilgileri tekrar doldur
             this.onCariKartSecildi(this.selectedCari());
@@ -711,7 +675,7 @@ export class SatisBelgeleriComponent implements OnInit {
         const empty = createEmptyCreateSatisBelgesiRequest();
         empty.belgeTipi = this.getDefaultBelgeTipi();
         empty.tesisId = tesisId;
-        empty.satirlar.forEach(satir => {
+        empty.satirlar.forEach((satir) => {
             satir.birim = this.resolveDefaultBirim();
         });
         this.formData.set(empty);
@@ -737,7 +701,7 @@ export class SatisBelgeleriComponent implements OnInit {
             kaynakId: belge.kaynakId,
             tesisId: belge.tesisId,
             cariKartId: belge.cariKartId ?? null,
-            belgeTarihi: belge.belgeTarihi?.split('T')[0] ?? (toLocalDateString(new Date()) ?? ''),
+            belgeTarihi: belge.belgeTarihi?.split('T')[0] ?? toLocalDateString(new Date()) ?? '',
             vadeTarihi: belge.vadeTarihi?.split('T')[0] ?? null,
             musteriUnvan: belge.musteriUnvan,
             musteriAdSoyad: belge.musteriAdSoyad,
@@ -750,7 +714,7 @@ export class SatisBelgeleriComponent implements OnInit {
             kurumsalMi: belge.kurumsalMi,
             aciklama: belge.aciklama,
             belgeNo: belge.belgeNo,
-                satirlar: belge.satirlar.map(s => ({
+            satirlar: belge.satirlar.map((s) => ({
                 siraNo: s.siraNo,
                 satirTipi: s.satirTipi,
                 aciklama: s.aciklama,
@@ -789,9 +753,7 @@ export class SatisBelgeleriComponent implements OnInit {
             this.messageService.add({
                 severity: 'warn',
                 summary: 'Eksik Bilgi',
-                detail: this.isAlisMode()
-                    ? 'Lütfen tedarikçi cari kart seçiniz veya "Manuel cari bilgisi gireceğim" seçeneğini açınız.'
-                    : 'Lütfen cari kart seçiniz veya "Manuel müşteri bilgisi gireceğim" seçeneğini açınız.'
+                detail: this.isAlisMode() ? 'Lütfen tedarikçi cari kart seçiniz veya "Manuel cari bilgisi gireceğim" seçeneğini açınız.' : 'Lütfen cari kart seçiniz veya "Manuel müşteri bilgisi gireceğim" seçeneğini açınız.'
             });
             return;
         }
@@ -807,7 +769,7 @@ export class SatisBelgeleriComponent implements OnInit {
             const payload = {
                 ...this.formData(),
                 tesisId,
-                satirlar: this.formData().satirlar.map(s => this.mapSatirToRequest(s))
+                satirlar: this.formData().satirlar.map((s) => this.mapSatirToRequest(s))
             };
             const updateReq: UpdateSatisBelgesiRequest = {
                 belgeNo: payload.belgeNo,
@@ -844,7 +806,7 @@ export class SatisBelgeleriComponent implements OnInit {
             const payload = {
                 ...this.formData(),
                 tesisId,
-                satirlar: this.formData().satirlar.map(s => this.mapSatirToRequest(s))
+                satirlar: this.formData().satirlar.map((s) => this.mapSatirToRequest(s))
             };
             this.service.create(payload).subscribe({
                 next: () => {
@@ -966,7 +928,7 @@ export class SatisBelgeleriComponent implements OnInit {
         yeniSatir.birim = this.resolveDefaultBirim();
         this.initializeSatirParametreDurumlari([yeniSatir]);
         satirlar.push(yeniSatir);
-        this.formData.update(f => ({ ...f, satirlar }));
+        this.formData.update((f) => ({ ...f, satirlar }));
     }
 
     removeSatir(index: number): void {
@@ -977,10 +939,10 @@ export class SatisBelgeleriComponent implements OnInit {
         const removedSatir = this.formData().satirlar[index] ?? null;
         const removedSatirUiId = removedSatir ? this.getSatirUiId(removedSatir) : null;
         const satirlar = this.formData().satirlar.filter((_, i) => i !== index);
-        satirlar.forEach((s, i) => s.siraNo = i + 1);
-        this.formData.update(f => ({ ...f, satirlar }));
+        satirlar.forEach((s, i) => (s.siraNo = i + 1));
+        this.formData.update((f) => ({ ...f, satirlar }));
         if (removedSatirUiId !== null) {
-            this.collapsedSatirUiIds.update(ids => ids.filter(id => id !== removedSatirUiId));
+            this.collapsedSatirUiIds.update((ids) => ids.filter((id) => id !== removedSatirUiId));
         }
     }
 
@@ -990,7 +952,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
     toggleSatirExpanded(satir: CreateSatisBelgesiSatiriRequest): void {
         const satirUiId = this.getSatirUiId(satir);
-        this.collapsedSatirUiIds.update(ids => {
+        this.collapsedSatirUiIds.update((ids) => {
             const next = new Set(ids);
             if (next.has(satirUiId)) {
                 next.delete(satirUiId);
@@ -1021,7 +983,7 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     private initializeSatirParametreDurumlari(satirlar: CreateSatisBelgesiSatiriRequest[]): void {
-        satirlar.forEach(satir => {
+        satirlar.forEach((satir) => {
             this.getSatirParametreDurumu(satir);
             this.getSatirUiId(satir);
         });
@@ -1046,9 +1008,7 @@ export class SatisBelgeleriComponent implements OnInit {
 
         const yeniDurum: SatirParametreDurumu = {
             indirim: this.getSatirIndirimOrani(satir) > 0 || this.getSatirIndirimTutari(satir) > 0,
-            tevkifat: satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli ||
-                this.getSatirTevkifatTutari(satir) > 0 ||
-                this.hasTevkifatliParametre(satir),
+            tevkifat: satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli || this.getSatirTevkifatTutari(satir) > 0 || this.hasTevkifatliParametre(satir),
             otv: this.getSatirOtvOrani(satir) > 0 || this.getSatirOtvTutari(satir) > 0,
             oiv: this.getSatirOivOrani(satir) > 0 || this.getSatirOivTutari(satir) > 0,
             konaklamaVergisi: this.getSatirKonaklamaVergisiOrani(satir) > 0 || this.getSatirKonaklamaVergisiTutari(satir) > 0
@@ -1062,10 +1022,7 @@ export class SatisBelgeleriComponent implements OnInit {
         return (satir.tevkifatPay ?? 0) > 0 && (satir.tevkifatPayda ?? 0) > 0;
     }
 
-    private setSatirParametreGorunurlugu(
-        satir: CreateSatisBelgesiSatiriRequest,
-        parametre: SatirParametreKey,
-        visible: boolean): void {
+    private setSatirParametreGorunurlugu(satir: CreateSatisBelgesiSatiriRequest, parametre: SatirParametreKey, visible: boolean): void {
         const durum = this.getSatirParametreDurumu(satir);
         durum[parametre] = visible;
 
@@ -1152,13 +1109,7 @@ export class SatisBelgeleriComponent implements OnInit {
             command: () => this.toggleSatirParametre(satir, parametre)
         });
 
-        return [
-            buildItem('indirim', 'İndirim'),
-            buildItem('tevkifat', 'Tevkifat Oranı'),
-            buildItem('otv', 'ÖTV'),
-            buildItem('oiv', 'ÖİV'),
-            buildItem('konaklamaVergisi', 'Konaklama Vergisi')
-        ];
+        return [buildItem('indirim', 'İndirim'), buildItem('tevkifat', 'Tevkifat Oranı'), buildItem('otv', 'ÖTV'), buildItem('oiv', 'ÖİV'), buildItem('konaklamaVergisi', 'Konaklama Vergisi')];
     }
 
     private normalizeLookupValue(value?: string | null): string {
@@ -1172,7 +1123,7 @@ export class SatisBelgeleriComponent implements OnInit {
     private calculateRateBasedAmount(baseAmount: number, rate?: number | null, fallbackAmount?: number | null): number {
         const normalizedRate = this.normalizeRate(rate);
         if (normalizedRate > 0) {
-            return Math.max(0, Math.round(baseAmount * normalizedRate / 100 * 100) / 100);
+            return Math.max(0, Math.round(((baseAmount * normalizedRate) / 100) * 100) / 100);
         }
 
         return Math.max(0, fallbackAmount ?? 0);
@@ -1188,9 +1139,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 'Adet';
         }
 
-        const adet = secenekler.find(opt =>
-            this.normalizeLookupValue(opt.value) === 'adet' ||
-            this.normalizeLookupValue(opt.label) === 'adet');
+        const adet = secenekler.find((opt) => this.normalizeLookupValue(opt.value) === 'adet' || this.normalizeLookupValue(opt.label) === 'adet');
 
         return adet?.value ?? secenekler[0]?.value ?? 'Adet';
     }
@@ -1199,7 +1148,7 @@ export class SatisBelgeleriComponent implements OnInit {
         const secenekler = [...this.paketTuruSecenekleri()];
         const currentValue = satir?.birim?.trim();
 
-        if (currentValue && !secenekler.some(opt => opt.value === currentValue)) {
+        if (currentValue && !secenekler.some((opt) => opt.value === currentValue)) {
             secenekler.unshift({ label: currentValue, value: currentValue });
         }
 
@@ -1221,7 +1170,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 0;
         }
 
-        return Math.max(0, Math.round((this.getSatirIndirimTutari(satir) * 100 / brut) * 10000) / 10000);
+        return Math.max(0, Math.round(((this.getSatirIndirimTutari(satir) * 100) / brut) * 10000) / 10000);
     }
 
     getSatirIndirimTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1236,13 +1185,11 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     getSatirBrutKdvTutari(satir: CreateSatisBelgesiSatiriRequest): number {
-        if (satir.kdvUygulamaTipi === KdvUygulamaTipi.TamIstisna ||
-            satir.kdvUygulamaTipi === KdvUygulamaTipi.KismiIstisna ||
-            satir.kdvUygulamaTipi === KdvUygulamaTipi.KdvKapsamDisi) {
+        if (satir.kdvUygulamaTipi === KdvUygulamaTipi.TamIstisna || satir.kdvUygulamaTipi === KdvUygulamaTipi.KismiIstisna || satir.kdvUygulamaTipi === KdvUygulamaTipi.KdvKapsamDisi) {
             return 0;
         }
 
-        return this.getSatirMatrah(satir) * (satir.kdvOrani ?? 0) / 100;
+        return (this.getSatirMatrah(satir) * (satir.kdvOrani ?? 0)) / 100;
     }
 
     getSatirTevkifatTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1257,7 +1204,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 0;
         }
 
-        return brutKdv * pay / payda;
+        return (brutKdv * pay) / payda;
     }
 
     previewNetKdvTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1280,7 +1227,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 0;
         }
 
-        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+        return Math.max(0, Math.round(((tutar * 100) / matrah) * 10000) / 10000);
     }
 
     getSatirOtvTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1299,7 +1246,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 0;
         }
 
-        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+        return Math.max(0, Math.round(((tutar * 100) / matrah) * 10000) / 10000);
     }
 
     getSatirOivTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1318,7 +1265,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return 0;
         }
 
-        return Math.max(0, Math.round((tutar * 100 / matrah) * 10000) / 10000);
+        return Math.max(0, Math.round(((tutar * 100) / matrah) * 10000) / 10000);
     }
 
     getSatirKonaklamaVergisiTutari(satir: CreateSatisBelgesiSatiriRequest): number {
@@ -1369,14 +1316,14 @@ export class SatisBelgeleriComponent implements OnInit {
         if (!tasinirKartId) {
             return '-';
         }
-        return this.tasinirKartSecenekleri().find(x => x.value === tasinirKartId)?.label ?? `#${tasinirKartId}`;
+        return this.tasinirKartSecenekleri().find((x) => x.value === tasinirKartId)?.label ?? `#${tasinirKartId}`;
     }
 
     getDepoLabel(depoId?: number | null): string {
         if (!depoId) {
             return '-';
         }
-        return this.depoSecenekleri().find(x => x.value === depoId)?.label ?? `#${depoId}`;
+        return this.depoSecenekleri().find((x) => x.value === depoId)?.label ?? `#${depoId}`;
     }
 
     getSelectedCariDisplay(): string {
@@ -1385,24 +1332,18 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     getKdvIstisnaSecenekleri(satir: CreateSatisBelgesiSatiriRequest): Array<{ label: string; value: number }> {
-        if (
-            satir.kdvUygulamaTipi === KdvUygulamaTipi.Kdvli ||
-            satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli
-        ) {
+        if (satir.kdvUygulamaTipi === KdvUygulamaTipi.Kdvli || satir.kdvUygulamaTipi === KdvUygulamaTipi.Tevkifatli) {
             return [];
         }
 
         return this.kdvIstisnaTanimlari()
-            .filter(t =>
-                t.aktifMi &&
-                (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi) &&
-                (t.uygulamaTipi === satir.kdvUygulamaTipi))
-            .map(t => ({ label: `${t.kod} - ${t.ad}`, value: t.id }));
+            .filter((t) => t.aktifMi && (this.isAlisMode() ? t.alisIslemlerindeKullanilirMi : t.satisIslemlerindeKullanilirMi) && t.uygulamaTipi === satir.kdvUygulamaTipi)
+            .map((t) => ({ label: `${t.kod} - ${t.ad}`, value: t.id }));
     }
 
     getKdvOraniSecenekleri(currentValue?: number | null): Array<{ label: string; value: number }> {
         const base = [...this.kdvOraniSecenekleri];
-        if (currentValue !== null && currentValue !== undefined && !base.some(x => x.value === currentValue)) {
+        if (currentValue !== null && currentValue !== undefined && !base.some((x) => x.value === currentValue)) {
             base.push({ label: `%${currentValue}`, value: currentValue });
         }
         return base;
@@ -1422,7 +1363,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return;
         }
 
-        const [pay, payda] = value.split('/').map(part => Number(part));
+        const [pay, payda] = value.split('/').map((part) => Number(part));
         satir.tevkifatPay = Number.isFinite(pay) ? pay : null;
         satir.tevkifatPayda = Number.isFinite(payda) ? payda : null;
     }
@@ -1460,11 +1401,9 @@ export class SatisBelgeleriComponent implements OnInit {
             return;
         }
 
-        const kart = this.tasinirKartlar().find(k => k.id === value);
+        const kart = this.tasinirKartlar().find((k) => k.id === value);
         if (kart && (!satir.birim || this.normalizeLookupValue(satir.birim) === 'adet')) {
-            satir.birim = this.getBirimSecenekleri().some(opt => opt.value === kart.birim)
-                ? kart.birim
-                : this.resolveDefaultBirim();
+            satir.birim = this.getBirimSecenekleri().some((opt) => opt.value === kart.birim) ? kart.birim : this.resolveDefaultBirim();
         }
     }
 
@@ -1496,18 +1435,11 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     canIptal(belge: SatisBelgesiDto): boolean {
-        return belge.durum !== SatisBelgesiDurumu.IptalEdildi &&
-            belge.durum !== SatisBelgesiDurumu.FaturaKesildi &&
-            belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;
+        return belge.durum !== SatisBelgesiDurumu.IptalEdildi && belge.durum !== SatisBelgesiDurumu.FaturaKesildi && belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;
     }
 
     canFisOlustur(belge: SatisBelgesiDto): boolean {
-        if (
-            belge.durum !== SatisBelgesiDurumu.MuhasebeOnaylandi ||
-            belge.muhasebeFisId ||
-            belge.belgeTipi === SatisBelgesiTipi.Proforma ||
-            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi
-        ) {
+        if (belge.durum !== SatisBelgesiDurumu.MuhasebeOnaylandi || belge.muhasebeFisId || belge.belgeTipi === SatisBelgesiTipi.Proforma || belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi) {
             return false;
         }
 
@@ -1515,9 +1447,7 @@ export class SatisBelgeleriComponent implements OnInit {
             return belge.belgeTipi === SatisBelgesiTipi.AlisFaturasi || belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi;
         }
 
-        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi ||
-            belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi ||
-            belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi;
+        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi || belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi || belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi;
     }
 
     hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
@@ -1534,12 +1464,12 @@ export class SatisBelgeleriComponent implements OnInit {
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
         if (!this.canFisOlustur(belge)) {
             const detail = this.isAlisMode()
-                ? (belge.belgeTipi === SatisBelgesiTipi.Proforma
+                ? belge.belgeTipi === SatisBelgesiTipi.Proforma
                     ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
-                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.')
-                : (belge.belgeTipi === SatisBelgesiTipi.Proforma
-                    ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
-                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.');
+                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.'
+                : belge.belgeTipi === SatisBelgesiTipi.Proforma
+                  ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
+                  : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.';
 
             this.messageService.add({
                 severity: 'warn',

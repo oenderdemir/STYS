@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -51,22 +51,9 @@ interface SiparisKalemFormModel {
 @Component({
     selector: 'app-restoran-siparis-yonetimi',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        ConfirmDialogModule,
-        DialogModule,
-        InputNumberModule,
-        InputTextModule,
-        SelectModule,
-        TableModule,
-        TabsModule,
-        TagModule,
-        ToastModule,
-        ToolbarModule
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './restoran-siparis-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RestoranSiparisYonetimi implements OnInit {
@@ -227,11 +214,14 @@ export class RestoranSiparisYonetimi implements OnInit {
         };
 
         this.saving = true;
-        this.service.create(payload)
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .create(payload)
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.createDialogVisible = false;
@@ -261,11 +251,14 @@ export class RestoranSiparisYonetimi implements OnInit {
 
         const payload: UpdateRestoranSiparisDurumRequest = { siparisDurumu: this.selectedDurum };
         this.paymentSaving = true;
-        this.service.updateDurum(this.selectedSiparis.id, payload)
-            .pipe(finalize(() => {
-                this.paymentSaving = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .updateDurum(this.selectedSiparis.id, payload)
+            .pipe(
+                finalize(() => {
+                    this.paymentSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (updated) => {
                     this.selectedSiparis = updated;
@@ -383,11 +376,14 @@ export class RestoranSiparisYonetimi implements OnInit {
             aciklama: this.odemeAciklama
         };
 
-        this.service.odayaEkle(this.selectedSiparis.id, payload)
-            .pipe(finalize(() => {
-                this.paymentSaving = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .odayaEkle(this.selectedSiparis.id, payload)
+            .pipe(
+                finalize(() => {
+                    this.paymentSaving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.rezervasyonDialogVisible = false;
@@ -431,10 +427,12 @@ export class RestoranSiparisYonetimi implements OnInit {
         forkJoin({
             restoranlar: this.restoranService.getAll()
         })
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ restoranlar }) => {
                     this.restoranlar = restoranlar;
@@ -496,20 +494,18 @@ export class RestoranSiparisYonetimi implements OnInit {
 
         this.loading = true;
 
-        const request$ = this.selectedMasaId
-            ? this.service.getAcikByMasaId(this.selectedMasaId)
-            : this.service.getByRestoranId(this.selectedRestoranId);
+        const request$ = this.selectedMasaId ? this.service.getAcikByMasaId(this.selectedMasaId) : this.service.getByRestoranId(this.selectedRestoranId);
 
         request$
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
-                    this.siparisler = this.selectedMasaId
-                        ? items.filter((x) => x.restoranMasaId === this.selectedMasaId)
-                        : items;
+                    this.siparisler = this.selectedMasaId ? items.filter((x) => x.restoranMasaId === this.selectedMasaId) : items;
                 },
                 error: (error: unknown) => {
                     this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, finalize } from 'rxjs';
@@ -18,13 +18,7 @@ import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-c
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { KdvHareketRaporuService } from '../services/kdv-hareket-raporu.service';
-import {
-    BELGE_YONU_SECENEKLERI,
-    KdvHareketRaporModel,
-    KdvRaporFilterModel,
-    TevkifatHareketRaporModel,
-    createDefaultKdvRaporFilter
-} from '../models/kdv-hareket-raporu.model';
+import { BELGE_YONU_SECENEKLERI, KdvHareketRaporModel, KdvRaporFilterModel, TevkifatHareketRaporModel, createDefaultKdvRaporFilter } from '../models/kdv-hareket-raporu.model';
 
 @Component({
     selector: 'app-kdv-hareket-raporu',
@@ -47,6 +41,7 @@ import {
     ],
     providers: [MessageService],
     templateUrl: './kdv-hareket-raporu.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './kdv-hareket-raporu.component.scss'
 })
 export class KdvHareketRaporuComponent implements OnInit {
@@ -107,18 +102,20 @@ export class KdvHareketRaporuComponent implements OnInit {
         forkJoin({
             kdv: this.raporService.getRapor(this.filter),
             tevkifat: this.raporService.getTevkifatRapor(this.filter)
-        }).pipe(
-            finalize(() => {
-                this.loading = false;
-                this.cdr.markForCheck();
-            })
-        ).subscribe({
-            next: ({ kdv, tevkifat }) => {
-                this.kdvRapor = kdv;
-                this.tevkifatRapor = tevkifat;
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+        })
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: ({ kdv, tevkifat }) => {
+                    this.kdvRapor = kdv;
+                    this.tevkifatRapor = tevkifat;
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     formatPara(value: number): string {
@@ -136,43 +133,65 @@ export class KdvHareketRaporuComponent implements OnInit {
 
     getBelgeTipiLabel(value: string): string {
         switch (value) {
-            case 'FaturaTaslagi': return 'Fatura Taslağı';
-            case 'SatisFaturasi': return 'Satış Faturası';
-            case 'AlisFaturasi': return 'Alış Faturası';
-            case 'SatisIadeFaturasi': return 'Satış İade Faturası';
-            case 'AlisIadeFaturasi': return 'Alış İade Faturası';
-            case 'IadeFaturasi': return 'Legacy İade';
-            case 'Proforma': return 'Proforma';
-            default: return value;
+            case 'FaturaTaslagi':
+                return 'Fatura Taslağı';
+            case 'SatisFaturasi':
+                return 'Satış Faturası';
+            case 'AlisFaturasi':
+                return 'Alış Faturası';
+            case 'SatisIadeFaturasi':
+                return 'Satış İade Faturası';
+            case 'AlisIadeFaturasi':
+                return 'Alış İade Faturası';
+            case 'IadeFaturasi':
+                return 'Legacy İade';
+            case 'Proforma':
+                return 'Proforma';
+            default:
+                return value;
         }
     }
 
     getBelgeYonuLabel(value: string): string {
         switch (value) {
-            case 'Satis': return 'Satış';
-            case 'Alis': return 'Alış';
-            case 'Iade': return 'İade';
-            default: return value;
+            case 'Satis':
+                return 'Satış';
+            case 'Alis':
+                return 'Alış';
+            case 'Iade':
+                return 'İade';
+            default:
+                return value;
         }
     }
 
     getBelgeYonuSeverity(value: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (value) {
-            case 'Satis': return 'success';
-            case 'Alis': return 'danger';
-            case 'Iade': return 'warn';
-            default: return 'secondary';
+            case 'Satis':
+                return 'success';
+            case 'Alis':
+                return 'danger';
+            case 'Iade':
+                return 'warn';
+            default:
+                return 'secondary';
         }
     }
 
     getKdvTipiSeverity(value: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (value) {
-            case 'KDV\'li': return 'info';
-            case 'Tam İstisna': return 'success';
-            case 'Kısmi İstisna': return 'warn';
-            case 'KDV Kapsam Dışı': return 'secondary';
-            case 'Tevkifatlı': return 'danger';
-            default: return 'secondary';
+            case "KDV'li":
+                return 'info';
+            case 'Tam İstisna':
+                return 'success';
+            case 'Kısmi İstisna':
+                return 'warn';
+            case 'KDV Kapsam Dışı':
+                return 'secondary';
+            case 'Tevkifatlı':
+                return 'danger';
+            default:
+                return 'secondary';
         }
     }
 

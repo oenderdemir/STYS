@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { catchError, finalize, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -46,23 +46,10 @@ interface UserOption {
 @Component({
     selector: 'app-kurum-yonetimi',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        CheckboxModule,
-        ConfirmDialogModule,
-        DialogModule,
-        SelectModule,
-        TableModule,
-        TabsModule,
-        TagModule,
-        ToastModule,
-        ToolbarModule,
-        InputTextModule
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, SelectModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule, InputTextModule],
     templateUrl: './kurum-yonetimi.html',
     styleUrl: './kurum-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class KurumYonetimi implements OnInit {
@@ -175,9 +162,7 @@ export class KurumYonetimi implements OnInit {
         }
 
         this.kurumSaving = true;
-        const request$: Observable<KurumModel> = this.selectedKurumIsNew || !this.selectedKurum.id
-            ? this.kurumService.create(payload)
-            : this.kurumService.update(this.selectedKurum.id, payload);
+        const request$: Observable<KurumModel> = this.selectedKurumIsNew || !this.selectedKurum.id ? this.kurumService.create(payload) : this.kurumService.update(this.selectedKurum.id, payload);
 
         request$
             .pipe(
@@ -210,7 +195,7 @@ export class KurumYonetimi implements OnInit {
     }
 
     deleteKurum(kurum: KurumModel | null = null): void {
-        const target = kurum ?? (this.selectedKurum.id ? this.selectedKurum as KurumModel : null);
+        const target = kurum ?? (this.selectedKurum.id ? (this.selectedKurum as KurumModel) : null);
         if (!this.canManageKurumList || !target?.id) {
             return;
         }
@@ -291,7 +276,8 @@ export class KurumYonetimi implements OnInit {
             };
 
             this.kurumUserSaving = true;
-            this.kurumKullaniciService.assign(assignPayload)
+            this.kurumKullaniciService
+                .assign(assignPayload)
                 .pipe(finalize(() => (this.kurumUserSaving = false)))
                 .subscribe({
                     next: () => {
@@ -316,7 +302,8 @@ export class KurumYonetimi implements OnInit {
         };
 
         this.kurumUserSaving = true;
-        this.kurumKullaniciService.update(request.id, updatePayload)
+        this.kurumKullaniciService
+            .update(request.id, updatePayload)
             .pipe(finalize(() => (this.kurumUserSaving = false)))
             .subscribe({
                 next: () => {
@@ -468,7 +455,8 @@ export class KurumYonetimi implements OnInit {
         }
 
         this.kurumUserLoading = true;
-        this.kurumKullaniciService.getByKurum(this.selectedKurum.id)
+        this.kurumKullaniciService
+            .getByKurum(this.selectedKurum.id)
             .pipe(
                 finalize(() => {
                     this.kurumUserLoading = false;
@@ -570,20 +558,23 @@ export class KurumYonetimi implements OnInit {
         }
 
         this.logoUploadingKurumId = kurumId;
-        this.kurumService.uploadLogo(kurumId, file).pipe(
-            finalize(() => {
-                this.logoUploadingKurumId = null;
-                this.cdr.detectChanges();
-            })
-        ).subscribe({
-            next: (updated) => {
-                this.updateKurumInList(updated);
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo yuklendi.' });
-            },
-            error: (error: unknown) => {
-                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-            }
-        });
+        this.kurumService
+            .uploadLogo(kurumId, file)
+            .pipe(
+                finalize(() => {
+                    this.logoUploadingKurumId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (updated) => {
+                    this.updateKurumInList(updated);
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo yuklendi.' });
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                }
+            });
     }
 
     deleteSelectedKurumLogo(): void {
@@ -593,41 +584,40 @@ export class KurumYonetimi implements OnInit {
         }
 
         this.logoDeletingKurumId = kurumId;
-        this.kurumService.deleteLogo(kurumId).pipe(
-            finalize(() => {
-                this.logoDeletingKurumId = null;
-                this.cdr.detectChanges();
-            })
-        ).subscribe({
-            next: () => {
-                const cleared: KurumModel = {
-                    id: kurumId,
-                    kod: this.selectedKurum.kod,
-                    ad: this.selectedKurum.ad,
-                    aktifMi: this.selectedKurum.aktifMi,
-                    vergiNo: this.selectedKurum.vergiNo,
-                    telefon: this.selectedKurum.telefon,
-                    eposta: this.selectedKurum.eposta,
-                    logoDosyaAdi: null,
-                    logoUrl: null
-                };
-                this.updateKurumInList(cleared);
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo silindi.' });
-            },
-            error: (error: unknown) => {
-                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
-            }
-        });
+        this.kurumService
+            .deleteLogo(kurumId)
+            .pipe(
+                finalize(() => {
+                    this.logoDeletingKurumId = null;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    const cleared: KurumModel = {
+                        id: kurumId,
+                        kod: this.selectedKurum.kod,
+                        ad: this.selectedKurum.ad,
+                        aktifMi: this.selectedKurum.aktifMi,
+                        vergiNo: this.selectedKurum.vergiNo,
+                        telefon: this.selectedKurum.telefon,
+                        eposta: this.selectedKurum.eposta,
+                        logoDosyaAdi: null,
+                        logoUrl: null
+                    };
+                    this.updateKurumInList(cleared);
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Logo silindi.' });
+                },
+                error: (error: unknown) => {
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
+                }
+            });
     }
 
     private updateKurumInList(updated: KurumModel): void {
         const index = this.kurumlar.findIndex((k) => k.id === updated.id);
         if (index !== -1) {
-            this.kurumlar = [
-                ...this.kurumlar.slice(0, index),
-                updated,
-                ...this.kurumlar.slice(index + 1)
-            ];
+            this.kurumlar = [...this.kurumlar.slice(0, index), updated, ...this.kurumlar.slice(index + 1)];
         }
 
         if (this.selectedKurum.id === updated.id) {

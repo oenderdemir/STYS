@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -28,8 +28,24 @@ type ParentOption = { label: string; value: number };
 @Component({
     selector: 'app-tasinir-kodlari-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, AutoCompleteModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, TagModule, ToastModule, ToolbarModule, TreeTableModule],
+    imports: [
+        CommonModule,
+        FormsModule,
+        AutoCompleteModule,
+        ButtonModule,
+        CheckboxModule,
+        ConfirmDialogModule,
+        DialogModule,
+        InputNumberModule,
+        InputTextModule,
+        MuhasebeTesisContextBarComponent,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        TreeTableModule
+    ],
     templateUrl: './tasinir-kodlari.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class TasinirKodlariPage implements OnInit {
@@ -64,12 +80,11 @@ export class TasinirKodlariPage implements OnInit {
                 this.loading = false;
                 this.cdr.detectChanges();
             },
-            error: (error: unknown) => 
-                {
-                    this.loading = false;
-                    this.showError(error);
-                    this.cdr.detectChanges();
-                }
+            error: (error: unknown) => {
+                this.loading = false;
+                this.showError(error);
+                this.cdr.detectChanges();
+            }
         });
     }
 
@@ -116,14 +131,14 @@ export class TasinirKodlariPage implements OnInit {
                     const option: ParentOption = { label: `${parent.tamKod} - ${parent.ad}`, value: parent.id! };
                     this.selectedParentOption = option;
                     this.parentSearchResults = [option];
-                  this.cdr.detectChanges();
+                    this.cdr.detectChanges();
                 },
                 error: (error: unknown) => this.showError(error)
             });
         }
 
         this.dialogVisible = true;
-         this.cdr.detectChanges();
+        this.cdr.detectChanges();
     }
 
     searchParent(event: { query: string }): void {
@@ -132,7 +147,7 @@ export class TasinirKodlariPage implements OnInit {
 
         if (query.trim().length < 2) {
             this.parentSearchResults = [];
-             this.cdr.detectChanges();
+            this.cdr.detectChanges();
             return;
         }
 
@@ -142,9 +157,7 @@ export class TasinirKodlariPage implements OnInit {
                     return;
                 }
 
-                this.parentSearchResults = paged.items
-                    .filter((x) => x.aktifMi && x.id !== this.model.id)
-                    .map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
+                this.parentSearchResults = paged.items.filter((x) => x.aktifMi && x.id !== this.model.id).map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id! }));
                 this.cdr.markForCheck();
             },
             error: (error: unknown) => {
@@ -193,7 +206,7 @@ export class TasinirKodlariPage implements OnInit {
 
         this.saving = true;
         this.cdr.markForCheck();
-        
+
         const payload = {
             tamKod: this.model.tamKod.trim(),
             kod: this.model.kod.trim(),
@@ -204,25 +217,27 @@ export class TasinirKodlariPage implements OnInit {
             aciklama: this.model.aciklama?.trim() || null
         };
 
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload) : this.service.create(payload);
 
-        request$.pipe(finalize(() => {
-            this.saving = false;
-            this.cdr.markForCheck();
-        })).subscribe({
-            next: () => {
-                this.dialogVisible = false;
-                this.load();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
-                this.cdr.markForCheck();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.markForCheck();
-            }
-        });
+        request$
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.markForCheck();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.dialogVisible = false;
+                    this.load();
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
+                    this.cdr.markForCheck();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.markForCheck();
+                }
+            });
     }
 
     delete(item: TasinirKodModel): void {

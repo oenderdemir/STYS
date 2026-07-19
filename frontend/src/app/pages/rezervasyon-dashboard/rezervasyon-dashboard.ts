@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -16,13 +16,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { AuthService } from '../auth';
-import {
-    RezervasyonDashboardDto,
-    RezervasyonGelirKirilimDto,
-    RezervasyonKpiTrendGunDto,
-    RezervasyonKpiOzetDto,
-    RezervasyonTesisDto
-} from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
+import { RezervasyonDashboardDto, RezervasyonGelirKirilimDto, RezervasyonKpiTrendGunDto, RezervasyonKpiOzetDto, RezervasyonTesisDto } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
 
 @Component({
@@ -31,6 +25,7 @@ import { RezervasyonYonetimiService } from '../rezervasyon-yonetimi/rezervasyon-
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DatePickerModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './rezervasyon-dashboard.html',
     styleUrl: './rezervasyon-dashboard.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class RezervasyonDashboard implements OnInit {
@@ -150,18 +145,20 @@ export class RezervasyonDashboard implements OnInit {
     }
 
     getKpiOzet(): RezervasyonKpiOzetDto {
-        return this.dashboard?.kpiOzet ?? {
-            tarihAraligiGunSayisi: 0,
-            toplamRezervasyonSayisi: 0,
-            iptalRezervasyonSayisi: 0,
-            iptalOraniYuzde: 0,
-            toplamGeceSayisi: 0,
-            satilanGeceSayisi: 0,
-            dolulukOraniYuzde: 0,
-            toplamGelir: 0,
-            adr: 0,
-            revPar: 0
-        };
+        return (
+            this.dashboard?.kpiOzet ?? {
+                tarihAraligiGunSayisi: 0,
+                toplamRezervasyonSayisi: 0,
+                iptalRezervasyonSayisi: 0,
+                iptalOraniYuzde: 0,
+                toplamGeceSayisi: 0,
+                satilanGeceSayisi: 0,
+                dolulukOraniYuzde: 0,
+                toplamGelir: 0,
+                adr: 0,
+                revPar: 0
+            }
+        );
     }
 
     getDurumKirilimiToplam(): number {
@@ -200,7 +197,7 @@ export class RezervasyonDashboard implements OnInit {
 
         return values
             .map((value, index) => {
-                const x = 2 + (step * index);
+                const x = 2 + step * index;
                 const y = this.clampSparklineY(value, min, max, height);
                 return `${x.toFixed(2)},${y.toFixed(2)}`;
             })
@@ -223,11 +220,9 @@ export class RezervasyonDashboard implements OnInit {
         return trend.map((item, index) => {
             const value = type === 'gelir' ? item.gelir : item.dolulukOraniYuzde;
             const safeValue = Number.isFinite(value) ? value : 0;
-            const x = trend.length > 1 ? 2 + (step * index) : 50;
+            const x = trend.length > 1 ? 2 + step * index : 50;
             const y = this.clampSparklineY(safeValue, min, max, height);
-            const valueText = type === 'gelir'
-                ? `${this.formatMoney(safeValue)} TRY`
-                : this.formatPercent(safeValue);
+            const valueText = type === 'gelir' ? `${this.formatMoney(safeValue)} TRY` : this.formatPercent(safeValue);
 
             return {
                 x,
@@ -366,7 +361,7 @@ export class RezervasyonDashboard implements OnInit {
         }
 
         const normalized = (value - min) / (max - min);
-        return 2 + ((1 - normalized) * (height - 4));
+        return 2 + (1 - normalized) * (height - 4);
     }
 
     private formatShortDate(value: string): string {
@@ -391,11 +386,7 @@ export class RezervasyonDashboard implements OnInit {
 
         this.loadingDashboard = true;
         this.service
-            .getGunlukDashboard(
-                this.selectedTesisId,
-                this.formatDateForApi(this.selectedTarihDate),
-                this.formatDateForApi(this.kpiBaslangicDate),
-                this.formatDateForApi(this.kpiBitisDate))
+            .getGunlukDashboard(this.selectedTesisId, this.formatDateForApi(this.selectedTarihDate), this.formatDateForApi(this.kpiBaslangicDate), this.formatDateForApi(this.kpiBitisDate))
             .pipe(
                 finalize(() => {
                     this.loadingDashboard = false;
@@ -507,9 +498,10 @@ export class RezervasyonDashboard implements OnInit {
             this.exportingPdf = true;
         }
 
-        const export$ = format === 'excel'
-            ? this.service.exportOdemeRaporuExcel(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!)
-            : this.service.exportOdemeRaporuPdf(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!);
+        const export$ =
+            format === 'excel'
+                ? this.service.exportOdemeRaporuExcel(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!)
+                : this.service.exportOdemeRaporuPdf(this.reportSelectedTesisIds, this.formatDateForApi(this.reportBaslangicDate)!, this.formatDateForApi(this.reportBitisDate)!);
 
         export$
             .pipe(

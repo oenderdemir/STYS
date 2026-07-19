@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -24,6 +24,7 @@ import { OdaSinifiYonetimiService } from './oda-sinifi-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, OdaSinifiDialog],
     templateUrl: './oda-sinifi-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class OdaSinifiYonetimi implements OnDestroy {
@@ -124,10 +125,7 @@ export class OdaSinifiYonetimi implements OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedOdaSinifi.id
-                ? this.service.updateOdaSinifi(this.selectedOdaSinifi.id, payload)
-                : this.service.createOdaSinifi(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedOdaSinifi.id ? this.service.updateOdaSinifi(this.selectedOdaSinifi.id, payload) : this.service.createOdaSinifi(payload);
 
         this.saving = true;
         save$

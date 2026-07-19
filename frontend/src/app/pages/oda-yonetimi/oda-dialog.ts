@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -17,15 +17,9 @@ import { OdaDto } from './oda-yonetimi.dto';
     selector: 'app-oda-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToggleSwitchModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '42rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '95vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '42rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -177,9 +171,7 @@ export class OdaDialog implements OnChanges {
 
     get visibleOdaOzellikleri(): OdaOzellikDto[] {
         const selectedFeatureIds = new Set((this.workingModel.odaOzellikDegerleri ?? []).map((item) => item.odaOzellikId));
-        return [...this.odaOzellikleri]
-            .filter((item) => item.aktifMi || selectedFeatureIds.has(item.id ?? 0))
-            .sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+        return [...this.odaOzellikleri].filter((item) => item.aktifMi || selectedFeatureIds.has(item.id ?? 0)).sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
     }
 
     get groupedOdaOzellikleri(): Array<{ key: OdaOzellikVeriTipi; label: string; icon: string; items: OdaOzellikDto[] }> {
@@ -213,8 +205,7 @@ export class OdaDialog implements OnChanges {
     }
 
     get showSaveButton(): boolean {
-        return (this.mode === 'create' && this.canCreate)
-            || (this.mode === 'edit' && this.canEdit);
+        return (this.mode === 'create' && this.canCreate) || (this.mode === 'edit' && this.canEdit);
     }
 
     get showLockToggle(): boolean {
@@ -260,9 +251,7 @@ export class OdaDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return (this.workingModel.odaNo?.trim() ?? '').length > 0
-            && !!this.workingModel.binaId
-            && !!this.workingModel.tesisOdaTipiId;
+        return (this.workingModel.odaNo?.trim() ?? '').length > 0 && !!this.workingModel.binaId && !!this.workingModel.tesisOdaTipiId;
     }
 
     submit(): void {
@@ -369,10 +358,7 @@ export class OdaDialog implements OnChanges {
             return;
         }
 
-        this.workingModel.odaOzellikDegerleri = [
-            ...(this.workingModel.odaOzellikDegerleri ?? []),
-            { odaOzellikId: ozellikId, deger: value }
-        ];
+        this.workingModel.odaOzellikDegerleri = [...(this.workingModel.odaOzellikDegerleri ?? []), { odaOzellikId: ozellikId, deger: value }];
     }
 
     private getSanitizedFeatureValues(): Array<{ odaOzellikId: number; deger: string }> {

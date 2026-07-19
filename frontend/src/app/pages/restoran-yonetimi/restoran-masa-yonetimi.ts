@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -17,14 +17,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import {
-    CreateRestoranMasaRequest,
-    getMasaDurumSeverity,
-    RESTORAN_MASA_DURUMLARI,
-    RestoranMasaModel,
-    RestoranModel,
-    UpdateRestoranMasaRequest
-} from './restoran-yonetimi.dto';
+import { CreateRestoranMasaRequest, getMasaDurumSeverity, RESTORAN_MASA_DURUMLARI, RestoranMasaModel, RestoranModel, UpdateRestoranMasaRequest } from './restoran-yonetimi.dto';
 import { RestoranMasaYonetimiService } from './restoran-masa-yonetimi.service';
 import { RestoranYonetimiService } from './restoran-yonetimi.service';
 
@@ -33,6 +26,7 @@ import { RestoranYonetimiService } from './restoran-yonetimi.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './restoran-masa-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RestoranMasaYonetimi implements OnInit {
@@ -114,15 +108,15 @@ export class RestoranMasaYonetimi implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateRestoranMasaRequest)
-            : this.service.create(payload as CreateRestoranMasaRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateRestoranMasaRequest) : this.service.create(payload as CreateRestoranMasaRequest);
 
         request$
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
@@ -180,10 +174,12 @@ export class RestoranMasaYonetimi implements OnInit {
             restoranlar: this.restoranService.getAll(),
             masalar: this.service.getAll()
         })
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ restoranlar, masalar }) => {
                     this.restoranlar = restoranlar;
@@ -197,15 +193,15 @@ export class RestoranMasaYonetimi implements OnInit {
 
     private loadMasalar(): void {
         this.loading = true;
-        const request$ = this.selectedRestoranId
-            ? this.service.getByRestoranId(this.selectedRestoranId)
-            : this.service.getAll();
+        const request$ = this.selectedRestoranId ? this.service.getByRestoranId(this.selectedRestoranId) : this.service.getAll();
 
         request$
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.masalar = items;

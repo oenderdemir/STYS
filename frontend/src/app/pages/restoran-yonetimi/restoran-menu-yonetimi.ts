@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -20,14 +20,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { tryReadApiMessage } from '../../core/api';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { AuthService } from '../auth';
-import {
-    CreateRestoranMenuUrunRequest,
-    PARA_BIRIMI_SECENEKLERI,
-    RestoranMenuKategoriModel,
-    RestoranMenuUrunModel,
-    RestoranModel,
-    UpdateRestoranMenuUrunRequest
-} from './restoran-yonetimi.dto';
+import { CreateRestoranMenuUrunRequest, PARA_BIRIMI_SECENEKLERI, RestoranMenuKategoriModel, RestoranMenuUrunModel, RestoranModel, UpdateRestoranMenuUrunRequest } from './restoran-yonetimi.dto';
 import { RestoranMenuYonetimiService } from './restoran-menu-yonetimi.service';
 import { RestoranYonetimiService } from './restoran-yonetimi.service';
 
@@ -43,6 +36,7 @@ interface RestoranMenuKategoriGrupModel {
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, InputGroupModule, InputGroupAddonModule, PanelModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './restoran-menu-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RestoranMenuYonetimi implements OnInit {
@@ -100,7 +94,7 @@ export class RestoranMenuYonetimi implements OnInit {
 
         this.urunDialogMode = 'create';
         this.urunModel = this.createEmptyUrun();
-        this.urunModel.restoranMenuKategoriId = kategoriId ?? (this.kategoriler[0]?.id ?? 0);
+        this.urunModel.restoranMenuKategoriId = kategoriId ?? this.kategoriler[0]?.id ?? 0;
         this.urunDialogVisible = true;
     }
 
@@ -140,15 +134,15 @@ export class RestoranMenuYonetimi implements OnInit {
         };
 
         this.savingUrun = true;
-        const request$ = this.urunDialogMode === 'edit' && this.urunModel.id
-            ? this.service.updateUrun(this.urunModel.id, payload as UpdateRestoranMenuUrunRequest)
-            : this.service.createUrun(payload as CreateRestoranMenuUrunRequest);
+        const request$ = this.urunDialogMode === 'edit' && this.urunModel.id ? this.service.updateUrun(this.urunModel.id, payload as UpdateRestoranMenuUrunRequest) : this.service.createUrun(payload as CreateRestoranMenuUrunRequest);
 
         request$
-            .pipe(finalize(() => {
-                this.savingUrun = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingUrun = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.urunDialogVisible = false;
@@ -210,10 +204,12 @@ export class RestoranMenuYonetimi implements OnInit {
         forkJoin({
             restoranlar: this.restoranService.getAll()
         })
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ restoranlar }) => {
                     this.restoranlar = restoranlar;
@@ -237,14 +233,17 @@ export class RestoranMenuYonetimi implements OnInit {
         }
 
         this.loading = true;
-        this.service.getYonetimMenuByRestoranId(this.selectedRestoranId)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getYonetimMenuByRestoranId(this.selectedRestoranId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ kategoriler, urunMap }) => {
-                    this.kategoriler = [...kategoriler].sort((a, b) => (a.siraNo - b.siraNo) || a.ad.localeCompare(b.ad, 'tr'));
+                    this.kategoriler = [...kategoriler].sort((a, b) => a.siraNo - b.siraNo || a.ad.localeCompare(b.ad, 'tr'));
                     this.urunMap = urunMap;
                     this.kategoriGruplari = this.kategoriler.map((kategori) => ({
                         id: kategori.id ?? 0,

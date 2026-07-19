@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, effect, inject, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, effect, inject, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MenuItem, MessageService } from 'primeng/api';
@@ -34,176 +34,142 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
     imports: [RouterModule, CommonModule, FormsModule, StyleClassModule, AppConfigurator, MenuModule, PopoverModule, DialogModule, PasswordModule, ButtonModule, ToastModule, CheckboxModule, MultiSelectModule, SelectModule],
     providers: [MessageService],
     styleUrl: './app.topbar.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: ` <div class="layout-topbar">
             <p-toast position="bottom-right" [baseZIndex]="20000" />
-        <div class="layout-topbar-logo-container">
-            <button class="layout-menu-button layout-topbar-action" (click)="layoutService.onMenuToggle()">
-                <i class="pi pi-bars"></i>
-            </button>
-            <a class="layout-topbar-logo" routerLink="/">
-                <img
-                    [src]="activeKurumLogoSrc()"
-                    class="topbar-kurum-logo"
-                    alt="STYS"
-                    (error)="onKurumLogoError($event)"
-                />
-            </a>
-        </div>
-
-        <div class="layout-topbar-actions">
-            @if (currentUserName) {
-                <div
-                    class="hidden lg:flex"
-                    style="align-items: center; gap: 0.45rem; padding: 0.4rem 0.75rem; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--surface-card); margin-right: 0.5rem;"
-                    [title]="currentUserName"
-                >
-                    <i class="pi pi-user" style="font-size: 0.9rem; color: var(--text-color-secondary);"></i>
-                    <span style="font-weight: 600; max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ currentUserName }}</span>
-                </div>
-            }
-
-            <div class="layout-config-menu">
-                <button type="button" class="layout-topbar-action" (click)="toggleDarkMode()">
-                    <i [ngClass]="{ 'pi ': true, 'pi-moon': layoutService.isDarkTheme(), 'pi-sun': !layoutService.isDarkTheme() }"></i>
+            <div class="layout-topbar-logo-container">
+                <button class="layout-menu-button layout-topbar-action" (click)="layoutService.onMenuToggle()">
+                    <i class="pi pi-bars"></i>
                 </button>
-                <div class="relative">
-                    <button
-                        class="layout-topbar-action layout-topbar-action-highlight"
-                        pStyleClass="@next"
-                        enterFromClass="hidden"
-                        enterActiveClass="animate-scalein"
-                        leaveToClass="hidden"
-                        leaveActiveClass="animate-fadeout"
-                        [hideOnOutsideClick]="true"
-                    >
-                        <i class="pi pi-palette"></i>
-                    </button>
-                    <app-configurator />
-                </div>
+                <a class="layout-topbar-logo" routerLink="/">
+                    <img [src]="activeKurumLogoSrc()" class="topbar-kurum-logo" alt="STYS" (error)="onKurumLogoError($event)" />
+                </a>
             </div>
 
-            <button class="layout-topbar-menu-button layout-topbar-action" pStyleClass="@next" enterFromClass="hidden" enterActiveClass="animate-scalein" leaveToClass="hidden" leaveActiveClass="animate-fadeout" [hideOnOutsideClick]="true">
-                <i class="pi pi-ellipsis-v"></i>
-            </button>
+            <div class="layout-topbar-actions">
+                @if (currentUserName) {
+                    <div
+                        class="hidden lg:flex"
+                        style="align-items: center; gap: 0.45rem; padding: 0.4rem 0.75rem; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--surface-card); margin-right: 0.5rem;"
+                        [title]="currentUserName"
+                    >
+                        <i class="pi pi-user" style="font-size: 0.9rem; color: var(--text-color-secondary);"></i>
+                        <span style="font-weight: 600; max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ currentUserName }}</span>
+                    </div>
+                }
 
-            <div class="layout-topbar-menu hidden lg:block">
-                <div class="layout-topbar-menu-content">
-                    @if (authService.isAuthenticated() && kurumOptions.length > 0) {
-                        <div class="layout-topbar-kurum-switcher">
-                            <span class="layout-topbar-kurum-switcher__label">Kurum</span>
-                            @if (kurumOptions.length > 1) {
-                                <p-select
-                                    [options]="kurumOptions"
-                                    optionLabel="ad"
-                                    optionValue="id"
-                                    [(ngModel)]="selectedKurumId"
-                                    [disabled]="kurumOptionsLoading"
-                                    [showClear]="false"
-                                    placeholder="Kurum secin"
-                                    appendTo="body"
-                                    styleClass="layout-topbar-kurum-switcher__select"
-                                    (ngModelChange)="onKurumSelectionChange($event)"
-                                />
-                            } @else {
-                                <span class="layout-topbar-kurum-switcher__value">{{ kurumDisplayLabel() }}</span>
-                            }
-                        </div>
-                    }
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-calendar"></i>
-                        <span>Calendar</span>
+                <div class="layout-config-menu">
+                    <button type="button" class="layout-topbar-action" (click)="toggleDarkMode()">
+                        <i [ngClass]="{ 'pi ': true, 'pi-moon': layoutService.isDarkTheme(), 'pi-sun': !layoutService.isDarkTheme() }"></i>
                     </button>
-                    <button type="button" class="layout-topbar-action relative" (click)="toggleNotificationPopover($event)">
-                        <i
-                            class="pi pi-envelope"
-                            [ngClass]="{ 'topbar-notification-pulse': hasNewNotificationCue, 'topbar-envelope-unread': unreadCount() > 0 }"
-                            [style.color]="unreadCount() > 0 ? '#22c55e' : null"
-                        ></i>
-                        @if (hasNewNotificationCue) {
-                            <span class="topbar-notification-alert">!</span>
-                        }
-                        @if (unreadCount() > 0) {
-                            <span class="topbar-unread-badge">
-                                {{ unreadBadgeText() }}
-                            </span>
-                        }
-                        <span>Bildirimler</span>
-                    </button>
-                    <p-popover #notificationPopover [appendTo]="'body'" [style]="{ width: '26rem', 'max-width': '92vw' }">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <i class="pi pi-bell"></i>
-                                <span style="font-weight: 700;">Bildirimler</span>
-                            </div>
-                            <button
-                                type="button"
-                                class="p-button p-button-text p-button-sm"
-                                (click)="markAllNotificationsAsRead()"
-                                [disabled]="unreadCount() === 0"
-                            >
-                                Tumunu Okundu Yap
-                            </button>
-                        </div>
+                    <div class="relative">
+                        <button
+                            class="layout-topbar-action layout-topbar-action-highlight"
+                            pStyleClass="@next"
+                            enterFromClass="hidden"
+                            enterActiveClass="animate-scalein"
+                            leaveToClass="hidden"
+                            leaveActiveClass="animate-fadeout"
+                            [hideOnOutsideClick]="true"
+                        >
+                            <i class="pi pi-palette"></i>
+                        </button>
+                        <app-configurator />
+                    </div>
+                </div>
 
-                        @if (notifications().length === 0) {
-                            <div style="padding: 1.25rem 0.5rem; color: var(--text-color-secondary); text-align: center;">
-                                Yeni bildirim bulunmuyor.
-                            </div>
-                        } @else {
-                            <div style="max-height: 24rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
-                                @for (item of notifications(); track item.id) {
-                                    <button
-                                        type="button"
-                                        (click)="onNotificationClick(item)"
-                                        [ngStyle]="notificationCardStyle(item)"
-                                    >
-                                        <div style="display: flex; align-items: start; justify-content: space-between; gap: 0.5rem;">
-                                            <strong style="display: block; font-size: 0.9rem;">{{ item.baslik }}</strong>
-                                            @if (!item.isRead) {
-                                                <span style="display: inline-flex; width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--primary-color); margin-top: 0.25rem;"></span>
-                                            }
-                                        </div>
-                                        <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.84rem; line-height: 1.25;">
-                                            {{ item.mesaj }}
-                                        </div>
-                                        @if (item.kaynakUserAdi) {
-                                            <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.76rem;">
-                                                Kaynak: {{ item.kaynakUserAdi }}
-                                            </div>
-                                        }
-                                        <div style="margin-top: 0.45rem; color: var(--text-color-secondary); font-size: 0.76rem;">
-                                            {{ formatNotificationDate(item.createdAt) }}
-                                        </div>
-                                    </button>
+                <button class="layout-topbar-menu-button layout-topbar-action" pStyleClass="@next" enterFromClass="hidden" enterActiveClass="animate-scalein" leaveToClass="hidden" leaveActiveClass="animate-fadeout" [hideOnOutsideClick]="true">
+                    <i class="pi pi-ellipsis-v"></i>
+                </button>
+
+                <div class="layout-topbar-menu hidden lg:block">
+                    <div class="layout-topbar-menu-content">
+                        @if (authService.isAuthenticated() && kurumOptions.length > 0) {
+                            <div class="layout-topbar-kurum-switcher">
+                                <span class="layout-topbar-kurum-switcher__label">Kurum</span>
+                                @if (kurumOptions.length > 1) {
+                                    <p-select
+                                        [options]="kurumOptions"
+                                        optionLabel="ad"
+                                        optionValue="id"
+                                        [(ngModel)]="selectedKurumId"
+                                        [disabled]="kurumOptionsLoading"
+                                        [showClear]="false"
+                                        placeholder="Kurum secin"
+                                        appendTo="body"
+                                        styleClass="layout-topbar-kurum-switcher__select"
+                                        (ngModelChange)="onKurumSelectionChange($event)"
+                                    />
+                                } @else {
+                                    <span class="layout-topbar-kurum-switcher__value">{{ kurumDisplayLabel() }}</span>
                                 }
                             </div>
                         }
-                    </p-popover>
-                    <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)" [title]="currentUserName || 'Profile'">
-                        <i class="pi pi-user"></i>
-                        <span>{{ currentUserName || 'Profile' }}</span>
-                    </button>
-                    <p-menu #profileMenu [popup]="true" [model]="profileMenuItems"></p-menu>
+                        <button type="button" class="layout-topbar-action">
+                            <i class="pi pi-calendar"></i>
+                            <span>Calendar</span>
+                        </button>
+                        <button type="button" class="layout-topbar-action relative" (click)="toggleNotificationPopover($event)">
+                            <i class="pi pi-envelope" [ngClass]="{ 'topbar-notification-pulse': hasNewNotificationCue, 'topbar-envelope-unread': unreadCount() > 0 }" [style.color]="unreadCount() > 0 ? '#22c55e' : null"></i>
+                            @if (hasNewNotificationCue) {
+                                <span class="topbar-notification-alert">!</span>
+                            }
+                            @if (unreadCount() > 0) {
+                                <span class="topbar-unread-badge">
+                                    {{ unreadBadgeText() }}
+                                </span>
+                            }
+                            <span>Bildirimler</span>
+                        </button>
+                        <p-popover #notificationPopover [appendTo]="'body'" [style]="{ width: '26rem', 'max-width': '92vw' }">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="pi pi-bell"></i>
+                                    <span style="font-weight: 700;">Bildirimler</span>
+                                </div>
+                                <button type="button" class="p-button p-button-text p-button-sm" (click)="markAllNotificationsAsRead()" [disabled]="unreadCount() === 0">Tumunu Okundu Yap</button>
+                            </div>
+
+                            @if (notifications().length === 0) {
+                                <div style="padding: 1.25rem 0.5rem; color: var(--text-color-secondary); text-align: center;">Yeni bildirim bulunmuyor.</div>
+                            } @else {
+                                <div style="max-height: 24rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    @for (item of notifications(); track item.id) {
+                                        <button type="button" (click)="onNotificationClick(item)" [ngStyle]="notificationCardStyle(item)">
+                                            <div style="display: flex; align-items: start; justify-content: space-between; gap: 0.5rem;">
+                                                <strong style="display: block; font-size: 0.9rem;">{{ item.baslik }}</strong>
+                                                @if (!item.isRead) {
+                                                    <span style="display: inline-flex; width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--primary-color); margin-top: 0.25rem;"></span>
+                                                }
+                                            </div>
+                                            <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.84rem; line-height: 1.25;">
+                                                {{ item.mesaj }}
+                                            </div>
+                                            @if (item.kaynakUserAdi) {
+                                                <div style="margin-top: 0.3rem; color: var(--text-color-secondary); font-size: 0.76rem;">Kaynak: {{ item.kaynakUserAdi }}</div>
+                                            }
+                                            <div style="margin-top: 0.45rem; color: var(--text-color-secondary); font-size: 0.76rem;">
+                                                {{ formatNotificationDate(item.createdAt) }}
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </p-popover>
+                        <button type="button" class="layout-topbar-action" (click)="onProfileMenuToggle($event, profileMenu)" [title]="currentUserName || 'Profile'">
+                            <i class="pi pi-user"></i>
+                            <span>{{ currentUserName || 'Profile' }}</span>
+                        </button>
+                        <p-menu #profileMenu [popup]="true" [model]="profileMenuItems"></p-menu>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-        <p-dialog
-            header="Bildirim Tercihleri"
-            [(visible)]="notificationPreferenceDialogVisible"
-            [modal]="true"
-            [style]="{ width: '36rem', 'max-width': '96vw' }"
-            [breakpoints]="{ '960px': '96vw' }"
-        >
+        <p-dialog header="Bildirim Tercihleri" [(visible)]="notificationPreferenceDialogVisible" [modal]="true" [style]="{ width: '36rem', 'max-width': '96vw' }" [breakpoints]="{ '960px': '96vw' }">
             <div class="flex flex-col gap-4">
                 <div class="flex items-center gap-2">
-                    <p-checkbox
-                        inputId="notificationActive"
-                        [binary]="true"
-                        [(ngModel)]="notificationPreferences.bildirimlerAktifMi"
-                        [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences"
-                    />
+                    <p-checkbox inputId="notificationActive" [binary]="true" [(ngModel)]="notificationPreferences.bildirimlerAktifMi" [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences" />
                     <label for="notificationActive" class="font-medium">Bildirimleri Aktif Tut</label>
                 </div>
 
@@ -255,66 +221,50 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
 
             <ng-template #footer>
                 <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="isSavingNotificationPreferences" (onClick)="notificationPreferenceDialogVisible = false" />
-                <p-button
-                    [label]="isSavingNotificationPreferences ? 'Kaydediliyor...' : 'Kaydet'"
-                    icon="pi pi-check"
-                    [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences"
-                    (onClick)="saveNotificationPreferences()"
-                />
+                <p-button [label]="isSavingNotificationPreferences ? 'Kaydediliyor...' : 'Kaydet'" icon="pi pi-check" [disabled]="isLoadingNotificationPreferences || isSavingNotificationPreferences" (onClick)="saveNotificationPreferences()" />
             </ng-template>
         </p-dialog>
 
-		    <p-dialog
-	        [header]="isForceChangePasswordMode ? 'Zorunlu Sifre Degistirme' : 'Sifre Degistir'"
-	        [(visible)]="changePasswordDialogVisible"
-        [modal]="true"
-        [closable]="!isForceChangePasswordMode"
-        [closeOnEscape]="!isForceChangePasswordMode"
-        [dismissableMask]="!isForceChangePasswordMode"
-        [style]="{ width: '28rem', 'max-width': '95vw' }"
-        [breakpoints]="{ '960px': '95vw' }"
-    >
-        <div class="flex flex-col gap-4">
-            <div>
-                <label for="currentPassword" class="block font-medium mb-2">Mevcut Sifre</label>
-                <p-password id="currentPassword" [(ngModel)]="currentPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
-            </div>
-
-            <div>
-                <label for="newPassword" class="block font-medium mb-2">Yeni Sifre</label>
-                <p-password id="newPassword" [(ngModel)]="newPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
-            </div>
-
-            <div>
-                <label for="newPasswordAgain" class="block font-medium mb-2">Yeni Sifre (Tekrar)</label>
-                <p-password id="newPasswordAgain" [(ngModel)]="newPasswordAgain" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
-            </div>
-
-            @if (changePasswordError) {
-                <small class="text-red-500">{{ changePasswordError }}</small>
-            }
-        </div>
-
-		        <ng-template #footer>
-                    @if (!isForceChangePasswordMode) {
-		                <p-button label="Iptal" icon="pi pi-times" severity="secondary" text [disabled]="isChangingPassword" (onClick)="changePasswordDialogVisible = false" />
-                    }
-		            <p-button
-		                [label]="isChangingPassword ? 'Degistiriliyor...' : 'Degistir'"
-		                icon="pi pi-check"
-	                [disabled]="isChangingPassword || !currentPassword || !newPassword || !newPasswordAgain"
-	                (onClick)="submitChangePassword()"
-	            />
-	        </ng-template>
-	    </p-dialog>
-
         <p-dialog
-            header="Sifre Degistirme Hatasi"
-            [(visible)]="changePasswordErrorDialogVisible"
+            [header]="isForceChangePasswordMode ? 'Zorunlu Sifre Degistirme' : 'Sifre Degistir'"
+            [(visible)]="changePasswordDialogVisible"
             [modal]="true"
-            [style]="{ width: '30rem', 'max-width': '95vw' }"
+            [closable]="!isForceChangePasswordMode"
+            [closeOnEscape]="!isForceChangePasswordMode"
+            [dismissableMask]="!isForceChangePasswordMode"
+            [style]="{ width: '28rem', 'max-width': '95vw' }"
             [breakpoints]="{ '960px': '95vw' }"
         >
+            <div class="flex flex-col gap-4">
+                <div>
+                    <label for="currentPassword" class="block font-medium mb-2">Mevcut Sifre</label>
+                    <p-password id="currentPassword" [(ngModel)]="currentPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+                </div>
+
+                <div>
+                    <label for="newPassword" class="block font-medium mb-2">Yeni Sifre</label>
+                    <p-password id="newPassword" [(ngModel)]="newPassword" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+                </div>
+
+                <div>
+                    <label for="newPasswordAgain" class="block font-medium mb-2">Yeni Sifre (Tekrar)</label>
+                    <p-password id="newPasswordAgain" [(ngModel)]="newPasswordAgain" [feedback]="false" [toggleMask]="true" [fluid]="true" [disabled]="isChangingPassword"></p-password>
+                </div>
+
+                @if (changePasswordError) {
+                    <small class="text-red-500">{{ changePasswordError }}</small>
+                }
+            </div>
+
+            <ng-template #footer>
+                @if (!isForceChangePasswordMode) {
+                    <p-button label="Iptal" icon="pi pi-times" severity="secondary" text [disabled]="isChangingPassword" (onClick)="changePasswordDialogVisible = false" />
+                }
+                <p-button [label]="isChangingPassword ? 'Degistiriliyor...' : 'Degistir'" icon="pi pi-check" [disabled]="isChangingPassword || !currentPassword || !newPassword || !newPasswordAgain" (onClick)="submitChangePassword()" />
+            </ng-template>
+        </p-dialog>
+
+        <p-dialog header="Sifre Degistirme Hatasi" [(visible)]="changePasswordErrorDialogVisible" [modal]="true" [style]="{ width: '30rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }">
             <div class="flex flex-col gap-3">
                 <span>Islem tamamlanamadi. Lutfen hata detaylarini kontrol edin.</span>
                 <ul class="m-0 pl-5">
@@ -329,13 +279,7 @@ import { BackendVersionInfo, VersionInfo } from '../../core/version/version.mode
             </ng-template>
         </p-dialog>
 
-        <p-dialog
-            header="Sürüm Bilgisi"
-            [(visible)]="versionDialogVisible"
-            [modal]="true"
-            [style]="{ width: '38rem', 'max-width': '96vw' }"
-            [breakpoints]="{ '960px': '96vw' }"
-        >
+        <p-dialog header="Sürüm Bilgisi" [(visible)]="versionDialogVisible" [modal]="true" [style]="{ width: '38rem', 'max-width': '96vw' }" [breakpoints]="{ '960px': '96vw' }">
             @if (isLoadingVersion) {
                 <div style="padding: 1.5rem; text-align: center; color: var(--text-color-secondary);">
                     <i class="pi pi-spin pi-spinner" style="font-size: 1.5rem;"></i>
@@ -652,34 +596,35 @@ export class AppTopbar {
         this.kurumOptionsLoading = true;
         this.kurumOptionsError = null;
 
-        this.kurumService.getMyKurumlar().pipe(
-            finalize(() => {
-                this.kurumOptionsLoading = false;
-                this.cdr.detectChanges();
-            })
-        ).subscribe({
-            next: (kurumlar) => {
-                const normalized = (kurumlar ?? [])
-                    .filter((kurum) => kurum && kurum.aktifMi)
-                    .sort((left, right) => left.ad.localeCompare(right.ad, 'tr'));
+        this.kurumService
+            .getMyKurumlar()
+            .pipe(
+                finalize(() => {
+                    this.kurumOptionsLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (kurumlar) => {
+                    const normalized = (kurumlar ?? []).filter((kurum) => kurum && kurum.aktifMi).sort((left, right) => left.ad.localeCompare(right.ad, 'tr'));
 
-                this.kurumOptions = normalized;
+                    this.kurumOptions = normalized;
 
-                const activeKurumId = this.authService.getAktifKurumId();
-                const matchedActiveKurum = activeKurumId !== null ? normalized.find((item) => item.id === activeKurumId) : undefined;
-                if (matchedActiveKurum) {
-                    this.selectedKurumId = matchedActiveKurum.id;
-                } else if (this.authService.isSuperAdminUser()) {
-                    this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
-                } else {
-                    this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
+                    const activeKurumId = this.authService.getAktifKurumId();
+                    const matchedActiveKurum = activeKurumId !== null ? normalized.find((item) => item.id === activeKurumId) : undefined;
+                    if (matchedActiveKurum) {
+                        this.selectedKurumId = matchedActiveKurum.id;
+                    } else if (this.authService.isSuperAdminUser()) {
+                        this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
+                    } else {
+                        this.selectedKurumId = normalized.length === 1 ? normalized[0].id : activeKurumId;
+                    }
+                },
+                error: (_error: unknown) => {
+                    this.clearKurumOptions();
+                    this.selectedKurumId = this.authService.getAktifKurumId();
                 }
-            },
-            error: (_error: unknown) => {
-                this.clearKurumOptions();
-                this.selectedKurumId = this.authService.getAktifKurumId();
-            }
-        });
+            });
     }
 
     private clearKurumOptions(): void {
@@ -752,12 +697,18 @@ export class AppTopbar {
         };
 
         this.versionService.getFrontendVersion().subscribe({
-            next: (v) => { this.frontendVersion = v; done(); },
+            next: (v) => {
+                this.frontendVersion = v;
+                done();
+            },
             error: () => done()
         });
 
         this.versionService.getBackendVersion().subscribe({
-            next: (v) => { this.backendVersion = v; done(); },
+            next: (v) => {
+                this.backendVersion = v;
+                done();
+            },
             error: () => done()
         });
     }

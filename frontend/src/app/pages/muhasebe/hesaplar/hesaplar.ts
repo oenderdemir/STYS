@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -26,6 +26,7 @@ import { HesaplarService } from './hesaplar.service';
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, DialogModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './hesaplar.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class HesaplarPage implements OnInit {
@@ -106,19 +107,24 @@ export class HesaplarPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.filteredRecords = [...paged.items];
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.filteredRecords = [...paged.items];
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     openCreate(): void {
@@ -159,9 +165,7 @@ export class HesaplarPage implements OnInit {
             return;
         }
 
-        const tesisId = this.dialogMode === 'create'
-            ? this.getSeciliTesisIdOrWarn()
-            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        const tesisId = this.dialogMode === 'create' ? this.getSeciliTesisIdOrWarn() : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
         if (tesisId === null) {
             return;
         }
@@ -185,9 +189,7 @@ export class HesaplarPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateHesapRequest)
-            : this.service.create(payload as CreateHesapRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateHesapRequest) : this.service.create(payload as CreateHesapRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -259,7 +261,7 @@ export class HesaplarPage implements OnInit {
 
     private uniqueLookupByValue(items: Array<{ label: string; value: number }>): Array<{ label: string; value: number }> {
         const seen = new Set<number>();
-        return items.filter(item => {
+        return items.filter((item) => {
             if (seen.has(item.value)) {
                 return false;
             }
@@ -280,18 +282,18 @@ export class HesaplarPage implements OnInit {
 
     private syncSelectedLookupValues(kind: 'kasa' | 'banka' | 'depo'): void {
         if (kind === 'kasa') {
-            const kasaIds = new Set(this.kasaHesaplari.map(x => x.value));
-            this.model.kasaHesapIds = (this.model.kasaHesapIds ?? []).filter(id => kasaIds.has(id));
+            const kasaIds = new Set(this.kasaHesaplari.map((x) => x.value));
+            this.model.kasaHesapIds = (this.model.kasaHesapIds ?? []).filter((id) => kasaIds.has(id));
         }
 
         if (kind === 'banka') {
-            const bankaIds = new Set(this.bankaHesaplari.map(x => x.value));
-            this.model.bankaHesapIds = (this.model.bankaHesapIds ?? []).filter(id => bankaIds.has(id));
+            const bankaIds = new Set(this.bankaHesaplari.map((x) => x.value));
+            this.model.bankaHesapIds = (this.model.bankaHesapIds ?? []).filter((id) => bankaIds.has(id));
         }
 
         if (kind === 'depo') {
-            const depoIds = new Set(this.depolar.map(x => x.value));
-            this.model.depoIds = (this.model.depoIds ?? []).filter(id => depoIds.has(id));
+            const depoIds = new Set(this.depolar.map((x) => x.value));
+            this.model.depoIds = (this.model.depoIds ?? []).filter((id) => depoIds.has(id));
         }
     }
 

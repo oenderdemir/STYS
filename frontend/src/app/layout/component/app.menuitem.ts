@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal, ChangeDetectionStrategy } from '@angular/core';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RippleModule } from 'primeng/ripple';
@@ -18,16 +18,7 @@ import { filter } from 'rxjs/operators';
             </button>
         }
         @if ((!hasRouterLink() || hasChildren()) && isVisible() && (!root() || !hasChildren())) {
-            <a
-                [attr.href]="item().url"
-                (click)="itemClick($event)"
-                [ngClass]="item().class"
-                [class.menu-parent-link]="hasChildren()"
-                [class.menu-leaf-link]="!hasChildren()"
-                [attr.target]="item().target"
-                tabindex="0"
-                pRipple
-            >
+            <a [attr.href]="item().url" (click)="itemClick($event)" [ngClass]="item().class" [class.menu-parent-link]="hasChildren()" [class.menu-leaf-link]="!hasChildren()" [attr.target]="item().target" tabindex="0" pRipple>
                 <i [ngClass]="item().icon" class="layout-menuitem-icon"></i>
                 <span class="layout-menuitem-text">{{ item().label }}</span>
                 @if (hasChildren()) {
@@ -63,12 +54,7 @@ import { filter } from 'rxjs/operators';
             </a>
         }
         @if (hasChildren() && isVisible() && (root() ? isRootExpanded() : isActive())) {
-            <ul
-                [animate.enter]="initialized() ? 'p-submenu-enter' : null"
-                [animate.leave]="'p-submenu-leave'"
-                [class.layout-root-submenulist]="root()"
-                [class.menu-child-list]="!root()"
-            >
+            <ul [animate.enter]="initialized() ? 'p-submenu-enter' : null" [animate.leave]="'p-submenu-leave'" [class.layout-root-submenulist]="root()" [class.menu-child-list]="!root()">
                 @for (child of item().items; track child?.label) {
                     <li app-menuitem [item]="child" [parentPath]="fullPath()" [root]="false" [class]="child['badgeClass']"></li>
                 }
@@ -79,6 +65,7 @@ import { filter } from 'rxjs/operators';
         '[class.active-menuitem]': 'isActive()',
         '[class.layout-root-menuitem]': 'root()'
     },
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrl: './app.menuitem.scss'
 })
 export class AppMenuitem {

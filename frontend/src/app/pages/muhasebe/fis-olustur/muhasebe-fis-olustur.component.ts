@@ -1,5 +1,5 @@
 import { CommonModule, DecimalPipe } from '@angular/common';
-import { Component, OnInit, effect, inject } from '@angular/core';
+import { Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -18,12 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    CreateMuhasebeFisRequestModel,
-    CreateMuhasebeFisSatirRequestModel,
-    MuhasebeFisTipleri,
-    formatDateForApi
-} from '../models/muhasebe-fis.model';
+import { CreateMuhasebeFisRequestModel, CreateMuhasebeFisSatirRequestModel, MuhasebeFisTipleri, formatDateForApi } from '../models/muhasebe-fis.model';
 import { MuhasebeHesapPlaniModel } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.dto';
 import { MuhasebeHesapPlaniService } from '../muhasebe-hesap-plani/muhasebe-hesap-plani.service';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
@@ -103,6 +98,7 @@ const FIS_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
     ],
     templateUrl: './muhasebe-fis-olustur.component.html',
     styleUrls: ['./muhasebe-fis-olustur.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class MuhasebeFisOlusturComponent implements OnInit {
@@ -203,16 +199,21 @@ export class MuhasebeFisOlusturComponent implements OnInit {
     }
 
     private loadHesapPlani(): void {
-        this.hesapPlaniService.getTree().pipe(finalize(() => {
-            this.hesapPlaniLoaded = true;
-        })).subscribe({
-            next: (tree) => {
-                this.hesapPlaniTree = tree ?? [];
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.hesapPlaniService
+            .getTree()
+            .pipe(
+                finalize(() => {
+                    this.hesapPlaniLoaded = true;
+                })
+            )
+            .subscribe({
+                next: (tree) => {
+                    this.hesapPlaniTree = tree ?? [];
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     private flattenTree(nodes: MuhasebeHesapPlaniModel[], prefix: string = ''): HesapSecenek[] {
@@ -245,10 +246,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
         const flat = this.flattenTree(this.hesapPlaniTree);
         const lower = partialKod.toLowerCase().trim();
         if (!lower) return flat;
-        return flat.filter(h =>
-            h.tamKod.toLowerCase().includes(lower) ||
-            h.ad.toLowerCase().includes(lower)
-        );
+        return flat.filter((h) => h.tamKod.toLowerCase().includes(lower) || h.ad.toLowerCase().includes(lower));
     }
 
     openHesapLookup(satirIndex: number): void {
@@ -290,7 +288,7 @@ export class MuhasebeFisOlusturComponent implements OnInit {
         }
         this.satirlar.splice(index, 1);
         // Re-number siraNo
-        this.satirlar.forEach((s, i) => s.siraNo = i + 1);
+        this.satirlar.forEach((s, i) => (s.siraNo = i + 1));
     }
 
     onBorcChange(satir: SatirRow): void {
@@ -388,24 +386,29 @@ export class MuhasebeFisOlusturComponent implements OnInit {
         };
 
         this.saving = true;
-        this.service.create(request).pipe(finalize(() => {
-            this.saving = false;
-        })).subscribe({
-            next: (created) => {
-                this.messageService.add({
-                    severity: UiSeverity.Success,
-                    summary: 'Başarılı',
-                    detail: `Fiş oluşturuldu: ${created.fisNo}`,
-                    life: 4000
-                });
-                this.router.navigate(['/muhasebe/fisler'], {
-                    queryParams: { fisNo: created.fisNo, id: created.id }
-                });
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-            }
-        });
+        this.service
+            .create(request)
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                })
+            )
+            .subscribe({
+                next: (created) => {
+                    this.messageService.add({
+                        severity: UiSeverity.Success,
+                        summary: 'Başarılı',
+                        detail: `Fiş oluşturuldu: ${created.fisNo}`,
+                        life: 4000
+                    });
+                    this.router.navigate(['/muhasebe/fisler'], {
+                        queryParams: { fisNo: created.fisNo, id: created.id }
+                    });
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                }
+            });
     }
 
     vazgec(): void {

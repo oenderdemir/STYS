@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -36,22 +36,10 @@ import { RestoranYonetimiService } from './restoran-yonetimi.service';
 @Component({
     selector: 'app-garson-servis',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        CardModule,
-        DividerModule,
-        InputTextModule,
-        TextareaModule,
-        ProgressSpinnerModule,
-        SelectModule,
-        TabsModule,
-        TagModule,
-        ToastModule
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, CardModule, DividerModule, InputTextModule, TextareaModule, ProgressSpinnerModule, SelectModule, TabsModule, TagModule, ToastModule],
     templateUrl: './garson-servis.html',
     styleUrl: './garson-servis.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class GarsonServisPage implements OnInit {
@@ -393,9 +381,7 @@ export class GarsonServisPage implements OnInit {
 
     private loadMasaOturumu(masaId: number, createIfMissing: boolean): void {
         this.oturumLoading = true;
-        const request$ = createIfMissing
-            ? this.service.startOrGetMasaOturumu(masaId, { paraBirimi: 'TRY' })
-            : this.service.getMasaOturumuByMasa(masaId);
+        const request$ = createIfMissing ? this.service.startOrGetMasaOturumu(masaId, { paraBirimi: 'TRY' }) : this.service.getMasaOturumuByMasa(masaId);
 
         request$
             .pipe(

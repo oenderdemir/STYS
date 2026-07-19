@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -22,12 +22,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import {
-    DepoCikisGrupModel,
-    DepoModel,
-    MALZEME_KAYIT_TIPI_OPTIONS,
-    MalzemeKayitTipi
-} from './depolar.dto';
+import { DepoCikisGrupModel, DepoModel, MALZEME_KAYIT_TIPI_OPTIONS, MalzemeKayitTipi } from './depolar.dto';
 import { DepolarService } from './depolar.service';
 
 type DepoTreeNode = TreeNode<DepoModel>;
@@ -55,6 +50,7 @@ type DepoTreeNode = TreeNode<DepoModel>;
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './depolar.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class DepolarPage implements OnInit {
@@ -114,20 +110,25 @@ export class DepolarPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getTree(tesisId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (items) => {
-                this.records = items;
-                this.treeRecords = this.buildTree(items);
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getTree(tesisId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (items) => {
+                    this.records = items;
+                    this.treeRecords = this.buildTree(items);
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -160,9 +161,7 @@ export class DepolarPage implements OnInit {
             return;
         }
 
-        const tesisId = this.dialogMode === 'create'
-            ? this.getSeciliTesisIdOrWarn()
-            : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
+        const tesisId = this.dialogMode === 'create' ? this.getSeciliTesisIdOrWarn() : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
         if (tesisId === null) {
             return;
         }
@@ -194,25 +193,27 @@ export class DepolarPage implements OnInit {
             }))
         };
 
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload) : this.service.create(payload);
 
-        request$.pipe(finalize(() => {
-            this.saving = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: () => {
-                this.dialogVisible = false;
-                this.load();
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        request$
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: () => {
+                    this.dialogVisible = false;
+                    this.load();
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit kaydedildi.' });
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     delete(item: DepoModel): void {

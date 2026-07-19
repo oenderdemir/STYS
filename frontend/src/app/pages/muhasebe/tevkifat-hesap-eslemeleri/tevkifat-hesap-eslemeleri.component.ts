@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -20,36 +20,16 @@ import { HesaplarService } from '../hesaplar/hesaplar.service';
 import { HesapLookupModel } from '../hesaplar/hesaplar.dto';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
-import {
-    CreateTevkifatHesapEslemeRequest,
-    TEVKIFAT_ISLEM_YONLERI,
-    TevkifatHesapEslemeFilterDto,
-    TevkifatHesapEslemeModel,
-    UpdateTevkifatHesapEslemeRequest,
-    createDefaultTevkifatHesapEslemeFilter
-} from './tevkifat-hesap-eslemeleri.dto';
+import { CreateTevkifatHesapEslemeRequest, TEVKIFAT_ISLEM_YONLERI, TevkifatHesapEslemeFilterDto, TevkifatHesapEslemeModel, UpdateTevkifatHesapEslemeRequest, createDefaultTevkifatHesapEslemeFilter } from './tevkifat-hesap-eslemeleri.dto';
 import { TevkifatHesapEslemeleriService } from './tevkifat-hesap-eslemeleri.service';
 
 @Component({
     selector: 'app-tevkifat-hesap-eslemeleri-page',
     standalone: true,
-    imports: [
-        CommonModule,
-        FormsModule,
-        ButtonModule,
-        CheckboxModule,
-        ConfirmDialogModule,
-        DialogModule,
-        InputTextModule,
-        SelectModule,
-        TableModule,
-        TextareaModule,
-        ToastModule,
-        ToolbarModule,
-        MuhasebeTesisContextBarComponent
-    ],
+    imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, ConfirmDialogModule, DialogModule, InputTextModule, SelectModule, TableModule, TextareaModule, ToastModule, ToolbarModule, MuhasebeTesisContextBarComponent],
     providers: [ConfirmationService, MessageService],
     templateUrl: './tevkifat-hesap-eslemeleri.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     styleUrls: ['./tevkifat-hesap-eslemeleri.component.scss']
 })
 export class TevkifatHesapEslemeleriPage implements OnInit {
@@ -79,17 +59,11 @@ export class TevkifatHesapEslemeleriPage implements OnInit {
     ];
 
     get tesisSecenekleriForSelect(): Array<{ label: string; value: number | null }> {
-        return [
-            { label: 'Tümü / Global', value: null },
-            ...this.tesisContext.tesisSecenekleri().map((x) => ({ label: x.label, value: x.value }))
-        ];
+        return [{ label: 'Tümü / Global', value: null }, ...this.tesisContext.tesisSecenekleri().map((x) => ({ label: x.label, value: x.value }))];
     }
 
     get islemYonuFiltreSecenekleri(): Array<{ label: string; value: 'Satis' | 'Alis' | null }> {
-        return [
-            { label: 'Tümü', value: null },
-            ...this.islemYonuSecenekleri.map((x) => ({ label: x.label, value: x.value }))
-        ];
+        return [{ label: 'Tümü', value: null }, ...this.islemYonuSecenekleri.map((x) => ({ label: x.label, value: x.value }))];
     }
 
     ngOnInit(): void {
@@ -100,15 +74,18 @@ export class TevkifatHesapEslemeleriPage implements OnInit {
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, this.filter).pipe(finalize(() => (this.loading = false))).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-            },
-            error: (error: unknown) => this.showError(error)
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, this.filter)
+            .pipe(finalize(() => (this.loading = false)))
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     onLazyLoad(event: { first?: number | null; rows?: number | null }): void {
@@ -172,9 +149,7 @@ export class TevkifatHesapEslemeleriPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateTevkifatHesapEslemeRequest)
-            : this.service.create(payload as CreateTevkifatHesapEslemeRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateTevkifatHesapEslemeRequest) : this.service.create(payload as CreateTevkifatHesapEslemeRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {

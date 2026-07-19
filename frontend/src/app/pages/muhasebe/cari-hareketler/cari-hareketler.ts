@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
@@ -26,8 +26,24 @@ import { CariHareketlerService } from './cari-hareketler.service';
 @Component({
     selector: 'app-cari-hareketler-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        DialogModule,
+        SelectModule,
+        InputNumberModule,
+        InputTextModule,
+        TableModule,
+        TabsModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        MuhasebeTesisSecimDialogComponent,
+        MuhasebeTesisContextBarComponent
+    ],
     templateUrl: './cari-hareketler.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class CariHareketlerPage implements OnInit {
@@ -121,22 +137,27 @@ export class CariHareketlerPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedCariKartId).pipe(finalize(() => {
-            this.loading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (paged) => {
-                this.records = paged.items;
-                this.pageNumber = paged.pageNumber;
-                this.pageSize = paged.pageSize;
-                this.totalRecords = paged.totalCount;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.cdr.detectChanges();
-            }
-        });
+        this.service
+            .getPaged(pageNumber, pageSize, tesisId, this.selectedCariKartId)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (paged) => {
+                    this.records = paged.items;
+                    this.pageNumber = paged.pageNumber;
+                    this.pageSize = paged.pageSize;
+                    this.totalRecords = paged.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     openCreate(): void {
@@ -186,9 +207,7 @@ export class CariHareketlerPage implements OnInit {
         };
 
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateCariHareketRequest)
-            : this.service.create(payload as CreateCariHareketRequest);
+        const request$ = this.dialogMode === 'edit' && this.model.id ? this.service.update(this.model.id, payload as UpdateCariHareketRequest) : this.service.create(payload as CreateCariHareketRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -228,9 +247,7 @@ export class CariHareketlerPage implements OnInit {
 
         this.cariKartService.getAll().subscribe({
             next: (items) => {
-                this.cariKartlar = items
-                    .filter((x) => !x.tesisId || x.tesisId === tesisId)
-                    .map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
+                this.cariKartlar = items.filter((x) => !x.tesisId || x.tesisId === tesisId).map((x) => ({ label: `${x.cariKodu} - ${x.unvanAdSoyad}`, value: x.id!, tesisId: x.tesisId ?? null }));
 
                 if (this.selectedCariKartId && !this.cariKartlar.some((x) => x.value === this.selectedCariKartId)) {
                     this.selectedCariKartId = null;
@@ -259,23 +276,27 @@ export class CariHareketlerPage implements OnInit {
             acik: this.service.getAcikHareketler(cariKartId),
             kapanan: this.service.getKapananHareketler(cariKartId),
             ekstre: this.service.getCariHareketEkstre(cariKartId)
-        }).pipe(finalize(() => {
-            this.ozetLoading = false;
-            this.cdr.detectChanges();
-        })).subscribe({
-            next: (result) => {
-                this.bakiyeOzet = result.bakiye;
-                this.acikHareketler = result.acik;
-                this.kapananHareketler = result.kapanan;
-                this.ekstreHareketler = result.ekstre;
-                this.cdr.detectChanges();
-            },
-            error: (error: unknown) => {
-                this.showError(error);
-                this.clearCariOzet();
-                this.cdr.detectChanges();
-            }
-        });
+        })
+            .pipe(
+                finalize(() => {
+                    this.ozetLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
+            .subscribe({
+                next: (result) => {
+                    this.bakiyeOzet = result.bakiye;
+                    this.acikHareketler = result.acik;
+                    this.kapananHareketler = result.kapanan;
+                    this.ekstreHareketler = result.ekstre;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.showError(error);
+                    this.clearCariOzet();
+                    this.cdr.detectChanges();
+                }
+            });
     }
 
     private clearCariOzet(): void {
@@ -352,4 +373,3 @@ export class CariHareketlerPage implements OnInit {
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
     }
 }
-

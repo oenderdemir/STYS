@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { CarouselModule } from 'primeng/carousel';
 import { GalleriaModule } from 'primeng/galleria';
@@ -54,6 +54,7 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
                 </ng-template>
             </p-galleria>
         </div>`,
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [ProductService, PhotoService]
 })
 export class MediaDemo implements OnInit {

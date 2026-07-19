@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -32,6 +32,7 @@ interface SelectOption<T = string | number> {
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, OdaKullanimBlokDialog],
     templateUrl: './oda-kullanim-blok-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
@@ -186,10 +187,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedModel.id
-                ? this.service.update(this.selectedModel.id, payload)
-                : this.service.create(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedModel.id ? this.service.update(this.selectedModel.id, payload) : this.service.create(payload);
 
         this.saving = true;
         save$
@@ -268,7 +266,7 @@ export class OdaKullanimBlokYonetimi implements OnInit, OnDestroy {
             .subscribe({
                 next: ({ tesisler }) => {
                     this.tesisler = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad));
-                    this.tesisOptions = this.tesisler.filter(x => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
+                    this.tesisOptions = this.tesisler.filter((x) => x.id != null).map((x) => ({ label: x.ad, value: x.id! }));
 
                     if (!this.selectedTesisId && this.tesisOptions.length > 0) {
                         this.selectedTesisId = this.tesisOptions[0].value;

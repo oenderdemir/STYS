@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -13,15 +13,9 @@ import { OdaOzellikDto, ODA_OZELLIK_VERI_TIPI_OPTIONS } from './oda-ozellik-yone
     selector: 'app-oda-ozellik-dialog',
     standalone: true,
     imports: [CommonModule, FormsModule, DialogModule, ButtonModule, InputTextModule, SelectModule, ToggleSwitchModule],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
-        <p-dialog
-            [header]="dialogTitle"
-            [visible]="visible"
-            [modal]="true"
-            [style]="{ width: '36rem', 'max-width': '95vw' }"
-            [breakpoints]="{ '960px': '95vw' }"
-            (onHide)="close()"
-        >
+        <p-dialog [header]="dialogTitle" [visible]="visible" [modal]="true" [style]="{ width: '36rem', 'max-width': '95vw' }" [breakpoints]="{ '960px': '95vw' }" (onHide)="close()">
             @if (showLockToggle) {
                 <div class="flex justify-end mb-3">
                     <p-button [icon]="lockIcon" size="small" [severity]="lockSeverity" [rounded]="true" [outlined]="false" [ariaLabel]="lockAriaLabel" styleClass="shadow-2" [disabled]="saving" (onClick)="toggleLockMode()" />
@@ -39,16 +33,7 @@ import { OdaOzellikDto, ODA_OZELLIK_VERI_TIPI_OPTIONS } from './oda-ozellik-yone
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="veriTipi" class="block font-medium mb-2">Veri Tipi</label>
-                    <p-select
-                        inputId="veriTipi"
-                        [options]="veriTipiOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        [(ngModel)]="workingModel.veriTipi"
-                        appendTo="body"
-                        class="w-full"
-                        [disabled]="isReadOnly || saving"
-                    />
+                    <p-select inputId="veriTipi" [options]="veriTipiOptions" optionLabel="label" optionValue="value" [(ngModel)]="workingModel.veriTipi" appendTo="body" class="w-full" [disabled]="isReadOnly || saving" />
                 </div>
                 <div class="col-span-12 md:col-span-6 flex items-center gap-3 mt-7">
                     <p-toggleswitch inputId="aktifMi" [(ngModel)]="workingModel.aktifMi" [disabled]="isReadOnly || saving" />
@@ -130,9 +115,7 @@ export class OdaOzellikDialog implements OnChanges {
     }
 
     canSubmit(): boolean {
-        return (this.workingModel.kod?.trim() ?? '').length > 0
-            && (this.workingModel.ad?.trim() ?? '').length > 0
-            && !!this.workingModel.veriTipi;
+        return (this.workingModel.kod?.trim() ?? '').length > 0 && (this.workingModel.ad?.trim() ?? '').length > 0 && !!this.workingModel.veriTipi;
     }
 
     submit(): void {

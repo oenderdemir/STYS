@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, forkJoin, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -31,6 +31,7 @@ interface SelectOption {
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, SelectModule, TableModule, ToastModule, ToolbarModule, SezonDialog],
     templateUrl: './sezon-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class SezonYonetimi implements OnInit, OnDestroy {
@@ -144,10 +145,7 @@ export class SezonYonetimi implements OnInit, OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedModel.id
-                ? this.service.update(this.selectedModel.id, payload)
-                : this.service.create(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedModel.id ? this.service.update(this.selectedModel.id, payload) : this.service.create(payload);
 
         this.saving = true;
         save$
@@ -217,9 +215,7 @@ export class SezonYonetimi implements OnInit, OnDestroy {
             )
             .subscribe({
                 next: ({ tesisler }) => {
-                    this.tesisOptions = [...tesisler]
-                        .sort((a, b) => a.ad.localeCompare(b.ad))
-                        .map((x) => ({ label: x.ad, value: x.id! }));
+                    this.tesisOptions = [...tesisler].sort((a, b) => a.ad.localeCompare(b.ad)).map((x) => ({ label: x.ad, value: x.id! }));
                     this.loadPaged();
                 },
                 error: (error: unknown) => {

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AccordionModule } from 'primeng/accordion';
 import { MenuItem } from 'primeng/api';
@@ -38,6 +38,7 @@ import { ToolbarModule } from 'primeng/toolbar';
         IconFieldModule,
         InputIconModule
     ],
+    changeDetection: ChangeDetectionStrategy.Eager,
     template: `
         <div class="flex flex-col">
             <div class="card">

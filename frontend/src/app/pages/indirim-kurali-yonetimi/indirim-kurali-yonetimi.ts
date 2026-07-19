@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { toLocalDateString } from '../../core/utils/date-time.util';
 import { FormsModule } from '@angular/forms';
 import { catchError, finalize, forkJoin, Observable, of } from 'rxjs';
@@ -29,6 +29,7 @@ import { IndirimKuraliYonetimiService } from './indirim-kurali-yonetimi.service'
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, IndirimKuraliDialog],
     templateUrl: './indirim-kurali-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
@@ -143,10 +144,7 @@ export class IndirimKuraliYonetimi implements OnInit, OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedIndirimKurali.id
-                ? this.service.updateIndirimKurali(this.selectedIndirimKurali.id, payload)
-                : this.service.createIndirimKurali(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedIndirimKurali.id ? this.service.updateIndirimKurali(this.selectedIndirimKurali.id, payload) : this.service.createIndirimKurali(payload);
 
         this.saving = true;
         save$

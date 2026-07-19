@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { forkJoin, finalize } from 'rxjs';
@@ -25,6 +25,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, InputTextModule, MultiSelectModule, SelectModule, TableModule, ToastModule, ToolbarModule],
     templateUrl: './kamp-donemi-atama-yonetimi.html',
     styleUrl: './kamp-donemi-atama-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KampDonemiAtamaYonetimi implements OnInit {
@@ -93,15 +94,14 @@ export class KampDonemiAtamaYonetimi implements OnInit {
     }
 
     get topluAdayDonemSecenekleri(): Array<{ label: string; value: number }> {
-        return this.filteredDonemler
-            .map((x) => ({
-                label: `${x.kampProgramiAd || '-'} / ${x.ad}`,
-                value: x.id!
-            }));
+        return this.filteredDonemler.map((x) => ({
+            label: `${x.kampProgramiAd || '-'} / ${x.ad}`,
+            value: x.id!
+        }));
     }
 
     get tarifeSecenekleri(): Array<{ label: string; value: string }> {
-        return this.konaklamaTarifeleri.map(t => ({
+        return this.konaklamaTarifeleri.map((t) => ({
             label: `${t.ad} (${t.kod})`,
             value: t.kod
         }));
@@ -155,10 +155,12 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         this.savingAtamalar = true;
         this.service
             .kaydetTesisAtamalari(this.selectedKampDonemiId, this.tesisAtamalari)
-            .pipe(finalize(() => {
-                this.savingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;
@@ -179,10 +181,12 @@ export class KampDonemiAtamaYonetimi implements OnInit {
 
         this.savingTopluAtamalar = true;
         forkJoin(this.topluHedefDonemIds.map((donemId) => this.service.kaydetTesisAtamalari(donemId, this.tesisAtamalari)))
-            .pipe(finalize(() => {
-                this.savingTopluAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingTopluAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (results) => {
                     const seciliId = this.selectedKampDonemiId;
@@ -217,10 +221,12 @@ export class KampDonemiAtamaYonetimi implements OnInit {
             donemler: this.service.getKampDonemleri(),
             tarifeler: this.service.getAktifKonaklamaTarifeleri()
         })
-            .pipe(finalize(() => {
-                this.loadingBaglam = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingBaglam = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: ({ donemler, tarifeler }) => {
                     this.konaklamaTarifeleri = tarifeler;
@@ -276,10 +282,12 @@ export class KampDonemiAtamaYonetimi implements OnInit {
         this.loadingAtamalar = true;
         this.service
             .getTesisAtamalari(this.selectedKampDonemiId)
-            .pipe(finalize(() => {
-                this.loadingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RezervasyonDegisiklikGecmisiDialogComponent } from './components/rezervasyon-degisiklik-gecmisi-dialog/rezervasyon-degisiklik-gecmisi-dialog';
@@ -54,18 +54,37 @@ import {
 } from './rezervasyon-yonetimi.dto';
 import { RezervasyonYonetimiService } from './rezervasyon-yonetimi.service';
 
-type RezervasyonNavAction =
-    | 'odeme'
-    | 'odaDegisim'
-    | 'konaklayanPlan'
-    | 'degisiklikGecmisi';
+type RezervasyonNavAction = 'odeme' | 'odaDegisim' | 'konaklayanPlan' | 'degisiklikGecmisi';
 
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent, RezervasyonOdaDegisimiDialogComponent, RezervasyonOdemeDialogComponent],
+    imports: [
+        CommonModule,
+        FormsModule,
+        RouterLink,
+        ButtonModule,
+        CheckboxModule,
+        ConfirmDialogModule,
+        DatePickerModule,
+        DialogModule,
+        InputTextModule,
+        MenuModule,
+        MultiSelectModule,
+        SelectModule,
+        TableModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule,
+        TooltipModule,
+        RezervasyonDegisiklikGecmisiDialogComponent,
+        RezervasyonKonaklayanPlaniDialogComponent,
+        RezervasyonOdaDegisimiDialogComponent,
+        RezervasyonOdemeDialogComponent
+    ],
     templateUrl: './rezervasyon-yonetimi.html',
     styleUrl: './rezervasyon-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class RezervasyonYonetimi implements OnInit {
@@ -287,7 +306,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.pendingNavRezervasyonId = null;
         this.pendingNavAction = null;
 
-        const kayit = this.rezervasyonKayitlari.find(k => k.id === rezervasyonId);
+        const kayit = this.rezervasyonKayitlari.find((k) => k.id === rezervasyonId);
         if (!kayit) {
             this.messageService.add({
                 severity: 'warn',
@@ -466,7 +485,10 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     getScenarioPricingLabel(scenario: KonaklamaSenaryoDto): string {
-        const pricingType = scenario.fiyatlamaTipi?.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const pricingType = scenario.fiyatlamaTipi
+            ?.trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
         if (pricingType) {
             switch (pricingType) {
                 case 'tekkisilikfiyat':
@@ -625,10 +647,15 @@ export class RezervasyonYonetimi implements OnInit {
 
         this.service
             .searchUygunOdalar(request)
-            .pipe(finalize(() => { this.alternatifOdaLoading = false; this.cdr.detectChanges(); }))
+            .pipe(
+                finalize(() => {
+                    this.alternatifOdaLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (odalar) => {
-                    this.alternatifOdalar = odalar.filter(o => o.odaId !== atama.odaId);
+                    this.alternatifOdalar = odalar.filter((o) => o.odaId !== atama.odaId);
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
@@ -692,13 +719,7 @@ export class RezervasyonYonetimi implements OnInit {
 
         this.loadingDiscountRules = true;
         this.service
-            .getIndirimKurallari(
-                this.selectedTesisId,
-                this.selectedMisafirTipiId,
-                this.selectedKonaklamaTipiId,
-                this.toLocalDateTimeString(this.baslangicTarihi),
-                this.toLocalDateTimeString(this.bitisTarihi)
-            )
+            .getIndirimKurallari(this.selectedTesisId, this.selectedMisafirTipiId, this.selectedKonaklamaTipiId, this.toLocalDateTimeString(this.baslangicTarihi), this.toLocalDateTimeString(this.bitisTarihi))
             .pipe(
                 finalize(() => {
                     this.loadingDiscountRules = false;
@@ -803,12 +824,12 @@ export class RezervasyonYonetimi implements OnInit {
 
         const scenarioToUse: KonaklamaSenaryoDto = this.scenarioPriceBreakdown
             ? {
-                ...this.selectedScenarioForDiscount,
-                toplamBazUcret: this.scenarioPriceBreakdown.toplamBazUcret,
-                toplamNihaiUcret: this.scenarioPriceBreakdown.toplamNihaiUcret,
-                paraBirimi: this.scenarioPriceBreakdown.paraBirimi,
-                uygulananIndirimler: [...this.scenarioPriceBreakdown.uygulananIndirimler]
-            }
+                  ...this.selectedScenarioForDiscount,
+                  toplamBazUcret: this.scenarioPriceBreakdown.toplamBazUcret,
+                  toplamNihaiUcret: this.scenarioPriceBreakdown.toplamNihaiUcret,
+                  paraBirimi: this.scenarioPriceBreakdown.paraBirimi,
+                  uygulananIndirimler: [...this.scenarioPriceBreakdown.uygulananIndirimler]
+              }
             : this.selectedScenarioForDiscount;
 
         this.closeDiscountDialog();
@@ -831,9 +852,7 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         const afterDiscount = result.toplamNihaiUcret - discountAmount;
-        const customRuleName = this.customDiscountDescription.trim().length > 0
-            ? this.customDiscountDescription.trim()
-            : 'Custom Indirim';
+        const customRuleName = this.customDiscountDescription.trim().length > 0 ? this.customDiscountDescription.trim() : 'Custom Indirim';
 
         return {
             ...result,
@@ -898,19 +917,11 @@ export class RezervasyonYonetimi implements OnInit {
     }
 
     canGuncelleKonaklamaHakkiDurumu(detay: RezervasyonDetayDto | null, hak: RezervasyonKonaklamaHakkiDto): boolean {
-        return !!detay
-            && this.canManage
-            && detay.rezervasyonDurumu === this.durumCheckInTamamlandi
-            && hak.tuketimKayitlari.length === 0
-            && (hak.durum === this.hakDurumBekliyor || hak.durum === this.hakDurumKullanildi);
+        return !!detay && this.canManage && detay.rezervasyonDurumu === this.durumCheckInTamamlandi && hak.tuketimKayitlari.length === 0 && (hak.durum === this.hakDurumBekliyor || hak.durum === this.hakDurumKullanildi);
     }
 
     canOpenKonaklamaHakkiTuketim(detay: RezervasyonDetayDto | null, hak: RezervasyonKonaklamaHakkiDto): boolean {
-        return !!detay
-            && this.canManage
-            && detay.rezervasyonDurumu === this.durumCheckInTamamlandi
-            && hak.durum !== this.hakDurumIptal
-            && (hak.kullanimTipi !== 'Adetli' || (hak.kalanMiktar ?? 0) > 0);
+        return !!detay && this.canManage && detay.rezervasyonDurumu === this.durumCheckInTamamlandi && hak.durum !== this.hakDurumIptal && (hak.kullanimTipi !== 'Adetli' || (hak.kalanMiktar ?? 0) > 0);
     }
 
     canOpenKonaklamaHakkiGecmisi(hak: RezervasyonKonaklamaHakkiDto): boolean {
@@ -932,9 +943,7 @@ export class RezervasyonYonetimi implements OnInit {
             return;
         }
 
-        const hedefDurum = mevcutDurum === this.hakDurumBekliyor
-            ? this.hakDurumKullanildi
-            : this.hakDurumBekliyor;
+        const hedefDurum = mevcutDurum === this.hakDurumBekliyor ? this.hakDurumKullanildi : this.hakDurumBekliyor;
 
         this.updatingKonaklamaHakId = hakId;
         this.service
@@ -951,9 +960,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.messageService.add({
                         severity: UiSeverity.Success,
                         summary: 'Basarili',
-                        detail: hedefDurum === this.hakDurumKullanildi
-                            ? 'Konaklama hakki kullanildi olarak isaretlendi.'
-                            : 'Konaklama hakki tekrar bekliyor durumuna alindi.'
+                        detail: hedefDurum === this.hakDurumKullanildi ? 'Konaklama hakki kullanildi olarak isaretlendi.' : 'Konaklama hakki tekrar bekliyor durumuna alindi.'
                     });
                     this.cdr.detectChanges();
                 },
@@ -1034,13 +1041,15 @@ export class RezervasyonYonetimi implements OnInit {
     canSaveKonaklamaHakkiTuketim(): boolean {
         const detay = this.getSelectedRezervasyonUcretDetay();
         const hak = this.getSelectedKonaklamaHakkiForTuketim();
-        return !!detay
-            && !!hak
-            && this.canOpenKonaklamaHakkiTuketim(detay, hak)
-            && !!this.konaklamaHakkiTuketimTarihi
-            && Number.isFinite(Number(this.konaklamaHakkiTuketimMiktar ?? 0))
-            && Number(this.konaklamaHakkiTuketimMiktar ?? 0) > 0
-            && (hak.kullanimNoktasi === 'Genel' || !!this.selectedKonaklamaHakkiTuketimNoktasiId);
+        return (
+            !!detay &&
+            !!hak &&
+            this.canOpenKonaklamaHakkiTuketim(detay, hak) &&
+            !!this.konaklamaHakkiTuketimTarihi &&
+            Number.isFinite(Number(this.konaklamaHakkiTuketimMiktar ?? 0)) &&
+            Number(this.konaklamaHakkiTuketimMiktar ?? 0) > 0 &&
+            (hak.kullanimNoktasi === 'Genel' || !!this.selectedKonaklamaHakkiTuketimNoktasiId)
+        );
     }
 
     kaydetKonaklamaHakkiTuketim(): void {
@@ -1141,7 +1150,6 @@ export class RezervasyonYonetimi implements OnInit {
     closeDegisiklikGecmisiDialog(): void {
         this.degisiklikGecmisiDialogVisible = false;
     }
-
 
     openKonaklayanPlaniDialog(kayit: RezervasyonListeDto): void {
         if (!this.canManage || !kayit?.id || kayit.id <= 0) {
@@ -1411,11 +1419,7 @@ export class RezervasyonYonetimi implements OnInit {
             return 'Check-out tamamlandi';
         }
 
-        if (
-            kayit.rezervasyonDurumu !== this.durumTaslak
-            && kayit.rezervasyonDurumu !== this.durumOnayli
-            && kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi
-        ) {
+        if (kayit.rezervasyonDurumu !== this.durumTaslak && kayit.rezervasyonDurumu !== this.durumOnayli && kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi) {
             return 'Durum uygun degil';
         }
 
@@ -1539,11 +1543,7 @@ export class RezervasyonYonetimi implements OnInit {
         });
 
         const cancelDisabledReason = this.getCancelReservationDisabledReason(kayit);
-        const cancelActionLabel = kayit.rezervasyonDurumu === this.durumIptal
-            ? 'Iptali Geri Al'
-            : cancelDisabledReason
-                ? `Iptal Et (${cancelDisabledReason})`
-                : 'Iptal Et';
+        const cancelActionLabel = kayit.rezervasyonDurumu === this.durumIptal ? 'Iptali Geri Al' : cancelDisabledReason ? `Iptal Et (${cancelDisabledReason})` : 'Iptal Et';
 
         items.push({
             label: cancelActionLabel,
@@ -1599,16 +1599,12 @@ export class RezervasyonYonetimi implements OnInit {
 
     private executeCheckInIfAllowed(kayit: RezervasyonListeDto, kontrol: RezervasyonCheckInKontrolDto): Observable<RezervasyonKayitSonucDto> {
         if (kontrol.uyarilar.length > 0) {
-            const warningDetail = kontrol.uyarilar
-                .map((x) => x.odaNo ? `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})` : x.mesaj)
-                .join(', ');
+            const warningDetail = kontrol.uyarilar.map((x) => (x.odaNo ? `${x.odaNo} - ${x.binaAdi} (${x.temizlikDurumu})` : x.mesaj)).join(', ');
 
             this.messageService.add({
                 severity: kontrol.checkInYapilabilir ? 'warn' : 'error',
                 summary: kontrol.checkInYapilabilir ? 'Uyari' : 'Check-in Engellendi',
-                detail: kontrol.checkInYapilabilir
-                    ? `Oda durumu uyarisi: ${warningDetail}`
-                    : `Hazir olmayan odalar var: ${warningDetail}`
+                detail: kontrol.checkInYapilabilir ? `Oda durumu uyarisi: ${warningDetail}` : `Hazir olmayan odalar var: ${warningDetail}`
             });
         }
 
@@ -1625,9 +1621,7 @@ export class RezervasyonYonetimi implements OnInit {
         }
 
         const isRevert = kayit.rezervasyonDurumu === this.durumIptal;
-        const confirmationMessage = isRevert
-            ? 'Bu rezervasyonun iptalini geri alip Taslak durumuna donmek istediginize emin misiniz?'
-            : 'Bu rezervasyonu iptal etmek istediginize emin misiniz?';
+        const confirmationMessage = isRevert ? 'Bu rezervasyonun iptalini geri alip Taslak durumuna donmek istediginize emin misiniz?' : 'Bu rezervasyonu iptal etmek istediginize emin misiniz?';
 
         if (!window.confirm(confirmationMessage)) {
             return;
@@ -1648,9 +1642,7 @@ export class RezervasyonYonetimi implements OnInit {
                     this.messageService.add({
                         severity: UiSeverity.Success,
                         summary: 'Basarili',
-                        detail: result.rezervasyonDurumu === this.durumIptal
-                            ? `Rezervasyon iptal edildi. Referans: ${result.referansNo}`
-                            : `Rezervasyon iptali geri alindi. Referans: ${result.referansNo}`
+                        detail: result.rezervasyonDurumu === this.durumIptal ? `Rezervasyon iptal edildi. Referans: ${result.referansNo}` : `Rezervasyon iptali geri alindi. Referans: ${result.referansNo}`
                     });
                     this.cdr.detectChanges();
                 },
@@ -1763,7 +1755,8 @@ export class RezervasyonYonetimi implements OnInit {
 
     private loadReferences(): void {
         this.loadingReferences = true;
-        this.tesisService.getTesisler()
+        this.tesisService
+            .getTesisler()
             .pipe(
                 finalize(() => {
                     this.loadingReferences = false;

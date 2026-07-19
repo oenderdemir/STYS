@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -24,6 +24,7 @@ import { MisafirTipiYonetimiService } from './misafir-tipi-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, CheckboxModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './misafir-tipi-yonetimi.html',
     styleUrl: './misafir-tipi-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class MisafirTipiYonetimi implements OnInit {
@@ -74,17 +75,17 @@ export class MisafirTipiYonetimi implements OnInit {
             return;
         }
 
-        const misafirTipiIds = this.tesisAtamalari
-            .filter((x) => x.tesisteKullanilabilirMi && x.globalAktifMi)
-            .map((x) => x.misafirTipiId);
+        const misafirTipiIds = this.tesisAtamalari.filter((x) => x.tesisteKullanilabilirMi && x.globalAktifMi).map((x) => x.misafirTipiId);
 
         this.savingAtamalar = true;
         this.service
             .kaydetTesisAtamalari(this.selectedTesisId, misafirTipiIds)
-            .pipe(finalize(() => {
-                this.savingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.savingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;
@@ -106,15 +107,15 @@ export class MisafirTipiYonetimi implements OnInit {
         this.loadingBaglam = true;
         this.service
             .getYonetimBaglam()
-            .pipe(finalize(() => {
-                this.loadingBaglam = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingBaglam = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
-                    this.tesisSecenekleri = baglam.tesisler
-                        .map((x) => ({ label: x.ad, value: x.id }))
-                        .sort((a, b) => a.label.localeCompare(b.label));
+                    this.tesisSecenekleri = baglam.tesisler.map((x) => ({ label: x.ad, value: x.id })).sort((a, b) => a.label.localeCompare(b.label));
 
                     if (this.selectedTesisId && !this.tesisSecenekleri.some((x) => x.value === this.selectedTesisId)) {
                         this.selectedTesisId = null;
@@ -146,10 +147,12 @@ export class MisafirTipiYonetimi implements OnInit {
         this.loadingAtamalar = true;
         this.service
             .getTesisAtamalari(this.selectedTesisId)
-            .pipe(finalize(() => {
-                this.loadingAtamalar = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loadingAtamalar = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.tesisAtamalari = items;

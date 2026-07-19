@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -24,6 +24,7 @@ import { IsletmeAlaniSinifiDto } from '../isletme-alani-yonetimi/isletme-alani-y
     standalone: true,
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, IsletmeAlaniSinifiDialog],
     templateUrl: './isletme-alani-sinifi-yonetimi.html',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
@@ -124,9 +125,7 @@ export class IsletmeAlaniSinifiYonetimi implements OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedSinif.id
-            ? this.service.updateSinif(this.selectedSinif.id, payload)
-            : this.service.createSinif(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedSinif.id ? this.service.updateSinif(this.selectedSinif.id, payload) : this.service.createSinif(payload);
 
         this.saving = true;
         save$

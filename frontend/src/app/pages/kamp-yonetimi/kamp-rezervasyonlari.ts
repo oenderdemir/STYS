@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -24,6 +24,7 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
     imports: [CommonModule, FormsModule, RouterLink, ButtonModule, DialogModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, KampBasvuruDetayDialogComponent],
     templateUrl: './kamp-rezervasyonlari.html',
     styleUrl: './kamp-rezervasyonlari.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class KampRezervasyonlariPage implements OnInit {
@@ -88,11 +89,14 @@ export class KampRezervasyonlariPage implements OnInit {
 
         const id = this.iptalYapiliyorId;
         this.iptalKaydediliyor = true;
-        this.service.iptalEtKampRezervasyon(id, { iptalNedeni: this.iptalNedeni })
-            .pipe(finalize(() => {
-                this.iptalKaydediliyor = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .iptalEtKampRezervasyon(id, { iptalNedeni: this.iptalNedeni })
+            .pipe(
+                finalize(() => {
+                    this.iptalKaydediliyor = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.iptalDialogVisible = false;
@@ -121,11 +125,14 @@ export class KampRezervasyonlariPage implements OnInit {
 
     private loadBaglam(): void {
         this.loading = true;
-        this.service.getKampRezervasyonBaglam()
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampRezervasyonBaglam()
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (baglam) => {
                     this.baglam = baglam;
@@ -140,11 +147,14 @@ export class KampRezervasyonlariPage implements OnInit {
 
     private loadListe(): void {
         this.loading = true;
-        this.service.getKampRezervasyonlari(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+        this.service
+            .getKampRezervasyonlari(this.selectedKampDonemiId, this.selectedTesisId, this.selectedDurum)
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (items) => {
                     this.kayitlar = items;

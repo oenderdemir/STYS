@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -20,6 +20,7 @@ import { LisansYonetimiService } from './lisans-yonetimi.service';
     imports: [CommonModule, ButtonModule, FileUploadModule, TagModule, ToastModule, ToolbarModule],
     templateUrl: './lisans-yonetimi.html',
     styleUrl: './lisans-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService]
 })
 export class LisansYonetimi implements OnInit {
@@ -65,7 +66,12 @@ export class LisansYonetimi implements OnInit {
         this.loading = true;
         this.service
             .getStatus()
-            .pipe(finalize(() => { this.loading = false; this.cdr.detectChanges(); }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (data) => {
                     this.status = data;
@@ -82,7 +88,12 @@ export class LisansYonetimi implements OnInit {
         this.contextLoading = true;
         this.service
             .getContext()
-            .pipe(finalize(() => { this.contextLoading = false; this.cdr.detectChanges(); }))
+            .pipe(
+                finalize(() => {
+                    this.contextLoading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (data) => {
                     this.context = data;
@@ -100,7 +111,8 @@ export class LisansYonetimi implements OnInit {
 
         const text = JSON.stringify(this.context, null, 2);
         if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText(text)
+            navigator.clipboard
+                .writeText(text)
                 .then(() => this.messageService.add({ severity: UiSeverity.Success, summary: 'Kopyalandi', detail: 'Lisans konfigurasyonu panoya kopyalandi.' }))
                 .catch(() => this.fallbackCopy(text));
             return;
@@ -134,7 +146,12 @@ export class LisansYonetimi implements OnInit {
         this.uploading = true;
         this.service
             .upload(file)
-            .pipe(finalize(() => { this.uploading = false; this.cdr.detectChanges(); }))
+            .pipe(
+                finalize(() => {
+                    this.uploading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (data) => {
                     this.status = data;

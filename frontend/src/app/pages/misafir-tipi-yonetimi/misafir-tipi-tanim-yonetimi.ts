@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize, Observable } from 'rxjs';
@@ -27,6 +27,7 @@ import { MisafirTipiYonetimiService } from './misafir-tipi-yonetimi.service';
     imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, IconFieldModule, InputIconModule, InputTextModule, TableModule, ToastModule, ToolbarModule, MisafirTipiDialog],
     templateUrl: './misafir-tipi-tanim-yonetimi.html',
     styleUrl: './misafir-tipi-tanim-yonetimi.scss',
+    changeDetection: ChangeDetectionStrategy.Eager,
     providers: [MessageService, ConfirmationService]
 })
 export class MisafirTipiTanimYonetimi implements OnInit, OnDestroy {
@@ -137,17 +138,16 @@ export class MisafirTipiTanimYonetimi implements OnInit, OnDestroy {
             return;
         }
 
-        const save$: Observable<unknown> =
-            this.dialogMode === 'edit' && this.selectedMisafirTipi.id
-                ? this.service.updateMisafirTipi(this.selectedMisafirTipi.id, payload)
-                : this.service.createMisafirTipi(payload);
+        const save$: Observable<unknown> = this.dialogMode === 'edit' && this.selectedMisafirTipi.id ? this.service.updateMisafirTipi(this.selectedMisafirTipi.id, payload) : this.service.createMisafirTipi(payload);
 
         this.saving = true;
         save$
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: () => {
                     this.dialogVisible = false;
@@ -195,10 +195,12 @@ export class MisafirTipiTanimYonetimi implements OnInit, OnDestroy {
         this.loading = true;
         this.service
             .getMisafirTipleriPaged(pageNumber, pageSize, this.searchQuery, this.sortBy, this.sortDir)
-            .pipe(finalize(() => {
-                this.loading = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.loading = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (pagedResponse) => {
                     if (pagedResponse.totalCount > 0 && pagedResponse.totalPages > 0 && pageNumber > pagedResponse.totalPages) {
@@ -228,10 +230,12 @@ export class MisafirTipiTanimYonetimi implements OnInit, OnDestroy {
         this.saving = true;
         this.service
             .getMisafirTipiById(id)
-            .pipe(finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
-            }))
+            .pipe(
+                finalize(() => {
+                    this.saving = false;
+                    this.cdr.detectChanges();
+                })
+            )
             .subscribe({
                 next: (item) => {
                     this.selectedMisafirTipi = item;

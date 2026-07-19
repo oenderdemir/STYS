@@ -46,8 +46,8 @@ export class OrtalamaKonaklamaSuresiRaporComponent implements OnInit {
     yukleniyor = false;
     excelIndiriliyor = false;
 
-    chartData: unknown = null;
-    chartOptions: unknown = null;
+    chartData: any = null;
+    chartOptions: any = null;
 
     ngOnInit(): void {
         this.tesisleriYukle();

@@ -34,12 +34,12 @@
                     <div class="kategori-scroll">
                         <p-chip
                             label="Tum Urunler"
-                            [styleClass]="seciliKategoriId === null ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
+                            [class]="seciliKategoriId === null ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
                             (click)="selectKategori(null)"></p-chip>
                         <p-chip
                             *ngFor="let kategori of m.kategoriler; trackBy: trackByKategoriId"
                             [label]="kategori.ad"
-                            [styleClass]="seciliKategoriId === kategori.id ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
+                            [class]="seciliKategoriId === kategori.id ? 'kategori-chip kategori-chip--active' : 'kategori-chip'"
                             (click)="selectKategori(kategori.id)"></p-chip>
                     </div>
                     <div class="arama-alani">

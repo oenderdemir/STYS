@@ -98,7 +98,7 @@
                     <p-select class="w-full" [options]="urunler" optionLabel="ad" optionValue="id" [(ngModel)]="line.restoranMenuUrunId" [appendTo]="'body'" [showClear]="false" placeholder="Urun Secin" />
                 </td>
                 <td>
-                    <p-inputNumber class="w-full" [(ngModel)]="line.miktar" [min]="1" [showButtons]="true" />
+                    <p-inputnumber class="w-full" [(ngModel)]="line.miktar" [min]="1" [showButtons]="true" />
                 </td>
                 <td>
                     <input pInputText class="w-full" [(ngModel)]="line.notlar" />
@@ -185,7 +185,7 @@
                         </div>
                         <div class="col-span-12 md:col-span-3">
                             <label class="block font-medium mb-2">Tutar</label>
-                            <p-inputNumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" [disabled]="!canTakePayment" />
+                            <p-inputnumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" [disabled]="!canTakePayment" />
                         </div>
                         <div class="col-span-12 md:col-span-4">
                             <label class="block font-medium mb-2">Aciklama</label>
@@ -232,7 +232,7 @@
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Tutar</label>
-            <p-inputNumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+            <p-inputnumber class="w-full" [(ngModel)]="odemeTutari" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
         </div>
     </div>
 

@@ -376,11 +376,11 @@ export class OdaTemizlikYonetimi implements OnInit, OnDestroy {
         return 'Beklenmeyen bir hata olustu.';
     }
 
-    private createMenuAnchorEvent(anchor: HTMLElement): { target: HTMLElement; currentTarget: HTMLElement } {
+    private createMenuAnchorEvent(anchor: HTMLElement): Event {
         return {
             target: anchor,
             currentTarget: anchor
-        };
+        } as unknown as Event;
     }
 }
 import { UiSeverity } from '@/app/core/ui/ui-severity.constants';

@@ -69,7 +69,7 @@
 
             <div class="mb-3">
                 <label class="block font-medium mb-2">Kategoriler</label>
-                <p-multiSelect
+                <p-multiselect
                     class="w-full"
                     [options]="globalKategoriler"
                     optionLabel="ad"
@@ -98,7 +98,7 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Sira No</label>
-            <p-inputNumber class="w-full" [(ngModel)]="kategoriModel.siraNo" [min]="0" [showButtons]="true" />
+            <p-inputnumber class="w-full" [(ngModel)]="kategoriModel.siraNo" [min]="0" [showButtons]="true" />
         </div>
         <div class="col-span-12 md:col-span-6 flex align-items-center gap-2 mt-4">
             <input id="globalKategoriAktifMi" type="checkbox" [(ngModel)]="kategoriModel.aktifMi" />

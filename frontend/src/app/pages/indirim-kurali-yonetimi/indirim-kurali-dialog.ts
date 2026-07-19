@@ -134,7 +134,7 @@ interface IndirimKuraliWorkingModel {
 
                 <div class="col-span-12 md:col-span-6">
                     <label for="misafirTipiIds" class="block font-medium mb-2">Misafir Tipleri (Opsiyonel)</label>
-                    <p-multiSelect
+                    <p-multiselect
                         inputId="misafirTipiIds"
                         class="w-full"
                         [options]="misafirTipiOptions"
@@ -150,7 +150,7 @@ interface IndirimKuraliWorkingModel {
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="konaklamaTipiIds" class="block font-medium mb-2">Konaklama Tipleri (Opsiyonel)</label>
-                    <p-multiSelect
+                    <p-multiselect
                         inputId="konaklamaTipiIds"
                         class="w-full"
                         [options]="konaklamaTipiOptions"

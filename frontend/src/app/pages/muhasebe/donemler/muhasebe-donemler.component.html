@@ -172,7 +172,7 @@
     <!-- Mali Yıl -->
     <div>
       <label class="block mb-1 text-sm font-medium">Mali Yıl <span class="text-red-500">*</span></label>
-      <p-inputNumber
+      <p-inputnumber
         [(ngModel)]="model.maliYil"
         [min]="2000"
         [max]="2100"
@@ -184,7 +184,7 @@
     <!-- Dönem No -->
     <div>
       <label class="block mb-1 text-sm font-medium">Dönem No <span class="text-red-500">*</span></label>
-      <p-inputNumber
+      <p-inputnumber
         [(ngModel)]="model.donemNo"
         [min]="1"
         [max]="12"
@@ -251,4 +251,4 @@
   </ng-template>
 </p-dialog>
 
-<p-confirmDialog key="donemDialog" />
+<p-confirm-dialog key="donemDialog" />

@@ -52,10 +52,10 @@ export class RezervasyonDurumDagilimiRaporComponent implements OnInit {
     yukleniyor = false;
     excelIndiriliyor = false;
 
-    durumDagilimiChartData: unknown = null;
-    durumDagilimiChartOptions: unknown = null;
-    odaTipiChartData: unknown = null;
-    odaTipiChartOptions: unknown = null;
+    durumDagilimiChartData: any = null;
+    durumDagilimiChartOptions: any = null;
+    odaTipiChartData: any = null;
+    odaTipiChartOptions: any = null;
 
     readonly durumSecenekleri: DurumSecenegi[] = [
         { label: 'Taslak', value: 'taslak' },

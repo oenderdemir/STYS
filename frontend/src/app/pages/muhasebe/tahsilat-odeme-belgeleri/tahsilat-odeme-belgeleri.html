@@ -1,6 +1,6 @@
-<p-confirmDialog />
-<p-confirmDialog key="kapamaGeriAl" />
-<p-confirmDialog key="muhasebeFisiOlustur" />
+<p-confirm-dialog />
+<p-confirm-dialog key="kapamaGeriAl" />
+<p-confirm-dialog key="muhasebeFisiOlustur" />
 <app-muhasebe-tesis-secim-dialog />
 <app-muhasebe-tesis-context-bar />
 
@@ -62,9 +62,9 @@
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Belge No</label><input pInputText class="w-full" [(ngModel)]="model.belgeNo" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Belge Tipi</label><p-select class="w-full" [options]="belgeTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.belgeTipi" appendTo="body" /></div>
         <div class="col-span-12"><label class="block mb-2">Cari</label><p-select class="w-full" [options]="cariKartlar" optionLabel="label" optionValue="value" [(ngModel)]="model.cariKartId" appendTo="body" /></div>
-        <div class="col-span-12"><label class="block mb-2">Kapatılacak Cari Hareket Id</label><p-inputNumber class="w-full" [(ngModel)]="model.kapatilacakCariHareketId" [useGrouping]="false" [min]="1" placeholder="Opsiyonel" /></div>
+        <div class="col-span-12"><label class="block mb-2">Kapatılacak Cari Hareket Id</label><p-inputnumber class="w-full" [(ngModel)]="model.kapatilacakCariHareketId" [useGrouping]="false" [min]="1" placeholder="Opsiyonel" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Odeme Yontemi</label><p-select class="w-full" [options]="odemeYontemleri" optionLabel="label" optionValue="value" [(ngModel)]="model.odemeYontemi" appendTo="body" /></div>
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tutar</label><p-inputNumber class="w-full" [(ngModel)]="model.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Tutar</label><p-inputnumber class="w-full" [(ngModel)]="model.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
     </div>
     <ng-template #footer><p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" /><p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" /></ng-template>
 </p-dialog>

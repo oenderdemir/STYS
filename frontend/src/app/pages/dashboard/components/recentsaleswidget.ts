@@ -15,8 +15,8 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
             <ng-template #header>
                 <tr>
                     <th>Image</th>
-                    <th pSortableColumn="name">Name <p-sortIcon field="name"></p-sortIcon></th>
-                    <th pSortableColumn="price">Price <p-sortIcon field="price"></p-sortIcon></th>
+                    <th pSortableColumn="name">Name <p-sort-icon field="name"></p-sort-icon></th>
+                    <th pSortableColumn="price">Price <p-sort-icon field="price"></p-sort-icon></th>
                     <th>View</th>
                 </tr>
             </ng-template>

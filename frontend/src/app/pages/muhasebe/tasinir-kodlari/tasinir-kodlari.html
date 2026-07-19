@@ -9,7 +9,7 @@
     </ng-template>
 </p-toolbar> 
 
-<p-treeTable [value]="treeRecords" [loading]="loading" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
+<p-treetable [value]="treeRecords" [loading]="loading" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
     
     <ng-template #caption>
         <h5 class="m-0">Tasinir Kodlari (Agac)</h5>
@@ -29,7 +29,7 @@
     <ng-template #body let-rowNode let-rowData="rowData">
         <tr [ttRow]="rowNode">
             <td>
-                <p-treeTableToggler [rowNode]="rowNode" />
+                <p-treetable-toggler [rowNode]="rowNode" />
                 {{ rowData.tamKod }}
             </td>
             <td>{{ rowData.kod }}</td>
@@ -46,7 +46,7 @@
             </td>
         </tr>
     </ng-template>
-</p-treeTable>
+</p-treetable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Tasinir Kod Duzenle' : 'Yeni Tasinir Kod'" [style]="{ width: '42rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3 mt-1">
@@ -76,7 +76,7 @@
                 (onSelect)="onParentSelect()"
                 [dropdown]="true"
                 [delay]="0"
-                [minLength]="2"
+                [minQueryLength]="2"
                 [forceSelection]="false"
                 optionLabel="label"
                 placeholder="Kod veya ad ile ara"

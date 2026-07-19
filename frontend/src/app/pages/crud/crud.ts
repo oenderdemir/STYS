@@ -93,29 +93,29 @@ interface ExportColumn {
             <ng-template #header>
                 <tr>
                     <th style="width: 3rem">
-                        <p-tableHeaderCheckbox />
+                        <p-table-header-checkbox />
                     </th>
                     <th style="min-width: 16rem">Code</th>
                     <th pSortableColumn="name" style="min-width:16rem">
                         Name
-                        <p-sortIcon field="name" />
+                        <p-sort-icon field="name" />
                     </th>
                     <th>Image</th>
                     <th pSortableColumn="price" style="min-width: 8rem">
                         Price
-                        <p-sortIcon field="price" />
+                        <p-sort-icon field="price" />
                     </th>
                     <th pSortableColumn="category" style="min-width:10rem">
                         Category
-                        <p-sortIcon field="category" />
+                        <p-sort-icon field="category" />
                     </th>
                     <th pSortableColumn="rating" style="min-width: 12rem">
                         Reviews
-                        <p-sortIcon field="rating" />
+                        <p-sort-icon field="rating" />
                     </th>
                     <th pSortableColumn="inventoryStatus" style="min-width: 12rem">
                         Status
-                        <p-sortIcon field="inventoryStatus" />
+                        <p-sort-icon field="inventoryStatus" />
                     </th>
                     <th style="min-width: 12rem"></th>
                 </tr>
@@ -123,7 +123,7 @@ interface ExportColumn {
             <ng-template #body let-product>
                 <tr>
                     <td style="width: 3rem">
-                        <p-tableCheckbox [value]="product" />
+                        <p-table-checkbox [value]="product" />
                     </td>
                     <td style="min-width: 12rem">{{ product.code }}</td>
                     <td style="min-width: 16rem">{{ product.name }}</td>

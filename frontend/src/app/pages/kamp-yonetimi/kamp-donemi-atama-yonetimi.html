@@ -49,7 +49,7 @@
             @if (canManagePermission) {
                 <div>
                     <label for="topluDonemSecimi" class="block font-medium mb-2">Kamp Donemleri (Coklu Secim)</label>
-                    <p-multiSelect
+                    <p-multiselect
                         inputId="topluDonemSecimi"
                         [options]="topluAdayDonemSecenekleri"
                         optionLabel="label"
@@ -106,7 +106,7 @@
                         <input pInputText type="number" min="0" class="w-full" [(ngModel)]="item.toplamKontenjan" [disabled]="!canManageAssignments || !item.atamaVarMi" />
                     </td>
                     <td>
-                        <p-multiSelect
+                        <p-multiselect
                             [(ngModel)]="item.konaklamaTarifeKodlari"
                             [options]="tarifeSecenekleri"
                             optionLabel="label"

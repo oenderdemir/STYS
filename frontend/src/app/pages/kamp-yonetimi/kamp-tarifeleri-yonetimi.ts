@@ -106,70 +106,70 @@ import { KampYonetimiService } from './kamp-yonetimi.service';
                                 >
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.minimumKisi"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                             >
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td >
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.maksimumKisi"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                >
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.kamuGunlukUcret"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                 mode="decimal"
                                 [minFractionDigits]="2"
                                 [maxFractionDigits]="2">
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.digerGunlukUcret"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                 mode="decimal"
                                 [minFractionDigits]="2"
                                 [maxFractionDigits]="2">
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.buzdolabiGunlukUcret"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                 mode="decimal"
                                 [minFractionDigits]="2"
                                 [maxFractionDigits]="2">
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.televizyonGunlukUcret"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                 mode="decimal"
                                 [minFractionDigits]="2"
                                 [maxFractionDigits]="2">
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
-                            <p-inputNumber
+                            <p-inputnumber
                                 [(ngModel)]="tarife.klimaGunlukUcret"
                                 [disabled]="!canManage"
                                 [useGrouping]="false"
                                 mode="decimal"
                                 [minFractionDigits]="2"
                                 [maxFractionDigits]="2">
-                            </p-inputNumber>
+                            </p-inputnumber>
                         </td>
                         <td>
                             <p-checkbox

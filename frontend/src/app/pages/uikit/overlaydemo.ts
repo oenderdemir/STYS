@@ -42,12 +42,12 @@ import { Product, ProductService } from '@/app/pages/service/product.service';
                                 <tr>
                                     <th pSortableColumn="name" style="width: 33%;">
                                         Name
-                                        <p-sortIcon field="name" />
+                                        <p-sort-icon field="name" />
                                     </th>
                                     <th style="width: 33%;">Image</th>
                                     <th pSortableColumn="price" style="width: 33%;">
                                         Price
-                                        <p-sortIcon field="price" />
+                                        <p-sort-icon field="price" />
                                     </th>
                                 </tr>
                             </ng-template>

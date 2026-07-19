@@ -10,7 +10,7 @@
     </ng-template>
 </p-toolbar>
 
-<p-treeTable [value]="treeMenuItems" [loading]="loading" [tableStyle]="{ 'min-width': '70rem' }">
+<p-treetable [value]="treeMenuItems" [loading]="loading" [tableStyle]="{ 'min-width': '70rem' }">
     <ng-template pTemplate="header">
         <tr>
             <th>Label</th>
@@ -24,7 +24,7 @@
     <ng-template pTemplate="body" let-rowNode let-rowData="rowData">
         <tr [ttRow]="rowNode">
             <td>
-                <p-treeTableToggler [rowNode]="rowNode" />
+                <p-treetable-toggler [rowNode]="rowNode" />
                 {{ rowData.label || '-' }}
             </td>
             <td><i [class]="rowData.icon"></i> {{ rowData.icon || '-' }}</td>
@@ -43,7 +43,7 @@
             </td>
         </tr>
     </ng-template>
-</p-treeTable>
+</p-treetable>
 
 <p-dialog
     [header]="isEditMode ? 'Menu Duzenle' : 'Yeni Menu Ekle'"
@@ -86,7 +86,7 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label for="roles" class="block font-medium mb-2">Roller</label>
-            <p-multiSelect
+            <p-multiselect
                 id="roles"
                 [options]="allRoles"
                 optionLabel="label"

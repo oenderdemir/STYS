@@ -11,7 +11,7 @@
     </ng-template>
 </p-toolbar>
 
-<p-treeTable [value]="treeRecords" [loading]="loading" [tableStyle]="{ 'min-width': '88rem' }">
+<p-treetable [value]="treeRecords" [loading]="loading" [tableStyle]="{ 'min-width': '88rem' }">
     <ng-template #caption>
         <h5 class="m-0">Depolar (Agac)</h5>
     </ng-template>
@@ -31,7 +31,7 @@
     <ng-template #body let-rowNode let-rowData="rowData">
         <tr [ttRow]="rowNode">
             <td>
-                <p-treeTableToggler [rowNode]="rowNode" />
+                <p-treetable-toggler [rowNode]="rowNode" />
                 {{ rowData.kod }}
             </td>
             <td>{{ rowData.ad }}</td>
@@ -49,7 +49,7 @@
             </td>
         </tr>
     </ng-template>
-</p-treeTable>
+</p-treetable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Depo Duzenle' : 'Yeni Depo'" [style]="{ width: '78rem', 'max-width': '98vw' }">
     <div class="grid grid-cols-12 gap-3 mt-1">
@@ -79,7 +79,7 @@
             <label class="block font-medium mb-2">Malzeme Kayit Tipi</label>
             <div class="flex flex-wrap gap-4">
                 <div class="flex align-items-center gap-2" *ngFor="let option of malzemeKayitTipiOptions; let i = index">
-                    <p-radioButton [inputId]="'malzemeTipi-' + i" name="malzemeKayitTipi" [value]="option.value" [(ngModel)]="model.malzemeKayitTipi"></p-radioButton>
+                    <p-radiobutton [inputId]="'malzemeTipi-' + i" name="malzemeKayitTipi" [value]="option.value" [(ngModel)]="model.malzemeKayitTipi"></p-radiobutton>
                     <label [for]="'malzemeTipi-' + i">{{ option.label }}</label>
                 </div>
             </div>

@@ -171,8 +171,8 @@
         <div class="col-span-12"><label class="block mb-2">Cari</label><p-select class="w-full" [options]="cariKartlar" optionLabel="label" optionValue="value" [(ngModel)]="model.cariKartId" appendTo="body" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Belge Turu</label><input pInputText class="w-full" [(ngModel)]="model.belgeTuru" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Belge No</label><input pInputText class="w-full" [(ngModel)]="model.belgeNo" /></div>
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Borc</label><p-inputNumber class="w-full" [(ngModel)]="model.borcTutari" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
-        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Alacak</label><p-inputNumber class="w-full" [(ngModel)]="model.alacakTutari" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Borc</label><p-inputnumber class="w-full" [(ngModel)]="model.borcTutari" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
+        <div class="col-span-12 md:col-span-6"><label class="block mb-2">Alacak</label><p-inputnumber class="w-full" [(ngModel)]="model.alacakTutari" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Durum</label><p-select class="w-full" [options]="durumlar" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" appendTo="body" /></div>
         <div class="col-span-12 md:col-span-6"><label class="block mb-2">Para Birimi</label><input pInputText class="w-full" [(ngModel)]="model.paraBirimi" maxlength="3" /></div>
     </div>

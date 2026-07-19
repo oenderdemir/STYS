@@ -76,7 +76,7 @@
         </div>
         <div class="col-span-12 md:col-span-3">
             <label class="block mb-2">Valör Süresi (Gun)</label>
-            <p-inputNumber class="w-full" [(ngModel)]="model.valorGunSayisi" [min]="0" [max]="365" [useGrouping]="false" />
+            <p-inputnumber class="w-full" [(ngModel)]="model.valorGunSayisi" [min]="0" [max]="365" [useGrouping]="false" />
             <small class="text-color-secondary">Islem tarihinden kac gun sonra gercek hesaba gececegini belirtir.</small>
         </div>
 
@@ -142,15 +142,15 @@
             </div>
             <div class="col-span-12 md:col-span-4">
                 <label class="block mb-2">Kart Limiti</label>
-                <p-inputNumber class="w-full" [(ngModel)]="model.kartLimiti" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+                <p-inputnumber class="w-full" [(ngModel)]="model.kartLimiti" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
             </div>
             <div class="col-span-12 md:col-span-4">
                 <label class="block mb-2">Hesap Kesim Gunu</label>
-                <p-inputNumber class="w-full" [(ngModel)]="model.hesapKesimGunu" [min]="1" [max]="31" [useGrouping]="false" />
+                <p-inputnumber class="w-full" [(ngModel)]="model.hesapKesimGunu" [min]="1" [max]="31" [useGrouping]="false" />
             </div>
             <div class="col-span-12 md:col-span-4">
                 <label class="block mb-2">Son Odeme Gunu</label>
-                <p-inputNumber class="w-full" [(ngModel)]="model.sonOdemeGunu" [min]="1" [max]="31" [useGrouping]="false" />
+                <p-inputnumber class="w-full" [(ngModel)]="model.sonOdemeGunu" [min]="1" [max]="31" [useGrouping]="false" />
             </div>
             <div class="col-span-12 md:col-span-6">
                 <label class="block mb-2">Bagli Banka Hesabi</label>

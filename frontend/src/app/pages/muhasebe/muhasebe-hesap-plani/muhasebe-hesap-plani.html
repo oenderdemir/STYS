@@ -9,7 +9,7 @@
     </ng-template>
 </p-toolbar>
 
-<p-treeTable [value]="treeRecords" [loading]="loading" [lazy]="true" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
+<p-treetable [value]="treeRecords" [loading]="loading" [lazy]="true" (onNodeExpand)="onNodeExpand($event)" [tableStyle]="{ 'min-width': '72rem' }">
     <ng-template #caption><h5 class="m-0">Muhasebe Hesap Plani (Agac)</h5></ng-template>
     <ng-template #header>
         <tr>
@@ -24,7 +24,7 @@
     <ng-template #body let-rowNode let-rowData="rowData">
         <tr>
             <td>
-                <p-treeTableToggler [rowNode]="rowNode" />
+                <p-treetable-toggler [rowNode]="rowNode" />
                 {{ rowData.tamKod }}
             </td>
             <td>{{ rowData.kod }}</td>
@@ -39,7 +39,7 @@
             </td>
         </tr>
     </ng-template>
-</p-treeTable>
+</p-treetable>
 
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Hesap Duzenle' : 'Yeni Hesap'" [style]="{ width: '44rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">

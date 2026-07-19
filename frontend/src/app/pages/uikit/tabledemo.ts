@@ -75,19 +75,19 @@ interface expandedRows {
                         <th style="min-width: 12rem">
                             <div class="flex justify-between items-center">
                                 Name
-                                <p-columnFilter type="text" field="name" display="menu" placeholder="Search by name"></p-columnFilter>
+                                <p-column-filter type="text" field="name" display="menu" placeholder="Search by name"></p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 12rem">
                             <div class="flex justify-between items-center">
                                 Country
-                                <p-columnFilter type="text" field="country.name" display="menu" placeholder="Search by country"></p-columnFilter>
+                                <p-column-filter type="text" field="country.name" display="menu" placeholder="Search by country"></p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 14rem">
                             <div class="flex justify-between items-center">
                                 Agent
-                                <p-columnFilter field="representative" matchMode="in" display="menu" [showMatchModes]="false" [showOperator]="false" [showAddButton]="false">
+                                <p-column-filter field="representative" matchMode="in" display="menu" [showMatchModes]="false" [showOperator]="false" [showAddButton]="false">
                                     <ng-template #header>
                                         <div class="px-3 pt-3 pb-0">
                                             <span class="font-bold">Agent Picker</span>
@@ -103,25 +103,25 @@ interface expandedRows {
                                             </ng-template>
                                         </p-multiselect>
                                     </ng-template>
-                                </p-columnFilter>
+                                </p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 10rem">
                             <div class="flex justify-between items-center">
                                 Date
-                                <p-columnFilter type="date" field="date" display="menu" placeholder="mm/dd/yyyy"></p-columnFilter>
+                                <p-column-filter type="date" field="date" display="menu" placeholder="mm/dd/yyyy"></p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 10rem">
                             <div class="flex justify-between items-center">
                                 Balance
-                                <p-columnFilter type="numeric" field="balance" display="menu" currency="USD"></p-columnFilter>
+                                <p-column-filter type="numeric" field="balance" display="menu" currency="USD"></p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 12rem">
                             <div class="flex justify-between items-center">
                                 Status
-                                <p-columnFilter field="status" matchMode="equals" display="menu">
+                                <p-column-filter field="status" matchMode="equals" display="menu">
                                     <ng-template #filter let-value let-filter="filterCallback">
                                         <p-select [ngModel]="value" [options]="statuses" (onChange)="filter($event.value)" placeholder="Any" [style]="{ 'min-width': '12rem' }">
                                             <ng-template let-option #item>
@@ -129,13 +129,13 @@ interface expandedRows {
                                             </ng-template>
                                         </p-select>
                                     </ng-template>
-                                </p-columnFilter>
+                                </p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 12rem">
                             <div class="flex justify-between items-center">
                                 Activity
-                                <p-columnFilter field="activity" matchMode="between" display="menu" [showMatchModes]="false" [showOperator]="false" [showAddButton]="false">
+                                <p-column-filter field="activity" matchMode="between" display="menu" [showMatchModes]="false" [showOperator]="false" [showAddButton]="false">
                                     <ng-template #filter let-filter="filterCallback">
                                         <p-slider [ngModel]="activityValues" [range]="true" (onSlideEnd)="filter($event.values)" styleClass="m-3" [style]="{ 'min-width': '12rem' }"></p-slider>
                                         <div class="flex items-center justify-between px-2">
@@ -143,13 +143,13 @@ interface expandedRows {
                                             <span>{{ activityValues[1] }}</span>
                                         </div>
                                     </ng-template>
-                                </p-columnFilter>
+                                </p-column-filter>
                             </div>
                         </th>
                         <th style="min-width: 8rem">
                             <div class="flex justify-between items-center">
                                 Verified
-                                <p-columnFilter type="boolean" field="verified" display="menu"></p-columnFilter>
+                                <p-column-filter type="boolean" field="verified" display="menu"></p-column-filter>
                             </div>
                         </th>
                     </tr>
@@ -241,18 +241,18 @@ interface expandedRows {
             <div class="font-semibold text-xl mb-4">Row Expansion</div>
             <p-table [value]="products" dataKey="id" [tableStyle]="{ 'min-width': '60rem' }" [expandedRowKeys]="expandedRows">
                 <ng-template #caption>
-                    <button pButton icon="pi pi-fw {{ isExpanded ? 'pi-minus' : 'pi-plus' }}" label="{{ isExpanded ? 'Collapse All' : 'Expand All' }}" (click)="expandAll()"></button>
+                    <p-button [icon]="'pi pi-fw ' + (isExpanded ? 'pi-minus' : 'pi-plus')" [label]="isExpanded ? 'Collapse All' : 'Expand All'" (onClick)="expandAll()" />
                     <div class="flex table-header"></div>
                 </ng-template>
                 <ng-template #header>
                     <tr>
                         <th style="width: 5rem"></th>
-                        <th pSortableColumn="name">Name <p-sortIcon field="name" /></th>
+                        <th pSortableColumn="name">Name <p-sort-icon field="name" /></th>
                         <th>Image</th>
-                        <th pSortableColumn="price">Price <p-sortIcon field="price" /></th>
-                        <th pSortableColumn="category">Category <p-sortIcon field="category" /></th>
-                        <th pSortableColumn="rating">Reviews <p-sortIcon field="rating" /></th>
-                        <th pSortableColumn="inventoryStatus">Status <p-sortIcon field="inventoryStatus" /></th>
+                        <th pSortableColumn="price">Price <p-sort-icon field="price" /></th>
+                        <th pSortableColumn="category">Category <p-sort-icon field="category" /></th>
+                        <th pSortableColumn="rating">Reviews <p-sort-icon field="rating" /></th>
+                        <th pSortableColumn="inventoryStatus">Status <p-sort-icon field="inventoryStatus" /></th>
                     </tr>
                 </ng-template>
                 <ng-template #body let-product let-expanded="expanded">
@@ -282,19 +282,19 @@ interface expandedRows {
                                 <p-table [value]="product.orders" dataKey="id">
                                     <ng-template #header>
                                         <tr>
-                                            <th pSortableColumn="id">Id <p-sortIcon field="price" /></th>
+                                            <th pSortableColumn="id">Id <p-sort-icon field="price" /></th>
                                             <th pSortableColumn="customer">
                                                 Customer
-                                                <p-sortIcon field="customer" />
+                                                <p-sort-icon field="customer" />
                                             </th>
-                                            <th pSortableColumn="date">Date <p-sortIcon field="date" /></th>
+                                            <th pSortableColumn="date">Date <p-sort-icon field="date" /></th>
                                             <th pSortableColumn="amount">
                                                 Amount
-                                                <p-sortIcon field="amount" />
+                                                <p-sort-icon field="amount" />
                                             </th>
                                             <th pSortableColumn="status">
                                                 Status
-                                                <p-sortIcon field="status" />
+                                                <p-sort-icon field="status" />
                                             </th>
                                             <th style="width: 4rem"></th>
                                         </tr>

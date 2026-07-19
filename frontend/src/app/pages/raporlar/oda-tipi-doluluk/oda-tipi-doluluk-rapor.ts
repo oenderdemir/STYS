@@ -47,8 +47,8 @@ export class OdaTipiDolulukRaporComponent implements OnInit {
 
     expandedRowKeys: Record<number, boolean> = {};
 
-    chartData: unknown = null;
-    chartOptions: unknown = null;
+    chartData: any = null;
+    chartOptions: any = null;
 
     ngOnInit(): void {
         this.tesisleriYukle();

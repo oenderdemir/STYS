@@ -101,7 +101,7 @@
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Fiyat</label>
-            <p-inputNumber class="w-full" [(ngModel)]="urunModel.fiyat" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+            <p-inputnumber class="w-full" [(ngModel)]="urunModel.fiyat" [min]="0" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Para Birimi</label>
@@ -110,7 +110,7 @@
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Hazirlama Suresi</label>
             <p-inputgroup class="w-full">
-                <p-inputNumber class="w-full" [(ngModel)]="urunModel.hazirlamaSuresiDakika" [min]="0" [maxFractionDigits]="0" [useGrouping]="false" />
+                <p-inputnumber class="w-full" [(ngModel)]="urunModel.hazirlamaSuresiDakika" [min]="0" [maxFractionDigits]="0" [useGrouping]="false" />
                 <p-inputgroup-addon>dk</p-inputgroup-addon>
             </p-inputgroup>
         </div>

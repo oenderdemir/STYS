@@ -231,7 +231,7 @@
   </ng-template>
 </p-table>
 
-<p-confirmDialog
+<p-confirm-dialog
   [style]="{ width: '28rem' }"
   [breakpoints]="{ '576px': '90vw' }" />
 
@@ -426,12 +426,12 @@
       <!-- Mali Yıl -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block mb-1 text-sm font-medium">Mali Yıl</label>
-        <p-inputNumber [(ngModel)]="duzenleFis.maliYil" [min]="2000" [max]="2100" [showButtons]="true" styleClass="w-full" />
+        <p-inputnumber [(ngModel)]="duzenleFis.maliYil" [min]="2000" [max]="2100" [showButtons]="true" styleClass="w-full" />
       </div>
       <!-- Dönem -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">
         <label class="block mb-1 text-sm font-medium">Dönem</label>
-        <p-inputNumber [(ngModel)]="duzenleFis.donem" [min]="1" [max]="12" [showButtons]="true" styleClass="w-full" />
+        <p-inputnumber [(ngModel)]="duzenleFis.donem" [min]="1" [max]="12" [showButtons]="true" styleClass="w-full" />
       </div>
       <!-- Fiş Tipi -->
       <div class="col-span-12 md:col-span-6 lg:col-span-4">
@@ -493,10 +493,10 @@
             <input type="text" pInputText [(ngModel)]="satir.aciklama" placeholder="Satır açıklaması..." class="w-full text-sm" />
           </td>
           <td>
-            <p-inputNumber [(ngModel)]="satir.borc" [min]="0" [maxFractionDigits]="2" [showButtons]="true" styleClass="w-full text-right" inputStyleClass="text-right" />
+            <p-inputnumber [(ngModel)]="satir.borc" [min]="0" [maxFractionDigits]="2" [showButtons]="true" styleClass="w-full text-right" inputStyleClass="text-right" />
           </td>
           <td>
-            <p-inputNumber [(ngModel)]="satir.alacak" [min]="0" [maxFractionDigits]="2" [showButtons]="true" styleClass="w-full text-right" inputStyleClass="text-right" />
+            <p-inputnumber [(ngModel)]="satir.alacak" [min]="0" [maxFractionDigits]="2" [showButtons]="true" styleClass="w-full text-right" inputStyleClass="text-right" />
           </td>
         </tr>
       </ng-template>

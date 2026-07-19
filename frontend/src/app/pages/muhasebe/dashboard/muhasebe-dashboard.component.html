@@ -42,7 +42,7 @@
 <!-- Loading State -->
 <ng-container *ngIf="loading && !dashboard">
   <div class="flex flex-column align-items-center justify-content-center py-8">
-    <p-progressSpinner [style]="{ width: '60px', height: '60px' }" />
+    <p-progress-spinner [style]="{ width: '60px', height: '60px' }" />
     <p class="mt-3 text-color-secondary">{{ loadingMessage }}</p>
   </div>
 </ng-container>

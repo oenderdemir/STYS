@@ -18,7 +18,6 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
-import { TableModule } from 'primeng/table';
 import { tryReadApiMessage } from '../../../../core/api';
 import { UiSeverity } from '../../../../core/ui/ui-severity.constants';
 import {
@@ -31,11 +30,21 @@ import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi.service';
 import { KonaklayanCinsiyetleri } from '../../konaklayan-cinsiyetleri.constants';
 import { KonaklayanKatilimDurumlari } from '../../konaklayan-katilim-durumlari.constants';
 
+interface KonaklayanOdaSecenekOption {
+    value: number;
+    label: string;
+    odaNo: string;
+    binaAdi: string;
+    odaTipiAdi: string;
+    ayrilanKisiSayisi: number;
+    paylasimliMi: boolean;
+}
+
 @Component({
     selector: 'app-rezervasyon-konaklayan-plani-dialog',
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, SelectModule, TableModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, SelectModule],
     templateUrl: './rezervasyon-konaklayan-plani-dialog.html',
     styleUrl: './rezervasyon-konaklayan-plani-dialog.scss'
 })
@@ -136,7 +145,7 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
         return this.konaklayanPlan?.segmentler ?? [];
     }
 
-    getKonaklayanOdaSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): { label: string; value: number }[] {
+    getKonaklayanOdaSecenekleri(kisi: RezervasyonKonaklayanKisiDto, segmentId: number): KonaklayanOdaSecenekOption[] {
         if (!this.isKonaklayanAssignmentsRequired(kisi)) {
             return [];
         }
@@ -158,7 +167,12 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
             })
             .map((oda) => ({
                 value: oda.odaId,
-                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi, ${oda.paylasimliMi ? 'paylasimli' : 'paylasimsiz'})`
+                label: `${oda.odaNo} - ${oda.binaAdi} (${oda.odaTipiAdi}, ${oda.ayrilanKisiSayisi} kisi, ${oda.paylasimliMi ? 'paylasimli' : 'paylasimsiz'})`,
+                odaNo: oda.odaNo,
+                binaAdi: oda.binaAdi,
+                odaTipiAdi: oda.odaTipiAdi,
+                ayrilanKisiSayisi: oda.ayrilanKisiSayisi,
+                paylasimliMi: oda.paylasimliMi
             }));
     }
 

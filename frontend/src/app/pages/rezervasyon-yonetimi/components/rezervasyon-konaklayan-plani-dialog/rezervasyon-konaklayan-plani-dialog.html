@@ -78,7 +78,7 @@
                         <div class="konaklayan-field"><label class="konaklayan-field-label">Uyruk Kodu</label><input pInputText class="w-full" [(ngModel)]="kisi.uyrukKodu" [disabled]="saving" /></div>
                     </div>
                     <div class="konaklayan-segment-disabled-note"><strong>KBS:</strong> {{ kisi.kbsDurumu }} @if (kisi.sonKbsBildirimSonucu) { &middot; {{ kisi.sonKbsBildirimSonucu }} } @if (kisi.eksikKbsBilgileri.length) { <br />Eksik KBS bilgileri: {{ kisi.eksikKbsBilgileri.join(', ') }} }</div>
-                    <div class="flex gap-2 flex-wrap mb-3"><p-button label="Fiili Giris Yap" icon="pi pi-sign-in" size="small" [disabled]="saving || !!kisi.fiiliGirisTarihi" (onClick)="fiiliGiris(kisi)" /><p-button label="Fiili Cikis Yap" icon="pi pi-sign-out" size="small" severity="secondary" [disabled]="saving || !kisi.fiiliGirisTarihi || !!kisi.fiiliCikisTarihi" (onClick)="fiiliCikis(kisi)" /><p-button label="Oda Degisikligi Bildir" icon="pi pi-sync" size="small" severity="secondary" [disabled]="saving || !kisi.fiiliGirisTarihi || !!kisi.fiiliCikisTarihi" (onClick)="odaDegisikligi(kisi)" /></div>
+                    <div class="flex gap-2 flex-wrap mb-3"><p-button label="Fiili Giris Yap" icon="pi pi-sign-in" size="small" [disabled]="saving || !!kisi.fiiliGirisTarihi" (onClick)="fiiliGiris(kisi)" /><p-button label="Fiili Cikis Yap" icon="pi pi-sign-out" size="small" severity="secondary" [disabled]="saving || !kisi.fiiliGirisTarihi || !!kisi.fiiliCikisTarihi" (onClick)="fiiliCikis(kisi)" /></div>
 
                     @if (!isKonaklayanAssignmentsRequired(kisi)) {
                         <div class="konaklayan-segment-disabled-note">

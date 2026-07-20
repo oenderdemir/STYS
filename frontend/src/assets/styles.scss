@@ -1,7 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
 @use 'primeicons/primeicons.css';
-@use '@/assets/layout/layout.scss';
-@use '@/assets/demo/demo.scss';
+@use './layout/layout.scss';
+@use './demo/demo.scss';
 
 .satis-belgesi-dialog .p-dialog-content {
   padding: 1rem 1.25rem;

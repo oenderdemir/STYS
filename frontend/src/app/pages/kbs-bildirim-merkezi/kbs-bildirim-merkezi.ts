@@ -21,6 +21,7 @@ export class KbsBildirimMerkezi implements OnInit {
     tesisler: { label: string; value: number }[] = []; tesisId: number | null = null; durum: string | null = null; kayitlar: KbsBildirim[] = []; toplam = 0; sayfa = 1; sayfaBoyutu = 25; loading = false;
     ozet: KbsGunlukOzet = { basarili: 0, bekleyen: 0, hatali: 0, mudahaleGerekli: 0 }; ayar: KbsTesisAyari | null = null;
     sonExcelManifesti: string | null = null;
+    islem: { id: number; tur: 'Islendi' | 'Islenmedi' | 'EgmBasarili' | 'EgmBasarisiz' } | null = null; islemAciklamasi = ''; kurumReferansNo = '';
     readonly durumlar = [null, 'Hazir', 'Gonderiliyor', 'TekrarBekliyor', 'Basarili', 'SonucuBelirsiz', 'MudahaleGerekli', 'DosyaUretildi', 'YuklemeOnayiBekliyor'].map(value => ({ label: value ?? 'Tum durumlar', value }));
     readonly kolluklar = [{ label: 'EGM', value: 'EGM' }, { label: 'Jandarma', value: 'Jandarma' }]; readonly entegrasyonlar = ['Fake', 'Excel', 'Soap'].map(value => ({ label: value, value }));
     ngOnInit(): void { this.service.tesisler().subscribe({ next: xs => { this.tesisler = xs.map(x => ({ label: x.ad, value: x.id })); this.tesisId = this.tesisler[0]?.value ?? null; this.yenile(); }, error: e => this.error(e) }); }
@@ -30,6 +31,14 @@ export class KbsBildirimMerkezi implements OnInit {
     retry(id: number): void { this.service.tekrarDene(id).subscribe({ next: () => { this.success('Bildirim tekrar kuyruga alindi.'); this.yenile(); }, error: e => this.error(e) }); }
     excel(tip: 'Giris' | 'Cikis'): void { if (!this.tesisId) return; this.service.excel(this.tesisId, tip).subscribe({ next: r => { this.sonExcelManifesti = r.headers.get('X-Kbs-Manifest-Hash'); const url = URL.createObjectURL(r.body!); const a = document.createElement('a'); a.href = url; a.download = `egm-${tip.toLowerCase()}.xlsx`; a.click(); URL.revokeObjectURL(url); this.success('EGM Excel dosyasi olusturuldu; yukleme onayi verilmeden basarili sayilmaz.'); this.yenile(); }, error: e => this.error(e) }); }
     yuklemeOnayla(): void { if (!this.tesisId || !this.sonExcelManifesti) return; this.service.yuklemeOnayla(this.tesisId, this.sonExcelManifesti).subscribe({ next: () => { this.sonExcelManifesti = null; this.success('Yukleme onayi kaydedildi; bildirimler henuz basarili/dogrulanmis sayilmadi.'); this.yenile(); }, error: e => this.error(e) }); }
+    islemAc(id: number, tur: 'Islendi' | 'Islenmedi' | 'EgmBasarili' | 'EgmBasarisiz'): void { this.islem = { id, tur }; this.islemAciklamasi = ''; this.kurumReferansNo = ''; }
+    islemKaydet(): void {
+        if (!this.islem || !this.islemAciklamasi.trim()) { this.messages.add({ severity: 'warn', summary: 'Aciklama gerekli', detail: 'Hassas veri icermeyen bir mutabakat aciklamasi girin.' }); return; }
+        const ref = this.kurumReferansNo.trim() || null; const action = this.islem.tur.startsWith('Egm')
+            ? this.service.egmDogrula(this.islem.id, this.islem.tur === 'EgmBasarili', this.islemAciklamasi.trim(), ref)
+            : this.service.mutabakat(this.islem.id, this.islem.tur as 'Islendi' | 'Islenmedi', this.islemAciklamasi.trim(), ref);
+        action.subscribe({ next: () => { this.islem = null; this.success('Mutabakat sonucu denetim kaydi ile kaydedildi.'); this.yenile(); }, error: e => this.error(e) });
+    }
     kaydetAyar(): void { if (!this.ayar) return; this.service.ayarKaydet(this.ayar).subscribe({ next: x => { this.ayar = x; this.success('KBS ayari kaydedildi.'); }, error: e => this.error(e) }); }
     can(permission: string): boolean { return this.auth.hasPermission(permission); }
     severity(durum: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' { if (durum === 'Basarili' || durum === 'Dogrulandi') return 'success'; if (durum === 'MudahaleGerekli') return 'danger'; if (durum === 'SonucuBelirsiz' || durum === 'TekrarBekliyor') return 'warn'; return 'info'; }

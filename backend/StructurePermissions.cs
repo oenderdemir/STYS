@@ -259,6 +259,7 @@ public static class StructurePermissions
         public const string Retry = "KbsYonetimi.Retry";
         public const string Settings = "KbsYonetimi.Settings";
         public const string SensitiveDataView = "KbsYonetimi.SensitiveDataView";
+        public const string Reconciliation = "KbsYonetimi.Reconciliation";
     }
 
     public static class OdaRezervasyonTakvimiYonetimi

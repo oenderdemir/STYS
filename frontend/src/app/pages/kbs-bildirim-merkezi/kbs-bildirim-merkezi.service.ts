@@ -20,6 +20,8 @@ export class KbsBildirimMerkeziService {
     tekrarDene(id: number): Observable<void> { return this.http.post<void>(`${this.base}/ui/kbs/bildirimler/${id}/tekrar-dene`, {}); }
     excel(tesisId: number, tip: 'Giris' | 'Cikis'): Observable<HttpResponse<Blob>> { return this.http.get(`${this.base}/ui/kbs/tesisler/${tesisId}/egm-excel/${tip}`, { observe: 'response', responseType: 'blob' }); }
     yuklemeOnayla(tesisId: number, manifestHash: string): Observable<void> { return this.http.post<void>(`${this.base}/ui/kbs/tesisler/${tesisId}/egm-yukleme-onayi/${manifestHash}`, {}); }
+    mutabakat(id: number, karar: 'Islendi' | 'Islenmedi', aciklama: string, kurumReferansNo: string | null): Observable<void> { return this.http.post<void>(`${this.base}/ui/kbs/bildirimler/${id}/mutabakat`, { karar, aciklama, kurumReferansNo }); }
+    egmDogrula(id: number, basarili: boolean, aciklama: string, kurumReferansNo: string | null): Observable<void> { return this.http.post<void>(`${this.base}/ui/kbs/bildirimler/${id}/egm-dogrulama`, { basarili, aciklama, kurumReferansNo }); }
     private unwrap<T>(source: Observable<ApiResponse<T>>, message: string): Observable<T> { return source.pipe(map(x => { if (x.success && x.data != null) return x.data; throw new Error(tryReadApiMessage(x) ?? message); })); }
     private unwrapNullable<T>(source: Observable<ApiResponse<T | null>>): Observable<T | null> { return source.pipe(map(x => x.data ?? null)); }
 }

@@ -6,7 +6,7 @@ public interface IKbsBildirimOlusturmaService
 {
     Task<KbsFiiliOlaySonucDto> FiiliGirisYapAsync(int konaklayanId, DateTime? olayTarihi = null, CancellationToken cancellationToken = default);
     Task<KbsFiiliOlaySonucDto> FiiliCikisYapAsync(int konaklayanId, DateTime? olayTarihi = null, CancellationToken cancellationToken = default);
-    Task<KbsFiiliOlaySonucDto> OdaDegisikligiBildirAsync(int konaklayanId, string odaNo, DateTime? olayTarihi = null, CancellationToken cancellationToken = default);
+    Task OdaDegisikligiBildirimleriniHazirlaAsync(KbsOdaDegisikligiOlayi olay, CancellationToken cancellationToken = default);
     Task<KbsFiiliOlaySonucDto> GelmeyecekOlarakIsaretleAsync(int konaklayanId, CancellationToken cancellationToken = default);
 }
 
@@ -21,4 +21,6 @@ public interface IKbsYonetimService
     Task ManuelMudahaleAsync(long bildirimId, CancellationToken cancellationToken);
     Task<(byte[] Content, string FileName, string ManifestHash)> EgmExcelOlusturAsync(int tesisId, string bildirimTipi, CancellationToken cancellationToken);
     Task EgmYuklemeOnaylaAsync(int tesisId, string manifestHash, CancellationToken cancellationToken);
+    Task MutabakatYapAsync(long bildirimId, KbsMutabakatRequestDto request, CancellationToken cancellationToken);
+    Task EgmDogrulaAsync(long bildirimId, KbsEgmDogrulamaRequestDto request, CancellationToken cancellationToken);
 }

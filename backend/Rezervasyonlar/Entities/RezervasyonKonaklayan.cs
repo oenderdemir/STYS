@@ -69,4 +69,7 @@ public class RezervasyonKonaklayan : BaseEntity<int>
     public Rezervasyon? Rezervasyon { get; set; }
 
     public ICollection<RezervasyonKonaklayanSegmentAtama> SegmentAtamalari { get; set; } = [];
+
+    [Timestamp]
+    public byte[] RowVersion { get; set; } = [];
 }

@@ -15,6 +15,8 @@ using STYS.Fiyatlandirma;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Kbs.Dtos;
+using STYS.Kbs.Services;
 using STYS.Licensing;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Odalar;
@@ -40,6 +42,7 @@ public class RezervasyonService : IRezervasyonService
     private readonly IDomainOperationLogger _domainLogger;
     private readonly IRezervasyonOdemeMuhasebeService _rezervasyonOdemeMuhasebeService;
     private readonly IRezervasyonGelirTahakkukService _rezervasyonGelirTahakkukService;
+    private readonly IKbsBildirimOlusturmaService? _kbsBildirimOlusturmaService;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
@@ -50,7 +53,8 @@ public class RezervasyonService : IRezervasyonService
         ICurrentTenantAccessor currentTenantAccessor,
         IDomainOperationLogger domainLogger,
         IRezervasyonOdemeMuhasebeService rezervasyonOdemeMuhasebeService,
-        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService)
+        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService,
+        IKbsBildirimOlusturmaService? kbsBildirimOlusturmaService = null)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -61,6 +65,7 @@ public class RezervasyonService : IRezervasyonService
         _domainLogger = domainLogger;
         _rezervasyonOdemeMuhasebeService = rezervasyonOdemeMuhasebeService;
         _rezervasyonGelirTahakkukService = rezervasyonGelirTahakkukService;
+        _kbsBildirimOlusturmaService = kbsBildirimOlusturmaService;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)
@@ -1845,6 +1850,7 @@ public class RezervasyonService : IRezervasyonService
                 {
                     atama.RezervasyonSegmentId,
                     atama.OdaId,
+                    KonaklayanId = konaklayan.Id,
                     konaklayan.Cinsiyet
                 })
             .ToListAsync(cancellationToken);
@@ -1970,6 +1976,23 @@ public class RezervasyonService : IRezervasyonService
             changedAssignmentContexts,
             roomInfoById,
             cancellationToken);
+
+        if (_kbsBildirimOlusturmaService is not null)
+        {
+            var eventDate = DateTime.UtcNow;
+            foreach (var changed in changedAssignmentContexts)
+            {
+                var guestIds = reservationGuestAssignments
+                    .Where(x => x.RezervasyonSegmentId == changed.SegmentId && x.OdaId == changed.EskiOdaId)
+                    .Select(x => x.KonaklayanId).Distinct().ToArray();
+                if (guestIds.Length == 0) continue;
+                var oldRoomNo = oldAssignmentsSnapshot.First(x => x.RezervasyonSegmentOdaAtamaId == changed.RezervasyonSegmentOdaAtamaId).OdaNoSnapshot;
+                var newRoom = roomInfoById[changed.YeniOdaId];
+                await _kbsBildirimOlusturmaService.OdaDegisikligiBildirimleriniHazirlaAsync(new KbsOdaDegisikligiOlayi(
+                    rezervasyonId, changed.RezervasyonSegmentOdaAtamaId, Guid.NewGuid(), changed.EskiOdaId, oldRoomNo,
+                    changed.YeniOdaId, newRoom.OdaNo, eventDate, guestIds), cancellationToken);
+            }
+        }
 
         await TryApplyPriceDecreaseAfterRoomChangeAsync(
             reservation,

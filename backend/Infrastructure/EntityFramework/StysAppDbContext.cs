@@ -143,6 +143,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KbsTesisAyari> KbsTesisAyarlari => Set<KbsTesisAyari>();
     public DbSet<KbsBildirim> KbsBildirimler => Set<KbsBildirim>();
     public DbSet<KbsBildirimDenemesi> KbsBildirimDenemeleri => Set<KbsBildirimDenemesi>();
+    public DbSet<KbsDurumGecmisi> KbsDurumGecmisleri => Set<KbsDurumGecmisi>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
     public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
@@ -1289,6 +1290,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Telefon).HasMaxLength(32);
             entity.Property(x => x.AracPlakasi).HasMaxLength(16);
             entity.Property(x => x.KonaklamaKullanimSekli).HasMaxLength(16);
+            entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
             entity.Property(x => x.Cinsiyet).HasMaxLength(16);
             entity.Property(x => x.KatilimDurumu).HasMaxLength(16).IsRequired().HasDefaultValue(KonaklayanKatilimDurumlari.Bekleniyor);
             entity.HasIndex(x => new { x.RezervasyonId, x.SiraNo })
@@ -1317,6 +1319,7 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.KurumId, x.RezervasyonKonaklayanId, x.BildirimTipi, x.OlayAnahtari }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.Durum, x.SonrakiDenemeTarihi }).HasFilter("[IsDeleted] = 0");
             entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+            entity.Property(x => x.ProtectedPayload).HasColumnType("nvarchar(max)").IsRequired();
             entity.HasOne<STYS.Rezervasyonlar.Entities.Rezervasyon>().WithMany().HasForeignKey(x => x.RezervasyonId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<STYS.Rezervasyonlar.Entities.RezervasyonKonaklayan>().WithMany().HasForeignKey(x => x.RezervasyonKonaklayanId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -1325,6 +1328,13 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("KbsBildirimDenemeleri", "dbo");
             entity.HasIndex(x => new { x.KbsBildirimId, x.DenemeTarihi });
+            entity.HasOne(x => x.Bildirim).WithMany().HasForeignKey(x => x.KbsBildirimId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KbsDurumGecmisi>(entity =>
+        {
+            entity.ToTable("KbsDurumGecmisleri", "dbo");
+            entity.HasIndex(x => new { x.KbsBildirimId, x.IslemTarihi });
             entity.HasOne(x => x.Bildirim).WithMany().HasForeignKey(x => x.KbsBildirimId).OnDelete(DeleteBehavior.Restrict);
         });
 

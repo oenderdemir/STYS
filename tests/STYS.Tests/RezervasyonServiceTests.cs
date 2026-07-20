@@ -14,6 +14,8 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
+using STYS.Kbs.Dtos;
+using STYS.Kbs.Services;
 using STYS.Kurumlar.Entities;
 using STYS.MisafirTipleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
@@ -1686,6 +1688,33 @@ public class RezervasyonServiceTests
         Assert.Equal(102, guestAssignment.OdaId);
     }
 
+    [Fact]
+    public async Task OdaDegisimi_FiilenIceridekiKonukIcinCanonicalKbsOlayiUretir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1126, segmentId: 1127, withPlan: true);
+        await SeedRoomBlockForReservationAsync(dbContext, rezervasyonId: 1126, segmentId: 1127, odaId: 101);
+        var reservation = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 1126); reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi;
+        var guest = await dbContext.RezervasyonKonaklayanlar.SingleAsync(x => x.RezervasyonId == 1126); guest.FiiliGirisTarihi = DateTime.UtcNow.AddHours(-1);
+        await dbContext.SaveChangesAsync();
+        var capture = new CapturingKbsService(); var service = CreateService(dbContext, kbsService: capture);
+        var assignment = await dbContext.RezervasyonSegmentOdaAtamalari.SingleAsync(x => x.RezervasyonSegmentId == 1127);
+        await service.KaydetOdaDegisimiAsync(1126, new RezervasyonOdaDegisimKaydetRequestDto { Atamalar = [new() { RezervasyonSegmentOdaAtamaId = assignment.Id, YeniOdaId = 102 }] });
+        var olay = Assert.Single(capture.RoomEvents); Assert.Equal(101, olay.EskiOdaId); Assert.Equal(102, olay.YeniOdaId);
+        Assert.Equal("A-102", olay.EskiOdaNo); Assert.Equal("A-103", olay.YeniOdaNo); Assert.Contains(guest.Id, olay.KonaklayanIds); Assert.NotEqual(Guid.Empty, olay.EventId);
+    }
+
+    [Fact]
+    public async Task OdaDegisimi_BaskaTesiseAitOdayiReddeder_veKbsOlayiUretmez()
+    {
+        await using var dbContext = CreateDbContext(); await SeedReservationForCheckFlowAsync(dbContext, rezervasyonId: 1226, segmentId: 1227, withPlan: true);
+        var reservation = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 1226); reservation.RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi; await dbContext.SaveChangesAsync();
+        var capture = new CapturingKbsService(); var service = CreateService(dbContext, kbsService: capture);
+        var assignment = await dbContext.RezervasyonSegmentOdaAtamalari.SingleAsync(x => x.RezervasyonSegmentId == 1227);
+        await Assert.ThrowsAsync<BaseException>(() => service.KaydetOdaDegisimiAsync(1226, new RezervasyonOdaDegisimKaydetRequestDto { Atamalar = [new() { RezervasyonSegmentOdaAtamaId = assignment.Id, YeniOdaId = 200 }] }));
+        Assert.Empty(capture.RoomEvents);
+    }
+
     // Konaklayan plani henuz kaydedilmemisse ana misafir cinsiyeti ilk kisiye varsayilan olarak yansitilmali.
     [Fact]
     public async Task KonaklayanPlani_AnaMisafirCinsiyetiniIlkKisiyeVarsayilanYansitir()
@@ -2711,7 +2740,8 @@ public class RezervasyonServiceTests
         DomainAccessScope? scope = null,
         IReadOnlyCollection<string>? permissions = null,
         IRezervasyonGelirTahakkukService? rezervasyonGelirTahakkukService = null,
-        ICurrentTenantAccessor? currentTenantAccessor = null)
+        ICurrentTenantAccessor? currentTenantAccessor = null,
+        IKbsBildirimOlusturmaService? kbsService = null)
     {
         var httpContextAccessor = new HttpContextAccessor
         {
@@ -2736,7 +2766,8 @@ public class RezervasyonServiceTests
             currentTenantAccessor ?? new FakeCurrentTenantAccessor(),
             new NoOpDomainOperationLogger(),
             new FakeRezervasyonOdemeMuhasebeService(),
-            rezervasyonGelirTahakkukService ?? new FakeRezervasyonGelirTahakkukService());
+            rezervasyonGelirTahakkukService ?? new FakeRezervasyonGelirTahakkukService(),
+            kbsService);
     }
 
     private static RezervasyonKaydetRequestDto BuildCustomDiscountSaveRequest()
@@ -4222,5 +4253,14 @@ public class RezervasyonServiceTests
 
         public Task<RezervasyonTahsilatKapamaSonucuDto> KapatOncekiTahsilatlariAsync(int rezervasyonId, CancellationToken cancellationToken = default)
             => Task.FromResult(new RezervasyonTahsilatKapamaSonucuDto());
+    }
+
+    private sealed class CapturingKbsService : IKbsBildirimOlusturmaService
+    {
+        public List<KbsOdaDegisikligiOlayi> RoomEvents { get; } = [];
+        public Task OdaDegisikligiBildirimleriniHazirlaAsync(KbsOdaDegisikligiOlayi olay, CancellationToken cancellationToken = default) { RoomEvents.Add(olay); return Task.CompletedTask; }
+        public Task<KbsFiiliOlaySonucDto> FiiliGirisYapAsync(int konaklayanId, DateTime? olayTarihi = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<KbsFiiliOlaySonucDto> FiiliCikisYapAsync(int konaklayanId, DateTime? olayTarihi = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<KbsFiiliOlaySonucDto> GelmeyecekOlarakIsaretleAsync(int konaklayanId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

@@ -589,7 +589,6 @@ export class RezervasyonYonetimiService {
 
     fiiliGirisYap(konaklayanId: number): Observable<unknown> { return this.http.post(`${this.apiBaseUrl}/ui/kbs/konaklayanlar/${konaklayanId}/fiili-giris`, {}); }
     fiiliCikisYap(konaklayanId: number): Observable<unknown> { return this.http.post(`${this.apiBaseUrl}/ui/kbs/konaklayanlar/${konaklayanId}/fiili-cikis`, {}); }
-    kbsOdaDegisikligiBildir(konaklayanId: number, odaNo: string): Observable<unknown> { return this.http.post(`${this.apiBaseUrl}/ui/kbs/konaklayanlar/${konaklayanId}/oda-degisikligi`, { odaNo, olayTarihi: null }); }
 
     silKonaklamaHakkiTuketim(
         rezervasyonId: number,

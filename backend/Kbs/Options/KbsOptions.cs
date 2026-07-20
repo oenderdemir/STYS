@@ -10,4 +10,5 @@ public class KbsOptions
     public string? EgmTemplatePath { get; set; }
     public Dictionary<string, int> EgmColumns { get; set; } = [];
     public string FakeResponse { get; set; } = "Basarili";
+    public string? PayloadProtectionKeyRingPath { get; set; }
 }

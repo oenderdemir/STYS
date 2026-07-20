@@ -7,6 +7,16 @@
 **Tarih:** 20 Temmuz 2026
 **Durum:** Ortak altyapı, Fake connector, SQL outbox, API, kullanıcı arayüzü, migration ve otomatik testler tamamlandı. Resmî Jandarma WSDL sözleşmesi ile güncel EGM Excel şablonu bekleniyor.
 
+## İkinci güvenlik ve veri bütünlüğü aşaması (20 Temmuz 2026)
+
+Bu aşamada outbox yeniden gönderim güvenliği güçlendirildi. Gönderilecek veri artık konaklayan tablosundan worker anında yeniden kurulmamaktadır. Oluşturma anındaki canonical snapshot, SHA-256 hash ve uygulama Data Protection anahtarıyla şifrelenmiş payload birlikte saklanmaktadır. Worker ile EGM Excel üretimi yalnızca bu değişmez snapshot'ı kullanır ve sürüm, tenant, tesis, rezervasyon, konaklayan ve bildirim tipi invariant'larını doğrular.
+
+Giriş/çıkış anahtarları zamandan bağımsız ve kararlı hale getirildi. Konaklayan satırına rowversion eklendi; eşzamanlı isteklerde yalnızca beklenen KBS unique constraint ihlali idempotent kazanan olarak okunur. Oda değişikliği serbest metin/prompt akışından çıkarıldı ve canonical rezervasyon oda değişikliği işleminin aynı kayıt birimine bağlandı.
+
+Durum makinesi sıkılaştırıldı: manuel retry yalnızca `MudahaleGerekli`, mutabakat yalnızca `SonucuBelirsiz`, EGM doğrulaması yalnızca `YuklemeOnayiBekliyor` durumunda yapılabilir. Tüm manuel kararlar açıklama, kurum referansı, kullanıcı ve önceki/yeni durum bilgileriyle denetim tablosuna yazılır. Worker poison kayıtları izole eder; dış çağrı sonrası yerel kayıt hatası otomatik yeniden gönderilmez ve `SonucuBelirsiz` olarak ele alınır.
+
+Ek migration `20260720223000_HardenKbsOutboxIntegrity`, şifreli payload alanını, konaklayan rowversion alanını, durum geçmişi tablosunu ve `KbsYonetimi.Reconciliation` yetkisini ekler. Önceki sürümden snapshot'sız kayıtlar otomatik gönderilmek yerine `LEGACY-PAYLOAD-MISSING` koduyla manuel incelemeye alınır. Migration gerçek veritabanına uygulanmamıştır.
+
 ## 1. Yönetici özeti
 
 STYS projesine, konaklayanların fiziksel giriş ve çıkışlarının kolluk sistemlerine bildirilmesini yönetmek üzere tesis ve tenant bazlı bir KBS modülü eklenmiştir. Tasarımın ana ilkesi, KBS bildiriminin rezervasyon yerine `RezervasyonKonaklayan` bazında yönetilmesidir.
@@ -54,7 +64,7 @@ Eklenen fiziksel olay işlemleri:
 
 - `FiiliGirisYapAsync`
 - `FiiliCikisYapAsync`
-- `OdaDegisikligiBildirAsync`
+- Canonical rezervasyon oda değişikliğinden atomik outbox üretimi
 - `GelmeyecekOlarakIsaretleAsync`
 
 Fiilî giriş ve çıkış işlemleri idempotenttir. Fiilî çıkış akışında ödeme veya kalan borç kontrolü bulunmaz. Bu işlem mevcut `TamamlaCheckOutAsync` metodunu çağırmaz ve rezervasyonun mali durumunu değiştirmez.
@@ -172,6 +182,7 @@ Eklenen yetkiler:
 - `KbsYonetimi.Retry`
 - `KbsYonetimi.Settings`
 - `KbsYonetimi.SensitiveDataView`
+- `KbsYonetimi.Reconciliation`
 
 Eklenen lisans modülü:
 
@@ -189,7 +200,7 @@ API kapsamı:
 - EGM giriş/çıkış Excel’i oluşturma
 - EGM manifest tabanlı yükleme onayı
 - Konaklayan fiilî giriş/çıkış
-- Konaklayan oda değişikliği
+- Mutabakat ve EGM manuel doğrulama
 - Konaklayanı gelmeyecek olarak işaretleme
 
 KBS entity’leri `ITenantEntity` uygular. Kullanıcı API’leri mevcut global tenant filtresi altında çalışır. Worker yalnızca kendi kontrollü sistem sorgularında query filter’ı atlar ve kayıtları kurum/tesis bilgileriyle birlikte işler.
@@ -218,7 +229,7 @@ Rezervasyon konaklayan planına şu alanlar eklenmiştir:
 - Eksik KBS bilgileri
 - Fiilî giriş
 - Fiilî çıkış
-- Oda değişikliği bildirimi
+- Canonical oda seçimiyle otomatik KBS oda değişikliği bildirimi
 
 ## 10. Güvenlik kontrolleri
 
@@ -272,11 +283,14 @@ Eklenen KBS testleri aşağıdaki davranışları kapsar:
 Doğrulama sonuçları:
 
 - Backend build: başarılı, 0 hata, 0 uyarı
-- KBS testleri: 13/13 başarılı
-- Tam solution testi: 310 başarılı, 0 başarısız, 18 mevcut SQL entegrasyon testi skipped
+- KBS ve canonical oda değişikliği hedef testleri: 29/29 başarılı
+- Tam solution testi: 326 başarılı, 0 başarısız, 18 mevcut SQL entegrasyon testi skipped
+- Angular KBS servis testleri: 2/2 başarılı (ChromeHeadless)
 - Angular production build: başarılı
 - Migration SQL üretimi: başarılı
 - `git diff --check`: başarılı
+
+`STYS_TEST_SQLSERVER_CONNECTION` ile açılan opt-in test, iki ayrı DbContext üzerinden eşzamanlı giriş ve çıkışın tek outbox üretmesini ve kaybedenin `ZatenKayitli=true` almasını doğrular. Bu çalışma ortamında bağlantı değişkeni sağlanmadığı için gerçek SQL Server koşusu yapılmamıştır; InMemory sonucu SQL Server concurrency kanıtı olarak sunulmamaktadır.
 
 Angular build’de repository’nin mevcut bundle bütçe uyarısı devam etmektedir: başlangıç paketi 4.25 MB, tanımlı bütçe 2.80 MB.
 

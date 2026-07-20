@@ -16,6 +16,7 @@ public class KbsBildirim : BaseEntity<long>, ITenantEntity
     [MaxLength(64)] public string OlayAnahtari { get; set; } = string.Empty;
     [MaxLength(16)] public string PayloadVersion { get; set; } = "1";
     [MaxLength(64)] public string PayloadHash { get; set; } = string.Empty;
+    public string ProtectedPayload { get; set; } = string.Empty;
     public int DenemeSayisi { get; set; }
     public DateTime? SonrakiDenemeTarihi { get; set; }
     [MaxLength(64)] public string? SonHataKodu { get; set; }

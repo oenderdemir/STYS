@@ -63,6 +63,8 @@ using STYS.Kurumlar.Options;
 using STYS.Kbs.Connectors;
 using STYS.Kbs.Options;
 using STYS.Kbs.Services;
+using STYS.Kbs.Payload;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -103,6 +105,12 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.Configure<KurumLogoStorageOptions>(
     builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
 builder.Services.Configure<KbsOptions>(builder.Configuration.GetSection(KbsOptions.SectionName));
+var kbsDataProtection = builder.Services.AddDataProtection().SetApplicationName("STYS.Kbs");
+var kbsKeyRingPath = builder.Configuration[$"{KbsOptions.SectionName}:PayloadProtectionKeyRingPath"];
+if (!string.IsNullOrWhiteSpace(kbsKeyRingPath))
+{
+    kbsDataProtection.PersistKeysToFileSystem(new DirectoryInfo(kbsKeyRingPath));
+}
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();
@@ -158,6 +166,7 @@ builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
 builder.Services.AddScoped<IRestoranErisimService, RestoranErisimService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
 builder.Services.AddScoped<IKbsBildirimOlusturmaService, KbsBildirimOlusturmaService>();
+builder.Services.AddSingleton<IKbsPayloadProtector, DataProtectionKbsPayloadProtector>();
 builder.Services.AddScoped<IKbsYonetimService, KbsYonetimService>();
 builder.Services.AddScoped<IKbsConnectorResolver, KbsConnectorResolver>();
 builder.Services.AddScoped<IKbsConnector, FakeKbsConnector>();

@@ -44,6 +44,16 @@ public class KbsController(IKbsYonetimService yonetim, IKbsBildirimOlusturmaServ
     [Permission(StructurePermissions.KbsYonetimi.Manage)]
     public async Task<IActionResult> ManuelMudahale(long bildirimId, CancellationToken ct) { await yonetim.ManuelMudahaleAsync(bildirimId, ct); return NoContent(); }
 
+    [HttpPost("bildirimler/{bildirimId:long}/mutabakat")]
+    [Permission(StructurePermissions.KbsYonetimi.Reconciliation)]
+    public async Task<IActionResult> Mutabakat(long bildirimId, [FromBody] KbsMutabakatRequestDto request, CancellationToken ct)
+    { await yonetim.MutabakatYapAsync(bildirimId, request, ct); return NoContent(); }
+
+    [HttpPost("bildirimler/{bildirimId:long}/egm-dogrulama")]
+    [Permission(StructurePermissions.KbsYonetimi.Reconciliation)]
+    public async Task<IActionResult> EgmDogrulama(long bildirimId, [FromBody] KbsEgmDogrulamaRequestDto request, CancellationToken ct)
+    { await yonetim.EgmDogrulaAsync(bildirimId, request, ct); return NoContent(); }
+
     [HttpGet("tesisler/{tesisId:int}/egm-excel/{bildirimTipi}")]
     [Permission(StructurePermissions.KbsYonetimi.Manage)]
     public async Task<IActionResult> EgmExcel(int tesisId, string bildirimTipi, CancellationToken ct)
@@ -65,10 +75,6 @@ public class KbsController(IKbsYonetimService yonetim, IKbsBildirimOlusturmaServ
     [HttpPost("konaklayanlar/{konaklayanId:int}/fiili-cikis")]
     [Permission(StructurePermissions.KbsYonetimi.Manage)]
     public async Task<ActionResult<KbsFiiliOlaySonucDto>> FiiliCikis(int konaklayanId, CancellationToken ct) => Ok(await olaylar.FiiliCikisYapAsync(konaklayanId, null, ct));
-
-    [HttpPost("konaklayanlar/{konaklayanId:int}/oda-degisikligi")]
-    [Permission(StructurePermissions.KbsYonetimi.Manage)]
-    public async Task<ActionResult<KbsFiiliOlaySonucDto>> OdaDegisikligi(int konaklayanId, [FromBody] KbsOdaDegisikligiRequestDto request, CancellationToken ct) => Ok(await olaylar.OdaDegisikligiBildirAsync(konaklayanId, request.OdaNo, request.OlayTarihi, ct));
 
     [HttpPost("konaklayanlar/{konaklayanId:int}/gelmeyecek")]
     [Permission(StructurePermissions.KbsYonetimi.Manage)]

@@ -114,6 +114,10 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
                     pasaportNo: this.normalizeOptional(kisi.pasaportNo ?? ''),
                     cinsiyet: this.normalizeOptional(kisi.cinsiyet ?? ''),
                     katilimDurumu: this.normalizeOptional(kisi.katilimDurumu ?? '') ?? KonaklayanKatilimDurumlari.Bekleniyor,
+                    ad: this.normalizeOptional(kisi.ad ?? ''), soyad: this.normalizeOptional(kisi.soyad ?? ''), kimlikTuru: this.normalizeOptional(kisi.kimlikTuru ?? ''),
+                    kimlikNo: this.normalizeOptional(kisi.kimlikNo ?? ''), belgeNo: this.normalizeOptional(kisi.belgeNo ?? ''), belgeTuru: this.normalizeOptional(kisi.belgeTuru ?? ''),
+                    uyrukKodu: this.normalizeOptional(kisi.uyrukKodu ?? ''), dogumTarihi: kisi.dogumTarihi, dogumYeri: this.normalizeOptional(kisi.dogumYeri ?? ''),
+                    telefon: this.normalizeOptional(kisi.telefon ?? ''), aracPlakasi: this.normalizeOptional(kisi.aracPlakasi ?? ''), konaklamaKullanimSekli: this.normalizeOptional(kisi.konaklamaKullanimSekli ?? ''),
                     atamalar: kisi.atamalar.map((atama) => ({
                         segmentId: atama.segmentId,
                         odaId: atama.odaId,
@@ -139,6 +143,15 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
                     this.cdr.markForCheck();
                 }
             });
+    }
+
+    fiiliGiris(kisi: RezervasyonKonaklayanKisiDto): void { this.runKbsAction(kisi, () => this.service.fiiliGirisYap(kisi.id!), 'Fiili giris kaydedildi.'); }
+    fiiliCikis(kisi: RezervasyonKonaklayanKisiDto): void { this.runKbsAction(kisi, () => this.service.fiiliCikisYap(kisi.id!), 'Fiili cikis kaydedildi; mali check-out degistirilmedi.'); }
+    odaDegisikligi(kisi: RezervasyonKonaklayanKisiDto): void { const odaNo = window.prompt('Yeni oda numarasi'); if (odaNo?.trim()) this.runKbsAction(kisi, () => this.service.kbsOdaDegisikligiBildir(kisi.id!, odaNo.trim()), 'Oda degisikligi bildirimi olusturuldu.'); }
+
+    private runKbsAction(kisi: RezervasyonKonaklayanKisiDto, action: () => import('rxjs').Observable<unknown>, message: string): void {
+        if (!kisi.id || kisi.eksikKbsBilgileri.length > 0) { this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik bilgi', detail: kisi.id ? `Eksik KBS bilgileri: ${kisi.eksikKbsBilgileri.join(', ')}` : 'Once konaklayan planini kaydedin.' }); return; }
+        action().subscribe({ next: () => { this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: message }); if (this.rezervasyonId) this.load(this.rezervasyonId); }, error: e => this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(e) }) });
     }
 
     getKonaklayanSegmentler(): RezervasyonKonaklayanSegmentDto[] {

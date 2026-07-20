@@ -16,7 +16,8 @@ public class RequestResponseLoggingMiddleware
         "/health",
         "/swagger",
         "/hangfire",
-        "/hubs"
+        "/hubs",
+        "/ui/kbs"
     ];
 
     private readonly RequestDelegate _next;
@@ -165,7 +166,8 @@ public class RequestResponseLoggingMiddleware
     private static bool IsSensitive(string propertyName)
     {
         var key = propertyName.ToLowerInvariant();
-        return key is "password" or "parola" or "secret" or "token" or "accesstoken" or "refreshtoken" or "authtoken" or "authorization" or "apikey" or "api_key" or "clientsecret" or "client_secret";
+        return key is "password" or "parola" or "secret" or "secretreference" or "token" or "accesstoken" or "refreshtoken" or "authtoken" or "authorization" or "apikey" or "api_key" or "clientsecret" or "client_secret"
+            or "tckimlikno" or "kimlikno" or "ykn" or "pasaportno" or "belgeno" or "payload" or "soappayload" or "soapxml";
     }
 
     private static void LogRequest(HttpContext context, Guid requestGuid, string? body)

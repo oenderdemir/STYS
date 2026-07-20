@@ -9,6 +9,7 @@ using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Kamp.Entities;
+using STYS.Kbs.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
@@ -139,6 +140,9 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonKonaklamaHakkiTuketimKaydi> RezervasyonKonaklamaHakkiTuketimKayitlari => Set<RezervasyonKonaklamaHakkiTuketimKaydi>();
     public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
+    public DbSet<KbsTesisAyari> KbsTesisAyarlari => Set<KbsTesisAyari>();
+    public DbSet<KbsBildirim> KbsBildirimler => Set<KbsBildirim>();
+    public DbSet<KbsBildirimDenemesi> KbsBildirimDenemeleri => Set<KbsBildirimDenemesi>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
     public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
@@ -1274,6 +1278,17 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AdSoyad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.TcKimlikNo).HasMaxLength(32);
             entity.Property(x => x.PasaportNo).HasMaxLength(32);
+            entity.Property(x => x.Ad).HasMaxLength(100);
+            entity.Property(x => x.Soyad).HasMaxLength(100);
+            entity.Property(x => x.KimlikTuru).HasMaxLength(24);
+            entity.Property(x => x.KimlikNo).HasMaxLength(32);
+            entity.Property(x => x.BelgeNo).HasMaxLength(32);
+            entity.Property(x => x.BelgeTuru).HasMaxLength(32);
+            entity.Property(x => x.UyrukKodu).HasMaxLength(8);
+            entity.Property(x => x.DogumYeri).HasMaxLength(100);
+            entity.Property(x => x.Telefon).HasMaxLength(32);
+            entity.Property(x => x.AracPlakasi).HasMaxLength(16);
+            entity.Property(x => x.KonaklamaKullanimSekli).HasMaxLength(16);
             entity.Property(x => x.Cinsiyet).HasMaxLength(16);
             entity.Property(x => x.KatilimDurumu).HasMaxLength(16).IsRequired().HasDefaultValue(KonaklayanKatilimDurumlari.Bekleniyor);
             entity.HasIndex(x => new { x.RezervasyonId, x.SiraNo })
@@ -1284,6 +1299,33 @@ public class StysAppDbContext : DbContext
                 .WithMany(x => x.Konaklayanlar)
                 .HasForeignKey(x => x.RezervasyonId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KbsTesisAyari>(entity =>
+        {
+            entity.ToTable("KbsTesisAyarlari", "dbo");
+            entity.HasIndex(x => new { x.KurumId, x.TesisId }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.Property(x => x.KollukSistemi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.EntegrasyonTipi).HasMaxLength(16).IsRequired();
+            entity.HasOne<STYS.Tesisler.Entities.Tesis>().WithMany().HasForeignKey(x => x.TesisId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KbsBildirim>(entity =>
+        {
+            entity.ToTable("KbsBildirimler", "dbo");
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KurumId, x.RezervasyonKonaklayanId, x.BildirimTipi, x.OlayAnahtari }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.Durum, x.SonrakiDenemeTarihi }).HasFilter("[IsDeleted] = 0");
+            entity.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+            entity.HasOne<STYS.Rezervasyonlar.Entities.Rezervasyon>().WithMany().HasForeignKey(x => x.RezervasyonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<STYS.Rezervasyonlar.Entities.RezervasyonKonaklayan>().WithMany().HasForeignKey(x => x.RezervasyonKonaklayanId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KbsBildirimDenemesi>(entity =>
+        {
+            entity.ToTable("KbsBildirimDenemeleri", "dbo");
+            entity.HasIndex(x => new { x.KbsBildirimId, x.DenemeTarihi });
+            entity.HasOne(x => x.Bildirim).WithMany().HasForeignKey(x => x.KbsBildirimId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RezervasyonKonaklayanSegmentAtama>(entity =>

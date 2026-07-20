@@ -445,12 +445,16 @@ export interface RezervasyonKonaklayanOdaSecenekDto {
 }
 
 export interface RezervasyonKonaklayanKisiDto {
+    id: number | null;
     siraNo: number;
     adSoyad: string;
     tcKimlikNo: string | null;
     pasaportNo: string | null;
     cinsiyet: string | null;
     katilimDurumu: string;
+    ad: string | null; soyad: string | null; kimlikTuru: string | null; kimlikNo: string | null; belgeNo: string | null; belgeTuru: string | null; uyrukKodu: string | null;
+    dogumTarihi: string | null; dogumYeri: string | null; telefon: string | null; aracPlakasi: string | null; fiiliGirisTarihi: string | null; fiiliCikisTarihi: string | null;
+    konaklamaKullanimSekli: string | null; kbsDurumu: string; sonKbsBildirimSonucu: string | null; eksikKbsBilgileri: string[];
     atamalar: RezervasyonKonaklayanKisiAtamaDto[];
 }
 
@@ -471,6 +475,8 @@ export interface RezervasyonKonaklayanKisiKaydetDto {
     pasaportNo: string | null;
     cinsiyet: string | null;
     katilimDurumu: string | null;
+    ad: string | null; soyad: string | null; kimlikTuru: string | null; kimlikNo: string | null; belgeNo: string | null; belgeTuru: string | null; uyrukKodu: string | null;
+    dogumTarihi: string | null; dogumYeri: string | null; telefon: string | null; aracPlakasi: string | null; konaklamaKullanimSekli: string | null;
     atamalar: RezervasyonKonaklayanKisiAtamaKaydetDto[];
 }
 

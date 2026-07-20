@@ -1081,12 +1081,16 @@ public class RezervasyonService : IRezervasyonService
                     .ThenBy(k => k.Id)
                     .Select(k => new
                     {
+                        k.Id,
                         k.SiraNo,
                         k.AdSoyad,
                         k.TcKimlikNo,
                         k.PasaportNo,
                         k.Cinsiyet,
                         k.KatilimDurumu,
+                        k.Ad, k.Soyad, k.KimlikTuru, k.KimlikNo, k.BelgeNo, k.BelgeTuru, k.UyrukKodu,
+                        k.DogumTarihi, k.DogumYeri, k.Telefon, k.AracPlakasi, k.FiiliGirisTarihi, k.FiiliCikisTarihi, k.KonaklamaKullanimSekli,
+                        SonKbs = _stysDbContext.KbsBildirimler.Where(b => b.RezervasyonKonaklayanId == k.Id).OrderByDescending(b => b.Id).Select(b => new { b.Durum, b.SonHataMesaji }).FirstOrDefault(),
                         Atamalar = k.SegmentAtamalari
                             .Select(a => new
                             {
@@ -1153,11 +1157,18 @@ public class RezervasyonService : IRezervasyonService
 
                 return new RezervasyonKonaklayanKisiDto
                 {
+                    Id = k.Id,
                     SiraNo = k.SiraNo,
                     AdSoyad = k.AdSoyad,
                     TcKimlikNo = k.TcKimlikNo,
                     PasaportNo = k.PasaportNo,
                     Cinsiyet = k.Cinsiyet,
+                    Ad = k.Ad, Soyad = k.Soyad, KimlikTuru = k.KimlikTuru, KimlikNo = k.KimlikNo, BelgeNo = k.BelgeNo, BelgeTuru = k.BelgeTuru,
+                    UyrukKodu = k.UyrukKodu, DogumTarihi = k.DogumTarihi, DogumYeri = k.DogumYeri, Telefon = k.Telefon, AracPlakasi = k.AracPlakasi,
+                    FiiliGirisTarihi = k.FiiliGirisTarihi, FiiliCikisTarihi = k.FiiliCikisTarihi, KonaklamaKullanimSekli = k.KonaklamaKullanimSekli,
+                    KbsDurumu = k.SonKbs == null ? "BildirimYok" : k.SonKbs.Durum,
+                    SonKbsBildirimSonucu = k.SonKbs == null ? null : k.SonKbs.SonHataMesaji ?? k.SonKbs.Durum,
+                    EksikKbsBilgileri = GetMissingKbsFields(k.Ad, k.Soyad, k.KimlikTuru, k.KimlikNo, k.BelgeNo, k.UyrukKodu),
                     KatilimDurumu = NormalizeStoredKonaklayanKatilimDurumu(k.KatilimDurumu),
                     Atamalar = normalizedAtamalar
                 };
@@ -1495,25 +1506,23 @@ public class RezervasyonService : IRezervasyonService
             })
             .ToList();
 
-        if (existingGuests.Count > 0)
-        {
-            _stysDbContext.RezervasyonKonaklayanlar.RemoveRange(existingGuests);
-        }
-
         var guestsBySira = sortedGuests.ToDictionary(
             x => x.SiraNo,
-            x => new RezervasyonKonaklayan
-            {
-                RezervasyonId = rezervasyonId,
-                SiraNo = x.SiraNo,
-                AdSoyad = x.AdSoyad.Trim(),
-                TcKimlikNo = string.IsNullOrWhiteSpace(x.TcKimlikNo) ? null : x.TcKimlikNo.Trim(),
-                PasaportNo = string.IsNullOrWhiteSpace(x.PasaportNo) ? null : x.PasaportNo.Trim(),
-                Cinsiyet = normalizedGenderBySiraNo[x.SiraNo],
-                KatilimDurumu = normalizedParticipationBySiraNo[x.SiraNo]
-            });
+            x => existingGuests.FirstOrDefault(e => e.SiraNo == x.SiraNo) ?? new RezervasyonKonaklayan { RezervasyonId = rezervasyonId, SiraNo = x.SiraNo });
 
-        await _stysDbContext.RezervasyonKonaklayanlar.AddRangeAsync(guestsBySira.Values, cancellationToken);
+        foreach (var input in sortedGuests)
+        {
+            var entity = guestsBySira[input.SiraNo];
+            entity.AdSoyad = input.AdSoyad.Trim(); entity.TcKimlikNo = Clean(input.TcKimlikNo); entity.PasaportNo = Clean(input.PasaportNo);
+            entity.Cinsiyet = normalizedGenderBySiraNo[input.SiraNo]; entity.KatilimDurumu = normalizedParticipationBySiraNo[input.SiraNo];
+            entity.Ad = Clean(input.Ad); entity.Soyad = Clean(input.Soyad); entity.KimlikTuru = Clean(input.KimlikTuru); entity.KimlikNo = Clean(input.KimlikNo);
+            entity.BelgeNo = Clean(input.BelgeNo); entity.BelgeTuru = Clean(input.BelgeTuru); entity.UyrukKodu = Clean(input.UyrukKodu); entity.DogumTarihi = input.DogumTarihi;
+            entity.DogumYeri = Clean(input.DogumYeri); entity.Telefon = Clean(input.Telefon); entity.AracPlakasi = Clean(input.AracPlakasi); entity.KonaklamaKullanimSekli = Clean(input.KonaklamaKullanimSekli);
+        }
+        var newGuests = guestsBySira.Values.Where(x => x.Id == 0).ToList();
+        if (newGuests.Count > 0) await _stysDbContext.RezervasyonKonaklayanlar.AddRangeAsync(newGuests, cancellationToken);
+        var removedGuests = existingGuests.Where(x => !guestsBySira.ContainsKey(x.SiraNo)).ToList();
+        if (removedGuests.Count > 0) _stysDbContext.RezervasyonKonaklayanlar.RemoveRange(removedGuests);
 
         foreach (var guest in sortedGuests)
         {
@@ -7255,5 +7264,22 @@ public class RezervasyonService : IRezervasyonService
             OdaTipleri = odaTipiGruplari,
             Ozet = ozet
         };
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string> GetMissingKbsFields(string? ad, string? soyad, string? kimlikTuru, string? kimlikNo, string? belgeNo, string? uyrukKodu)
+    {
+        var fields = new List<string>();
+        if (string.IsNullOrWhiteSpace(ad)) fields.Add("Ad");
+        if (string.IsNullOrWhiteSpace(soyad)) fields.Add("Soyad");
+        if (string.IsNullOrWhiteSpace(kimlikTuru)) fields.Add("KimlikTuru");
+        if (kimlikTuru == "YabanciBelge")
+        {
+            if (string.IsNullOrWhiteSpace(belgeNo)) fields.Add("BelgeNo");
+            if (string.IsNullOrWhiteSpace(uyrukKodu)) fields.Add("UyrukKodu");
+        }
+        else if (!string.IsNullOrWhiteSpace(kimlikTuru) && string.IsNullOrWhiteSpace(kimlikNo)) fields.Add("KimlikNo");
+        return fields;
     }
 }

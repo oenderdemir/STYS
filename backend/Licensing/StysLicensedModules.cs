@@ -8,4 +8,5 @@ public static class StysLicensedModules
     public const string OdaTemizlik = "OdaTemizlik";
     public const string Bildirim = "Bildirim";
     public const string Muhasebe = "Muhasebe";
+    public const string Kbs = "Kbs";
 }

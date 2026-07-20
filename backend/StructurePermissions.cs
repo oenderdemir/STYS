@@ -251,6 +251,16 @@ public static class StructurePermissions
         public const string CustomIndirimGirebilir = "RezervasyonYonetimi.CustomIndirimGirebilir";
     }
 
+    public static class KbsYonetimi
+    {
+        public const string Menu = "KbsYonetimi.Menu";
+        public const string View = "KbsYonetimi.View";
+        public const string Manage = "KbsYonetimi.Manage";
+        public const string Retry = "KbsYonetimi.Retry";
+        public const string Settings = "KbsYonetimi.Settings";
+        public const string SensitiveDataView = "KbsYonetimi.SensitiveDataView";
+    }
+
     public static class OdaRezervasyonTakvimiYonetimi
     {
         public const string Menu = "OdaRezervasyonTakvimiYonetimi.Menu";

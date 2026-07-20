@@ -43,6 +43,7 @@ public class RezervasyonKonaklayanOdaSecenekDto
 
 public class RezervasyonKonaklayanKisiDto
 {
+    public int? Id { get; set; }
     public int SiraNo { get; set; }
 
     public string AdSoyad { get; set; } = string.Empty;
@@ -52,6 +53,24 @@ public class RezervasyonKonaklayanKisiDto
     public string? PasaportNo { get; set; }
 
     public string? Cinsiyet { get; set; }
+
+    public string? Ad { get; set; }
+    public string? Soyad { get; set; }
+    public string? KimlikTuru { get; set; }
+    public string? KimlikNo { get; set; }
+    public string? BelgeNo { get; set; }
+    public string? BelgeTuru { get; set; }
+    public string? UyrukKodu { get; set; }
+    public DateTime? DogumTarihi { get; set; }
+    public string? DogumYeri { get; set; }
+    public string? Telefon { get; set; }
+    public string? AracPlakasi { get; set; }
+    public DateTime? FiiliGirisTarihi { get; set; }
+    public DateTime? FiiliCikisTarihi { get; set; }
+    public string? KonaklamaKullanimSekli { get; set; }
+    public string KbsDurumu { get; set; } = "BildirimYok";
+    public string? SonKbsBildirimSonucu { get; set; }
+    public List<string> EksikKbsBilgileri { get; set; } = [];
 
     public string KatilimDurumu { get; set; } = KonaklayanKatilimDurumlari.Bekleniyor;
 

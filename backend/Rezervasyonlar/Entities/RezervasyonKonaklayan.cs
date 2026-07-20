@@ -20,8 +20,47 @@ public class RezervasyonKonaklayan : BaseEntity<int>
     [MaxLength(32)]
     public string? PasaportNo { get; set; }
 
+    [MaxLength(100)]
+    public string? Ad { get; set; }
+
+    [MaxLength(100)]
+    public string? Soyad { get; set; }
+
+    [MaxLength(24)]
+    public string? KimlikTuru { get; set; }
+
+    [MaxLength(32)]
+    public string? KimlikNo { get; set; }
+
+    [MaxLength(32)]
+    public string? BelgeNo { get; set; }
+
+    [MaxLength(32)]
+    public string? BelgeTuru { get; set; }
+
+    [MaxLength(8)]
+    public string? UyrukKodu { get; set; }
+
+    public DateTime? DogumTarihi { get; set; }
+
+    [MaxLength(100)]
+    public string? DogumYeri { get; set; }
+
     [MaxLength(16)]
     public string? Cinsiyet { get; set; }
+
+    [MaxLength(32)]
+    public string? Telefon { get; set; }
+
+    [MaxLength(16)]
+    public string? AracPlakasi { get; set; }
+
+    public DateTime? FiiliGirisTarihi { get; set; }
+
+    public DateTime? FiiliCikisTarihi { get; set; }
+
+    [MaxLength(16)]
+    public string? KonaklamaKullanimSekli { get; set; }
 
     [Required]
     [MaxLength(16)]

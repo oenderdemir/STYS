@@ -60,6 +60,9 @@ using TOD.Platform.Identity.Users.Services;
 using TOD.Platform.Licensing.AspNetCore;
 using TOD.Platform.Persistence.Rdbms.Extensions;
 using STYS.Kurumlar.Options;
+using STYS.Kbs.Connectors;
+using STYS.Kbs.Options;
+using STYS.Kbs.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 SerilogHooks.Configure(builder.Configuration["Serilog:ArchiveDirectoryFormat"]);
@@ -99,6 +102,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 });
 builder.Services.Configure<KurumLogoStorageOptions>(
     builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
+builder.Services.Configure<KbsOptions>(builder.Configuration.GetSection(KbsOptions.SectionName));
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();
@@ -153,6 +157,12 @@ builder.Services.AddScoped<IMusteriMenuService, MusteriMenuService>();
 builder.Services.AddScoped<IGarsonServisService, GarsonServisService>();
 builder.Services.AddScoped<IRestoranErisimService, RestoranErisimService>();
 builder.Services.AddScoped<IBildirimService, BildirimService>();
+builder.Services.AddScoped<IKbsBildirimOlusturmaService, KbsBildirimOlusturmaService>();
+builder.Services.AddScoped<IKbsYonetimService, KbsYonetimService>();
+builder.Services.AddScoped<IKbsConnectorResolver, KbsConnectorResolver>();
+builder.Services.AddScoped<IKbsConnector, FakeKbsConnector>();
+builder.Services.AddScoped<IKbsConnector, JandarmaKbsConnector>();
+builder.Services.AddScoped<IKbsConnector, EgmKbsExcelConnector>();
 builder.Services.AddScoped<ITasinirKodMuhasebeHesapEslemeService, TasinirKodMuhasebeHesapEslemeService>();
 builder.Services.AddScoped<IMuhasebeVergiHesapEslemeService, MuhasebeVergiHesapEslemeService>();
 builder.Services.AddScoped<ITevkifatHesapEslemeRepository, TevkifatHesapEslemeRepository>();
@@ -183,6 +193,7 @@ builder.Services.AddScoped<ISatisBelgesiMuhasebeFisService, SatisBelgesiMuhasebe
 builder.Services.AddScoped<STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.ITahsilatOdemeBelgesiMuhasebeFisService, STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.TahsilatOdemeBelgesiMuhasebeFisService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
+builder.Services.AddHostedService<KbsBildirimWorker>();
 
 builder.Services.AddTodLicensing(builder.Configuration, builder.Environment);
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());

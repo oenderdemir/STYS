@@ -90,6 +90,7 @@ import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
 import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { KurumYonetimi } from './app/pages/kurum-yonetimi/kurum-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
+import { KbsBildirimMerkezi } from './app/pages/kbs-bildirim-merkezi/kbs-bildirim-merkezi';
 
 export const appRoutes: Routes = [
     { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
@@ -151,6 +152,7 @@ export const appRoutes: Routes = [
             { path: 'kamp-basvurularim', component: KampBenimBasvurularimPage, data: { breadcrumb: ['Ana Menu', 'Kamp Basvurularim'] } },
             { path: 'sezon-kurallari', component: SezonYonetimi, data: { breadcrumb: ['Isletme', 'Sezon Kurallari'] } },
             { path: 'rezervasyon-yonetimi', component: RezervasyonYonetimi, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Yonetimi'] } },
+            { path: 'kbs-bildirim-merkezi', component: KbsBildirimMerkezi, data: { breadcrumb: ['Ana Menu', 'KBS Bildirim Merkezi'] } },
             { path: 'rezervasyon-dashboard', component: RezervasyonDashboard, data: { breadcrumb: ['Ana Menu', 'Rezervasyon Dashboard'] } },
             { path: 'oda-rezervasyon-takvimi', component: OdaRezervasyonTakvimi, data: { breadcrumb: ['Rezervasyon Yönetimi', 'Oda Rezervasyon Takvimi'] } },
             { path: 'raporlar/oda-doluluk-aylik', component: OdaDolulukAylikComponent, data: { breadcrumb: ['Raporlar', 'Aylık Oda Planı'] } },

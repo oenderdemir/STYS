@@ -14,6 +14,7 @@ public class RezervasyonAramaRequestDto
 
     public bool SadeceOdemesiKalanlar { get; set; }
     public bool SadeceOdaDegisimiGerekli { get; set; }
+    public bool IptalEdilenleriGoster { get; set; }
 
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;

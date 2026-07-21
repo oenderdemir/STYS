@@ -165,6 +165,7 @@ export class RezervasyonYonetimi implements OnInit {
     aramaCikisBitis: Date | null = null;
     aramaSadeceOdemesiKalanlar = false;
     aramaSadeceOdaDegisimiGerekli = false;
+    aramaIptalEdilenleriGoster = false;
     aramaToplamKayitSayisi = 0;
     aramaPage = 1;
     aramaPageSize = 50;
@@ -1930,6 +1931,7 @@ export class RezervasyonYonetimi implements OnInit {
             cikisBitisTarihi: this.aramaCikisBitis ? this.formatLocalDate(this.aramaCikisBitis) : null,
             sadeceOdemesiKalanlar: this.aramaSadeceOdemesiKalanlar,
             sadeceOdaDegisimiGerekli: this.aramaSadeceOdaDegisimiGerekli,
+            iptalEdilenleriGoster: this.aramaIptalEdilenleriGoster,
             page: this.aramaPage,
             pageSize: this.aramaPageSize
         };
@@ -1985,6 +1987,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.aramaCikisBitis = null;
         this.aramaSadeceOdemesiKalanlar = false;
         this.aramaSadeceOdaDegisimiGerekli = false;
+        this.aramaIptalEdilenleriGoster = false;
         this.araRezervasyonlar(1);
     }
 

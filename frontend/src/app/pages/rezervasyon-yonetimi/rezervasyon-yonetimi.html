@@ -475,6 +475,14 @@
                 />
                 <label for="aramaSadeceOdaDegisimiGerekli" class="text-sm cursor-pointer">Sadece oda degisimi gerekli</label>
             </div>
+            <div class="flex align-items-center gap-2">
+                <p-checkbox
+                    inputId="aramaIptalEdilenleriGoster"
+                    [(ngModel)]="aramaIptalEdilenleriGoster"
+                    [binary]="true"
+                />
+                <label for="aramaIptalEdilenleriGoster" class="text-sm cursor-pointer">Iptal edilmis rezervasyonlari goster</label>
+            </div>
         </div>
         <div class="flex gap-2">
             <p-button label="Ara" icon="pi pi-search" (onClick)="araRezervasyonlar(1)" />

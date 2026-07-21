@@ -243,6 +243,7 @@ export interface RezervasyonAramaRequestDto {
     cikisBitisTarihi?: string | null;
     sadeceOdemesiKalanlar: boolean;
     sadeceOdaDegisimiGerekli: boolean;
+    iptalEdilenleriGoster: boolean;
     page: number;
     pageSize: number;
 }

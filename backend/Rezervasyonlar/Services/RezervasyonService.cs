@@ -377,6 +377,10 @@ public class RezervasyonService : IRezervasyonService
         {
             query = query.Where(x => x.RezervasyonDurumu == request.RezervasyonDurumu);
         }
+        else if (!request.IptalEdilenleriGoster)
+        {
+            query = query.Where(x => x.RezervasyonDurumu != RezervasyonDurumlari.Iptal);
+        }
 
         if (request.GirisBaslangicTarihi.HasValue)
         {

@@ -1,3 +1,10 @@
+.konaklayan-plan-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
 .konaklayan-plan-list {
     display: flex;
     flex-direction: column;
@@ -21,6 +28,14 @@
     flex-wrap: wrap;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--surface-border);
+    cursor: pointer;
+    user-select: none;
+}
+
+.konaklayan-card-chevron {
+    align-self: center;
+    font-size: 0.8rem;
+    color: var(--text-color-secondary);
 }
 
 .konaklayan-card-title {
@@ -33,6 +48,10 @@
     font-size: 0.875rem;
     color: var(--text-color-secondary);
     overflow-wrap: anywhere;
+}
+
+.konaklayan-card-status {
+    margin-left: auto;
 }
 
 .konaklayan-field-grid {

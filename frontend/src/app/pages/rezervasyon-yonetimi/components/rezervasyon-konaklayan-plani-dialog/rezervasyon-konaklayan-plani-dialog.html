@@ -15,124 +15,134 @@
     } @else if (!konaklayanPlan) {
         <div>Konaklayan plani bulunamadi.</div>
     } @else {
+        <div class="konaklayan-plan-toolbar">
+            <p-button label="Tumunu Ac" icon="pi pi-angle-double-down" size="small" text (onClick)="expandAllKonaklayan()" />
+            <p-button label="Tumunu Kapat" icon="pi pi-angle-double-up" size="small" text (onClick)="collapseAllKonaklayan()" />
+        </div>
         <div class="konaklayan-plan-list">
             @for (kisi of konaklayanPlan.konaklayanlar; track kisi.siraNo) {
                 <div class="konaklayan-card">
-                    <div class="konaklayan-card-header">
+                    <div class="konaklayan-card-header" (click)="toggleKonaklayanCard(kisi.siraNo)">
+                        <i class="pi konaklayan-card-chevron" [class.pi-chevron-down]="isKonaklayanExpanded(kisi.siraNo)" [class.pi-chevron-right]="!isKonaklayanExpanded(kisi.siraNo)"></i>
                         <span class="konaklayan-card-title">Konaklayan {{ kisi.siraNo }}</span>
                         @if (kisi.adSoyad.trim().length > 0) {
                             <span class="konaklayan-card-subtitle">{{ kisi.adSoyad }}</span>
                         }
+                        @if (!isKonaklayanComplete(kisi)) {
+                            <p-tag value="Eksik bilgi" severity="warn" class="konaklayan-card-status" />
+                        }
                     </div>
 
-                    <div class="konaklayan-field-grid">
-                        <div class="konaklayan-field konaklayan-field--full">
-                            <label class="konaklayan-field-label">Ad Soyad</label>
-                            <input pInputText class="w-full" [(ngModel)]="kisi.adSoyad" [disabled]="saving" />
-                        </div>
-
-                        <div class="konaklayan-field">
-                            <label class="konaklayan-field-label">Cinsiyet</label>
-                            <p-select
-                                class="w-full"
-                                [options]="cinsiyetSecenekleri"
-                                optionLabel="label"
-                                optionValue="value"
-                                [appendTo]="'body'"
-                                [showClear]="true"
-                                placeholder="Cinsiyet"
-                                [disabled]="saving"
-                                [(ngModel)]="kisi.cinsiyet"
-                            />
-                        </div>
-
-                        <div class="konaklayan-field">
-                            <label class="konaklayan-field-label">Katilim Durumu</label>
-                            <p-select
-                                class="w-full"
-                                [options]="katilimDurumuSecenekleri"
-                                optionLabel="label"
-                                optionValue="value"
-                                [appendTo]="'body'"
-                                [showClear]="false"
-                                [disabled]="saving"
-                                [ngModel]="kisi.katilimDurumu"
-                                (ngModelChange)="setKonaklayanKatilimDurumu(kisi, $event)"
-                            />
-                        </div>
-
-                        <div class="konaklayan-field">
-                            <label class="konaklayan-field-label">TC Kimlik No</label>
-                            <input pInputText class="w-full" [(ngModel)]="kisi.tcKimlikNo" [disabled]="saving" />
-                        </div>
-
-                        <div class="konaklayan-field">
-                            <label class="konaklayan-field-label">Pasaport No</label>
-                            <input pInputText class="w-full" [(ngModel)]="kisi.pasaportNo" [disabled]="saving" />
-                        </div>
-                    </div>
-
-                    @if (!isKonaklayanAssignmentsRequired(kisi)) {
-                        <div class="konaklayan-segment-disabled-note">
-                            "Gelmedi" durumundaki konaklayanlar icin oda/yatak secimi yapilmaz.
-                        </div>
-                    }
-
-                    @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
-                        <div class="konaklayan-segment-block">
-                            <div class="konaklayan-segment-header">
-                                <span class="konaklayan-segment-title">Segment {{ segment.segmentSirasi }}</span>
-                                <span class="konaklayan-segment-tarih">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</span>
+                    @if (isKonaklayanExpanded(kisi.siraNo)) {
+                        <div class="konaklayan-field-grid">
+                            <div class="konaklayan-field konaklayan-field--full">
+                                <label class="konaklayan-field-label">Ad Soyad</label>
+                                <input pInputText class="w-full" [(ngModel)]="kisi.adSoyad" [disabled]="saving" />
                             </div>
 
-                            <div class="konaklayan-field konaklayan-field--full">
-                                <label class="konaklayan-field-label">Oda</label>
+                            <div class="konaklayan-field">
+                                <label class="konaklayan-field-label">Cinsiyet</label>
                                 <p-select
                                     class="w-full"
-                                    [options]="getKonaklayanOdaSecenekleri(kisi, segment.segmentId)"
+                                    [options]="cinsiyetSecenekleri"
                                     optionLabel="label"
                                     optionValue="value"
                                     [appendTo]="'body'"
                                     [showClear]="true"
-                                    placeholder="Oda Seciniz"
-                                    [disabled]="saving || !isKonaklayanAssignmentsRequired(kisi)"
-                                    [ngModel]="getKonaklayanAtamaOdaId(kisi, segment.segmentId)"
-                                    (ngModelChange)="setKonaklayanAtamaOdaId(kisi, segment.segmentId, $event)"
-                                >
-                                    <ng-template #selectedItem let-option>
-                                        <span class="konaklayan-oda-selected">{{ option.odaNo }} - {{ option.binaAdi }}</span>
-                                    </ng-template>
-                                    <ng-template #item let-option>
-                                        <div class="konaklayan-oda-option">
-                                            <div class="konaklayan-oda-option-line1">{{ option.odaNo }} - {{ option.binaAdi }}</div>
-                                            <div class="konaklayan-oda-option-line2">{{ option.odaTipiAdi }}</div>
-                                            <div class="konaklayan-oda-option-line3">
-                                                {{ option.ayrilanKisiSayisi }} kisi &middot; {{ option.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}
-                                            </div>
-                                            <div class="konaklayan-oda-option-line4">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</div>
-                                        </div>
-                                    </ng-template>
-                                </p-select>
+                                    placeholder="Cinsiyet"
+                                    [disabled]="saving"
+                                    [(ngModel)]="kisi.cinsiyet"
+                                />
                             </div>
 
-                            @if (isKonaklayanYatakSecimiGerekli(kisi, segment.segmentId)) {
+                            <div class="konaklayan-field">
+                                <label class="konaklayan-field-label">Katilim Durumu</label>
+                                <p-select
+                                    class="w-full"
+                                    [options]="katilimDurumuSecenekleri"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    [appendTo]="'body'"
+                                    [showClear]="false"
+                                    [disabled]="saving"
+                                    [ngModel]="kisi.katilimDurumu"
+                                    (ngModelChange)="setKonaklayanKatilimDurumu(kisi, $event)"
+                                />
+                            </div>
+
+                            <div class="konaklayan-field">
+                                <label class="konaklayan-field-label">TC Kimlik No</label>
+                                <input pInputText class="w-full" [(ngModel)]="kisi.tcKimlikNo" [disabled]="saving" />
+                            </div>
+
+                            <div class="konaklayan-field">
+                                <label class="konaklayan-field-label">Pasaport No</label>
+                                <input pInputText class="w-full" [(ngModel)]="kisi.pasaportNo" [disabled]="saving" />
+                            </div>
+                        </div>
+
+                        @if (!isKonaklayanAssignmentsRequired(kisi)) {
+                            <div class="konaklayan-segment-disabled-note">
+                                "Gelmedi" durumundaki konaklayanlar icin oda/yatak secimi yapilmaz.
+                            </div>
+                        }
+
+                        @for (segment of getKonaklayanSegmentler(); track segment.segmentId) {
+                            <div class="konaklayan-segment-block">
+                                <div class="konaklayan-segment-header">
+                                    <span class="konaklayan-segment-title">Segment {{ segment.segmentSirasi }}</span>
+                                    <span class="konaklayan-segment-tarih">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</span>
+                                </div>
+
                                 <div class="konaklayan-field konaklayan-field--full">
-                                    <label class="konaklayan-field-label">Yatak</label>
+                                    <label class="konaklayan-field-label">Oda</label>
                                     <p-select
                                         class="w-full"
-                                        [options]="getKonaklayanYatakSecenekleri(kisi, segment.segmentId)"
+                                        [options]="getKonaklayanOdaSecenekleri(kisi, segment.segmentId)"
                                         optionLabel="label"
                                         optionValue="value"
                                         [appendTo]="'body'"
                                         [showClear]="true"
-                                        placeholder="Yatak Seciniz"
+                                        placeholder="Oda Seciniz"
                                         [disabled]="saving || !isKonaklayanAssignmentsRequired(kisi)"
-                                        [ngModel]="getKonaklayanAtamaYatakNo(kisi, segment.segmentId)"
-                                        (ngModelChange)="setKonaklayanAtamaYatakNo(kisi, segment.segmentId, $event)"
-                                    />
+                                        [ngModel]="getKonaklayanAtamaOdaId(kisi, segment.segmentId)"
+                                        (ngModelChange)="setKonaklayanAtamaOdaId(kisi, segment.segmentId, $event)"
+                                    >
+                                        <ng-template #selectedItem let-option>
+                                            <span class="konaklayan-oda-selected">{{ option.odaNo }} - {{ option.binaAdi }}</span>
+                                        </ng-template>
+                                        <ng-template #item let-option>
+                                            <div class="konaklayan-oda-option">
+                                                <div class="konaklayan-oda-option-line1">{{ option.odaNo }} - {{ option.binaAdi }}</div>
+                                                <div class="konaklayan-oda-option-line2">{{ option.odaTipiAdi }}</div>
+                                                <div class="konaklayan-oda-option-line3">
+                                                    {{ option.ayrilanKisiSayisi }} kisi &middot; {{ option.paylasimliMi ? 'Paylasimli' : 'Paylasimsiz' }}
+                                                </div>
+                                                <div class="konaklayan-oda-option-line4">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</div>
+                                            </div>
+                                        </ng-template>
+                                    </p-select>
                                 </div>
-                            }
-                        </div>
+
+                                @if (isKonaklayanYatakSecimiGerekli(kisi, segment.segmentId)) {
+                                    <div class="konaklayan-field konaklayan-field--full">
+                                        <label class="konaklayan-field-label">Yatak</label>
+                                        <p-select
+                                            class="w-full"
+                                            [options]="getKonaklayanYatakSecenekleri(kisi, segment.segmentId)"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [appendTo]="'body'"
+                                            [showClear]="true"
+                                            placeholder="Yatak Seciniz"
+                                            [disabled]="saving || !isKonaklayanAssignmentsRequired(kisi)"
+                                            [ngModel]="getKonaklayanAtamaYatakNo(kisi, segment.segmentId)"
+                                            (ngModelChange)="setKonaklayanAtamaYatakNo(kisi, segment.segmentId, $event)"
+                                        />
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
                 </div>
             }

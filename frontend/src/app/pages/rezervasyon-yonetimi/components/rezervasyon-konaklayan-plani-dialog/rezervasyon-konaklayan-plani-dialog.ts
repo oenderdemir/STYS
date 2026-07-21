@@ -18,6 +18,7 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
+import { TagModule } from 'primeng/tag';
 import { tryReadApiMessage } from '../../../../core/api';
 import { UiSeverity } from '../../../../core/ui/ui-severity.constants';
 import {
@@ -44,7 +45,7 @@ interface KonaklayanOdaSecenekOption {
     selector: 'app-rezervasyon-konaklayan-plani-dialog',
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, SelectModule],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, InputTextModule, SelectModule, TagModule],
     templateUrl: './rezervasyon-konaklayan-plani-dialog.html',
     styleUrl: './rezervasyon-konaklayan-plani-dialog.scss'
 })
@@ -62,6 +63,7 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
     loading = false;
     saving = false;
     konaklayanPlan: RezervasyonKonaklayanPlanDto | null = null;
+    private expandedSiraNolari = new Set<number>();
 
     private loadSeq = 0;
 
@@ -130,6 +132,7 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
             .subscribe({
                 next: (plan) => {
                     this.konaklayanPlan = plan;
+                    this.initializeExpandedState(plan);
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Konaklayan plani kaydedildi.' });
                     this.saved.emit();
                     this.cdr.markForCheck();
@@ -139,6 +142,52 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
                     this.cdr.markForCheck();
                 }
             });
+    }
+
+    isKonaklayanExpanded(siraNo: number): boolean {
+        return this.expandedSiraNolari.has(siraNo);
+    }
+
+    toggleKonaklayanCard(siraNo: number): void {
+        if (this.expandedSiraNolari.has(siraNo)) {
+            this.expandedSiraNolari.delete(siraNo);
+        } else {
+            this.expandedSiraNolari.add(siraNo);
+        }
+    }
+
+    expandAllKonaklayan(): void {
+        for (const kisi of this.konaklayanPlan?.konaklayanlar ?? []) {
+            this.expandedSiraNolari.add(kisi.siraNo);
+        }
+    }
+
+    collapseAllKonaklayan(): void {
+        this.expandedSiraNolari.clear();
+    }
+
+    isKonaklayanComplete(kisi: RezervasyonKonaklayanKisiDto): boolean {
+        if ((kisi.adSoyad ?? '').trim().length === 0) {
+            return false;
+        }
+
+        if (!this.isKonaklayanAssignmentsRequired(kisi)) {
+            return true;
+        }
+
+        return this.getKonaklayanSegmentler().every((segment) => {
+            const odaId = this.getKonaklayanAtamaOdaId(kisi, segment.segmentId);
+            if (!odaId || odaId <= 0) {
+                return false;
+            }
+
+            if (this.isKonaklayanYatakSecimiGerekli(kisi, segment.segmentId)) {
+                const yatakNo = this.getKonaklayanAtamaYatakNo(kisi, segment.segmentId);
+                return !!yatakNo && yatakNo > 0;
+            }
+
+            return true;
+        });
     }
 
     getKonaklayanSegmentler(): RezervasyonKonaklayanSegmentDto[] {
@@ -300,6 +349,7 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
                 next: (plan) => {
                     if (seq === this.loadSeq) {
                         this.konaklayanPlan = plan;
+                        this.initializeExpandedState(plan);
                         this.cdr.markForCheck();
                     }
                 },
@@ -318,10 +368,18 @@ export class RezervasyonKonaklayanPlaniDialogComponent implements OnChanges {
         this.loading = false;
         this.saving = false;
         this.konaklayanPlan = null;
+        this.expandedSiraNolari.clear();
     }
 
     private resetPlanState(): void {
         this.konaklayanPlan = null;
+        this.expandedSiraNolari.clear();
+    }
+
+    private initializeExpandedState(plan: RezervasyonKonaklayanPlanDto): void {
+        this.expandedSiraNolari = new Set(
+            plan.konaklayanlar.filter((kisi) => !this.isKonaklayanComplete(kisi)).map((kisi) => kisi.siraNo)
+        );
     }
 
     private getKonaklayanSegmentOdaSecenegi(segmentId: number, odaId: number | null | undefined): RezervasyonKonaklayanOdaSecenekDto | null {

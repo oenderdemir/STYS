@@ -8,14 +8,13 @@ import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { ChartModule } from 'primeng/chart';
 import { DatePickerModule } from 'primeng/datepicker';
-import { InputNumberModule } from 'primeng/inputnumber';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { ToastModule } from 'primeng/toast';
 import { TagModule } from 'primeng/tag';
 import { tryReadApiMessage } from '../../../core/api';
 import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
-import { RezervasyonTesisDto } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
+import { RezervasyonOdaTipiDto, RezervasyonTesisDto } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { RezervasyonDurumDagilimiRaporService } from './rezervasyon-durum-dagilimi-rapor.service';
 import { RezervasyonDurumDagilimiRaporDto } from './rezervasyon-durum-dagilimi-rapor.dto';
 
@@ -27,7 +26,7 @@ interface DurumSecenegi {
 @Component({
     selector: 'app-rezervasyon-durum-dagilimi-rapor',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, CardModule, ChartModule, DatePickerModule, InputNumberModule, SelectModule, TableModule, ToastModule, TagModule],
+    imports: [CommonModule, FormsModule, ButtonModule, CardModule, ChartModule, DatePickerModule, SelectModule, TableModule, ToastModule, TagModule],
     providers: [MessageService],
     templateUrl: './rezervasyon-durum-dagilimi-rapor.html',
     styleUrl: './rezervasyon-durum-dagilimi-rapor.scss',
@@ -41,6 +40,9 @@ export class RezervasyonDurumDagilimiRaporComponent implements OnInit {
 
     tesisler: RezervasyonTesisDto[] = [];
     tesislerYukleniyor = false;
+
+    odaTipleri: RezervasyonOdaTipiDto[] = [];
+    odaTipleriYukleniyor = false;
 
     selectedTesisId: number | null = null;
     selectedBaslangic: Date = this.ayinIlkGunu();
@@ -69,6 +71,38 @@ export class RezervasyonDurumDagilimiRaporComponent implements OnInit {
         this.tesisleriYukle();
     }
 
+    get odaTipiSecenekleri(): { label: string; value: number | null }[] {
+        return [{ label: 'Tümü', value: null }, ...this.odaTipleri.map((x) => ({ label: x.ad, value: x.id }))];
+    }
+
+    onTesisChange(tesisId: number | null): void {
+        this.selectedTesisId = tesisId;
+        this.selectedOdaTipiId = null;
+        this.odaTipleri = [];
+        if (tesisId) {
+            this.odaTipleriniYukle(tesisId);
+        }
+    }
+
+    private odaTipleriniYukle(tesisId: number): void {
+        this.odaTipleriYukleniyor = true;
+        this.rezervasyonService
+            .getOdaTipleriByTesis(tesisId)
+            .pipe(finalize(() => { this.odaTipleriYukleniyor = false; this.cdr.markForCheck(); }))
+            .subscribe({
+                next: (odaTipleri) => {
+                    this.odaTipleri = odaTipleri;
+                },
+                error: (err: HttpErrorResponse) => {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Hata',
+                        detail: tryReadApiMessage(err) ?? 'Oda tipi listesi alınamadı.'
+                    });
+                }
+            });
+    }
+
     private ayinIlkGunu(): Date {
         const simdi = new Date();
         return new Date(simdi.getFullYear(), simdi.getMonth(), 1);
@@ -89,6 +123,7 @@ export class RezervasyonDurumDagilimiRaporComponent implements OnInit {
                     this.tesisler = tesisler;
                     if (tesisler.length > 0 && !this.selectedTesisId) {
                         this.selectedTesisId = tesisler[0].id;
+                        this.odaTipleriniYukle(this.selectedTesisId);
                     }
                 },
                 error: (err: HttpErrorResponse) => {

@@ -17,7 +17,8 @@
                         [options]="tesisler"
                         optionLabel="ad"
                         optionValue="id"
-                        [(ngModel)]="selectedTesisId"
+                        [ngModel]="selectedTesisId"
+                        (ngModelChange)="onTesisChange($event)"
                         [loading]="tesislerYukleniyor"
                         placeholder="Tesis seçiniz"
                     ></p-select>
@@ -48,13 +49,17 @@
                 </div>
 
                 <div class="filtre-ogesi">
-                    <label for="odaTipiInput">Oda Tipi Id</label>
-                    <p-inputnumber
-                        id="odaTipiInput"
+                    <label for="odaTipiSelect">Oda Tipi</label>
+                    <p-select
+                        id="odaTipiSelect"
+                        styleClass="oda-tipi-select"
+                        [options]="odaTipiSecenekleri"
+                        optionLabel="label"
+                        optionValue="value"
                         [(ngModel)]="selectedOdaTipiId"
-                        [useGrouping]="false"
+                        [loading]="odaTipleriYukleniyor"
                         placeholder="Tümü"
-                    ></p-inputnumber>
+                    ></p-select>
                 </div>
             </div>
 

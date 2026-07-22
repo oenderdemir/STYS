@@ -14,7 +14,7 @@ import { ToastModule } from 'primeng/toast';
 import { TagModule } from 'primeng/tag';
 import { tryReadApiMessage } from '../../../core/api';
 import { RezervasyonYonetimiService } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.service';
-import { RezervasyonTesisDto } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
+import { RezervasyonOdaTipiDto, RezervasyonTesisDto } from '../../rezervasyon-yonetimi/rezervasyon-yonetimi.dto';
 import { OdaMusaitlikRaporService } from './oda-musaitlik-rapor.service';
 import { OdaMusaitlikRaporDto } from './oda-musaitlik-rapor.dto';
 
@@ -41,6 +41,9 @@ export class OdaMusaitlikRaporComponent implements OnInit {
     tesisler: RezervasyonTesisDto[] = [];
     tesislerYukleniyor = false;
 
+    odaTipleri: RezervasyonOdaTipiDto[] = [];
+    odaTipleriYukleniyor = false;
+
     selectedTesisId: number | null = null;
     selectedBaslangic: Date = new Date();
     selectedBitis: Date = this.gunEkle(new Date(), 7);
@@ -63,6 +66,38 @@ export class OdaMusaitlikRaporComponent implements OnInit {
         this.tesisleriYukle();
     }
 
+    get odaTipiSecenekleri(): { label: string; value: number | null }[] {
+        return [{ label: 'Tümü', value: null }, ...this.odaTipleri.map((x) => ({ label: x.ad, value: x.id }))];
+    }
+
+    onTesisChange(tesisId: number | null): void {
+        this.selectedTesisId = tesisId;
+        this.selectedOdaTipiId = null;
+        this.odaTipleri = [];
+        if (tesisId) {
+            this.odaTipleriniYukle(tesisId);
+        }
+    }
+
+    private odaTipleriniYukle(tesisId: number): void {
+        this.odaTipleriYukleniyor = true;
+        this.rezervasyonService
+            .getOdaTipleriByTesis(tesisId)
+            .pipe(finalize(() => { this.odaTipleriYukleniyor = false; this.cdr.markForCheck(); }))
+            .subscribe({
+                next: (odaTipleri) => {
+                    this.odaTipleri = odaTipleri;
+                },
+                error: (err: HttpErrorResponse) => {
+                    this.messageService.add({
+                        severity: 'error',
+                        summary: 'Hata',
+                        detail: tryReadApiMessage(err) ?? 'Oda tipi listesi alınamadı.'
+                    });
+                }
+            });
+    }
+
     private gunEkle(tarih: Date, gunSayisi: number): Date {
         const yeniTarih = new Date(tarih);
         yeniTarih.setDate(yeniTarih.getDate() + gunSayisi);
@@ -79,6 +114,7 @@ export class OdaMusaitlikRaporComponent implements OnInit {
                     this.tesisler = tesisler;
                     if (tesisler.length > 0 && !this.selectedTesisId) {
                         this.selectedTesisId = tesisler[0].id;
+                        this.odaTipleriniYukle(this.selectedTesisId);
                     }
                 },
                 error: (err: HttpErrorResponse) => {

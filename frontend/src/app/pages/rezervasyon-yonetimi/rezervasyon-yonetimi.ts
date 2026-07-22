@@ -168,7 +168,7 @@ export class RezervasyonYonetimi implements OnInit {
     aramaIptalEdilenleriGoster = false;
     aramaToplamKayitSayisi = 0;
     aramaPage = 1;
-    aramaPageSize = 50;
+    aramaPageSize = 20;
 
     private readonly defaultGirisSaati = '14:00';
     private readonly defaultCikisSaati = '10:00';

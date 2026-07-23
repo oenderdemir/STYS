@@ -35,10 +35,19 @@ public class PosTahsilatValorService : BaseRdbmsService<PosTahsilatValorDto, Pos
     public override async Task<PosTahsilatValorDto?> GetByIdAsync(int id, Func<IQueryable<PosTahsilatValor>, IQueryable<PosTahsilatValor>>? include = null)
     {
         var dto = await base.GetByIdAsync(id, BuildIncludeQuery(include));
-        if (dto is not null)
+        if (dto is null)
         {
-            Zenginlestir(dto);
+            return null;
         }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (scope.IsScoped && !scope.TesisIds.Contains(dto.TesisId))
+        {
+            // Baska bir tesisin kaydi - varligini ifsa etmemek icin "bulunamadi" gibi davranilir.
+            return null;
+        }
+
+        Zenginlestir(dto);
         return dto;
     }
 
@@ -60,11 +69,21 @@ public class PosTahsilatValorService : BaseRdbmsService<PosTahsilatValorDto, Pos
 
     public async Task<PosTahsilatValorOzetDto> GetOzetAsync(int? tesisId, CancellationToken cancellationToken = default)
     {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && tesisId.HasValue && !scope.TesisIds.Contains(tesisId.Value))
+        {
+            throw new TOD.Platform.SharedKernel.Exceptions.BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
+        }
+
         var bugun = ValorTarihHesaplamaService.BugunIstanbul();
         var query = _dbContext.PosTahsilatValorleri.AsNoTracking().Where(x => !x.IsDeleted);
         if (tesisId.HasValue)
         {
             query = query.Where(x => x.TesisId == tesisId.Value);
+        }
+        else if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
         }
 
         var items = await query.Select(x => new { x.Durum, x.BeklenenValorTarihi, x.BrutTutar }).ToListAsync(cancellationToken);
@@ -104,6 +123,12 @@ public class PosTahsilatValorService : BaseRdbmsService<PosTahsilatValorDto, Pos
 
     public async Task<PosTahsilatValorTopluOnayBilgisiDto> GetTopluOnayBilgisiAsync(PosTahsilatValorTopluOnayBilgisiRequest request, CancellationToken cancellationToken = default)
     {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && request.TesisId.HasValue && !scope.TesisIds.Contains(request.TesisId.Value))
+        {
+            throw new TOD.Platform.SharedKernel.Exceptions.BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
+        }
+
         var query = _dbContext.PosTahsilatValorleri.AsNoTracking().Where(x => !x.IsDeleted);
 
         if (request.ValorIdler is { Count: > 0 })
@@ -122,6 +147,13 @@ public class PosTahsilatValorService : BaseRdbmsService<PosTahsilatValorDto, Pos
                 var bugun = ValorTarihHesaplamaService.BugunIstanbul();
                 query = query.Where(x => x.Durum == PosTahsilatValorDurumlari.ValorBekliyor && x.BeklenenValorTarihi <= bugun);
             }
+        }
+
+        // Tesis scope her zaman uygulanir (valorIdler yolu dahil) - kullanicinin yetkisiz
+        // tesislere ait kayitlari toplamlara sizdirmasi engellenir.
+        if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
         }
 
         var toplam = await query

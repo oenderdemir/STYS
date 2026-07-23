@@ -179,6 +179,7 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri => Set<MuhasebeHesapBakiye>();
     public DbSet<PosTahsilatValor> PosTahsilatValorleri => Set<PosTahsilatValor>();
     public DbSet<PosTahsilatValorDegisiklikGecmisi> PosTahsilatValorDegisiklikGecmisleri => Set<PosTahsilatValorDegisiklikGecmisi>();
+    public DbSet<PosValorFisNoSayac> PosValorFisNoSayaclari => Set<PosValorFisNoSayac>();
     public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
     public DbSet<SatisBelgesi> SatisBelgeleri => Set<SatisBelgesi>();
     public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
@@ -1848,6 +1849,14 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.PosTahsilatValorId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosValorFisNoSayac>(entity =>
+        {
+            entity.ToTable("PosValorFisNoSayaclari", muhasebeSchema);
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
         });
 
         modelBuilder.Entity<Hesap>(entity =>

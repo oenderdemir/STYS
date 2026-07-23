@@ -123,7 +123,14 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         var sw = Stopwatch.StartNew();
         _domainLogger.Started("Accounting.JournalEntry.Create.Started", new { MuhasebeFisId = id });
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // Ambient transaction farkindaligi: bu metot baska bir servisin (ornegin
+        // PosTahsilatValorAktarimService'in POS->Banka transfer fisini olusturur olusturmaz
+        // aninda onaylamasi) acik transaction'i icinde cagrilabilir - IptalEtAsync ile ayni
+        // ownsTransaction deseni.
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
 
         try
         {
@@ -208,7 +215,10 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 cancellationToken);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
 
             // Reload
             var reloaded = await _repository.GetByIdWithSatirlarAsync(fis.Id, cancellationToken)
@@ -238,8 +248,18 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
                 MuhasebeFisId = id,
                 DurationMs = sw.ElapsedMilliseconds
             });
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             throw;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
     }
 
@@ -433,10 +453,14 @@ SELECT * FROM [muhasebe].[MuhasebeFisler] WITH (UPDLOCK, ROWLOCK)
 WHERE [IptalEdilenFisId] = {orijinalFis.Id} AND [IsDeleted] = 0")
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (mevcutTersKayit is null)
+            // Bulunan satirin GERCEKTEN gecerli bir ters kayit oldugunu dogrula - yalnizca var
+            // oldugu icin gecerli sayilmaz: Durum=TersKayit ve TesisId eslesmesi kesin sarttir.
+            if (mevcutTersKayit is null
+                || mevcutTersKayit.Durum != MuhasebeFisDurumlari.TersKayit
+                || mevcutTersKayit.TesisId != orijinalFis.TesisId)
             {
                 throw new BaseException(
-                    $"Fiş {orijinalFis.Id} 'İptal' durumunda ancak buna ait ters kayıt fişi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun.", 500);
+                    $"Fiş {orijinalFis.Id} 'İptal' durumunda ancak buna ait geçerli bir ters kayıt fişi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun.", 500);
             }
 
             return new MuhasebeFisIptalSonucDto

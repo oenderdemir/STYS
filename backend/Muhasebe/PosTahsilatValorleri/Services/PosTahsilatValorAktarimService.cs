@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
@@ -16,10 +17,13 @@ namespace STYS.Muhasebe.PosTahsilatValorleri.Services;
 /// <summary>
 /// POS -> Banka valor aktarim orkestratoru. Iki asamali claim/lease deseni kullanir (Adim A:
 /// kisa transaction'da satir kilidiyle claim + onceki durumu yakalama; Adim B: ayri transaction'da
-/// is kurallari + fis olusturma). ClaimToken EF concurrency token oldugu icin (bkz.
-/// StysAppDbContext.OnModelCreating) her SaveChangesAsync otomatik olarak dogru satiri
+/// is kurallari + fis olusturma + fis onaylama). ClaimToken EF concurrency token oldugu icin
+/// (bkz. StysAppDbContext.OnModelCreating) her SaveChangesAsync otomatik olarak dogru satiri
 /// hedefledigini garanti eder - orphan fis (fis olusup kayit Aktarildi'ye gecmeden kalmasi)
 /// yapisal olarak imkansizdir.
+///
+/// Aktarim, muhasebe etkisini HEMEN dogurdugu icin transfer fisi ayni transaction icinde
+/// onaylanir (YevmiyeNo uretilir, hesap bakiyeleri islenir) - Taslak birakilmaz.
 ///
 /// Bu iş bankaya fiziksel para transferi yapmaz; yalnizca STYS icindeki POS alacaginin bagli
 /// banka hesabina muhasebe kaydiyla aktarildigini temsil eder.
@@ -30,30 +34,40 @@ public class PosTahsilatValorAktarimService : IPosTahsilatValorAktarimService
     private const int AzamiOtomatikDeneme = 5;
     private const int BackoffDakika = 30;
 
+    /// <summary>Mukerrer/yarisma kaynakli hatalar icin ozel hata kodu - bu kod HesabaAktarAsync'in
+    /// disaridaki catch blogunda DenemeSayisi'nin ARTIRILMAMASI gerektigini isaret eder (kayit
+    /// muhtemelen baska bir islem tarafindan zaten sonuclandirilmis).</summary>
+    private const int MukerrerNoPenaltyErrorCode = 499;
+
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IMuhasebeFisService _muhasebeFisService;
+    private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ILogger<PosTahsilatValorAktarimService> _logger;
 
     public PosTahsilatValorAktarimService(
         StysAppDbContext dbContext,
         IMuhasebeDonemService muhasebeDonemService,
         IMuhasebeFisService muhasebeFisService,
+        IUserAccessScopeService userAccessScopeService,
         ILogger<PosTahsilatValorAktarimService> logger)
     {
         _dbContext = dbContext;
         _muhasebeDonemService = muhasebeDonemService;
         _muhasebeFisService = muhasebeFisService;
+        _userAccessScopeService = userAccessScopeService;
         _logger = logger;
     }
 
     public async Task<PosTahsilatValorAktarimSonucDto> HesabaAktarAsync(int id, ManuelAktarimGuncellemeDto? guncelleme, CancellationToken cancellationToken = default)
     {
-        // Ön-kontrol: side-effect yok. Valör tarihi gelmemiş veya kalıcı bir durumdaysa hiçbir
-        // alan değiştirilmeden hata döner.
+        // Ön-kontrol: side-effect yok. Valör tarihi gelmemiş, kalıcı bir durumdaysa veya
+        // kullanıcının bu tesise erişim yetkisi yoksa hiçbir alan değiştirilmeden hata döner.
         var onKontrol = await _dbContext.PosTahsilatValorleri.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
             ?? throw new BaseException("Valör kaydı bulunamadı.", 404);
+
+        await EnsureTesisErisimiAsync(onKontrol.TesisId, cancellationToken);
 
         if (onKontrol.Durum is PosTahsilatValorDurumlari.Aktarildi or PosTahsilatValorDurumlari.Iptal or PosTahsilatValorDurumlari.AktarimFisiIptalEdildi)
         {
@@ -69,12 +83,6 @@ public class PosTahsilatValorAktarimService : IPosTahsilatValorAktarimService
         if (onKontrol.Durum == PosTahsilatValorDurumlari.MutabakatBekliyor && !komisyonBilgisiVerildi)
         {
             throw new BaseException("Bu kayıt için komisyon tutarı belirsiz; lütfen manuel aktarımda komisyon/net tutarını girin.", 422);
-        }
-
-        if (guncelleme?.KomisyonTutari.HasValue == true && guncelleme.NetTutar.HasValue
-            && ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.KomisyonTutari.Value + guncelleme.NetTutar.Value) != ParaTutarYuvarlamaHelper.Yuvarla(onKontrol.BrutTutar))
-        {
-            throw new BaseException("Brüt tutar = Net tutar + Komisyon tutarı olmalıdır.", 422);
         }
 
         // Adım A - claim (kısa transaction, satır kilidiyle önceki durumu yakalar).
@@ -138,47 +146,8 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
                 throw new BaseException("İşlem başka bir süreç tarafından devralınmış.", 409);
             }
 
-            // Manuel override / otomatik tamamlama - kilitli entity üzerinde.
-            if (guncelleme is not null)
-            {
-                if (guncelleme.KomisyonTutari.HasValue && !guncelleme.NetTutar.HasValue)
-                {
-                    entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.KomisyonTutari.Value);
-                    entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar - entity.KomisyonTutari);
-                }
-                else if (guncelleme.NetTutar.HasValue && !guncelleme.KomisyonTutari.HasValue)
-                {
-                    entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.NetTutar.Value);
-                    entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar - entity.NetTutar);
-                }
-                else if (guncelleme.KomisyonTutari.HasValue && guncelleme.NetTutar.HasValue)
-                {
-                    entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.KomisyonTutari.Value);
-                    entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.NetTutar.Value);
-                }
-
-                if (guncelleme.KomisyonGiderHesapPlaniIdOverride.HasValue)
-                {
-                    entity.KomisyonGiderHesapPlaniId = guncelleme.KomisyonGiderHesapPlaniIdOverride;
-                }
-
-                if (!string.IsNullOrWhiteSpace(guncelleme.Aciklama))
-                {
-                    entity.Aciklama = guncelleme.Aciklama;
-                }
-            }
-
-            try
-            {
-                await ValidateVeFisOlusturAsync(entity, cancellationToken);
-            }
-            catch (BaseException ex) when (ex.ErrorCode == 422)
-            {
-                // Kullanıcı hatası: transaction rollback, kayıt önceki haline döner,
-                // Hata/DenemeSayisi YAZILMAZ.
-                await tx.RollbackAsync(cancellationToken);
-                throw;
-            }
+            await ApplyGuncellemeVeAuditAsync(entity, guncelleme, cancellationToken);
+            await ValidateVeFisOlusturAsync(entity, cancellationToken);
 
             entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
             entity.AktarimTarihi = DateTime.UtcNow;
@@ -190,6 +159,17 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             await tx.CommitAsync(cancellationToken);
 
             return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = true, MuhasebeFisId = entity.MuhasebeFisId };
+        }
+        catch (BaseException ex) when (ex.ErrorCode == 422)
+        {
+            // Kullanıcı hatası: transaction rollback (entity degisiklikleri geri alinir), AMA
+            // Adim A'nin claim'i (Durum=Aktariliyor) AYRI, zaten commit edilmis bir transaction'daydi
+            // - bu yuzden burada da KosulluGuncelleAsync ile aciklikca onceki duruma DONULMELIDIR,
+            // aksi halde kayit Aktariliyor'da "takili" kalir. Hata/DenemeSayisi YAZILMAZ.
+            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await SafeRollbackAsync(tx, cleanupCts.Token);
+            await KosulluGuncelleAsync(id, token, onceki.OncekiDurum, onceki.OncekiDenemeSayisi, onceki.OncekiHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -211,12 +191,133 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
 
             var mesaj = ex is BaseException be ? be.Message : "Aktarım sırasında beklenmeyen bir hata oluştu.";
             var yapilandirmaHatasi = ex is BaseException { ErrorCode: 409 };
-            var yeniDenemeSayisi = yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1;
+            var mukerrerNoPenalty = ex is BaseException { ErrorCode: MukerrerNoPenaltyErrorCode };
+            var yeniDenemeSayisi = mukerrerNoPenalty
+                ? onceki.OncekiDenemeSayisi
+                : (yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1);
 
             await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, yeniDenemeSayisi, mesaj, DateTime.UtcNow, cleanupCts.Token);
 
             _logger.LogWarning(ex, "POS valör aktarımı başarısız: {Id}", id);
             return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
+        }
+    }
+
+    /// <summary>
+    /// Manuel komisyon/net/hesap override'larini kilitli entity uzerine uygular; GERCEK bir
+    /// degisiklik varsa (no-op degilse) her degisen alan icin PosTahsilatValorDegisiklikGecmisi
+    /// satiri ekler (ayni transaction, tek SaveChangesAsync ile birlikte kaydedilir) ve zorunlu
+    /// aciklamayi dogrular. Uygulanan tutarlar icin Brut>0, 0&lt;=Komisyon&lt;=Brut,
+    /// 0&lt;=Net&lt;=Brut ve Brut=Net+Komisyon kurallarini denetler.
+    /// </summary>
+    private async Task ApplyGuncellemeVeAuditAsync(PosTahsilatValor entity, ManuelAktarimGuncellemeDto? guncelleme, CancellationToken cancellationToken)
+    {
+        var kullaniciGirdisiVarMi = guncelleme is not null
+            && (guncelleme.KomisyonTutari.HasValue || guncelleme.NetTutar.HasValue || guncelleme.KomisyonGiderHesapPlaniIdOverride.HasValue);
+
+        if (guncelleme is not null)
+        {
+            var eskiKomisyon = entity.KomisyonTutari;
+            var eskiNet = entity.NetTutar;
+            var eskiKomisyonHesap = entity.KomisyonGiderHesapPlaniId;
+
+            if (guncelleme.KomisyonTutari.HasValue && !guncelleme.NetTutar.HasValue)
+            {
+                entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.KomisyonTutari.Value);
+                entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar - entity.KomisyonTutari);
+            }
+            else if (guncelleme.NetTutar.HasValue && !guncelleme.KomisyonTutari.HasValue)
+            {
+                entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.NetTutar.Value);
+                entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar - entity.NetTutar);
+            }
+            else if (guncelleme.KomisyonTutari.HasValue && guncelleme.NetTutar.HasValue)
+            {
+                entity.KomisyonTutari = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.KomisyonTutari.Value);
+                entity.NetTutar = ParaTutarYuvarlamaHelper.Yuvarla(guncelleme.NetTutar.Value);
+            }
+
+            if (guncelleme.KomisyonGiderHesapPlaniIdOverride.HasValue)
+            {
+                entity.KomisyonGiderHesapPlaniId = guncelleme.KomisyonGiderHesapPlaniIdOverride;
+            }
+
+            if (kullaniciGirdisiVarMi)
+            {
+                ValidateTutarlar(entity, kullaniciGirdisiVarMi: true);
+            }
+
+            var degisenAlanlar = new List<(string IslemTipi, object? Eski, object? Yeni)>();
+            if (eskiKomisyon != entity.KomisyonTutari)
+            {
+                degisenAlanlar.Add(("ManuelKomisyonDuzenleme", eskiKomisyon, entity.KomisyonTutari));
+            }
+            if (eskiNet != entity.NetTutar)
+            {
+                degisenAlanlar.Add(("ManuelNetDuzenleme", eskiNet, entity.NetTutar));
+            }
+            if (eskiKomisyonHesap != entity.KomisyonGiderHesapPlaniId)
+            {
+                degisenAlanlar.Add(("KomisyonHesabiDegisikligi", eskiKomisyonHesap, entity.KomisyonGiderHesapPlaniId));
+            }
+
+            if (degisenAlanlar.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(guncelleme.Aciklama))
+                {
+                    throw new BaseException("Komisyon/net tutarı veya komisyon hesabı değiştiriliyorsa açıklama zorunludur.", 422);
+                }
+
+                entity.Aciklama = guncelleme.Aciklama;
+
+                foreach (var (islemTipi, eski, yeni) in degisenAlanlar)
+                {
+                    await _dbContext.PosTahsilatValorDegisiklikGecmisleri.AddAsync(new PosTahsilatValorDegisiklikGecmisi
+                    {
+                        PosTahsilatValorId = entity.Id,
+                        IslemTipi = islemTipi,
+                        Aciklama = guncelleme.Aciklama,
+                        OncekiDegerJson = System.Text.Json.JsonSerializer.Serialize(eski),
+                        YeniDegerJson = System.Text.Json.JsonSerializer.Serialize(yeni)
+                    }, cancellationToken);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(guncelleme.Aciklama))
+            {
+                entity.Aciklama = guncelleme.Aciklama;
+            }
+        }
+
+        // Snapshot degerleri (override verilmemis kayitlar dahil) her zaman kurallara uymali -
+        // bu, bozuk/eski bir snapshot'in fise donusmesini engelleyen son savunma hattidir.
+        ValidateTutarlar(entity, kullaniciGirdisiVarMi);
+    }
+
+    /// <summary>Brut>0, 0&lt;=Komisyon&lt;=Brut, 0&lt;=Net&lt;=Brut, Brut=Net+Komisyon kurallarini
+    /// dogrular. kullaniciGirdisiVarMi true ise (canli kullanici girdisi) 422, degilse (snapshot/
+    /// yapilandirma kaynakli) 409 ile hata firlatir.</summary>
+    private static void ValidateTutarlar(PosTahsilatValor entity, bool kullaniciGirdisiVarMi)
+    {
+        var hataKodu = kullaniciGirdisiVarMi ? 422 : 409;
+
+        if (entity.BrutTutar <= 0)
+        {
+            throw new BaseException("Brüt tutar sıfırdan büyük olmalıdır.", hataKodu);
+        }
+
+        if (entity.KomisyonTutari < 0 || entity.KomisyonTutari > entity.BrutTutar)
+        {
+            throw new BaseException("Komisyon tutarı 0 ile brüt tutar arasında olmalıdır.", hataKodu);
+        }
+
+        if (entity.NetTutar < 0 || entity.NetTutar > entity.BrutTutar)
+        {
+            throw new BaseException("Net tutar 0 ile brüt tutar arasında olmalıdır.", hataKodu);
+        }
+
+        if (ParaTutarYuvarlamaHelper.Yuvarla(entity.NetTutar + entity.KomisyonTutari) != ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar))
+        {
+            throw new BaseException("Brüt tutar = Net tutar + Komisyon tutarı olmalıdır.", hataKodu);
         }
     }
 
@@ -260,11 +361,6 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             throw new BaseException("Seçilen kredi kartı/POS hesabı 109 - Kredi Kartı/POS Alacakları hesap koduna bağlı değil; hesap tanımını kontrol edin.", 409);
         }
 
-        if (ParaTutarYuvarlamaHelper.Yuvarla(entity.NetTutar + entity.KomisyonTutari) != ParaTutarYuvarlamaHelper.Yuvarla(entity.BrutTutar))
-        {
-            throw new BaseException("Brüt tutar = Net tutar + Komisyon tutarı olmalıdır.", 422);
-        }
-
         if (entity.KomisyonTutari > 0 && !entity.KomisyonGiderHesapPlaniId.HasValue)
         {
             throw new BaseException("Komisyon tutarı girilmişse komisyon gider hesabı zorunludur.", 409);
@@ -283,7 +379,7 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
 
         if (mevcutFis is not null)
         {
-            throw new BaseException($"Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş. Mevcut fiş: {mevcutFis.FisNo}", 409);
+            throw new BaseException($"Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş. Mevcut fiş: {mevcutFis.FisNo}", MukerrerNoPenaltyErrorCode);
         }
 
         var satirlar = new List<MuhasebeFisSatir>
@@ -328,6 +424,20 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             Aciklama = $"POS valör aktarımı - kaynak belge: {entity.TahsilatOdemeBelgesi.BelgeNo}"
         });
 
+        // Fis insertinden hemen once son savunma: negatif satir tutari kesinlikle kabul edilmez,
+        // gercek satir toplamlarinda ToplamBorc=ToplamAlacak olmalidir.
+        if (satirlar.Any(s => s.Borc < 0 || s.Alacak < 0))
+        {
+            throw new BaseException("Fiş satırlarında negatif tutar olamaz.", 500);
+        }
+
+        var toplamBorc = satirlar.Sum(s => s.Borc);
+        var toplamAlacak = satirlar.Sum(s => s.Alacak);
+        if (ParaTutarYuvarlamaHelper.Yuvarla(toplamBorc) != ParaTutarYuvarlamaHelper.Yuvarla(toplamAlacak))
+        {
+            throw new BaseException("Fiş satır toplamları (Borç/Alacak) eşit değil; fiş oluşturulamadı.", 500);
+        }
+
         var fisNo = await GenerateFisNoAsync(entity.TesisId, aktifDonem.MaliYil, cancellationToken);
 
         var fis = new MuhasebeFis
@@ -342,8 +452,8 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             KaynakId = entity.Id,
             Durum = MuhasebeFisDurumlari.Taslak,
             Aciklama = $"POS→Banka valör aktarımı - {entity.KrediKartiHesap.Ad} → {entity.BagliBankaHesap.Ad} - Kaynak belge: {entity.TahsilatOdemeBelgesi.BelgeNo}",
-            ToplamBorc = entity.BrutTutar,
-            ToplamAlacak = entity.BrutTutar,
+            ToplamBorc = toplamBorc,
+            ToplamAlacak = toplamAlacak,
             Satirlar = satirlar
         };
 
@@ -352,32 +462,93 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+        catch (DbUpdateException ex)
         {
-            throw new BaseException("Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş.", 409);
+            var tip = ClassifyFisConflict(ex);
+            if (tip is FisConflictType.KaynakMukerrer or FisConflictType.FisNoCakismasi)
+            {
+                // Bu valor kaydi icin fis zaten baska bir eszamanli islem tarafindan olusturulmus
+                // olabilir - bu durum "hata" degil, "mukerrer" olarak siniflandirilir; DenemeSayisi
+                // TUKETILMEZ (bkz. HesabaAktarAsync'in disaridaki catch blogu).
+                throw new BaseException("Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş veya eşzamanlı bir işlem tespit edildi.", MukerrerNoPenaltyErrorCode);
+            }
+
+            throw;
         }
 
         entity.MuhasebeFisId = fis.Id;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Is kurali: aktarimin muhasebe etkisi HEMEN dogar - fis Taslak birakilmaz, ayni
+        // transaction icinde onaylanir (YevmiyeNo uretilir, hesap bakiyeleri islenir).
+        await _muhasebeFisService.OnaylaAsync(fis.Id, cancellationToken);
     }
 
+    private enum FisConflictType { KaynakMukerrer, FisNoCakismasi, Diger }
+
+    private static FisConflictType ClassifyFisConflict(DbUpdateException ex)
+    {
+        if (!IsUniqueConflict(ex))
+        {
+            return FisConflictType.Diger;
+        }
+
+        var mesaj = ex.InnerException?.Message ?? string.Empty;
+        if (mesaj.Contains("IX_MuhasebeFisler_TesisId_KaynakModul_KaynakId", StringComparison.OrdinalIgnoreCase)
+            || mesaj.Contains("IX_MuhasebeFisler_KaynakModul_KaynakId", StringComparison.OrdinalIgnoreCase))
+        {
+            return FisConflictType.KaynakMukerrer;
+        }
+
+        if (mesaj.Contains("IX_MuhasebeFisler_TesisId_FisNo", StringComparison.OrdinalIgnoreCase))
+        {
+            return FisConflictType.FisNoCakismasi;
+        }
+
+        return FisConflictType.Diger;
+    }
+
+    /// <summary>
+    /// Tesis+MaliYil bazli, eszamanliliga guvenli fis no sayaci. MuhasebeFisService.
+    /// YevmiyeNoUretAsync ile ayni WITH (UPDLOCK, ROWLOCK, HOLDLOCK) + retry deseni - eski
+    /// Max(FisNo)+1 yaklasimi yarisa acikti.
+    /// </summary>
     private async Task<string> GenerateFisNoAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
     {
         var prefix = $"{maliYil}-VLR-";
-        var mevcutFisNolar = await _dbContext.MuhasebeFisler
-            .Where(x => x.TesisId == tesisId && x.MaliYil == maliYil && !x.IsDeleted && x.FisNo.StartsWith(prefix))
-            .Select(x => x.FisNo)
-            .ToListAsync(cancellationToken);
 
-        var maxSira = 0;
-        foreach (var fisNo in mevcutFisNolar)
+        for (var attempt = 1; attempt <= 3; attempt++)
         {
-            var siraStr = fisNo[prefix.Length..];
-            if (int.TryParse(siraStr, out var sira) && sira > maxSira)
-                maxSira = sira;
+            var sayac = await _dbContext.PosValorFisNoSayaclari
+                .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[PosValorFisNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (sayac is null)
+            {
+                var created = new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = 1 };
+                await _dbContext.PosValorFisNoSayaclari.AddAsync(created, cancellationToken);
+                try
+                {
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    return $"{prefix}{created.SonNumara:D6}";
+                }
+                catch (DbUpdateException ex) when (attempt < 3 && IsUniqueConflict(ex))
+                {
+                    _dbContext.Entry(created).State = EntityState.Detached;
+                    continue;
+                }
+            }
+            else
+            {
+                sayac.SonNumara += 1;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return $"{prefix}{sayac.SonNumara:D6}";
+            }
         }
 
-        return $"{prefix}{(maxSira + 1):D6}";
+        throw new BaseException("Fiş numarası üretilemedi. Lütfen tekrar deneyiniz.", 500);
     }
 
     private async Task KosulluGuncelleAsync(int id, Guid token, string durum, int denemeSayisi, string? hataMesaji, DateTime? sonDenemeTarihi, CancellationToken cancellationToken)
@@ -392,6 +563,15 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
         if (etkilenen == 0)
         {
             _logger.LogInformation("POS valör kaydı {Id} zaten başka bir süreç tarafından sonuçlandırılmış, üzerine yazılmadı.", id);
+        }
+    }
+
+    private async Task EnsureTesisErisimiAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
+        {
+            throw new BaseException("Bu kayıt için yetkiniz bulunmuyor.", 403);
         }
     }
 
@@ -424,6 +604,12 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
 
     public async Task<PosTahsilatValorToplamAktarimSonucDto> ValoruGelenleriHesabaAktarAsync(int? tesisId, CancellationToken cancellationToken = default)
     {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && tesisId.HasValue && !scope.TesisIds.Contains(tesisId.Value))
+        {
+            throw new BaseException("Seçilen tesis için yetkiniz bulunmuyor.", 403);
+        }
+
         var bugun = ValorTarihHesaplamaService.BugunIstanbul();
         var query = _dbContext.PosTahsilatValorleri.AsNoTracking()
             .Where(x => !x.IsDeleted && x.Durum == PosTahsilatValorDurumlari.ValorBekliyor && x.BeklenenValorTarihi <= bugun);
@@ -431,6 +617,10 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
         if (tesisId.HasValue)
         {
             query = query.Where(x => x.TesisId == tesisId.Value);
+        }
+        else if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
         }
 
         var idler = await query.Select(x => x.Id).ToListAsync(cancellationToken);
@@ -474,6 +664,12 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
         {
             throw new BaseException("Düzeltme/ters kayıt için açıklama zorunludur.", 422);
         }
+
+        var onKontrol = await _dbContext.PosTahsilatValorleri.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Valör kaydı bulunamadı.", 404);
+
+        await EnsureTesisErisimiAsync(onKontrol.TesisId, cancellationToken);
 
         var token = Guid.NewGuid();
 

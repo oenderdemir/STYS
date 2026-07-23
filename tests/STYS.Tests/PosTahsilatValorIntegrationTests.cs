@@ -1,10 +1,12 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Iller.Entities;
 using STYS.Kurumlar.Entities;
+using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Mapping;
 using STYS.Muhasebe.CariHareketler.Repositories;
 using STYS.Muhasebe.CariHareketler.Services;
@@ -243,6 +245,21 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         await dbContext.MuhasebeHesapBakiyeleri
             .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
             .ExecuteDeleteAsync();
+
+        // CariHareketler (Senaryo 8'in gercek cari hareket/kapama zinciri) - once self-referencing
+        // IliskiliCariHareketId'yi NULL'a cek (FK Restrict), sonra kartlari silmeden ONCE hareketleri
+        // sil.
+        var cariHareketIds = await dbContext.CariHareketler
+            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (cariHareketIds.Count > 0)
+        {
+            await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IliskiliCariHareketId, (int?)null));
+            await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+
         await dbContext.CariKartlar
             .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
             .ExecuteDeleteAsync();
@@ -331,6 +348,46 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// PosTahsilatValorleri uzerindeki kilitli SELECT (WITH UPDLOCK/ROWLOCK) SQL Server'a
+    /// GONDERILMEDEN HEMEN once (yalnizca ILK eslesen komutta) iki tarafi bariyerde durdurup ayni
+    /// anda serbest birakan bir DbCommandInterceptor. Senaryo 8'de, HesabaAktarAsync'in Adim A
+    /// claim'i ile PosTahsilatValorSnapshotService.IptalEtAsync'in kendi kilitli SELECT'ini -
+    /// production'daki TAM kritik kilit noktasinda - bulusturmak icin kullanilir; boylece yaris
+    /// yalnizca Task.WhenAll'in rastgele zamanlamasina degil, GERCEK SQL Server satir kilidi
+    /// rekabetine dayanir.
+    /// </summary>
+    private sealed class PosValorSelectBarrierInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        private readonly SemaphoreSlim _gate;
+        private readonly CountdownEvent _hazir;
+        private bool _tetiklendi;
+
+        public PosValorSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir)
+        {
+            _gate = gate;
+            _hazir = hazir;
+        }
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_tetiklendi
+                && command.CommandText.Contains("PosTahsilatValorleri", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("UPDLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                _tetiklendi = true;
+                _hazir.Signal();
+                await _gate.WaitAsync(cancellationToken);
+            }
+
+            return await base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
     private static IMapper CreateMapper()
     {
         var config = new MapperConfiguration(cfg =>
@@ -377,6 +434,19 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         return new MuhasebeDonemService(repo, mapper, dbContext, new FakeMuhasebeTesisScopeService());
     }
 
+    /// <summary>Senaryo 8'de, tahsilat iptalinin GERCEK cari hareket kapama geri-alma yolunu
+    /// (CariHareketKapamaService.GeriAlAsync) tetikleyebilmesi icin, tahsilat belgesi olusturulurken
+    /// KULLANILAN gercek servis - dogrudan DbContext'e CariHareket eklemek yerine, production'daki
+    /// AYNI "fatura hareketi + kapama hareketi" olusturma akisini calistirir.</summary>
+    private static ICariHareketKapamaService CreateCariHareketKapamaService(StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService)
+    {
+        var mapper = CreateMapper();
+        var tahsilatRepo = new TahsilatOdemeBelgesiRepository(dbContext, mapper);
+        var cariHareketRepo = new CariHareketRepository(dbContext, mapper);
+        var muhasebeDonemService = CreateMuhasebeDonemService(dbContext);
+        return new CariHareketKapamaService(dbContext, tahsilatRepo, cariHareketRepo, muhasebeDonemService, userAccessScopeService, mapper);
+    }
+
     private static IMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService)
     {
         var mapper = CreateMapper();
@@ -389,14 +459,74 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             new FakeDomainOperationLogger());
     }
 
-    private static IPosTahsilatValorAktarimService CreateAktarimService(StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService)
+    /// <summary>`dbContextFactory` verilmezse, PosTahsilatValorAktarimService'in kendi ic
+    /// duzeltme/cleanup islemleri (bkz. CorrectFisNoSayaciAsync, KosulluGuncelleAsync) icin
+    /// interceptor'suz, sade context'ler ureten bir fabrika kullanilir - bu, hata enjeksiyonu
+    /// GEREKTIRMEYEN normal senaryo testlerinde (Senaryo 1-9) mevcut davranisi degistirmez.</summary>
+    private static IPosTahsilatValorAktarimService CreateAktarimService(
+        StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService, IDbContextFactory<StysAppDbContext>? dbContextFactory = null)
     {
         return new PosTahsilatValorAktarimService(
             dbContext,
+            dbContextFactory ?? new TestDbContextFactory(),
             CreateMuhasebeDonemService(dbContext),
             CreateMuhasebeFisService(dbContext, userAccessScopeService),
             userAccessScopeService,
             NullLogger<PosTahsilatValorAktarimService>.Instance);
+    }
+
+    /// <summary>Testlerde IDbContextFactory&lt;StysAppDbContext&gt; gerektiren servisler icin -
+    /// PosTahsilatValorAktarimService, sayac duzeltmesi (CorrectFisNoSayaciAsync) ve claim
+    /// temizleme (KosulluGuncelleAsync) islemlerini AYRI, kisa omurlu context'ler uzerinden yapar.
+    /// Verilen interceptor'lar (varsa) URETILEN HER context'e uygulanir - bu, "sayac duzeltmesi
+    /// sirasinda ikinci bir hata" gibi senaryolari deterministik olarak enjekte etmeyi saglar.</summary>
+    private sealed class TestDbContextFactory : IDbContextFactory<StysAppDbContext>
+    {
+        private readonly IInterceptor[] _interceptors;
+        private readonly string _connectionString;
+        private readonly string? _gecikenIlkNCagriIcinBozukConnectionString;
+        private readonly int _bozukCagriButcesi;
+        private int _cagriSayaci;
+
+        public TestDbContextFactory(string? connectionString = null, params IInterceptor[] interceptors)
+        {
+            _connectionString = connectionString ?? ConnectionString!;
+            _interceptors = interceptors;
+        }
+
+        /// <summary>Yalnizca ILK `bozukCagriSayisi` CreateDbContext cagrisinda `bozukConnectionString`
+        /// dondurur (gecici baglanti sorunu SIMULASYONU); sonraki cagrilar `saglikliConnectionString`
+        /// ile normal calisir. Bu, gercekci bir senaryoyu modeller: CorrectFisNoSayaciAsync'in
+        /// KENDI cagrisi baglanti hatasiyla basarisiz olur, ama HEMEN ARDINDAN gelen
+        /// KosulluGuncelleAsync cleanup cagrisi (ayni factory uzerinden) BASARILI olur - "sayac
+        /// duzeltmesi + cleanup'in TAMAMEN ayni, KALICI olarak cokmus DB'ye bagli oldugu" gercekci
+        /// OLMAYAN bir varsayimdan kaçınılır.</summary>
+        public TestDbContextFactory(string saglikliConnectionString, string bozukConnectionString, int bozukCagriSayisi)
+        {
+            _connectionString = saglikliConnectionString;
+            _gecikenIlkNCagriIcinBozukConnectionString = bozukConnectionString;
+            _bozukCagriButcesi = bozukCagriSayisi;
+            _interceptors = [];
+        }
+
+        public StysAppDbContext CreateDbContext()
+        {
+            var connectionString = _connectionString;
+            if (_gecikenIlkNCagriIcinBozukConnectionString is not null
+                && System.Threading.Interlocked.Increment(ref _cagriSayaci) <= _bozukCagriButcesi)
+            {
+                connectionString = _gecikenIlkNCagriIcinBozukConnectionString;
+            }
+
+            var builder = new DbContextOptionsBuilder<StysAppDbContext>().UseSqlServer(connectionString);
+            if (_interceptors.Length > 0)
+            {
+                builder.AddInterceptors(_interceptors);
+            }
+            return new StysAppDbContext(builder.Options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor());
+        }
+
+        public Task<StysAppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
     private async Task<int> SeedValorKaydiAsync(
@@ -752,10 +882,54 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 250m, 0m, HesapPlaniKomisyonId, "S8");
         var belgeId = await seedContext.PosTahsilatValorleri.Where(x => x.Id == valorId).Select(x => x.TahsilatOdemeBelgesiId).SingleAsync();
 
+        // GERCEK cari hareket + cari kapama zinciri kurulur: once acik bir "fatura" hareketi
+        // (musteri borcu, KalanTutar=250) eklenir, sonra tahsilat belgesi bu harekete baglanip
+        // CariHareketKapamaService ile GERCEKTEN kapatilir (yeni bir kapama CariHareket'i
+        // olusturulur, fatura hareketinin KalanTutar/KapandiMi alanlari guncellenir) - boylece
+        // iptal yarisinin cari hareket/kapama GERI ALMA davranisi GERCEK verilerle dogrulanabilir.
         var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        int faturaHareketId;
+        await using (var setupCtx = CreateDbContext())
+        {
+            var faturaHareket = new CariHareket
+            {
+                CariKartId = CariKartAId,
+                HareketTarihi = DateTime.UtcNow.Date,
+                BelgeTuru = "Fatura",
+                BelgeNo = $"{_uniqueSuffix}-S8-FATURA",
+                BorcTutari = 250m,
+                AlacakTutari = 0m,
+                KapananTutar = 0m,
+                KalanTutar = 250m,
+                ParaBirimi = "TRY",
+                Durum = CariHareketDurumlari.Aktif,
+                KapandiMi = false
+            };
+            setupCtx.CariHareketler.Add(faturaHareket);
+            await setupCtx.SaveChangesAsync();
+            faturaHareketId = faturaHareket.Id;
 
-        await using var ctx1 = CreateDbContext();
-        await using var ctx2 = CreateDbContext();
+            var belgeEntity = await setupCtx.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+            belgeEntity.KapatilacakCariHareketId = faturaHareketId;
+            await setupCtx.SaveChangesAsync();
+
+            var kapamaSvc = CreateCariHareketKapamaService(setupCtx, scope);
+            await kapamaSvc.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(belgeId, CancellationToken.None);
+        }
+
+        // Deterministik bariyer: HesabaAktarAsync'in Adim A'si ve PosTahsilatValorSnapshotService.
+        // IptalEtAsync'in KENDI kilitli SELECT'i, AYNI PosTahsilatValorleri satiri uzerinde GERCEK
+        // UPDLOCK cakismasina girer - production'daki tam kritik kilit noktasi budur. Bariyer, her
+        // iki tarafin da bu SELECT'i SQL Server'a gondermeden HEMEN once senkronize olmasini
+        // saglar; boylece "hangi tarafin once basladigi" rastgeleligine BAGLI KALINMAZ - yalnizca
+        // GERCEK satir kilidi rekabeti sonucu belirler (Task.WhenAll TEK BASINA bunu garanti etmez).
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var aktarimInterceptor = new PosValorSelectBarrierInterceptor(gate, hazirSayaci);
+        var iptalInterceptor = new PosValorSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContext(aktarimInterceptor);
+        await using var ctx2 = CreateDbContext(iptalInterceptor);
         var aktarimSvc = CreateAktarimService(ctx1, scope);
         // ONEMLI: dogrudan PosTahsilatValorSnapshotService.IptalEtAsync DEGIL, production'da
         // tahsilat iptalinin AMBIENT transaction'ini yoneten GERCEK giris noktasi
@@ -768,22 +942,48 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         // gorulemedi/race; 409: "aktarim/iptal surdugu icin simdi yapilamaz"; 422: valor tarihi/
         // girdi kontrolu). Baska HERHANGI bir BaseException (ornegin 500 veri tutarsizligi, 403
         // yetki) test hatasi olarak YUKARI FIRLATILIR - koşulsuz yutma yapilmaz.
-        var aktarimTask = SafeCallAsync(() => aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None), 404, 409, 422);
-        var iptalTask = SafeCallAsync(() => tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None), 404, 409, 422);
+        var aktarimTask = Task.Run(() => SafeCallAsync(() => aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None), 404, 409, 422));
+        var iptalTask = Task.Run(() => SafeCallAsync(() => tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None), 404, 409, 422));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        gate.Release(2);
+        Assert.True(ikisiDeHazir, "On-kosul ihlali: iki taraf da beklenen surede kilitli SELECT'e ulasmadi.");
+
         await Task.WhenAll(aktarimTask, iptalTask);
 
         await using var verifyContext = CreateDbContext();
         var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
 
-        // Tahsilat belgesinin kendisi de tutarli olmali: iptal yarisi kazandiysa belge Iptal
-        // durumunda olmali; kaybettiyse (aktarim once tamamlandiysa iptal 409 ile reddedilmis
-        // olabilir VEYA aktarimdan SONRA calisip basarili olmus olabilir - PosTahsilatValor
-        // Durum=Iptal her iki durumda da nihai sonucu yansitir) belge durumu asagida ayrica kontrol
-        // edilir.
+        // Tahsilat belgesinin durumu, valor'un nihai durumuyla IKI YONLU tutarli olmali:
+        // Aktarildi ise belge HALA Aktif olmali (iptal yarisi kaybetti/hic tetiklenmedi); Iptal ise
+        // belge de KESINLIKLE Iptal olmali. Onceki tek yonlu kontrol (yalnizca Iptal dalinda
+        // dogrulama) belge Aktarildi dalinda YANLISLIKLA Iptal kalmis olsa bile fark etmezdi.
         var belge = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+        Assert.Equal(
+            valor.Durum == PosTahsilatValorDurumlari.Iptal ? TahsilatOdemeBelgeDurumlari.Iptal : TahsilatOdemeBelgeDurumlari.Aktif,
+            belge.Durum);
+
+        // Cari hareket/kapama zinciri de valor'un nihai durumuyla tutarli olmali: iptal kazandiysa
+        // kapama hareketi GERI ALINMIS (Durum=Iptal, iliski koparilmis) ve fatura hareketinin
+        // KalanTutar'i ORIJINAL degerine (250) DONMUS olmali; aktarim kazandiysa (iptal hic
+        // etkilemedi) kapama hareketi hala Aktif ve fatura hareketi hala KAPALI (KalanTutar=0)
+        // kalmis olmali - hicbiri "yarim" durumda kalmamali.
+        var faturaHareketSonHali = await verifyContext.CariHareketler.SingleAsync(x => x.Id == faturaHareketId);
+        var kapamaHareketSonHali = await verifyContext.CariHareketler.SingleAsync(x =>
+            x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == belgeId);
+
         if (valor.Durum == PosTahsilatValorDurumlari.Iptal)
         {
-            Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, belge.Durum);
+            Assert.Equal(CariHareketDurumlari.Iptal, kapamaHareketSonHali.Durum);
+            Assert.Null(kapamaHareketSonHali.IliskiliCariHareketId);
+            Assert.Equal(250m, faturaHareketSonHali.KalanTutar);
+            Assert.False(faturaHareketSonHali.KapandiMi);
+        }
+        else
+        {
+            Assert.Equal(CariHareketDurumlari.Aktif, kapamaHareketSonHali.Durum);
+            Assert.Equal(0m, faturaHareketSonHali.KalanTutar);
+            Assert.True(faturaHareketSonHali.KapandiMi);
         }
 
         // Tutarlilik: kayit ya basariyla aktarilmis (Aktarildi) ya da iptal edilmis (Iptal) olmali;
@@ -935,6 +1135,271 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         {
             return new PosTahsilatValorAktarimSonucDto { Id = valorId, Basarili = false, HataMesaji = ex.Message };
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 10 — Sayac duzeltmesi SIRASINDA ikinci bir GERCEK unique catisma enjekte edilir.
+    // Kayit Aktariliyor/ClaimToken dolu KALMAMALI (bkz. round-5 bulgu #1/#2).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo10_SayacDuzeltmesiSirasindaIkinciUniqueCakisma_KayitTakiliKalmaz()
+    {
+        const int maliYil = 2026;
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 300m, 0m, HesapPlaniKomisyonId, "S10");
+
+        var sayacVarMi = await seedContext.PosValorFisNoSayaclari.AnyAsync(x => x.TesisId == TesisAId && x.MaliYil == maliYil);
+        Assert.False(sayacVarMi, "On-kosul ihlali: sayac zaten mevcut, test senaryosu gecersiz.");
+
+        // 1) Adim B'nin AMBIENT context'inde: GenerateFisNoAsync sayacI ILK KEZ olusturmaya
+        //    calisirken (Added PosValorFisNoSayac tespit edildiginde), RAW/ayri bir baglantiyla
+        //    ayni anahtarli (TesisId, MaliYil) satiri once BIZ ekleyip commit ediyoruz - bu, EF'in
+        //    kendi INSERT'inin GERCEK bir unique index catismasiyla basarisiz olmasini saglar
+        //    (PosValorAdimBYenidenDenemeException firlar).
+        var ambientInterceptor = new SayacInsertOncesiRawSideEffectInterceptor(() => RawSayacInsertSil(TesisAId, maliYil, insert: true));
+
+        // 2) HesabaAktarAsync bunu yakalayip CorrectFisNoSayaciAsync'i AYRI bir factory-context'te
+        //    cagirir. O context'e iki interceptor takiliyor: (a) kendi SELECT'inden HEMEN once,
+        //    adim 1'de eklenen satiri RAW olarak SILEN bir interceptor - boylece duzeltme de
+        //    "sayac yok" durumuyla karsilasip INSERT dalina girer; (b) duzeltmenin KENDI INSERT'i
+        //    calismadan hemen once, AYNI satiri TEKRAR RAW olarak ekleyen bir interceptor - boylece
+        //    duzeltmenin KENDI INSERT'i de GERCEK bir ikinci unique catismasina ugrar.
+        var selectOncesiSilInterceptor = new SayacSelectOncesiRawSideEffectInterceptor(() => RawSayacInsertSil(TesisAId, maliYil, insert: false));
+        var insertOncesiTekrarEkleInterceptor = new SayacInsertOncesiRawSideEffectInterceptor(() => RawSayacInsertSil(TesisAId, maliYil, insert: true));
+        var correctionFactory = new TestDbContextFactory(null, selectOncesiSilInterceptor, insertOncesiTekrarEkleInterceptor);
+
+        await using var ctx = CreateDbContext(ambientInterceptor);
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var svc = CreateAktarimService(ctx, scope, correctionFactory);
+
+        var sonuc = await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+
+        Assert.False(sonuc.Basarili);
+
+        await using var verifyContext = CreateDbContext();
+        var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+        Assert.Equal(PosTahsilatValorDurumlari.Hata, valor.Durum);
+        Assert.Null(valor.ClaimToken);
+        Assert.Null(valor.AktarimBaslamaTarihi);
+
+        // Test tarafinca RAW olarak eklenen satiri temizle (test verisi).
+        RawSayacInsertSil(TesisAId, maliYil, insert: false);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 11 — Sayac duzeltmesi SIRASINDA iptal (cancellation) enjekte edilir. Kayit
+    // Aktariliyor/ClaimToken dolu KALMAMALI.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo11_SayacDuzeltmesiSirasindaIptal_KayitTakiliKalmaz()
+    {
+        const int maliYil = 2026;
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 300m, 0m, HesapPlaniKomisyonId, "S11");
+
+        // FisNo cakismasini deterministik olarak tetiklemek icin: sayaci "SonNumara=1" ile
+        // onceden olustur, ayni tesis/yil icin FisNo="2026-VLR-000002" olan bir "yabanci" fis ekle -
+        // GenerateFisNoAsync bir sonraki numarayi (2) uretecek ve bu fisle CAKISACAK.
+        await using (var setupCtx = CreateDbContext())
+        {
+            setupCtx.PosValorFisNoSayaclari.Add(new PosValorFisNoSayac { TesisId = TesisAId, MaliYil = maliYil, SonNumara = 1 });
+            setupCtx.MuhasebeFisler.Add(new MuhasebeFis
+            {
+                TesisId = TesisAId, MaliYil = maliYil, Donem = 1, FisNo = $"{maliYil}-VLR-000002",
+                FisTarihi = DateTime.UtcNow.Date, FisTipi = MuhasebeFisTipleri.Mahsup,
+                KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi, KaynakId = -911,
+                Durum = MuhasebeFisDurumlari.Onayli, ToplamBorc = 10m, ToplamAlacak = 10m
+            });
+            await setupCtx.SaveChangesAsync();
+        }
+
+        using var iptalCts = new CancellationTokenSource();
+        // CorrectFisNoSayaciAsync'in KENDI SELECT'i tam calismadan hemen once token iptal edilir -
+        // boylece CorrectFisNoSayaciAsync icinde GERCEK bir OperationCanceledException olusur.
+        var iptalInterceptor = new SayacSelectOncesiRawSideEffectInterceptor(() => iptalCts.Cancel());
+        var correctionFactory = new TestDbContextFactory(null, iptalInterceptor);
+
+        await using var ctx = CreateDbContext();
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var svc = CreateAktarimService(ctx, scope, correctionFactory);
+
+        var sonuc = await svc.HesabaAktarAsync(valorId, null, iptalCts.Token);
+
+        Assert.False(sonuc.Basarili);
+
+        await using var verifyContext = CreateDbContext();
+        var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+        Assert.Equal(PosTahsilatValorDurumlari.Hata, valor.Durum);
+        Assert.Null(valor.ClaimToken);
+        Assert.Null(valor.AktarimBaslamaTarihi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 12 — Sayac duzeltmesi SIRASINDA baglanti hatasi enjekte edilir (gecersiz sunucuya
+    // isaret eden bir factory). Kayit Aktariliyor/ClaimToken dolu KALMAMALI.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo12_SayacDuzeltmesiSirasindaBaglantiHatasi_KayitTakiliKalmaz()
+    {
+        const int maliYil = 2026;
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 300m, 0m, HesapPlaniKomisyonId, "S12");
+
+        await using (var setupCtx = CreateDbContext())
+        {
+            setupCtx.PosValorFisNoSayaclari.Add(new PosValorFisNoSayac { TesisId = TesisAId, MaliYil = maliYil, SonNumara = 1 });
+            setupCtx.MuhasebeFisler.Add(new MuhasebeFis
+            {
+                TesisId = TesisAId, MaliYil = maliYil, Donem = 1, FisNo = $"{maliYil}-VLR-000002",
+                FisTarihi = DateTime.UtcNow.Date, FisTipi = MuhasebeFisTipleri.Mahsup,
+                KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi, KaynakId = -912,
+                Durum = MuhasebeFisDurumlari.Onayli, ToplamBorc = 10m, ToplamAlacak = 10m
+            });
+            await setupCtx.SaveChangesAsync();
+        }
+
+        // CorrectFisNoSayaciAsync'in AYRI context'i icin ERISILEMEZ bir sunucuya isaret eden,
+        // yalnizca ILK cagrida (sayac duzeltmesinin kendisinde) baglanti hatasi ureten bir factory -
+        // hemen ardindan gelen KosulluGuncelleAsync cleanup cagrisi (AYNI factory'nin 2. cagrisi)
+        // saglikli baglantiya doner ve basariyla temizler. Bu, gercek uretimde tek bir factory'nin
+        // GECICI bir baglanti sorunu yasadigi (kalici cokme DEGIL) gercekci senaryoyu modeller.
+        var hataliConnectionString = System.Text.RegularExpressions.Regex.Replace(ConnectionString!, @"Server=[^;]+", "Server=127.0.0.1,1") + ";Connect Timeout=3";
+        var correctionFactory = new TestDbContextFactory(ConnectionString!, hataliConnectionString, bozukCagriSayisi: 1);
+
+        await using var ctx = CreateDbContext();
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var svc = CreateAktarimService(ctx, scope, correctionFactory);
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var sonuc = await svc.HesabaAktarAsync(valorId, null, timeoutCts.Token);
+
+        Assert.False(sonuc.Basarili);
+
+        await using var verifyContext = CreateDbContext();
+        var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+        Assert.Equal(PosTahsilatValorDurumlari.Hata, valor.Durum);
+        Assert.Null(valor.ClaimToken);
+        Assert.Null(valor.AktarimBaslamaTarihi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 13 — Sayac duzeltmesi SIRASINDA "deadlock benzeri" beklenmeyen bir istisna enjekte
+    // edilir. IsDeadlock'un tam SqlException(1205) tipini eslestirmesi gercek bir SQL Server
+    // deadlock'u (veya SqlClient'a reflection ile mudahaleyi) gerektirdigi icin, bu test yerine
+    // CorrectFisNoSayaciAsync'in genel GUVENLIK AGINI (herhangi bir istisna turunde kaydin
+    // takili KALMAMASI) dogrular - HesabaAktarAsync'teki nested catch (Exception correctEx) ozel
+    // olarak exception TURUNE bakmadan calisir, dolayisiyla bu test o genel yolu dogru sekilde
+    // kapsar.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo13_SayacDuzeltmesiSirasindaBeklenmeyenIstisna_KayitTakiliKalmaz()
+    {
+        const int maliYil = 2026;
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 300m, 0m, HesapPlaniKomisyonId, "S13");
+
+        await using (var setupCtx = CreateDbContext())
+        {
+            setupCtx.PosValorFisNoSayaclari.Add(new PosValorFisNoSayac { TesisId = TesisAId, MaliYil = maliYil, SonNumara = 1 });
+            setupCtx.MuhasebeFisler.Add(new MuhasebeFis
+            {
+                TesisId = TesisAId, MaliYil = maliYil, Donem = 1, FisNo = $"{maliYil}-VLR-000002",
+                FisTarihi = DateTime.UtcNow.Date, FisTipi = MuhasebeFisTipleri.Mahsup,
+                KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi, KaynakId = -913,
+                Durum = MuhasebeFisDurumlari.Onayli, ToplamBorc = 10m, ToplamAlacak = 10m
+            });
+            await setupCtx.SaveChangesAsync();
+        }
+
+        var istisnaInterceptor = new SayacSelectOncesiRawSideEffectInterceptor(() =>
+            throw new InvalidOperationException("Test: sayaç düzeltmesi sırasında deadlock benzeri beklenmeyen bir hata simüle edildi."));
+        var correctionFactory = new TestDbContextFactory(null, istisnaInterceptor);
+
+        await using var ctx = CreateDbContext();
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var svc = CreateAktarimService(ctx, scope, correctionFactory);
+
+        var sonuc = await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+
+        Assert.False(sonuc.Basarili);
+
+        await using var verifyContext = CreateDbContext();
+        var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+        Assert.Equal(PosTahsilatValorDurumlari.Hata, valor.Durum);
+        Assert.Null(valor.ClaimToken);
+        Assert.Null(valor.AktarimBaslamaTarihi);
+    }
+
+    /// <summary>SavingChanges anında, verilen context'in "eklenmekte olan" (Added) bir
+    /// PosValorFisNoSayac icerip icermedigini kontrol eder; iceriyorsa (yani INSERT'e hazirlaniyorsa)
+    /// verilen side-effect'i CALISTIRIR. Bu, sayac satirinin ilk kez olusturulmasi sirasinda GERCEK
+    /// bir SQL Server unique-index catismasini deterministik olarak enjekte etmek icin kullanilir.</summary>
+    private sealed class SayacInsertOncesiRawSideEffectInterceptor(Action sideEffect) : SaveChangesInterceptor
+    {
+        public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+        {
+            if (SayacEklemesiVarMi(eventData)) { sideEffect(); }
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (SayacEklemesiVarMi(eventData)) { sideEffect(); }
+            return new ValueTask<InterceptionResult<int>>(result);
+        }
+
+        private static bool SayacEklemesiVarMi(DbContextEventData eventData) =>
+            eventData.Context is not null && eventData.Context.ChangeTracker.Entries<PosValorFisNoSayac>().Any(e => e.State == EntityState.Added);
+    }
+
+    /// <summary>Sayac uzerindeki kilitli SELECT (WITH UPDLOCK) SQL Server'a gonderilmeden HEMEN
+    /// once (yalnizca ILK cagrida) verilen side-effect'i calistirir. "Duzeltme kendi SELECT'ini
+    /// yapmadan once dis bir etken (raw silme/ekleme, token iptali, beklenmeyen istisna) araya
+    /// giriyor" senaryolarini deterministik olarak enjekte etmek icin kullanilir.</summary>
+    private sealed class SayacSelectOncesiRawSideEffectInterceptor(Action sideEffect) : DbCommandInterceptor
+    {
+        private bool _tetiklendi;
+
+        public override async ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_tetiklendi
+                && command.CommandText.Contains("PosValorFisNoSayaclari", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("UPDLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                _tetiklendi = true;
+                sideEffect();
+            }
+
+            return await base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
+    /// <summary>RAW (EF disi) bir SqlConnection ile PosValorFisNoSayaclari tablosuna dogrudan
+    /// INSERT/DELETE yapar - fault-injection testlerinde, EF'in ic degisiklik izlemesine dahil
+    /// OLMADAN gercek bir eszamanli/rakip satir olusturmak/kaldirmak icin kullanilir.</summary>
+    private static void RawSayacInsertSil(int tesisId, int maliYil, bool insert)
+    {
+        using var conn = new Microsoft.Data.SqlClient.SqlConnection(ConnectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        if (insert)
+        {
+            cmd.CommandText = """
+                INSERT INTO [muhasebe].[PosValorFisNoSayaclari] ([TesisId],[MaliYil],[SonNumara],[IsDeleted],[CreatedAt],[UpdatedAt],[CreatedBy],[UpdatedBy])
+                VALUES (@tesisId, @maliYil, 99, 0, SYSUTCDATETIME(), SYSUTCDATETIME(), N'test_raw_side_effect', N'test_raw_side_effect')
+                """;
+        }
+        else
+        {
+            cmd.CommandText = "DELETE FROM [muhasebe].[PosValorFisNoSayaclari] WHERE [TesisId] = @tesisId AND [MaliYil] = @maliYil";
+        }
+        cmd.Parameters.AddWithValue("@tesisId", tesisId);
+        cmd.Parameters.AddWithValue("@maliYil", maliYil);
+        cmd.ExecuteNonQuery();
     }
 
     // ─────────────────────────────────────────────────────────────

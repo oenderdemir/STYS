@@ -40,6 +40,7 @@ public class PosTahsilatValorAktarimService : IPosTahsilatValorAktarimService
     private const int MukerrerNoPenaltyErrorCode = 499;
 
     private readonly StysAppDbContext _dbContext;
+    private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IMuhasebeFisService _muhasebeFisService;
     private readonly IUserAccessScopeService _userAccessScopeService;
@@ -47,12 +48,14 @@ public class PosTahsilatValorAktarimService : IPosTahsilatValorAktarimService
 
     public PosTahsilatValorAktarimService(
         StysAppDbContext dbContext,
+        IDbContextFactory<StysAppDbContext> dbContextFactory,
         IMuhasebeDonemService muhasebeDonemService,
         IMuhasebeFisService muhasebeFisService,
         IUserAccessScopeService userAccessScopeService,
         ILogger<PosTahsilatValorAktarimService> logger)
     {
         _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _muhasebeDonemService = muhasebeDonemService;
         _muhasebeFisService = muhasebeFisService;
         _userAccessScopeService = userAccessScopeService;
@@ -132,146 +135,192 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
         // transaction'da oldugu icin GECERLI kalir - Adim B tamamen yeni bir transaction'la,
         // sinirli sayida (3) tekrar denenir. Bu iki hata turu AYNI paylasilan deneme butcesini
         // kullanir (sonsuz donguye girmemesi icin).
+        //
+        // DIS GUVENLIK KATMANI: asagidaki try/finally, Adim B'nin TUMUNU (retry dongusu +
+        // sayac duzeltmesi dahil) kapsar. Ic catch dallarinin HER BIRI kendi ozel/hassas cleanup'ini
+        // zaten yapiyor olsa da, `basariylaTamamlandi` false kaldigi surece (ornegin bir catch dali
+        // BEKLENMEYEN bir istisna firlatirsa, ya da CorrectFisNoSayaciAsync gibi ic islemler
+        // kendi hatalarini tam ele almazsa) bu finally, kaydin `ClaimToken` kosuluyla kontrollu bir
+        // duruma (onceki durum ya da Hata) DONDURULDUGUNU garanti eder - "Aktariliyor"da takili
+        // kalma riski, tek bir noktadan, savunma amacli ikinci bir katmanla ORTADAN KALDIRILIR.
+        // Ic dallarin kendi KosulluGuncelleAsync cagrilari zaten ClaimToken'i temizlemisse, bu
+        // finally'nin kosullu UPDATE'i 0 satir etkiler (no-op, zararsiz).
         const int maxAdimBDenemesi = 3;
-        for (var denemeSayisi = 1; denemeSayisi <= maxAdimBDenemesi; denemeSayisi++)
+        var basariylaTamamlandi = false;
+        try
         {
-            Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx;
-            try
+            for (var denemeSayisi = 1; denemeSayisi <= maxAdimBDenemesi; denemeSayisi++)
             {
-                tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Claim alindi (Durum=Aktariliyor, ayri/commit edilmis bir transaction'da) ama
-                // Adim B transaction'i hic ACILAMADI - kayit "Aktariliyor"da 15 dakika beklemek
-                // zorunda KALMAMALI, hemen kontrollu bir duruma geri alinir.
-                using var iptalCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
-                var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
-                var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
-                    ? "Aktarım işlemi transaction açılırken iptal edildi/bağlantı kesildi; kayıt tekrar denenebilir."
-                    : onceki.OncekiHataMesaji;
-                await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, iptalCleanupCts.Token);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Transaction acma islemi (baglanti hatasi vb.) basarisiz oldu - kayit "Aktariliyor"da
-                // 15 dakikalik stuck esigini beklemek zorunda KALMADAN, ClaimToken kosuluyla kontrollu
-                // bir Hata durumuna geri alinir.
-                using var beginCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                const string mesaj = "Aktarım işlemi başlatılamadı (veritabanı bağlantı/transaction hatası); kayıt tekrar denenebilir.";
-                await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, mesaj, DateTime.UtcNow, beginCleanupCts.Token);
-                _logger.LogWarning(ex, "POS valör aktarımı ({Id}) Adım B transaction'ı açılamadı.", id);
-                return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
-            }
-
-            try
-            {
-                var entity = await _dbContext.PosTahsilatValorleri
-                    .FromSqlInterpolated($@"
-SELECT * FROM [muhasebe].[PosTahsilatValorleri] WITH (UPDLOCK, ROWLOCK)
-WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [ClaimToken] = {token}")
-                    .Include(x => x.KrediKartiHesap)
-                    .Include(x => x.BagliBankaHesap)
-                    .Include(x => x.TahsilatOdemeBelgesi)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                if (entity is null)
+                Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx;
+                try
                 {
-                    await tx.RollbackAsync(cancellationToken);
-                    throw new BaseException("İşlem başka bir süreç tarafından devralınmış.", 409);
+                    tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Claim alindi (Durum=Aktariliyor, ayri/commit edilmis bir transaction'da) ama
+                    // Adim B transaction'i hic ACILAMADI - kayit "Aktariliyor"da 15 dakika beklemek
+                    // zorunda KALMAMALI, hemen kontrollu bir duruma geri alinir. KosulluGuncelleAsync
+                    // AYRI/kisa omurlu bir context kullandigi icin _dbContext'in olasi bozuk baglanti
+                    // durumundan etkilenmez (bkz. KosulluGuncelleAsync).
+                    using var iptalCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
+                    var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
+                    var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
+                        ? "Aktarım işlemi transaction açılırken iptal edildi/bağlantı kesildi; kayıt tekrar denenebilir."
+                        : onceki.OncekiHataMesaji;
+                    await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, iptalCleanupCts.Token);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Transaction acma islemi (baglanti hatasi vb.) basarisiz oldu - kayit "Aktariliyor"da
+                    // 15 dakikalik stuck esigini beklemek zorunda KALMADAN, ClaimToken kosuluyla kontrollu
+                    // bir Hata durumuna geri alinir. _dbContext'in kendisi BOZUK olabilecegi icin
+                    // (transaction acma basarisiz oldu), cleanup KosulluGuncelleAsync uzerinden AYRI/
+                    // kisa omurlu bir context ile yapilir - ayni potansiyel olarak bozuk baglantiyi
+                    // TEKRAR KULLANMAZ.
+                    using var beginCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    const string mesaj = "Aktarım işlemi başlatılamadı (veritabanı bağlantı/transaction hatası); kayıt tekrar denenebilir.";
+                    await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, mesaj, DateTime.UtcNow, beginCleanupCts.Token);
+                    _logger.LogWarning(ex, "POS valör aktarımı ({Id}) Adım B transaction'ı açılamadı.", id);
+                    return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
                 }
 
-                await ApplyGuncellemeVeAuditAsync(entity, guncelleme, cancellationToken);
-                await ValidateVeFisOlusturAsync(entity, cancellationToken);
+                try
+                {
+                    var entity = await _dbContext.PosTahsilatValorleri
+                        .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[PosTahsilatValorleri] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [ClaimToken] = {token}")
+                        .Include(x => x.KrediKartiHesap)
+                        .Include(x => x.BagliBankaHesap)
+                        .Include(x => x.TahsilatOdemeBelgesi)
+                        .FirstOrDefaultAsync(cancellationToken);
 
-                entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
-                entity.AktarimTarihi = DateTime.UtcNow;
-                entity.HataMesaji = null;
-                entity.ClaimToken = null;
-                entity.AktarimBaslamaTarihi = null;
+                    if (entity is null)
+                    {
+                        await tx.RollbackAsync(cancellationToken);
+                        throw new BaseException("İşlem başka bir süreç tarafından devralınmış.", 409);
+                    }
 
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                await tx.CommitAsync(cancellationToken);
+                    await ApplyGuncellemeVeAuditAsync(entity, guncelleme, cancellationToken);
+                    await ValidateVeFisOlusturAsync(entity, cancellationToken);
 
-                return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = true, MuhasebeFisId = entity.MuhasebeFisId };
+                    entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
+                    entity.AktarimTarihi = DateTime.UtcNow;
+                    entity.HataMesaji = null;
+                    entity.ClaimToken = null;
+                    entity.AktarimBaslamaTarihi = null;
+
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+
+                    basariylaTamamlandi = true;
+                    return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = true, MuhasebeFisId = entity.MuhasebeFisId };
+                }
+                catch (Exception ex) when (IsDeadlock(ex) && denemeSayisi < maxAdimBDenemesi)
+                {
+                    await SafeRollbackAsync(tx, cancellationToken);
+                    _dbContext.ChangeTracker.Clear();
+                    _logger.LogInformation("POS valör aktarımı ({Id}) deadlock (1205) nedeniyle tekrar deneniyor: deneme {Deneme}/{Azami}.", id, denemeSayisi, maxAdimBDenemesi);
+                    continue;
+                }
+                catch (PosValorAdimBYenidenDenemeException ex) when (denemeSayisi < maxAdimBDenemesi)
+                {
+                    // FisNo sayaci gercek veriyle desenkron kalmis (ilk-olusturma yarisi veya fisNo
+                    // cakismasi) - Adim B TAMAMEN rollback edilir, change tracker temizlenir, sayac
+                    // AYRI/YENI bir kisa omurlu context+transaction'da (bkz. CorrectFisNoSayaciAsync)
+                    // gercek maksimuma yukseltilir, sonra Adim B sinirli sayida BASTAN denenir.
+                    await SafeRollbackAsync(tx, cancellationToken);
+                    _dbContext.ChangeTracker.Clear();
+
+                    try
+                    {
+                        await CorrectFisNoSayaciAsync(ex.TesisId, ex.MaliYil, cancellationToken);
+                    }
+                    catch (Exception correctEx)
+                    {
+                        // Sayac duzeltmesi KENDISI basarisiz oldu (ornegin ikinci bir unique
+                        // catisma, deadlock, iptal veya baglanti hatasi) - bu istisnanin BURADAN
+                        // DOGRUDAN yukari sizmasina izin VERILMEZ (bu, kaydi Aktariliyor/ClaimToken
+                        // dolu birakirdi - tam da bu bulgunun duzeltmeye calistigi hata). Kontrollu
+                        // sekilde Hata durumuna donulur.
+                        using var correctCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        const string mesaj = "Fiş numarası sayacı düzeltilirken beklenmeyen bir hata oluştu; kayıt tekrar denenebilir.";
+                        await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, mesaj, DateTime.UtcNow, correctCleanupCts.Token);
+                        _logger.LogError(correctEx, "POS valör aktarımı ({Id}) sayaç düzeltmesi başarısız oldu.", id);
+                        return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
+                    }
+
+                    _logger.LogInformation("POS valör aktarımı ({Id}) FisNo sayaç çakışması nedeniyle tekrar deneniyor: deneme {Deneme}/{Azami}. Sebep: {Sebep}", id, denemeSayisi, maxAdimBDenemesi, ex.Message);
+                    continue;
+                }
+                catch (BaseException ex) when (ex.ErrorCode == 422)
+                {
+                    // Kullanıcı hatası: transaction rollback (entity degisiklikleri geri alinir), AMA
+                    // Adim A'nin claim'i (Durum=Aktariliyor) AYRI, zaten commit edilmis bir transaction'daydi
+                    // - bu yuzden burada da KosulluGuncelleAsync ile aciklikca onceki duruma DONULMELIDIR,
+                    // aksi halde kayit Aktariliyor'da "takili" kalir. Hata/DenemeSayisi YAZILMAZ.
+                    using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await SafeRollbackAsync(tx, cleanupCts.Token);
+                    await KosulluGuncelleAsync(id, token, onceki.OncekiDurum, onceki.OncekiDenemeSayisi, onceki.OncekiHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await SafeRollbackAsync(tx, cleanupCts.Token);
+                    var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
+                    var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
+                    var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
+                        ? "Önceki aktarım denemesi sırasında bağlantı kesildi/uygulama durduruldu; kayıt tekrar denenebilir."
+                        : onceki.OncekiHataMesaji;
+
+                    await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await SafeRollbackAsync(tx, cleanupCts.Token);
+
+                    var mesaj = ex is BaseException be ? be.Message : "Aktarım sırasında beklenmeyen bir hata oluştu.";
+                    var yapilandirmaHatasi = ex is BaseException { ErrorCode: 409 };
+                    var mukerrerNoPenalty = ex is BaseException { ErrorCode: MukerrerNoPenaltyErrorCode };
+                    var yeniDenemeSayisi = mukerrerNoPenalty
+                        ? onceki.OncekiDenemeSayisi
+                        : (yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1);
+
+                    await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, yeniDenemeSayisi, mesaj, DateTime.UtcNow, cleanupCts.Token);
+
+                    _logger.LogWarning(ex, "POS valör aktarımı başarısız: {Id}", id);
+                    return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
+                }
+                finally
+                {
+                    await tx.DisposeAsync();
+                }
             }
-            catch (Exception ex) when (IsDeadlock(ex) && denemeSayisi < maxAdimBDenemesi)
+
+            // Buraya yalnizca deadlock veya FisNo sayac cakismasi nedeniyle tum denemeler tukendiyse ulasilir.
+            using var tukendiCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            const string tukendiMesaj = "Aktarım sırasında tekrarlanan veritabanı çakışması (deadlock) oluştu, lütfen tekrar deneyin.";
+            await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, tukendiMesaj, DateTime.UtcNow, tukendiCleanupCts.Token);
+            return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = tukendiMesaj };
+        }
+        finally
+        {
+            if (!basariylaTamamlandi)
             {
-                await SafeRollbackAsync(tx, cancellationToken);
-                _dbContext.ChangeTracker.Clear();
-                _logger.LogInformation("POS valör aktarımı ({Id}) deadlock (1205) nedeniyle tekrar deneniyor: deneme {Deneme}/{Azami}.", id, denemeSayisi, maxAdimBDenemesi);
-                continue;
-            }
-            catch (PosValorAdimBYenidenDenemeException ex) when (denemeSayisi < maxAdimBDenemesi)
-            {
-                // FisNo sayaci gercek veriyle desenkron kalmis (ilk-olusturma yarisi veya fisNo
-                // cakismasi) - Adim B TAMAMEN rollback edilir, change tracker temizlenir, sayac
-                // AYRI/YENI bir transaction'da (ambient transaction yokken calisan SaveChangesAsync
-                // kendi kisa islemini acar) gercek maksimuma yukseltilir, sonra Adim B sinirli
-                // sayida BASTAN denenir. Onceki (hatali) tasarimda bu duzeltme AYNI, rollback
-                // edilecek transaction icinde yapiliyordu - rollback ile duzeltme de geri
-                // alindigi icin etkisizdi.
-                await SafeRollbackAsync(tx, cancellationToken);
-                _dbContext.ChangeTracker.Clear();
-                await CorrectFisNoSayaciAsync(ex.TesisId, ex.MaliYil, cancellationToken);
-                _logger.LogInformation("POS valör aktarımı ({Id}) FisNo sayaç çakışması nedeniyle tekrar deneniyor: deneme {Deneme}/{Azami}. Sebep: {Sebep}", id, denemeSayisi, maxAdimBDenemesi, ex.Message);
-                continue;
-            }
-            catch (BaseException ex) when (ex.ErrorCode == 422)
-            {
-                // Kullanıcı hatası: transaction rollback (entity degisiklikleri geri alinir), AMA
-                // Adim A'nin claim'i (Durum=Aktariliyor) AYRI, zaten commit edilmis bir transaction'daydi
-                // - bu yuzden burada da KosulluGuncelleAsync ile aciklikca onceki duruma DONULMELIDIR,
-                // aksi halde kayit Aktariliyor'da "takili" kalir. Hata/DenemeSayisi YAZILMAZ.
-                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await SafeRollbackAsync(tx, cleanupCts.Token);
-                await KosulluGuncelleAsync(id, token, onceki.OncekiDurum, onceki.OncekiDenemeSayisi, onceki.OncekiHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await SafeRollbackAsync(tx, cleanupCts.Token);
+                using var sonCleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
                 var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
                 var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
-                    ? "Önceki aktarım denemesi sırasında bağlantı kesildi/uygulama durduruldu; kayıt tekrar denenebilir."
+                    ? "Aktarım işlemi beklenmeyen bir şekilde sonlandı; kayıt tekrar denenebilir."
                     : onceki.OncekiHataMesaji;
-
-                await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
-                throw;
+                await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, sonCleanupCts.Token);
             }
-            catch (Exception ex)
-            {
-                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await SafeRollbackAsync(tx, cleanupCts.Token);
-
-                var mesaj = ex is BaseException be ? be.Message : "Aktarım sırasında beklenmeyen bir hata oluştu.";
-                var yapilandirmaHatasi = ex is BaseException { ErrorCode: 409 };
-                var mukerrerNoPenalty = ex is BaseException { ErrorCode: MukerrerNoPenaltyErrorCode };
-                var yeniDenemeSayisi = mukerrerNoPenalty
-                    ? onceki.OncekiDenemeSayisi
-                    : (yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1);
-
-                await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, yeniDenemeSayisi, mesaj, DateTime.UtcNow, cleanupCts.Token);
-
-                _logger.LogWarning(ex, "POS valör aktarımı başarısız: {Id}", id);
-                return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
-            }
-            finally
-            {
-                await tx.DisposeAsync();
-            }
-        }
-
-        // Buraya yalnizca deadlock veya FisNo sayac cakismasi nedeniyle tum denemeler tukendiyse ulasilir.
-        {
-            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            const string mesaj = "Aktarım sırasında tekrarlanan veritabanı çakışması (deadlock) oluştu, lütfen tekrar deneyin.";
-            await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, mesaj, DateTime.UtcNow, cleanupCts.Token);
-            return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
         }
     }
 
@@ -645,7 +694,7 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
         if (sayac is null)
         {
-            var baslangicNumarasi = await ComputeGercekMaksimumNumaraAsync(tesisId, maliYil, cancellationToken);
+            var baslangicNumarasi = await ComputeGercekMaksimumNumaraAsync(_dbContext, tesisId, maliYil, cancellationToken);
             var created = new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = baslangicNumarasi + 1 };
             await _dbContext.PosValorFisNoSayaclari.AddAsync(created, cancellationToken);
 
@@ -678,12 +727,14 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
     /// Bu tesis/mali yil icin MuhasebeFisler'de KaynakModul=PosTahsilatValorTransferi olan,
     /// "{MaliYil}-VLR-NNNNNN" formatindaki fislerin GERCEKTEN kullanilmis en buyuk sira numarasini
     /// dondurur (yoksa 0). Migration'daki seed sorgusuyla ayni mantik - hem yeni sayac olusturulurken
-    /// hem de sayac desenkron kaldiginda (CorrectFisNoSayaciAsync) kullanilir.
+    /// (ambient _dbContext ile) hem de sayac desenkron kaldiginda (CorrectFisNoSayaciAsync'in kendi
+    /// kisa omurlu context'iyle) kullanilir - bu yuzden context parametre olarak alinir, `_dbContext`
+    /// alanina sabitlenmez.
     /// </summary>
-    private async Task<int> ComputeGercekMaksimumNumaraAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
+    private static async Task<int> ComputeGercekMaksimumNumaraAsync(StysAppDbContext dbContext, int tesisId, int maliYil, CancellationToken cancellationToken)
     {
         var prefix = $"{maliYil}-VLR-";
-        var mevcutFisNolar = await _dbContext.MuhasebeFisler
+        var mevcutFisNolar = await dbContext.MuhasebeFisler
             .Where(x => x.TesisId == tesisId && x.MaliYil == maliYil && !x.IsDeleted
                         && x.KaynakModul == MuhasebeKaynakModulleri.PosTahsilatValorTransferi
                         && x.FisNo.StartsWith(prefix))
@@ -705,44 +756,84 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
     /// <summary>
     /// FisNo unique index cakismasi (sayac gercek veriyle desenkron kalmis) sonrasi cagrilir.
-    /// Sayaci GERCEK maksimuma yukseltir (yalnizca ARTIRIR, asla azaltmaz - baska bir eszamanli
-    /// islemin zaten ilerlettigi bir sayaci geriye almaz). Ayni (ambient) transaction icinde
-    /// calisir - kilit UPDLOCK/ROWLOCK/HOLDLOCK ile aliniyor.
+    /// ONEMLI: bu, AMBIENT `_dbContext` UZERINDE, transaction'siz bir SELECT + ayri implicit
+    /// SaveChangesAsync olarak CALISMAZ - boyle bir tasarimda UPDLOCK/HOLDLOCK ipuclari, ayri bir
+    /// transaction ile SARILMADIGI icin SELECT tamamlanir tamamlanmaz kilit ANINDA serbest kalir ve
+    /// hicbir gercek koruma saglamaz. Bunun yerine YENI, kisa omurlu bir StysAppDbContext (bkz.
+    /// _dbContextFactory) ve KENDI ACIK transaction'i icinde calisir: sayac satiri UPDLOCK/ROWLOCK/
+    /// HOLDLOCK ile okunur, gercek maksimum AYNI transaction icinde hesaplanir, SonNumara =
+    /// Max(mevcut SonNumara, gercek maksimum) olacak sekilde guncellenir (ASLA AZALTILMAZ - baska
+    /// bir eszamanli islemin zaten ilerlettigi bir sayaci geriye almaz) ve commit edilir. Bu context
+    /// ve transaction, cagiranin (HesabaAktarAsync) Adim B'sinden TAMAMEN bagimsizdir - Adim B zaten
+    /// rollback edilmis olur, boylece duzeltme rollback ile birlikte geri alinmaz.
+    /// Bu metot BASARISIZ olursa (ikinci bir unique catisma, deadlock, iptal, baglanti hatasi vb.)
+    /// istisna cagirana FIRLATILIR - cagiran (HesabaAktarAsync) bunu yakalayip kaydi kontrollu bir
+    /// duruma getirmekle YUKUMLUDUR (bkz. PosValorAdimBYenidenDenemeException catch blogu).
     /// </summary>
     private async Task CorrectFisNoSayaciAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
     {
-        var gercekMaksimum = await ComputeGercekMaksimumNumaraAsync(tesisId, maliYil, cancellationToken);
-
-        var sayac = await _dbContext.PosValorFisNoSayaclari
-            .FromSqlInterpolated($@"
+        await using var context = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var sayac = await context.PosValorFisNoSayaclari
+                .FromSqlInterpolated($@"
 SELECT * FROM [muhasebe].[PosValorFisNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
 WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
-            .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(cancellationToken);
 
-        if (sayac is null)
-        {
-            await _dbContext.PosValorFisNoSayaclari.AddAsync(new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = gercekMaksimum }, cancellationToken);
-        }
-        else if (sayac.SonNumara < gercekMaksimum)
-        {
-            sayac.SonNumara = gercekMaksimum;
-        }
+            var gercekMaksimum = await ComputeGercekMaksimumNumaraAsync(context, tesisId, maliYil, cancellationToken);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            if (sayac is null)
+            {
+                await context.PosValorFisNoSayaclari.AddAsync(new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = gercekMaksimum }, cancellationToken);
+            }
+            else
+            {
+                sayac.SonNumara = Math.Max(sayac.SonNumara, gercekMaksimum);
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await SafeRollbackAsync(tx, cancellationToken);
+            throw;
+        }
     }
 
+    /// <summary>
+    /// Kaydi ClaimToken kosuluyla kontrollu bir duruma (Hata veya onceki durum) dondurur. AMBIENT
+    /// `_dbContext` YERINE HER ZAMAN AYRI, kisa omurlu bir context (bkz. _dbContextFactory)
+    /// kullanir - bu cagri genellikle _dbContext'in transaction'i BOZULMUS/rollback edilmis
+    /// olabilecegi bir hata durumundan SONRA yapilir, dolayisiyla ayni (potansiyel olarak sorunlu)
+    /// context/baglanti UZERINDEN cleanup denemek riskli olurdu. Bu cleanup'in KENDISI basarisiz
+    /// olursa (ornegin veritabani tamamen erisilemezse), istisna YUTULUR ve yalnizca loglanir -
+    /// ASIL hatayi MASKELEMEZ; kayit bu durumda Adim A'nin claim sorgusundaki stuck-esigi
+    /// (StuckDakika dakika) gectikten sonra otomatik kurtarma mekanizmasiyla tekrar denenebilir hale
+    /// gelir, sonsuza kadar takili KALMAZ.
+    /// </summary>
     private async Task KosulluGuncelleAsync(int id, Guid token, string durum, int denemeSayisi, string? hataMesaji, DateTime? sonDenemeTarihi, CancellationToken cancellationToken)
     {
-        var etkilenen = await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+        try
+        {
+            await using var cleanupContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var etkilenen = await cleanupContext.Database.ExecuteSqlInterpolatedAsync($@"
 UPDATE [muhasebe].[PosTahsilatValorleri]
 SET [Durum] = {durum}, [DenemeSayisi] = {denemeSayisi}, [HataMesaji] = {hataMesaji},
     [SonDenemeTarihi] = {sonDenemeTarihi}, [ClaimToken] = NULL, [AktarimBaslamaTarihi] = NULL
 WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [ClaimToken] = {token}",
-            cancellationToken);
+                cancellationToken);
 
-        if (etkilenen == 0)
+            if (etkilenen == 0)
+            {
+                _logger.LogInformation("POS valör kaydı {Id} zaten başka bir süreç tarafından sonuçlandırılmış, üzerine yazılmadı.", id);
+            }
+        }
+        catch (Exception ex)
         {
-            _logger.LogInformation("POS valör kaydı {Id} zaten başka bir süreç tarafından sonuçlandırılmış, üzerine yazılmadı.", id);
+            _logger.LogError(ex, "POS valör kaydı {Id} için claim temizleme işlemi başarısız oldu; kayıt {StuckDakika} dakikalık stuck eşiği geçince otomatik kurtarma mekanizmasıyla tekrar denenebilecek.", id, StuckDakika);
         }
     }
 

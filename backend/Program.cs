@@ -91,7 +91,13 @@ var mapperConfig = new MapperConfiguration(cfg =>
 builder.Services.AddSingleton(mapperConfig);
 builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
-builder.Services.AddDbContext<StysAppDbContext>(options => options.UseSqlServer(connectionString));
+// AddDbContextFactory + AddScoped(sp => factory.CreateDbContext()) kullanilir - bu, mevcut kod
+// tabanindaki her yerdeki normal "scoped StysAppDbContext enjeksiyonu" davranisini AYNEN korurken,
+// IDbContextFactory<StysAppDbContext>'in de enjekte edilebilmesini saglar (bkz.
+// PosTahsilatValorAktarimService - sayac duzeltmesi gibi, mevcut ambient context'in transaction/
+// baglanti durumundan BAGIMSIZ, kisa omurlu ve ayri bir context/transaction gerektiren islemler icin).
+builder.Services.AddDbContextFactory<StysAppDbContext>(options => options.UseSqlServer(connectionString));
+builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<StysAppDbContext>>().CreateDbContext());
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";

@@ -3,7 +3,98 @@
 Tarih: 2026-07-23 (ilk uygulama, commit 903fa6a) — güncelleme 1: 2026-07-23 (kod incelemesi
 düzeltmeleri, commit c7ceecb) — güncelleme 2: 2026-07-23 (FisNo sayaç migration/concurrency
 düzeltmeleri, commit 43d0c83) — güncelleme 3: 2026-07-23 (backfill migration, Adım B
-transaction/retry sertleştirmesi, gerçek DB-seviyeli eşzamanlılık testleri, commit 43d0c83 sonrası)
+transaction/retry sertleştirmesi, gerçek DB-seviyeli eşzamanlılık testleri, commit 9b0c347) —
+güncelleme 4: 2026-07-23 (sayaç düzeltmesinin ayrı context/transaction'a taşınması, dış
+try/finally güvenlik ağı, IDbContextFactory ile cleanup izolasyonu, gerçek hata-enjeksiyonlu
+SQL Server testleri, commit 9b0c347 sonrası)
+
+## Güncelleme 4 — Sayaç düzeltmesi izolasyonu, dış güvenlik ağı, hata-enjeksiyonlu testler (commit 9b0c347 sonrası)
+
+`9b0c347` üzerinde yapılan beşinci bir kod incelemesinde 6 madde tespit edildi ve düzeltildi:
+
+1. **`CorrectFisNoSayaciAsync` artık transaction'sız SELECT + ayrı implicit SaveChanges olarak
+   çalışmıyor.** Önceki tasarımda bu metot ambient `_dbContext` üzerinde, açık bir transaction
+   OLMADAN bir SELECT (WITH UPDLOCK/HOLDLOCK) yapıp ayrı bir implicit `SaveChangesAsync` çağırıyordu
+   — transaction olmadığı için UPDLOCK/HOLDLOCK ipuçları SELECT tamamlanır tamamlanmaz kilidi
+   serbest bırakıyor, dolayısıyla hiçbir gerçek koruma sağlamıyordu. Artık `IDbContextFactory
+   <StysAppDbContext>` ile üretilen **yeni, kısa ömürlü bir context** ve **kendi açık
+   transaction'ı** içinde çalışıyor: sayaç satırı UPDLOCK/ROWLOCK/HOLDLOCK ile okunuyor, gerçek
+   maksimum AYNI transaction içinde hesaplanıyor, `SonNumara = Max(mevcut, gerçek maksimum)`
+   olacak şekilde güncellenip commit ediliyor. Commit sonrası Adım B baştan deneniyor.
+2. **Sayaç düzeltmesi hata verirse artık kayıt Aktariliyor/ClaimToken dolu bırakılmıyor.**
+   `CorrectFisNoSayaciAsync`'in kendi try/catch'i artık istisnayı olduğu gibi çağırana fırlatıyor;
+   `HesabaAktarAsync`'teki çağrı noktası bunu **iç içe bir try/catch** ile yakalayıp kaydı kontrollü
+   bir `Hata` durumuna getiriyor. Ayrıca, Adım B'nin tüm retry+düzeltme mantığını kapsayan **dış bir
+   try/finally güvenlik ağı** eklendi: `basariylaTamamlandi` bayrağı `Aktarildi` dönüşünden hemen
+   önce `true` yapılıyor; `finally` bloğu, bu bayrak `false` kalmışsa (beklenmeyen/gelecekte
+   eklenecek bir kod yolu dahil) kaydı `ClaimToken` koşuluyla kontrollü bir duruma döndürüyor. İç
+   dalların kendi cleanup'ı zaten `ClaimToken`'ı temizlemişse bu son güvenlik ağının koşullu
+   UPDATE'i 0 satır etkiler (zararsız no-op).
+3. **`BeginTransactionAsync` başarısızlığı sonrası cleanup artık aynı (bozuk olabilecek)
+   `DbContext` üzerinden yapılmıyor.** `KosulluGuncelleAsync`, artık HER ZAMAN
+   `IDbContextFactory<StysAppDbContext>` ile üretilen ayrı, kısa ömürlü bir context kullanıyor —
+   `_dbContext`'in transaction/bağlantı durumu bozulmuş olsa bile cleanup bundan etkilenmiyor. Bu
+   cleanup'ın KENDİSİ başarısız olursa (örn. veritabanı tamamen erişilemezse), istisna **asıl
+   hatayı maskelememesi için yutulup yalnızca loglanıyor**; kayıt bu durumda Adım A'nın claim
+   sorgusundaki stuck-eşiği (15 dakika) geçtikten sonra otomatik kurtarma mekanizmasıyla tekrar
+   denenebilir hale geliyor.
+4. **Aktarım–tahsilat iptali yarış testi (Senaryo 8) iki yönlü ve gerçek verilerle güçlendirildi.**
+   Artık valör `Aktarildi` ise `TahsilatOdemeBelgesi.Durum=Aktif` olduğu, `Iptal` ise
+   `Durum=Iptal` olduğu **her iki yönde de** doğrulanıyor (önceki tek yönlü kontrol, belge
+   durumunun `Aktarildi` dalında yanlışlıkla `Iptal` kalmış olması ihtimalini kaçırırdı). Ayrıca
+   test artık gerçek bir "fatura" `CariHareket`'i ve `CariHareketKapamaService` ile gerçekten
+   oluşturulmuş bir kapama hareketi kuruyor; iptal kazanırsa kapama hareketinin geri alındığı
+   (`Durum=Iptal`, ilişki koparılmış, fatura hareketinin `KalanTutar`i orijinal değerine dönmüş),
+   aktarım kazanırsa bunların korunduğu (kapama hala `Aktif`, fatura hala kapalı) doğrulanıyor.
+5. **Yarış artık yalnızca `Task.WhenAll`'a bırakılmıyor.** Yeni bir `PosValorSelectBarrierInterceptor`,
+   `HesabaAktarAsync`'in Adım A claim'i ile `PosTahsilatValorSnapshotService.IptalEtAsync`'in kendi
+   kilitli SELECT'ini — production'daki tam kritik kilit noktasında (aynı `PosTahsilatValorleri`
+   satırı üzerindeki `UPDLOCK`) — buluşturuyor; her iki taraf da bu SELECT'i SQL Server'a
+   göndermeden hemen önce bir bariyerde durdurulup aynı anda serbest bırakılıyor.
+6. **Sayaç düzeltmesi sırasında 4 farklı hata türü enjekte eden yeni SQL Server testleri eklendi**
+   (Senaryo 10-13): (a) ikinci bir **gerçek** unique-index çakışması (ham ADO.NET bağlantılarla
+   düzeltmenin SELECT'i ile INSERT'i arasına gerçek bir rakip satır enjekte edilerek), (b) gerçek
+   `CancellationToken` iptali (düzeltmenin SELECT'i tam çalışacağı an token iptal edilerek), (c)
+   gerçek bağlantı hatası (düzeltmenin **yalnızca ilk** çağrısı geçersiz bir sunucuya yönlendirilen,
+   sonraki (cleanup) çağrısı sağlıklı bağlantıya dönen bir test factory ile — kalıcı değil, geçici
+   bir bağlantı sorununu gerçekçi şekilde modeller), (d) beklenmeyen genel bir istisna (`IsDeadlock`'un
+   tam `SqlException(1205)` eşleşmesi gerçek bir SQL Server deadlock'u veya SqlClient'a reflection
+   gerektirdiği için, bunun yerine `HesabaAktarAsync`'teki genel güvenlik ağının **istisna türünden
+   bağımsız** çalıştığı doğrulanıyor). Her 4 testte de kaydın `Hata` durumuna döndüğü, `ClaimToken`
+   ve `AktarimBaslamaTarihi`'nin `NULL` olduğu (yani `Aktariliyor`da takılı KALMADIĞI) doğrulanıyor.
+
+### Değişen/eklenen dosyalar (bu güncellemede)
+- `backend/Program.cs` (`AddDbContext<StysAppDbContext>` yerine `AddDbContextFactory` +
+  `AddScoped(sp => factory.CreateDbContext())` — mevcut scoped enjeksiyon davranışı korunarak
+  `IDbContextFactory<StysAppDbContext>` da enjekte edilebilir hale getirildi)
+- `backend/Muhasebe/PosTahsilatValorleri/Services/PosTahsilatValorAktarimService.cs`
+  (`CorrectFisNoSayaciAsync` ayrı context/transaction'a taşındı, `KosulluGuncelleAsync` her zaman
+  ayrı context kullanacak ve kendi hatalarını yutacak şekilde güçlendirildi, Adım B'yi saran dış
+  try/finally güvenlik ağı eklendi, `IDbContextFactory<StysAppDbContext>` bağımlılığı eklendi)
+- `tests/STYS.Tests/PosTahsilatValorIntegrationTests.cs` (`TestDbContextFactory`,
+  `PosValorSelectBarrierInterceptor`, hata-enjeksiyon interceptor'ları (`SayacInsertOncesiRaw
+  SideEffectInterceptor`, `SayacSelectOncesiRawSideEffectInterceptor`), Senaryo 8'in gerçek cari
+  hareket/kapama zinciriyle ve deterministik bariyerle güçlendirilmesi, yeni Senaryo 10-13, test
+  cleanup'ına `CariHareketler` temizliği eklendi)
+
+### Çalıştırılan komutlar ve sonuçlar
+- `dotnet build backend/STYS.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet build tests/STYS.Tests/STYS.Tests.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet test --filter FullyQualifiedName~PosTahsilatValorIntegrationTests` (gerçek SQL Server'a
+  karşı, 13 senaryo — Senaryo 1-9 + yeni Senaryo 10-13) → **13/13 Passed, 0 Failed, 0 Skipped**.
+- `dotnet test tests/STYS.Tests` (tüm proje, env var ayarlı) → **328 Passed, 0 Failed, 0 Skipped**.
+- `ng build` (frontend) → **başarılı** (yalnızca ön var olan bundle-size uyarısı, hata değil).
+
+### Kalan notlar
+- Senaryo 13, `IsDeadlock`'un `SqlException.Number==1205` eşleşmesini TAM olarak test etmiyor —
+  bunun için ya gerçek bir SQL Server deadlock'u (bu kod yolunda, tek bir satır/tabloya erişen
+  `CorrectFisNoSayaciAsync` için pratikte imkânsız, çünkü deadlock çapraz-kaynak kilit döngüsü
+  gerektirir) ya da `Microsoft.Data.SqlClient.SqlException`'a reflection ile müdahale gerekirdi.
+  Bunun yerine, `HesabaAktarAsync`'teki nested `catch (Exception correctEx)` bloğunun istisna
+  TÜRÜNDEN bağımsız çalıştığı (dolayısıyla gerçek bir 1205 hatasını da aynı şekilde ele alacağı)
+  doğrulandı.
+
+---
 
 ## Güncelleme 3 — Backfill migration, Adım B transaction/retry sertleştirmesi, gerçek eşzamanlılık testleri (commit 43d0c83 sonrası)
 

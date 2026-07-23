@@ -91,33 +91,16 @@ var mapperConfig = new MapperConfiguration(cfg =>
 builder.Services.AddSingleton(mapperConfig);
 builder.Services.AddScoped<IMapper>(sp => sp.GetRequiredService<MapperConfiguration>().CreateMapper(sp.GetService));
 
-// AddDbContextFactory + AddScoped(sp => factory.CreateDbContext()) kullanilir - bu, mevcut kod
-// tabanindaki her yerdeki normal "scoped StysAppDbContext enjeksiyonu" davranisini AYNEN korurken,
-// IDbContextFactory<StysAppDbContext>'in de enjekte edilebilmesini saglar (bkz.
+// AddStysPersistence (backend/Infrastructure/EntityFramework/StysPersistenceServiceCollectionExtensions.cs)
+// StysAppDbContext'i Scoped bir IDbContextFactory ile kaydeder. Bu, hem dogrudan `StysAppDbContext`
+// enjeksiyonunu (EF Core 10'da AddDbContextFactory context tipini de Scoped olarak kaydeder) HEM DE
+// IDbContextFactory<StysAppDbContext>'in enjekte edilebilmesini saglar (bkz.
 // PosTahsilatValorAktarimService - sayac duzeltmesi gibi, mevcut ambient context'in transaction/
 // baglanti durumundan BAGIMSIZ, kisa omurlu ve ayri bir context/transaction gerektiren islemler icin).
-//
-// ONEMLI: ServiceLifetime.Scoped ACIKCA belirtilir - AddDbContextFactory'nin VARSAYILANI
-// Singleton'dir. StysAppDbContext'in constructor'i ise SCOPED ICurrentUserAccessor/
-// ICurrentTenantAccessor alir; factory Singleton olsaydi, TEK bir factory ornegi TUM uygulama
-// omru boyunca paylasilir ve CreateDbContext() cagrildiginda bu scoped bagimliliklari KENDI
-// (kok/singleton'a bagli) provider'indan cozmeye calisirdi - bu ya "Cannot resolve scoped
-// service from root provider" istisnasiyla (ValidateScopes acikken) patlar, ya da (kapali iken)
-// ilk cozulen kullanicinin/tenantin degerlerini SESSIZCE tum sonraki istekler icin "captive
-// dependency" olarak dondurmeye devam ederdi - farkli kullanicilarin/tesislerin birbirinin
-// verisini gormesi gibi ciddi bir veri sizintisina yol acardi. Scoped lifetime ile, HER HTTP
-// istegi/scope KENDI factory ornegini (ve dolayisiyla o scope'a ait ICurrentUserAccessor/
-// ICurrentTenantAccessor'i) alir; CreateDbContext() ile uretilen TUM context'ler (asagidaki
-// AddScoped kaydi dahil, ve PosTahsilatValorAktarimService'in ek duzeltme context'leri) dogru
-// istek/kullanici/tenant baglamini gorur. Bu davranis
-// tests/STYS.Tests/DbContextFactoryDependencyInjectionTests.cs ile dogrulanir.
-builder.Services.AddDbContextFactory<StysAppDbContext>(options => options.UseSqlServer(connectionString), ServiceLifetime.Scoped);
-// AddDbContextFactory yalnizca IDbContextFactory<StysAppDbContext>'i kaydeder - StysAppDbContext'in
-// KENDISINI DI'a AYRICA kaydetmez. Kod tabanindaki YUZLERCE servis dogrudan `StysAppDbContext`
-// enjekte ettigi icin (IDbContextFactory DEGIL), bu satir hala GEREKLIDIR - cakisan/mukerrer bir
-// StysAppDbContext kaydi DEGILDIR (yalnizca TEK kayit var), factory'nin SCOPED CreateDbContext()
-// cagrisini sarmalar.
-builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<StysAppDbContext>>().CreateDbContext());
+// Ayni metot tests/STYS.Tests/DbContextFactoryDependencyInjectionTests.cs tarafindan da cagrilir -
+// bu yuzden DI kaydinin dogrulugu (tek descriptor, scope/tenant sizintisi olmamasi) GERCEKTEN
+// production'da kullanilan koda karsi test edilir, kopyalanmis bir kayit blogu DEGIL.
+builder.Services.AddStysPersistence(connectionString);
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";

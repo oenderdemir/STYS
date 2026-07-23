@@ -2,7 +2,108 @@
 
 Tarih: 2026-07-23 (ilk uygulama, commit 903fa6a) — güncelleme 1: 2026-07-23 (kod incelemesi
 düzeltmeleri, commit c7ceecb) — güncelleme 2: 2026-07-23 (FisNo sayaç migration/concurrency
-düzeltmeleri, commit c7ceecb sonrası)
+düzeltmeleri, commit 43d0c83) — güncelleme 3: 2026-07-23 (backfill migration, Adım B
+transaction/retry sertleştirmesi, gerçek DB-seviyeli eşzamanlılık testleri, commit 43d0c83 sonrası)
+
+## Güncelleme 3 — Backfill migration, Adım B transaction/retry sertleştirmesi, gerçek eşzamanlılık testleri (commit 43d0c83 sonrası)
+
+`43d0c83` üzerindeki üçüncü bir kod incelemesinde 6 madde tespit edildi ve düzeltildi:
+
+1. **`AddPosValorFisNoSayaci` migrationı geriye dönük değiştirilmedi.** Önceki turda o migrationın
+   `Up()`'ına eklenen seed SQL bloğu **geri alındı** (migration artık yalnızca tabloyu/index'i
+   oluşturuyor — c7ceecb'deki orijinal haline döndü). Bunun yerine **yeni, bağımsız bir migration**
+   (`BackfillPosValorFisNoSayaclari`) eklendi: mevcut POS valör transfer fişlerinden (1) eksik sayaç
+   satırlarını oluşturur, (2) var olan ama gerçek veriden **geri kalmış** (`SonNumara` < gerçek
+   maksimum) sayaçları yükseltir — **asla azaltmaz**. İki adım da idempotent (`NOT EXISTS`/`<`
+   koşullu), tekrar tekrar çalıştırılabilir. `Down()` kasıtlı olarak no-op (bu bir veri onarımıdır,
+   geri alınacak bir şema yoktur).
+   **Gerçek SQL Server'a karşı doğrulandı**: veritabanı önce `AddPosTahsilatValorMenuVeYetki`'ye
+   (bu migrationdan önceki noktaya) geri alındı, sonra yalnızca `AddPosValorFisNoSayaci`'nin GÜNCEL
+   (seed'siz, c7ceecb-dönemi) hali uygulanarak "eski bir veritabanı" simüle edildi. Üç senaryo elle
+   test edildi: (a) legacy fiş var, sayaç YOK → backfill sayacı `SonNumara=3` ile oluşturdu; (b)
+   legacy fiş var (gerçek maks=7), sayaç VAR ama geride (`SonNumara=2`) → backfill `7`'ye yükseltti;
+   (c) sayaç zaten gerçek maksimumun (10) ÖNÜNDE (`SonNumara=50`) → backfill **azaltmadı**, `50`
+   olarak kaldı. Migration ikinci kez çalıştırıldığında (idempotency kontrolü) hiçbir değer
+   değişmedi. Test verileri temizlendi, veritabanı tekrar tüm migrationların başına (`Backfill...`
+   dahil) güncellendi.
+2. **FisNo unique-index çakışmasında artık aynı transaction/context'te devam edilmiyor.**
+   `ValidateVeFisOlusturAsync` ve `GenerateFisNoAsync`'in kendi iç retry döngüleri kaldırıldı; bunun
+   yerine bu iki yer, çakışma (FisNo unique index veya sayaç satırının ilk oluşturulmasındaki unique
+   çakışma) tespit ettiğinde yeni bir `PosValorAdimBYenidenDenemeException` fırlatıyor.
+   `HesabaAktarAsync`'in Adım B döngüsü bu istisnayı yakalayıp: (a) **tüm Adım B transaction'ını**
+   rollback ediyor, (b) `ChangeTracker.Clear()` ile önceki denemenin tüm izlenen entity'lerini
+   temizliyor, (c) sayacı **ayrı, yeni bir transaction'da** (rollback sonrası ambient transaction
+   kalmadığı için `CorrectFisNoSayaciAsync`'in kendi `SaveChangesAsync`'i kendi otonom transaction'ını
+   açıyor) gerçek maksimuma yükseltiyor, (d) Adım B'yi **sınırlı sayıda (3)** baştan deniyor. Önceki
+   (hatalı) tasarımda bu düzeltme AYNI, birazdan rollback edilecek transaction içinde yapılıyordu —
+   rollback ile düzeltme de anlamsız hale geliyordu. (Not: bu servis, projedeki genel `DbContext`
+   kullanım deseniyle tutarlı olarak TEK bir enjekte edilmiş `StysAppDbContext` üzerinden çalışır —
+   projede hiçbir yerde `IDbContextFactory` kullanılmıyor; "yeni transaction" burada rollback+
+   `ChangeTracker.Clear()` sonrası tamamen bağımsız/temiz bir transaction anlamına gelir, ayrı bir
+   DbContext örneği değil — bu, mevcut mimariyi genişletme ilkesiyle tutarlıdır.)
+3. **Adım B'nin `BeginTransactionAsync` çağrısı artık hata/cleanup kapsamında.** Daha önce bu çağrı
+   try/catch DIŞINDAYDI — claim (Adım A, ayrı/commit edilmiş bir transaction'da) alındıktan sonra
+   transaction açma işlemi (bağlantı hatası vb.) başarısız olursa istisna doğrudan yukarı fırlıyor ve
+   kayıt `Aktariliyor` durumunda, `ClaimToken` dolu şekilde kalıyordu — yalnızca 15 dakikalık "stuck"
+   eşiği geçtikten sonra kurtarılabiliyordu. Artık `BeginTransactionAsync` try/catch içine alındı:
+   normal bir hata durumunda kayıt `ClaimToken` koşuluyla kontrollü bir `Hata` durumuna hemen
+   getiriliyor; `OperationCanceledException` durumunda ise (önceki durum `Aktariliyor` ise `Hata`'ya,
+   değilse önceki duruma) aynı mantıkla geri alınıyor — hiçbir durumda 15 dakika beklemek
+   gerekmiyor.
+4. **Senaryo 2 artık gerçek bir DB-seviyeli bariyerle senkronize ediliyor.** Önceki turda kullanılan
+   "çağrı ÖNCESİNDEKİ gate" yaklaşımının bunu GERÇEKTEN garanti ETMEDİĞİ kabul edildi — iki task'ın
+   `HesabaAktarAsync` içinde hangi noktada olduğu belirsizdi. Yerine gerçek bir `DbCommandInterceptor`
+   (`SayacSelectBarrierInterceptor`) eklendi: SQL komut metni incelenip, sayaç üzerindeki kilitli
+   SELECT (`WITH UPDLOCK/ROWLOCK/HOLDLOCK`) **SQL Server'a gönderilmeden hemen önce**
+   (`ReaderExecutingAsync`) her iki taraf da bir bariyerde durduruluyor, ikisi de hazır olunca AYNI
+   ANDA serbest bırakılıyor. **Önemli bir kendi-kendine-deadlock bulundu ve düzeltildi**: bariyer ilk
+   denemede SELECT TAMAMLANDIKTAN SONRA (`ReaderExecutedAsync`) konulmuştu — ama `UPDLOCK`, başka bir
+   `UPDLOCK` ile UYUMSUZ olduğundan, ilk tamamlanan taraf transaction'ını açık tutup (kilidi elinde)
+   bariyerde beklerken, ikinci taraf AYNI kilidi beklemek zorunda kalıp SQL Server seviyesinde bloke
+   oluyor ve interceptor'a hiç ulaşamıyordu — iki taraf da asla "hazır" sinyali veremiyordu. Bariyer
+   komut gönderilmeden ÖNCEYE taşınarak bu kendi-kendine-deadlock giderildi.
+5. **`SafeDuzeltmeAsync` artık yalnızca beklenen 409'u yutuyor.** Önceden tüm `BaseException`
+   türlerini koşulsuz yutuyordu; artık `when (ex.ErrorCode == 409)` koşuluyla sınırlandı — 500/403/422
+   gibi beklenmeyen bir hata kodu gelirse test başarısız olur (koşulsuz yutma kaldırıldı).
+6. **Senaryo 8 artık `TahsilatOdemeBelgesiService.IptalEtAsync`'i çağırıyor.** Önceden doğrudan
+   `PosTahsilatValorSnapshotService.IptalEtAsync` çağrılıyordu — bu, production'da tahsilat iptalinin
+   ambient transaction'ını yöneten gerçek giriş noktasını (cari hareket kapamasının geri alınması +
+   POS valör snapshot iptalinin AYNI transaction'da yürütülmesi) atlıyordu. Artık gerçek
+   `TahsilatOdemeBelgesiService` (gerçek `CariHareketKapamaService`, gerçek `MuhasebeFisService` ile)
+   kuruluyor ve test, tahsilat belgesinin kendi `Durum`'unun da (valör iptal olduğunda `Iptal`)
+   tutarlı olduğunu ayrıca doğruluyor.
+
+### Değişen/eklenen dosyalar (bu güncellemede)
+- `backend/Infrastructure/EntityFramework/Migrations/20260723075626_AddPosValorFisNoSayaci.cs`
+  (seed SQL bloğu GERİ ALINDI — migration c7ceecb'deki orijinal haline döndü)
+- `backend/Infrastructure/EntityFramework/Migrations/20260723111420_BackfillPosValorFisNoSayaclari.cs`
+  (yeni, bağımsız backfill migrationı)
+- `backend/Muhasebe/PosTahsilatValorleri/Services/PosTahsilatValorAktarimService.cs`
+  (`PosValorAdimBYenidenDenemeException`, Adım B'nin birleşik deadlock/FisNo-çakışması retry
+  döngüsü, `BeginTransactionAsync` hata/cleanup kapsamı, `GenerateFisNoAsync`/
+  `ValidateVeFisOlusturAsync`'in iç retry döngülerinin kaldırılması)
+- `tests/STYS.Tests/PosTahsilatValorIntegrationTests.cs` (`SayacSelectBarrierInterceptor` ile
+  Senaryo 2'nin gerçek DB-seviyeli bariyere taşınması, `CreateTahsilatOdemeBelgesiService` yardımcısı,
+  Senaryo 8'in gerçek `TahsilatOdemeBelgesiService.IptalEtAsync` çağırması, `SafeDuzeltmeAsync`'in
+  yalnızca 409 yutması)
+
+### Çalıştırılan komutlar ve sonuçlar
+- **Backfill migration manuel doğrulaması** (`localhost,14333/STYSDB`): veritabanı
+  `AddPosTahsilatValorMenuVeYetki`'ye geri alındı → yalnızca güncel (seed'siz)
+  `AddPosValorFisNoSayaci` uygulandı ("eski veritabanı" simülasyonu) → 3 farklı senaryoda (eksik
+  sayaç / geride kalmış sayaç / önde olan sayaç) test verisi eklendi → `BackfillPosValorFisNoSayaclari`
+  uygulandı → sonuçlar doğrulandı (sırasıyla `3`, `7`, `50` — hiçbiri azaltılmadı) → migration ikinci
+  kez çalıştırılıp idempotency doğrulandı (değer değişmedi) → test verisi temizlendi → veritabanı
+  tekrar migration head'ine güncellendi.
+- `dotnet build backend/STYS.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet build tests/STYS.Tests/STYS.Tests.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet test --filter FullyQualifiedName~PosTahsilatValor` (gerçek SQL Server'a karşı, 9 senaryo,
+  Senaryo 2'nin yeni DB-seviyeli bariyeri ve Senaryo 8'in yeni `TahsilatOdemeBelgesiService` çağrısı
+  dahil) → **9/9 Passed, 0 Failed, 0 Skipped**.
+- `dotnet test tests/STYS.Tests` (tüm proje, env var ayarlı) → **324 Passed, 0 Failed, 0 Skipped**.
+- `ng build` (frontend) → **başarılı** (yalnızca ön var olan bundle-size uyarısı, hata değil).
+
+---
 
 ## Güncelleme 2 — FisNo sayaç migration ve eşzamanlılık düzeltmeleri (commit c7ceecb sonrası)
 

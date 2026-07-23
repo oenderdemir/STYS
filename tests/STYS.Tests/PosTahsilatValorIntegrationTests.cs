@@ -5,7 +5,12 @@ using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Iller.Entities;
 using STYS.Kurumlar.Entities;
+using STYS.Muhasebe.CariHareketler.Mapping;
+using STYS.Muhasebe.CariHareketler.Repositories;
+using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.CariKartlar.Mapping;
+using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
@@ -23,6 +28,9 @@ using STYS.Muhasebe.PosTahsilatValorleri.Dtos;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.PosTahsilatValorleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Mapping;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using STYS.Tesisler.Entities;
 using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Licensing.Abstractions;
@@ -262,12 +270,65 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     // Yardimcilar
     // ─────────────────────────────────────────────────────────────
 
-    private static StysAppDbContext CreateDbContext()
+    private static StysAppDbContext CreateDbContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
-        var options = new DbContextOptionsBuilder<StysAppDbContext>()
-            .UseSqlServer(ConnectionString)
-            .Options;
+        var builder = new DbContextOptionsBuilder<StysAppDbContext>().UseSqlServer(ConnectionString);
+        if (interceptors.Length > 0)
+        {
+            builder.AddInterceptors(interceptors);
+        }
+        var options = builder.Options;
         return new StysAppDbContext(options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor());
+    }
+
+    /// <summary>
+    /// PosValorFisNoSayaclari uzerindeki kilitli SELECT (WITH UPDLOCK/ROWLOCK/HOLDLOCK) TAM
+    /// tamamlandiginda iki eszamanli tarafi GERCEKTEN durdurup ayni anda serbest birakan bir
+    /// DbCommandInterceptor. "Sayac henuz yokken ilk olusturma" yarisini test ederken, cagri
+    /// oncesindeki bir gate/semaphore'un bunu garanti ETMEDIGI (cunku iki task'in HANGI noktada
+    /// duracagi belirsizdir - HesabaAktarAsync'in Adim A'sina, aktif donem sorgusuna vb. de takilabilir)
+    /// tespit edildi; bu interceptor, SQL komut metnini inceleyerek TAM olarak dogru SELECT
+    /// tamamlandiktan SONRA (INSERT'ten HEMEN once) her iki tarafi da bariyerde bekletir.
+    /// </summary>
+    private sealed class SayacSelectBarrierInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        private readonly SemaphoreSlim _gate;
+        private readonly CountdownEvent _hazir;
+        public readonly System.Collections.Concurrent.ConcurrentBag<string> GorulenKomutlar = [];
+
+        public SayacSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir)
+        {
+            _gate = gate;
+            _hazir = hazir;
+        }
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            GorulenKomutlar.Add(command.CommandText);
+            if (command.CommandText.Contains("PosValorFisNoSayaclari", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("UPDLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                // ONEMLI: bariyer SELECT TAMAMLANDIKTAN SONRA (ReaderExecutedAsync) DEGIL,
+                // komut SQL Server'a GONDERILMEDEN ONCE (ReaderExecutingAsync) uygulanir. UPDLOCK,
+                // baska bir UPDLOCK ile UYUMSUZDUR (S/S kilitlerin aksine) - eger bariyer SELECT
+                // TAMAMLANDIKTAN SONRA konulsaydi, ilk tamamlanan taraf HALA transaction'ini acik
+                // tutarak (kilidi elinde tutarak) bariyerde beklerdi, ikinci taraf ise TAM O KILIDI
+                // beklemek zorunda kalip SQL Server seviyesinde bloke olur ve interceptor'a hic
+                // ULASAMAZDI - bu, iki tarafin da "hazir" sinyalini asla veremeyecegi bir KENDI
+                // KENDINE deadlock'a yol acardi (gercekten yasandi, bkz. commit gecmisi). Komut
+                // gonderilmeden ONCE senkronize etmek, her iki SELECT'in ayni anda SQL Server'a
+                // ulasmasini saglar - kim once kilidi alirsa dogal olarak "kazanir", digeri SQL
+                // Server'in KENDI kilit bekleme mekanizmasiyla (test kodunda degil) bloke olur.
+                _hazir.Signal();
+                await _gate.WaitAsync(cancellationToken);
+            }
+
+            return await base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     private static IMapper CreateMapper()
@@ -276,8 +337,37 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         {
             cfg.AddProfile<MuhasebeDonemProfile>();
             cfg.AddProfile<MuhasebeFisProfile>();
+            cfg.AddProfile<TahsilatOdemeBelgesiProfile>();
+            cfg.AddProfile<CariKartProfile>();
+            cfg.AddProfile<CariHareketProfile>();
         }, NullLoggerFactory.Instance);
         return config.CreateMapper();
+    }
+
+    /// <summary>
+    /// Gercek, production'da kullanilan TahsilatOdemeBelgesiService.IptalEtAsync akisini kurar -
+    /// bu, tahsilat belgesi iptalinin AMBIENT transaction'ini yoneten GERCEK metottur (bkz.
+    /// Senaryo 8). Snapshot servisi burada da GERCEK MuhasebeFisService'i kullanir (Fake DEGIL) -
+    /// aksi halde ters kayit fisi/bakiye etkisi gercekci sekilde dogrulanamaz.
+    /// </summary>
+    private static ITahsilatOdemeBelgesiService CreateTahsilatOdemeBelgesiService(StysAppDbContext dbContext, IUserAccessScopeService userAccessScopeService)
+    {
+        var mapper = CreateMapper();
+        var tahsilatRepo = new TahsilatOdemeBelgesiRepository(dbContext, mapper);
+        var cariKartRepo = new CariKartRepository(dbContext, mapper);
+        var cariHareketRepo = new CariHareketRepository(dbContext, mapper);
+        var muhasebeDonemService = CreateMuhasebeDonemService(dbContext);
+        var cariHareketKapamaService = new CariHareketKapamaService(
+            dbContext, tahsilatRepo, cariHareketRepo, muhasebeDonemService, userAccessScopeService, mapper);
+
+        var posTahsilatValorSnapshotService = new PosTahsilatValorSnapshotService(
+            dbContext,
+            new ValorTarihHesaplamaService(new NoOpResmiTatilGunuProvider()),
+            CreateMuhasebeFisService(dbContext, userAccessScopeService));
+
+        return new TahsilatOdemeBelgesiService(
+            tahsilatRepo, cariKartRepo, cariHareketRepo, cariHareketKapamaService,
+            dbContext, muhasebeDonemService, userAccessScopeService, posTahsilatValorSnapshotService, mapper);
     }
 
     private static IMuhasebeDonemService CreateMuhasebeDonemService(StysAppDbContext dbContext)
@@ -405,31 +495,40 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         var sayacVarMi = await seedContext.PosValorFisNoSayaclari.AnyAsync(x => x.TesisId == TesisAId);
         Assert.False(sayacVarMi, "On-kosul ihlali: sayac zaten mevcut, test senaryosu gecersiz.");
 
-        await using var ctx1 = CreateDbContext();
-        await using var ctx2 = CreateDbContext();
+        // Deterministik barrier: bir onceki turda kullanilan "cagri ONCESINDEKI gate" yaklasimi
+        // GERCEKTEN garanti ETMIYORDU - iki task'in HesabaAktarAsync icinde HANGI noktada
+        // (Adim A'nin kendi kilidi, aktif donem sorgusu, vb.) oldugu belirsizdi; gate serbest
+        // birakildiginda taraflardan biri sayac SELECT'ine cok once/sonra ulasabilirdi. Bunun
+        // yerine GERCEK bir DbCommandInterceptor kullanilir: SQL komut metni incelenip, TAM olarak
+        // sayac uzerindeki kilitli SELECT (WITH UPDLOCK/ROWLOCK/HOLDLOCK) TAMAMLANDIKTAN SONRA (ama
+        // INSERT'ten ONCE) her iki taraf da bariyerde durdurulur, ikisi de hazir olunca AYNI ANDA
+        // serbest birakilir - "sayac henuz yokken" fantom-satir yarisi boylece gercekten garanti
+        // edilir.
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptor1 = new SayacSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptor2 = new SayacSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContext(interceptor1);
+        await using var ctx2 = CreateDbContext(interceptor2);
         var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
         var svc1 = CreateAktarimService(ctx1, scope);
         var svc2 = CreateAktarimService(ctx2, scope);
 
-        // Deterministik barrier: her iki gorev de kendi HesabaAktarAsync cagrisini yapmadan hemen
-        // once gate'i bekler; gate iki taraf da hazir olunca AYNI ANDA acilir. Bu, iki tarafin da
-        // sayac SELECT'ini (WITH UPDLOCK) mumkun oldugunca ayni zaman penceresinde yapmasini saglar
-        // - "sayac henuz yokken" fantom-satir yarisini (UPDLOCK var-olmayan bir satiri kilitleyemez)
-        // gercekci sekilde tetikler.
-        using var gate = new SemaphoreSlim(0, 2);
-        using var hazirSayaci = new CountdownEvent(2);
+        var task1 = Task.Run(() => svc1.HesabaAktarAsync(valorId1, null, CancellationToken.None));
+        var task2 = Task.Run(() => svc2.HesabaAktarAsync(valorId2, null, CancellationToken.None));
 
-        async Task<PosTahsilatValorAktarimSonucDto> GatedAktarAsync(IPosTahsilatValorAktarimService svc, int valorId)
+        // Iki taraf da sayac SELECT'ini tamamlayip bariyerde durana kadar bekle (10 sn icinde
+        // gerceklesmezse test zaman asimina ugrar - "her iki taraf da sayac SELECT'ine ulasti"
+        // varsayimi GERCEKTEN dogrulanmis olur, varsayilmaz).
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        if (!ikisiDeHazir)
         {
-            hazirSayaci.Signal();
-            await gate.WaitAsync();
-            return await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+            gate.Release(2);
+            var tanilama = string.Join(" | ", interceptor1.GorulenKomutlar.Concat(interceptor2.GorulenKomutlar)
+                .Select(x => x.Replace('\n', ' ').Replace('\r', ' ')).Take(20));
+            Assert.Fail($"On-kosul ihlali: iki taraf da beklenen surede sayac SELECT'ine ulasmadi. Gorulen komutlar: {tanilama}");
         }
-
-        var task1 = Task.Run(() => GatedAktarAsync(svc1, valorId1));
-        var task2 = Task.Run(() => GatedAktarAsync(svc2, valorId2));
-
-        hazirSayaci.Wait(TimeSpan.FromSeconds(10));
         gate.Release(2);
 
         var sonuclar = await Task.WhenAll(task1, task2);
@@ -625,13 +724,18 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         Assert.Equal(1, tersKayitSayisi);
     }
 
+    /// <summary>Yalnizca YARIS KAYBININ beklenen sonucu olan 409 ("islem baska bir surec tarafindan
+    /// devralinmis" / "duzeltme/ters kayit isleminin surdugu") yutulur. Baska bir BaseException
+    /// (500 veri tutarsizligi, 422 girdi hatasi, 403 yetki vb.) KOŞULSUZ YUTULMAZ - test hatasi
+    /// olarak yukari firlatilir; bu, testin gercek bir hatayi "beklenen yaris kaybi" sanip
+    /// gizlemesini engeller.</summary>
     private static async Task SafeDuzeltmeAsync(IPosTahsilatValorAktarimService svc, int valorId, string aciklama)
     {
         try
         {
             await svc.DuzeltmeTersKayitAsync(valorId, aciklama, CancellationToken.None);
         }
-        catch (BaseException)
+        catch (BaseException ex) when (ex.ErrorCode == 409)
         {
             // Yariş kaybeden istek icin beklenen (409) - test yalnizca tek ters kaydin
             // olustugunu dogrular, her iki cagrinin da basarili olmasini beklemez.
@@ -653,21 +757,34 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         await using var ctx1 = CreateDbContext();
         await using var ctx2 = CreateDbContext();
         var aktarimSvc = CreateAktarimService(ctx1, scope);
-        var snapshotSvc = new PosTahsilatValorSnapshotService(
-            ctx2,
-            new ValorTarihHesaplamaService(new NoOpResmiTatilGunuProvider()),
-            CreateMuhasebeFisService(ctx2, scope));
+        // ONEMLI: dogrudan PosTahsilatValorSnapshotService.IptalEtAsync DEGIL, production'da
+        // tahsilat iptalinin AMBIENT transaction'ini yoneten GERCEK giris noktasi
+        // (TahsilatOdemeBelgesiService.IptalEtAsync) cagrilir - bu, cari hareket kapamasinin geri
+        // alinmasi + POS valor snapshot iptalinin AYNI transaction icinde, gercek uretim akisiyla
+        // birebir calistigini dogrular.
+        var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx2, scope);
 
         // Yalnizca YARISTA KAYBETMENIN beklenen sonucu olan hata kodlari yutulur (404: kayit henuz
         // gorulemedi/race; 409: "aktarim/iptal surdugu icin simdi yapilamaz"; 422: valor tarihi/
         // girdi kontrolu). Baska HERHANGI bir BaseException (ornegin 500 veri tutarsizligi, 403
         // yetki) test hatasi olarak YUKARI FIRLATILIR - koşulsuz yutma yapilmaz.
         var aktarimTask = SafeCallAsync(() => aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None), 404, 409, 422);
-        var iptalTask = SafeCallAsync(() => snapshotSvc.IptalEtAsync(belgeId, CancellationToken.None), 404, 409, 422);
+        var iptalTask = SafeCallAsync(() => tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None), 404, 409, 422);
         await Task.WhenAll(aktarimTask, iptalTask);
 
         await using var verifyContext = CreateDbContext();
         var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+
+        // Tahsilat belgesinin kendisi de tutarli olmali: iptal yarisi kazandiysa belge Iptal
+        // durumunda olmali; kaybettiyse (aktarim once tamamlandiysa iptal 409 ile reddedilmis
+        // olabilir VEYA aktarimdan SONRA calisip basarili olmus olabilir - PosTahsilatValor
+        // Durum=Iptal her iki durumda da nihai sonucu yansitir) belge durumu asagida ayrica kontrol
+        // edilir.
+        var belge = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+        if (valor.Durum == PosTahsilatValorDurumlari.Iptal)
+        {
+            Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, belge.Durum);
+        }
 
         // Tutarlilik: kayit ya basariyla aktarilmis (Aktarildi) ya da iptal edilmis (Iptal) olmali;
         // hicbir zaman "Aktariliyor"da takili kalmamali ve ClaimToken bos olmali.

@@ -6,7 +6,85 @@ düzeltmeleri, commit 43d0c83) — güncelleme 3: 2026-07-23 (backfill migration
 transaction/retry sertleştirmesi, gerçek DB-seviyeli eşzamanlılık testleri, commit 9b0c347) —
 güncelleme 4: 2026-07-23 (sayaç düzeltmesinin ayrı context/transaction'a taşınması, dış
 try/finally güvenlik ağı, IDbContextFactory ile cleanup izolasyonu, gerçek hata-enjeksiyonlu
-SQL Server testleri, commit 9b0c347 sonrası)
+SQL Server testleri, commit c6da3aa) — güncelleme 5: 2026-07-23 (AddDbContextFactory'nin
+Singleton→Scoped lifetime düzeltmesi, DI smoke testi, gerçek uygulama başlatma doğrulaması,
+commit c6da3aa sonrası)
+
+## Güncelleme 5 — AddDbContextFactory lifetime düzeltmesi ve DI smoke testi (commit c6da3aa sonrası)
+
+`c6da3aa`'daki `AddDbContextFactory<StysAppDbContext>` kaydında **kritik bir DI yaşam döngüsü
+hatası** tespit edildi ve düzeltildi:
+
+1. **Kök neden**: `AddDbContextFactory`'nin **varsayılan lifetime'ı `Singleton`'dır**.
+   `StysAppDbContext`'in constructor'ı ise **scoped** `ICurrentUserAccessor`/`ICurrentTenantAccessor`
+   servislerini alıyor. Factory Singleton kalsaydı, TEK bir factory örneği uygulama ömrü boyunca
+   paylaşılır ve `CreateDbContext()` her çağrıldığında bu scoped bağımlılıkları KENDİ (köke bağlı)
+   `IServiceProvider`'ından çözmeye çalışırdı — bu, `ValidateScopes` açıkken (ASP.NET Core
+   Development ortamında varsayılan olarak açıktır) doğrudan `InvalidOperationException: Cannot
+   resolve scoped service '...' from root provider` ile patlar; kapalıyken ise SESSİZCE ilk
+   çözülen kullanıcının/tenantın değerlerini bir **captive dependency** olarak tüm sonraki
+   isteklere döndürmeye devam eder — farklı kullanıcıların/tesislerin birbirinin verisini görmesi
+   gibi ciddi bir veri sızıntısı riski.
+2. **Düzeltme**: `AddDbContextFactory<StysAppDbContext>(options => ..., ServiceLifetime.Scoped)` —
+   factory artık AÇIKÇA Scoped. Böylece her HTTP isteği/scope kendi factory örneğini (ve dolayısıyla
+   o scope'a ait `ICurrentUserAccessor`/`ICurrentTenantAccessor`'ı) alır; `CreateDbContext()` ile
+   üretilen TÜM context'ler (doğrudan enjekte edilen `StysAppDbContext` dahil, ve
+   `PosTahsilatValorAktarimService`'in sayaç düzeltmesi/cleanup için ürettiği ek context'ler) doğru
+   istek/kullanıcı/tenant bağlamını görür.
+3. **Mükerrer kayıt kontrolü**: `AddDbContextFactory`, `StysAppDbContext`'in KENDİSİNİ DI'a ayrıca
+   kaydetmez — yalnızca `IDbContextFactory<StysAppDbContext>`'i kaydeder. Bu yüzden `AddScoped(sp =>
+   factory.CreateDbContext())` satırı GEREKLİDİR (kod tabanındaki yüzlerce servis doğrudan
+   `StysAppDbContext` enjekte eder) ve `StysAppDbContext` için TEK bir kayıt olduğundan çakışan/
+   mükerrer bir DI kaydı YOKTUR — bu, yeni eklenen DI smoke testiyle doğrulandı.
+4. **Yeni DI smoke testi eklendi** (`tests/STYS.Tests/DbContextFactoryDependencyInjectionTests.cs`):
+   Program.cs'teki DbContext/DbContextFactory kayıt bloğunun birebir aynısını kullanan gerçek bir
+   `ServiceProvider` (`ValidateScopes=true, ValidateOnBuild=true`) kuruyor ve doğruluyor: (a) tek bir
+   scope içinde hem `StysAppDbContext` hem `PosTahsilatValorAktarimService` (gerçek üretim sınıfı)
+   çözülebiliyor; (b) `IDbContextFactory` ile ikinci, bağımsız bir context oluşturulabiliyor; (c) iki
+   farklı scope, farklı kullanıcı/tenant (`userA`/tenant 100 vs `userB`/tenant 200) ile
+   çalıştırıldığında, hem doğrudan enjekte edilen hem factory ile üretilen context'lerin HER İKİSİ
+   de kendi scope'unun tenant'ını görüyor — scope'lar arasında sızıntı yok; (d) `SaveChanges` audit
+   `CreatedBy` alanının gerçekten doğru kullanıcıdan geldiği ayrıca doğrulandı (scope A'da eklenen
+   kayıt `CreatedBy="userA"`, scope B'de eklenen `CreatedBy="userB"`). **Testin gerçekten bu hatayı
+   yakaladığı da doğrulandı**: lifetime geçici olarak `Singleton`'a geri alınıp test tekrar
+   çalıştırıldığında, tam olarak raporlanan `Cannot resolve scoped service 'ICurrentUserAccessor'
+   from root provider` istisnası üretildi; `Scoped`'a geri dönüldüğünde tekrar yeşil oldu.
+5. **Gerçek uygulama başlatma doğrulaması**: Backend, Development ortamında gerçek dev SQL
+   Server'a karşı `dotnet run` ile başlatıldı. Migration'lar başarıyla uygulandı, lisans doğrulaması
+   geçti, anonim `/ui/version` ve `/health/live` endpoint'leri 200 döndü. Daha da önemlisi,
+   `PosValorAktarimHostedService` (uygulama başladıktan hemen sonra `IServiceScopeFactory.
+   CreateScope()` ile GERÇEK bir scope açıp `StysAppDbContext`/`IPosTahsilatValorAktarimService`'i
+   bu scope'tan çözen arka plan servisi) hatasız çalıştı — loglarda "Cannot resolve scoped service"
+   veya herhangi bir DI/captive-dependency hatası görülmedi. Bu, raporlanan hatanın GERÇEK bir
+   çalışan uygulamada da (yalnızca izole bir test container'ında değil) oluşmadığını doğrular.
+   (Not: HTTP üzerinden `StysAppDbContext` kullanan bir controller endpoint'ine JWT ile kimlik
+   doğrulamalı istek göndermek bu doğrulamanın kapsamı dışında bırakıldı — bunun yerine, PRECİSE
+   olarak aynı DI şeklini/senaryoyu sergileyen gerçek arka plan servisi kullanıldı, ki bu zaten
+   HTTP katmanından bağımsız olarak `IServiceScopeFactory.CreateScope()` + scoped `StysAppDbContext`
+   çözümlemesinin production'da GERÇEKTEN çalıştığını kanıtlar.)
+
+### Değişen/eklenen dosyalar (bu güncellemede)
+- `backend/Program.cs` (`AddDbContextFactory<StysAppDbContext>`'e `ServiceLifetime.Scoped` açıkça
+  eklendi; yorum genişletildi)
+- `tests/STYS.Tests/DbContextFactoryDependencyInjectionTests.cs` (yeni DI smoke testi)
+
+### Çalıştırılan komutlar ve sonuçlar
+- `dotnet build backend/STYS.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet test --filter FullyQualifiedName~DbContextFactoryDependencyInjectionTests` → **2/2
+  Passed**; lifetime geçici olarak `Singleton`'a alınıp tekrar çalıştırıldığında **2/2 Failed**
+  (tam olarak raporlanan "Cannot resolve scoped service ... from root provider" istisnasıyla) —
+  testin gerçekten bu regresyonu yakaladığı kanıtlandı, sonra `Scoped`'a geri alınıp tekrar
+  yeşil olduğu doğrulandı.
+- `dotnet test --filter FullyQualifiedName~PosTahsilatValorIntegrationTests` (gerçek SQL Server'a
+  karşı, 13 senaryo) → **13/13 Passed, 0 Failed, 0 Skipped**.
+- `dotnet test tests/STYS.Tests` (tüm proje, env var ayarlı) → **330 Passed, 0 Failed, 0 Skipped**.
+- Gerçek uygulama `dotnet run` ile Development ortamında başlatıldı (dev SQL Server'a karşı) →
+  migration'lar uygulandı, lisans doğrulandı, `/ui/version` ve `/health/live` 200 döndü,
+  `PosValorAktarimHostedService`'in gerçek scoped `StysAppDbContext` çözümlemesi hatasız çalıştı
+  (log'larda DI/root-provider hatası yok) → uygulama durduruldu.
+- `ng build` (frontend) → **başarılı** (yalnızca ön var olan bundle-size uyarısı, hata değil).
+
+---
 
 ## Güncelleme 4 — Sayaç düzeltmesi izolasyonu, dış güvenlik ağı, hata-enjeksiyonlu testler (commit 9b0c347 sonrası)
 

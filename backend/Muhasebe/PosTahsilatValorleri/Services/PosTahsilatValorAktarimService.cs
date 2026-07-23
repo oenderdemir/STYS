@@ -127,78 +127,103 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
             await claimTx.CommitAsync(cancellationToken);
         }
 
-        // Adım B - iş (ayrı transaction, satır kilidini yeniden alır).
-        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        // Adım B - iş (ayrı transaction, satır kilidini yeniden alır). Deadlock (1205) tespit
+        // edilirse - claim (token) zaten AYRI, commit edilmis bir transaction'da oldugu icin
+        // GECERLI kalir - Adim B tamamen yeni bir transaction'la, sinirli sayida (3) tekrar denenir.
+        const int maxDeadlockDenemesi = 3;
+        for (var deadlockDenemesi = 1; deadlockDenemesi <= maxDeadlockDenemesi; deadlockDenemesi++)
         {
-            var entity = await _dbContext.PosTahsilatValorleri
-                .FromSqlInterpolated($@"
+            var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var entity = await _dbContext.PosTahsilatValorleri
+                    .FromSqlInterpolated($@"
 SELECT * FROM [muhasebe].[PosTahsilatValorleri] WITH (UPDLOCK, ROWLOCK)
 WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [ClaimToken] = {token}")
-                .Include(x => x.KrediKartiHesap)
-                .Include(x => x.BagliBankaHesap)
-                .Include(x => x.TahsilatOdemeBelgesi)
-                .FirstOrDefaultAsync(cancellationToken);
+                    .Include(x => x.KrediKartiHesap)
+                    .Include(x => x.BagliBankaHesap)
+                    .Include(x => x.TahsilatOdemeBelgesi)
+                    .FirstOrDefaultAsync(cancellationToken);
 
-            if (entity is null)
-            {
-                await tx.RollbackAsync(cancellationToken);
-                throw new BaseException("İşlem başka bir süreç tarafından devralınmış.", 409);
+                if (entity is null)
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    throw new BaseException("İşlem başka bir süreç tarafından devralınmış.", 409);
+                }
+
+                await ApplyGuncellemeVeAuditAsync(entity, guncelleme, cancellationToken);
+                await ValidateVeFisOlusturAsync(entity, cancellationToken);
+
+                entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
+                entity.AktarimTarihi = DateTime.UtcNow;
+                entity.HataMesaji = null;
+                entity.ClaimToken = null;
+                entity.AktarimBaslamaTarihi = null;
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+
+                return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = true, MuhasebeFisId = entity.MuhasebeFisId };
             }
+            catch (Exception ex) when (IsDeadlock(ex) && deadlockDenemesi < maxDeadlockDenemesi)
+            {
+                await SafeRollbackAsync(tx, cancellationToken);
+                _dbContext.ChangeTracker.Clear();
+                _logger.LogInformation("POS valör aktarımı ({Id}) deadlock (1205) nedeniyle tekrar deneniyor: deneme {Deneme}/{Azami}.", id, deadlockDenemesi, maxDeadlockDenemesi);
+                continue;
+            }
+            catch (BaseException ex) when (ex.ErrorCode == 422)
+            {
+                // Kullanıcı hatası: transaction rollback (entity degisiklikleri geri alinir), AMA
+                // Adim A'nin claim'i (Durum=Aktariliyor) AYRI, zaten commit edilmis bir transaction'daydi
+                // - bu yuzden burada da KosulluGuncelleAsync ile aciklikca onceki duruma DONULMELIDIR,
+                // aksi halde kayit Aktariliyor'da "takili" kalir. Hata/DenemeSayisi YAZILMAZ.
+                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await SafeRollbackAsync(tx, cleanupCts.Token);
+                await KosulluGuncelleAsync(id, token, onceki.OncekiDurum, onceki.OncekiDenemeSayisi, onceki.OncekiHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await SafeRollbackAsync(tx, cleanupCts.Token);
+                var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
+                var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
+                var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
+                    ? "Önceki aktarım denemesi sırasında bağlantı kesildi/uygulama durduruldu; kayıt tekrar denenebilir."
+                    : onceki.OncekiHataMesaji;
 
-            await ApplyGuncellemeVeAuditAsync(entity, guncelleme, cancellationToken);
-            await ValidateVeFisOlusturAsync(entity, cancellationToken);
+                await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await SafeRollbackAsync(tx, cleanupCts.Token);
 
-            entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
-            entity.AktarimTarihi = DateTime.UtcNow;
-            entity.HataMesaji = null;
-            entity.ClaimToken = null;
-            entity.AktarimBaslamaTarihi = null;
+                var mesaj = ex is BaseException be ? be.Message : "Aktarım sırasında beklenmeyen bir hata oluştu.";
+                var yapilandirmaHatasi = ex is BaseException { ErrorCode: 409 };
+                var mukerrerNoPenalty = ex is BaseException { ErrorCode: MukerrerNoPenaltyErrorCode };
+                var yeniDenemeSayisi = mukerrerNoPenalty
+                    ? onceki.OncekiDenemeSayisi
+                    : (yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1);
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+                await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, yeniDenemeSayisi, mesaj, DateTime.UtcNow, cleanupCts.Token);
 
-            return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = true, MuhasebeFisId = entity.MuhasebeFisId };
+                _logger.LogWarning(ex, "POS valör aktarımı başarısız: {Id}", id);
+                return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
+            }
+            finally
+            {
+                await tx.DisposeAsync();
+            }
         }
-        catch (BaseException ex) when (ex.ErrorCode == 422)
-        {
-            // Kullanıcı hatası: transaction rollback (entity degisiklikleri geri alinir), AMA
-            // Adim A'nin claim'i (Durum=Aktariliyor) AYRI, zaten commit edilmis bir transaction'daydi
-            // - bu yuzden burada da KosulluGuncelleAsync ile aciklikca onceki duruma DONULMELIDIR,
-            // aksi halde kayit Aktariliyor'da "takili" kalir. Hata/DenemeSayisi YAZILMAZ.
-            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await SafeRollbackAsync(tx, cleanupCts.Token);
-            await KosulluGuncelleAsync(id, token, onceki.OncekiDurum, onceki.OncekiDenemeSayisi, onceki.OncekiHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
-            throw;
-        }
-        catch (OperationCanceledException)
+
+        // Buraya yalnizca deadlock nedeniyle tum denemeler tukendiyse ulasilir.
         {
             using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await SafeRollbackAsync(tx, cleanupCts.Token);
-            var iadeDurumu = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? PosTahsilatValorDurumlari.Hata : onceki.OncekiDurum;
-            var iadeDenemeSayisi = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor ? onceki.OncekiDenemeSayisi + 1 : onceki.OncekiDenemeSayisi;
-            var iadeHataMesaji = onceki.OncekiDurum == PosTahsilatValorDurumlari.Aktariliyor
-                ? "Önceki aktarım denemesi sırasında bağlantı kesildi/uygulama durduruldu; kayıt tekrar denenebilir."
-                : onceki.OncekiHataMesaji;
-
-            await KosulluGuncelleAsync(id, token, iadeDurumu, iadeDenemeSayisi, iadeHataMesaji, onceki.OncekiSonDenemeTarihi, cleanupCts.Token);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await SafeRollbackAsync(tx, cleanupCts.Token);
-
-            var mesaj = ex is BaseException be ? be.Message : "Aktarım sırasında beklenmeyen bir hata oluştu.";
-            var yapilandirmaHatasi = ex is BaseException { ErrorCode: 409 };
-            var mukerrerNoPenalty = ex is BaseException { ErrorCode: MukerrerNoPenaltyErrorCode };
-            var yeniDenemeSayisi = mukerrerNoPenalty
-                ? onceki.OncekiDenemeSayisi
-                : (yapilandirmaHatasi ? AzamiOtomatikDeneme : onceki.OncekiDenemeSayisi + 1);
-
-            await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, yeniDenemeSayisi, mesaj, DateTime.UtcNow, cleanupCts.Token);
-
-            _logger.LogWarning(ex, "POS valör aktarımı başarısız: {Id}", id);
+            const string mesaj = "Aktarım sırasında tekrarlanan veritabanı çakışması (deadlock) oluştu, lütfen tekrar deneyin.";
+            await KosulluGuncelleAsync(id, token, PosTahsilatValorDurumlari.Hata, onceki.OncekiDenemeSayisi + 1, mesaj, DateTime.UtcNow, cleanupCts.Token);
             return new PosTahsilatValorAktarimSonucDto { Id = id, Basarili = false, HataMesaji = mesaj };
         }
     }
@@ -438,50 +463,85 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
             throw new BaseException("Fiş satır toplamları (Borç/Alacak) eşit değil; fiş oluşturulamadı.", 500);
         }
 
-        var fisNo = await GenerateFisNoAsync(entity.TesisId, aktifDonem.MaliYil, cancellationToken);
+        // FisNo cakismasinda (sayac gercek veriyle desenkron kalmissa) sayaci duzeltip SINIRLI
+        // sayida (3) tekrar dener - AYNI numarayi sonsuza kadar yeniden uretmez.
+        const int maxFisNoDenemesi = 3;
+        for (var fisNoDenemesi = 1; fisNoDenemesi <= maxFisNoDenemesi; fisNoDenemesi++)
+        {
+            var fisNo = await GenerateFisNoAsync(entity.TesisId, aktifDonem.MaliYil, cancellationToken);
 
-        var fis = new MuhasebeFis
-        {
-            TesisId = entity.TesisId,
-            MaliYil = aktifDonem.MaliYil,
-            Donem = aktifDonem.DonemNo,
-            FisNo = fisNo,
-            FisTarihi = DateTime.UtcNow.Date,
-            FisTipi = MuhasebeFisTipleri.Mahsup,
-            KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi,
-            KaynakId = entity.Id,
-            Durum = MuhasebeFisDurumlari.Taslak,
-            Aciklama = $"POS→Banka valör aktarımı - {entity.KrediKartiHesap.Ad} → {entity.BagliBankaHesap.Ad} - Kaynak belge: {entity.TahsilatOdemeBelgesi.BelgeNo}",
-            ToplamBorc = toplamBorc,
-            ToplamAlacak = toplamAlacak,
-            Satirlar = satirlar
-        };
-
-        try
-        {
-            await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex)
-        {
-            var tip = ClassifyFisConflict(ex);
-            if (tip is FisConflictType.KaynakMukerrer or FisConflictType.FisNoCakismasi)
+            var fis = new MuhasebeFis
             {
-                // Bu valor kaydi icin fis zaten baska bir eszamanli islem tarafindan olusturulmus
-                // olabilir - bu durum "hata" degil, "mukerrer" olarak siniflandirilir; DenemeSayisi
-                // TUKETILMEZ (bkz. HesabaAktarAsync'in disaridaki catch blogu).
-                throw new BaseException("Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş veya eşzamanlı bir işlem tespit edildi.", MukerrerNoPenaltyErrorCode);
+                TesisId = entity.TesisId,
+                MaliYil = aktifDonem.MaliYil,
+                Donem = aktifDonem.DonemNo,
+                FisNo = fisNo,
+                FisTarihi = DateTime.UtcNow.Date,
+                FisTipi = MuhasebeFisTipleri.Mahsup,
+                KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi,
+                KaynakId = entity.Id,
+                Durum = MuhasebeFisDurumlari.Taslak,
+                Aciklama = $"POS→Banka valör aktarımı - {entity.KrediKartiHesap.Ad} → {entity.BagliBankaHesap.Ad} - Kaynak belge: {entity.TahsilatOdemeBelgesi.BelgeNo}",
+                ToplamBorc = toplamBorc,
+                ToplamAlacak = toplamAlacak,
+                // Her deneme icin YENI MuhasebeFisSatir orneklerine ihtiyac var - onceki basarisiz
+                // denemenin nesneleri EF tarafindan hala "Added" olarak izlenebilir.
+                Satirlar = satirlar.Select(s => new MuhasebeFisSatir
+                {
+                    MuhasebeHesapPlaniId = s.MuhasebeHesapPlaniId,
+                    SiraNo = s.SiraNo,
+                    Borc = s.Borc,
+                    Alacak = s.Alacak,
+                    ParaBirimi = s.ParaBirimi,
+                    Kur = s.Kur,
+                    KasaBankaHesapId = s.KasaBankaHesapId,
+                    Aciklama = s.Aciklama
+                }).ToList()
+            };
+
+            try
+            {
+                await _dbContext.MuhasebeFisler.AddAsync(fis, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+            {
+                _dbContext.Entry(fis).State = EntityState.Detached;
+                foreach (var satir in fis.Satirlar)
+                {
+                    _dbContext.Entry(satir).State = EntityState.Detached;
+                }
+
+                var tip = ClassifyFisConflict(ex);
+                if (tip == FisConflictType.KaynakMukerrer)
+                {
+                    // Bu valor kaydi icin fis zaten baska bir eszamanli islem tarafindan
+                    // olusturulmus - bu "hata" degil, "mukerrer" olarak siniflandirilir; DenemeSayisi
+                    // TUKETILMEZ (bkz. HesabaAktarAsync'in disaridaki catch blogu).
+                    throw new BaseException("Bu valör kaydı için zaten bir muhasebe fişi oluşturulmuş veya eşzamanlı bir işlem tespit edildi.", MukerrerNoPenaltyErrorCode);
+                }
+
+                if (tip == FisConflictType.FisNoCakismasi && fisNoDenemesi < maxFisNoDenemesi)
+                {
+                    // Sayac gercek veriyle desenkron kalmis (ornegin migration'dan once elle
+                    // eklenmis bir fis) - sayaci GERCEK maksimuma gore duzeltip tekrar dener.
+                    await CorrectFisNoSayaciAsync(entity.TesisId, aktifDonem.MaliYil, cancellationToken);
+                    continue;
+                }
+
+                throw;
             }
 
-            throw;
+            entity.MuhasebeFisId = fis.Id;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // Is kurali: aktarimin muhasebe etkisi HEMEN dogar - fis Taslak birakilmaz, ayni
+            // transaction icinde onaylanir (YevmiyeNo uretilir, hesap bakiyeleri islenir).
+            await _muhasebeFisService.OnaylaAsync(fis.Id, cancellationToken);
+            return;
         }
 
-        entity.MuhasebeFisId = fis.Id;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // Is kurali: aktarimin muhasebe etkisi HEMEN dogar - fis Taslak birakilmaz, ayni
-        // transaction icinde onaylanir (YevmiyeNo uretilir, hesap bakiyeleri islenir).
-        await _muhasebeFisService.OnaylaAsync(fis.Id, cancellationToken);
+        throw new BaseException("Fiş numarası tekrarlanan çakışmalar nedeniyle üretilemedi. Lütfen tekrar deneyiniz.", 500);
     }
 
     private enum FisConflictType { KaynakMukerrer, FisNoCakismasi, Diger }
@@ -511,7 +571,10 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
     /// <summary>
     /// Tesis+MaliYil bazli, eszamanliliga guvenli fis no sayaci. MuhasebeFisService.
     /// YevmiyeNoUretAsync ile ayni WITH (UPDLOCK, ROWLOCK, HOLDLOCK) + retry deseni - eski
-    /// Max(FisNo)+1 yaklasimi yarisa acikti.
+    /// Max(FisNo)+1 yaklasimi yarisa acikti. Sayac kaydi HENUZ yoksa, koru olarak SonNumara=1
+    /// KULLANILMAZ - mevcut MuhasebeFisler'de bu tesis/yil icin zaten kullanilmis en buyuk
+    /// numaraya gore (bkz. ComputeGercekMaksimumNumaraAsync) baslangic degeri hesaplanir; bu,
+    /// migration'in kacirdigi/elle eklenmis legacy fisler ile cakismayi onler.
     /// </summary>
     private async Task<string> GenerateFisNoAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
     {
@@ -527,7 +590,8 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
 
             if (sayac is null)
             {
-                var created = new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = 1 };
+                var baslangicNumarasi = await ComputeGercekMaksimumNumaraAsync(tesisId, maliYil, cancellationToken);
+                var created = new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = baslangicNumarasi + 1 };
                 await _dbContext.PosValorFisNoSayaclari.AddAsync(created, cancellationToken);
                 try
                 {
@@ -549,6 +613,63 @@ WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
         }
 
         throw new BaseException("Fiş numarası üretilemedi. Lütfen tekrar deneyiniz.", 500);
+    }
+
+    /// <summary>
+    /// Bu tesis/mali yil icin MuhasebeFisler'de KaynakModul=PosTahsilatValorTransferi olan,
+    /// "{MaliYil}-VLR-NNNNNN" formatindaki fislerin GERCEKTEN kullanilmis en buyuk sira numarasini
+    /// dondurur (yoksa 0). Migration'daki seed sorgusuyla ayni mantik - hem yeni sayac olusturulurken
+    /// hem de sayac desenkron kaldiginda (CorrectFisNoSayaciAsync) kullanilir.
+    /// </summary>
+    private async Task<int> ComputeGercekMaksimumNumaraAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
+    {
+        var prefix = $"{maliYil}-VLR-";
+        var mevcutFisNolar = await _dbContext.MuhasebeFisler
+            .Where(x => x.TesisId == tesisId && x.MaliYil == maliYil && !x.IsDeleted
+                        && x.KaynakModul == MuhasebeKaynakModulleri.PosTahsilatValorTransferi
+                        && x.FisNo.StartsWith(prefix))
+            .Select(x => x.FisNo)
+            .ToListAsync(cancellationToken);
+
+        var maxSira = 0;
+        foreach (var fisNo in mevcutFisNolar)
+        {
+            var siraStr = fisNo[prefix.Length..];
+            if (int.TryParse(siraStr, out var sira) && sira > maxSira)
+            {
+                maxSira = sira;
+            }
+        }
+
+        return maxSira;
+    }
+
+    /// <summary>
+    /// FisNo unique index cakismasi (sayac gercek veriyle desenkron kalmis) sonrasi cagrilir.
+    /// Sayaci GERCEK maksimuma yukseltir (yalnizca ARTIRIR, asla azaltmaz - baska bir eszamanli
+    /// islemin zaten ilerlettigi bir sayaci geriye almaz). Ayni (ambient) transaction icinde
+    /// calisir - kilit UPDLOCK/ROWLOCK/HOLDLOCK ile aliniyor.
+    /// </summary>
+    private async Task CorrectFisNoSayaciAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
+    {
+        var gercekMaksimum = await ComputeGercekMaksimumNumaraAsync(tesisId, maliYil, cancellationToken);
+
+        var sayac = await _dbContext.PosValorFisNoSayaclari
+            .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[PosValorFisNoSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [TesisId] = {tesisId} AND [MaliYil] = {maliYil}")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (sayac is null)
+        {
+            await _dbContext.PosValorFisNoSayaclari.AddAsync(new PosValorFisNoSayac { TesisId = tesisId, MaliYil = maliYil, SonNumara = gercekMaksimum }, cancellationToken);
+        }
+        else if (sayac.SonNumara < gercekMaksimum)
+        {
+            sayac.SonNumara = gercekMaksimum;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task KosulluGuncelleAsync(int id, Guid token, string durum, int denemeSayisi, string? hataMesaji, DateTime? sonDenemeTarihi, CancellationToken cancellationToken)
@@ -590,6 +711,21 @@ WHERE [Id] = {id} AND [Durum] = {PosTahsilatValorDurumlari.Aktariliyor} AND [Cla
     private static bool IsUniqueConflict(DbUpdateException ex)
     {
         return ex.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+    }
+
+    /// <summary>SQL Server deadlock victim hatasi (1205). Raw SQL (ExecuteSqlInterpolatedAsync/
+    /// FromSqlInterpolated) sirasinda dogrudan SqlException, SaveChangesAsync sirasinda
+    /// DbUpdateException icine sarilmis olarak gelebilir - her iki durumu da yakalar. Bir deadlock
+    /// SQL Server tarafindan otomatik rollback edildigi icin transaction kullanilamaz hale gelir;
+    /// bu yuzden HesabaAktarAsync bu durumda TUM Adim B'yi (yeni bir transaction'la) tekrar dener.</summary>
+    private static bool IsDeadlock(Exception ex)
+    {
+        return ex switch
+        {
+            Microsoft.Data.SqlClient.SqlException sqlEx => sqlEx.Number == 1205,
+            DbUpdateException dbEx => dbEx.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 1205 },
+            _ => false
+        };
     }
 
     public async Task<PosTahsilatValorToplamAktarimSonucDto> SeciliHesaplaraAktarAsync(List<int> valorIdler, CancellationToken cancellationToken = default)

@@ -1,8 +1,77 @@
 # Kredi Kartı/POS Valör Takibi ve Banka Hesabına Aktarım — Uygulama Raporu
 
-Tarih: 2026-07-23 (ilk uygulama, commit 903fa6a) — güncelleme: 2026-07-23 (kod incelemesi düzeltmeleri)
+Tarih: 2026-07-23 (ilk uygulama, commit 903fa6a) — güncelleme 1: 2026-07-23 (kod incelemesi
+düzeltmeleri, commit c7ceecb) — güncelleme 2: 2026-07-23 (FisNo sayaç migration/concurrency
+düzeltmeleri, commit c7ceecb sonrası)
 
-## Güncelleme — Kod incelemesi düzeltmeleri (commit 903fa6a sonrası)
+## Güncelleme 2 — FisNo sayaç migration ve eşzamanlılık düzeltmeleri (commit c7ceecb sonrası)
+
+`c7ceecb` üzerinde yapılan ikinci bir kod incelemesinde, `AddPosValorFisNoSayaci` migration'ı ve
+FisNo üretiminin eşzamanlılık doğruluğu hakkında 5 madde tespit edildi ve düzeltildi:
+
+1. **Migration artık boş bir sayaç tablosu bırakmıyor.** `Up()` içine, mevcut `MuhasebeFisler`
+   tablosunda `KaynakModul=PosTahsilatValorTransferi` ve `FisNo` formatı `YYYY-VLR-NNNNNN` olan
+   kayıtları tesis+mali yıl bazında tarayıp **gerçek en büyük numarayı** `PosValorFisNoSayaclari`'na
+   yazan bir `migrationBuilder.Sql()` bloğu eklendi. Sorgu `NOT EXISTS` ile korunuyor — migration
+   birden fazla kez çalıştırılsa (örn. script olarak yeniden uygulansa) mevcut sayaç satırlarının
+   üzerine yazmıyor (idempotent). **Gerçek bir SQL Server'a karşı manuel doğrulandı**: migration geri
+   alındı, `TesisId=999999, FisNo='2026-VLR-000001'` ile elle bir legacy fiş eklendi, migration tekrar
+   uygulandı, `PosValorFisNoSayaclari`'nda o tesis/yıl için `SonNumara=1` satırının doğru şekilde
+   oluştuğu doğrulandı, ardından test verisi temizlendi.
+2. **Sayaç yokken artık `SonNumara=1` varsayılmıyor.** `GenerateFisNoAsync`, sayaç satırı yoksa artık
+   `ComputeGercekMaksimumNumaraAsync` ile `MuhasebeFisler` üzerinde gerçek maksimum numarayı hesaplayıp
+   sayaç satırını `SonNumara = gerçekMaks + 1` ile oluşturuyor — legacy/migration-öncesi fişlerle
+   çakışma riski ortadan kalktı. FisNo unique index çakışmasında (aynı numara başka bir fiş tarafından
+   zaten kullanılmış), aynı transaction'da sonsuz döngüye girmek yerine rollback sonrası **yeni bir
+   transaction'da** `CorrectFisNoSayaciAsync` ile sayaç gerçek maksimuma göre düzeltiliyor, ardından
+   en fazla 3 denemeye kadar sınırlı şekilde tekrar deneniyor.
+3. **Deadlock (SQL Server 1205) artık aynı transaction'da devam etmiyor.** `HesabaAktarAsync`'in Adım
+   B'si, 1205 hatası (`IsDeadlock` ile sınıflandırılıyor) alırsa **tüm transaction'ı** (yeni context/
+   transaction ile) en fazla 3 kez baştan deniyor — kısmi/eski bir transaction içinde ilerlemiyor. Bu,
+   sayaç satırının ilk kez oluşturulması için yarışan iki eşzamanlı sürecin deterministik bir
+   `SemaphoreSlim`+`CountdownEvent` bariyeriyle senkronize edildiği **Senaryo 2** testiyle (yeniden
+   yazıldı) doğrulandı: her iki taraf da başarıyla tamamlanıyor, sayaç tablosunda bu tesis/yıl için
+   **tam olarak bir** satır oluşuyor ve `SonNumara=2` (iki başarılı aktarımı yansıtıyor).
+4. **Senaryo 8 (aktarım/tahsilat-iptali yarışı) güçlendirildi.** Artık valör `Iptal` sonuçlanırsa aktif/
+   Onaylı hiçbir transfer fişinin kalmadığı (fiş hiç oluşmamışsa 0 fiş; oluşup sonra geri alınmışsa
+   orijinal fiş `Durum=Iptal`, karşı fiş `Durum=TersKayit`, `IptalEdilenFisId`/`TersKayitFisId`
+   ilişkisi doğru, tam olarak bir ters kayıt) ve **bakiye etkisinin gerçekten sıfırlandığı**
+   (`MuhasebeHesapBakiyeleri.NetBakiye` POS/Banka hesapları için toplamda 0) doğrulanıyor. Test
+   yardımcıları (`SafeCallAsync`/`TryAktarAsync`) artık **tüm** `BaseException`'ları koşulsuz
+   yutmuyor — yalnızca beklenen yarış-kaybı hata kodları (404/409/422 bağlama göre) yutuluyor, başka
+   bir kod (örn. 500, 403) test hatası olarak yukarı fırlatılıyor.
+5. **Yeni Senaryo 9 eklendi**: bir tesis için `MuhasebeFisler`'da legacy `2026-VLR-000001` fişi
+   varken `PosValorFisNoSayaclari`'nda o tesis/yıl için HİÇ satır olmadığı (migration-öncesi/geçiş
+   durumu) senaryoda, gerçek bir `HesabaAktarAsync` çağrısının başarıyla tamamlandığı, üretilen FisNo
+   numarasının `2026-VLR-000001` ile ÇAKIŞMADIĞI ve `>=000002` olduğu, sayaç tablosunun bu değeri
+   doğru yansıttığı doğrulanıyor.
+
+### Değişen/eklenen dosyalar (bu güncellemede)
+- `backend/Infrastructure/EntityFramework/Migrations/20260723075626_AddPosValorFisNoSayaci.cs`
+  (mevcut fişlerden sayaç seed eden `migrationBuilder.Sql()` bloğu eklendi)
+- `backend/Muhasebe/PosTahsilatValorleri/Services/PosTahsilatValorAktarimService.cs`
+  (`ComputeGercekMaksimumNumaraAsync`, `CorrectFisNoSayaciAsync`, `IsDeadlock`, deadlock-safe
+  transaction-retry döngüsü, FisNo çakışması retry döngüsü)
+- `tests/STYS.Tests/PosTahsilatValorIntegrationTests.cs` (Senaryo 2 barrier ile yeniden yazıldı,
+  Senaryo 8 güçlendirildi, yeni Senaryo 9 eklendi, `SafeCallAsync` ile koşulsuz exception yutma
+  kaldırıldı)
+
+### Çalıştırılan komutlar ve sonuçlar
+- **Migration manuel doğrulaması** (`localhost,14333/STYSDB`): migration geri alındı → legacy fiş
+  (`2026-VLR-000001`, `TesisId=999999`) elle eklendi → migration yeniden uygulandı → sayaç satırının
+  `SonNumara=1` ile doğru oluştuğu doğrulandı → test verisi temizlendi.
+- `dotnet ef database update` (güncel migration seti, `AddPosValorFisNoSayaci` dahil) → **başarılı**,
+  `dotnet ef migrations list` ile son migration'ın uygulandığı doğrulandı.
+- `dotnet build backend/STYS.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet build tests/STYS.Tests/STYS.Tests.csproj` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet test --filter FullyQualifiedName~PosTahsilatValor` (gerçek SQL Server'a karşı, 9 senaryo) →
+  **9/9 Passed, 0 Failed, 0 Skipped**.
+- `dotnet test tests/STYS.Tests` (tüm proje, env var ayarlı) → **324 Passed, 0 Failed, 0 Skipped**.
+- `ng build` (frontend) → **başarılı** (yalnızca ön var olan bundle-size uyarısı, hata değil).
+
+---
+
+## Güncelleme 1 — Kod incelemesi düzeltmeleri (commit 903fa6a sonrası)
 
 İlk uygulamanın kod incelemesinde 8 madde tespit edildi ve düzeltildi:
 

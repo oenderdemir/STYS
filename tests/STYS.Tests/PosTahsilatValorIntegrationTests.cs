@@ -19,6 +19,7 @@ using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.PosTahsilatValorleri.Dtos;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.PosTahsilatValorleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -389,14 +390,20 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Senaryo 2 — Iki "instance" ayni tesis/mali yil icin fis no uretiyor
+    // Senaryo 2 — Sayac kaydi HENUZ YOKKEN, iki "instance" ayni anda ilk kez
+    // olusturmaya calisiyor (deterministik barrier ile eszamanlanir).
     // ─────────────────────────────────────────────────────────────
     [IntegrationFact]
-    public async Task Senaryo2_IkiInstance_FarkliValorKayitlariIcinFisNoUretimi_CakismaOlmaz()
+    public async Task Senaryo2_SayacYokkenIkiEsZamanliIlkOlusturma_TekSayacSatiriVeBenzersizFisNo()
     {
         await using var seedContext = CreateDbContext();
         var valorId1 = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 500m, 0m, HesapPlaniKomisyonId, "S2-A");
         var valorId2 = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 700m, 0m, HesapPlaniKomisyonId, "S2-B");
+
+        // On-kosul: bu tesis/mali yil icin sayac tablosunda HENUZ hicbir satir yok - "ilk olusturma"
+        // yarisini test ediyoruz (Max(FisNo)+1 yaklasiminin en kirilgan oldugu senaryo).
+        var sayacVarMi = await seedContext.PosValorFisNoSayaclari.AnyAsync(x => x.TesisId == TesisAId);
+        Assert.False(sayacVarMi, "On-kosul ihlali: sayac zaten mevcut, test senaryosu gecersiz.");
 
         await using var ctx1 = CreateDbContext();
         await using var ctx2 = CreateDbContext();
@@ -404,8 +411,27 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         var svc1 = CreateAktarimService(ctx1, scope);
         var svc2 = CreateAktarimService(ctx2, scope);
 
-        var task1 = svc1.HesabaAktarAsync(valorId1, null, CancellationToken.None);
-        var task2 = svc2.HesabaAktarAsync(valorId2, null, CancellationToken.None);
+        // Deterministik barrier: her iki gorev de kendi HesabaAktarAsync cagrisini yapmadan hemen
+        // once gate'i bekler; gate iki taraf da hazir olunca AYNI ANDA acilir. Bu, iki tarafin da
+        // sayac SELECT'ini (WITH UPDLOCK) mumkun oldugunca ayni zaman penceresinde yapmasini saglar
+        // - "sayac henuz yokken" fantom-satir yarisini (UPDLOCK var-olmayan bir satiri kilitleyemez)
+        // gercekci sekilde tetikler.
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+
+        async Task<PosTahsilatValorAktarimSonucDto> GatedAktarAsync(IPosTahsilatValorAktarimService svc, int valorId)
+        {
+            hazirSayaci.Signal();
+            await gate.WaitAsync();
+            return await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+        }
+
+        var task1 = Task.Run(() => GatedAktarAsync(svc1, valorId1));
+        var task2 = Task.Run(() => GatedAktarAsync(svc2, valorId2));
+
+        hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        gate.Release(2);
+
         var sonuclar = await Task.WhenAll(task1, task2);
 
         Assert.All(sonuclar, x => Assert.True(x.Basarili, x.HataMesaji));
@@ -419,6 +445,18 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
 
         Assert.Equal(2, fisNolar.Count);
         Assert.Equal(2, fisNolar.Distinct().Count()); // fis no'lar farkli olmali (cakisma yok)
+
+        // Sayac tablosunda bu tesis/mali yil icin TEK bir (soft-delete edilmemis) satir olmali -
+        // eszamanli iki "ilk olusturma" denemesi ikinci bir sayac satiri URETMEMIS olmali.
+        var sayacSatirSayisi = await verifyContext.PosValorFisNoSayaclari
+            .CountAsync(x => x.TesisId == TesisAId && !x.IsDeleted);
+        Assert.Equal(1, sayacSatirSayisi);
+
+        var sonNumara = await verifyContext.PosValorFisNoSayaclari
+            .Where(x => x.TesisId == TesisAId && !x.IsDeleted)
+            .Select(x => x.SonNumara)
+            .SingleAsync();
+        Assert.Equal(2, sonNumara); // iki fis uretildi -> sayac 2'de olmali
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -620,8 +658,12 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             new ValorTarihHesaplamaService(new NoOpResmiTatilGunuProvider()),
             CreateMuhasebeFisService(ctx2, scope));
 
-        var aktarimTask = SafeAktarAsync(aktarimSvc, valorId);
-        var iptalTask = SafeIptalAsync(snapshotSvc, belgeId);
+        // Yalnizca YARISTA KAYBETMENIN beklenen sonucu olan hata kodlari yutulur (404: kayit henuz
+        // gorulemedi/race; 409: "aktarim/iptal surdugu icin simdi yapilamaz"; 422: valor tarihi/
+        // girdi kontrolu). Baska HERHANGI bir BaseException (ornegin 500 veri tutarsizligi, 403
+        // yetki) test hatasi olarak YUKARI FIRLATILIR - koşulsuz yutma yapilmaz.
+        var aktarimTask = SafeCallAsync(() => aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None), 404, 409, 422);
+        var iptalTask = SafeCallAsync(() => snapshotSvc.IptalEtAsync(belgeId, CancellationToken.None), 404, 409, 422);
         await Task.WhenAll(aktarimTask, iptalTask);
 
         await using var verifyContext = CreateDbContext();
@@ -634,39 +676,148 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
 
         if (valor.Durum == PosTahsilatValorDurumlari.Aktarildi)
         {
+            // Aktarim yarisi kazandi: tam olarak bir Onayli transfer fisi olmali (Taslak degil -
+            // bkz. duzeltme #1), tahsilat iptali bu fisi henuz gormemis/etkilememis olmali.
             Assert.NotNull(valor.MuhasebeFisId);
+            var fis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == valor.MuhasebeFisId);
+            Assert.Equal(MuhasebeFisDurumlari.Onayli, fis.Durum);
+
             var fisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x =>
                 x.KaynakModul == MuhasebeKaynakModulleri.PosTahsilatValorTransferi && x.KaynakId == valorId);
             Assert.Equal(1, fisSayisi);
         }
+        else // valor.Durum == Iptal
+        {
+            // Iptal yarisi kazandi (ya da aktarimdan sonra iptal tetiklendi). Iki alt-durum var:
+            if (valor.MuhasebeFisId is null)
+            {
+                // (a) Iptal, transfer fisi hic olusmadan once devreye girdi - aktif/Onayli hicbir
+                // transfer fisi KESINLIKLE olusmamis olmali.
+                var olusmusFisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x =>
+                    x.KaynakModul == MuhasebeKaynakModulleri.PosTahsilatValorTransferi && x.KaynakId == valorId);
+                Assert.Equal(0, olusmusFisSayisi);
+            }
+            else
+            {
+                // (b) Aktarim ONCE tamamlandi (fis Onayli oldu), SONRA iptal onu ters kayitla geri
+                // aldi (TahsilatOdemeBelgesiService -> PosTahsilatValorSnapshotService.IptalEtAsync
+                // -> MuhasebeFisService.PosValorTransferFisiniIptalEtAsync). Orijinal fis artik
+                // AKTIF/Onayli KALMAMALI; tam olarak bir karsit (TersKayit) fis olusmus olmali ve
+                // iliski dogru kurulmus olmali.
+                var orijinalFis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == valor.MuhasebeFisId);
+                Assert.Equal(MuhasebeFisDurumlari.Iptal, orijinalFis.Durum); // aktif Onayli birakilmadi
+
+                Assert.NotNull(valor.TersKayitMuhasebeFisId);
+                var tersFis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == valor.TersKayitMuhasebeFisId);
+                Assert.Equal(MuhasebeFisDurumlari.TersKayit, tersFis.Durum);
+                Assert.Equal(orijinalFis.Id, tersFis.IptalEdilenFisId);
+                Assert.Equal(tersFis.Id, orijinalFis.TersKayitFisId);
+
+                var tersKayitSayisi = await verifyContext.MuhasebeFisler.CountAsync(x => x.IptalEdilenFisId == orijinalFis.Id);
+                Assert.Equal(1, tersKayitSayisi); // tam olarak BIR ters kayit
+
+                // Bakiye etkisi geri alinmis olmali: orijinal fis + ters kayit fisinin POS (109) ve
+                // Banka (102) hesaplarina toplam net etkisi sifir olmalidir (bu izole test tesisinde
+                // baska hicbir fis bu hesaplara dokunmuyor).
+                var posNetBakiye = await verifyContext.MuhasebeHesapBakiyeleri
+                    .Where(x => x.TesisId == TesisAId && x.MuhasebeHesapPlaniId == HesapPlaniPosId)
+                    .SumAsync(x => x.NetBakiye);
+                var bankaNetBakiye = await verifyContext.MuhasebeHesapBakiyeleri
+                    .Where(x => x.TesisId == TesisAId && x.MuhasebeHesapPlaniId == HesapPlaniBankaId)
+                    .SumAsync(x => x.NetBakiye);
+                Assert.Equal(0m, posNetBakiye);
+                Assert.Equal(0m, bankaNetBakiye);
+            }
+        }
     }
 
-    private static async Task SafeAktarAsync(IPosTahsilatValorAktarimService svc, int valorId)
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 9 — Legacy fis (2026-VLR-000001) varken sayac tablosu bos: migration/gecis senaryosu.
+    // Yeni bir aktarim, sayac HENUZ yokken bile GERCEK MuhasebeFisler verisine bakarak benzersiz,
+    // >=000002 bir numarayla basariyla tamamlanmali (bkz. GenerateFisNoAsync'in "sayac is null" dali).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo9_LegacyFisVarkenSayacBos_YeniAktarimBenzersizNumarayiUretir()
     {
-        try { await svc.HesabaAktarAsync(valorId, null, CancellationToken.None); }
-        catch (BaseException) { /* yarisi kaybedebilir, beklenen */ }
+        await using var seedContext = CreateDbContext();
+
+        var legacyFis = new MuhasebeFis
+        {
+            TesisId = TesisAId,
+            MaliYil = 2026,
+            Donem = 1,
+            FisNo = "2026-VLR-000001",
+            FisTarihi = DateTime.UtcNow.Date,
+            FisTipi = MuhasebeFisTipleri.Mahsup,
+            KaynakModul = MuhasebeKaynakModulleri.PosTahsilatValorTransferi,
+            KaynakId = -1, // gercek bir valor kaydina bagli degil - yalnizca sayac hesaplamasini test eder
+            Durum = MuhasebeFisDurumlari.Onayli,
+            ToplamBorc = 500m,
+            ToplamAlacak = 500m
+        };
+        seedContext.MuhasebeFisler.Add(legacyFis);
+        await seedContext.SaveChangesAsync();
+
+        // On-kosul: sayac tablosunda bu tesis/mali yil icin HENUZ kayit yok.
+        var sayacVarMi = await seedContext.PosValorFisNoSayaclari.AnyAsync(x => x.TesisId == TesisAId && x.MaliYil == 2026);
+        Assert.False(sayacVarMi, "On-kosul ihlali: sayac zaten mevcut, test senaryosu gecersiz.");
+
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 600m, 0m, HesapPlaniKomisyonId, "S9");
+
+        await using var ctx = CreateDbContext();
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var svc = CreateAktarimService(ctx, scope);
+
+        var sonuc = await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+        Assert.True(sonuc.Basarili, sonuc.HataMesaji);
+
+        await using var verifyContext = CreateDbContext();
+        var yeniFis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == sonuc.MuhasebeFisId);
+        Assert.NotEqual("2026-VLR-000001", yeniFis.FisNo);
+        Assert.Matches(@"^2026-VLR-\d{6}$", yeniFis.FisNo);
+
+        var yeniSira = int.Parse(yeniFis.FisNo[^6..]);
+        Assert.True(yeniSira >= 2, $"Beklenen: >=2 (legacy 000001'i takip etmeli), Gerçek: {yeniSira} (FisNo={yeniFis.FisNo})");
+
+        var sayacSonNumara = await verifyContext.PosValorFisNoSayaclari
+            .Where(x => x.TesisId == TesisAId && x.MaliYil == 2026 && !x.IsDeleted)
+            .Select(x => x.SonNumara)
+            .SingleAsync();
+        Assert.Equal(yeniSira, sayacSonNumara);
+    }
+
+    /// <summary>HesabaAktarAsync/IptalEtAsync gibi eszamanlilik testlerinde cagrilan islemler,
+    /// yarisi kaybettiklerinde BEKLENEN hata kodlariyla (ornegin 409 "su an yapilamaz") basarisiz
+    /// olabilir - bunlar yutulur. Ancak listede OLMAYAN bir ErrorCode (ornegin 500 veri tutarsizligi,
+    /// 403 yetkisiz erisim) KOŞULSUZ YUTULMAZ, oldugu gibi yeniden firlatilir - bu, testin gercek
+    /// bir hatayi "beklenen yaris kaybi" sanip gizlemesini engeller.</summary>
+    private static async Task SafeCallAsync(Func<Task> action, params int[] beklenenHataKodlari)
+    {
+        try
+        {
+            await action();
+        }
+        catch (BaseException ex) when (beklenenHataKodlari.Contains(ex.ErrorCode))
+        {
+            // Beklenen yaris-kaybi hatasi - yutulur.
+        }
     }
 
     /// <summary>HesabaAktarAsync, claim asamasinda kaybeden taraf icin bir sonuc DTO'su DEGIL,
     /// dogrudan BaseException firlatir (Adim A'da "uygun" degilse hemen throw). Bu yardimci,
     /// eszamanlilik testlerinde her iki tarafi da tekdüze bir sonuca (Basarili/HataMesaji)
-    /// indirger.</summary>
-    private static async Task<STYS.Muhasebe.PosTahsilatValorleri.Dtos.PosTahsilatValorAktarimSonucDto> TryAktarAsync(IPosTahsilatValorAktarimService svc, int valorId)
+    /// indirger. Yalnizca 409 (claim/durum yarisi) beklenen hatadir - baska bir kod gelirse test
+    /// hatasi olarak yukari firlatilir.</summary>
+    private static async Task<PosTahsilatValorAktarimSonucDto> TryAktarAsync(IPosTahsilatValorAktarimService svc, int valorId)
     {
         try
         {
             return await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
         }
-        catch (BaseException ex)
+        catch (BaseException ex) when (ex.ErrorCode == 409)
         {
-            return new STYS.Muhasebe.PosTahsilatValorleri.Dtos.PosTahsilatValorAktarimSonucDto { Id = valorId, Basarili = false, HataMesaji = ex.Message };
+            return new PosTahsilatValorAktarimSonucDto { Id = valorId, Basarili = false, HataMesaji = ex.Message };
         }
-    }
-
-    private static async Task SafeIptalAsync(IPosTahsilatValorSnapshotService svc, int belgeId)
-    {
-        try { await svc.IptalEtAsync(belgeId, CancellationToken.None); }
-        catch (BaseException) { /* yarisi kaybedebilir, beklenen */ }
     }
 
     // ─────────────────────────────────────────────────────────────

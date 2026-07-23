@@ -62,6 +62,7 @@ import { CariHareketlerPage } from './app/pages/muhasebe/cari-hareketler/cari-ha
 import { KasaHareketleriPage } from './app/pages/muhasebe/kasa-hareketleri/kasa-hareketleri';
 import { BankaHareketleriPage } from './app/pages/muhasebe/banka-hareketleri/banka-hareketleri';
 import { TahsilatOdemeBelgeleriPage } from './app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri';
+import { PosTahsilatValorPage } from './app/pages/muhasebe/pos-tahsilat-valor/pos-tahsilat-valor';
 import { TasinirKodlariPage } from './app/pages/muhasebe/tasinir-kodlari/tasinir-kodlari';
 import { TasinirKartlariPage } from './app/pages/muhasebe/tasinir-kartlari/tasinir-kartlari';
 import { DepolarPage } from './app/pages/muhasebe/depolar/depolar';
@@ -176,6 +177,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/kasa-banka-hesaplari', component: KasaBankaHesaplariPage, data: { breadcrumb: ['Finans Yönetimi', 'Finansal Hesaplar'] } },
             { path: 'muhasebe/hesaplar', component: HesaplarPage, data: { breadcrumb: ['Cari Yönetim', 'Hesaplar'] } },
             { path: 'muhasebe/tahsilat-odeme-belgeleri', component: TahsilatOdemeBelgeleriPage, data: { breadcrumb: ['Cari Yönetim', 'Tahsilat/Odeme Belgeleri'] } },
+            { path: 'muhasebe/pos-tahsilat-valor', component: PosTahsilatValorPage, data: { breadcrumb: ['Finans Yönetimi', 'POS Valör Takibi'] } },
             { path: 'muhasebe/tasinir-kodlari', component: TasinirKodlariPage, data: { breadcrumb: ['Taşınır / Demirbaş Yönetimi', 'Taşınır Kodları'] } },
             { path: 'muhasebe/tasinir-kartlari', component: TasinirKartlariPage, data: { breadcrumb: ['Taşınır / Demirbaş Yönetimi', 'Taşınır Kartları'] } },
             { path: 'muhasebe/depolar', component: DepolarPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Depolar'] } },

@@ -153,8 +153,29 @@
                 <p-inputNumber class="w-full" [(ngModel)]="model.sonOdemeGunu" [min]="1" [max]="31" [useGrouping]="false" />
             </div>
             <div class="col-span-12 md:col-span-6">
-                <label class="block mb-2">Bagli Banka Hesabi</label>
+                <label class="block mb-2">Bagli Banka Hesabi *</label>
                 <p-select class="w-full" [options]="bagliBankaSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.bagliBankaHesapId" appendTo="body" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block mb-2">Valör Gün Türü</label>
+                <p-select class="w-full" [options]="valorGunTurleri" optionLabel="label" optionValue="value" [(ngModel)]="model.valorGunTuru" appendTo="body" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <label class="block mb-2">Komisyon Oranı (%)</label>
+                <p-inputNumber class="w-full" [(ngModel)]="model.komisyonOrani" [min]="0" [max]="100" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" placeholder="Bilinmiyor" />
+            </div>
+            <div class="col-span-12 md:col-span-8">
+                <label class="block mb-2">Komisyon Gider Hesabı{{ (model.komisyonOrani ?? 0) > 0 ? ' *' : '' }}</label>
+                <p-select class="w-full" [options]="komisyonGiderHesapSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.komisyonGiderHesapPlaniId" appendTo="body" [showClear]="true" />
+            </div>
+            <div class="col-span-12 flex align-items-center gap-2">
+                <p-checkbox [(ngModel)]="model.valorGunundeOtomatikHesabaAktarMi" [binary]="true" inputId="valorOtomatikAktar" />
+                <label for="valorOtomatikAktar">Valör gününde otomatik olarak banka hesabına aktar</label>
+            </div>
+            <div class="col-span-12 text-sm text-color-secondary -mt-2">
+                Valör tarihi geldiğinde bekleyen POS tutarı bağlı banka hesabına otomatik olarak aktarılır. Bu işlem
+                yalnızca STYS içi muhasebe kaydıdır; bankaya fiziksel para transferi yapılmaz. Komisyon oranı
+                girilmezse (belirsizse) otomatik aktarım "Mutabakat Bekliyor" durumunda insan onayı bekler.
             </div>
         </ng-container>
 

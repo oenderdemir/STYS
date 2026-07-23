@@ -40,6 +40,11 @@ public class KasaBankaHesaplariController : UIController
     public async Task<ActionResult<List<MuhasebeHesapSecimDto>>> GetMuhasebeHesapSecimleri(string tip, CancellationToken cancellationToken = default)
         => Ok(await _service.GetMuhasebeHesapSecimleriAsync(tip, cancellationToken));
 
+    [HttpGet("komisyon-gider-hesap-secimleri")]
+    [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
+    public async Task<ActionResult<List<MuhasebeHesapSecimDto>>> GetKomisyonGiderHesapSecimleri(CancellationToken cancellationToken)
+        => Ok(await _service.GetKomisyonGiderHesapSecimleriAsync(cancellationToken));
+
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
     public async Task<ActionResult<KasaBankaHesapDto>> GetById(int id, CancellationToken cancellationToken)

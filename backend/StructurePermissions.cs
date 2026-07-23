@@ -531,6 +531,13 @@ public static class StructurePermissions
         public const string Manage = "KasaBankaHesapYonetimi.Manage";
     }
 
+    public static class PosTahsilatValorYonetimi
+    {
+        public const string Menu = "PosTahsilatValorYonetimi.Menu";
+        public const string View = "PosTahsilatValorYonetimi.View";
+        public const string Manage = "PosTahsilatValorYonetimi.Manage";
+    }
+
     public static class HesapYonetimi
     {
         public const string Menu = "HesapYonetimi.Menu";

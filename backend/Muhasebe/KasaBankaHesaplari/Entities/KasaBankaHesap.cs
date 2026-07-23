@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.Muhasebe.BankaHareketleri.Entities;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Tesisler.Entities;
@@ -48,6 +49,21 @@ public class KasaBankaHesap : BaseEntity<int>
     public int? SonOdemeGunu { get; set; }
 
     public int? BagliBankaHesapId { get; set; }
+
+    /// <summary>Valor gununde POS alacaginin BagliBankaHesapId'ye otomatik aktarilip
+    /// aktarilmayacagi. Yalnizca STYS ici muhasebe aktarimidir, bankaya fiziksel para
+    /// transferi yapmaz.</summary>
+    public bool ValorGunundeOtomatikHesabaAktarMi { get; set; }
+
+    [MaxLength(16)]
+    public string ValorGunTuru { get; set; } = ValorGunTurleri.TakvimGunu;
+
+    /// <summary>Komisyon kesintisinin yazilacagi gider hesabi. KomisyonOrani>0 ise zorunludur.</summary>
+    public int? KomisyonGiderHesapPlaniId { get; set; }
+
+    /// <summary>Sabit oranli POS komisyon tarifesi (yuzde). Null ise komisyon belirsiz kabul
+    /// edilir; otomatik aktarimda bu durumda MutabakatBekliyor'a dusulur.</summary>
+    public decimal? KomisyonOrani { get; set; }
 
     [MaxLength(128)]
     public string? BankaAdi { get; set; }

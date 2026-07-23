@@ -8,4 +8,5 @@ public interface IKasaBankaHesapService : IBaseRdbmsService<KasaBankaHesapDto, K
 {
     Task<List<KasaBankaHesapDto>> GetByTipAsync(string tip, bool onlyActive, CancellationToken cancellationToken = default);
     Task<List<MuhasebeHesapSecimDto>> GetMuhasebeHesapSecimleriAsync(string tip, CancellationToken cancellationToken = default);
+    Task<List<MuhasebeHesapSecimDto>> GetKomisyonGiderHesapSecimleriAsync(CancellationToken cancellationToken = default);
 }

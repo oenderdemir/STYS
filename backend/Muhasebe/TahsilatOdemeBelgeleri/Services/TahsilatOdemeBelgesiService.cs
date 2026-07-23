@@ -9,6 +9,7 @@ using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.PosTahsilatValorleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
@@ -26,6 +27,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IPosTahsilatValorSnapshotService _posTahsilatValorSnapshotService;
 
     public TahsilatOdemeBelgesiService(
         ITahsilatOdemeBelgesiRepository repository,
@@ -35,6 +37,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         StysAppDbContext dbContext,
         IMuhasebeDonemService muhasebeDonemService,
         IUserAccessScopeService userAccessScopeService,
+        IPosTahsilatValorSnapshotService posTahsilatValorSnapshotService,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -45,6 +48,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         _dbContext = dbContext;
         _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
+        _posTahsilatValorSnapshotService = posTahsilatValorSnapshotService;
     }
 
     public async Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default)
@@ -104,6 +108,11 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             {
                 await _cariHareketKapamaService.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(entity.Id, CancellationToken.None);
             }
+
+            // Yalnizca kredi karti/POS tahsilatlari icin (aksi halde no-op) valor takip
+            // kaydi olusturulur - ayni transaction icinde, commit'ten once. Snapshot
+            // olusturma basarisiz olursa TahsilatOdemeBelgesi kaydi da rollback olur.
+            await _posTahsilatValorSnapshotService.OlusturSnapshotAsync(entity, CancellationToken.None);
 
             await transaction.CommitAsync();
             return Mapper.Map<TahsilatOdemeBelgesiDto>(entity);
@@ -182,6 +191,10 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             }
 
             await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, cancellationToken);
+
+            // POS valor kaydi varsa (kredi karti disi odemelerde no-op) iptal zincirine dahil
+            // edilir - Aktarildi ise once valor transfer fisinin ters kaydi olusturulur.
+            await _posTahsilatValorSnapshotService.IptalEtAsync(id, cancellationToken);
 
             if (await HasCariHareketAsync(id))
             {

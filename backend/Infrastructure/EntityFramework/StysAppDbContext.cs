@@ -16,7 +16,9 @@ using STYS.MisafirTipleri.Entities;
 using STYS.Muhasebe.BankaHareketleri.Entities;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.Hesaplar.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -175,6 +177,8 @@ public class StysAppDbContext : DbContext
     public DbSet<MuhasebeDonem> MuhasebeDonemler => Set<MuhasebeDonem>();
     public DbSet<MuhasebeYevmiyeNoSayac> MuhasebeYevmiyeNoSayaclari => Set<MuhasebeYevmiyeNoSayac>();
     public DbSet<MuhasebeHesapBakiye> MuhasebeHesapBakiyeleri => Set<MuhasebeHesapBakiye>();
+    public DbSet<PosTahsilatValor> PosTahsilatValorleri => Set<PosTahsilatValor>();
+    public DbSet<PosTahsilatValorDegisiklikGecmisi> PosTahsilatValorDegisiklikGecmisleri => Set<PosTahsilatValorDegisiklikGecmisi>();
     public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
     public DbSet<SatisBelgesi> SatisBelgeleri => Set<SatisBelgesi>();
     public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
@@ -1749,6 +1753,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.SorumluKisi).HasMaxLength(128);
             entity.Property(x => x.Lokasyon).HasMaxLength(128);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.ValorGunTuru).HasMaxLength(16).HasDefaultValue(ValorGunTurleri.TakvimGunu);
+            entity.Property(x => x.ValorGunundeOtomatikHesabaAktarMi).HasDefaultValue(false);
+            entity.Property(x => x.KomisyonOrani).HasPrecision(5, 2);
             entity.HasIndex(x => new { x.TesisId, x.Kod })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
@@ -1776,6 +1783,70 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<MuhasebeHesapPlani>()
+                .WithMany()
+                .HasForeignKey(x => x.KomisyonGiderHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosTahsilatValor>(entity =>
+        {
+            entity.ToTable("PosTahsilatValorleri", muhasebeSchema);
+            entity.Property(x => x.ValorGunTuru).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Durum).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.KomisyonOraniSnapshot).HasPrecision(5, 2);
+            entity.Property(x => x.BrutTutar).HasPrecision(18, 2);
+            entity.Property(x => x.KomisyonTutari).HasPrecision(18, 2);
+            entity.Property(x => x.NetTutar).HasPrecision(18, 2);
+            entity.Property(x => x.HataMesaji).HasMaxLength(1024);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+
+            // Bir TahsilatOdemeBelgesi icin en fazla bir (soft-delete edilmemis) valor kaydi.
+            entity.HasIndex(x => x.TahsilatOdemeBelgesiId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.Durum, x.BeklenenValorTarihi });
+            entity.HasIndex(x => new { x.TesisId, x.OtomatikAktarimMi, x.Durum });
+
+            // ClaimToken EF concurrency token'i olarak isaretlenir - EF'in urettigi her
+            // UPDATE/DELETE otomatik olarak WHERE ... AND ClaimToken=@orijinalDeger ekler
+            // (satir kilidine ek, gercek bir optimistic-concurrency guvencesi).
+            entity.Property(x => x.ClaimToken).IsConcurrencyToken();
+
+            entity.HasOne(x => x.TahsilatOdemeBelgesi)
+                .WithMany()
+                .HasForeignKey(x => x.TahsilatOdemeBelgesiId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.KrediKartiHesap)
+                .WithMany()
+                .HasForeignKey(x => x.KrediKartiHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.BagliBankaHesap)
+                .WithMany()
+                .HasForeignKey(x => x.BagliBankaHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.KomisyonGiderHesapPlani)
+                .WithMany()
+                .HasForeignKey(x => x.KomisyonGiderHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.MuhasebeFis)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeFisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosTahsilatValorDegisiklikGecmisi>(entity =>
+        {
+            entity.ToTable("PosTahsilatValorDegisiklikGecmisleri", muhasebeSchema);
+            entity.Property(x => x.IslemTipi).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(512);
+            entity.HasIndex(x => x.PosTahsilatValorId);
+            entity.HasOne(x => x.PosTahsilatValor)
+                .WithMany()
+                .HasForeignKey(x => x.PosTahsilatValorId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -2163,7 +2234,12 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0 AND [KaynakModul] IS NOT NULL AND [KaynakId] IS NOT NULL AND [Durum] NOT IN ('Iptal', 'TersKayit')");
             entity.HasIndex(x => x.Durum);
             entity.HasIndex(x => x.TersKayitFisId);
-            entity.HasIndex(x => x.IptalEdilenFisId);
+            // Ayni orijinal fise ikinci bir ters kayit fisi olusmasini DB seviyesinde engeller.
+            // IsDeleted filtresi BILINCLI OLARAK eklenmez: bir ters kayit fisi soft-delete
+            // edilse bile bu iliski "bos" sayilmamali (finansal butunluk).
+            entity.HasIndex(x => x.IptalEdilenFisId)
+                .IsUnique()
+                .HasFilter("[IptalEdilenFisId] IS NOT NULL");
             entity.HasOne(x => x.TersKayitFis)
                 .WithMany()
                 .HasForeignKey(x => x.TersKayitFisId)

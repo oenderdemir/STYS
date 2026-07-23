@@ -181,8 +181,15 @@ builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, AlisTevkifatliFat
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisStratejisi, AlisFaturasiMuhasebeFisStratejisi>();
 builder.Services.AddScoped<ISatisBelgesiMuhasebeFisService, SatisBelgesiMuhasebeFisService>();
 builder.Services.AddScoped<STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.ITahsilatOdemeBelgesiMuhasebeFisService, STYS.Muhasebe.TahsilatOdemeBelgeleri.Services.TahsilatOdemeBelgesiMuhasebeFisService>();
+builder.Services.AddSingleton<STYS.Muhasebe.Common.Services.IResmiTatilGunuProvider, STYS.Muhasebe.Common.Services.NoOpResmiTatilGunuProvider>();
+builder.Services.AddSingleton<STYS.Muhasebe.Common.Services.IValorTarihHesaplamaService, STYS.Muhasebe.Common.Services.ValorTarihHesaplamaService>();
+builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Repositories.IPosTahsilatValorRepository, STYS.Muhasebe.PosTahsilatValorleri.Repositories.PosTahsilatValorRepository>();
+builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsilatValorSnapshotService, STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorSnapshotService>();
+builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsilatValorAktarimService, STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorAktarimService>();
+builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsilatValorService, STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
+builder.Services.AddHostedService<STYS.Muhasebe.PosTahsilatValorleri.Services.PosValorAktarimHostedService>();
 
 builder.Services.AddTodLicensing(builder.Configuration, builder.Environment);
 builder.Services.AddTodPlatformJwtAuthentication(builder.Configuration, builder.Environment.IsDevelopment());

@@ -49,9 +49,14 @@ export class KasaBankaHesaplariPage implements OnInit {
     totalRecords = 0;
 
     readonly hesapTipleri = KASA_BANKA_HESAP_TIPLERI;
+    readonly valorGunTurleri = [
+        { label: 'Takvim Günü', value: 'TakvimGunu' as const },
+        { label: 'İş Günü (yalnızca hafta sonu hariç, resmi tatil hariç)', value: 'IsGunu' as const }
+    ];
     tipFilter: KasaBankaHesapTipi | null = null;
     secilenYeniTip: KasaBankaHesapTipi = 'NakitKasa';
     bagliBankaSecenekleri: Array<{ label: string; value: number }> = [];
+    komisyonGiderHesapSecenekleri: Array<{ label: string; value: number }> = [];
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -136,6 +141,7 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.model.tesisId = tesisId;
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
+        this.refreshKomisyonGiderHesapSecenekleri();
     }
 
     openEdit(item: KasaBankaHesapModel): void {
@@ -143,6 +149,7 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.model = { ...item };
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
+        this.refreshKomisyonGiderHesapSecenekleri();
     }
 
     onTipChange(): void {
@@ -164,10 +171,15 @@ export class KasaBankaHesaplariPage implements OnInit {
             hesapKesimGunu: next === 'KrediKarti' ? this.model.hesapKesimGunu : null,
             sonOdemeGunu: next === 'KrediKarti' ? this.model.sonOdemeGunu : null,
             bagliBankaHesapId: next === 'KrediKarti' ? this.model.bagliBankaHesapId : null,
+            valorGunundeOtomatikHesabaAktarMi: next === 'KrediKarti' ? this.model.valorGunundeOtomatikHesabaAktarMi : false,
+            valorGunTuru: next === 'KrediKarti' ? (this.model.valorGunTuru || 'TakvimGunu') : 'TakvimGunu',
+            komisyonGiderHesapPlaniId: next === 'KrediKarti' ? this.model.komisyonGiderHesapPlaniId : null,
+            komisyonOrani: next === 'KrediKarti' ? this.model.komisyonOrani : null,
             sorumluKisi: next === 'NakitKasa' ? this.model.sorumluKisi : null,
             lokasyon: next === 'NakitKasa' ? this.model.lokasyon : null
         };
         this.refreshBagliBankaSecenekleri();
+        this.refreshKomisyonGiderHesapSecenekleri();
     }
 
     save(): void {
@@ -210,6 +222,23 @@ export class KasaBankaHesaplariPage implements OnInit {
             }
         }
 
+        if (this.model.tip === 'KrediKarti') {
+            if (!this.model.bagliBankaHesapId) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kredi karti/POS hesabi icin bagli banka hesabi zorunludur.' });
+                return;
+            }
+
+            if (this.model.komisyonOrani != null && (this.model.komisyonOrani < 0 || this.model.komisyonOrani > 100)) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gecersiz Deger', detail: 'Komisyon orani 0-100 araliginda olmalidir.' });
+                return;
+            }
+
+            if ((this.model.komisyonOrani ?? 0) > 0 && !this.model.komisyonGiderHesapPlaniId) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Komisyon orani girildiyse komisyon gider hesabi zorunludur.' });
+                return;
+            }
+        }
+
         const payload: CreateKasaBankaHesapRequest | UpdateKasaBankaHesapRequest = {
             tesisId,
             tip: this.model.tip,
@@ -224,6 +253,10 @@ export class KasaBankaHesaplariPage implements OnInit {
             hesapKesimGunu: this.model.hesapKesimGunu ?? null,
             sonOdemeGunu: this.model.sonOdemeGunu ?? null,
             bagliBankaHesapId: this.model.bagliBankaHesapId ?? null,
+            valorGunundeOtomatikHesabaAktarMi: this.model.valorGunundeOtomatikHesabaAktarMi,
+            valorGunTuru: this.model.valorGunTuru,
+            komisyonGiderHesapPlaniId: this.model.komisyonGiderHesapPlaniId ?? null,
+            komisyonOrani: this.model.komisyonOrani ?? null,
             bankaAdi: this.model.bankaAdi?.trim() || null,
             subeAdi: this.model.subeAdi?.trim() || null,
             hesapNo: this.model.hesapNo?.trim() || null,
@@ -285,6 +318,20 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.bagliBankaSecenekleri = candidates;
     }
 
+    private refreshKomisyonGiderHesapSecenekleri(): void {
+        if (this.model.tip !== 'KrediKarti') {
+            this.komisyonGiderHesapSecenekleri = [];
+            return;
+        }
+
+        this.service.getKomisyonGiderHesapSecimleri().subscribe({
+            next: (items) => {
+                this.komisyonGiderHesapSecenekleri = items.map((x) => ({ label: `${x.tamKod} - ${x.ad}`, value: x.id }));
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
     private createEmpty(tip: KasaBankaHesapTipi = 'NakitKasa'): KasaBankaHesapModel {
         const isKredi = tip === 'KrediKarti';
         return {
@@ -303,6 +350,10 @@ export class KasaBankaHesaplariPage implements OnInit {
             hesapKesimGunu: null,
             sonOdemeGunu: null,
             bagliBankaHesapId: null,
+            valorGunundeOtomatikHesabaAktarMi: false,
+            valorGunTuru: 'TakvimGunu',
+            komisyonGiderHesapPlaniId: null,
+            komisyonOrani: null,
             muhasebeTamKod: null,
             muhasebeHesapAdi: null,
             bankaAdi: null,

@@ -112,6 +112,10 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         entity.HesapKesimGunu = dto.HesapKesimGunu;
         entity.SonOdemeGunu = dto.SonOdemeGunu;
         entity.BagliBankaHesapId = dto.BagliBankaHesapId;
+        entity.ValorGunundeOtomatikHesabaAktarMi = dto.ValorGunundeOtomatikHesabaAktarMi;
+        entity.ValorGunTuru = dto.ValorGunTuru;
+        entity.KomisyonGiderHesapPlaniId = dto.KomisyonGiderHesapPlaniId;
+        entity.KomisyonOrani = dto.KomisyonOrani;
         entity.BankaAdi = dto.BankaAdi;
         entity.SubeAdi = dto.SubeAdi;
         entity.HesapNo = dto.HesapNo;
@@ -325,16 +329,82 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
                 throw new BaseException("Son odeme gunu 1-31 araliginda olmalidir.", 400);
             }
 
-            if (dto.BagliBankaHesapId.HasValue)
+            // BagliBankaHesapId kredi karti/POS hesaplarinda her zaman zorunludur (yalnizca
+            // otomatik aktarim acikken degil) - manuel aktarimda da hedef banka hesabi
+            // bilinmeli ve valor snapshot'ina sabitlenmelidir.
+            if (!dto.BagliBankaHesapId.HasValue)
             {
-                var bagliBanka = await _dbContext.KasaBankaHesaplari
-                    .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
-                if (bagliBanka is null || (bagliBanka.Tip != KasaBankaHesapTipleri.Banka && bagliBanka.Tip != KasaBankaHesapTipleri.DovizHesabi))
+                throw new BaseException("Kredi karti/POS hesabi icin bagli banka hesabi zorunludur.", 400);
+            }
+
+            if (dto.BagliBankaHesapId.Value == dto.Id)
+            {
+                throw new BaseException("Kredi karti/POS hesabi kendi kendisine baglanamaz.", 400);
+            }
+
+            var bagliBanka = await _dbContext.KasaBankaHesaplari
+                .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
+            if (bagliBanka is null || (bagliBanka.Tip != KasaBankaHesapTipleri.Banka && bagliBanka.Tip != KasaBankaHesapTipleri.DovizHesabi))
+            {
+                throw new BaseException("Bagli banka hesabi gecersiz.", 400);
+            }
+
+            if (!bagliBanka.AktifMi)
+            {
+                throw new BaseException("Bagli banka hesabi aktif degil.", 400);
+            }
+
+            if (bagliBanka.TesisId != dto.TesisId)
+            {
+                throw new BaseException("Bagli banka hesabi ayni tesise ait olmalidir.", 400);
+            }
+
+            if (!string.IsNullOrWhiteSpace(bagliBanka.ParaBirimi) && bagliBanka.ParaBirimi != dto.ParaBirimi)
+            {
+                throw new BaseException("Bagli banka hesabi ile para birimi uyumlu olmalidir.", 400);
+            }
+
+            dto.ValorGunTuru = string.IsNullOrWhiteSpace(dto.ValorGunTuru) || !ValorGunTurleri.Hepsi.Contains(dto.ValorGunTuru)
+                ? ValorGunTurleri.TakvimGunu
+                : dto.ValorGunTuru;
+
+            if (dto.KomisyonOrani.HasValue && (dto.KomisyonOrani.Value < 0 || dto.KomisyonOrani.Value > 100))
+            {
+                throw new BaseException("Komisyon orani 0 ile 100 arasinda olmalidir.", 400);
+            }
+
+            if (dto.KomisyonOrani.GetValueOrDefault() > 0 && !dto.KomisyonGiderHesapPlaniId.HasValue)
+            {
+                throw new BaseException("Komisyon orani tanimliyken komisyon gider hesabi zorunludur.", 400);
+            }
+
+            if (dto.KomisyonGiderHesapPlaniId.HasValue)
+            {
+                var komisyonHesabi = await _dbContext.MuhasebeHesapPlanlari
+                    .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == dto.KomisyonGiderHesapPlaniId.Value);
+                if (komisyonHesabi is null || !komisyonHesabi.AktifMi || !komisyonHesabi.DetayHesapMi
+                    || !komisyonHesabi.HareketGorebilirMi || !komisyonHesabi.TamKod.StartsWith("7."))
                 {
-                    throw new BaseException("Bagli banka hesabi gecersiz.", 400);
+                    throw new BaseException("Komisyon gider hesabi gecersiz; aktif, detay ve Gider sinifinda (7.) bir hesap secilmelidir.", 400);
                 }
             }
         }
+    }
+
+    public async Task<List<MuhasebeHesapSecimDto>> GetKomisyonGiderHesapSecimleriAsync(CancellationToken cancellationToken = default)
+    {
+        var matches = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi && x.DetayHesapMi && x.HareketGorebilirMi && x.TamKod.StartsWith("7."))
+            .OrderBy(x => x.TamKod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return matches.Select(x => new MuhasebeHesapSecimDto
+        {
+            Id = x.Id,
+            TamKod = x.TamKod,
+            Ad = x.Ad
+        }).ToList();
     }
 
     private static string? NormalizeOptional(string? value, int maxLen)

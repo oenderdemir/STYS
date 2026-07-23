@@ -19,6 +19,10 @@ public class KasaBankaHesapDto : BaseRdbmsDto<int>
     public int? HesapKesimGunu { get; set; }
     public int? SonOdemeGunu { get; set; }
     public int? BagliBankaHesapId { get; set; }
+    public bool ValorGunundeOtomatikHesabaAktarMi { get; set; }
+    public string ValorGunTuru { get; set; } = "TakvimGunu";
+    public int? KomisyonGiderHesapPlaniId { get; set; }
+    public decimal? KomisyonOrani { get; set; }
     public string? MuhasebeTamKod { get; set; }
     public string? MuhasebeHesapAdi { get; set; }
     public string? BankaAdi { get; set; }
@@ -48,6 +52,10 @@ public class CreateKasaBankaHesapRequest
     public int? HesapKesimGunu { get; set; }
     public int? SonOdemeGunu { get; set; }
     public int? BagliBankaHesapId { get; set; }
+    public bool ValorGunundeOtomatikHesabaAktarMi { get; set; }
+    public string? ValorGunTuru { get; set; }
+    public int? KomisyonGiderHesapPlaniId { get; set; }
+    public decimal? KomisyonOrani { get; set; }
     public string? BankaAdi { get; set; }
     public string? SubeAdi { get; set; }
     public string? HesapNo { get; set; }

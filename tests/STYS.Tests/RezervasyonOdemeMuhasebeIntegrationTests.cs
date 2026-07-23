@@ -1153,9 +1153,14 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         var cariHareketKapamaService = new CariHareketKapamaService(
             dbContext, tahsilatRepo, cariHareketRepo, muhasebeDonemService, userAccessScope, mapper);
 
+        var posTahsilatValorSnapshotService = new STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorSnapshotService(
+            dbContext,
+            new STYS.Muhasebe.Common.Services.ValorTarihHesaplamaService(new STYS.Muhasebe.Common.Services.NoOpResmiTatilGunuProvider()),
+            new FakeMuhasebeFisService());
+
         return new TahsilatOdemeBelgesiService(
             tahsilatRepo, cariKartRepo, cariHareketRepo, cariHareketKapamaService,
-            dbContext, muhasebeDonemService, userAccessScope, mapper);
+            dbContext, muhasebeDonemService, userAccessScope, posTahsilatValorSnapshotService, mapper);
     }
 
     private static IMuhasebeDonemService CreateMuhasebeDonemService(StysAppDbContext dbContext)
@@ -1361,6 +1366,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         public Task<List<MuhasebeFisDto>> GetByKaynakAsync(string kaynakModul, int kaynakId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<MuhasebeFisDto> OnaylaAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<MuhasebeFisDto> IptalEtAsync(int id, string? aciklama = null, CancellationToken cancellationToken = default) => throw new NotSupportedException("Bu senaryolarda fis olusmadigi icin cagrilmamali.");
+        public Task<STYS.Muhasebe.MuhasebeFisleri.Dtos.MuhasebeFisIptalSonucDto> PosValorTransferFisiniIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();

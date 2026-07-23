@@ -1,0 +1,161 @@
+<app-muhasebe-tesis-context-bar />
+<app-muhasebe-tesis-secim-dialog />
+<p-toast />
+<p-confirmDialog />
+
+<div class="card mb-3">
+    <div class="grid grid-cols-12 gap-3 text-center">
+        <div class="col-span-12 md:col-span-2">
+            <div class="text-sm text-color-secondary">Valör Bekleyen</div>
+            <div class="text-xl font-bold">{{ ozet?.valorBekleyenToplam ?? 0 | number: '1.2-2' }}</div>
+            <div class="text-xs text-color-secondary">{{ ozet?.valorBekleyenAdet ?? 0 }} kayıt</div>
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <div class="text-sm text-color-secondary">Bugün Valörü Gelen</div>
+            <div class="text-xl font-bold">{{ ozet?.bugunValoruGelenToplam ?? 0 | number: '1.2-2' }}</div>
+            <div class="text-xs text-color-secondary">{{ ozet?.bugunValoruGelenAdet ?? 0 }} kayıt</div>
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <div class="text-sm text-color-secondary">Valörü Geçmiş</div>
+            <div class="text-xl font-bold">{{ ozet?.valoruGecmisToplam ?? 0 | number: '1.2-2' }}</div>
+            <div class="text-xs text-color-secondary">{{ ozet?.valoruGecmisAdet ?? 0 }} kayıt</div>
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <div class="text-sm text-color-secondary">Aktarılan</div>
+            <div class="text-xl font-bold">{{ ozet?.aktarilanToplam ?? 0 | number: '1.2-2' }}</div>
+            <div class="text-xs text-color-secondary">{{ ozet?.aktarilanAdet ?? 0 }} kayıt</div>
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <div class="text-sm text-color-secondary">Hatalı İşlem</div>
+            <div class="text-xl font-bold">{{ ozet?.hataliAdet ?? 0 }}</div>
+        </div>
+    </div>
+    <div class="text-xs text-color-secondary mt-3">
+        Bu aktarım STYS içi muhasebe kaydıdır; bankaya fiziksel para transferi yapılmaz ve ekstre eşleştirmesi/banka entegrasyonu içermez.
+    </div>
+</div>
+
+<div class="card">
+    <p-toolbar>
+        <ng-template pTemplate="start">
+            <p-button label="Seçilenleri Hesaba Aktar" icon="pi pi-send" class="mr-2" severity="secondary" (onClick)="openTopluOnaySecili()" />
+            <p-button label="Valörü Gelenlerin Tümünü Hesaba Aktar" icon="pi pi-send" class="mr-2" severity="secondary" (onClick)="openTopluOnayValoruGelenler()" />
+            <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" (onClick)="refresh()" />
+        </ng-template>
+    </p-toolbar>
+
+    <p-table
+        [value]="records"
+        [lazy]="true"
+        (onLazyLoad)="onLazyLoad($event)"
+        [paginator]="true"
+        [rows]="pageSize"
+        [first]="(pageNumber - 1) * pageSize"
+        [totalRecords]="totalRecords"
+        [rowsPerPageOptions]="[10, 20, 50]"
+        [loading]="loading"
+        [(selection)]="selectedRecords"
+        dataKey="id"
+        responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th style="width: 3rem"><p-tableHeaderCheckbox /></th>
+                <th>Belge No</th>
+                <th>Ödeme Tarihi</th>
+                <th>Kredi Kartı/POS Hesabı</th>
+                <th>Bağlı Banka Hesabı</th>
+                <th>Brüt</th>
+                <th>Komisyon</th>
+                <th>Net</th>
+                <th>Para Birimi</th>
+                <th>Valör Tarihi</th>
+                <th>Valöre Kalan</th>
+                <th>Otomatik</th>
+                <th>Durum</th>
+                <th>Aktarım Tarihi</th>
+                <th>Muhasebe Fişi</th>
+                <th>İşlemler</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+            <tr>
+                <td><p-tableCheckbox [value]="item" /></td>
+                <td>{{ item.tahsilatBelgeNo }}</td>
+                <td>{{ item.odemeTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ item.krediKartiHesapAdi }}</td>
+                <td>{{ item.bagliBankaHesapAdi }}</td>
+                <td>{{ item.brutTutar | number: '1.2-2' }}</td>
+                <td>{{ item.komisyonTutari | number: '1.2-2' }}</td>
+                <td>{{ item.netTutar | number: '1.2-2' }}</td>
+                <td>{{ item.paraBirimi }}</td>
+                <td>{{ item.beklenenValorTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ getValoreKalanText(item) }}</td>
+                <td>{{ item.otomatikAktarimMi ? 'Evet' : 'Hayır' }}</td>
+                <td><p-tag [value]="getDurumLabel(item.durum)" [severity]="getDurumSeverity(item.durum)" /></td>
+                <td>{{ item.aktarimTarihi ? (item.aktarimTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
+                <td>{{ item.muhasebeFisId ?? '-' }}<span *ngIf="item.tersKayitMuhasebeFisId"> / Ters: {{ item.tersKayitMuhasebeFisId }}</span></td>
+                <td>
+                    <p-button *ngIf="item.aktarilabilirMi" icon="pi pi-send" size="small" text="true" pTooltip="Hesaba Aktar" (onClick)="hesabaAktar(item)" />
+                    <p-button *ngIf="item.durum === 'Hata'" icon="pi pi-replay" size="small" text="true" pTooltip="Yeniden Dene" (onClick)="yenidenDene(item)" />
+                    <p-button *ngIf="item.durum === 'Aktarildi'" icon="pi pi-undo" size="small" text="true" severity="danger" pTooltip="Düzeltme/Ters Kayıt" (onClick)="openDuzeltmeDialog(item)" />
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr><td colspan="15" class="text-center">Kayıt bulunamadı.</td></tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog header="Mutabakat / Manuel Aktarım" [(visible)]="manuelDialogVisible" [modal]="true" [style]="{ width: '30rem' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block mb-2">Brüt Tutar</label>
+            <input pInputText class="w-full" [value]="manuelKayit?.brutTutar" disabled />
+        </div>
+        <div class="col-span-6">
+            <label class="block mb-2">Komisyon Tutarı</label>
+            <p-inputNumber class="w-full" [(ngModel)]="manuelKomisyonTutari" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+        </div>
+        <div class="col-span-6">
+            <label class="block mb-2">Net Tutar</label>
+            <p-inputNumber class="w-full" [(ngModel)]="manuelNetTutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" />
+        </div>
+        <div class="col-span-12">
+            <label class="block mb-2">Açıklama</label>
+            <input pInputText class="w-full" [(ngModel)]="manuelAciklama" />
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" (onClick)="manuelDialogVisible = false" />
+        <p-button label="Hesaba Aktar" (onClick)="manuelAktarOnayla()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog header="Düzeltme / Ters Kayıt" [(visible)]="duzeltmeDialogVisible" [modal]="true" [style]="{ width: '30rem' }">
+    <p class="text-sm text-color-secondary">
+        Bu işlem, bu kaydın valör transfer fişini ters kayıtla iptal eder. Kalıcı bir işlemdir; yeniden otomatik
+        aktarım yapılmaz.
+    </p>
+    <div class="mt-2">
+        <label class="block mb-2">Açıklama (zorunlu)</label>
+        <input pInputText class="w-full" [(ngModel)]="duzeltmeAciklama" />
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" (onClick)="duzeltmeDialogVisible = false" />
+        <p-button label="Onayla" severity="danger" (onClick)="duzeltmeOnayla()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog header="Toplu Aktarım Onayı" [(visible)]="topluOnayDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
+    <div *ngIf="topluOnayBilgisi">
+        <p>Kayıt sayısı: <strong>{{ topluOnayBilgisi.adet }}</strong></p>
+        <p>Toplam brüt: <strong>{{ topluOnayBilgisi.toplamBrut | number: '1.2-2' }}</strong></p>
+        <p>Toplam komisyon: <strong>{{ topluOnayBilgisi.toplamKomisyon | number: '1.2-2' }}</strong></p>
+        <p>Toplam net: <strong>{{ topluOnayBilgisi.toplamNet | number: '1.2-2' }}</strong></p>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" (onClick)="topluOnayDialogVisible = false" />
+        <p-button label="Onayla ve Aktar" (onClick)="topluOnayOnayla()" />
+    </ng-template>
+</p-dialog>

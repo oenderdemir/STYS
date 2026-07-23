@@ -17,6 +17,10 @@ export interface KasaBankaHesapModel {
     hesapKesimGunu?: number | null;
     sonOdemeGunu?: number | null;
     bagliBankaHesapId?: number | null;
+    valorGunundeOtomatikHesabaAktarMi: boolean;
+    valorGunTuru: 'TakvimGunu' | 'IsGunu';
+    komisyonGiderHesapPlaniId?: number | null;
+    komisyonOrani?: number | null;
     muhasebeTamKod?: string | null;
     muhasebeHesapAdi?: string | null;
     bankaAdi?: string | null;
@@ -45,6 +49,10 @@ export interface CreateKasaBankaHesapRequest {
     hesapKesimGunu?: number | null;
     sonOdemeGunu?: number | null;
     bagliBankaHesapId?: number | null;
+    valorGunundeOtomatikHesabaAktarMi?: boolean;
+    valorGunTuru?: 'TakvimGunu' | 'IsGunu' | null;
+    komisyonGiderHesapPlaniId?: number | null;
+    komisyonOrani?: number | null;
     bankaAdi?: string | null;
     subeAdi?: string | null;
     hesapNo?: string | null;
@@ -58,6 +66,12 @@ export interface CreateKasaBankaHesapRequest {
 }
 
 export interface UpdateKasaBankaHesapRequest extends CreateKasaBankaHesapRequest {}
+
+export interface MuhasebeHesapSecimModel {
+    id: number;
+    tamKod: string;
+    ad: string;
+}
 
 export const KASA_BANKA_HESAP_TIPLERI: Array<{ label: string; value: KasaBankaHesapTipi }> = [
     { label: 'Kasa', value: 'NakitKasa' },

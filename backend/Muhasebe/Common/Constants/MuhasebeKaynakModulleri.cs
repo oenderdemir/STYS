@@ -13,6 +13,7 @@ public static class MuhasebeKaynakModulleri
     public const string CariKart = "CariKart";
     public const string CariKartAcilisDuzeltme = "CariKartAcilisDuzeltme";
     public const string Rezervasyon = "Rezervasyon";
+    public const string PosTahsilatValorTransferi = "PosTahsilatValorTransferi";
 
     public static readonly string[] Hepsi =
     [
@@ -26,6 +27,7 @@ public static class MuhasebeKaynakModulleri
         SatisBelgesi,
         CariKart,
         CariKartAcilisDuzeltme,
-        Rezervasyon
+        Rezervasyon,
+        PosTahsilatValorTransferi
     ];
 }

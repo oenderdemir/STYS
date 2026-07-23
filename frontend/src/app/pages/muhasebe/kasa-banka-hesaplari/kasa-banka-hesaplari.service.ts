@@ -27,6 +27,10 @@ export class KasaBankaHesaplariService {
         return this.http.get<ApiResponse<Array<{ id: number; tamKod: string; ad: string }>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/muhasebe-hesap-secimleri/${tip}`).pipe(map(this.unwrapOne));
     }
 
+    getKomisyonGiderHesapSecimleri(): Observable<Array<{ id: number; tamKod: string; ad: string }>> {
+        return this.http.get<ApiResponse<Array<{ id: number; tamKod: string; ad: string }>>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari/komisyon-gider-hesap-secimleri`).pipe(map(this.unwrapOne));
+    }
+
     create(payload: CreateKasaBankaHesapRequest): Observable<KasaBankaHesapModel> {
         return this.http.post<ApiResponse<KasaBankaHesapModel>>(`${this.apiBaseUrl}/ui/muhasebe/kasa-banka-hesaplari`, payload).pipe(map(this.unwrapOne));
     }

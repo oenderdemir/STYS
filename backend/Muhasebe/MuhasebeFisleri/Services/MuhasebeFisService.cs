@@ -550,6 +550,24 @@ WHERE [IptalEdilenFisId] = {orijinalFis.Id} AND [IsDeleted] = 0")
 
     private async Task ValidateFisIptalTersKayitAsync(MuhasebeFis fis, CancellationToken cancellationToken)
     {
+        // POS valor transfer fisleri KENDI durum makinesine (PosTahsilatValor.Durum) sahiptir -
+        // bu fis genel IptalEtAsync ile DOGRUDAN iptal edilirse, fis muhasebe acisindan dogru
+        // sekilde ters kayitla kapanir AMA iliskili PosTahsilatValor kaydinin Durum/
+        // TersKayitMuhasebeFisId alanlari GUNCELLENMEZ (bu guncelleme yalnizca
+        // PosValorTransferFisiniIptalEtAsync -> PosTahsilatValorSnapshotService.IptalEtAsync
+        // zincirinde yapilir) - sonucta POS Valor Takibi ekrani, parasi ZATEN geri alinmis bir
+        // kaydi hala "Aktarildi" gostermeye devam eder (muhasebe ile valor takibi birbirinden
+        // kopar). Bu yuzden bu KaynakModul icin genel iptal KESIN olarak reddedilir; dogru yol
+        // POS Valor Takibi ekranindaki "duzeltme/ters kayit" islemidir (bkz.
+        // PosValorTransferFisiniIptalEtAsync).
+        if (fis.KaynakModul == MuhasebeKaynakModulleri.PosTahsilatValorTransferi)
+        {
+            throw new BaseException(
+                "Bu fiş bir POS valör transfer fişidir; genel fiş iptali ile iptal edilemez. " +
+                "Lütfen POS Valör Takibi ekranından ilgili kaydın düzeltme/ters kayıt işlemini kullanın.",
+                409);
+        }
+
         ValidateFisDurumuAsync(fis);
         await ValidateYetkiAsync(fis, cancellationToken);
         await ValidateKaynakBelgeCariHareketEngelleriAsync(fis, cancellationToken);

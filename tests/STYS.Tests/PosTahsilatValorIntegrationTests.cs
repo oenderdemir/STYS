@@ -1042,6 +1042,53 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Senaryo 6b — POS valor transfer fisi, GENEL fis iptali (MuhasebeFisService.IptalEtAsync)
+    // ile DOGRUDAN iptal edilemez - aksi halde fis muhasebe acisindan ters kayitla kapanir ama
+    // iliskili PosTahsilatValor kaydi (Durum/TersKayitMuhasebeFisId) hic guncellenmez ve POS
+    // Valor Takibi ekrani ile muhasebe arasinda tutarsizlik olusur. Dogru yol
+    // DuzeltmeTersKayitAsync (POS Valor Takibi ekrani) uzerinden gecmelidir.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo6b_TransferFisiGenelIptalIleReddedilir_ValorKaydiEtkilenmez()
+    {
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosKomisyonluAId, KasaBankaBankaAId, 800m, 2m, HesapPlaniKomisyonId, "S6b");
+
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        int muhasebeFisId;
+
+        await using (var ctx = CreateDbContext())
+        {
+            var svc = CreateAktarimService(ctx, scope);
+            var sonuc = await svc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+            Assert.True(sonuc.Basarili, sonuc.HataMesaji);
+            muhasebeFisId = sonuc.MuhasebeFisId!.Value;
+        }
+
+        await using (var ctx = CreateDbContext())
+        {
+            var fisSvc = CreateMuhasebeFisService(ctx, scope);
+            var ex = await Assert.ThrowsAsync<BaseException>(() => fisSvc.IptalEtAsync(muhasebeFisId, "genel ekrandan yanlislikla iptal denemesi", CancellationToken.None));
+            Assert.Equal(409, ex.ErrorCode);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            // Ret sonrasi hem fis hem valor kaydi TAMAMEN degismemis olmali.
+            var fis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == muhasebeFisId);
+            Assert.Equal(MuhasebeFisDurumlari.Onayli, fis.Durum);
+            Assert.Null(fis.TersKayitFisId);
+
+            var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+            Assert.Equal(PosTahsilatValorDurumlari.Aktarildi, valor.Durum);
+            Assert.Null(valor.TersKayitMuhasebeFisId);
+
+            var tersFisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x => x.IptalEdilenFisId == muhasebeFisId);
+            Assert.Equal(0, tersFisSayisi);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Senaryo 7 — Ayni Aktarildi kayda iki duzeltme-ters-kayit istegi
     // ─────────────────────────────────────────────────────────────
     [IntegrationFact]

@@ -1804,6 +1804,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.NetTutar).HasPrecision(18, 2);
             entity.Property(x => x.HataMesaji).HasMaxLength(1024);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.IptalOncesiDurum).HasMaxLength(24);
 
             // Bir TahsilatOdemeBelgesi icin en fazla bir (soft-delete edilmemis) valor kaydi.
             entity.HasIndex(x => x.TahsilatOdemeBelgesiId)

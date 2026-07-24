@@ -23,6 +23,20 @@ public interface IMuhasebeFisService : IBaseRdbmsService<MuhasebeFisDto, Muhaseb
     /// </summary>
     Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniIptalEtAsync(
         int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// PosValorTransferFisiniIptalEtAsync ile olusturulmus bir ters kayit fisini "geri alir" -
+    /// yani ters kaydin Borc/Alacak'ini TEKRAR ters cevirerek, orijinal transfer fisiyle AYNI net
+    /// ekonomik etkiyi yeniden tesis eden YENI bir fis olusturur (orijinal transfer fisi VE ters
+    /// kayit fisi asla degistirilmez/silinmez - denetim izi korunur). Yalnizca
+    /// Durum=TersKayit olan bir fis uzerinde calisir; ters kaydin KENDISI zaten daha once geri
+    /// alinmissa (TersKayitFisId doluysa) IptalEdilenFisId iliskisiyle mevcut geri alma fisini
+    /// kilitli sekilde bulup idempotent doner. Ambient transaction'a katilir (kendi transaction'ini
+    /// acmaz) - yalnizca PosTahsilatValorleri modulunun sunucu-ici servis kodundan cagrilir, disari
+    /// acik bir HTTP endpoint'i yoktur.
+    /// </summary>
+    Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniGeriAlAsync(
+        int tersKayitFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);

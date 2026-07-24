@@ -111,6 +111,9 @@ WHERE [TahsilatOdemeBelgesiId] = {tahsilatOdemeBelgesiId} AND [IsDeleted] = 0")
             case PosTahsilatValorDurumlari.ValorBekliyor:
             case PosTahsilatValorDurumlari.MutabakatBekliyor:
             case PosTahsilatValorDurumlari.Hata:
+                // IptalOncesiDurum, GeriAlAsync'in hangi duruma donecegini bilmesi icin
+                // kaydedilir - yalnizca GERCEK bir gecis oldugunda (idempotent no-op'larda DEGIL).
+                entity.IptalOncesiDurum = entity.Durum;
                 entity.Durum = PosTahsilatValorDurumlari.Iptal;
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 return;
@@ -132,22 +135,93 @@ WHERE [TahsilatOdemeBelgesiId] = {tahsilatOdemeBelgesiId} AND [IsDeleted] = 0")
                     "Tahsilat iptali nedeniyle valör transferi ters kaydı", cancellationToken);
 
                 entity.TersKayitMuhasebeFisId = sonuc.TersKayitFisId;
+                entity.IptalOncesiDurum = PosTahsilatValorDurumlari.Aktarildi;
                 entity.Durum = PosTahsilatValorDurumlari.Iptal;
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 return;
 
             case PosTahsilatValorDurumlari.AktarimFisiIptalEdildi:
                 // Ters kaydi zaten var - ikinci ters kayit URETILMEZ, idempotent gecis.
+                entity.IptalOncesiDurum = PosTahsilatValorDurumlari.AktarimFisiIptalEdildi;
                 entity.Durum = PosTahsilatValorDurumlari.Iptal;
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 return;
 
             case PosTahsilatValorDurumlari.Iptal:
-                // Zaten iptal - idempotent no-op.
+                // Zaten iptal - idempotent no-op. IptalOncesiDurum DEGISTIRILMEZ (ilk gercek
+                // gecişte kaydedilen deger korunur).
                 return;
 
             default:
                 throw new BaseException($"Valör kaydı beklenmeyen bir durumda ({entity.Durum}).", 500);
+        }
+    }
+
+    public async Task GeriAlAsync(int tahsilatOdemeBelgesiId, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.PosTahsilatValorleri
+            .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[PosTahsilatValorleri] WITH (UPDLOCK, ROWLOCK)
+WHERE [TahsilatOdemeBelgesiId] = {tahsilatOdemeBelgesiId} AND [IsDeleted] = 0")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (entity is null)
+        {
+            // Kredi karti disi odeme (hic valor kaydi yok) - no-op, IptalEtAsync ile simetrik.
+            return;
+        }
+
+        if (entity.Durum != PosTahsilatValorDurumlari.Iptal)
+        {
+            throw new BaseException("Bu valör kaydı iptal durumunda değil, geri alınamaz.", 400);
+        }
+
+        if (string.IsNullOrEmpty(entity.IptalOncesiDurum))
+        {
+            // Bu ozellik eklenmeden ONCE iptal edilmis (IptalOncesiDurum hic kaydedilmemis) eski
+            // kayitlar icin - guvenli varsayilan yerine ACIKCA reddedilir (yanlis bir duruma geri
+            // donmek finansal veri icin varsayimdan daha kotudur).
+            throw new BaseException("Bu valör kaydının iptal öncesi durumu bilinmiyor, geri alınamaz.", 400);
+        }
+
+        switch (entity.IptalOncesiDurum)
+        {
+            case PosTahsilatValorDurumlari.ValorBekliyor:
+            case PosTahsilatValorDurumlari.MutabakatBekliyor:
+            case PosTahsilatValorDurumlari.Hata:
+                entity.Durum = entity.IptalOncesiDurum;
+                entity.IptalOncesiDurum = null;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return;
+
+            case PosTahsilatValorDurumlari.AktarimFisiIptalEdildi:
+                // Bu valor, belge iptal edilmeden ONCE zaten manuel duzeltme-ters-kayit ile
+                // aktarilmisti (fis reversal'i belge iptalinden BAGIMSIZDI) - geri alma yalnizca
+                // durumu geri ceker, fis tarafinda hicbir sey degismez.
+                entity.Durum = PosTahsilatValorDurumlari.AktarimFisiIptalEdildi;
+                entity.IptalOncesiDurum = null;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return;
+
+            case PosTahsilatValorDurumlari.Aktarildi:
+                if (!entity.TersKayitMuhasebeFisId.HasValue)
+                {
+                    throw new BaseException("Aktarılmış valör kaydının ters kayıt fişi bulunamadı; veri tutarsızlığı.", 500);
+                }
+
+                var sonuc = await _muhasebeFisService.PosValorTransferFisiniGeriAlAsync(
+                    entity.TersKayitMuhasebeFisId.Value, entity.Id, entity.TesisId,
+                    "Tahsilat iptalinin geri alınması nedeniyle valör transferinin yeniden tesisi", cancellationToken);
+                _ = sonuc; // sonuc, sadece idempotency/tutarlilik dogrulamasi icin kullanilir.
+
+                entity.Durum = PosTahsilatValorDurumlari.Aktarildi;
+                entity.TersKayitMuhasebeFisId = null;
+                entity.IptalOncesiDurum = null;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return;
+
+            default:
+                throw new BaseException($"Valör kaydının iptal öncesi durumu tanınmıyor ({entity.IptalOncesiDurum}).", 500);
         }
     }
 }

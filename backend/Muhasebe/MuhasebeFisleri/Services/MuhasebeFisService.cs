@@ -548,6 +548,133 @@ WHERE [IptalEdilenFisId] = {orijinalFis.Id} AND [IsDeleted] = 0")
         };
     }
 
+    /// <summary>
+    /// PosValorTransferFisiniIptalEtAsync ile olusturulmus bir ters kayit fisini geri alir (bkz.
+    /// IMuhasebeFisService). Orijinal transfer fisi VE ters kayit fisi degistirilmez/silinmez;
+    /// bunun yerine ters kaydin Borc/Alacak'ini TEKRAR ters ceviren, orijinal transferle AYNI net
+    /// etkiyi yeniden tesis eden YENI (Onayli) bir fis olusturulur.
+    /// </summary>
+    public async Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniGeriAlAsync(
+        int tersKayitFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default)
+    {
+        var tersKayitFis = await _dbContext.MuhasebeFisler
+            .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[MuhasebeFisler] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {tersKayitFisId} AND [IsDeleted] = 0")
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Ters kayıt fişi bulunamadı.", 404);
+
+        if (tersKayitFis.KaynakModul != MuhasebeKaynakModulleri.PosTahsilatValorTransferi
+            || tersKayitFis.KaynakId != beklenenKaynakId
+            || tersKayitFis.TesisId != beklenenTesisId)
+        {
+            throw new BaseException("Fiş bilgileri beklenenle eşleşmiyor, geri alma reddedildi.", 400);
+        }
+
+        if (tersKayitFis.Durum != MuhasebeFisDurumlari.TersKayit)
+        {
+            throw new BaseException("Yalnızca ters kayıt durumundaki bir fiş geri alınabilir.", 400);
+        }
+
+        if (tersKayitFis.TersKayitFisId.HasValue)
+        {
+            var mevcutGeriAlmaFisi = await _dbContext.MuhasebeFisler
+                .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[MuhasebeFisler] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {tersKayitFis.TersKayitFisId.Value} AND [IsDeleted] = 0")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            // Bulunan satirin GERCEKTEN gecerli bir geri alma fisi oldugunu dogrula - yalnizca var
+            // oldugu icin gecerli sayilmaz.
+            if (mevcutGeriAlmaFisi is null
+                || mevcutGeriAlmaFisi.Durum != MuhasebeFisDurumlari.Onayli
+                || mevcutGeriAlmaFisi.IptalEdilenFisId != tersKayitFis.Id
+                || mevcutGeriAlmaFisi.TesisId != tersKayitFis.TesisId)
+            {
+                throw new BaseException(
+                    $"Fiş {tersKayitFis.Id} zaten geri alınmış görünüyor ancak buna ait geçerli bir geri alma fişi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun.", 500);
+            }
+
+            return new MuhasebeFisIptalSonucDto
+            {
+                OrijinalFisId = tersKayitFis.Id,
+                TersKayitFisId = mevcutGeriAlmaFisi.Id,
+                ZatenTersKayitliMi = true
+            };
+        }
+
+        if (!tersKayitFis.YevmiyeNo.HasValue)
+        {
+            throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
+        }
+
+        await ValidateOpenPeriodAsync(tersKayitFis.TesisId, tersKayitFis.FisTarihi, tersKayitFis.MaliYil, tersKayitFis.Donem, cancellationToken);
+
+        var aktifSatirlar = tersKayitFis.Satirlar.Where(s => !s.IsDeleted).ToList();
+        if (aktifSatirlar.Count < 2)
+        {
+            throw new BaseException("Geri alınacak fiş en az iki satır içermelidir.", 400);
+        }
+
+        var geriAlmaFisi = new MuhasebeFis
+        {
+            TesisId = tersKayitFis.TesisId,
+            MaliYil = tersKayitFis.MaliYil,
+            Donem = tersKayitFis.Donem,
+            FisNo = "GERI-" + tersKayitFis.FisNo,
+            FisTarihi = tersKayitFis.FisTarihi,
+            FisTipi = MuhasebeFisTipleri.Mahsup,
+            KaynakModul = tersKayitFis.KaynakModul,
+            KaynakId = tersKayitFis.KaynakId,
+            Durum = MuhasebeFisDurumlari.Onayli,
+            IptalEdilenFisId = tersKayitFis.Id,
+            Aciklama = aciklama,
+            ToplamBorc = tersKayitFis.ToplamAlacak,
+            ToplamAlacak = tersKayitFis.ToplamBorc,
+            Satirlar = aktifSatirlar.Select(s => new MuhasebeFisSatir
+            {
+                MuhasebeHesapPlaniId = s.MuhasebeHesapPlaniId,
+                SiraNo = s.SiraNo,
+                Borc = s.Alacak,
+                Alacak = s.Borc,
+                ParaBirimi = s.ParaBirimi,
+                Kur = s.Kur,
+                CariKartId = s.CariKartId,
+                TasinirKartId = s.TasinirKartId,
+                DepoId = s.DepoId,
+                KasaBankaHesapId = s.KasaBankaHesapId,
+                Aciklama = "Geri alma: " + (s.Aciklama ?? ""),
+            }).ToList(),
+        };
+
+        try
+        {
+            var yevmiyeNo = await YevmiyeNoUretAsync(geriAlmaFisi.TesisId, geriAlmaFisi.MaliYil, cancellationToken);
+            geriAlmaFisi.YevmiyeNo = yevmiyeNo;
+
+            await _dbContext.MuhasebeFisler.AddAsync(geriAlmaFisi, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+        {
+            throw new BaseException("Bu fiş zaten geri alınmış.", 409);
+        }
+
+        tersKayitFis.TersKayitFisId = geriAlmaFisi.Id;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(geriAlmaFisi, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new MuhasebeFisIptalSonucDto
+        {
+            OrijinalFisId = tersKayitFis.Id,
+            TersKayitFisId = geriAlmaFisi.Id,
+            ZatenTersKayitliMi = false
+        };
+    }
+
     private async Task ValidateFisIptalTersKayitAsync(MuhasebeFis fis, CancellationToken cancellationToken)
     {
         // POS valor transfer fisleri KENDI durum makinesine (PosTahsilatValor.Durum) sahiptir -

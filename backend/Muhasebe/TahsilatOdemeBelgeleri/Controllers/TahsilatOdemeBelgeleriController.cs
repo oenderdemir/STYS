@@ -91,6 +91,14 @@ public class TahsilatOdemeBelgeleriController : UIController
         return Ok();
     }
 
+    [HttpPost("{id:int}/iptal-geri-al")]
+    [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.Manage)]
+    public async Task<IActionResult> IptalGeriAl(int id, CancellationToken cancellationToken)
+    {
+        await _service.IptalGeriAlAsync(id, cancellationToken);
+        return Ok();
+    }
+
     [HttpPost("{id:int}/kapama-geri-al")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.Manage)]
     public async Task<IActionResult> KapamaGeriAl(int id, CancellationToken cancellationToken)

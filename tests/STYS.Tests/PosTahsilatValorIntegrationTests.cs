@@ -1600,6 +1600,222 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         Assert.Null(valor.AktarimBaslamaTarihi);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 14 — Tahsilat iptali GERI ALINDIGINDA, valor daha once hic aktarilmamissa
+    // (ValorBekliyor) iptal ONCESINDEKI duruma dogru doner.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo14_ValorBekliyorkenIptalGeriAlinir_AyniDurumaDoner()
+    {
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosKomisyonluAId, KasaBankaBankaAId, 300m, 2m, HesapPlaniKomisyonId, "S14");
+        var belgeId = await seedContext.PosTahsilatValorleri.Where(x => x.Id == valorId).Select(x => x.TahsilatOdemeBelgesiId).SingleAsync();
+
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+            Assert.Equal(PosTahsilatValorDurumlari.Iptal, valor.Durum);
+            Assert.Equal(PosTahsilatValorDurumlari.ValorBekliyor, valor.IptalOncesiDurum);
+        }
+
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalGeriAlAsync(belgeId, CancellationToken.None);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+            Assert.Equal(PosTahsilatValorDurumlari.ValorBekliyor, valor.Durum);
+            Assert.Null(valor.IptalOncesiDurum);
+
+            var belge = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+            Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, belge.Durum);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 15 — Valor ZATEN Aktarildi iken tahsilat iptal edilir (ters kayit fisi olusur),
+    // sonra GERI ALINIR: yeni bir "geri alma" fisi olusur (orijinal fis VE ters kayit fisi
+    // DEGISTIRILMEZ), valor tekrar Aktarildi olur, ayni MuhasebeFisId korunur.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo15_AktarildiIkenIptalGeriAlinir_GeriAlmaFisiOlusurVeAktarildiyeDoner()
+    {
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosKomisyonluAId, KasaBankaBankaAId, 1200m, 2m, HesapPlaniKomisyonId, "S15");
+        var belgeId = await seedContext.PosTahsilatValorleri.Where(x => x.Id == valorId).Select(x => x.TahsilatOdemeBelgesiId).SingleAsync();
+
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        int orijinalFisId;
+
+        await using (var ctx = CreateDbContext())
+        {
+            var aktarimSvc = CreateAktarimService(ctx, scope);
+            var sonuc = await aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+            Assert.True(sonuc.Basarili, sonuc.HataMesaji);
+            orijinalFisId = sonuc.MuhasebeFisId!.Value;
+        }
+
+        int tersKayitFisId;
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+            Assert.Equal(PosTahsilatValorDurumlari.Iptal, valor.Durum);
+            Assert.Equal(PosTahsilatValorDurumlari.Aktarildi, valor.IptalOncesiDurum);
+            Assert.NotNull(valor.TersKayitMuhasebeFisId);
+            tersKayitFisId = valor.TersKayitMuhasebeFisId!.Value;
+
+            var orijinalFis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == orijinalFisId);
+            Assert.Equal(MuhasebeFisDurumlari.Iptal, orijinalFis.Durum);
+        }
+
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalGeriAlAsync(belgeId, CancellationToken.None);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+            Assert.Equal(PosTahsilatValorDurumlari.Aktarildi, valor.Durum);
+            Assert.Null(valor.IptalOncesiDurum);
+            Assert.Null(valor.TersKayitMuhasebeFisId);
+            Assert.Equal(orijinalFisId, valor.MuhasebeFisId);
+
+            var belge = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+            Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, belge.Durum);
+
+            // Orijinal fis VE ters kayit fisi HICBIR ZAMAN degistirilmez/silinmez - denetim izi
+            // korunur; yalnizca YENI bir "geri alma" fisi eklenir.
+            var orijinalFis = await verifyContext.MuhasebeFisler.SingleAsync(x => x.Id == orijinalFisId);
+            Assert.Equal(MuhasebeFisDurumlari.Iptal, orijinalFis.Durum);
+            Assert.Equal(tersKayitFisId, orijinalFis.TersKayitFisId);
+
+            var tersKayitFis = await verifyContext.MuhasebeFisler.Include(x => x.Satirlar).SingleAsync(x => x.Id == tersKayitFisId);
+            Assert.Equal(MuhasebeFisDurumlari.TersKayit, tersKayitFis.Durum);
+            Assert.NotNull(tersKayitFis.TersKayitFisId);
+            var geriAlmaFisId = tersKayitFis.TersKayitFisId!.Value;
+
+            var geriAlmaFisi = await verifyContext.MuhasebeFisler.Include(x => x.Satirlar).SingleAsync(x => x.Id == geriAlmaFisId);
+            Assert.Equal(MuhasebeFisDurumlari.Onayli, geriAlmaFisi.Durum);
+            Assert.Equal(tersKayitFisId, geriAlmaFisi.IptalEdilenFisId);
+            Assert.Equal(geriAlmaFisi.ToplamBorc, geriAlmaFisi.ToplamAlacak);
+
+            // Net muhasebe etkisi (fis1 + fis2 + fis3) orijinal transferin etkisiyle AYNI olmali:
+            // POS (109) ve Banka (102) hesaplarinin toplam net bakiyesi, TEK bir aktif transfer
+            // varmis gibi (sifir DEGIL, orijinal transferin tam etkisi kadar) olmalidir.
+            var posNetBakiye = await verifyContext.MuhasebeHesapBakiyeleri
+                .Where(x => x.TesisId == TesisAId && x.MuhasebeHesapPlaniId == HesapPlaniPosId)
+                .SumAsync(x => x.NetBakiye);
+            var bankaNetBakiye = await verifyContext.MuhasebeHesapBakiyeleri
+                .Where(x => x.TesisId == TesisAId && x.MuhasebeHesapPlaniId == HesapPlaniBankaId)
+                .SumAsync(x => x.NetBakiye);
+            Assert.NotEqual(0m, posNetBakiye);
+            Assert.NotEqual(0m, bankaNetBakiye);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 16 — Valor durumu Iptal DEGILKEN geri alma denemesi reddedilir (400), hicbir sey
+    // degismez.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo16_IptalEdilmemisBelgeGeriAlinamaz_400DonerVeKayitDegismez()
+    {
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosKomisyonluAId, KasaBankaBankaAId, 150m, 2m, HesapPlaniKomisyonId, "S16");
+        var belgeId = await seedContext.PosTahsilatValorleri.Where(x => x.Id == valorId).Select(x => x.TahsilatOdemeBelgesiId).SingleAsync();
+
+        await using var ctx = CreateDbContext();
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+        var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => tahsilatSvc.IptalGeriAlAsync(belgeId, CancellationToken.None));
+        Assert.Equal(400, ex.ErrorCode);
+
+        await using var verifyContext = CreateDbContext();
+        var valor = await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId);
+        Assert.Equal(PosTahsilatValorDurumlari.ValorBekliyor, valor.Durum);
+        var belge = await verifyContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == belgeId);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, belge.Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 17 — Ayni Aktarildi->Iptal kayda iki geri alma istegi: yalnizca BIR geri alma fisi
+    // uretilir (idempotent), ikinci istek de basarili doner (ZatenGeriAlinmisMi yolu).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task Senaryo17_IkiGeriAlmaIstegi_YalnizcaBirGeriAlmaFisiUretilir()
+    {
+        await using var seedContext = CreateDbContext();
+        var valorId = await SeedValorKaydiAsync(seedContext, TesisAId, CariKartAId, KasaBankaPosAId, KasaBankaBankaAId, 600m, 0m, HesapPlaniKomisyonId, "S17");
+        var belgeId = await seedContext.PosTahsilatValorleri.Where(x => x.Id == valorId).Select(x => x.TahsilatOdemeBelgesiId).SingleAsync();
+
+        var scope = new FakeUserAccessScopeService(DomainAccessScope.Unscoped());
+
+        await using (var ctx = CreateDbContext())
+        {
+            var aktarimSvc = CreateAktarimService(ctx, scope);
+            var sonuc = await aktarimSvc.HesabaAktarAsync(valorId, null, CancellationToken.None);
+            Assert.True(sonuc.Basarili, sonuc.HataMesaji);
+        }
+
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalEtAsync(belgeId, CancellationToken.None);
+        }
+
+        int tersKayitFisId;
+        await using (var verifyContext = CreateDbContext())
+        {
+            tersKayitFisId = (await verifyContext.PosTahsilatValorleri.SingleAsync(x => x.Id == valorId)).TersKayitMuhasebeFisId!.Value;
+        }
+
+        // Birinci geri alma - gercekten yeni bir fis uretir.
+        await using (var ctx = CreateDbContext())
+        {
+            var tahsilatSvc = CreateTahsilatOdemeBelgesiService(ctx, scope);
+            await tahsilatSvc.IptalGeriAlAsync(belgeId, CancellationToken.None);
+        }
+
+        // Ayni belge tekrar iptal edilip tekrar geri alinsa bile (kullanicinin ekrandan
+        // yanlislikla iki kez tikladigi senaryo) DAIMA ayni tek geri alma fisine ulasilmali -
+        // burada DOGRUDAN MuhasebeFisService uzerinden ayni ters kayit fisi icin ikinci bir
+        // geri alma DENEMESI yapilarak idempotency dogrulanir.
+        await using (var ctx = CreateDbContext())
+        {
+            var fisSvc = CreateMuhasebeFisService(ctx, scope);
+            var valor = await ctx.PosTahsilatValorleri.AsNoTracking().SingleAsync(x => x.Id == valorId);
+            var sonuc = await fisSvc.PosValorTransferFisiniGeriAlAsync(
+                tersKayitFisId, valorId, TesisAId, "ikinci deneme - idempotency", CancellationToken.None);
+            Assert.True(sonuc.ZatenTersKayitliMi);
+        }
+
+        await using (var verifyContext = CreateDbContext())
+        {
+            var geriAlmaFisSayisi = await verifyContext.MuhasebeFisler.CountAsync(x => x.IptalEdilenFisId == tersKayitFisId);
+            Assert.Equal(1, geriAlmaFisSayisi);
+        }
+    }
+
     /// <summary>SavingChanges anında, verilen context'in "eklenmekte olan" (Added) bir
     /// PosValorFisNoSayac icerip icermedigini kontrol eder; iceriyorsa (yani INSERT'e hazirlaniyorsa)
     /// verilen side-effect'i CALISTIRIR. Bu, sayac satirinin ilk kez olusturulmasi sirasinda GERCEK

@@ -56,6 +56,13 @@ public class PosTahsilatValor : BaseEntity<int>
     [MaxLength(24)]
     public string Durum { get; set; } = PosTahsilatValorDurumlari.ValorBekliyor;
 
+    /// <summary>Durum=Iptal'e GECERKEN (gercek bir gecis olarak, idempotent no-op'larda DEGIL)
+    /// kaydedilen onceki Durum degeri - GeriAlAsync'in hangi duruma/nasil geri donecegini bilmesi
+    /// icin gereklidir. Iptal disinda her zaman null'dur; geri alma basarili oldugunda tekrar
+    /// null'a cekilir.</summary>
+    [MaxLength(24)]
+    public string? IptalOncesiDurum { get; set; }
+
     /// <summary>Claim/lease mekanizmasi - Aktariliyor/TersKayitOlusturuluyor'a gecis aninda
     /// doldurulur, islem bitince temizlenir.</summary>
     public DateTime? AktarimBaslamaTarihi { get; set; }

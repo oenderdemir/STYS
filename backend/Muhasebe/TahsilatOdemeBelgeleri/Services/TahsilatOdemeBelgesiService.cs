@@ -219,6 +219,60 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         }
     }
 
+    public async Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
+        {
+            var visible = await GetByIdAsync(id);
+            if (visible is null)
+            {
+                throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            }
+
+            var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
+                ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+
+            if (existing.Durum != TahsilatOdemeBelgeDurumlari.Iptal)
+            {
+                throw new BaseException("Yalnızca iptal edilmiş bir tahsilat/ödeme belgesi geri alınabilir.", 400);
+            }
+
+            await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, cancellationToken);
+
+            // POS valor kaydini (varsa) IptalEtAsync ile SIMETRIK sirada, belge Aktif'e DONMEDEN
+            // ONCE geri al - bu adim basarisiz olursa belge Iptal olarak KALIR (tutarli).
+            await _posTahsilatValorSnapshotService.GeriAlAsync(id, cancellationToken);
+
+            // Cari hareket kapamasi varsa yeniden kurulur - eski (Iptal durumundaki) kapama
+            // hareketi DEGISTIRILMEZ, TahsilatOdemeIcinCariHareketOlusturVeKapatAsync ayni
+            // guvenli guard'larla (fatura hala uygun mu vb.) YENI bir kapama hareketi ekler.
+            if (existing.KapatilacakCariHareketId.HasValue)
+            {
+                await _cariHareketKapamaService.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(id, cancellationToken);
+            }
+
+            existing.Durum = TahsilatOdemeBelgeDurumlari.Aktif;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch
+        {
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+            throw;
+        }
+    }
+
     public override async Task<TahsilatOdemeBelgesiDto?> GetByIdAsync(int id, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync();

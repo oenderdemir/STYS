@@ -1172,11 +1172,17 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 
     private static IRezervasyonOdemeMuhasebeService CreateRezervasyonOdemeMuhasebeService(StysAppDbContext dbContext)
     {
+        var posTahsilatValorSnapshotService = new STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorSnapshotService(
+            dbContext,
+            new STYS.Muhasebe.Common.Services.ValorTarihHesaplamaService(new STYS.Muhasebe.Common.Services.NoOpResmiTatilGunuProvider()),
+            new FakeMuhasebeFisService());
+
         return new RezervasyonOdemeMuhasebeService(
             dbContext,
             CreateTahsilatOdemeBelgesiService(dbContext),
             new FakeMuhasebeFisService(),
-            new RezervasyonCariKartResolver(dbContext));
+            new RezervasyonCariKartResolver(dbContext),
+            posTahsilatValorSnapshotService);
     }
 
     private static IMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)

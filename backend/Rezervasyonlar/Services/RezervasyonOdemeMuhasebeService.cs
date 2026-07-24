@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
+using STYS.Muhasebe.PosTahsilatValorleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using STYS.Rezervasyonlar.Entities;
@@ -27,17 +28,20 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
     private readonly ITahsilatOdemeBelgesiService _tahsilatOdemeBelgesiService;
     private readonly IMuhasebeFisService _muhasebeFisService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
+    private readonly IPosTahsilatValorSnapshotService _posTahsilatValorSnapshotService;
 
     public RezervasyonOdemeMuhasebeService(
         StysAppDbContext dbContext,
         ITahsilatOdemeBelgesiService tahsilatOdemeBelgesiService,
         IMuhasebeFisService muhasebeFisService,
-        IRezervasyonCariKartResolver cariKartResolver)
+        IRezervasyonCariKartResolver cariKartResolver,
+        IPosTahsilatValorSnapshotService posTahsilatValorSnapshotService)
     {
         _dbContext = dbContext;
         _tahsilatOdemeBelgesiService = tahsilatOdemeBelgesiService;
         _muhasebeFisService = muhasebeFisService;
         _cariKartResolver = cariKartResolver;
+        _posTahsilatValorSnapshotService = posTahsilatValorSnapshotService;
     }
 
     public async Task TahsilatOlusturAsync(
@@ -144,6 +148,14 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
             {
                 await _dbContext.TahsilatOdemeBelgeleri.AddAsync(belge, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
+
+                // TahsilatOdemeBelgesiService.CreateAsync ile AYNI kural: yalnizca kredi karti/POS
+                // tahsilatlari icin (aksi halde no-op) valor takip kaydi olusturulur, ayni ambient
+                // transaction icinde, commit'ten ONCE - snapshot olusturma basarisiz olursa belge
+                // de rollback olur. Bu servis belgeyi CreateAsync CAGIRMADAN dogrudan DbContext
+                // uzerinden olusturdugu icin bu cagri olmadan rezervasyon uzerinden yapilan kredi
+                // karti odemeleri POS Valor Takibi ekraninda HICBIR ZAMAN gorunmuyordu.
+                await _posTahsilatValorSnapshotService.OlusturSnapshotAsync(belge, cancellationToken);
 
                 odeme.TahsilatOdemeBelgesiId = belge.Id;
                 odeme.KasaBankaHesapId = kasaBankaHesapId;

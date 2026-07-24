@@ -6,10 +6,26 @@
 -- calismasi sonucu SILINEMEDEN kalmis yetim test verilerini tespit eder ve
 -- (yalnizca ACIKCA istenirse) FK sirasiyla, transaction icinde siler.
 --
--- VARSAYILAN DAVRANIS: DRY-RUN. @ExecuteDelete = 0 iken hicbir INSERT/UPDATE/
--- DELETE calismaz - yalnizca silinecek adaylar ve adetleri SELECT/PRINT edilir.
+-- VARSAYILAN DAVRANIS: DRY-RUN. Hicbir INSERT/UPDATE/DELETE calismaz - yalnizca
+-- silinecek adaylarin adetleri VE kimlik bilgileri (Id + Kod/Ad) SELECT/PRINT edilir.
 --
--- SILME: @ExecuteDelete = 1 verilerek ACIKCA istenmelidir. Bu durumda script:
+-- Kullanim (sqlcmd, dosyayi HIC DEGISTIRMEDEN):
+--   Dry-run (varsayilan):
+--     sqlcmd -S localhost,14333 -d STYSDB -U sa -P "Strong!Pass1" -C -i find-orphaned-pos-valor-test-data.sql
+--   Silme (komut satirindan ACIKCA onaylanarak):
+--     sqlcmd -S localhost,14333 -d STYSDB -U sa -P "Strong!Pass1" -C -v ExecuteDelete=1 -i find-orphaned-pos-valor-test-data.sql
+--
+-- NOT (sqlcmd scripting-variable davranisi): `-v ExecuteDelete=1` VERILMEZSE sqlcmd
+-- "'ExecuteDelete' scripting variable not defined." seklinde bir BILGI mesaji basar
+-- (bu bir T-SQL SYNTAX hatasi DEGILDIR, script normal sekilde calismaya devam eder,
+-- exit code 0 doner) ve `$(ExecuteDelete)` metni asagidaki karsilastirmada OLDUGU GIBI
+-- kalir - bu metin '1'e ESIT OLMADIGI icin karsilastirma DOGAL olarak dry-run'a duser.
+-- Script kasitli olarak `:setvar ExecuteDelete ...` KULLANMAZ, cunku sqlcmd'de bir
+-- :setvar komutu HER ZAMAN -v ile verilen degeri EZER (test edilip dogrulanmistir) -
+-- bu, "-v ExecuteDelete=1 verilsin ama script yine de dry-run'a dussun" gibi sessiz bir
+-- hataya yol acardi.
+--
+-- SILME MODUNDA (@ExecuteDelete=1) script:
 --   - Yalnizca Kurumlar.Kod / Tesisler.Ad / MuhasebeHesapPlanlari.Kod / Iller.Ad
 --     alaninda @TestMarker (varsayilan 'PVI-970') GECEN kayitlardan TURETILEN
 --     (bu kurum/tesislere FK ile baglanan) satirlari hedefler - marker disindaki
@@ -20,14 +36,8 @@
 --   - FK sirasiyla (once referans temizligi/cocuk kayitlar, sonra ebeveyn
 --     kayitlar) TEK BIR transaction icinde, TRY/CATCH ile calisir; herhangi bir
 --     adim basarisiz olursa TUMU (ROLLBACK) geri alinir, hata mesaji PRINT edilir.
---   - Silinen kayit sayilarini (tablo bazinda) rapor eder.
---
--- Kullanim (sqlcmd):
---   sqlcmd -S localhost,14333 -d STYSDB -U sa -P "Strong!Pass1" -i find-orphaned-pos-valor-test-data.sql
---   (dry-run icin script'i degistirmeden calistirin; silme icin asagidaki
---    @ExecuteDelete degiskenini "1" yapin VEYA sqlcmd'ye -v ExecuteDelete=1 gecirip
---    DECLARE satirini "DECLARE @ExecuteDelete bit = CAST('$(ExecuteDelete)' AS bit);"
---    olarak degistirin.)
+--   - Silme ONCESI (aday) ve SONRASI (fiilen silinen + kalan) adetleri tablo
+--     bazinda rapor eder.
 -- ============================================================================
 
 SET NOCOUNT ON;
@@ -36,7 +46,9 @@ SET QUOTED_IDENTIFIER ON; -- Bazi sqlcmd/oturum varsayilanlarinda kapali gelebil
                           -- ifadeleri (filtreli/indeksli nesnelerle ayni oturumda) bunu gerektirir.
 
 DECLARE @TestMarker nvarchar(32) = N'PVI-970';
-DECLARE @ExecuteDelete bit = 0; -- YALNIZCA 1 verilirse asagidaki silme bloklari calisir.
+-- Bkz. yukaridaki NOT: $(ExecuteDelete) tanimsizsa bu metin OLDUGU GIBI kalir ('1'e esit
+-- olmadigi icin @ExecuteDelete=0 olur - guvenli varsayilan).
+DECLARE @ExecuteDelete bit = CASE WHEN N'$(ExecuteDelete)' = N'1' THEN 1 ELSE 0 END;
 
 -- ----------------------------------------------------------------------------
 -- 1) Hedef kok kayitlar: yalnizca marker'i TASIYAN Kurumlar/Tesisler/
@@ -70,11 +82,11 @@ INSERT INTO @HedefIller (Id)
 SELECT Id FROM dbo.Iller WHERE Ad LIKE '%' + @TestMarker + '%';
 
 -- ----------------------------------------------------------------------------
--- 2) DRY-RUN raporu: her tabloda silinecek aday sayisi (silme calismasa da
---    HER ZAMAN calisir - @ExecuteDelete=1 durumunda da ayni sayilarin silinip
---    silinmedigini karsilastirmak icin faydali bir on-rapor saglar).
+-- 2) DRY-RUN raporu: hem ADETLER hem de HEDEF Kurum/Tesis/MuhasebeHesapPlani
+--    kayitlarinin kimlik bilgileri (Id + Kod/Ad). HER ZAMAN calisir (silme
+--    modunda da "silme ONCESI" durumun kaydi olarak islev gorur).
 -- ----------------------------------------------------------------------------
-PRINT N'=== DRY-RUN: PVI-970 marker''li aday kayit sayilari (TestMarker=' + @TestMarker + N') ===';
+PRINT N'=== DRY-RUN (silme ONCESI): PVI-970 marker''li aday kayit adetleri (TestMarker=' + @TestMarker + N', ExecuteDelete=' + CAST(@ExecuteDelete AS nvarchar(1)) + N') ===';
 
 SELECT 'Kurumlar' AS Tablo, COUNT(*) AS AdaySayisi FROM @HedefKurumlar
 UNION ALL SELECT 'Tesisler', COUNT(*) FROM @HedefTesisler
@@ -93,10 +105,19 @@ UNION ALL SELECT 'CariHareketler', (SELECT COUNT(*) FROM muhasebe.CariHareketler
 UNION ALL SELECT 'KasaBankaHesaplari', (SELECT COUNT(*) FROM muhasebe.KasaBankaHesaplari WHERE TesisId IN (SELECT Id FROM @HedefTesisler))
 UNION ALL SELECT 'MuhasebeDonemler', (SELECT COUNT(*) FROM muhasebe.MuhasebeDonemler WHERE TesisId IN (SELECT Id FROM @HedefTesisler));
 
+PRINT N'=== DRY-RUN: hedef Kurumlar (Id, Kod, Ad) ===';
+SELECT k.Id, k.Kod, k.Ad, k.CreatedAt FROM dbo.Kurumlar k WHERE k.Id IN (SELECT Id FROM @HedefKurumlar) ORDER BY k.Id;
+
+PRINT N'=== DRY-RUN: hedef Tesisler (Id, Ad, KurumId) ===';
+SELECT t.Id, t.Ad, t.KurumId, t.CreatedAt FROM dbo.Tesisler t WHERE t.Id IN (SELECT Id FROM @HedefTesisler) ORDER BY t.Id;
+
+PRINT N'=== DRY-RUN: hedef MuhasebeHesapPlanlari (Id, Kod, TamKod) ===';
+SELECT h.Id, h.Kod, h.TamKod, h.Ad, h.CreatedAt FROM muhasebe.MuhasebeHesapPlanlari h WHERE h.Id IN (SELECT Id FROM @HedefHesapPlanlari) ORDER BY h.Id;
+
 IF @ExecuteDelete = 0
 BEGIN
-    PRINT N'@ExecuteDelete = 0 (varsayilan) - HICBIR SATIR SILINMEDI. Silmek icin script''in basindaki';
-    PRINT N'DECLARE @ExecuteDelete bit = 0; satirini 1 yapip TEKRAR calistirin.';
+    PRINT N'@ExecuteDelete = 0 (varsayilan/tanimsiz) - HICBIR SATIR SILINMEDI.';
+    PRINT N'Silmek icin: sqlcmd ... -v ExecuteDelete=1 -i find-orphaned-pos-valor-test-data.sql';
     RETURN;
 END;
 
@@ -105,7 +126,6 @@ END;
 --    iken buraya ulasilir.
 -- ----------------------------------------------------------------------------
 DECLARE @Silinen TABLE (Tablo nvarchar(64) PRIMARY KEY, Adet int NOT NULL);
-DECLARE @RowCount int;
 
 BEGIN TRY
     BEGIN TRANSACTION;
@@ -130,10 +150,8 @@ BEGIN TRY
     WHERE v.TesisId IN (SELECT Id FROM @HedefTesisler);
 
     -- 3.3) Fisler silinir (self-referanslar zaten temizlendi).
-    SET @RowCount = 0;
     DELETE FROM muhasebe.MuhasebeFisler WHERE Id IN (SELECT Id FROM @HedefFisler);
-    SET @RowCount = @@ROWCOUNT;
-    INSERT INTO @Silinen VALUES ('MuhasebeFisler', @RowCount);
+    INSERT INTO @Silinen VALUES ('MuhasebeFisler', @@ROWCOUNT);
 
     -- 3.4) PosTahsilatValorleri silinir.
     DELETE FROM muhasebe.PosTahsilatValorleri WHERE TesisId IN (SELECT Id FROM @HedefTesisler);
@@ -192,6 +210,18 @@ BEGIN TRY
 
     PRINT N'=== SILME TAMAMLANDI - tablo bazinda silinen kayit sayilari ===';
     SELECT Tablo, Adet FROM @Silinen ORDER BY Tablo;
+
+    -- 4) SONRASI dogrulama: ayni hedef Id kumeleri (silinmis olsalar bile @Hedef* tablo
+    -- degiskenlerinde hala tutulur) uzerinden, artik HICBIR fiziksel kaydin kalmadigini
+    -- (adet=0) teyit eder - "silinen adet" ile "GERCEKTEN kalan adet"in AYNI seyi kanitlamasi
+    -- gerekmez (biri neyin silindigini, digeri neyin KALMADIGINI dogrudan sorgular).
+    PRINT N'=== SILME SONRASI dogrulama: hedef kumelerde kalan kayit adetleri (0 olmali) ===';
+    SELECT 'Kurumlar' AS Tablo, COUNT(*) AS KalanAdet FROM dbo.Kurumlar WHERE Id IN (SELECT Id FROM @HedefKurumlar)
+    UNION ALL SELECT 'Tesisler', COUNT(*) FROM dbo.Tesisler WHERE Id IN (SELECT Id FROM @HedefTesisler)
+    UNION ALL SELECT 'Iller', COUNT(*) FROM dbo.Iller WHERE Id IN (SELECT Id FROM @HedefIller)
+    UNION ALL SELECT 'MuhasebeHesapPlanlari', COUNT(*) FROM muhasebe.MuhasebeHesapPlanlari WHERE Id IN (SELECT Id FROM @HedefHesapPlanlari)
+    UNION ALL SELECT 'CariKartlar', COUNT(*) FROM muhasebe.CariKartlar WHERE Id IN (SELECT Id FROM @HedefCariKartlar)
+    UNION ALL SELECT 'MuhasebeFisler', COUNT(*) FROM muhasebe.MuhasebeFisler WHERE Id IN (SELECT Id FROM @HedefFisler);
 END TRY
 BEGIN CATCH
     IF XACT_STATE() <> 0

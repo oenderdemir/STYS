@@ -67,13 +67,13 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     internal int KurumId;
     internal int TesisAId;
     internal int TesisBId;
-    private int HesapPlaniPosId;
-    private int HesapPlaniBankaId;
-    private int HesapPlaniKomisyonId;
-    private int KasaBankaBankaAId;
-    private int KasaBankaPosAId; // KomisyonOrani = null (manuel komisyon gerektirir)
+    internal int HesapPlaniPosId;
+    internal int HesapPlaniBankaId;
+    internal int HesapPlaniKomisyonId;
+    internal int KasaBankaBankaAId;
+    internal int KasaBankaPosAId; // KomisyonOrani = null (manuel komisyon gerektirir)
     private int KasaBankaPosKomisyonluAId; // KomisyonOrani = 2 (otomatik hesaplama)
-    private int CariKartAId;
+    internal int CariKartAId;
     private int TesisBBankaId;
     private int TesisBPosId;
     private int CariKartBId;
@@ -195,12 +195,42 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         await dbContext.SaveChangesAsync();
     }
 
+    /// <summary>Bu tesislere (TesisAId/TesisBId) ait, HALEN (aktif VEYA soft-delete edilmis)
+    /// CariKartlar Id'lerini dondurur. StysAppDbContext'in TUM BaseEntity turlerine uyguladigi
+    /// global IsDeleted=false query filter'i YUZUNDEN, navigation uzerinden filtreleme (ornegin
+    /// `x.CariKart.TesisId == ...`) soft-delete edilmis bir CariKart'in child kayitlarini
+    /// GORMEZDEN GELIR (navigation'in hedef entity'sinin KENDI query filter'i de devreye girer).
+    /// Bu yuzden CariKartlar/PosTahsilatValorleri ONCE IgnoreQueryFilters() ile DOGRUDAN
+    /// sorgulanip Id listesi cikarilir, sonraki adimlarda navigation DEGIL bu Id listesi
+    /// kullanilir.</summary>
+    private static async Task<List<int>> GetCariKartIdleriAsync(StysAppDbContext dbContext, int tesisAId, int tesisBId) =>
+        await dbContext.CariKartlar.IgnoreQueryFilters()
+            .Where(x => x.TesisId == tesisAId || x.TesisId == tesisBId)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+    private static async Task<List<int>> GetPosTahsilatValorIdleriAsync(StysAppDbContext dbContext, int tesisAId, int tesisBId) =>
+        await dbContext.PosTahsilatValorleri.IgnoreQueryFilters()
+            .Where(x => x.TesisId == tesisAId || x.TesisId == tesisBId)
+            .Select(x => x.Id)
+            .ToListAsync();
+
     /// <summary>
     /// Temizlik FOREIGN KEY SIRASIYLA tanimlanmis, birbirinden BAGIMSIZ adimlardan olusur. Her
     /// adim KENDI TAZE StysAppDbContext'ini acar (bir onceki adimin basarisiz olmus/rollback
     /// edilmis context'i ASLA yeniden kullanilmaz) ve, iliskili silme/guncellemeleri atomik
     /// tutmasi gerektigi durumlarda (ornegin "referansi NULL'a cek, sonra sil") KENDI transaction'ini
     /// acip commit eder - transaction basarisiz olursa context o adimla birlikte atilir.
+    ///
+    /// TUM sorgular IgnoreQueryFilters() KULLANIR: soft-delete edilmis bir test kaydi (ornegin bir
+    /// senaryonun kasitli olarak soft-delete ettigi bir PosTahsilatValor/CariKart/MuhasebeFis)
+    /// global IsDeleted=false filtresi yuzunden normal DbSet sorgularindan GORUNMEZ - bu, cleanup'in
+    /// bu satirlari sessizce ATLAMASINA (ve kalinti birikmesine) yol acardi. Navigation UZERINDEN
+    /// filtreleme (`x.CariKart.TesisId`, `x.PosTahsilatValor.TesisId`) de KULLANILMAZ - hedef
+    /// navigation entity'sinin KENDI query filter'i devreye girip soft-delete edilmis parent'in
+    /// child'larini gizleyebilir; bunun yerine ONCEDEN (IgnoreQueryFilters ile) cikarilan Id
+    /// listeleri (bkz. GetCariKartIdleriAsync/GetPosTahsilatValorIdleriAsync) kullanilir.
+    ///
     /// internal: PosTahsilatValorCleanupTests, adimlarin FK sirasini/dogrulama davranisini
     /// dogrudan gercek SQL Server'a karsi test edebilmek icin bu metoda erisir.
     /// </summary>
@@ -219,28 +249,29 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             await using var dbContext = CreateDbContext();
             await using var tx = await dbContext.Database.BeginTransactionAsync();
 
-            await dbContext.PosTahsilatValorleri
+            await dbContext.PosTahsilatValorleri.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(x => x.MuhasebeFisId, (int?)null)
                     .SetProperty(x => x.TersKayitMuhasebeFisId, (int?)null));
 
-            await dbContext.TahsilatOdemeBelgeleri
-                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+            var cariKartIds = await GetCariKartIdleriAsync(dbContext, TesisAId, TesisBId);
+            await dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters()
+                .Where(x => cariKartIds.Contains(x.CariKartId))
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.MuhasebeFisId, (int?)null));
 
-            var fisIds = await dbContext.MuhasebeFisler
+            var fisIds = await dbContext.MuhasebeFisler.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .Select(x => x.Id)
                 .ToListAsync();
             if (fisIds.Count > 0)
             {
-                await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id))
+                await dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => fisIds.Contains(x.Id))
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(x => x.TersKayitFisId, (int?)null)
                         .SetProperty(x => x.IptalEdilenFisId, (int?)null));
-                await dbContext.MuhasebeFisSatirlari.Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
-                await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
+                await dbContext.MuhasebeFisSatirlari.IgnoreQueryFilters().Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
+                await dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
             }
 
             await tx.CommitAsync();
@@ -249,15 +280,16 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("PosTahsilatValorDegisiklikGecmisleri silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.PosTahsilatValorDegisiklikGecmisleri
-                .Where(x => x.PosTahsilatValor != null && (x.PosTahsilatValor.TesisId == TesisAId || x.PosTahsilatValor.TesisId == TesisBId))
+            var posValorIds = await GetPosTahsilatValorIdleriAsync(dbContext, TesisAId, TesisBId);
+            await dbContext.PosTahsilatValorDegisiklikGecmisleri.IgnoreQueryFilters()
+                .Where(x => posValorIds.Contains(x.PosTahsilatValorId))
                 .ExecuteDeleteAsync();
         }),
 
         new("PosTahsilatValorleri silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.PosTahsilatValorleri
+            await dbContext.PosTahsilatValorleri.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -265,8 +297,9 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("TahsilatOdemeBelgeleri silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.TahsilatOdemeBelgeleri
-                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+            var cariKartIds = await GetCariKartIdleriAsync(dbContext, TesisAId, TesisBId);
+            await dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters()
+                .Where(x => cariKartIds.Contains(x.CariKartId))
                 .ExecuteDeleteAsync();
         }),
 
@@ -275,7 +308,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             await using var dbContext = CreateDbContext();
             // Yalnizca BU testin tesislerine ait sayaclar silinir - baska testlerle PAYLASILAN bir
             // sayac satiri (ayni tesis/mali yil, farkli test calismasi) asla etkilenmez.
-            await dbContext.PosValorFisNoSayaclari
+            await dbContext.PosValorFisNoSayaclari.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -283,7 +316,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("MuhasebeHesapBakiyeleri silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.MuhasebeHesapBakiyeleri
+            await dbContext.MuhasebeHesapBakiyeleri.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -296,15 +329,16 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             await using var dbContext = CreateDbContext();
             await using var tx = await dbContext.Database.BeginTransactionAsync();
 
-            var cariHareketIds = await dbContext.CariHareketler
-                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+            var cariKartIds = await GetCariKartIdleriAsync(dbContext, TesisAId, TesisBId);
+            var cariHareketIds = await dbContext.CariHareketler.IgnoreQueryFilters()
+                .Where(x => cariKartIds.Contains(x.CariKartId))
                 .Select(x => x.Id)
                 .ToListAsync();
             if (cariHareketIds.Count > 0)
             {
-                await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id))
+                await dbContext.CariHareketler.IgnoreQueryFilters().Where(x => cariHareketIds.Contains(x.Id))
                     .ExecuteUpdateAsync(s => s.SetProperty(x => x.IliskiliCariHareketId, (int?)null));
-                await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id)).ExecuteDeleteAsync();
+                await dbContext.CariHareketler.IgnoreQueryFilters().Where(x => cariHareketIds.Contains(x.Id)).ExecuteDeleteAsync();
             }
 
             await tx.CommitAsync();
@@ -313,7 +347,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("CariKartlar silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.CariKartlar
+            await dbContext.CariKartlar.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -321,7 +355,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("KasaBankaHesaplari silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.KasaBankaHesaplari
+            await dbContext.KasaBankaHesaplari.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -329,7 +363,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("MuhasebeDonemler silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.MuhasebeDonemler
+            await dbContext.MuhasebeDonemler.IgnoreQueryFilters()
                 .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -337,7 +371,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("MuhasebeHesapPlanlari silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.MuhasebeHesapPlanlari
+            await dbContext.MuhasebeHesapPlanlari.IgnoreQueryFilters()
                 .Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix))
                 .ExecuteDeleteAsync();
         }),
@@ -345,7 +379,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("Tesisler silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.Tesisler
+            await dbContext.Tesisler.IgnoreQueryFilters()
                 .Where(x => x.Id == TesisAId || x.Id == TesisBId)
                 .ExecuteDeleteAsync();
         }),
@@ -353,7 +387,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("Iller silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.Iller
+            await dbContext.Iller.IgnoreQueryFilters()
                 .Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix))
                 .ExecuteDeleteAsync();
         }),
@@ -361,15 +395,17 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         new("Kurumlar silme", async () =>
         {
             await using var dbContext = CreateDbContext();
-            await dbContext.Kurumlar
+            await dbContext.Kurumlar.IgnoreQueryFilters()
                 .Where(x => x.Id == KurumId)
                 .ExecuteDeleteAsync();
         }),
     ];
 
     /// <summary>Cleanup TAMAMLANDIKTAN sonra, KurumId/TesisAId/TesisBId'ye bagli GERCEKTEN hicbir
-    /// test kaydi kalmadigini dogrulayan bir sorgu. Kalan varsa tablo adi -> kalan kayit sayisi
-    /// eslemesini dondurur (bos sozluk = temiz).</summary>
+    /// test kaydi kalmadigini dogrulayan bir sorgu (aktif VEYA soft-delete edilmis - HER IKISI de
+    /// sayilir, bkz. IgnoreQueryFilters ve ID-tabanli alt sorgular yukaridaki OlusturCleanupAdimlari
+    /// notlarindaki gerekce ile ayni). Kalan varsa tablo adi -> kalan kayit sayisi eslemesini
+    /// dondurur (bos sozluk = temiz).</summary>
     internal async Task<Dictionary<string, int>> DogrulaTemizlikKalintilariAsync()
     {
         await using var dbContext = CreateDbContext();
@@ -384,23 +420,37 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             }
         }
 
-        await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("PosTahsilatValorDegisiklikGecmisleri", dbContext.PosTahsilatValorDegisiklikGecmisleri
-            .Where(x => x.PosTahsilatValor != null && (x.PosTahsilatValor.TesisId == TesisAId || x.PosTahsilatValor.TesisId == TesisBId)));
-        await KontrolEt("TahsilatOdemeBelgeleri", dbContext.TahsilatOdemeBelgeleri
-            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId)));
-        await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("PosValorFisNoSayaclari", dbContext.PosValorFisNoSayaclari.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("MuhasebeHesapBakiyeleri", dbContext.MuhasebeHesapBakiyeleri.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("CariHareketler", dbContext.CariHareketler
-            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId)));
-        await KontrolEt("CariKartlar", dbContext.CariKartlar.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("KasaBankaHesaplari", dbContext.KasaBankaHesaplari.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("MuhasebeDonemler", dbContext.MuhasebeDonemler.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
-        await KontrolEt("MuhasebeHesapPlanlari", dbContext.MuhasebeHesapPlanlari.Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix)));
-        await KontrolEt("Tesisler", dbContext.Tesisler.Where(x => x.Id == TesisAId || x.Id == TesisBId));
-        await KontrolEt("Iller", dbContext.Iller.Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix)));
-        await KontrolEt("Kurumlar", dbContext.Kurumlar.Where(x => x.Id == KurumId));
+        var cariKartIds = await GetCariKartIdleriAsync(dbContext, TesisAId, TesisBId);
+        var posValorIds = await GetPosTahsilatValorIdleriAsync(dbContext, TesisAId, TesisBId);
+
+        await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("PosTahsilatValorDegisiklikGecmisleri", dbContext.PosTahsilatValorDegisiklikGecmisleri.IgnoreQueryFilters()
+            .Where(x => posValorIds.Contains(x.PosTahsilatValorId)));
+        await KontrolEt("TahsilatOdemeBelgeleri", dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters()
+            .Where(x => cariKartIds.Contains(x.CariKartId)));
+        await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("PosValorFisNoSayaclari", dbContext.PosValorFisNoSayaclari.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeHesapBakiyeleri", dbContext.MuhasebeHesapBakiyeleri.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("CariHareketler", dbContext.CariHareketler.IgnoreQueryFilters()
+            .Where(x => cariKartIds.Contains(x.CariKartId)));
+        await KontrolEt("CariKartlar", dbContext.CariKartlar.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("KasaBankaHesaplari", dbContext.KasaBankaHesaplari.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeDonemler", dbContext.MuhasebeDonemler.IgnoreQueryFilters()
+            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeHesapPlanlari", dbContext.MuhasebeHesapPlanlari.IgnoreQueryFilters()
+            .Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix)));
+        await KontrolEt("Tesisler", dbContext.Tesisler.IgnoreQueryFilters()
+            .Where(x => x.Id == TesisAId || x.Id == TesisBId));
+        await KontrolEt("Iller", dbContext.Iller.IgnoreQueryFilters()
+            .Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix)));
+        await KontrolEt("Kurumlar", dbContext.Kurumlar.IgnoreQueryFilters()
+            .Where(x => x.Id == KurumId));
 
         return kalanlar;
     }
@@ -460,7 +510,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     // Yardimcilar
     // ─────────────────────────────────────────────────────────────
 
-    private static StysAppDbContext CreateDbContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
+    internal static StysAppDbContext CreateDbContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<StysAppDbContext>().UseSqlServer(ConnectionString);
         if (interceptors.Length > 0)
@@ -702,7 +752,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
         public Task<StysAppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
-    private async Task<int> SeedValorKaydiAsync(
+    internal async Task<int> SeedValorKaydiAsync(
         StysAppDbContext dbContext, int tesisId, int cariKartId, int krediKartiHesapId, int bagliBankaHesapId,
         decimal brut, decimal? komisyonOrani, int? komisyonGiderHesapPlaniId, string uniqueTag)
     {

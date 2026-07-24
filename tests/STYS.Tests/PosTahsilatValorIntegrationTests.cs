@@ -59,11 +59,14 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     private static readonly string? ConnectionString =
         Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);
 
-    private const string TestMarker = "PVI-970";
+    internal const string TestMarker = "PVI-970";
 
-    private int KurumId;
-    private int TesisAId;
-    private int TesisBId;
+    // internal: PosTahsilatValorCleanupTests, DisposeAsync'in gercek FK-sirali temizlik
+    // adimlarini/dogrulama sorgusunu bagimsiz olarak dogrulayabilmek icin bu alanlara ve
+    // yardimcilara erisir (ayni test projesi/assembly icinde).
+    internal int KurumId;
+    internal int TesisAId;
+    internal int TesisBId;
     private int HesapPlaniPosId;
     private int HesapPlaniBankaId;
     private int HesapPlaniKomisyonId;
@@ -75,7 +78,7 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     private int TesisBPosId;
     private int CariKartBId;
 
-    private string _uniqueSuffix = TestMarker;
+    internal string _uniqueSuffix = TestMarker;
 
     public async Task InitializeAsync()
     {
@@ -193,16 +196,215 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Temizlik ADIMLARININ HER BIRI kendi TAZE StysAppDbContext'i uzerinde, birbirinden BAGIMSIZ
-    /// try/catch ile calisir. Onceki (tek DbContext + kesintisiz sirali await zinciri) tasarimda,
-    /// ORTADAKI herhangi bir adim (ornegin gecici bir baglanti sorunu/timeout nedeniyle) basarisiz
-    /// olursa TUM SONRAKI adimlar (Tesisler/Kurumlar SILME DAHIL) calismadan atlaniyordu - bu,
-    /// paylasilan dev veritabaninda biriken yetim "Test Tesis/Test Kurum" kayitlarinin GERCEK KOK
-    /// NEDENIYDI (bkz. manuel temizlik: 2026-07-23'te 16 yetim Tesis + 7 yetim Kurum bulunup
-    /// silindi). Artik HER adim BAGIMSIZ bir birim: biri basarisiz olsa bile (loglanip devam
-    /// edilir) SONRAKI adimlar yine de denenir - bu, test kaydinin (TesisAId/TesisBId/KurumId ile
-    /// ID bazli, guvenli sekilde) MUMKUN OLDUGUNCA TAM temizlenmesini saglar.
+    /// Temizlik FOREIGN KEY SIRASIYLA tanimlanmis, birbirinden BAGIMSIZ adimlardan olusur. Her
+    /// adim KENDI TAZE StysAppDbContext'ini acar (bir onceki adimin basarisiz olmus/rollback
+    /// edilmis context'i ASLA yeniden kullanilmaz) ve, iliskili silme/guncellemeleri atomik
+    /// tutmasi gerektigi durumlarda (ornegin "referansi NULL'a cek, sonra sil") KENDI transaction'ini
+    /// acip commit eder - transaction basarisiz olursa context o adimla birlikte atilir.
+    /// internal: PosTahsilatValorCleanupTests, adimlarin FK sirasini/dogrulama davranisini
+    /// dogrudan gercek SQL Server'a karsi test edebilmek icin bu metoda erisir.
     /// </summary>
+    internal List<STYS.Tests.TestSupport.CleanupAdimi> OlusturCleanupAdimlari() =>
+    [
+        // 1) MuhasebeFisler'e referans veren TUM alanlar (bkz. bulgu #3) - PosTahsilatValorleri.
+        //    MuhasebeFisId/TersKayitMuhasebeFisId, TahsilatOdemeBelgesi.MuhasebeFisId,
+        //    MuhasebeFisler'in KENDI self-referanslari (TersKayitFisId/IptalEdilenFisId) - once
+        //    NULL'a cekilir, sonra satirlar ve fisler silinir. Onceki tasarimda TahsilatOdemeBelgesi.
+        //    MuhasebeFisId hic temizlenmiyordu; TahsilatOdemeBelgeleri silme adimi fisler
+        //    silindikten COK SONRA calistigi icin (Senaryo 8 gibi belge<->fis baglantisi kuran
+        //    testlerde) fis DELETE'i "REFERENCE constraint" hatasiyla basarisiz olabiliyordu. Butun
+        //    bu adim TEK bir transaction icinde atomik yapilir.
+        new("PosTahsilatValorleri/TahsilatOdemeBelgeleri/MuhasebeFisler FK temizligi ve silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await using var tx = await dbContext.Database.BeginTransactionAsync();
+
+            await dbContext.PosTahsilatValorleri
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.MuhasebeFisId, (int?)null)
+                    .SetProperty(x => x.TersKayitMuhasebeFisId, (int?)null));
+
+            await dbContext.TahsilatOdemeBelgeleri
+                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.MuhasebeFisId, (int?)null));
+
+            var fisIds = await dbContext.MuhasebeFisler
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .Select(x => x.Id)
+                .ToListAsync();
+            if (fisIds.Count > 0)
+            {
+                await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id))
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.TersKayitFisId, (int?)null)
+                        .SetProperty(x => x.IptalEdilenFisId, (int?)null));
+                await dbContext.MuhasebeFisSatirlari.Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
+                await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
+            }
+
+            await tx.CommitAsync();
+        }),
+
+        new("PosTahsilatValorDegisiklikGecmisleri silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.PosTahsilatValorDegisiklikGecmisleri
+                .Where(x => x.PosTahsilatValor != null && (x.PosTahsilatValor.TesisId == TesisAId || x.PosTahsilatValor.TesisId == TesisBId))
+                .ExecuteDeleteAsync();
+        }),
+
+        new("PosTahsilatValorleri silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.PosTahsilatValorleri
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("TahsilatOdemeBelgeleri silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.TahsilatOdemeBelgeleri
+                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+                .ExecuteDeleteAsync();
+        }),
+
+        new("PosValorFisNoSayaclari silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            // Yalnizca BU testin tesislerine ait sayaclar silinir - baska testlerle PAYLASILAN bir
+            // sayac satiri (ayni tesis/mali yil, farkli test calismasi) asla etkilenmez.
+            await dbContext.PosValorFisNoSayaclari
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("MuhasebeHesapBakiyeleri silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeHesapBakiyeleri
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        // CariHareketler (Senaryo 8'in gercek cari hareket/kapama zinciri) - once self-referencing
+        // IliskiliCariHareketId'yi NULL'a cek (FK Restrict), sonra kartlari silmeden ONCE hareketleri
+        // sil. Ayni transaction icinde atomik.
+        new("CariHareketler self-FK temizligi + silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await using var tx = await dbContext.Database.BeginTransactionAsync();
+
+            var cariHareketIds = await dbContext.CariHareketler
+                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
+                .Select(x => x.Id)
+                .ToListAsync();
+            if (cariHareketIds.Count > 0)
+            {
+                await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id))
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.IliskiliCariHareketId, (int?)null));
+                await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id)).ExecuteDeleteAsync();
+            }
+
+            await tx.CommitAsync();
+        }),
+
+        new("CariKartlar silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.CariKartlar
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("KasaBankaHesaplari silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.KasaBankaHesaplari
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("MuhasebeDonemler silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeDonemler
+                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("MuhasebeHesapPlanlari silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeHesapPlanlari
+                .Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix))
+                .ExecuteDeleteAsync();
+        }),
+
+        new("Tesisler silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.Tesisler
+                .Where(x => x.Id == TesisAId || x.Id == TesisBId)
+                .ExecuteDeleteAsync();
+        }),
+
+        new("Iller silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.Iller
+                .Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix))
+                .ExecuteDeleteAsync();
+        }),
+
+        new("Kurumlar silme", async () =>
+        {
+            await using var dbContext = CreateDbContext();
+            await dbContext.Kurumlar
+                .Where(x => x.Id == KurumId)
+                .ExecuteDeleteAsync();
+        }),
+    ];
+
+    /// <summary>Cleanup TAMAMLANDIKTAN sonra, KurumId/TesisAId/TesisBId'ye bagli GERCEKTEN hicbir
+    /// test kaydi kalmadigini dogrulayan bir sorgu. Kalan varsa tablo adi -> kalan kayit sayisi
+    /// eslemesini dondurur (bos sozluk = temiz).</summary>
+    internal async Task<Dictionary<string, int>> DogrulaTemizlikKalintilariAsync()
+    {
+        await using var dbContext = CreateDbContext();
+        var kalanlar = new Dictionary<string, int>();
+
+        async Task KontrolEt<T>(string tabloAdi, IQueryable<T> sorgu)
+        {
+            var adet = await sorgu.CountAsync();
+            if (adet > 0)
+            {
+                kalanlar[tabloAdi] = adet;
+            }
+        }
+
+        await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("PosTahsilatValorDegisiklikGecmisleri", dbContext.PosTahsilatValorDegisiklikGecmisleri
+            .Where(x => x.PosTahsilatValor != null && (x.PosTahsilatValor.TesisId == TesisAId || x.PosTahsilatValor.TesisId == TesisBId)));
+        await KontrolEt("TahsilatOdemeBelgeleri", dbContext.TahsilatOdemeBelgeleri
+            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId)));
+        await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("PosValorFisNoSayaclari", dbContext.PosValorFisNoSayaclari.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeHesapBakiyeleri", dbContext.MuhasebeHesapBakiyeleri.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("CariHareketler", dbContext.CariHareketler
+            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId)));
+        await KontrolEt("CariKartlar", dbContext.CariKartlar.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("KasaBankaHesaplari", dbContext.KasaBankaHesaplari.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeDonemler", dbContext.MuhasebeDonemler.Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId));
+        await KontrolEt("MuhasebeHesapPlanlari", dbContext.MuhasebeHesapPlanlari.Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix)));
+        await KontrolEt("Tesisler", dbContext.Tesisler.Where(x => x.Id == TesisAId || x.Id == TesisBId));
+        await KontrolEt("Iller", dbContext.Iller.Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix)));
+        await KontrolEt("Kurumlar", dbContext.Kurumlar.Where(x => x.Id == KurumId));
+
+        return kalanlar;
+    }
+
     public async Task DisposeAsync()
     {
         if (string.IsNullOrWhiteSpace(ConnectionString) || KurumId <= 0)
@@ -210,118 +412,47 @@ public class PosTahsilatValorIntegrationTests : IAsyncLifetime
             return;
         }
 
-        var hatalar = new List<string>();
+        var adimlar = OlusturCleanupAdimlari();
+        // Iki gecisli (FK sirali dene -> yalnizca basarisizlari ayni sirayla tekrar dene) mantik
+        // TwoPhaseCleanupRunner'da PAYLASILAN, DB'siz de test edilebilen bir yardimciya tasindi
+        // (bkz. PosTahsilatValorCleanupTests) - burada TEKRAR yazilmaz.
+        var hatalar = (await STYS.Tests.TestSupport.TwoPhaseCleanupRunner.CalistirAsync(adimlar)).ToList();
 
-        async Task AdimAsync(string adimAdi, Func<StysAppDbContext, Task> islem)
+        // Dogrulama: adimlarin "basarili" raporlamasina KOR KOR guvenilmez - KurumId/TesisAId/
+        // TesisBId'ye bagli GERCEKTEN hicbir kayit kalmadigini ayri bir sorguyla teyit et. Kalinti
+        // varsa (ornegin bir ExecuteDeleteAsync sessizce 0 satir etkiledi ama hata firlatmadiysa)
+        // bu da kalici hata sayilir ve mesajinda tablo/adet raporlanir.
+        Dictionary<string, int> kalanlar;
+        try
         {
-            try
-            {
-                await using var dbContext = CreateDbContext();
-                await islem(dbContext);
-            }
-            catch (Exception ex)
-            {
-                hatalar.Add($"{adimAdi}: {ex.GetType().Name} - {ex.Message}");
-            }
+            kalanlar = await DogrulaTemizlikKalintilariAsync();
+        }
+        catch (Exception ex)
+        {
+            kalanlar = [];
+            hatalar.Add(new InvalidOperationException($"[dogrulama sorgusu basarisiz] {ex.GetType().Name} - {ex.Message}", ex));
         }
 
-        // MuhasebeFisler'i silmeden ONCE, ona referans veren PosTahsilatValorleri.MuhasebeFisId /
-        // TersKayitMuhasebeFisId alanlarini NULL'a cekmeliyiz (FK Restrict) - aksi halde DELETE
-        // "REFERENCE constraint" hatasiyla basarisiz olur.
-        await AdimAsync("PosTahsilatValorleri fis FK temizligi", dbContext => dbContext.PosTahsilatValorleri
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(x => x.MuhasebeFisId, (int?)null)
-                .SetProperty(x => x.TersKayitMuhasebeFisId, (int?)null)));
-
-        await AdimAsync("MuhasebeFisler self-FK temizligi + satir/fis silme", async dbContext =>
+        if (kalanlar.Count > 0)
         {
-            var fisIds = await dbContext.MuhasebeFisler
-                .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-                .Select(x => x.Id)
-                .ToListAsync();
-            if (fisIds.Count == 0)
-            {
-                return;
-            }
-
-            // Ters kayit <-> orijinal fis çapraz referanslarini (TersKayitFisId/IptalEdilenFisId)
-            // da once temizle - ayni sebep.
-            await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id))
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(x => x.TersKayitFisId, (int?)null)
-                    .SetProperty(x => x.IptalEdilenFisId, (int?)null));
-            await dbContext.MuhasebeFisSatirlari.Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
-            await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
-        });
-
-        await AdimAsync("PosTahsilatValorDegisiklikGecmisleri silme", dbContext => dbContext.PosTahsilatValorDegisiklikGecmisleri
-            .Where(x => x.PosTahsilatValor != null && (x.PosTahsilatValor.TesisId == TesisAId || x.PosTahsilatValor.TesisId == TesisBId))
-            .ExecuteDeleteAsync());
-        await AdimAsync("PosTahsilatValorleri silme", dbContext => dbContext.PosTahsilatValorleri
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("TahsilatOdemeBelgeleri silme", dbContext => dbContext.TahsilatOdemeBelgeleri
-            .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
-            .ExecuteDeleteAsync());
-        await AdimAsync("PosValorFisNoSayaclari silme", dbContext => dbContext.PosValorFisNoSayaclari
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("MuhasebeHesapBakiyeleri silme", dbContext => dbContext.MuhasebeHesapBakiyeleri
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-
-        // CariHareketler (Senaryo 8'in gercek cari hareket/kapama zinciri) - once self-referencing
-        // IliskiliCariHareketId'yi NULL'a cek (FK Restrict), sonra kartlari silmeden ONCE hareketleri
-        // sil.
-        await AdimAsync("CariHareketler self-FK temizligi + silme", async dbContext =>
-        {
-            var cariHareketIds = await dbContext.CariHareketler
-                .Where(x => x.CariKart != null && (x.CariKart.TesisId == TesisAId || x.CariKart.TesisId == TesisBId))
-                .Select(x => x.Id)
-                .ToListAsync();
-            if (cariHareketIds.Count == 0)
-            {
-                return;
-            }
-
-            await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IliskiliCariHareketId, (int?)null));
-            await dbContext.CariHareketler.Where(x => cariHareketIds.Contains(x.Id)).ExecuteDeleteAsync();
-        });
-
-        await AdimAsync("CariKartlar silme", dbContext => dbContext.CariKartlar
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("KasaBankaHesaplari silme", dbContext => dbContext.KasaBankaHesaplari
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("MuhasebeDonemler silme", dbContext => dbContext.MuhasebeDonemler
-            .Where(x => x.TesisId == TesisAId || x.TesisId == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("MuhasebeHesapPlanlari silme", dbContext => dbContext.MuhasebeHesapPlanlari
-            .Where(x => x.Kod != null && x.Kod.StartsWith(_uniqueSuffix))
-            .ExecuteDeleteAsync());
-        await AdimAsync("Tesisler silme", dbContext => dbContext.Tesisler
-            .Where(x => x.Id == TesisAId || x.Id == TesisBId)
-            .ExecuteDeleteAsync());
-        await AdimAsync("Iller silme", dbContext => dbContext.Iller
-            .Where(x => x.Ad != null && x.Ad.Contains(_uniqueSuffix))
-            .ExecuteDeleteAsync());
-        await AdimAsync("Kurumlar silme", dbContext => dbContext.Kurumlar
-            .Where(x => x.Id == KurumId)
-            .ExecuteDeleteAsync());
+            hatalar.Add(new InvalidOperationException(
+                "Cleanup sonrasi kalinti kayit tespit edildi: " +
+                string.Join(", ", kalanlar.Select(kv => $"{kv.Key}={kv.Value}"))));
+        }
 
         if (hatalar.Count > 0)
         {
-            // xUnit'in IAsyncLifetime.DisposeAsync'i testin PASS/FAIL durumunu artik degistiremez
-            // (test zaten tamamlanmis olabilir) - bu yuzden Assert yerine stderr'e yazilir. Bu,
-            // "sessizce kalinti biriktirme" riskini en azindan GORUNUR kilar (CI/test ciktisinda
-            // izlenebilir); TestMarker (PVI-970) ile isaretli kayitlarin eski/yetim olanlari icin
-            // ayrica bkz. scripts/find-orphaned-pos-valor-test-data.sql (dry-run bakim script'i).
-            await Console.Error.WriteLineAsync(
+            // Test govdesi ZATEN basarisiz olmus olsa bile bu exception xUnit tarafindan AYRICA
+            // raporlanir (IAsyncLifetime.DisposeAsync'in kendi hatasi, test govdesinin hatasindan
+            // BAGIMSIZ olarak test ciktisinda gorunur) - "sessizce kalinti biriktirme" riski artik
+            // testi BASARISIZ kilarak ELE ALINIR, yalnizca stderr'e loglanmaz. TestMarker (PVI-970)
+            // ile isaretli kayitlarin gecmiste kalmis olanlari icin ayrica bkz.
+            // scripts/find-orphaned-pos-valor-test-data.sql (dry-run + kontrollu @ExecuteDelete
+            // bakim script'i).
+            throw new AggregateException(
                 $"[PosTahsilatValorIntegrationTests.DisposeAsync] KurumId={KurumId}, TesisAId={TesisAId}, TesisBId={TesisBId}: " +
-                $"{hatalar.Count} temizlik adimi basarisiz oldu, kalinti veri olusmus olabilir: {string.Join(" | ", hatalar)}");
+                $"{hatalar.Count} cleanup hatasi (kalinti veri olusmus olabilir).",
+                hatalar);
         }
     }
 

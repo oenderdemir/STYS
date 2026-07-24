@@ -79,11 +79,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                   AND (
                       EXISTS (
                           SELECT 1 FROM [muhasebe].[KasaBankaHesaplari] k
-                          WHERE k.[MuhasebeHesapPlaniId] = h.[Id] AND k.[Tip] = N'KrediKarti'
+                          WHERE k.[MuhasebeHesapPlaniId] = h.[Id] AND k.[Tip] = N'KrediKarti' AND k.[IsDeleted] = 0
                       )
                       OR NOT EXISTS (
                           SELECT 1 FROM [muhasebe].[KasaBankaHesaplari] k
-                          WHERE k.[MuhasebeHesapPlaniId] = h.[Id]
+                          WHERE k.[MuhasebeHesapPlaniId] = h.[Id] AND k.[IsDeleted] = 0
                       )
                   );
 

@@ -104,7 +104,43 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         return detay.Id;
     }
 
-    private static async Task<int> EkleKasaBankaHesabiAsync(StysAppDbContext dbContext, int hesapPlaniId, string tip)
+    /// <summary>Testte "yanlis ust hesap" olarak kullanilacak, GERCEKTEN veritabaninda var olan,
+    /// aktif ve Hazir Degerler/Kredi Kartlari hesaplarindan FARKLI bir MuhasebeHesapPlani Id'si
+    /// bulur (Identity degerlerinin ARDISIK oldugu VARSAYILMAZ - "HazirDegerlerId + 1" gibi bir Id
+    /// gercekte var olmayabilir, bu da testin "yanlis ama var olan bir ust hesap" senaryosunu
+    /// yanlislikla "var OLMAYAN bir ust hesap" senaryosuna donusturebilirdi). Boyle bir hesap
+    /// bulunamazsa (beklenmedik ama teorik olarak mumkun), transaction icinde GECICI bir template
+    /// hesap olusturup onun Id'sini dondurur - transaction sonunda rollback ile iz birakmaz.</summary>
+    private static async Task<int> BulYanlisUstHesapIdAsync(StysAppDbContext dbContext, HazirHesaplar gercek)
+    {
+        var mevcut = await dbContext.MuhasebeHesapPlanlari.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Id != gercek.HazirDegerlerId && x.Id != gercek.KrediKartlariId)
+            .OrderBy(x => x.Id)
+            .Select(x => (int?)x.Id)
+            .FirstOrDefaultAsync();
+        if (mevcut.HasValue)
+        {
+            return mevcut.Value;
+        }
+
+        var uniqueSuffix = $"{TestMarker}-YANLISUST-{Guid.NewGuid():N}"[..28];
+        var gecici = new MuhasebeHesapPlani
+        {
+            Kod = uniqueSuffix,
+            TamKod = "9.99." + uniqueSuffix,
+            Ad = "Test Gecici Yanlis Ust Hesap " + uniqueSuffix,
+            SeviyeNo = 1,
+            HesapTipi = HesapTipi.AltHesap,
+            AktifMi = true,
+            DetayHesapMi = false,
+            HareketGorebilirMi = false
+        };
+        dbContext.MuhasebeHesapPlanlari.Add(gecici);
+        await dbContext.SaveChangesAsync();
+        return gecici.Id;
+    }
+
+    private static async Task<int> EkleKasaBankaHesabiAsync(StysAppDbContext dbContext, int hesapPlaniId, string tip, bool isDeleted = false)
     {
         var uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
         var kasaBanka = new KasaBankaHesap
@@ -119,6 +155,16 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         };
         dbContext.KasaBankaHesaplari.Add(kasaBanka);
         await dbContext.SaveChangesAsync();
+
+        if (isDeleted)
+        {
+            // ApplyAuditInfo, EKLENEN (Added) her satirin IsDeleted'ini SaveChangesAsync sirasinda
+            // KOSULSUZ false'a zorlar (bkz. EkleDetayHesapAsync'teki ayni notu) - "zaten soft-delete
+            // edilmis bir KasaBankaHesap baglantisi" simule etmek icin ayri bir raw UPDATE gerekir.
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+UPDATE [muhasebe].[KasaBankaHesaplari] SET [IsDeleted] = 1 WHERE [Id] = {kasaBanka.Id}");
+        }
+
         return kasaBanka.Id;
     }
 
@@ -136,12 +182,9 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            // Yanlis ust hesap: Hazir Degerler DEGIL, baska bir Id (kendi Id'si + 999999 - kesinlikle
-            // gercek bir hesabin Id'si olamayacak sahte bir deger yerine, testin kendi baglaminda
-            // "yanlis ama var olan" bir ust hesap secmek icin Hazir Degerler'in Id'sinden farkli
-            // herhangi bir gercek Id kullanilir - burada basitce Hazir Degerler+1 kullanilir ki
-            // kesinlikle "spesifik ana hesap Id'si" ile ESLESMESIN).
-            var yanlisUstHesapId = gercek.HazirDegerlerId + 1;
+            // Yanlis ust hesap: Hazir Degerler DEGIL, GERCEKTEN var olan baska bir hesap (Identity
+            // degerlerinin ardisik oldugu varsayilmaz, bkz. BulYanlisUstHesapIdAsync).
+            var yanlisUstHesapId = await BulYanlisUstHesapIdAsync(dbContext, gercek);
             await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, beklenenAnaSeviye + 1, yanlisUstHesapId);
             var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, beklenenDetaySeviye + 1, "orijinal-hatali");
 
@@ -213,7 +256,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
             // Ana hesabin SeviyeNo'su ZATEN dogru (dogruAnaSeviye) ama UstHesapId hala YANLIS -
             // "kismen duzeltilmis" durumu boyle simule edilir (yalnizca SeviyeNo elle duzeltilmis,
             // UstHesapId unutulmus).
-            var yanlisUstHesapId = gercek.HazirDegerlerId + 1;
+            var yanlisUstHesapId = await BulYanlisUstHesapIdAsync(dbContext, gercek);
             await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye, yanlisUstHesapId);
             // Detay hesap ESKI (yanlis) seviyede birakilmis.
             var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, dogruDetaySeviye + 1, "kismen-duzeltilmis");
@@ -274,7 +317,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, gercek.HazirDegerlerId + 1);
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, await BulYanlisUstHesapIdAsync(dbContext, gercek));
             var yanlisSeviye = dogruDetaySeviye + 5;
             var silinmisDetayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, yanlisSeviye, "soft-deleted", isDeleted: true);
 
@@ -310,7 +353,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, gercek.HazirDegerlerId + 1);
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, await BulYanlisUstHesapIdAsync(dbContext, gercek));
             var yanlisSeviye = dogruDetaySeviye + 5;
             var ilgisizDetayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, yanlisSeviye, "ilgisiz-banka");
             // Bu detay hesap, KrediKarti DEGIL, Banka tipi bir KasaBankaHesap'a bagli - "gercekten
@@ -324,6 +367,48 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
             Assert.Equal(yanlisSeviye, ilgisizSeviyeSonra);
 
             // Ana hesap yine de duzeltilmis olmali.
+            var anaDurum = await OkuAnaHesapDurumuAsync(dbContext, gercek.KrediKartlariId);
+            Assert.Equal(dogruAnaSeviye, anaDurum.SeviyeNo);
+        }
+        finally
+        {
+            await tx.RollbackAsync();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Senaryo 6b (bulgu #7/#8) — Detay hesap yanlis seviyede, ama TEK bagli KasaBankaHesap kaydi
+    // SOFT-DELETE edilmis bir Banka tipi hesap. Migration'in EXISTS/NOT EXISTS sorgulari
+    // k.IsDeleted=0 filtresi TASIMALIDIR - aksi halde soft-delete edilmis bu Banka baglantisi
+    // "aktif bir baska-tip baglanti" sanilip detay hesap YANLISLIKLA atlanirdi. Soft-delete edilmis
+    // baglanti YOK SAYILMALI (aktif hicbir KasaBankaHesap yokmus GIBI degerlendirilmeli), bu da
+    // "hicbir KasaBankaHesap'a bagli olmayan detay hesap" dalindan (NOT EXISTS) gecmesini ve
+    // DUZELTILMESINI saglar.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task SadeceSoftDeleteEdilmisBankaBaglantisiOlanDetayHesap_AktifBaglantiSayilmazVeDuzeltilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var gercek = await OkuGercekHesaplariAsync(dbContext);
+        var dogruAnaSeviye = gercek.HazirDegerlerSeviye + 1;
+        var dogruDetaySeviye = dogruAnaSeviye + 1;
+
+        await using var tx = await dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, await BulYanlisUstHesapIdAsync(dbContext, gercek));
+            var yanlisSeviye = dogruDetaySeviye + 5;
+            var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, yanlisSeviye, "soft-deleted-banka-baglantisi");
+            // Bu KasaBankaHesap kaydi Banka tipinde VE soft-delete edilmis - fix'in sorgusu bunu
+            // "aktif bir baska-tip baglanti" olarak GORMEMELI (k.IsDeleted=0 filtresi).
+            await EkleKasaBankaHesabiAsync(dbContext, detayId, KasaBankaHesapTipleri.Banka, isDeleted: true);
+
+            await dbContext.Database.ExecuteSqlRawAsync(FixKrediKartlariAnaHesapHiyerarsisi.FixSql);
+
+            var detaySeviyeSonra = await dbContext.MuhasebeHesapPlanlari.AsNoTracking()
+                .Where(x => x.Id == detayId).Select(x => x.SeviyeNo).SingleAsync();
+            Assert.Equal(dogruDetaySeviye, detaySeviyeSonra);
+
             var anaDurum = await OkuAnaHesapDurumuAsync(dbContext, gercek.KrediKartlariId);
             Assert.Equal(dogruAnaSeviye, anaDurum.SeviyeNo);
         }
@@ -348,7 +433,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, gercek.HazirDegerlerId + 1);
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, await BulYanlisUstHesapIdAsync(dbContext, gercek));
             var yanlisSeviye = dogruDetaySeviye + 1;
             var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, yanlisSeviye, "kredi-karti-hesap");
             var kasaBankaId = await EkleKasaBankaHesabiAsync(dbContext, detayId, KasaBankaHesapTipleri.KrediKarti);
@@ -385,7 +470,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, gercek.HazirDegerlerId + 1);
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, dogruAnaSeviye + 1, await BulYanlisUstHesapIdAsync(dbContext, gercek));
             var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, dogruDetaySeviye + 1, "idempotency");
 
             await dbContext.Database.ExecuteSqlRawAsync(FixKrediKartlariAnaHesapHiyerarsisi.FixSql);
@@ -421,7 +506,7 @@ UPDATE [muhasebe].[MuhasebeHesapPlanlari] SET [IsDeleted] = 1 WHERE [Id] = {deta
         await using var tx = await dbContext.Database.BeginTransactionAsync();
         try
         {
-            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, gercek.HazirDegerlerSeviye + 5, gercek.HazirDegerlerId + 1);
+            await BozAnaHesabiAsync(dbContext, gercek.KrediKartlariId, gercek.HazirDegerlerSeviye + 5, await BulYanlisUstHesapIdAsync(dbContext, gercek));
             var detayId = await EkleDetayHesapAsync(dbContext, gercek.KrediKartlariId, gercek.HazirDegerlerSeviye + 8, "iliski-dogrulama");
 
             await dbContext.Database.ExecuteSqlRawAsync(FixKrediKartlariAnaHesapHiyerarsisi.FixSql);

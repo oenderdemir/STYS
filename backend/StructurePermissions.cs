@@ -538,6 +538,13 @@ public static class StructurePermissions
         public const string Manage = "PosTahsilatValorYonetimi.Manage";
     }
 
+    /// <summary>Salt-okunur izleme/raporlama ekrani - Manage yoktur (veri degistirilmez).</summary>
+    public static class NakitBankaPozisyonuYonetimi
+    {
+        public const string Menu = "NakitBankaPozisyonuYonetimi.Menu";
+        public const string View = "NakitBankaPozisyonuYonetimi.View";
+    }
+
     public static class HesapYonetimi
     {
         public const string Menu = "HesapYonetimi.Menu";

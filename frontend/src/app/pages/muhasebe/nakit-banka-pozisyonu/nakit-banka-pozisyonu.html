@@ -1,0 +1,316 @@
+<app-muhasebe-tesis-context-bar />
+<app-muhasebe-tesis-secim-dialog />
+<p-toast />
+
+<div class="card mb-3">
+    <div class="flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+        <h5 class="m-0">Nakit ve Banka Pozisyonu</h5>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" size="small" (onClick)="refresh()" />
+    </div>
+    <div class="text-sm text-color-secondary" pTooltip="Banka ekstresi entegrasyonu yoktur; ekranda gösterilen banka bakiyeleri yalnızca STYS içindeki muhasebe kayıtlarına dayanır.">
+        <i class="pi pi-info-circle mr-1"></i>
+        Gösterilen banka bakiyeleri STYS muhasebe kayıtlarına dayanır. Bankanın gerçek kullanılabilir bakiyesiyle farklılık gösterebilir.
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="grid grid-cols-12 gap-3 align-items-end">
+        <div class="col-span-12 md:col-span-2">
+            <label class="block mb-2 text-sm">Rapor Tarihi</label>
+            <p-datepicker [(ngModel)]="raporTarihi" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" (onSelect)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <label class="block mb-2 text-sm">Hesap Türü</label>
+            <p-select [(ngModel)]="hesapTuru" [options]="hesapTuruSecenekleri" optionLabel="label" optionValue="value" class="w-full" (onChange)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <label class="block mb-2 text-sm">Para Birimi</label>
+            <input pInputText class="w-full" [(ngModel)]="paraBirimi" placeholder="Örn: TRY" (change)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-3">
+            <label class="block mb-2 text-sm">Valör Durumu</label>
+            <p-select [(ngModel)]="valorDurumu" [options]="valorDurumuSecenekleri" optionLabel="label" optionValue="value" class="w-full" (onChange)="onFiltreDegisti()" />
+        </div>
+    </div>
+</div>
+
+<div *ngIf="loading" class="flex flex-column align-items-center justify-content-center py-8">
+    <p-progressSpinner [style]="{ width: '60px', height: '60px' }" />
+    <p class="mt-3 text-color-secondary">Nakit ve banka pozisyonu yükleniyor...</p>
+</div>
+
+<div *ngIf="!loading && errorMessage" class="card mb-3">
+    <div class="text-red-500"><i class="pi pi-exclamation-triangle mr-2"></i>{{ errorMessage }}</div>
+</div>
+
+<ng-container *ngIf="!loading && !errorMessage && ozet">
+    <!-- Ozet kartlari: yalnizca TRY (raporlama para birimi) hesaplarini yansitir - farkli para
+         birimindeki hesaplar buraya karistirilmaz, asagidaki "Para Birimine Gore Ozet" kartinda
+         ayrica gorulur. -->
+    <div class="text-xs text-color-secondary mb-1" *ngIf="ozet.paraBirimiOzetleri.length > 1">
+        Aşağıdaki özet kartları yalnızca TRY hesapları kapsar - diğer para birimleri "Para Birimine Göre Özet" bölümünde ayrıca listelenir.
+    </div>
+    <div class="grid grid-cols-12 gap-3 mb-3">
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Toplam Nakit</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.toplamNakit)">{{ ozet.toplamNakit | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Toplam Banka Muhasebe Bakiyesi</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.toplamBankaMuhasebeBakiyesi)">{{ ozet.toplamBankaMuhasebeBakiyesi | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Valörü Geçmiş Bekleyen Net</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.valoruGecmisBekleyenNet)">{{ ozet.valoruGecmisBekleyenNet | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Bugün Gelecek Net</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.bugunGelecekNet)">{{ ozet.bugunGelecekNet | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Yarın Gelecek Net</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.yarinGelecekNet)">{{ ozet.yarinGelecekNet | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Takip Eden 2-7 Gün Gelecek Net</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.takip2_7GunGelecekNet)">{{ ozet.takip2_7GunGelecekNet | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">7 Günden Sonrası Gelecek Net</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.sonraki7GundenSonraNet)">{{ ozet.sonraki7GundenSonraNet | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full">
+                <div class="text-sm text-color-secondary mb-1">Toplam Bekleyen Net POS Tutarı</div>
+                <div class="text-xl font-bold" [ngClass]="getTutarClass(ozet.toplamBekleyenNetPos)">{{ ozet.toplamBekleyenNetPos | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+        <div class="col-span-6 md:col-span-3 lg:col-span-2">
+            <p-card styleClass="text-center shadow-1 h-full border-primary">
+                <div class="text-sm text-color-secondary mb-1">Tahmini Toplam Banka Pozisyonu</div>
+                <div class="text-xl font-bold text-primary">{{ ozet.tahminiToplamBankaPozisyonu | number: '1.2-2' }}</div>
+            </p-card>
+        </div>
+    </div>
+
+    <!-- Uyari ozeti + para birimi ozetleri -->
+    <div class="grid grid-cols-12 gap-3 mb-3">
+        <div class="col-span-12 md:col-span-6" *ngIf="ozet.mutabakatBekleyenAdet > 0 || ozet.hataliAdet > 0 || ozet.uyariSayisi > 0">
+            <p-card styleClass="h-full">
+                <div class="text-sm font-semibold mb-2">Ayrı İzlenmesi Gereken Tutarlar (Tahmini Bakiyeye Dahil Değildir)</div>
+                <div *ngIf="ozet.mutabakatBekleyenAdet > 0" class="mb-1">
+                    <p-tag severity="warn" value="Mutabakat Bekliyor" class="mr-2" />
+                    {{ ozet.mutabakatBekleyenToplam | number: '1.2-2' }} ({{ ozet.mutabakatBekleyenAdet }} kayıt)
+                </div>
+                <div *ngIf="ozet.hataliAdet > 0" class="mb-1">
+                    <p-tag severity="danger" value="Hatalı" class="mr-2" />
+                    {{ ozet.hataliToplam | number: '1.2-2' }} ({{ ozet.hataliAdet }} kayıt)
+                </div>
+                <div *ngIf="ozet.uyariSayisi > 0" class="mt-2">
+                    <i class="pi pi-exclamation-triangle text-orange-500 mr-1"></i>
+                    <strong>{{ ozet.uyariSayisi }}</strong> veri kalitesi uyarısı var (aşağıda listelenir).
+                </div>
+            </p-card>
+        </div>
+        <div class="col-span-12 md:col-span-6" *ngIf="ozet.paraBirimiOzetleri.length > 1">
+            <p-card styleClass="h-full">
+                <div class="text-sm font-semibold mb-2">Para Birimine Göre Özet (ayrı toplanır, dönüştürülmez)</div>
+                <div *ngFor="let pb of ozet.paraBirimiOzetleri" class="flex justify-content-between text-sm mb-1">
+                    <span>{{ pb.paraBirimi }}</span>
+                    <span [ngClass]="getTutarClass(pb.tahminiToplamBankaPozisyonu)">{{ pb.tahminiToplamBankaPozisyonu | number: '1.2-2' }}</span>
+                </div>
+            </p-card>
+        </div>
+    </div>
+
+    <!-- Kasa hesaplari -->
+    <div class="card mb-3" *ngIf="!hesapTuru || hesapTuru === 'Kasa'">
+        <div class="flex align-items-center justify-content-between mb-2">
+            <h6 class="m-0">Nakit / Kasa Hesapları</h6>
+        </div>
+        <p-table [value]="hesaplar?.kasaHesaplari ?? []" responsiveLayout="scroll" dataKey="kasaBankaHesapId">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Kasa Adı</th>
+                    <th>Kasa Kodu</th>
+                    <th>Para Birimi</th>
+                    <th>Bağlı Muhasebe Hesap Kodu</th>
+                    <th>Bağlı Muhasebe Hesap Adı</th>
+                    <th>Muhasebe Bakiyesi</th>
+                    <th>Son Hareket Tarihi</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item>
+                <tr>
+                    <td>{{ item.ad }}</td>
+                    <td>{{ item.kod }}</td>
+                    <td>{{ item.paraBirimi }}</td>
+                    <td>{{ item.muhasebeHesapKodu ?? '-' }}</td>
+                    <td>{{ item.muhasebeHesapAdi ?? '-' }}</td>
+                    <td [ngClass]="getTutarClass(item.muhasebeBakiyesi)">{{ item.muhasebeBakiyesi | number: '1.2-2' }}</td>
+                    <td>{{ item.sonHareketTarihi ? (item.sonHareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+                <tr><td colspan="7" class="text-center">Kayıt bulunamadı.</td></tr>
+            </ng-template>
+        </p-table>
+    </div>
+
+    <!-- Banka/IBAN hesaplari -->
+    <div class="card mb-3" *ngIf="!hesapTuru || hesapTuru === 'Banka'">
+        <div class="flex align-items-center justify-content-between mb-2">
+            <h6 class="m-0">Banka / IBAN Hesapları</h6>
+        </div>
+        <p-table [value]="hesaplar?.bankaHesaplari ?? []" responsiveLayout="scroll" dataKey="kasaBankaHesapId" [scrollable]="true">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Banka Adı</th>
+                    <th>Hesap Adı</th>
+                    <th>IBAN</th>
+                    <th>Para Birimi</th>
+                    <th>STYS Muhasebe Bakiyesi</th>
+                    <th>Valörü Geçmiş Bekleyen Net</th>
+                    <th>Bugün Gelecek Net</th>
+                    <th>Yarın Gelecek Net</th>
+                    <th>Takip 2-7 Gün Net</th>
+                    <th>7 Günden Sonra Net</th>
+                    <th>Toplam Bekleyen Net</th>
+                    <th>Tahmini Bakiye</th>
+                    <th>Son Muhasebe Hareketi</th>
+                    <th>İşlemler</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-item>
+                <tr>
+                    <td>{{ item.bankaAdi }}</td>
+                    <td>{{ item.hesapAdi }}</td>
+                    <td>
+                        <span class="font-mono">{{ formatIban(item.iban) }}</span>
+                        <p-button *ngIf="item.iban" icon="pi pi-copy" size="small" text="true" pTooltip="IBAN'ı kopyala" (onClick)="copyIban(item.iban)" />
+                    </td>
+                    <td>{{ item.paraBirimi }}</td>
+                    <td [ngClass]="getTutarClass(item.stysMuhasebeBakiyesi)">{{ item.stysMuhasebeBakiyesi | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.valoruGecmisBekleyenNet)">{{ item.valoruGecmisBekleyenNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.bugunGelecekNet)">{{ item.bugunGelecekNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.yarinGelecekNet)">{{ item.yarinGelecekNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.takip2_7GunGelecekNet)">{{ item.takip2_7GunGelecekNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.sonraki7GundenSonraNet)">{{ item.sonraki7GundenSonraNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.toplamBekleyenNet)">{{ item.toplamBekleyenNet | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.tahminiBakiye)"><strong>{{ item.tahminiBakiye | number: '1.2-2' }}</strong></td>
+                    <td>{{ item.sonMuhasebeHareketTarihi ? (item.sonMuhasebeHareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
+                    <td>
+                        <p-button icon="pi pi-calendar" size="small" text="true" pTooltip="Valör Takvimi" (onClick)="openValorTakvimi(item)" />
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+                <tr><td colspan="14" class="text-center">Kayıt bulunamadı.</td></tr>
+            </ng-template>
+        </p-table>
+    </div>
+
+    <!-- Veri kalitesi uyarilari -->
+    <div class="card" *ngIf="hesaplar?.uyarilar?.length">
+        <h6 class="mb-2">Veri Kalitesi Uyarıları</h6>
+        <p-table [value]="hesaplar!.uyarilar" responsiveLayout="scroll">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Uyarı Tipi</th>
+                    <th>Açıklama</th>
+                    <th>Tutar</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-uyari>
+                <tr>
+                    <td><p-tag severity="warn" [value]="getUyariLabel(uyari.uyariTipi)" /></td>
+                    <td>{{ uyari.aciklama }}</td>
+                    <td>{{ uyari.tutar != null ? (uyari.tutar | number: '1.2-2') : '-' }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+</ng-container>
+
+<div *ngIf="!loading && !errorMessage && ozet && (!hesaplar || (hesaplar.kasaHesaplari.length === 0 && hesaplar.bankaHesaplari.length === 0))" class="card">
+    <div class="text-center text-color-secondary py-4">Seçilen filtrelerle eşleşen kasa/banka hesabı bulunamadı.</div>
+</div>
+
+<!-- Valor takvimi dialogu -->
+<p-dialog [header]="'Valör Takvimi - ' + takvimBankaAdi" [(visible)]="takvimVisible" [modal]="true" [style]="{ width: '60rem' }">
+    <div *ngIf="takvimLoading" class="flex align-items-center justify-content-center py-4">
+        <p-progressSpinner [style]="{ width: '40px', height: '40px' }" />
+    </div>
+
+    <div *ngIf="!takvimLoading && takvimData && takvimData.gunler.length === 0" class="text-center text-color-secondary py-4">
+        Bekleyen POS valör kaydı bulunamadı.
+    </div>
+
+    <div *ngIf="!takvimLoading && takvimData && takvimData.gunler.length > 0">
+        <div *ngFor="let gun of takvimData.gunler" class="mb-2 border-1 surface-border border-round">
+            <div class="flex align-items-center justify-content-between p-2 cursor-pointer" (click)="toggleGun(gun.valorTarihi)">
+                <div>
+                    <i class="pi" [ngClass]="isGunAcik(gun.valorTarihi) ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
+                    <strong class="ml-2">{{ gun.valorTarihi | date: 'dd.MM.yyyy' }}</strong>
+                    <span class="text-color-secondary ml-2">({{ gun.islemSayisi }} işlem)</span>
+                </div>
+                <div class="flex gap-3 text-sm">
+                    <span>Brüt: {{ gun.brutTutar | number: '1.2-2' }}</span>
+                    <span>Komisyon: {{ gun.komisyonTutari | number: '1.2-2' }}</span>
+                    <strong [ngClass]="getTutarClass(gun.netTutar)">Net: {{ gun.netTutar | number: '1.2-2' }}</strong>
+                </div>
+            </div>
+            <div *ngIf="isGunAcik(gun.valorTarihi)" class="p-2 pt-0">
+                <p-table [value]="gun.detaylar" responsiveLayout="scroll" [scrollable]="true">
+                    <ng-template pTemplate="header">
+                        <tr>
+                            <th>Belge No</th>
+                            <th>POS Hesabı</th>
+                            <th>İşlem Tarihi</th>
+                            <th>Valör Tarihi</th>
+                            <th>Brüt</th>
+                            <th>Komisyon</th>
+                            <th>Net</th>
+                            <th>Durum</th>
+                            <th>Muhasebe Fişi</th>
+                            <th>Hata</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-detay>
+                        <tr>
+                            <td>{{ detay.tahsilatBelgeNo ?? '-' }}</td>
+                            <td>{{ detay.krediKartiHesapAdi ?? '-' }}</td>
+                            <td>{{ detay.odemeTarihi | date: 'dd.MM.yyyy' }}</td>
+                            <td>{{ detay.beklenenValorTarihi | date: 'dd.MM.yyyy' }}</td>
+                            <td>{{ detay.brutTutar | number: '1.2-2' }}</td>
+                            <td>{{ detay.komisyonTutari | number: '1.2-2' }}</td>
+                            <td>{{ detay.netTutar | number: '1.2-2' }}</td>
+                            <td><p-tag [value]="detay.durum" [severity]="getDurumSeverity(detay.durum)" /></td>
+                            <td>{{ detay.muhasebeFisId ?? '-' }}</td>
+                            <td>{{ detay.hataMesaji ?? '-' }}</td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </div>
+        </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+        <p-button label="POS Valör Takibi'ne Git" icon="pi pi-external-link" severity="secondary" (onClick)="gitPosValorTakibine()" />
+        <p-button label="Kapat" (onClick)="takvimVisible = false" />
+    </ng-template>
+</p-dialog>

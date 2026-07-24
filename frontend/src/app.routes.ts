@@ -64,6 +64,7 @@ import { BankaHareketleriPage } from './app/pages/muhasebe/banka-hareketleri/ban
 import { TahsilatOdemeBelgeleriPage } from './app/pages/muhasebe/tahsilat-odeme-belgeleri/tahsilat-odeme-belgeleri';
 import { PosTahsilatValorPage } from './app/pages/muhasebe/pos-tahsilat-valor/pos-tahsilat-valor';
 import { NakitBankaPozisyonuPage } from './app/pages/muhasebe/nakit-banka-pozisyonu/nakit-banka-pozisyonu';
+import { OdemeIzlemePage } from './app/pages/muhasebe/odeme-izleme/odeme-izleme';
 import { TasinirKodlariPage } from './app/pages/muhasebe/tasinir-kodlari/tasinir-kodlari';
 import { TasinirKartlariPage } from './app/pages/muhasebe/tasinir-kartlari/tasinir-kartlari';
 import { DepolarPage } from './app/pages/muhasebe/depolar/depolar';
@@ -180,6 +181,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/tahsilat-odeme-belgeleri', component: TahsilatOdemeBelgeleriPage, data: { breadcrumb: ['Cari Yönetim', 'Tahsilat/Odeme Belgeleri'] } },
             { path: 'muhasebe/pos-tahsilat-valor', component: PosTahsilatValorPage, data: { breadcrumb: ['Finans Yönetimi', 'POS Valör Takibi'] } },
             { path: 'muhasebe/nakit-banka-pozisyonu', component: NakitBankaPozisyonuPage, data: { breadcrumb: ['Finans Yönetimi', 'Nakit ve Banka Pozisyonu'] } },
+            { path: 'muhasebe/odeme-izleme', component: OdemeIzlemePage, data: { breadcrumb: ['Finans Yönetimi', 'Ödeme İzleme'] } },
             { path: 'muhasebe/tasinir-kodlari', component: TasinirKodlariPage, data: { breadcrumb: ['Taşınır / Demirbaş Yönetimi', 'Taşınır Kodları'] } },
             { path: 'muhasebe/tasinir-kartlari', component: TasinirKartlariPage, data: { breadcrumb: ['Taşınır / Demirbaş Yönetimi', 'Taşınır Kartları'] } },
             { path: 'muhasebe/depolar', component: DepolarPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Depolar'] } },

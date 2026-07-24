@@ -2,7 +2,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 import { ApiResponse } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { NakitBankaPozisyonuOzetModel } from './nakit-banka-pozisyonu.dto';
+import { NakitBankaPozisyonuModel } from './nakit-banka-pozisyonu.dto';
 import { NakitBankaPozisyonuService } from './nakit-banka-pozisyonu.service';
 
 describe('NakitBankaPozisyonuService', () => {
@@ -22,9 +22,9 @@ describe('NakitBankaPozisyonuService', () => {
         httpMock.verify();
     });
 
-    it('getOzet: filtre parametrelerini dogru sekilde query string olarak gonderir', () => {
+    it('getPozisyon: filtre parametrelerini dogru sekilde query string olarak gonderir', () => {
         service
-            .getOzet({
+            .getPozisyon({
                 tesisId: 42,
                 raporTarihi: '2026-07-24',
                 hesapTuru: 'Banka',
@@ -35,7 +35,7 @@ describe('NakitBankaPozisyonuService', () => {
 
         const req = httpMock.expectOne(
             (r) =>
-                r.url === `${baseUrl}/ozet` &&
+                r.url === baseUrl &&
                 r.params.get('tesisId') === '42' &&
                 r.params.get('raporTarihi') === '2026-07-24' &&
                 r.params.get('hesapTuru') === 'Banka' &&
@@ -46,45 +46,54 @@ describe('NakitBankaPozisyonuService', () => {
         req.flush({ success: true, message: '', data: {}, errors: [] } satisfies ApiResponse<unknown>);
     });
 
-    it('getOzet: tesisId <= 0 iken parametre GONDERILMEZ (tum tesis kapsami anlamina gelir)', () => {
-        service.getOzet({ tesisId: 0 }).subscribe();
+    it('getPozisyon: tesisId <= 0 iken parametre GONDERILMEZ (tum tesis kapsami anlamina gelir)', () => {
+        service.getPozisyon({ tesisId: 0 }).subscribe();
 
-        const req = httpMock.expectOne(`${baseUrl}/ozet`);
+        const req = httpMock.expectOne(baseUrl);
         expect(req.request.params.has('tesisId')).toBeFalse();
         req.flush({ success: true, message: '', data: {}, errors: [] } satisfies ApiResponse<unknown>);
     });
 
-    it('getOzet: basarili yaniti dogru sekilde ac (unwrap) eder', (done) => {
-        const beklenen: NakitBankaPozisyonuOzetModel = {
+    it('getPozisyon: basarili yaniti dogru sekilde ac (unwrap) eder', (done) => {
+        const beklenen: NakitBankaPozisyonuModel = {
             raporTarihi: '2026-07-24',
-            toplamNakit: 1000,
-            toplamBankaMuhasebeBakiyesi: 2000,
-            valoruGecmisBekleyenNet: 0,
-            bugunGelecekNet: 0,
-            yarinGelecekNet: 0,
-            takip2_7GunGelecekNet: 0,
-            sonraki7GundenSonraNet: 0,
-            toplamBekleyenNetPos: 300,
-            tahminiToplamBankaPozisyonu: 2300,
-            mutabakatBekleyenToplam: 0,
-            mutabakatBekleyenAdet: 0,
-            hataliToplam: 0,
-            hataliAdet: 0,
-            uyariSayisi: 0,
-            paraBirimiOzetleri: []
+            gecmisTarihRaporuMu: false,
+            ozet: {
+                raporTarihi: '2026-07-24',
+                toplamNakit: 1000,
+                toplamBankaMuhasebeBakiyesi: 2000,
+                valoruGecmisBekleyenNet: 0,
+                bugunGelecekNet: 0,
+                yarinGelecekNet: 0,
+                takip2_7GunGelecekNet: 0,
+                sonraki7GundenSonraNet: 0,
+                toplamBekleyenNetPos: 300,
+                tahminiToplamBankaPozisyonu: 2300,
+                mutabakatBekleyenToplam: 0,
+                mutabakatBekleyenAdet: 0,
+                hataliToplam: 0,
+                hataliAdet: 0,
+                gecmisTarihRaporuMu: false,
+                uyariSayisi: 0,
+                paraBirimiOzetleri: []
+            },
+            kasaHesaplari: [],
+            bankaHesaplari: [],
+            uyarilar: [],
+            uygulananFiltre: { tesisId: 1 }
         };
 
-        service.getOzet({ tesisId: 1 }).subscribe((sonuc) => {
+        service.getPozisyon({ tesisId: 1 }).subscribe((sonuc) => {
             expect(sonuc).toEqual(beklenen);
             done();
         });
 
-        const req = httpMock.expectOne((r) => r.url === `${baseUrl}/ozet`);
-        req.flush({ success: true, message: '', data: beklenen, errors: [] } satisfies ApiResponse<NakitBankaPozisyonuOzetModel>);
+        const req = httpMock.expectOne((r) => r.url === baseUrl);
+        req.flush({ success: true, message: '', data: beklenen, errors: [] } satisfies ApiResponse<NakitBankaPozisyonuModel>);
     });
 
-    it('getOzet: basarisiz yanit alindiginda hata firlatir', (done) => {
-        service.getOzet({ tesisId: 1 }).subscribe({
+    it('getPozisyon: basarisiz yanit alindiginda hata firlatir', (done) => {
+        service.getPozisyon({ tesisId: 1 }).subscribe({
             next: () => fail('Basarili sonuc BEKLENMIYORDU.'),
             error: (err: Error) => {
                 expect(err.message).toContain('yetkiniz');
@@ -92,7 +101,7 @@ describe('NakitBankaPozisyonuService', () => {
             }
         });
 
-        const req = httpMock.expectOne((r) => r.url === `${baseUrl}/ozet`);
+        const req = httpMock.expectOne((r) => r.url === baseUrl);
         req.flush({ success: false, message: 'Bu tesis için yetkiniz bulunmuyor.', data: null, errors: [] } satisfies ApiResponse<unknown>);
     });
 
@@ -104,5 +113,19 @@ describe('NakitBankaPozisyonuService', () => {
         );
         expect(req.request.method).toBe('GET');
         req.flush({ success: true, message: '', data: {}, errors: [] } satisfies ApiResponse<unknown>);
+    });
+
+    it('getValorGunDetaylari: dogru URL ve sayfa/sayfaBoyutu parametrelerini kullanir', () => {
+        service.getValorGunDetaylari(7, '2026-07-24', 2, 10, 'ValorBekliyor').subscribe();
+
+        const req = httpMock.expectOne(
+            (r) =>
+                r.url === `${baseUrl}/banka-hesaplari/7/valor-takvimi/2026-07-24/detaylar` &&
+                r.params.get('sayfa') === '2' &&
+                r.params.get('sayfaBoyutu') === '10' &&
+                r.params.get('valorDurumu') === 'ValorBekliyor'
+        );
+        expect(req.request.method).toBe('GET');
+        req.flush({ success: true, message: '', data: { items: [], pageNumber: 2, pageSize: 10, totalCount: 0, totalPages: 0, hasPreviousPage: true, hasNextPage: false }, errors: [] } satisfies ApiResponse<unknown>);
     });
 });

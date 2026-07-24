@@ -545,6 +545,12 @@ public static class StructurePermissions
         public const string View = "NakitBankaPozisyonuYonetimi.View";
     }
 
+    public static class OdemeIzlemeYonetimi
+    {
+        public const string Menu = "OdemeIzlemeYonetimi.Menu";
+        public const string View = "OdemeIzlemeYonetimi.View";
+    }
+
     public static class HesapYonetimi
     {
         public const string Menu = "HesapYonetimi.Menu";

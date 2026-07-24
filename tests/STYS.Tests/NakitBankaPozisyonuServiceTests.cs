@@ -208,7 +208,150 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
 
     private static string YeniSuffix() => $"{TestMarker}-{Guid.NewGuid():N}"[..20];
 
+    /// <summary>Servisin kendi "bugun" tanimiyla (Europe/Istanbul) BIREBIR ayni - testler
+    /// DateTime.UtcNow.Date kullanirsa, UTC 21:00-23:59 saatleri arasinda (Istanbul UTC+3 oldugu
+    /// icin) servisin "bugun"u testin "bugun"unden BIR GUN ILERI olur ve gecmis-tarih-raporu
+    /// mantigi yanlislikla devreye girerdi - bu yuzden tum "bugun"e bagli testler bu helper'i
+    /// kullanir.</summary>
+    private static DateOnly BugunIstanbul()
+    {
+        TimeZoneInfo istanbul;
+        try
+        {
+            istanbul = TimeZoneInfo.FindSystemTimeZoneById("Turkey Standard Time");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            istanbul = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        }
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, istanbul));
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <summary>Her adim BAGIMSIZ ve kendi TAZE StysAppDbContext'ini acar - bir adimin basarisiz
+    /// olmasi sonraki adimlarin calismasini ENGELLEMEZ (eskiden TEK try/catch icinde ilk hatada
+    /// tum kalan adimlar atlaniyordu). FK sirasiyla: fis satirlari/fisler -> valor kayitlari ->
+    /// tahsilat belgeleri -> kasa/banka hesaplari -> cari kartlar -> hesap planlari -> tesisler ->
+    /// iller -> kurumlar. Tum sorgular IgnoreQueryFilters() kullanir (soft-delete edilmis test
+    /// kayitlarinin normal filtre yuzunden sessizce atlanmasini onlemek icin) ve ONCEDEN kaydedilen
+    /// ID listelerini kullanir - parent silindikten sonra child'lar parent uzerinden YENIDEN
+    /// bulunmaya calisilmaz.</summary>
+    private List<STYS.Tests.TestSupport.CleanupAdimi> OlusturCleanupAdimlari() =>
+    [
+        new("MuhasebeFisSatirlari + MuhasebeFisler silme", async () =>
+        {
+            if (_fisIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeFisSatirlari.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
+            await dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("PosTahsilatValorleri silme", async () =>
+        {
+            if (_valorIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.PosTahsilatValorleri.IgnoreQueryFilters().Where(x => _valorIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("TahsilatOdemeBelgeleri silme", async () =>
+        {
+            if (_belgeIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => _belgeIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("KasaBankaHesaplari silme", async () =>
+        {
+            if (_kasaBankaHesapIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.KasaBankaHesaplari.IgnoreQueryFilters().Where(x => _kasaBankaHesapIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("CariKartlar silme", async () =>
+        {
+            if (_cariKartIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.CariKartlar.IgnoreQueryFilters().Where(x => _cariKartIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("MuhasebeHesapPlanlari silme", async () =>
+        {
+            if (_hesapPlaniIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeHesapPlanlari.IgnoreQueryFilters().Where(x => _hesapPlaniIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("Tesisler silme", async () =>
+        {
+            if (_tesisIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.Tesisler.IgnoreQueryFilters().Where(x => _tesisIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("Iller silme", async () =>
+        {
+            if (_illIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.Iller.IgnoreQueryFilters().Where(x => _illIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("Kurumlar silme", async () =>
+        {
+            if (_kurumIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.Kurumlar.IgnoreQueryFilters().Where(x => _kurumIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+    ];
+
+    /// <summary>Cleanup adimlari "basarili" raporlasa bile KOR KOR guvenilmez - fiziksel olarak
+    /// (IgnoreQueryFilters ile, soft-delete DAHIL) hicbir kayit kalmadigi AYRICA dogrulanir.</summary>
+    private async Task<Dictionary<string, int>> DogrulaTemizlikKalintilariAsync()
+    {
+        await using var dbContext = CreateDbContext();
+        var kalanlar = new Dictionary<string, int>();
+
+        async Task KontrolEt<T>(string tabloAdi, IQueryable<T> sorgu)
+        {
+            var adet = await sorgu.CountAsync();
+            if (adet > 0)
+            {
+                kalanlar[tabloAdi] = adet;
+            }
+        }
+
+        if (_fisIdler.Count > 0)
+        {
+            await KontrolEt("MuhasebeFisSatirlari", dbContext.MuhasebeFisSatirlari.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.MuhasebeFisId)));
+            await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.Id)));
+        }
+        if (_valorIdler.Count > 0)
+        {
+            await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.IgnoreQueryFilters().Where(x => _valorIdler.Contains(x.Id)));
+        }
+        if (_belgeIdler.Count > 0)
+        {
+            await KontrolEt("TahsilatOdemeBelgeleri", dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => _belgeIdler.Contains(x.Id)));
+        }
+        if (_kasaBankaHesapIdler.Count > 0)
+        {
+            await KontrolEt("KasaBankaHesaplari", dbContext.KasaBankaHesaplari.IgnoreQueryFilters().Where(x => _kasaBankaHesapIdler.Contains(x.Id)));
+        }
+        if (_cariKartIdler.Count > 0)
+        {
+            await KontrolEt("CariKartlar", dbContext.CariKartlar.IgnoreQueryFilters().Where(x => _cariKartIdler.Contains(x.Id)));
+        }
+        if (_hesapPlaniIdler.Count > 0)
+        {
+            await KontrolEt("MuhasebeHesapPlanlari", dbContext.MuhasebeHesapPlanlari.IgnoreQueryFilters().Where(x => _hesapPlaniIdler.Contains(x.Id)));
+        }
+        if (_tesisIdler.Count > 0)
+        {
+            await KontrolEt("Tesisler", dbContext.Tesisler.IgnoreQueryFilters().Where(x => _tesisIdler.Contains(x.Id)));
+        }
+        if (_illIdler.Count > 0)
+        {
+            await KontrolEt("Iller", dbContext.Iller.IgnoreQueryFilters().Where(x => _illIdler.Contains(x.Id)));
+        }
+        if (_kurumIdler.Count > 0)
+        {
+            await KontrolEt("Kurumlar", dbContext.Kurumlar.IgnoreQueryFilters().Where(x => _kurumIdler.Contains(x.Id)));
+        }
+
+        return kalanlar;
+    }
 
     public async Task DisposeAsync()
     {
@@ -217,50 +360,35 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
             return;
         }
 
-        await using var dbContext = CreateDbContext();
+        var adimlar = OlusturCleanupAdimlari();
+        var hatalar = (await STYS.Tests.TestSupport.TwoPhaseCleanupRunner.CalistirAsync(adimlar)).ToList();
+
+        Dictionary<string, int> kalanlar;
         try
         {
-            if (_fisIdler.Count > 0)
-            {
-                await dbContext.MuhasebeFisSatirlari.Where(x => _fisIdler.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
-                await dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_valorIdler.Count > 0)
-            {
-                await dbContext.PosTahsilatValorleri.IgnoreQueryFilters().Where(x => _valorIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_belgeIdler.Count > 0)
-            {
-                await dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => _belgeIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_kasaBankaHesapIdler.Count > 0)
-            {
-                await dbContext.KasaBankaHesaplari.IgnoreQueryFilters().Where(x => _kasaBankaHesapIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_cariKartIdler.Count > 0)
-            {
-                await dbContext.CariKartlar.IgnoreQueryFilters().Where(x => _cariKartIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_hesapPlaniIdler.Count > 0)
-            {
-                await dbContext.MuhasebeHesapPlanlari.IgnoreQueryFilters().Where(x => _hesapPlaniIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_tesisIdler.Count > 0)
-            {
-                await dbContext.Tesisler.IgnoreQueryFilters().Where(x => _tesisIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_illIdler.Count > 0)
-            {
-                await dbContext.Iller.IgnoreQueryFilters().Where(x => _illIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            if (_kurumIdler.Count > 0)
-            {
-                await dbContext.Kurumlar.IgnoreQueryFilters().Where(x => _kurumIdler.Contains(x.Id)).ExecuteDeleteAsync();
-            }
+            kalanlar = await DogrulaTemizlikKalintilariAsync();
         }
         catch (Exception ex)
         {
-            await Console.Error.WriteLineAsync($"[NakitBankaPozisyonuServiceTests.DisposeAsync] temizlik hatasi: {ex.Message}");
+            kalanlar = [];
+            hatalar.Add(new InvalidOperationException($"[dogrulama sorgusu basarisiz] {ex.GetType().Name} - {ex.Message}", ex));
+        }
+
+        if (kalanlar.Count > 0)
+        {
+            hatalar.Add(new InvalidOperationException(
+                "Cleanup sonrasi kalinti kayit tespit edildi: " +
+                string.Join(", ", kalanlar.Select(kv => $"{kv.Key}={kv.Value}"))));
+        }
+
+        if (hatalar.Count > 0)
+        {
+            // Test govdesi ZATEN basarisiz olmus olsa bile bu exception xUnit tarafindan AYRICA
+            // raporlanir - DisposeAsync'in kendi hatasi test govdesinin hatasindan BAGIMSIZ olarak
+            // gorunur, sessizce Console.Error'a yazip yutulmaz.
+            throw new AggregateException(
+                $"[NakitBankaPozisyonuServiceTests.DisposeAsync] {hatalar.Count} cleanup hatasi (kalinti veri olusmus olabilir).",
+                hatalar);
         }
     }
 
@@ -278,7 +406,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli, (hesapPlaniId, 1000m, 0m), (hesapPlaniId, 0m, 200m));
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
 
         Assert.Single(hesaplar.KasaHesaplari);
         Assert.Equal(800m, hesaplar.KasaHesaplari[0].MuhasebeBakiyesi);
@@ -301,14 +429,13 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli, (hp2, 100m, 0m));
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
-        Assert.Equal(2, hesaplar.KasaHesaplari.Count);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        Assert.Equal(2, sonuc.KasaHesaplari.Count);
 
-        var ozet = await svc.GetOzetAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
         // Genel ozet karti YALNIZCA TRY'yi yansitir - USD hesabi buraya KARISTIRILMAZ.
-        Assert.Equal(500m, ozet.ToplamNakit);
-        var tryOzet = ozet.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "TRY");
-        var usdOzet = ozet.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "USD");
+        Assert.Equal(500m, sonuc.Ozet.ToplamNakit);
+        var tryOzet = sonuc.Ozet.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "TRY");
+        var usdOzet = sonuc.Ozet.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "USD");
         Assert.Equal(500m, tryOzet.ToplamNakit);
         Assert.Equal(100m, usdOzet.ToplamNakit);
     }
@@ -328,7 +455,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK2", hp2, iban: "TR000000000000000000000002", bankaAdi: "Test Banka B");
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
         Assert.Equal(2, hesaplar.BankaHesaplari.Count);
         Assert.Contains(hesaplar.BankaHesaplari, x => x.Iban == "TR000000000000000000000001");
         Assert.Contains(hesaplar.BankaHesaplari, x => x.Iban == "TR000000000000000000000002");
@@ -350,7 +477,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
 
-        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var bugun = BugunIstanbul();
         var senaryolar = new (DateOnly Tarih, decimal Net)[]
         {
             (bugun.AddDays(-3), 100m), // gecmis
@@ -368,7 +495,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         }
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
         var banka = hesaplar.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
         Assert.Equal(100m, banka.ValoruGecmisBekleyenNet);
@@ -398,7 +525,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
         var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
-        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var bugun = BugunIstanbul();
 
         var belge1 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
         await YeniValorAsync(dbContext, tesisId, belge1, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktarildi, bugun, 1000m, 20m, 980m);
@@ -410,7 +537,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniValorAsync(dbContext, tesisId, belge3, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.AktarimFisiIptalEdildi, bugun, 300m, 0m, 300m);
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
         var banka = hesaplar.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
         Assert.Equal(0m, banka.ToplamBekleyenNet);
@@ -433,7 +560,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
         var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
-        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var bugun = BugunIstanbul();
 
         await YeniFisAsync(dbContext, tesisId, bugun.ToDateTime(TimeOnly.MinValue), MuhasebeFisDurumlari.Onayli, (hpBanka, 2000m, 0m));
 
@@ -444,7 +571,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniValorAsync(dbContext, tesisId, belge2, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Hata, bugun, 400m, 0m, 400m);
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
         var banka = hesaplar.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
         Assert.Equal(700m, banka.MutabakatBekleyenNet);
@@ -472,7 +599,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"UPDATE [muhasebe].[KasaBankaHesaplari] SET [IsDeleted] = 1 WHERE [Id] = {kasaId}");
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
 
         Assert.Empty(hesaplar.KasaHesaplari);
     }
@@ -500,16 +627,16 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         // Yalnizca TesisA'ya erisimi olan bir kullaniciyi simule et.
         var svc = CreateService(dbContext, tesisA);
 
-        var hesaplarA = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisA });
+        var hesaplarA = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisA });
         Assert.Single(hesaplarA.KasaHesaplari);
         Assert.Equal(111m, hesaplarA.KasaHesaplari[0].MuhasebeBakiyesi);
 
         // TesisId verilmeden (scope'a gore) sorgulandiginda da yalnizca TesisA verisi donmeli.
-        var hesaplarScope = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto());
+        var hesaplarScope = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto());
         Assert.Single(hesaplarScope.KasaHesaplari);
 
         // TesisB'ye ERISIM YETKISI OLMADAN dogrudan istenirse 403 donmeli.
-        var ex = await Assert.ThrowsAsync<BaseException>(() => svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisB }));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisB }));
         Assert.Equal(403, ex.ErrorCode);
     }
 
@@ -528,7 +655,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli, (hp, 100m, 500m));
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
         var banka = hesaplar.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
         Assert.Equal(-400m, banka.StysMuhasebeBakiyesi);
@@ -546,7 +673,7 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", muhasebeHesapPlaniId: null, iban: "TR00", bankaAdi: "Test Banka");
 
         var svc = CreateService(dbContext, tesisId);
-        var hesaplar = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+        var hesaplar = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
 
         Assert.Contains(hesaplar.Uyarilar, u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.IbanVarMuhasebeHesabiYok);
     }
@@ -571,12 +698,241 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var svc = CreateService(dbContext, tesisId);
 
         // Rapor tarihi eski tarihte iken YALNIZCA o ana kadarki hareket (300) gorunmeli.
-        var gecmisRapor = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = DateOnly.FromDateTime(eskiTarih) });
+        var gecmisRapor = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = DateOnly.FromDateTime(eskiTarih) });
         Assert.Equal(300m, gecmisRapor.KasaHesaplari.Single().MuhasebeBakiyesi);
 
         // Rapor tarihi bugun iken HER IKI hareket de (300+700=1000) gorunmeli.
-        var bugunRapor = await svc.GetHesaplarAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = DateOnly.FromDateTime(yeniTarih) });
+        var bugunRapor = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = DateOnly.FromDateTime(yeniTarih) });
         Assert.Equal(1000m, bugunRapor.KasaHesaplari.Single().MuhasebeBakiyesi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 21) Gecmis rapor tarihinden ONCE aktarilmis (fisi rapor tarihinden ONCE tarihli) POS kaydi
+    //     bekleyen toplama GIRMEZ - muhasebe bakiyesi zaten aktarimi icerdigi icin (ayni FisTarihi
+    //     kriteriyle) mukerrer sayim olusmaz.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task GecmisTarihte_RaporTarihindenOnceAktarilmisKayit_BekleyenTutaraGirmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var raporTarihi = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-10));
+        var aktarimTarihi = raporTarihi.AddDays(-1).ToDateTime(TimeOnly.MinValue); // rapor tarihinden ONCE aktarilmis.
+        var fisId = await YeniFisAsync(dbContext, tesisId, aktarimTarihi, MuhasebeFisDurumlari.Onayli, (hpBanka, 980m, 0m));
+
+        var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
+        await YeniValorAsync(
+            dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktarildi,
+            raporTarihi.AddDays(-1), 1000m, 20m, 980m, muhasebeFisId: fisId);
+        // Ayrica OdemeTarihi'ni aktarim tarihinden ONCEYE cekelim ki rapor tarihinde "var olan" kayit olsun.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[PosTahsilatValorleri] SET [OdemeTarihi] = {aktarimTarihi.AddDays(-1)} WHERE [Id] IN (SELECT Id FROM [Muhasebe].[PosTahsilatValorleri] WHERE [TahsilatOdemeBelgesiId] = {belge})");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = raporTarihi });
+        var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+
+        Assert.True(sonuc.GecmisTarihRaporuMu);
+        Assert.Equal(0m, banka.ToplamBekleyenNet);
+        Assert.Equal(980m, banka.StysMuhasebeBakiyesi); // muhasebe bakiyesi ayni FisTarihi kriteriyle zaten aktarimi icerir.
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 22) Gecmiste, rapor tarihinden SONRA aktarilmis (fis tarihi rapor tarihinden sonra) kayit
+    //     hala BEKLEYEN sayilir - ileriki bir tarihte gerceklesen aktarim gecmis raporu bozmaz.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task GecmisTarihte_RaporTarihindenSonraAktarilanKayit_HalaBekleyenSayilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var raporTarihi = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-10));
+        var aktarimTarihi = raporTarihi.AddDays(3).ToDateTime(TimeOnly.MinValue); // rapor tarihinden SONRA aktarilmis.
+        var fisId = await YeniFisAsync(dbContext, tesisId, aktarimTarihi, MuhasebeFisDurumlari.Onayli, (hpBanka, 980m, 0m));
+
+        var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
+        await YeniValorAsync(
+            dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktarildi,
+            raporTarihi, 1000m, 20m, 980m, muhasebeFisId: fisId);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[PosTahsilatValorleri] SET [OdemeTarihi] = {raporTarihi.AddDays(-1).ToDateTime(TimeOnly.MinValue)} WHERE [TahsilatOdemeBelgesiId] = {belge}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = raporTarihi });
+        var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+
+        // Aktarim raporTarihi'nden SONRA gerceklesti - o gun icin hala BEKLEYEN sayilmali (rule c/e).
+        Assert.Equal(980m, banka.BugunGelecekNet);
+        Assert.Equal(980m, banka.ToplamBekleyenNet);
+        // Fis rapor tarihinden SONRA tarihli oldugu icin muhasebe bakiyesi bu tarihte HENUZ onu icermez.
+        Assert.Equal(0m, banka.StysMuhasebeBakiyesi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 23) Ayni MuhasebeHesapPlaniId farkli iki tesiste kullanildiginda bakiyeler KARISMAZ -
+    //     (TesisId, MuhasebeHesapPlaniId) bilesik anahtari dogrulanir.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task AyniHesapPlaniFarkliTesislerde_BakiyelerKarismaz()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffix + "A");
+        var tesisB = await YeniTesisAsync(dbContext, suffix + "B");
+
+        // Ayni MuhasebeHesapPlani.Id degeri A ve B kasa hesaplarina baglanacak sekilde AYNI hesap
+        // planini kullanalim (kod duplikasyonu semantik olarak nadir ama Id BAZLI eslesme gercek
+        // bug'i tetikler - composite anahtar OLMADAN GetBakiyelerAsync bu iki tesisin hareketlerini
+        // TEK bir anahtarda toplardi).
+        var hpPaylasilan = await YeniHesapPlaniAsync(dbContext, suffix, "PAYLASILAN");
+        await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.NakitKasa, suffix + "A", "KASA1", hpPaylasilan);
+        await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.NakitKasa, suffix + "B", "KASA1", hpPaylasilan);
+
+        await YeniFisAsync(dbContext, tesisA, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli, (hpPaylasilan, 1000m, 0m));
+        await YeniFisAsync(dbContext, tesisB, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli, (hpPaylasilan, 50m, 0m));
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+
+        var sonucA = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisA });
+        var sonucB = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisB });
+
+        // Composite anahtar OLMADAN her iki tesis de 1050 (1000+50) gorurdu - bug budur.
+        Assert.Equal(1000m, sonucA.KasaHesaplari.Single().MuhasebeBakiyesi);
+        Assert.Equal(50m, sonucB.KasaHesaplari.Single().MuhasebeBakiyesi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 24) ValorDurumu filtresi genel ozet/hesap toplamlarini ETKILEMEZ - yalnizca detay
+    //     sorgularini etkilemesi gerekir (bkz. DTO doc).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task ValorDurumuFiltresi_OzetToplamlariniEtkilemez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = BugunIstanbul();
+
+        var belge1 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 700m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, belge1, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 700m, 0m, 700m);
+        var belge2 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 400m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, belge2, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Hata, bugun, 400m, 0m, 400m);
+
+        var svc = CreateService(dbContext, tesisId);
+
+        var filtresiz = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var filtreliHata = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun, ValorDurumu = PosTahsilatValorDurumlari.Hata });
+
+        var bankaFiltresiz = filtresiz.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+        var bankaFiltreli = filtreliHata.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+
+        // ValorDurumu=Hata verilse BILE ozet/hesap toplamlari AYNI kalmali (yalnizca detay etkilenir).
+        Assert.Equal(bankaFiltresiz.ToplamBekleyenNet, bankaFiltreli.ToplamBekleyenNet);
+        Assert.Equal(bankaFiltresiz.HataliNet, bankaFiltreli.HataliNet);
+        Assert.Equal(filtresiz.Ozet.ToplamBekleyenNetPos, filtreliHata.Ozet.ToplamBekleyenNetPos);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 25) Gelecek bir rapor tarihi REDDEDILIR (400).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task GelecekRaporTarihi_Reddedilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var svc = CreateService(dbContext, tesisId);
+
+        var gelecekTarih = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(5));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = gelecekTarih }));
+        Assert.Equal(400, ex.ErrorCode);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 26) Banka hesabi bulunamayan/pasif BagliBankaHesapId -> uyari, sessizce kaybolmaz.
+    // FK kisiti gercek bir "hic var olmamis Id" senaryosunu engelledigi icin (DB seviyesinde
+    // referans butunlugu zaten korunuyor), bu durum gercekte yalnizca hesap SONRADAN soft-delete
+    // edildiginde ortaya cikabilir - test bunu simule eder.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task BagliBankaHesabiBulunamayanValor_UyariUretilirVeBekleyeneGirmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = BugunIstanbul();
+
+        var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 250m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 250m, 0m, 250m);
+
+        // Banka hesabi SONRADAN soft-delete edildi (valor kaydi olusturulduktan sonra).
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"UPDATE [Muhasebe].[KasaBankaHesaplari] SET [IsDeleted] = 1 WHERE [Id] = {bankaId}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+
+        Assert.Contains(sonuc.Uyarilar, u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.BankaHesabiBulunamadiVeyaPasif);
+        Assert.DoesNotContain(sonuc.BankaHesaplari, x => x.ToplamBekleyenNet == 250m);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 27) Gun detaylari sayfalamasi - toplam sayi ve sayfa sinirlari dogru calisir.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task ValorGunDetaylari_SayfalamaDogruCalisir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = BugunIstanbul();
+
+        for (var i = 0; i < 7; i++)
+        {
+            var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 10m, YeniSuffix());
+            await YeniValorAsync(dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 10m, 0m, 10m);
+        }
+
+        var svc = CreateService(dbContext, tesisId);
+        var sayfa1 = await svc.GetValorGunDetaylariAsync(bankaId, bugun, null, sayfa: 1, sayfaBoyutu: 3);
+        var sayfa2 = await svc.GetValorGunDetaylariAsync(bankaId, bugun, null, sayfa: 2, sayfaBoyutu: 3);
+        var sayfa3 = await svc.GetValorGunDetaylariAsync(bankaId, bugun, null, sayfa: 3, sayfaBoyutu: 3);
+
+        Assert.Equal(7, sayfa1.TotalCount);
+        Assert.Equal(3, sayfa1.Items.Count);
+        Assert.Equal(3, sayfa2.Items.Count);
+        Assert.Single(sayfa3.Items);
+        // Sayfalar arasinda mukerrer/eksik kayit olmadigini dogrula (kararli siralama).
+        var tumIdler = sayfa1.Items.Select(x => x.Id).Concat(sayfa2.Items.Select(x => x.Id)).Concat(sayfa3.Items.Select(x => x.Id)).ToList();
+        Assert.Equal(7, tumIdler.Distinct().Count());
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -6,8 +6,9 @@ import { getApiBaseUrl } from '../../../core/config';
 import {
     BankaValorTakvimiModel,
     NakitBankaPozisyonuFilterModel,
-    NakitBankaPozisyonuHesaplarModel,
-    NakitBankaPozisyonuOzetModel
+    NakitBankaPozisyonuModel,
+    PagedResultModel,
+    ValorDetayModel
 } from './nakit-banka-pozisyonu.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -16,16 +17,14 @@ export class NakitBankaPozisyonuService {
     private readonly apiBaseUrl = getApiBaseUrl();
     private readonly baseUrl = `${this.apiBaseUrl}/ui/muhasebe/nakit-banka-pozisyonu`;
 
-    getOzet(filter: NakitBankaPozisyonuFilterModel): Observable<NakitBankaPozisyonuOzetModel> {
+    /** Ozet + kasa/banka hesap listeleri + uyarilari TEK cagride getirir. */
+    getPozisyon(filter: NakitBankaPozisyonuFilterModel): Observable<NakitBankaPozisyonuModel> {
         const params = this.buildParams(filter);
-        return this.http.get<ApiResponse<NakitBankaPozisyonuOzetModel>>(`${this.baseUrl}/ozet`, { params }).pipe(map(this.unwrapOne));
+        return this.http.get<ApiResponse<NakitBankaPozisyonuModel>>(this.baseUrl, { params }).pipe(map(this.unwrapOne));
     }
 
-    getHesaplar(filter: NakitBankaPozisyonuFilterModel): Observable<NakitBankaPozisyonuHesaplarModel> {
-        const params = this.buildParams(filter);
-        return this.http.get<ApiResponse<NakitBankaPozisyonuHesaplarModel>>(`${this.baseUrl}/hesaplar`, { params }).pipe(map(this.unwrapOne));
-    }
-
+    /** Gun bazinda OZET listesi (detay satirlari icermez) - kullanici bir gunu actiginda ayrica
+     * getValorGunDetaylari cagrilir. */
     getValorTakvimi(kasaBankaHesapId: number, raporTarihi?: string | null): Observable<BankaValorTakvimiModel> {
         let params = new HttpParams();
         if (raporTarihi) {
@@ -33,6 +32,23 @@ export class NakitBankaPozisyonuService {
         }
         return this.http
             .get<ApiResponse<BankaValorTakvimiModel>>(`${this.baseUrl}/banka-hesaplari/${kasaBankaHesapId}/valor-takvimi`, { params })
+            .pipe(map(this.unwrapOne));
+    }
+
+    /** Tek bir gunun sayfali detay kayitlari. */
+    getValorGunDetaylari(
+        kasaBankaHesapId: number,
+        valorTarihi: string,
+        sayfa: number,
+        sayfaBoyutu: number,
+        valorDurumu?: string | null
+    ): Observable<PagedResultModel<ValorDetayModel>> {
+        let params = new HttpParams().set('sayfa', sayfa).set('sayfaBoyutu', sayfaBoyutu);
+        if (valorDurumu) {
+            params = params.set('valorDurumu', valorDurumu);
+        }
+        return this.http
+            .get<ApiResponse<PagedResultModel<ValorDetayModel>>>(`${this.baseUrl}/banka-hesaplari/${kasaBankaHesapId}/valor-takvimi/${valorTarihi}/detaylar`, { params })
             .pipe(map(this.unwrapOne));
     }
 

@@ -197,6 +197,7 @@ builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsi
 builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsilatValorAktarimService, STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorAktarimService>();
 builder.Services.AddScoped<STYS.Muhasebe.PosTahsilatValorleri.Services.IPosTahsilatValorService, STYS.Muhasebe.PosTahsilatValorleri.Services.PosTahsilatValorService>();
 builder.Services.AddScoped<STYS.Muhasebe.NakitBankaPozisyonu.Services.INakitBankaPozisyonuService, STYS.Muhasebe.NakitBankaPozisyonu.Services.NakitBankaPozisyonuService>();
+builder.Services.AddScoped<STYS.Muhasebe.OdemeIzleme.Services.IOdemeIzlemeService, STYS.Muhasebe.OdemeIzleme.Services.OdemeIzlemeService>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 builder.Services.AddHostedService<STYS.Muhasebe.PosTahsilatValorleri.Services.PosValorAktarimHostedService>();

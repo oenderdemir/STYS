@@ -1,4 +1,5 @@
 using STYS.Muhasebe.NakitBankaPozisyonu.Dtos;
+using TOD.Platform.Persistence.Rdbms.Paging;
 
 namespace STYS.Muhasebe.NakitBankaPozisyonu.Services;
 
@@ -9,11 +10,17 @@ namespace STYS.Muhasebe.NakitBankaPozisyonu.Services;
 /// </summary>
 public interface INakitBankaPozisyonuService
 {
-    Task<NakitBankaPozisyonuOzetDto> GetOzetAsync(NakitBankaPozisyonuFilterDto filter, CancellationToken cancellationToken = default);
-
-    Task<NakitBankaPozisyonuHesaplarDto> GetHesaplarAsync(NakitBankaPozisyonuFilterDto filter, CancellationToken cancellationToken = default);
+    /// <summary>Ozet + hesap listeleri + uyarilari TEK sorgu calistirmasindan uretir (bkz.
+    /// NakitBankaPozisyonuDto). Ekranin ana veri kaynagidir.</summary>
+    Task<NakitBankaPozisyonuDto> GetPozisyonAsync(NakitBankaPozisyonuFilterDto filter, CancellationToken cancellationToken = default);
 
     /// <summary>Belirtilen banka/IBAN hesabi icin, rapor tarihinden itibaren gun bazinda bekleyen
-    /// (Durum=ValorBekliyor) POS valor takvimini dondurur.</summary>
+    /// POS valor GUNLUK OZETLERINI (detay satirlari OLMADAN) dondurur.</summary>
     Task<BankaValorTakvimiDto> GetValorTakvimiAsync(int kasaBankaHesapId, DateOnly? raporTarihi, CancellationToken cancellationToken = default);
+
+    /// <summary>Belirtilen banka/IBAN hesabi ve TEK bir valor tarihi icin sayfali detay
+    /// kayitlarini dondurur. valorDurumu verilirse yalnizca bu durumdaki kayitlar listelenir (bu
+    /// filtre yalnizca bu detay sorgusunu etkiler, ozet/takvim toplamlarini ETKILEMEZ).</summary>
+    Task<PagedResult<ValorDetayDto>> GetValorGunDetaylariAsync(
+        int kasaBankaHesapId, DateOnly valorTarihi, string? valorDurumu, int sayfa, int sayfaBoyutu, CancellationToken cancellationToken = default);
 }

@@ -6,6 +6,7 @@ export interface NakitBankaPozisyonuFilterModel {
     hesapTuru?: string | null;
     bankaHesapId?: number | null;
     paraBirimi?: string | null;
+    /** Yalnizca valor takvimi/gun detay sorgularini etkiler - ozet/hesap toplamlarini ETKILEMEZ. */
     valorDurumu?: string | null;
 }
 
@@ -32,12 +33,17 @@ export interface NakitBankaPozisyonuOzetModel {
     mutabakatBekleyenAdet: number;
     hataliToplam: number;
     hataliAdet: number;
+    /** true ise secilen rapor tarihi bugunden oncesidir - Mutabakat/Hata alt kirilimlari bu
+     * durumda 0 gelir (gecmise donuk guvenilir sekilde ayirt edilemedigi icin), ilgili tutarlar
+     * bunun yerine toplamBekleyenNetPos icinde yer alir. */
+    gecmisTarihRaporuMu: boolean;
     uyariSayisi: number;
     paraBirimiOzetleri: ParaBirimiOzetModel[];
 }
 
 export interface NakitHesapPozisyonuModel {
     kasaBankaHesapId: number;
+    tesisId: number;
     ad: string;
     kod: string;
     paraBirimi: string;
@@ -50,6 +56,7 @@ export interface NakitHesapPozisyonuModel {
 
 export interface BankaHesapPozisyonuModel {
     kasaBankaHesapId: number;
+    tesisId: number;
     bankaAdi: string;
     hesapAdi: string;
     iban?: string | null;
@@ -77,13 +84,18 @@ export interface VeriKalitesiUyariModel {
     kasaBankaHesapId?: number | null;
     posTahsilatValorId?: number | null;
     tutar?: number | null;
+    adet: number;
 }
 
-export interface NakitBankaPozisyonuHesaplarModel {
+/** GetPozisyonAsync'in tek, birlesik sonucu - ozet + hesap listeleri + uyarilar TEK cagriden gelir. */
+export interface NakitBankaPozisyonuModel {
     raporTarihi: string;
+    gecmisTarihRaporuMu: boolean;
+    ozet: NakitBankaPozisyonuOzetModel;
     kasaHesaplari: NakitHesapPozisyonuModel[];
     bankaHesaplari: BankaHesapPozisyonuModel[];
     uyarilar: VeriKalitesiUyariModel[];
+    uygulananFiltre: NakitBankaPozisyonuFilterModel;
 }
 
 export interface ValorDetayModel {
@@ -101,13 +113,25 @@ export interface ValorDetayModel {
     hataMesaji?: string | null;
 }
 
+/** Sunucu tarafli sayfalama sonucu - TOD.Platform PagedResult<T> ile birebir eslesir. */
+export interface PagedResultModel<T> {
+    items: T[];
+    pageNumber: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+    hasPreviousPage: boolean;
+    hasNextPage: boolean;
+}
+
+/** Yalnizca gun bazinda OZET - detay satirlari icermez (bkz. getValorGunDetaylari, ayri sayfali
+ * bir sorgudur). Kullanici bir gunu actiginda yalnizca o gunun sayfali detaylari ayrica yuklenir. */
 export interface GunlukValorOzetiModel {
     valorTarihi: string;
     islemSayisi: number;
     brutTutar: number;
     komisyonTutari: number;
     netTutar: number;
-    detaylar: ValorDetayModel[];
 }
 
 export interface BankaValorTakvimiModel {
@@ -136,6 +160,10 @@ export const VERI_KALITESI_UYARI_LABELLARI: Record<string, string> = {
     NetVeyaKomisyonBilgisiEksik: 'Net/komisyon bilgisi eksik',
     ValorTarihiBos: 'Valör tarihi boş',
     AktarimDurumuFisIliskisiTutarsiz: 'Aktarım durumu / fiş ilişkisi tutarsız',
-    AyniBankaHesabinaBirdenFazlaAktifMuhasebeHesabi: 'Aynı bankaya birden fazla aktif muhasebe hesabı bağlı',
-    SoftDeleteEdilmisBaglantiliMuhasebeHesabi: 'Bağlı muhasebe hesabı silinmiş'
+    AyniMuhasebeHesabinaBirdenFazlaAktifBankaHesabiBagli: 'Aynı muhasebe hesabına birden fazla aktif banka hesabı bağlı',
+    SoftDeleteEdilmisBaglantiliMuhasebeHesabi: 'Bağlı muhasebe hesabı silinmiş',
+    BankaHesabiBulunamadiVeyaPasif: 'Bağlı banka hesabı bulunamadı veya pasif',
+    ParaBirimiUyusmuyor: 'Para birimi banka hesabıyla uyuşmuyor',
+    GecmisTarihIcinDurumBelirsiz: 'Geçmiş tarih için alt durum kesin değil (tutar bekleyene dahil edildi)',
+    GecmisTarihIcinIptalZamanlamasiBelirsiz: 'İptalin rapor tarihinden önce mi sonra mı olduğu belirsiz'
 };

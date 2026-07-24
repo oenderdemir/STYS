@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -26,9 +26,10 @@ import {
     BankaValorTakvimiModel,
     HESAP_TURU_SECENEKLERI,
     NakitBankaPozisyonuFilterModel,
-    NakitBankaPozisyonuHesaplarModel,
-    NakitBankaPozisyonuOzetModel,
+    NakitBankaPozisyonuModel,
+    PagedResultModel,
     VALOR_DURUMU_SECENEKLERI,
+    ValorDetayModel,
     VERI_KALITESI_UYARI_LABELLARI
 } from './nakit-banka-pozisyonu.dto';
 import { NakitBankaPozisyonuService } from './nakit-banka-pozisyonu.service';
@@ -47,6 +48,14 @@ export function bugunIstanbul(): Date {
         }, {});
 
     return new Date(Number(parcalar['year']), Number(parcalar['month']) - 1, Number(parcalar['day']));
+}
+
+const GUN_DETAY_SAYFA_BOYUTU = 25;
+
+interface GunDetayState {
+    loading: boolean;
+    sayfa: number;
+    sonuc: PagedResultModel<ValorDetayModel> | null;
 }
 
 @Component({
@@ -84,10 +93,10 @@ export class NakitBankaPozisyonuPage implements OnInit {
     loading = false;
     errorMessage: string | null = null;
 
-    ozet: NakitBankaPozisyonuOzetModel | null = null;
-    hesaplar: NakitBankaPozisyonuHesaplarModel | null = null;
+    sonuc: NakitBankaPozisyonuModel | null = null;
 
-    raporTarihi: Date = bugunIstanbul();
+    readonly bugun = bugunIstanbul();
+    raporTarihi: Date = this.bugun;
     hesapTuru: string | null = null;
     paraBirimi: string | null = null;
     valorDurumu: string | null = null;
@@ -99,8 +108,10 @@ export class NakitBankaPozisyonuPage implements OnInit {
     takvimVisible = false;
     takvimLoading = false;
     takvimData: BankaValorTakvimiModel | null = null;
+    takvimBankaId = 0;
     takvimBankaAdi = '';
     expandedGunler: Record<string, boolean> = {};
+    gunDetaylari: Record<string, GunDetayState> = {};
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -140,23 +151,18 @@ export class NakitBankaPozisyonuPage implements OnInit {
 
         this.loading = true;
         this.errorMessage = null;
-        forkJoin({
-            ozet: this.service.getOzet(filter),
-            hesaplar: this.service.getHesaplar(filter)
-        })
+        this.service.getPozisyon(filter)
             .pipe(finalize(() => {
                 this.loading = false;
                 this.cdr.detectChanges();
             }))
             .subscribe({
-                next: ({ ozet, hesaplar }) => {
-                    this.ozet = ozet;
-                    this.hesaplar = hesaplar;
+                next: (sonuc) => {
+                    this.sonuc = sonuc;
                     this.cdr.detectChanges();
                 },
                 error: (error: unknown) => {
-                    this.ozet = null;
-                    this.hesaplar = null;
+                    this.sonuc = null;
                     this.showError(error);
                     this.cdr.detectChanges();
                 }
@@ -172,11 +178,13 @@ export class NakitBankaPozisyonuPage implements OnInit {
     }
 
     openValorTakvimi(hesap: BankaHesapPozisyonuModel): void {
+        this.takvimBankaId = hesap.kasaBankaHesapId;
         this.takvimBankaAdi = `${hesap.bankaAdi} - ${hesap.hesapAdi}`;
         this.takvimVisible = true;
         this.takvimLoading = true;
         this.takvimData = null;
         this.expandedGunler = {};
+        this.gunDetaylari = {};
 
         this.service.getValorTakvimi(hesap.kasaBankaHesapId, this.toIsoDate(this.raporTarihi))
             .pipe(finalize(() => {
@@ -193,11 +201,39 @@ export class NakitBankaPozisyonuPage implements OnInit {
     }
 
     toggleGun(valorTarihi: string): void {
-        this.expandedGunler[valorTarihi] = !this.expandedGunler[valorTarihi];
+        const yeniDurum = !this.expandedGunler[valorTarihi];
+        this.expandedGunler[valorTarihi] = yeniDurum;
+        if (yeniDurum && !this.gunDetaylari[valorTarihi]) {
+            this.loadGunDetaylari(valorTarihi, 1);
+        }
     }
 
     isGunAcik(valorTarihi: string): boolean {
         return !!this.expandedGunler[valorTarihi];
+    }
+
+    gunDetayDurumu(valorTarihi: string): GunDetayState | null {
+        return this.gunDetaylari[valorTarihi] ?? null;
+    }
+
+    gunSayfaDegistir(valorTarihi: string, sayfa: number): void {
+        this.loadGunDetaylari(valorTarihi, sayfa);
+    }
+
+    private loadGunDetaylari(valorTarihi: string, sayfa: number): void {
+        this.gunDetaylari[valorTarihi] = { loading: true, sayfa, sonuc: this.gunDetaylari[valorTarihi]?.sonuc ?? null };
+
+        this.service.getValorGunDetaylari(this.takvimBankaId, valorTarihi, sayfa, GUN_DETAY_SAYFA_BOYUTU)
+            .pipe(finalize(() => this.cdr.detectChanges()))
+            .subscribe({
+                next: (sonuc) => {
+                    this.gunDetaylari[valorTarihi] = { loading: false, sayfa, sonuc };
+                },
+                error: (error: unknown) => {
+                    this.gunDetaylari[valorTarihi] = { loading: false, sayfa, sonuc: null };
+                    this.showError(error);
+                }
+            });
     }
 
     /** POS Valör Takibi ekrani su an banka/tarih filtresini query param olarak desteklemiyor

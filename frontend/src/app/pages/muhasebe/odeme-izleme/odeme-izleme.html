@@ -1,0 +1,240 @@
+<app-muhasebe-tesis-context-bar />
+<app-muhasebe-tesis-secim-dialog />
+<p-toast />
+
+<div class="card mb-3">
+    <div class="flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+        <h5 class="m-0">Ödeme İzleme / Araştırma</h5>
+        <p-button label="Beyan Edilen Ödemeyi Karşılaştır" icon="pi pi-search" severity="secondary" size="small" (onClick)="openKarsilastir()" />
+    </div>
+    <div class="text-sm text-color-secondary">
+        <i class="pi pi-info-circle mr-1"></i>
+        Bu ekran salt okunurdur; hiçbir ödeme/fiş/valör kaydı oluşturmaz veya değiştirmez. Olası eşleşmeler ve uyarılar yalnızca inceleme
+        amaçlıdır - kesin sonuç olarak sunulmayan bulgular güven seviyesiyle birlikte gösterilir.
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="grid grid-cols-12 gap-3 align-items-end">
+        <div class="col-span-12 md:col-span-2">
+            <label class="block mb-2 text-sm">Belge No</label>
+            <input pInputText class="w-full" [(ngModel)]="belgeNo" (change)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <label class="block mb-2 text-sm">Cari Ara</label>
+            <input pInputText class="w-full" [(ngModel)]="cariAramaMetni" (change)="onFiltreDegisti()" placeholder="Unvan/kod" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tarih Başlangıç</label>
+            <p-datepicker [(ngModel)]="tarihBaslangic" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" (onSelect)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tarih Bitiş</label>
+            <p-datepicker [(ngModel)]="tarihBitis" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" (onSelect)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tutar Min</label>
+            <p-inputNumber [(ngModel)]="tutarMin" class="w-full" (onBlur)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tutar Max</label>
+            <p-inputNumber [(ngModel)]="tutarMax" class="w-full" (onBlur)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Ödeme Yöntemi</label>
+            <p-select [(ngModel)]="odemeYontemi" [options]="odemeYontemiSecenekleri" optionLabel="label" optionValue="value" class="w-full" (onChange)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Durum</label>
+            <p-select [(ngModel)]="durum" [options]="durumSecenekleri" optionLabel="label" optionValue="value" class="w-full" (onChange)="onFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-2 flex align-items-center gap-2">
+            <input type="checkbox" [(ngModel)]="sadeceFissizOlanlar" (change)="onFiltreDegisti()" id="fissizChk" />
+            <label for="fissizChk" class="text-sm">Yalnızca fişi olmayanlar</label>
+        </div>
+    </div>
+</div>
+
+<div *ngIf="loading" class="flex flex-column align-items-center justify-content-center py-8">
+    <p-progressSpinner [style]="{ width: '60px', height: '60px' }" />
+</div>
+
+<div *ngIf="!loading && errorMessage" class="card mb-3">
+    <div class="text-red-500"><i class="pi pi-exclamation-triangle mr-2"></i>{{ errorMessage }}</div>
+</div>
+
+<div class="card" *ngIf="!loading && !errorMessage">
+    <p-table
+        [value]="satirlar"
+        [lazy]="true"
+        [paginator]="true"
+        [rows]="sayfaBoyutu"
+        [totalRecords]="toplamKayit"
+        [first]="(sayfa - 1) * sayfaBoyutu"
+        (onLazyLoad)="onSayfaDegisti($event)"
+        responsiveLayout="scroll"
+        dataKey="id"
+    >
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Belge No</th>
+                <th>Tarih</th>
+                <th>Cari</th>
+                <th>Tutar</th>
+                <th>Yöntem</th>
+                <th>Durum</th>
+                <th>Kasa/Banka</th>
+                <th>Uyarı</th>
+                <th></th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+            <tr>
+                <td>{{ item.belgeNo }}</td>
+                <td>{{ item.belgeTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ item.cariUnvan }} <span class="text-color-secondary">({{ item.cariKodu }})</span></td>
+                <td [ngClass]="getTutarClass(item.tutar)">{{ item.tutar | number: '1.2-2' }} {{ item.paraBirimi }}</td>
+                <td>{{ item.odemeYontemi }}</td>
+                <td><p-tag [severity]="item.durum === 'Iptal' ? 'danger' : 'success'" [value]="item.durum" /></td>
+                <td>{{ item.kasaBankaHesapAdi ?? '-' }}</td>
+                <td>
+                    <p-tag *ngIf="item.uyariSayisi > 0" severity="warn" [value]="item.uyariSayisi + ' uyarı'" />
+                </td>
+                <td>
+                    <p-button icon="pi pi-eye" size="small" text="true" pTooltip="Detay" (onClick)="openDetay(item)" />
+                    <p-button icon="pi pi-list" size="small" text="true" pTooltip="Cari Hareket Dökümü" (onClick)="openCariHareketDokumu(item.cariKartId)" />
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr><td colspan="9" class="text-center">Kayıt bulunamadı.</td></tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<!-- Detay dialogu -->
+<p-dialog header="Ödeme Detayı" [(visible)]="detayVisible" [modal]="true" [style]="{ width: '50rem' }">
+    <div *ngIf="detayLoading" class="flex align-items-center justify-content-center py-4">
+        <p-progressSpinner [style]="{ width: '40px', height: '40px' }" />
+    </div>
+    <div *ngIf="!detayLoading && detay as d" class="grid grid-cols-12 gap-2 text-sm">
+        <div class="col-span-6"><strong>Belge No:</strong> {{ d.belgeNo }}</div>
+        <div class="col-span-6"><strong>Tarih:</strong> {{ d.belgeTarihi | date: 'dd.MM.yyyy HH:mm' }}</div>
+        <div class="col-span-6"><strong>Tutar:</strong> {{ d.tutar | number: '1.2-2' }} {{ d.paraBirimi }}</div>
+        <div class="col-span-6"><strong>Yöntem:</strong> {{ d.odemeYontemi }}</div>
+        <div class="col-span-6"><strong>Durum:</strong> {{ d.durum }}</div>
+        <div class="col-span-6"><strong>Bakiyeye Dahil:</strong> {{ d.bakiyeyeDahilMi ? 'Evet' : 'Hayır' }} <span *ngIf="d.bakiyeyeDahilDegilGerekcesi">({{ d.bakiyeyeDahilDegilGerekcesi }})</span></div>
+        <div class="col-span-6"><strong>Cari:</strong> {{ d.cariUnvan }} ({{ d.cariKodu }})</div>
+        <div class="col-span-6"><strong>Tesis:</strong> {{ d.tesisAdi ?? '-' }}</div>
+        <div class="col-span-6"><strong>Kasa/Banka:</strong> {{ d.kasaBankaHesapAdi ?? '-' }} <span *ngIf="d.bankaAdi">({{ d.bankaAdi }})</span></div>
+        <div class="col-span-6"><strong>IBAN:</strong> <span class="font-mono">{{ d.ibanMaskeli ?? '-' }}</span></div>
+        <div class="col-span-6"><strong>Muhasebe Hesabı:</strong> {{ d.muhasebeHesapKodu ?? '-' }}</div>
+        <div class="col-span-6"><strong>Muhasebe Fişi:</strong> {{ d.muhasebeFisNo ?? '-' }} <span *ngIf="d.muhasebeFisTarihi">({{ d.muhasebeFisTarihi | date: 'dd.MM.yyyy' }}, {{ d.muhasebeFisDurumu }})</span></div>
+        <div class="col-span-6" *ngIf="d.posValorDurumu"><strong>POS Valör:</strong> {{ d.posValorDurumu }} - {{ d.posBeklenenValorTarihi | date: 'dd.MM.yyyy' }} - Net: {{ d.posNetTutar | number: '1.2-2' }}</div>
+        <div class="col-span-6" *ngIf="d.kapatilacakCariHareketId"><strong>Borç Kapatma:</strong> {{ d.kapatildiMi ? 'Kapandı' : 'Kapanmadı' }}</div>
+        <div class="col-span-6" *ngIf="d.rezervasyonReferansNo"><strong>Rezervasyon:</strong> {{ d.rezervasyonReferansNo }}</div>
+        <div class="col-span-6"><strong>Oluşturan:</strong> {{ d.olusturanKullanici ?? '-' }} ({{ d.olusturmaTarihi | date: 'dd.MM.yyyy HH:mm' }})</div>
+        <div class="col-span-6" *ngIf="d.degistirenKullanici"><strong>Son Değiştiren:</strong> {{ d.degistirenKullanici }} ({{ d.degisiklikTarihi | date: 'dd.MM.yyyy HH:mm' }})</div>
+
+        <div class="col-span-12 mt-3" *ngIf="d.uyarilar.length">
+            <h6 class="mb-2">Uyarılar</h6>
+            <div *ngFor="let u of d.uyarilar" class="mb-2 p-2 border-1 surface-border border-round">
+                <p-tag [severity]="getGuvenSeviyesiSeverity(u.guvenSeviyesi)" [value]="getGuvenSeviyesiLabel(u.guvenSeviyesi)" class="mr-2" />
+                <strong>{{ getUyariLabel(u.uyariTipi) }}</strong>
+                <div class="text-color-secondary">{{ u.aciklama }}</div>
+            </div>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Kapat" (onClick)="detayVisible = false" />
+    </ng-template>
+</p-dialog>
+
+<!-- Cari hareket dökümü dialogu -->
+<p-dialog header="Cari Hareket Dökümü" [(visible)]="dokumVisible" [modal]="true" [style]="{ width: '60rem' }">
+    <div *ngIf="dokumLoading" class="flex align-items-center justify-content-center py-4">
+        <p-progressSpinner [style]="{ width: '40px', height: '40px' }" />
+    </div>
+    <ng-container *ngIf="!dokumLoading && dokum as dk">
+        <div class="mb-2 text-sm">
+            <strong>{{ dk.cariUnvan }}</strong> - Açılış Bakiyesi: {{ dk.acilisBakiyeTutari | number: '1.2-2' }} ({{ dk.acilisBakiyeYonu ?? '-' }})
+        </div>
+        <p-table [value]="dk.hareketler" responsiveLayout="scroll" [scrollable]="true">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Tarih</th>
+                    <th>Belge Türü</th>
+                    <th>Belge No</th>
+                    <th>Borç</th>
+                    <th>Alacak</th>
+                    <th>Durum</th>
+                    <th>Kümülatif Bakiye</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-h>
+                <tr [class.text-color-secondary]="h.hesaplamaDisiMi">
+                    <td>{{ h.hareketTarihi | date: 'dd.MM.yyyy' }}</td>
+                    <td>{{ h.belgeTuru }}</td>
+                    <td>{{ h.belgeNo ?? '-' }}</td>
+                    <td>{{ h.borcTutari | number: '1.2-2' }}</td>
+                    <td>{{ h.alacakTutari | number: '1.2-2' }}</td>
+                    <td>
+                        <p-tag [severity]="h.durum === 'Iptal' ? 'danger' : 'success'" [value]="h.durum" />
+                        <span *ngIf="h.hesaplamaDisiMi" class="text-xs ml-1">(hesaplama dışı)</span>
+                    </td>
+                    <td [ngClass]="getTutarClass(h.kumulatifBakiye)">{{ h.kumulatifBakiye | number: '1.2-2' }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+        <div class="grid grid-cols-12 gap-3 mt-3 text-sm">
+            <div class="col-span-3"><strong>Toplam Borç:</strong> {{ dk.toplamBorc | number: '1.2-2' }}</div>
+            <div class="col-span-3"><strong>Toplam Alacak:</strong> {{ dk.toplamAlacak | number: '1.2-2' }}</div>
+            <div class="col-span-3"><strong>İptal Edilmiş:</strong> {{ dk.toplamIptalEdilmisTutar | number: '1.2-2' }}</div>
+            <div class="col-span-3"><strong>Aktarılmayı Bekleyen POS:</strong> {{ dk.aktarilmayiBekleyenPosTutari | number: '1.2-2' }}</div>
+            <div class="col-span-12"><strong>Kalan Bakiye:</strong> <span class="text-lg font-bold" [ngClass]="getTutarClass(dk.kalanBakiye)">{{ dk.kalanBakiye | number: '1.2-2' }}</span></div>
+        </div>
+    </ng-container>
+    <ng-template pTemplate="footer">
+        <p-button label="Kapat" (onClick)="dokumVisible = false" />
+    </ng-template>
+</p-dialog>
+
+<!-- Beyan edilen odeme karsilastirma dialogu -->
+<p-dialog header="Beyan Edilen Ödemeyi Karşılaştır" [(visible)]="karsilastirVisible" [modal]="true" [style]="{ width: '45rem' }">
+    <div class="text-sm text-color-secondary mb-3">
+        Dosya/dekont yükleme desteklenmez. Girdiğiniz bilgiler yalnızca mevcut kayıtlarda arama yapmak için kullanılır, yeni bir kayıt
+        oluşturulmaz. Sonuçlar yalnızca tutara dayanmaz; eşleşme kesinliği güven seviyesiyle belirtilir.
+    </div>
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-6">
+            <label class="block mb-2 text-sm">Ödeme Tarihi</label>
+            <p-datepicker [(ngModel)]="beyanTarih" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" />
+        </div>
+        <div class="col-span-6">
+            <label class="block mb-2 text-sm">Tutar</label>
+            <p-inputNumber [(ngModel)]="beyanTutar" class="w-full" />
+        </div>
+        <div class="col-span-6">
+            <label class="block mb-2 text-sm">Belge No / Dekont No (tahmini)</label>
+            <input pInputText class="w-full" [(ngModel)]="beyanBelgeNoTahmini" />
+        </div>
+        <div class="col-span-6 flex align-items-end">
+            <p-button label="Ara" icon="pi pi-search" (onClick)="calistirKarsilastirma()" [loading]="karsilastirLoading" />
+        </div>
+    </div>
+
+    <div class="mt-3" *ngIf="karsilastirSonuclari.length">
+        <div *ngFor="let s of karsilastirSonuclari" class="mb-2 p-2 border-1 surface-border border-round">
+            <p-tag [severity]="getGuvenSeviyesiSeverity(s.guvenSeviyesi)" [value]="getGuvenSeviyesiLabel(s.guvenSeviyesi)" class="mr-2" />
+            <strong>{{ s.belgeNo }}</strong> - {{ s.belgeTarihi | date: 'dd.MM.yyyy' }} - {{ s.tutar | number: '1.2-2' }} {{ s.paraBirimi }} - {{ s.cariUnvan }}
+            <div class="text-color-secondary text-sm">{{ s.gerekce }}</div>
+        </div>
+    </div>
+    <div class="mt-3 text-color-secondary" *ngIf="!karsilastirLoading && karsilastirSonuclari.length === 0">
+        Arama yapılmadı veya eşleşme bulunamadı.
+    </div>
+
+    <ng-template pTemplate="footer">
+        <p-button label="Kapat" (onClick)="karsilastirVisible = false" />
+    </ng-template>
+</p-dialog>

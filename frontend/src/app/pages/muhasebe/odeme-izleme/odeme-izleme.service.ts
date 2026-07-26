@@ -8,8 +8,10 @@ import {
     BeyanEdilenOdemeKarsilastirmaFilterModel,
     CariHareketDokumFilterModel,
     CariHareketDokumModel,
+    OdemeAdayiModel,
     OdemeAramaFilterModel,
     OdemeAramaSatiriModel,
+    OdemeCaprazAramaFilterModel,
     OdemeDetayModel
 } from './odeme-izleme.dto';
 
@@ -21,6 +23,20 @@ export class OdemeIzlemeService {
     ara(pageNumber: number, pageSize: number, filter: OdemeAramaFilterModel): Observable<PagedResponseDto<OdemeAramaSatiriModel>> {
         let params = this.buildFilterParams(filter).set('pageNumber', pageNumber).set('pageSize', pageSize);
         return this.http.get<ApiResponse<PagedResponseDto<OdemeAramaSatiriModel>>>(this.baseUrl, { params }).pipe(map(this.unwrapOne));
+    }
+
+    /** Capraz-kaynak arastirma - odeme belgesi OLMAYAN kayitlari da bulur. */
+    caprazAra(pageNumber: number, pageSize: number, filter: OdemeCaprazAramaFilterModel): Observable<PagedResponseDto<OdemeAdayiModel>> {
+        let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+        if (filter.tesisId && filter.tesisId > 0) params = params.set('tesisId', filter.tesisId);
+        if (filter.tarihBaslangic) params = params.set('tarihBaslangic', filter.tarihBaslangic);
+        if (filter.tarihBitis) params = params.set('tarihBitis', filter.tarihBitis);
+        if (filter.tutarMin != null) params = params.set('tutarMin', filter.tutarMin);
+        if (filter.tutarMax != null) params = params.set('tutarMax', filter.tutarMax);
+        if (filter.cariKartId) params = params.set('cariKartId', filter.cariKartId);
+        if (filter.kopuklukTipi) params = params.set('kopuklukTipi', filter.kopuklukTipi);
+        if (filter.sadeceKopukOlanlar != null) params = params.set('sadeceKopukOlanlar', filter.sadeceKopukOlanlar);
+        return this.http.get<ApiResponse<PagedResponseDto<OdemeAdayiModel>>>(`${this.baseUrl}/capraz-arama`, { params }).pipe(map(this.unwrapOne));
     }
 
     getDetay(id: number): Observable<OdemeDetayModel> {
@@ -65,6 +81,15 @@ export class OdemeIzlemeService {
         if (filter.durum) params = params.set('durum', filter.durum);
         if (filter.valorDurumu) params = params.set('valorDurumu', filter.valorDurumu);
         if (filter.sadeceFissizOlanlar) params = params.set('sadeceFissizOlanlar', filter.sadeceFissizOlanlar);
+        if (filter.muhasebeFisNo) params = params.set('muhasebeFisNo', filter.muhasebeFisNo);
+        if (filter.rezervasyonReferansNo) params = params.set('rezervasyonReferansNo', filter.rezervasyonReferansNo);
+        if (filter.olusturulmaBaslangic) params = params.set('olusturulmaBaslangic', filter.olusturulmaBaslangic);
+        if (filter.olusturulmaBitis) params = params.set('olusturulmaBitis', filter.olusturulmaBitis);
+        if (filter.olusturanKullanici) params = params.set('olusturanKullanici', filter.olusturanKullanici);
+        if (filter.maliYil) params = params.set('maliYil', filter.maliYil);
+        if (filter.donem) params = params.set('donem', filter.donem);
+        if (filter.iban) params = params.set('iban', filter.iban);
+        if (filter.sadeceIptalEdilmisOlanlar != null) params = params.set('sadeceIptalEdilmisOlanlar', filter.sadeceIptalEdilmisOlanlar);
         return params;
     }
 

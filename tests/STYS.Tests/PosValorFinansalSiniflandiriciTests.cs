@@ -1,3 +1,5 @@
+using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.NakitBankaPozisyonu.Dtos;
 using STYS.Muhasebe.NakitBankaPozisyonu.Services;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
@@ -26,14 +28,26 @@ public class PosValorFinansalSiniflandiriciTests
             MuhasebeFisId = durum == PosTahsilatValorDurumlari.Aktarildi ? 5 : null,
             TersKayitMuhasebeFisId = durum == PosTahsilatValorDurumlari.AktarimFisiIptalEdildi ? 9 : null,
             BankaHesabiGecerliMi = true,
-            MuhasebeHesabiGecerliMi = true
+            MuhasebeHesabiGecerliMi = true,
+            // Fis'e bagli durumlarda varsayilan olarak TAM GECERLI bir dogrulanmis fis verilir;
+            // testler bunu bilincli olarak bozarak gecersizlik davranisini dogrular.
+            DogrulanmisAktarimFisi = durum == PosTahsilatValorDurumlari.Aktarildi ? GecerliDogrulanmisFis(5) : null,
+            DogrulanmisTersKayitFisi = durum == PosTahsilatValorDurumlari.AktarimFisiIptalEdildi ? GecerliDogrulanmisFis(9) : null
         };
         ayarla?.Invoke(a);
         return new PosValorSiniflandirmaGirdisi(
             a.Durum, a.BeklenenValorTarihi, a.BrutTutar, a.KomisyonTutari, a.NetTutar,
             a.ValorParaBirimi, a.BankaHesabiParaBirimi, a.MuhasebeFisId, a.TersKayitMuhasebeFisId,
-            a.BankaHesabiGecerliMi, a.MuhasebeHesabiGecerliMi);
+            a.BankaHesabiGecerliMi, a.MuhasebeHesabiGecerliMi,
+            a.DogrulanmisAktarimFisi, a.DogrulanmisTersKayitFisi, a.ValorTesisId, a.BankaHesabiTesisId);
     }
+
+    /// <summary>Tam gecerli (bulundu + silinmemis + Onayli + dogru tesis + beklenen hesap etkilenmis)
+    /// bir dogrulanmis fis.</summary>
+    private static DogrulanmisFis GecerliDogrulanmisFis(int fisId) =>
+        new(fisId, Bulundu: true, SoftDeleteEdilmis: false, Durum: MuhasebeFisDurumlari.Onayli,
+            TesisId: null, MaliYil: 2026, Donem: 7, FisTarihi: new DateTime(2026, 7, 24),
+            BeklenenKasaBankaHesabiEtkilenmisMi: true);
 
     private sealed class Ayar
     {
@@ -48,6 +62,10 @@ public class PosValorFinansalSiniflandiriciTests
         public int? TersKayitMuhasebeFisId;
         public bool BankaHesabiGecerliMi;
         public bool MuhasebeHesabiGecerliMi;
+        public DogrulanmisFis? DogrulanmisAktarimFisi;
+        public DogrulanmisFis? DogrulanmisTersKayitFisi;
+        public int? ValorTesisId;
+        public int? BankaHesabiTesisId;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -187,13 +205,14 @@ public class PosValorFinansalSiniflandiriciTests
     }
 
     [Fact]
-    public void ParaBirimiBos_NormalToplamaGIRMEZ()
+    public void ParaBirimiBos_NormalToplamaGIRMEZ_VeTanimsizKoduUretir()
     {
         var sonuc = PosValorFinansalSiniflandirici.Siniflandir(
             Gecerli(PosTahsilatValorDurumlari.ValorBekliyor, a => a.ValorParaBirimi = null));
 
         Assert.False(sonuc.NormalToplamaDahilMi);
-        Assert.Equal(NakitBankaPozisyonuUyariTipleri.ParaBirimiUyusmuyor, sonuc.UyariTipi);
+        // Bos para birimi "uyusmuyor"dan AYRI bir sorundur ve TRY VARSAYILMAZ.
+        Assert.Equal(NakitBankaPozisyonuUyariTipleri.ParaBirimiTanimsiz, sonuc.UyariTipi);
     }
 
     [Fact]
@@ -225,6 +244,128 @@ public class PosValorFinansalSiniflandiriciTests
             Gecerli(PosTahsilatValorDurumlari.ValorBekliyor, a => a.NetTutar = 979.99m));
 
         Assert.Equal(PosValorKategori.NormalBekleyen, sonuc.Kategori);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Fis DOGRULAMASI (yalnizca ID'nin dolu olmasi yeterli DEGILDIR)
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Aktarildi_FisIdDoluAmaFisBULUNAMADI_NormalKabulEdilmez()
+    {
+        var girdi = Gecerli(PosTahsilatValorDurumlari.Aktarildi, a =>
+        {
+            a.MuhasebeFisId = 55;
+            a.DogrulanmisAktarimFisi = null; // fis bulunamadi
+        });
+
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(girdi);
+
+        Assert.Equal(PosValorKategori.VeriKalitesiUyarisi, sonuc.Kategori);
+        Assert.Equal(NakitBankaPozisyonuUyariTipleri.AktarimFisiDogrulanamadi, sonuc.UyariTipi);
+    }
+
+    [Fact]
+    public void Aktarildi_FisSoftDeleteEdilmis_NormalKabulEdilmez()
+    {
+        var girdi = Gecerli(PosTahsilatValorDurumlari.Aktarildi, a =>
+        {
+            a.MuhasebeFisId = 55;
+            a.DogrulanmisAktarimFisi = new DogrulanmisFis(55, Bulundu: true, SoftDeleteEdilmis: true,
+                Durum: MuhasebeFisDurumlari.Onayli, TesisId: 1, MaliYil: 2026, Donem: 7,
+                FisTarihi: DateTime.UtcNow, BeklenenKasaBankaHesabiEtkilenmisMi: true);
+        });
+
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(girdi);
+
+        Assert.Equal(PosValorKategori.VeriKalitesiUyarisi, sonuc.Kategori);
+        Assert.Equal(NakitBankaPozisyonuUyariTipleri.AktarimFisiDogrulanamadi, sonuc.UyariTipi);
+    }
+
+    [Fact]
+    public void Aktarildi_FisBaskaTesiseAit_NormalKabulEdilmez()
+    {
+        var girdi = Gecerli(PosTahsilatValorDurumlari.Aktarildi, a =>
+        {
+            a.MuhasebeFisId = 55;
+            a.ValorTesisId = 1;
+            a.DogrulanmisAktarimFisi = new DogrulanmisFis(55, true, false, MuhasebeFisDurumlari.Onayli,
+                TesisId: 99, MaliYil: 2026, Donem: 7, FisTarihi: DateTime.UtcNow, BeklenenKasaBankaHesabiEtkilenmisMi: true);
+        });
+
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(girdi);
+
+        Assert.Equal(PosValorKategori.VeriKalitesiUyarisi, sonuc.Kategori);
+    }
+
+    [Fact]
+    public void Aktarildi_FisSatirindaBeklenenHesapYok_NormalKabulEdilmez()
+    {
+        var girdi = Gecerli(PosTahsilatValorDurumlari.Aktarildi, a =>
+        {
+            a.MuhasebeFisId = 55;
+            a.DogrulanmisAktarimFisi = new DogrulanmisFis(55, true, false, MuhasebeFisDurumlari.Onayli,
+                TesisId: 1, MaliYil: 2026, Donem: 7, FisTarihi: DateTime.UtcNow,
+                BeklenenKasaBankaHesabiEtkilenmisMi: false);
+        });
+
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(girdi);
+
+        Assert.Equal(PosValorKategori.VeriKalitesiUyarisi, sonuc.Kategori);
+    }
+
+    [Fact]
+    public void Aktarildi_FisTamamenGecerli_AktarilmisSayilir()
+    {
+        var girdi = Gecerli(PosTahsilatValorDurumlari.Aktarildi, a =>
+        {
+            a.MuhasebeFisId = 55;
+            a.ValorTesisId = 1;
+            a.DogrulanmisAktarimFisi = new DogrulanmisFis(55, true, false, MuhasebeFisDurumlari.Onayli,
+                TesisId: 1, MaliYil: 2026, Donem: 7, FisTarihi: DateTime.UtcNow, BeklenenKasaBankaHesabiEtkilenmisMi: true);
+        });
+
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(girdi);
+
+        Assert.Equal(PosValorKategori.Aktarilmis, sonuc.Kategori);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Tesis uyumu
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ValorVeBankaHesabiFarkliTesiste_NormalToplamaGIRMEZ()
+    {
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(
+            Gecerli(PosTahsilatValorDurumlari.ValorBekliyor, a => { a.ValorTesisId = 1; a.BankaHesabiTesisId = 2; }));
+
+        Assert.False(sonuc.NormalToplamaDahilMi);
+        Assert.Equal(NakitBankaPozisyonuUyariTipleri.ValorBankaHesabiTesisUyumsuz, sonuc.UyariTipi);
+    }
+
+    [Fact]
+    public void ValorVeBankaHesabiAyniTesiste_NormalBekleyenSayilir()
+    {
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(
+            Gecerli(PosTahsilatValorDurumlari.ValorBekliyor, a => { a.ValorTesisId = 7; a.BankaHesabiTesisId = 7; }));
+
+        Assert.Equal(PosValorKategori.NormalBekleyen, sonuc.Kategori);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Para birimi - bos deger TRY VARSAYILMAZ
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParaBirimiTanimsiz_AyriUyariTipiUretir_TRYVarsayilmaz()
+    {
+        var sonuc = PosValorFinansalSiniflandirici.Siniflandir(
+            Gecerli(PosTahsilatValorDurumlari.ValorBekliyor, a => a.ValorParaBirimi = "   "));
+
+        Assert.False(sonuc.NormalToplamaDahilMi);
+        // "Uyusmuyor" degil, ayri bir "Tanimsiz" kodu doner.
+        Assert.Equal(NakitBankaPozisyonuUyariTipleri.ParaBirimiTanimsiz, sonuc.UyariTipi);
     }
 
     [Fact]

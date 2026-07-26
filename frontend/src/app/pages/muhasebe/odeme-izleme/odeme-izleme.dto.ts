@@ -39,6 +39,70 @@ export interface OdemeAramaFilterModel {
     durum?: string | null;
     valorDurumu?: string | null;
     sadeceFissizOlanlar?: boolean | null;
+    muhasebeFisNo?: string | null;
+    rezervasyonReferansNo?: string | null;
+    olusturulmaBaslangic?: string | null;
+    olusturulmaBitis?: string | null;
+    olusturanKullanici?: string | null;
+    maliYil?: number | null;
+    donem?: number | null;
+    iban?: string | null;
+    sadeceIptalEdilmisOlanlar?: boolean | null;
+}
+
+/** Capraz-kaynak arastirmada bir adayin uretildigi kaynak. */
+export const ODEME_ADAY_KAYNAKLARI: Record<string, string> = {
+    TahsilatOdemeBelgesi: 'Ödeme/Tahsilat Belgesi',
+    CariHareket: 'Cari Hareket',
+    PosTahsilatValor: 'POS Valör',
+    KasaHareket: 'Kasa Hareketi',
+    BankaHareket: 'Banka Hareketi',
+    MuhasebeFis: 'Muhasebe Fişi'
+};
+
+export const KOPUKLUK_LABELLARI: Record<string, string> = {
+    OdemeBaglantisiOlmayanMuhasebeFisi: 'Ödeme bağlantısı olmayan muhasebe fişi',
+    OdemeBelgesiOlmayanCariHareket: 'Ödeme belgesi olmayan cari hareket',
+    MuhasebeFisiOlmayanOdemeBelgesi: 'Muhasebe fişi olmayan ödeme belgesi',
+    CariHareketEtkisiOlmayanOdemeBelgesi: 'Cari hareket etkisi olmayan ödeme belgesi',
+    ValorKaydiOlmayanPosTahsilati: 'Valör kaydı olmayan POS tahsilatı',
+    HedefBankaHesabiOlmayanValor: 'Hedef banka hesabı olmayan valör',
+    OdemeBelgesiOlmayanKasaHareketi: 'Ödeme belgesi olmayan kasa hareketi',
+    OdemeBelgesiOlmayanBankaHareketi: 'Ödeme belgesi olmayan banka hareketi',
+    SoftDeleteIliskiNedeniyleGorunmeyen: 'Soft-delete ilişki nedeniyle görünmeyen kayıt'
+};
+
+export interface OdemeCaprazAramaFilterModel {
+    tesisId?: number | null;
+    tarihBaslangic?: string | null;
+    tarihBitis?: string | null;
+    tutarMin?: number | null;
+    tutarMax?: number | null;
+    cariKartId?: number | null;
+    kopuklukTipi?: string | null;
+    sadeceKopukOlanlar?: boolean;
+}
+
+export interface OdemeAdayiModel {
+    kaynak: string;
+    kaynakId: number;
+    tekillestirmeAnahtari: string;
+    bulunduguKaynaklar: string[];
+    tahsilatOdemeBelgesiId?: number | null;
+    cariHareketId?: number | null;
+    posTahsilatValorId?: number | null;
+    muhasebeFisId?: number | null;
+    kasaBankaHesapId?: number | null;
+    belgeNo?: string | null;
+    tarih?: string | null;
+    tutar?: number | null;
+    paraBirimi?: string | null;
+    cariKartId?: number | null;
+    cariUnvan?: string | null;
+    tesisId?: number | null;
+    aciklama?: string | null;
+    kopuklukKodlari: string[];
+    kopuklukAciklamalari: string[];
 }
 
 export interface OdemeAramaSatiriModel {

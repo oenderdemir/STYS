@@ -47,7 +47,7 @@ describe('OdemeIzlemePage', () => {
     }
 
     beforeEach(() => {
-        serviceSpy = jasmine.createSpyObj<OdemeIzlemeService>('OdemeIzlemeService', ['ara', 'getDetay', 'getCariHareketDokumu', 'karsilastir']);
+        serviceSpy = jasmine.createSpyObj<OdemeIzlemeService>('OdemeIzlemeService', ['ara', 'getDetay', 'getCariHareketDokumu', 'karsilastir', 'caprazAra']);
         tesisContextStub = {
             seciliTesis: signal({ id: 1, ad: 'Test Tesis' }),
             tesisler: signal([{ id: 1, ad: 'Test Tesis' }]),
@@ -205,6 +205,55 @@ describe('OdemeIzlemePage', () => {
         expect(s.tarihBirebirMi).toBeFalse();
         expect(s.tarihFarkiGun).toBe(1);
         expect(component.getGuvenSeviyesiSeverity(s.guvenSeviyesi)).toBe('info');
+    });
+
+    it('capraz kaynak arastirmasi: kopuk kayitlari sayfali olarak yukler ve kaynaklari gosterir', () => {
+        serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+        serviceSpy.caprazAra.and.returnValue(
+            of({
+                items: [
+                    {
+                        kaynak: 'MuhasebeFis',
+                        kaynakId: 10,
+                        tekillestirmeAnahtari: 'FIS:10',
+                        bulunduguKaynaklar: ['MuhasebeFis'],
+                        kopuklukKodlari: ['OdemeBaglantisiOlmayanMuhasebeFisi'],
+                        kopuklukAciklamalari: ['Bağlı ödeme belgesi bulunamadı.'],
+                        muhasebeFisId: 10
+                    }
+                ],
+                pageNumber: 1, pageSize: 20, totalCount: 1, totalPages: 1, hasPreviousPage: false, hasNextPage: false
+            })
+        );
+
+        const component = createComponent();
+        component.ngOnInit();
+        component.openCaprazArama();
+
+        expect(component.caprazVisible).toBeTrue();
+        expect(component.caprazAdaylar.length).toBe(1);
+        expect(component.caprazToplam).toBe(1);
+        expect(component.getKopuklukLabel('OdemeBaglantisiOlmayanMuhasebeFisi')).toContain('Ödeme bağlantısı olmayan');
+        expect(component.getKaynakLabel('MuhasebeFis')).toBe('Muhasebe Fişi');
+    });
+
+    it('capraz arama sayfalamasi: ayni sayfa/boyut icin gereksiz yeniden yukleme yapmaz', () => {
+        serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+        serviceSpy.caprazAra.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+
+        const component = createComponent();
+        component.ngOnInit();
+        component.openCaprazArama();
+        const ilkCagriSayisi = serviceSpy.caprazAra.calls.count();
+
+        // Ayni sayfa/boyut - tekrar yuklememeli.
+        component.caprazSayfaDegisti({ first: 0, rows: 20 });
+        expect(serviceSpy.caprazAra.calls.count()).toBe(ilkCagriSayisi);
+
+        // Gercek sayfa degisikligi - yuklemeli.
+        component.caprazSayfaDegisti({ first: 20, rows: 20 });
+        expect(component.caprazSayfa).toBe(2);
+        expect(serviceSpy.caprazAra.calls.count()).toBe(ilkCagriSayisi + 1);
     });
 
     it('para bicimlendirme: pozitif/negatif/sifir tutarlar farkli siniflar alir', () => {

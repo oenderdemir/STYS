@@ -1,3 +1,4 @@
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.NakitBankaPozisyonu.Dtos;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 
@@ -28,6 +29,13 @@ public enum PosValorKategori
 }
 
 /// <summary>Siniflandiriciya verilen, DB'den bagimsiz saf girdi.</summary>
+/// <param name="MuhasebeFisId">Kaydin isaret ettigi aktarim fisi id'si (yalnizca ID - gecerlilik
+/// kaniti DEGILDIR, bkz. <paramref name="DogrulanmisAktarimFisi"/>).</param>
+/// <param name="DogrulanmisAktarimFisi">Sorgu katmaninda GERCEKTEN dogrulanmis fis bilgisi.
+/// MuhasebeFisId dolu oldugu halde bu null ise fis bulunamamis demektir.</param>
+/// <param name="DogrulanmisTersKayitFisi">Ters kayit fisinin dogrulanmis bilgisi.</param>
+/// <param name="ValorTesisId">Valor kaydinin kendi tesisi.</param>
+/// <param name="BankaHesabiTesisId">Hedef banka hesabinin tesisi - valorunkiyle ESLESMELIDIR.</param>
 public sealed record PosValorSiniflandirmaGirdisi(
     string Durum,
     DateOnly BeklenenValorTarihi,
@@ -39,7 +47,11 @@ public sealed record PosValorSiniflandirmaGirdisi(
     int? MuhasebeFisId,
     int? TersKayitMuhasebeFisId,
     bool BankaHesabiGecerliMi,
-    bool MuhasebeHesabiGecerliMi);
+    bool MuhasebeHesabiGecerliMi,
+    DogrulanmisFis? DogrulanmisAktarimFisi = null,
+    DogrulanmisFis? DogrulanmisTersKayitFisi = null,
+    int? ValorTesisId = null,
+    int? BankaHesabiTesisId = null);
 
 public sealed record PosValorSiniflandirmaSonucu(
     PosValorKategori Kategori,
@@ -74,11 +86,27 @@ public static class PosValorFinansalSiniflandirici
                 break; // tek aday - asagidaki veri kalitesi kapisina girer.
 
             case PosTahsilatValorDurumlari.Aktarildi:
-                return girdi.MuhasebeFisId.HasValue
-                    ? new(PosValorKategori.Aktarilmis, null, null)
-                    : new(PosValorKategori.VeriKalitesiUyarisi,
+            {
+                if (!girdi.MuhasebeFisId.HasValue)
+                {
+                    return new(PosValorKategori.VeriKalitesiUyarisi,
                         NakitBankaPozisyonuUyariTipleri.AktarimDurumuFisIliskisiTutarsiz,
                         "Kayıt 'Aktarıldı' durumunda ancak bağlı bir muhasebe fişi (MuhasebeFisId) bulunamıyor.");
+                }
+
+                // YALNIZCA ID'nin dolu olmasi yeterli DEGILDIR - fisin gercekten var oldugu, silinmemis,
+                // mali etki olusturan durumda ve ayni tesise ait oldugu dogrulanmalidir.
+                var fisSonucu = MuhasebeFisDogrulama.Degerlendir(
+                    girdi.DogrulanmisAktarimFisi,
+                    beklenenTesisId: girdi.ValorTesisId,
+                    kasaBankaHesabiKontrolEdilsinMi: true);
+
+                return fisSonucu.GecerliMi
+                    ? new(PosValorKategori.Aktarilmis, null, null)
+                    : new(PosValorKategori.VeriKalitesiUyarisi,
+                        NakitBankaPozisyonuUyariTipleri.AktarimFisiDogrulanamadi,
+                        "Kayıt 'Aktarıldı' görünüyor ancak bağlı muhasebe fişi doğrulanamadı: " + string.Join(" ", fisSonucu.Aciklamalar));
+            }
 
             case PosTahsilatValorDurumlari.MutabakatBekliyor:
                 return new(PosValorKategori.MutabakatBekliyor, null, null);
@@ -90,11 +118,23 @@ public static class PosValorFinansalSiniflandirici
                 return new(PosValorKategori.IptalEdilmis, null, null);
 
             case PosTahsilatValorDurumlari.AktarimFisiIptalEdildi:
-                return girdi.TersKayitMuhasebeFisId.HasValue
-                    ? new(PosValorKategori.TersKayitSurecinde, null, null)
-                    : new(PosValorKategori.VeriKalitesiUyarisi,
+            {
+                if (!girdi.TersKayitMuhasebeFisId.HasValue)
+                {
+                    return new(PosValorKategori.VeriKalitesiUyarisi,
                         NakitBankaPozisyonuUyariTipleri.AktarimDurumuFisIliskisiTutarsiz,
                         "Kayıt 'Aktarım Fişi İptal Edildi' durumunda ancak bağlı bir ters kayıt fişi (TersKayitMuhasebeFisId) bulunamıyor.");
+                }
+
+                var tersSonuc = MuhasebeFisDogrulama.Degerlendir(
+                    girdi.DogrulanmisTersKayitFisi, beklenenTesisId: girdi.ValorTesisId);
+
+                return tersSonuc.GecerliMi
+                    ? new(PosValorKategori.TersKayitSurecinde, null, null)
+                    : new(PosValorKategori.VeriKalitesiUyarisi,
+                        NakitBankaPozisyonuUyariTipleri.AktarimFisiDogrulanamadi,
+                        "Ters kayıt fişi doğrulanamadı: " + string.Join(" ", tersSonuc.Aciklamalar));
+            }
 
             case PosTahsilatValorDurumlari.TersKayitOlusturuluyor:
                 return new(PosValorKategori.TersKayitSurecinde, null, null);
@@ -126,6 +166,17 @@ public static class PosValorFinansalSiniflandirici
                 "Bağlı banka hesabının geçerli (mevcut, aktif ve silinmemiş) bir muhasebe hesabı bağlantısı yok; muhasebe bakiyesi hesaplanamadığı için tahmini bakiye üretilmedi.");
         }
 
+        // TESIS UYUMU: bir valor yalnizca banka hesabi ID'si eslesti diye BASKA bir tesisin banka
+        // hesabina dahil edilemez. PosTahsilatValor'un kendi TesisId'si ile hedef KasaBankaHesap'in
+        // TesisId'si mutlaka ayni olmalidir.
+        if (girdi.ValorTesisId.HasValue && girdi.BankaHesabiTesisId.HasValue
+            && girdi.ValorTesisId.Value != girdi.BankaHesabiTesisId.Value)
+        {
+            return new(PosValorKategori.VeriKalitesiUyarisi,
+                NakitBankaPozisyonuUyariTipleri.ValorBankaHesabiTesisUyumsuz,
+                $"POS valör kaydının tesisi ({girdi.ValorTesisId}) ile hedef banka hesabının tesisi ({girdi.BankaHesabiTesisId}) farklı; kayıt bu hesabın toplamına dahil edilmedi.");
+        }
+
         if (girdi.MuhasebeFisId.HasValue)
         {
             return new(PosValorKategori.VeriKalitesiUyarisi,
@@ -147,13 +198,20 @@ public static class PosValorFinansalSiniflandirici
                 "Beklenen valör tarihi tanımlı değil.");
         }
 
-        if (string.IsNullOrWhiteSpace(girdi.ValorParaBirimi)
-            || string.IsNullOrWhiteSpace(girdi.BankaHesabiParaBirimi)
-            || !string.Equals(girdi.ValorParaBirimi, girdi.BankaHesabiParaBirimi, StringComparison.OrdinalIgnoreCase))
+        // Bos/tanimsiz para birimi TRY VARSAYILMAZ - ayri bir veri kalitesi sorunudur ve TRY
+        // toplamina eklenmemelidir.
+        if (string.IsNullOrWhiteSpace(girdi.ValorParaBirimi) || string.IsNullOrWhiteSpace(girdi.BankaHesabiParaBirimi))
+        {
+            return new(PosValorKategori.VeriKalitesiUyarisi,
+                NakitBankaPozisyonuUyariTipleri.ParaBirimiTanimsiz,
+                "Kaydın veya bağlı banka hesabının para birimi tanımsız; hangi para biriminde olduğu bilinmediği için hiçbir toplama dahil edilemez.");
+        }
+
+        if (!string.Equals(girdi.ValorParaBirimi, girdi.BankaHesabiParaBirimi, StringComparison.OrdinalIgnoreCase))
         {
             return new(PosValorKategori.VeriKalitesiUyarisi,
                 NakitBankaPozisyonuUyariTipleri.ParaBirimiUyusmuyor,
-                $"Kaydın para birimi ('{girdi.ValorParaBirimi}') bağlı banka hesabının para biriminden ('{girdi.BankaHesabiParaBirimi}') farklı veya tanımsız; kur dönüşümü yapılmadan toplanamaz.");
+                $"Kaydın para birimi ('{girdi.ValorParaBirimi}') bağlı banka hesabının para biriminden ('{girdi.BankaHesabiParaBirimi}') farklı; kur dönüşümü yapılmadan toplanamaz.");
         }
 
         // Net tutar iliskisi: NetTutar = BrutTutar - KomisyonTutari. Para tutarlari 2 haneye

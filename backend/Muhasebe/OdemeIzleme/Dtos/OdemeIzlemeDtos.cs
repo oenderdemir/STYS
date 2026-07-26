@@ -45,6 +45,85 @@ public static class BakiyeyeDahilEdilmeDurumlari
     public const string DahilDegil = "DahilDegil";
 }
 
+/// <summary>Capraz-kaynak arastirmada bir adayin HANGI kaynaktan uretildigi.</summary>
+public static class OdemeAdayKaynaklari
+{
+    public const string TahsilatOdemeBelgesi = "TahsilatOdemeBelgesi";
+    public const string CariHareket = "CariHareket";
+    public const string PosTahsilatValor = "PosTahsilatValor";
+    public const string KasaHareket = "KasaHareket";
+    public const string BankaHareket = "BankaHareket";
+    public const string MuhasebeFis = "MuhasebeFis";
+}
+
+/// <summary>Capraz-kaynak arastirmada tespit edilen KOPUKLUK turleri.</summary>
+public static class OdemeKopuklukTipleri
+{
+    public const string OdemeBaglantisiOlmayanMuhasebeFisi = "OdemeBaglantisiOlmayanMuhasebeFisi";
+    public const string OdemeBelgesiOlmayanCariHareket = "OdemeBelgesiOlmayanCariHareket";
+    public const string MuhasebeFisiOlmayanOdemeBelgesi = "MuhasebeFisiOlmayanOdemeBelgesi";
+    public const string CariHareketEtkisiOlmayanOdemeBelgesi = "CariHareketEtkisiOlmayanOdemeBelgesi";
+    public const string ValorKaydiOlmayanPosTahsilati = "ValorKaydiOlmayanPosTahsilati";
+    public const string HedefBankaHesabiOlmayanValor = "HedefBankaHesabiOlmayanValor";
+    public const string OdemeBelgesiOlmayanKasaHareketi = "OdemeBelgesiOlmayanKasaHareketi";
+    public const string OdemeBelgesiOlmayanBankaHareketi = "OdemeBelgesiOlmayanBankaHareketi";
+    public const string SoftDeleteIliskiNedeniyleGorunmeyen = "SoftDeleteIliskiNedeniyleGorunmeyen";
+}
+
+/// <summary>Capraz-kaynak arastirma sonucundaki TEK bir aday. Ayni mali islem birden fazla kaynakta
+/// bulunabildiginden adaylar tekillestirilir (bkz. TekillestirmeAnahtari).</summary>
+public class OdemeAdayiDto
+{
+    /// <summary>Adayin uretildigi birincil kaynak (bkz. OdemeAdayKaynaklari).</summary>
+    public string Kaynak { get; set; } = string.Empty;
+
+    /// <summary>Kaynak kaydin kendi id'si.</summary>
+    public int KaynakId { get; set; }
+
+    /// <summary>Ayni mali islemi temsil eden kayitlarin BIRLESTIRILDIGI anahtar - tekillestirme
+    /// bunun uzerinden yapilir, boylece ayni odeme belge/cari hareket/valor/fis kayitlarinda
+    /// bulundugu icin birden fazla kez SAYILMAZ.</summary>
+    public string TekillestirmeAnahtari { get; set; } = string.Empty;
+
+    /// <summary>Bu mali islemin bulundugu TUM kaynaklar (tekillestirme sonrasi birlesik liste).</summary>
+    public List<string> BulunduguKaynaklar { get; set; } = [];
+
+    public int? TahsilatOdemeBelgesiId { get; set; }
+    public int? CariHareketId { get; set; }
+    public int? PosTahsilatValorId { get; set; }
+    public int? MuhasebeFisId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
+
+    public string? BelgeNo { get; set; }
+    public DateTime? Tarih { get; set; }
+    public decimal? Tutar { get; set; }
+    public string? ParaBirimi { get; set; }
+    public int? CariKartId { get; set; }
+    public string? CariUnvan { get; set; }
+    public int? TesisId { get; set; }
+    public string? Aciklama { get; set; }
+
+    /// <summary>Bu adayda tespit edilen kopukluk kodlari (bkz. OdemeKopuklukTipleri).</summary>
+    public List<string> KopuklukKodlari { get; set; } = [];
+    public List<string> KopuklukAciklamalari { get; set; } = [];
+}
+
+public class OdemeCaprazAramaFilterDto
+{
+    public int? TesisId { get; set; }
+    public DateOnly? TarihBaslangic { get; set; }
+    public DateOnly? TarihBitis { get; set; }
+    public decimal? TutarMin { get; set; }
+    public decimal? TutarMax { get; set; }
+    public int? CariKartId { get; set; }
+
+    /// <summary>Yalnizca belirtilen kopukluk turunu tasiyan adaylari dondurur.</summary>
+    public string? KopuklukTipi { get; set; }
+
+    /// <summary>true ise yalnizca en az bir kopukluk tespit edilen adaylar dondurulur.</summary>
+    public bool SadeceKopukOlanlar { get; set; } = true;
+}
+
 public static class OdemeUyariTipleri
 {
     public const string OdemeVarFisYok = "OdemeVarFisYok";
@@ -80,6 +159,31 @@ public class OdemeAramaFilterDto
     public string? ValorDurumu { get; set; }
     /// <summary>true ise yalnizca MuhasebeFisId'si BOS olan (fis uretilmemis) kayitlar listelenir.</summary>
     public bool? SadeceFissizOlanlar { get; set; }
+
+    /// <summary>Bagli muhasebe fisinin numarasi (MuhasebeFis.FisNo) ile arama.</summary>
+    public string? MuhasebeFisNo { get; set; }
+
+    /// <summary>Rezervasyon referans numarasi (Rezervasyon.ReferansNo) ile arama - odeme,
+    /// RezervasyonOdeme.TahsilatOdemeBelgesiId uzerinden rezervasyona baglanir.</summary>
+    public string? RezervasyonReferansNo { get; set; }
+
+    /// <summary>Kayit OLUSTURULMA tarihi araligi (BelgeTarihi'nden farklidir).</summary>
+    public DateOnly? OlusturulmaBaslangic { get; set; }
+    public DateOnly? OlusturulmaBitis { get; set; }
+
+    /// <summary>Islemi yapan (kaydi olusturan) kullanici - BaseEntity.CreatedBy ile eslesir.</summary>
+    public string? OlusturanKullanici { get; set; }
+
+    /// <summary>Muhasebe donemi - bagli fisin MaliYil/Donem degerleriyle eslesir.</summary>
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+
+    /// <summary>Bagli banka hesabinin IBAN'i (kismi arama).</summary>
+    public string? Iban { get; set; }
+
+    /// <summary>true: yalnizca iptal edilmis; false: yalnizca aktif; null: hepsi. (Durum ile ayni
+    /// isi yapar, kullanim kolayligi icin ayri tutulur.)</summary>
+    public bool? SadeceIptalEdilmisOlanlar { get; set; }
 }
 
 public class OdemeAramaSatiriDto
@@ -175,6 +279,9 @@ public class OdemeDetayDto
     public string? EtkiledigiCariVeyaBorc { get; set; }
     public decimal? EtkiledigiTutar { get; set; }
 
+    /// <summary>Etkilenen tutarin para birimi - farkli para birimleri birlestirilmediginden ayrica tasinir.</summary>
+    public string? EtkiledigiParaBirimi { get; set; }
+
     public List<OdemeUyariDto> Uyarilar { get; set; } = [];
 }
 
@@ -215,6 +322,11 @@ public class CariBakiyeParaBirimiOzetiDto
 {
     public string ParaBirimi { get; set; } = "TRY";
 
+    /// <summary>Acilis bakiyesi + tarih araligi BASLANGICINDAN ONCE bakiyeye gercekten dahil olmus
+    /// (Durum=Aktif) hareketlerin net etkisi. Tarih araligi verilmediyse yalnizca acilis bakiyesidir.</summary>
+    public decimal DevredenBakiye { get; set; }
+
+    /// <summary>Yalnizca DONEM ICI (tarih araligindaki) aktif hareketlerin borc toplami.</summary>
     public decimal ToplamBorc { get; set; }
     public decimal ToplamAlacak { get; set; }
 
@@ -233,8 +345,12 @@ public class CariBakiyeParaBirimiOzetiDto
     /// <summary>Aktarim/ters kayit ara durumlarindaki (sonucu kesinlesmemis) POS tutari.</summary>
     public decimal AktarimSurecindekiPos { get; set; }
 
-    /// <summary>Acilis bakiyesi + aktif hareketlerden hesaplanan, ACIKLANAN kalan bakiye.</summary>
+    /// <summary>DevredenBakiye + dönem içi aktif hareketlerin net etkisi = ACIKLANAN kalan bakiye.</summary>
     public decimal AciklananKalanBakiye { get; set; }
+
+    /// <summary>Tarih alani guvenilir olmadigi icin doneme KATILMAYAN POS kayitlarinin tutari
+    /// (bkz. CariHareketDokumDto.Uyarilar). Hicbir toplama dahil edilmez.</summary>
+    public decimal DonemeKatilmayanBelirsizTarihliPos { get; set; }
 }
 
 /// <summary>Bir carinin bakiyesini ACIKLANABILIR sekilde aciklayan tam dokum - "eksik odeme" yalnizca
@@ -249,6 +365,15 @@ public class CariHareketDokumDto
 
     /// <summary>Para birimi bazinda ayristirilmis toplamlar - tek bir birlesik toplam URETILMEZ.</summary>
     public List<CariBakiyeParaBirimiOzetiDto> ParaBirimiOzetleri { get; set; } = [];
+
+    /// <summary>Uygulanan tarih araligi (verildiyse) - kullanicinin hangi kapsamin gecerli oldugunu
+    /// tahmin etmemesi icin echo edilir.</summary>
+    public DateOnly? TarihBaslangic { get; set; }
+    public DateOnly? TarihBitis { get; set; }
+
+    /// <summary>Dokum sirasinda olusan veri kalitesi uyarilari (ör. tarihi belirsiz oldugu icin
+    /// doneme katilamayan POS kayitlari).</summary>
+    public List<string> Uyarilar { get; set; } = [];
 }
 
 public class BeyanEdilenOdemeKarsilastirmaFilterDto
@@ -294,4 +419,11 @@ public class BeyanEdilenOdemeEslesmeDto
     /// "birebir tarih" olarak RAPORLANMAZ.</summary>
     public bool TarihBirebirMi { get; set; }
     public int TarihFarkiGun { get; set; }
+
+    /// <summary>Referans karsilastirmasinda uygulanan normalizasyonun kullaniciya aciklamasi.</summary>
+    public string KullanilanNormalizasyon { get; set; } = string.Empty;
+
+    /// <summary>Normalize referansin yetki kapsaminda TEKIL olup olmadigi. false ise ayni numaraya
+    /// sahip birden fazla kayit vardir ve KESIN eslesme URETILMEZ. Referans verilmediyse null.</summary>
+    public bool? ReferansTekilMi { get; set; }
 }

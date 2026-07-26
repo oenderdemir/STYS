@@ -277,6 +277,18 @@ public static class NakitBankaPozisyonuUyariTipleri
     /// KasaBankaHesap.MuhasebeHesapPlaniId TEKIL bir FK oldugu icin bu yon semayla yapisal olarak
     /// IMKANSIZDIR; sabit yalnizca iki yonun karistirilmamasi icin ayrica tanimlanmistir.</summary>
     public const string AyniBankaHesabiBirdenFazlaMuhasebeHesabinaBagli = "AyniBankaHesabiBirdenFazlaMuhasebeHesabinaBagli";
+
+    /// <summary>Kayit bir muhasebe fisine bagli gorunuyor ancak fis GERCEKTEN dogrulanamadi
+    /// (bulunamadi / soft-delete / mali etki olusturmayan durum / farkli tesis / fis satirinda
+    /// beklenen kasa-banka hesabi etkilenmemis). Yalnizca ID'nin dolu olmasi yeterli DEGILDIR.</summary>
+    public const string AktarimFisiDogrulanamadi = "AktarimFisiDogrulanamadi";
+
+    /// <summary>POS valor kaydinin tesisi ile hedef banka hesabinin tesisi FARKLI - kayit o hesabin
+    /// toplamina dahil edilemez.</summary>
+    public const string ValorBankaHesabiTesisUyumsuz = "ValorBankaHesabiTesisUyumsuz";
+
+    /// <summary>Para birimi tanimsiz/bos - TRY VARSAYILMAZ, hicbir toplama dahil edilmez.</summary>
+    public const string ParaBirimiTanimsiz = "ParaBirimiTanimsiz";
 }
 
 /// <summary>Normal finansal toplamin DISINDA tutulan tutarlarin, DAHIL EDILMEME NEDENINE ve PARA

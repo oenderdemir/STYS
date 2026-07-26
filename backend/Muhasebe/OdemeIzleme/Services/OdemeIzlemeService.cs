@@ -101,6 +101,66 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             query = query.Where(b => eslesenBelgeIdler.Contains(b.Id));
         }
 
+        // ── Ek filtreler (hepsi GERCEKTEN sorguya uygulanir) ──
+
+        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo))
+        {
+            var fisIdler = _dbContext.MuhasebeFisler.AsNoTracking()
+                .Where(f => !f.IsDeleted && f.FisNo.Contains(filter.MuhasebeFisNo))
+                .Select(f => (int?)f.Id);
+            query = query.Where(b => fisIdler.Contains(b.MuhasebeFisId));
+        }
+
+        if (filter.MaliYil.HasValue || filter.Donem.HasValue)
+        {
+            var donemFisIdler = _dbContext.MuhasebeFisler.AsNoTracking()
+                .Where(f => !f.IsDeleted
+                    && (!filter.MaliYil.HasValue || f.MaliYil == filter.MaliYil.Value)
+                    && (!filter.Donem.HasValue || f.Donem == filter.Donem.Value))
+                .Select(f => (int?)f.Id);
+            query = query.Where(b => donemFisIdler.Contains(b.MuhasebeFisId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
+        {
+            var rezervasyonBelgeIdler = _dbContext.RezervasyonOdemeler.AsNoTracking()
+                .Where(r => r.TahsilatOdemeBelgesiId.HasValue
+                    && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo))
+                .Select(r => r.TahsilatOdemeBelgesiId!.Value);
+            query = query.Where(b => rezervasyonBelgeIdler.Contains(b.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Iban))
+        {
+            var ibanHesapIdler = _dbContext.KasaBankaHesaplari.AsNoTracking()
+                .Where(k => !k.IsDeleted && k.Iban != null && k.Iban.Contains(filter.Iban))
+                .Select(k => (int?)k.Id);
+            query = query.Where(b => ibanHesapIdler.Contains(b.KasaBankaHesapId));
+        }
+
+        if (filter.OlusturulmaBaslangic.HasValue)
+        {
+            var ust = filter.OlusturulmaBaslangic.Value.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(b => b.CreatedAt >= ust);
+        }
+        if (filter.OlusturulmaBitis.HasValue)
+        {
+            var ust = filter.OlusturulmaBitis.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = query.Where(b => b.CreatedAt < ust);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.OlusturanKullanici))
+        {
+            query = query.Where(b => b.CreatedBy != null && b.CreatedBy.Contains(filter.OlusturanKullanici));
+        }
+
+        if (filter.SadeceIptalEdilmisOlanlar.HasValue)
+        {
+            query = filter.SadeceIptalEdilmisOlanlar.Value
+                ? query.Where(b => b.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+                : query.Where(b => b.Durum == TahsilatOdemeBelgeDurumlari.Aktif);
+        }
+
         var toplam = await query.CountAsync(cancellationToken);
 
         var satirlar = await query
@@ -224,17 +284,38 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             }
         }
 
+        // Fisi ID'ye KOR KOR guvenmeden dogrula: IgnoreQueryFilters ile arar ki "bulunamadi" ile
+        // "soft-delete edilmis" ayirt edilebilsin. Ayrica fis SATIRLARINDAN, odemenin kasa/banka
+        // hesabinin gercekten etkilenip etkilenmedigi kontrol edilir.
+        DogrulanmisFis? dogrulanmisFis = null;
         if (belge.MuhasebeFisId.HasValue)
         {
-            var fis = await _dbContext.MuhasebeFisler.AsNoTracking()
+            var fis = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
                 .Where(f => f.Id == belge.MuhasebeFisId.Value)
-                .Select(f => new { f.FisNo, f.FisTarihi, f.Durum })
+                .Select(f => new { f.Id, f.FisNo, f.FisTarihi, f.Durum, f.IsDeleted, f.TesisId, f.MaliYil, f.Donem })
                 .FirstOrDefaultAsync(cancellationToken);
-            if (fis is not null)
+
+            if (fis is null)
+            {
+                dogrulanmisFis = new DogrulanmisFis(belge.MuhasebeFisId.Value, Bulundu: false, SoftDeleteEdilmis: false,
+                    Durum: null, TesisId: null, MaliYil: null, Donem: null, FisTarihi: null, BeklenenKasaBankaHesabiEtkilenmisMi: null);
+            }
+            else
             {
                 dto.MuhasebeFisNo = fis.FisNo;
                 dto.MuhasebeFisTarihi = fis.FisTarihi;
                 dto.MuhasebeFisDurumu = fis.Durum;
+
+                bool? hesapEtkilenmis = null;
+                if (belge.KasaBankaHesapId.HasValue)
+                {
+                    hesapEtkilenmis = await _dbContext.MuhasebeFisSatirlari.IgnoreQueryFilters().AsNoTracking()
+                        .AnyAsync(s => !s.IsDeleted && s.MuhasebeFisId == fis.Id && s.KasaBankaHesapId == belge.KasaBankaHesapId.Value, cancellationToken);
+                }
+
+                dogrulanmisFis = new DogrulanmisFis(fis.Id, Bulundu: true, SoftDeleteEdilmis: fis.IsDeleted,
+                    Durum: fis.Durum, TesisId: fis.TesisId, MaliYil: fis.MaliYil, Donem: fis.Donem,
+                    FisTarihi: fis.FisTarihi, BeklenenKasaBankaHesabiEtkilenmisMi: hesapEtkilenmis);
             }
         }
 
@@ -294,18 +375,27 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             }
 
             // Nakit hareketi doguran odeme yontemlerinde muhasebe fisi beklenir.
-            if (OdemeYontemleri.NakitHareketiGerektirenler.Contains(belge.OdemeYontemi) && !belge.MuhasebeFisId.HasValue)
+            var fisZorunlu = OdemeYontemleri.NakitHareketiGerektirenler.Contains(belge.OdemeYontemi);
+            if (fisZorunlu && !belge.MuhasebeFisId.HasValue)
             {
                 nedenKodlari.Add(BakiyeyeDahilEdilmemeNedenKodlari.ZorunluMuhasebeFisiYok);
                 nedenAciklamalari.Add("Ödeme nakit/banka/POS hareketi doğurduğu hâlde bir muhasebe fişi üretilmemiş; muhasebe (kasa/banka) bakiyesini etkilemiyor.");
             }
-            else if (belge.MuhasebeFisId.HasValue
-                && dto.MuhasebeFisDurumu is not null
-                && dto.MuhasebeFisDurumu != MuhasebeFisDurumlari.Onayli
-                && dto.MuhasebeFisDurumu != MuhasebeFisDurumlari.TersKayit)
+            else if (belge.MuhasebeFisId.HasValue)
             {
-                nedenKodlari.Add(BakiyeyeDahilEdilmemeNedenKodlari.MuhasebeFisiIptalEdilmis);
-                nedenAciklamalari.Add($"Bağlı muhasebe fişi '{dto.MuhasebeFisDurumu}' durumunda; muhasebe bakiyesine yansımıyor.");
+                // ID'nin dolu olmasi TEK BASINA yeterli DEGILDIR - fis gercekten var mi, silinmis mi,
+                // mali etki olusturan durumda mi, dogru tesise mi ait, dogru kasa/banka hesabini mi
+                // etkiliyor: hepsi dogrulanir.
+                var fisSonucu = MuhasebeFisDogrulama.Degerlendir(
+                    dogrulanmisFis,
+                    beklenenTesisId: tesisId,
+                    kasaBankaHesabiKontrolEdilsinMi: belge.KasaBankaHesapId.HasValue);
+
+                if (!fisSonucu.GecerliMi)
+                {
+                    nedenKodlari.AddRange(fisSonucu.NedenKodlari);
+                    nedenAciklamalari.AddRange(fisSonucu.Aciklamalar);
+                }
             }
 
             // Kredi karti tahsilatinda POS valor zinciri gereklidir.
@@ -341,6 +431,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         if (kapamaHareketi is not null)
         {
             dto.EtkiledigiTutar = kapamaHareketi.BorcTutari - kapamaHareketi.AlacakTutari;
+            dto.EtkiledigiParaBirimi = string.IsNullOrWhiteSpace(kapamaHareketi.ParaBirimi) ? null : kapamaHareketi.ParaBirimi;
             dto.EtkiledigiCariVeyaBorc = kapamaHareketi.IliskiliCariHareketId.HasValue
                 ? $"{dto.CariUnvan} - kapatılan cari hareket #{kapamaHareketi.IliskiliCariHareketId}"
                 : dto.CariUnvan;
@@ -362,14 +453,17 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         await _tesisScopeService.EnsureCanAccessTesisAsync(cari.TesisId ?? throw new BaseException("Carinin tesisi belirlenemedi.", 400), cancellationToken);
 
+        var baslangicUst = filter.TarihBaslangic?.ToDateTime(TimeOnly.MinValue);
+        var bitisUst = filter.TarihBitis?.AddDays(1).ToDateTime(TimeOnly.MinValue);
+
         var hareketQuery = _dbContext.CariHareketler.AsNoTracking().Where(h => !h.IsDeleted && h.CariKartId == cari.Id);
-        if (filter.TarihBaslangic.HasValue)
+        if (baslangicUst.HasValue)
         {
-            hareketQuery = hareketQuery.Where(h => h.HareketTarihi >= filter.TarihBaslangic.Value.ToDateTime(TimeOnly.MinValue));
+            hareketQuery = hareketQuery.Where(h => h.HareketTarihi >= baslangicUst.Value);
         }
-        if (filter.TarihBitis.HasValue)
+        if (bitisUst.HasValue)
         {
-            hareketQuery = hareketQuery.Where(h => h.HareketTarihi < filter.TarihBitis.Value.AddDays(1).ToDateTime(TimeOnly.MinValue));
+            hareketQuery = hareketQuery.Where(h => h.HareketTarihi < bitisUst.Value);
         }
 
         var hareketler = await hareketQuery
@@ -377,12 +471,34 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             .Select(h => new { h.Id, h.HareketTarihi, h.BelgeTuru, h.BelgeNo, h.Aciklama, h.BorcTutari, h.AlacakTutari, h.KalanTutar, h.Durum, h.KaynakModul, h.KaynakId, h.KapandiMi, h.ParaBirimi })
             .ToListAsync(cancellationToken);
 
+        // DEVREDEN BAKIYE: tarih araligi baslangicindan ONCEKI aktif hareketlerin net etkisi.
+        // Bu hareketler donem icinde gosterilmez ama bakiyeye GERCEKTEN dahildir - yok sayilirsa
+        // acilis bakiyesinden baslamak yanlis bir kalan bakiye uretirdi.
+        var devredenler = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        if (baslangicUst.HasValue)
+        {
+            var oncekiler = await _dbContext.CariHareketler.AsNoTracking()
+                .Where(h => !h.IsDeleted && h.CariKartId == cari.Id
+                    && h.HareketTarihi < baslangicUst.Value
+                    && h.Durum == CariHareketDurumlari.Aktif)
+                .GroupBy(h => h.ParaBirimi)
+                .Select(g => new { ParaBirimi = g.Key, Net = g.Sum(x => x.BorcTutari - x.AlacakTutari) })
+                .ToListAsync(cancellationToken);
+
+            foreach (var o in oncekiler)
+            {
+                devredenler[NormalizeParaBirimi(o.ParaBirimi)] = o.Net;
+            }
+        }
+
         var dto = new CariHareketDokumDto
         {
             CariKartId = cari.Id,
             CariUnvan = cari.UnvanAdSoyad,
             AcilisBakiyeTutari = cari.AcilisBakiyeTutari ?? 0m,
-            AcilisBakiyeYonu = cari.AcilisBakiyeYonu
+            AcilisBakiyeYonu = cari.AcilisBakiyeYonu,
+            TarihBaslangic = filter.TarihBaslangic,
+            TarihBitis = filter.TarihBitis
         };
 
         // Para birimi bazinda AYRI kumulatif bakiye - farkli para birimleri ASLA tek toplamda
@@ -398,18 +514,29 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         {
             if (!ozetler.TryGetValue(paraBirimi, out var o))
             {
-                o = new CariBakiyeParaBirimiOzetiDto { ParaBirimi = paraBirimi };
-                ozetler[paraBirimi] = o;
                 // Acilis bakiyesi yalnizca RAPORLAMA para biriminde anlamlidir (CariKart'ta acilis
                 // bakiyesinin para birimi alani yoktur) - baska para birimleri sifirdan baslar.
-                kumulatifler[paraBirimi] = string.Equals(paraBirimi, "TRY", StringComparison.OrdinalIgnoreCase) ? acilisNet : 0m;
+                var acilis = string.Equals(paraBirimi, RaporlamaParaBirimi, StringComparison.OrdinalIgnoreCase) ? acilisNet : 0m;
+                var devreden = acilis + devredenler.GetValueOrDefault(paraBirimi);
+
+                o = new CariBakiyeParaBirimiOzetiDto { ParaBirimi = paraBirimi, DevredenBakiye = devreden };
+                ozetler[paraBirimi] = o;
+                kumulatifler[paraBirimi] = devreden;
             }
             return o;
         }
 
+        // Donem oncesi hareketi olan ama donem ICINDE hic hareketi olmayan para birimleri de
+        // ozette gorunmeli (devreden bakiyeleri sifir degil).
+        foreach (var pbKey in devredenler.Keys)
+        {
+            OzetAl(pbKey);
+        }
+
         foreach (var h in hareketler)
         {
-            var pb = string.IsNullOrWhiteSpace(h.ParaBirimi) ? "TRY" : h.ParaBirimi;
+            // Bos para birimi TRY VARSAYILMAZ - "Bilinmiyor" olarak ayri izlenir.
+            var pb = NormalizeParaBirimi(h.ParaBirimi);
             var ozet = OzetAl(pb);
             var hesaplamaDisi = h.Durum != CariHareketDurumlari.Aktif;
 
@@ -447,17 +574,35 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // Bu cariye ait POS tutarlari - DURUM BAZINDA AYRI (normal bekleyen, mutabakat ve hata
         // BIRLESTIRILMEZ) ve para birimi bazinda. Bunlar cari bakiyesine OTOMATIK EKLENMEZ; yalnizca
         // farkin nereden gelebilecegini aciklamak icin gosterilir.
-        var posTutarlari = await (
+        //
+        // TARIH KAPSAMI: POS kayitlari, cari hareketlerle AYNI tarih araligini kullanmalidir. Bir
+        // POS valorunun cari bakiyesini etkileyen olayi, kaynak TAHSILAT belgesinin tarihidir
+        // (TahsilatOdemeBelgesi.BelgeTarihi) - cari hareket de bu belgeden dogar. Bu nedenle
+        // filtreleme belge tarihine gore yapilir; OdemeTarihi/BeklenenValorTarihi/AktarimTarihi
+        // birbirinin yerine KULLANILMAZ.
+        var posQuery =
             from v in _dbContext.PosTahsilatValorleri.AsNoTracking()
             join b in _dbContext.TahsilatOdemeBelgeleri.AsNoTracking() on v.TahsilatOdemeBelgesiId equals b.Id
             where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id
-            group v by new { v.Durum, v.ParaBirimi } into g
-            select new { g.Key.Durum, g.Key.ParaBirimi, Toplam = g.Sum(x => x.NetTutar) })
+            select new { v.Durum, v.ParaBirimi, v.NetTutar, BelgeTarihi = (DateTime?)b.BelgeTarihi };
+
+        if (baslangicUst.HasValue)
+        {
+            posQuery = posQuery.Where(x => x.BelgeTarihi >= baslangicUst.Value);
+        }
+        if (bitisUst.HasValue)
+        {
+            posQuery = posQuery.Where(x => x.BelgeTarihi < bitisUst.Value);
+        }
+
+        var posTutarlari = await posQuery
+            .GroupBy(x => new { x.Durum, x.ParaBirimi })
+            .Select(g => new { g.Key.Durum, g.Key.ParaBirimi, Toplam = g.Sum(x => x.NetTutar) })
             .ToListAsync(cancellationToken);
 
         foreach (var p in posTutarlari)
         {
-            var pb = string.IsNullOrWhiteSpace(p.ParaBirimi) ? "TRY" : p.ParaBirimi;
+            var pb = NormalizeParaBirimi(p.ParaBirimi);
             var ozet = OzetAl(pb);
             switch (p.Durum)
             {
@@ -480,14 +625,51 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             }
         }
 
+        // Tarih araligi verildiginde, kaynak belge tarihi BELIRSIZ olan POS kayitlari doneme
+        // SESSIZCE katilmaz; ayrica uyari olarak raporlanir.
+        if (baslangicUst.HasValue || bitisUst.HasValue)
+        {
+            var tarihsizPos = await (
+                from v in _dbContext.PosTahsilatValorleri.AsNoTracking()
+                join b in _dbContext.TahsilatOdemeBelgeleri.AsNoTracking() on v.TahsilatOdemeBelgesiId equals b.Id
+                where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id && b.BelgeTarihi == default
+                group v by v.ParaBirimi into g
+                select new { ParaBirimi = g.Key, Toplam = g.Sum(x => x.NetTutar), Adet = g.Count() })
+                .ToListAsync(cancellationToken);
+
+            foreach (var t in tarihsizPos)
+            {
+                var pb = NormalizeParaBirimi(t.ParaBirimi);
+                OzetAl(pb).DonemeKatilmayanBelirsizTarihliPos += t.Toplam;
+                dto.Uyarilar.Add(
+                    $"{t.Adet} adet POS kaydının kaynak belge tarihi tanımsız ({pb} {t.Toplam:N2}); tarih aralığına güvenilir biçimde dahil edilemediği için dönem toplamlarına katılmadı.");
+            }
+        }
+
         foreach (var (pb, ozet) in ozetler)
         {
             ozet.AciklananKalanBakiye = kumulatifler[pb];
         }
 
+        if (ozetler.ContainsKey(BilinmeyenParaBirimi))
+        {
+            dto.Uyarilar.Add("Para birimi tanımsız kayıtlar bulundu; bunlar TRY varsayılmadı, ayrı 'Bilinmiyor' grubunda gösterildi.");
+        }
+
         dto.ParaBirimiOzetleri = [.. ozetler.Values.OrderBy(x => x.ParaBirimi)];
         return dto;
     }
+
+    /// <summary>Acilis bakiyesinin varsayilan olarak ait sayildigi para birimi (CariKart'ta acilis
+    /// bakiyesi icin ayri bir para birimi alani YOKTUR).</summary>
+    private const string RaporlamaParaBirimi = "TRY";
+
+    /// <summary>Para birimi tanimsiz kayitlarin etiketi - TRY VARSAYILMAZ.</summary>
+    private const string BilinmeyenParaBirimi = "Bilinmiyor";
+
+    /// <summary>Bos para birimi TRY VARSAYILMAZ - ayri "Bilinmiyor" etiketiyle izlenir.</summary>
+    private static string NormalizeParaBirimi(string? paraBirimi) =>
+        string.IsNullOrWhiteSpace(paraBirimi) ? BilinmeyenParaBirimi : paraBirimi.Trim().ToUpperInvariant();
 
     public async Task<List<BeyanEdilenOdemeEslesmeDto>> KarsilastirAsync(BeyanEdilenOdemeKarsilastirmaFilterDto filter, CancellationToken cancellationToken = default)
     {
@@ -529,6 +711,33 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             .ToListAsync(cancellationToken);
 
         var beyanNormalize = NormalizeReferans(filter.BelgeNoTahmini);
+
+        // TEKILLIK DOGRULAMASI: normalize edilmis referans yetki kapsaminda BIRDEN FAZLA kayda
+        // karsilik geliyorsa hicbiri "Kesin" sayilamaz (hangisinin dogru oldugu bilinemez).
+        var referansTekilMi = true;
+        if (beyanNormalize is not null)
+        {
+            var ayniReferansliAdaylar = adaylar
+                .Count(a => string.Equals(NormalizeReferans(a.BelgeNo), beyanNormalize, StringComparison.Ordinal));
+
+            if (ayniReferansliAdaylar <= 1)
+            {
+                // Aday listesi tarih/tutar ile daralmis oldugundan, tekilligi TUM yetki kapsaminda
+                // (tarih/tutar filtresi olmadan) ayrica dogrula - ayni belge no baska tarih/tutarla
+                // da bulunuyorsa referans benzersiz DEGILDIR.
+                var kapsamdakiToplam = await _dbContext.TahsilatOdemeBelgeleri.AsNoTracking()
+                    .Where(b => !b.IsDeleted && b.CariKart != null && b.CariKart.TesisId.HasValue
+                        && tesisIds.Contains(b.CariKart.TesisId.Value))
+                    .Select(b => b.BelgeNo)
+                    .Where(no => no != null)
+                    .ToListAsync(cancellationToken);
+
+                ayniReferansliAdaylar = kapsamdakiToplam
+                    .Count(no => string.Equals(NormalizeReferans(no), beyanNormalize, StringComparison.Ordinal));
+            }
+
+            referansTekilMi = ayniReferansliAdaylar <= 1;
+        }
 
         var sonuc = new List<BeyanEdilenOdemeEslesmeDto>();
         foreach (var a in adaylar)
@@ -575,12 +784,25 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             string guven;
             string gerekce;
 
-            if (referansBirebirEslesti)
+            if (referansBirebirEslesti && referansTekilMi && !celiskiVar)
             {
                 guven = OdemeGuvenSeviyeleri.Kesin;
                 gerekce = tarihBirebir
-                    ? "Belge/dekont numarası birebir eşleşiyor; tutar, para birimi ve tarih de uyuşuyor."
-                    : $"Belge/dekont numarası birebir eşleşiyor; tutar ve para birimi uyuşuyor. Tarih birebir DEĞİL, ±{tarihFarki} gün fark var.";
+                    ? "Belge/dekont numarası birebir ve TEKİL olarak eşleşiyor; tutar, para birimi ve tarih de uyuşuyor."
+                    : $"Belge/dekont numarası birebir ve TEKİL olarak eşleşiyor; tutar ve para birimi uyuşuyor. Tarih birebir DEĞİL, ±{tarihFarki} gün fark var.";
+            }
+            else if (referansBirebirEslesti && !referansTekilMi)
+            {
+                // Ayni normalize referansa birden fazla aday var - hangisinin dogru oldugu
+                // bilinemeyeceginden KESIN eslesme URETILMEZ.
+                guven = OdemeGuvenSeviyeleri.YuksekOlasilik;
+                gerekce = "Belge/dekont numarası eşleşiyor ANCAK aynı numaraya sahip birden fazla kayıt bulunduğu için hangisinin doğru olduğu kesinleştirilemedi.";
+                uyusmayan.Add("Referans tekilliği (aynı numaraya sahip birden fazla kayıt var)");
+            }
+            else if (referansBirebirEslesti && celiskiVar)
+            {
+                guven = OdemeGuvenSeviyeleri.YuksekOlasilik;
+                gerekce = "Belge/dekont numarası eşleşiyor ANCAK beyan edilen ödeme yöntemi/hesabı bu kayıtla çelişiyor; kesin eşleşme sayılmadı.";
             }
             else if (!celiskiVar && (yontemVerildi || hesapVerildi))
             {
@@ -609,7 +831,11 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 EslesenAlanlar = eslesen,
                 UyusmayanAlanlar = uyusmayan,
                 TarihBirebirMi = tarihBirebir,
-                TarihFarkiGun = tarihFarki
+                TarihFarkiGun = tarihFarki,
+                KullanilanNormalizasyon = beyanNormalize is null
+                    ? "Referans verilmedi."
+                    : "Harf/rakam dışındaki ayırıcı karakterler temizlendi, büyük harfe çevrildi; kısmi metin eşleşmesi KULLANILMADI.",
+                ReferansTekilMi = beyanNormalize is null ? null : referansTekilMi
             });
         }
 

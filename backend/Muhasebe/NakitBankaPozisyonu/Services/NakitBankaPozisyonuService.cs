@@ -117,6 +117,8 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         // Muhasebe bakiyesi tarafi bundan BAGIMSIZDIR: fis satirlari gercek FisTarihi tasidigi icin
         // gecmis tarihli muhasebe bakiyesi hesaplanmaya devam eder.
         List<ValorProjeksiyon> valorKayitlari = [];
+        var fisDogrulamalari = new Dictionary<int, DogrulanmisFis>();
+        var fisEtkilenenHesaplar = new Dictionary<int, HashSet<int>>();
         if (gecmisTarihRaporuMu)
         {
             sonuc.PosPozisyonuHesaplandiMi = false;
@@ -135,9 +137,53 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
             valorKayitlari = await _dbContext.PosTahsilatValorleri.AsNoTracking()
                 .Where(v => !v.IsDeleted && tesisIds.Contains(v.TesisId))
                 .Select(v => new ValorProjeksiyon(
-                    v.Id, v.BagliBankaHesapId, v.Durum, v.BeklenenValorTarihi, v.BrutTutar, v.KomisyonTutari, v.NetTutar,
+                    v.Id, v.TesisId, v.BagliBankaHesapId, v.Durum, v.BeklenenValorTarihi, v.BrutTutar, v.KomisyonTutari, v.NetTutar,
                     v.ParaBirimi, v.MuhasebeFisId, v.TersKayitMuhasebeFisId))
                 .ToListAsync(cancellationToken);
+
+            // Valorlerin isaret ettigi fisleri TEK sorguda, IgnoreQueryFilters ile (soft-delete
+            // edilmis fisi "bulunamadi" degil "silinmis" olarak ayirt edebilmek icin) dogrula.
+            // Ayrica fis SATIRLARINDAN, beklenen kasa/banka hesabinin gercekten etkilenip
+            // etkilenmedigi tespit edilir - N+1 YOK, iki gruplu sorgu.
+            var fisIdleri = valorKayitlari
+                .SelectMany(v => new[] { v.MuhasebeFisId, v.TersKayitMuhasebeFisId })
+                .Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+
+            if (fisIdleri.Count > 0)
+            {
+                var fisler = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
+                    .Where(f => fisIdleri.Contains(f.Id))
+                    .Select(f => new { f.Id, f.IsDeleted, f.Durum, f.TesisId, f.MaliYil, f.Donem, f.FisTarihi })
+                    .ToListAsync(cancellationToken);
+
+                // (FisId, KasaBankaHesapId) - fis satirlarinda hangi kasa/banka hesaplarinin
+                // etkilendigi. Yalnizca ilgili fisler icin, tek sorgu.
+                var fisHesapEtkileri = await _dbContext.MuhasebeFisSatirlari.IgnoreQueryFilters().AsNoTracking()
+                    .Where(s => !s.IsDeleted && fisIdleri.Contains(s.MuhasebeFisId) && s.KasaBankaHesapId.HasValue)
+                    .Select(s => new { s.MuhasebeFisId, KasaBankaHesapId = s.KasaBankaHesapId!.Value })
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                var etkilenenHesaplar = fisHesapEtkileri
+                    .GroupBy(x => x.MuhasebeFisId)
+                    .ToDictionary(g => g.Key, g => g.Select(x => x.KasaBankaHesapId).ToHashSet());
+
+                foreach (var f in fisler)
+                {
+                    fisDogrulamalari[f.Id] = new DogrulanmisFis(
+                        FisId: f.Id,
+                        Bulundu: true,
+                        SoftDeleteEdilmis: f.IsDeleted,
+                        Durum: f.Durum,
+                        TesisId: f.TesisId,
+                        MaliYil: f.MaliYil,
+                        Donem: f.Donem,
+                        FisTarihi: f.FisTarihi,
+                        BeklenenKasaBankaHesabiEtkilenmisMi: null); // hesap bazli deger asagida kayit basina cozulur
+                }
+
+                fisEtkilenenHesaplar = etkilenenHesaplar;
+            }
         }
 
         // 5) Kasa satirlari.
@@ -188,7 +234,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
 
             foreach (var v in valorKayitlari.Where(v => v.BagliBankaHesapId == h.Id))
             {
-                UygulaValorKaydi(v, h, dto, raporTarihi, muhasebeBaglantisiGecerli, uyarilar);
+                UygulaValorKaydi(v, h, dto, raporTarihi, muhasebeBaglantisiGecerli, uyarilar, fisDogrulamalari, fisEtkilenenHesaplar);
             }
 
             dto.ToplamBekleyenNet = dto.ValoruGecmisBekleyenNet + dto.BugunGelecekNet + dto.YarinGelecekNet
@@ -206,23 +252,45 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         // 7) BagliBankaHesapId dolu ama bu tesis kapsaminda hicbir aktif banka hesabina karsilik
         //    GELMEYEN (yok/pasif/silinmis) kayitlar - hesaplar dongusune hic girmediginden burada
         //    AYRICA tespit edilir (aksi halde sessizce kaybolurlardi).
+        //    Bu kayitlar HICBIR banka DTO'suna baglanamadigi icin tutarlari yalnizca uyari metninde
+        //    kalmamali - genel UyariliTutarlar ozetine de girmeli (bkz. baglanamayanUyariliTutarlar).
+        var baglanamayanUyariliTutarlar = new List<UyariliTutarOzetiDto>();
+
+        void EkleBaglanamayan(string uyariTipi, string? paraBirimi, decimal netTutar, string aciklama)
+        {
+            var pb = NormalizeParaBirimi(paraBirimi);
+            var mevcut = baglanamayanUyariliTutarlar.FirstOrDefault(x => x.UyariTipi == uyariTipi && x.ParaBirimi == pb);
+            if (mevcut is null)
+            {
+                baglanamayanUyariliTutarlar.Add(new UyariliTutarOzetiDto
+                {
+                    UyariTipi = uyariTipi, ParaBirimi = pb, Adet = 1, ToplamNetTutar = netTutar, Aciklama = aciklama
+                });
+                return;
+            }
+            mevcut.Adet++;
+            mevcut.ToplamNetTutar += netTutar;
+        }
+
         foreach (var v in valorKayitlari.Where(v => v.BagliBankaHesapId.HasValue && !tumBankaHesapKimlikleri.ContainsKey(v.BagliBankaHesapId!.Value)))
         {
-            uyarilar.Ekle(NakitBankaPozisyonuUyariTipleri.BankaHesabiBulunamadiVeyaPasif, v.BagliBankaHesapId, v.Id, v.NetTutar,
-                "POS valör kaydının bağlı olduğu banka hesabı bulunamadı, silinmiş veya pasif.", v.ParaBirimi);
+            const string aciklama = "POS valör kaydının bağlı olduğu banka hesabı bulunamadı, silinmiş veya pasif.";
+            uyarilar.Ekle(NakitBankaPozisyonuUyariTipleri.BankaHesabiBulunamadiVeyaPasif, v.BagliBankaHesapId, v.Id, v.NetTutar, aciklama, v.ParaBirimi);
+            EkleBaglanamayan(NakitBankaPozisyonuUyariTipleri.BankaHesabiBulunamadiVeyaPasif, v.ParaBirimi, v.NetTutar, aciklama);
         }
 
         // 8) Hedef banka hesabi tanimsiz (BagliBankaHesapId NULL) kayitlar.
         foreach (var v in valorKayitlari.Where(v => !v.BagliBankaHesapId.HasValue))
         {
-            uyarilar.Ekle(NakitBankaPozisyonuUyariTipleri.PosValorHedefBankaBelirlenemiyor, null, v.Id, v.NetTutar,
-                "POS valör kaydının hedef banka hesabı (BagliBankaHesapId) belirlenemiyor.", v.ParaBirimi);
+            const string aciklama = "POS valör kaydının hedef banka hesabı (BagliBankaHesapId) belirlenemiyor.";
+            uyarilar.Ekle(NakitBankaPozisyonuUyariTipleri.PosValorHedefBankaBelirlenemiyor, null, v.Id, v.NetTutar, aciklama, v.ParaBirimi);
+            EkleBaglanamayan(NakitBankaPozisyonuUyariTipleri.PosValorHedefBankaBelirlenemiyor, v.ParaBirimi, v.NetTutar, aciklama);
         }
 
         BuildYapisalUyarilar(hesaplar, hesapPlaniLookup, uyarilar);
 
         sonuc.Uyarilar = uyarilar.Listele();
-        sonuc.Ozet = BuildOzet(sonuc, gecmisTarihRaporuMu);
+        sonuc.Ozet = BuildOzet(sonuc, gecmisTarihRaporuMu, baglanamayanUyariliTutarlar);
 
         return sonuc;
     }
@@ -336,7 +404,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
     private sealed record HesapPlaniProjeksiyon(int Id, string TamKod, string Ad, bool IsDeleted, bool AktifMi);
 
     private sealed record ValorProjeksiyon(
-        int Id, int? BagliBankaHesapId, string Durum, DateOnly BeklenenValorTarihi, decimal BrutTutar,
+        int Id, int TesisId, int? BagliBankaHesapId, string Durum, DateOnly BeklenenValorTarihi, decimal BrutTutar,
         decimal KomisyonTutari, decimal NetTutar, string ParaBirimi, int? MuhasebeFisId, int? TersKayitMuhasebeFisId);
 
     // ─────────────────────────────────────────────────────────────
@@ -367,7 +435,9 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
     /// NormalBekleyen kategorisi tarih bucket'larina ve dolayisiyla tahmini bakiyeye katilir.</summary>
     private static void UygulaValorKaydi(
         ValorProjeksiyon v, HesapProjeksiyon h, BankaHesapPozisyonuDto dto, DateOnly raporTarihi,
-        bool muhasebeBaglantisiGecerli, UyariToplayici uyarilar)
+        bool muhasebeBaglantisiGecerli, UyariToplayici uyarilar,
+        IReadOnlyDictionary<int, DogrulanmisFis> fisDogrulamalari,
+        IReadOnlyDictionary<int, HashSet<int>> fisEtkilenenHesaplar)
     {
         var siniflandirma = PosValorFinansalSiniflandirici.Siniflandir(new PosValorSiniflandirmaGirdisi(
             Durum: v.Durum,
@@ -380,7 +450,11 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
             MuhasebeFisId: v.MuhasebeFisId,
             TersKayitMuhasebeFisId: v.TersKayitMuhasebeFisId,
             BankaHesabiGecerliMi: true, // bu dala girildiyse hesap zaten aktif+silinmemis yuklenmistir
-            MuhasebeHesabiGecerliMi: muhasebeBaglantisiGecerli));
+            MuhasebeHesabiGecerliMi: muhasebeBaglantisiGecerli,
+            DogrulanmisAktarimFisi: CozumleFis(v.MuhasebeFisId, h.Id, fisDogrulamalari, fisEtkilenenHesaplar),
+            DogrulanmisTersKayitFisi: CozumleFis(v.TersKayitMuhasebeFisId, h.Id, fisDogrulamalari, fisEtkilenenHesaplar),
+            ValorTesisId: v.TesisId,
+            BankaHesabiTesisId: h.TesisId));
 
         switch (siniflandirma.Kategori)
         {
@@ -443,11 +517,38 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         }
     }
 
+    /// <summary>Bir fis id'sini, sorgu katmaninda toplanan dogrulama bilgisine cozer. ID dolu oldugu
+    /// halde sozlukte yoksa fis GERCEKTEN bulunamamis demektir (Bulundu=false doner) - bu, "ID dolu
+    /// oldugu icin gecerli sayma" hatasini yapisal olarak engeller.</summary>
+    private static DogrulanmisFis? CozumleFis(
+        int? fisId, int beklenenKasaBankaHesapId,
+        IReadOnlyDictionary<int, DogrulanmisFis> fisDogrulamalari,
+        IReadOnlyDictionary<int, HashSet<int>> fisEtkilenenHesaplar)
+    {
+        if (!fisId.HasValue)
+        {
+            return null;
+        }
+
+        if (!fisDogrulamalari.TryGetValue(fisId.Value, out var fis))
+        {
+            return new DogrulanmisFis(fisId.Value, Bulundu: false, SoftDeleteEdilmis: false,
+                Durum: null, TesisId: null, MaliYil: null, Donem: null, FisTarihi: null,
+                BeklenenKasaBankaHesabiEtkilenmisMi: null);
+        }
+
+        var hesapEtkilenmis = fisEtkilenenHesaplar.TryGetValue(fisId.Value, out var hesaplar)
+            && hesaplar.Contains(beklenenKasaBankaHesapId);
+
+        return fis with { BeklenenKasaBankaHesabiEtkilenmisMi = hesapEtkilenmis };
+    }
+
     /// <summary>Normal toplamin disinda kalan tutarlari, hesap bazinda (UyariTipi, ParaBirimi)
     /// kiriliminda toplar - farkli para birimleri ASLA birlestirilmez.</summary>
     private static void EkleUyariliTutar(BankaHesapPozisyonuDto dto, string uyariTipi, string? paraBirimi, decimal netTutar, string aciklama)
     {
-        var pb = string.IsNullOrWhiteSpace(paraBirimi) ? "?" : paraBirimi;
+        // Bos para birimi TRY VARSAYILMAZ - "Bilinmiyor" olarak AYRI gosterilir.
+        var pb = NormalizeParaBirimi(paraBirimi);
         var mevcut = dto.UyariliTutarlar.FirstOrDefault(x => x.UyariTipi == uyariTipi && x.ParaBirimi == pb);
         if (mevcut is null)
         {
@@ -466,7 +567,8 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         mevcut.ToplamNetTutar += netTutar;
     }
 
-    private static NakitBankaPozisyonuOzetDto BuildOzet(NakitBankaPozisyonuDto sonuc, bool gecmisTarihRaporuMu)
+    private static NakitBankaPozisyonuOzetDto BuildOzet(
+        NakitBankaPozisyonuDto sonuc, bool gecmisTarihRaporuMu, IReadOnlyList<UyariliTutarOzetiDto> baglanamayanUyariliTutarlar)
     {
         // ONEMLI: genel ozet kartlari yalnizca RAPORLAMA (TRY) para birimindeki hesaplarin
         // toplamini yansitir - farkli para birimindeki hesaplar buraya KARISTIRILMAZ (kur donusum
@@ -506,6 +608,9 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         // para birimleri BIRLESTIRILMEDEN.
         ozet.UyariliTutarlar = [.. sonuc.BankaHesaplari
             .SelectMany(x => x.UyariliTutarlar)
+            // Hicbir banka hesabina baglanamayan (hedef hesap yok/pasif/silinmis) kayitlarin
+            // tutarlari da ozete DAHIL edilir - aksi halde yalnizca uyari metninde kalirlardi.
+            .Concat(baglanamayanUyariliTutarlar)
             .GroupBy(x => (x.UyariTipi, x.ParaBirimi))
             .Select(g => new UyariliTutarOzetiDto
             {
@@ -621,10 +726,12 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
 
         // Bir muhasebe hesabina birden fazla aktif banka/IBAN hesabi baglanmis mi.
         //
-        // ONEMLI - ANAHTAR (TesisId, MuhasebeHesapPlaniId): MuhasebeHesapPlani tesisten BAGIMSIZ
-        // (global) bir tablodur; ayni hesap planinin FARKLI tesislerde birer banka hesabina
-        // baglanmasi NORMAL bir kurulumdur ve mukerrerlik DEGILDIR. Gercek mukerrerlik ancak AYNI
-        // TESIS icinde ayni hesap planina birden fazla aktif banka hesabi baglandiginda vardir.
+        // ONEMLI - ANAHTAR (TesisId, MuhasebeHesapPlaniId): MuhasebeHesapPlani.TesisId NULLABLE'dir,
+        // yani bir hesap plani tesise ozel de olabilir, tesisler arasi paylasilan (TesisId=null) da.
+        // Paylasilan bir hesap planinin FARKLI tesislerde birer banka hesabina baglanmasi NORMAL bir
+        // kurulumdur ve mukerrerlik DEGILDIR. Gercek mukerrerlik ancak AYNI TESIS icinde ayni hesap
+        // planina birden fazla aktif banka hesabi baglandiginda vardir - bu yuzden gruplama anahtari
+        // banka hesabinin TesisId'sini de icerir.
         //
         // TERS YON (bir banka hesabinin birden fazla aktif muhasebe hesabina baglanmasi) semayla
         // yapisal olarak IMKANSIZDIR - KasaBankaHesap.MuhasebeHesapPlaniId TEKIL bir FK'dir. Bu iki
@@ -679,6 +786,13 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
 
         public List<VeriKalitesiUyariDto> Listele() => [.. _map.Values];
     }
+
+    /// <summary>Para birimi etiketini normalize eder. Bos/tanimsiz deger TRY VARSAYILMAZ - ayri bir
+    /// "Bilinmiyor" etiketiyle gosterilir ki hicbir gercek para birimi toplamina karismasin.</summary>
+    internal const string BilinmeyenParaBirimi = "Bilinmiyor";
+
+    private static string NormalizeParaBirimi(string? paraBirimi) =>
+        string.IsNullOrWhiteSpace(paraBirimi) ? BilinmeyenParaBirimi : paraBirimi.Trim().ToUpperInvariant();
 
     private static DateOnly BugunIstanbul()
     {

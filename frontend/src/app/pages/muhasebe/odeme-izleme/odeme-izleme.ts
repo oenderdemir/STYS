@@ -26,7 +26,10 @@ import {
     CariHareketDokumModel,
     DURUM_SECENEKLERI,
     GUVEN_SEVIYESI_LABELLARI,
+    KOPUKLUK_LABELLARI,
+    ODEME_ADAY_KAYNAKLARI,
     ODEME_YONTEMI_SECENEKLERI,
+    OdemeAdayiModel,
     OdemeAramaFilterModel,
     OdemeAramaSatiriModel,
     OdemeDetayModel,
@@ -83,6 +86,23 @@ export class OdemeIzlemePage implements OnInit {
     odemeYontemi: string | null = null;
     durum: string | null = null;
     sadeceFissizOlanlar = false;
+    muhasebeFisNo: string | null = null;
+    rezervasyonReferansNo: string | null = null;
+    iban: string | null = null;
+    olusturanKullanici: string | null = null;
+    maliYil: number | null = null;
+    donem: number | null = null;
+
+    // ── Capraz-kaynak arastirma ──
+    caprazVisible = false;
+    caprazLoading = false;
+    caprazAdaylar: OdemeAdayiModel[] = [];
+    caprazToplam = 0;
+    caprazSayfa = 1;
+    caprazSayfaBoyutu = 20;
+    caprazKopuklukTipi: string | null = null;
+    readonly kopuklukLabellari = KOPUKLUK_LABELLARI;
+    readonly adayKaynaklari = ODEME_ADAY_KAYNAKLARI;
 
     readonly odemeYontemiSecenekleri = ODEME_YONTEMI_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
@@ -201,6 +221,62 @@ export class OdemeIzlemePage implements OnInit {
         this.karsilastirSonuclari = [];
     }
 
+    openCaprazArama(): void {
+        this.caprazVisible = true;
+        this.caprazSayfa = 1;
+        this.loadCaprazArama();
+    }
+
+    caprazSayfaDegisti(event: { first?: number | null; rows?: number | null }): void {
+        const rows = event.rows ?? this.caprazSayfaBoyutu;
+        const yeniSayfa = Math.floor((event.first ?? 0) / rows) + 1;
+        if (yeniSayfa === this.caprazSayfa && rows === this.caprazSayfaBoyutu) {
+            return;
+        }
+        this.caprazSayfa = yeniSayfa;
+        this.caprazSayfaBoyutu = rows;
+        this.loadCaprazArama();
+    }
+
+    loadCaprazArama(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            return;
+        }
+
+        this.caprazLoading = true;
+        this.service
+            .caprazAra(this.caprazSayfa, this.caprazSayfaBoyutu, {
+                tesisId,
+                tarihBaslangic: this.toIsoDate(this.tarihBaslangic),
+                tarihBitis: this.toIsoDate(this.tarihBitis),
+                kopuklukTipi: this.caprazKopuklukTipi,
+                sadeceKopukOlanlar: true
+            })
+            .pipe(finalize(() => { this.caprazLoading = false; this.cdr.detectChanges(); }))
+            .subscribe({
+                next: (sonuc) => {
+                    this.caprazAdaylar = sonuc.items;
+                    this.caprazToplam = sonuc.totalCount;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => {
+                    this.caprazAdaylar = [];
+                    this.caprazToplam = 0;
+                    this.showError(error);
+                    this.cdr.detectChanges();
+                }
+            });
+    }
+
+    getKopuklukLabel(kod: string): string {
+        return this.kopuklukLabellari[kod] ?? kod;
+    }
+
+    getKaynakLabel(kaynak: string): string {
+        return this.adayKaynaklari[kaynak] ?? kaynak;
+    }
+
     calistirKarsilastirma(): void {
         const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
         if (!tesisId || this.beyanTutar == null) {
@@ -260,7 +336,13 @@ export class OdemeIzlemePage implements OnInit {
             tutarMax: this.tutarMax,
             odemeYontemi: this.odemeYontemi,
             durum: this.durum,
-            sadeceFissizOlanlar: this.sadeceFissizOlanlar || null
+            sadeceFissizOlanlar: this.sadeceFissizOlanlar || null,
+            muhasebeFisNo: this.muhasebeFisNo,
+            rezervasyonReferansNo: this.rezervasyonReferansNo,
+            iban: this.iban,
+            olusturanKullanici: this.olusturanKullanici,
+            maliYil: this.maliYil,
+            donem: this.donem
         };
     }
 

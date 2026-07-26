@@ -16,11 +16,21 @@ namespace STYS.Muhasebe.OdemeIzleme.Controllers;
 public class OdemeIzlemeController : UIController
 {
     private readonly IOdemeIzlemeService _service;
+    private readonly IOdemeCaprazAramaService _caprazAramaService;
 
-    public OdemeIzlemeController(IOdemeIzlemeService service)
+    public OdemeIzlemeController(IOdemeIzlemeService service, IOdemeCaprazAramaService caprazAramaService)
     {
         _service = service;
+        _caprazAramaService = caprazAramaService;
     }
+
+    /// <summary>Capraz-kaynak arastirma: odeme belgesi, cari hareket, POS valor, kasa/banka hareketi
+    /// ve muhasebe fisi kaynaklarindan BAGIMSIZ aday uretir ve iliski kopukluklarini raporlar.</summary>
+    [HttpGet("capraz-arama")]
+    [Permission(StructurePermissions.OdemeIzlemeYonetimi.View)]
+    public async Task<ActionResult<PagedResult<OdemeAdayiDto>>> CaprazAra(
+        [FromQuery] PagedRequest request, [FromQuery] OdemeCaprazAramaFilterDto filter, CancellationToken cancellationToken)
+        => Ok(await _caprazAramaService.AraAsync(request, filter, cancellationToken));
 
     [HttpGet]
     [Permission(StructurePermissions.OdemeIzlemeYonetimi.View)]

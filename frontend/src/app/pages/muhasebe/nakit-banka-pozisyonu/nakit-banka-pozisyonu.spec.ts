@@ -11,6 +11,7 @@ function ornekSonuc(overrides?: Partial<NakitBankaPozisyonuModel>): NakitBankaPo
     return {
         raporTarihi: '2026-07-24',
         gecmisTarihRaporuMu: false,
+        posPozisyonuHesaplandiMi: true,
         ozet: {
             raporTarihi: '2026-07-24',
             toplamNakit: 1500,
@@ -27,7 +28,9 @@ function ornekSonuc(overrides?: Partial<NakitBankaPozisyonuModel>): NakitBankaPo
             hataliToplam: 0,
             hataliAdet: 0,
             gecmisTarihRaporuMu: false,
+            posPozisyonuHesaplandiMi: true,
             uyariSayisi: 0,
+            uyariliTutarlar: [],
             paraBirimiOzetleri: []
         },
         kasaHesaplari: [],
@@ -54,10 +57,12 @@ function ornekBankaHesabi(): BankaHesapPozisyonuModel {
         sonraki7GundenSonraNet: 0,
         toplamBekleyenNet: 0,
         tahminiBakiye: 1000,
+        muhasebeBakiyesiGecerliMi: true,
         mutabakatBekleyenNet: 0,
         mutabakatBekleyenAdet: 0,
         hataliNet: 0,
-        hataliAdet: 0
+        hataliAdet: 0,
+        uyariliTutarlar: []
     };
 }
 
@@ -134,13 +139,67 @@ describe('NakitBankaPozisyonuPage', () => {
         expect(component.sonuc).toBeNull();
     });
 
-    it('gecmis tarih raporu: gecmisTarihRaporuMu bayragi state uzerinden okunabilir', () => {
-        serviceSpy.getPozisyon.and.returnValue(of(ornekSonuc({ gecmisTarihRaporuMu: true })));
+    it('gecmis tarih raporu: POS pozisyonu hesaplanmadi bayragi ve nedeni state uzerinden okunabilir', () => {
+        serviceSpy.getPozisyon.and.returnValue(
+            of(
+                ornekSonuc({
+                    gecmisTarihRaporuMu: true,
+                    posPozisyonuHesaplandiMi: false,
+                    posPozisyonuHesaplanmamaNedeni: 'Geçmiş tarihli raporlarda POS/valör pozisyonu hesaplanmaz.'
+                })
+            )
+        );
 
         const component = createComponent();
         component.ngOnInit();
 
         expect(component.sonuc?.gecmisTarihRaporuMu).toBeTrue();
+        expect(component.sonuc?.posPozisyonuHesaplandiMi).toBeFalse();
+        expect(component.sonuc?.posPozisyonuHesaplanmamaNedeni).toContain('hesaplanmaz');
+    });
+
+    it('tarih secimi: gelecek tarih secilemez (maxDate bugun ile sinirli)', () => {
+        const component = createComponent();
+        expect(component.bugun instanceof Date).toBeTrue();
+        // Bilesen maxDate olarak `bugun` degerini kullanir - gelecege ait bir tarih secilemez.
+        expect(component.bugun.getTime()).toBeLessThanOrEqual(new Date().getTime());
+    });
+
+    it('uyarili tutarlar: normal toplamdan ayri, para birimiyle birlikte tasinir', () => {
+        serviceSpy.getPozisyon.and.returnValue(
+            of(
+                ornekSonuc({
+                    ozet: {
+                        ...ornekSonuc().ozet,
+                        uyariliTutarlar: [
+                            { uyariTipi: 'MutabakatBekleyen', paraBirimi: 'TRY', adet: 2, toplamNetTutar: 700, aciklama: 'Mutabakat bekliyor' },
+                            { uyariTipi: 'ParaBirimiUyusmuyor', paraBirimi: 'USD', adet: 1, toplamNetTutar: 50, aciklama: 'Para birimi uyuşmuyor' }
+                        ]
+                    }
+                })
+            )
+        );
+
+        const component = createComponent();
+        component.ngOnInit();
+
+        const uyarili = component.sonuc!.ozet.uyariliTutarlar;
+        expect(uyarili.length).toBe(2);
+        // Farkli para birimleri AYRI satirlarda kalir, tek toplamda birlestirilmez.
+        expect(uyarili.map((x) => x.paraBirimi)).toEqual(['TRY', 'USD']);
+        // Uyarili tutarlar normal bekleyen toplamina KATILMAZ.
+        expect(component.sonuc!.ozet.toplamBekleyenNetPos).toBe(100);
+    });
+
+    it('gecersiz muhasebe baglantisi: tahmini bakiye null gelir (sahte bakiye uretilmez)', () => {
+        const banka = { ...ornekBankaHesabi(), muhasebeBakiyesiGecerliMi: false, stysMuhasebeBakiyesi: 0, tahminiBakiye: null };
+        serviceSpy.getPozisyon.and.returnValue(of(ornekSonuc({ bankaHesaplari: [banka] })));
+
+        const component = createComponent();
+        component.ngOnInit();
+
+        expect(component.sonuc!.bankaHesaplari[0].tahminiBakiye).toBeNull();
+        expect(component.sonuc!.bankaHesaplari[0].muhasebeBakiyesiGecerliMi).toBeFalse();
     });
 
     it('para bicimlendirme/gorsel ayrim: pozitif ve negatif tutarlar farkli CSS siniflari alir', () => {

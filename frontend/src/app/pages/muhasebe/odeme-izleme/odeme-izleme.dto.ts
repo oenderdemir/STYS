@@ -103,7 +103,12 @@ export interface OdemeDetayModel {
     degistirenKullanici?: string | null;
     degisiklikTarihi?: string | null;
     bakiyeyeDahilMi: boolean;
-    bakiyeyeDahilDegilGerekcesi?: string | null;
+    /** TamamenDahil | KismenDahil | DahilDegil */
+    bakiyeyeDahilEdilmeDurumu: string;
+    bakiyeyeDahilEdilmemeNedenKodlari: string[];
+    bakiyeyeDahilEdilmemeAciklamalari: string[];
+    etkiledigiCariVeyaBorc?: string | null;
+    etkiledigiTutar?: number | null;
     uyarilar: OdemeUyariModel[];
 }
 
@@ -126,8 +131,22 @@ export interface CariHareketDokumSatiriModel {
     kaynakModul?: string | null;
     kaynakId?: number | null;
     kapandiMi: boolean;
+    paraBirimi: string;
     kumulatifBakiye: number;
     hesaplamaDisiMi: boolean;
+}
+
+/** Para birimi bazinda ayristirilmis cari bakiye ozeti - farkli para birimleri BIRLESTIRILMEZ. */
+export interface CariBakiyeParaBirimiOzetiModel {
+    paraBirimi: string;
+    toplamBorc: number;
+    toplamAlacak: number;
+    iptalEdilmisTutar: number;
+    normalAktarilmayiBekleyenPos: number;
+    mutabakatBekleyenPos: number;
+    hataliPos: number;
+    aktarimSurecindekiPos: number;
+    aciklananKalanBakiye: number;
 }
 
 export interface CariHareketDokumModel {
@@ -136,11 +155,7 @@ export interface CariHareketDokumModel {
     acilisBakiyeTutari: number;
     acilisBakiyeYonu?: string | null;
     hareketler: CariHareketDokumSatiriModel[];
-    toplamBorc: number;
-    toplamAlacak: number;
-    toplamIptalEdilmisTutar: number;
-    aktarilmayiBekleyenPosTutari: number;
-    kalanBakiye: number;
+    paraBirimiOzetleri: CariBakiyeParaBirimiOzetiModel[];
 }
 
 export interface BeyanEdilenOdemeKarsilastirmaFilterModel {
@@ -165,6 +180,11 @@ export interface BeyanEdilenOdemeEslesmeModel {
     cariUnvan: string;
     guvenSeviyesi: string;
     gerekce: string;
+    eslesenAlanlar: string[];
+    uyusmayanAlanlar: string[];
+    /** Toleransli tarih eslesmesi "birebir" olarak GOSTERILMEZ. */
+    tarihBirebirMi: boolean;
+    tarihFarkiGun: number;
 }
 
 export const ODEME_YONTEMI_SECENEKLERI: Array<{ label: string; value: string | null }> = [

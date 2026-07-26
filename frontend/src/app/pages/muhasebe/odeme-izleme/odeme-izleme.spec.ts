@@ -118,7 +118,8 @@ describe('OdemeIzlemePage', () => {
             of({
                 id: 1, belgeNo: 'B-001', belgeTarihi: '2026-07-24', belgeTipi: 'Tahsilat', durum: 'Aktif', tutar: 500, paraBirimi: 'TRY',
                 odemeYontemi: 'Nakit', cariKartId: 10, cariKodu: 'C-01', cariUnvan: 'Test Müşteri', kapatildiMi: false,
-                bakiyeyeDahilMi: true, uyarilar: []
+                bakiyeyeDahilMi: true, bakiyeyeDahilEdilmeDurumu: 'TamamenDahil',
+                bakiyeyeDahilEdilmemeNedenKodlari: [], bakiyeyeDahilEdilmemeAciklamalari: [], uyarilar: []
             })
         );
 
@@ -128,6 +129,30 @@ describe('OdemeIzlemePage', () => {
 
         expect(component.detayVisible).toBeTrue();
         expect(component.detay?.belgeNo).toBe('B-001');
+    });
+
+    it('bakiyeye dahil edilmeme gerekcelerinin gosterilmesi: neden kodlari ve aciklamalar state uzerinden okunur', () => {
+        serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+        serviceSpy.getDetay.and.returnValue(
+            of({
+                id: 2, belgeNo: 'B-002', belgeTarihi: '2026-07-24', belgeTipi: 'Tahsilat', durum: 'Aktif', tutar: 500, paraBirimi: 'TRY',
+                odemeYontemi: 'Nakit', cariKartId: 10, cariKodu: 'C-01', cariUnvan: 'Test Müşteri', kapatildiMi: false,
+                bakiyeyeDahilMi: false,
+                bakiyeyeDahilEdilmeDurumu: 'DahilDegil',
+                bakiyeyeDahilEdilmemeNedenKodlari: ['CariHareketiYok', 'ZorunluMuhasebeFisiYok'],
+                bakiyeyeDahilEdilmemeAciklamalari: ['Cari hareket oluşmamış.', 'Muhasebe fişi üretilmemiş.'],
+                uyarilar: []
+            })
+        );
+
+        const component = createComponent();
+        component.ngOnInit();
+        component.openDetay(ornekSatir());
+
+        // Aktif belge OLMASINA RAGMEN otomatik "dahil" sayilmaz.
+        expect(component.detay?.bakiyeyeDahilMi).toBeFalse();
+        expect(component.detay?.bakiyeyeDahilEdilmeDurumu).toBe('DahilDegil');
+        expect(component.detay?.bakiyeyeDahilEdilmemeNedenKodlari.length).toBe(2);
     });
 
     it('getGuvenSeviyesiSeverity: her guven seviyesi beklenen renge eslenir', () => {
@@ -141,7 +166,11 @@ describe('OdemeIzlemePage', () => {
     it('calistirKarsilastirma: sonuclari state uzerinden okunabilir sekilde set eder', () => {
         serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
         serviceSpy.karsilastir.and.returnValue(
-            of([{ odemeId: 1, belgeNo: 'B-1', belgeTarihi: '2026-07-24', tutar: 100, paraBirimi: 'TRY', odemeYontemi: 'Nakit', cariUnvan: 'X', guvenSeviyesi: 'Kesin', gerekce: 'test' }])
+            of([{
+                odemeId: 1, belgeNo: 'B-1', belgeTarihi: '2026-07-24', tutar: 100, paraBirimi: 'TRY', odemeYontemi: 'Nakit',
+                cariUnvan: 'X', guvenSeviyesi: 'Kesin', gerekce: 'test',
+                eslesenAlanlar: ['Tutar', 'Belge/dekont no'], uyusmayanAlanlar: [], tarihBirebirMi: true, tarihFarkiGun: 0
+            }])
         );
 
         const component = createComponent();
@@ -151,6 +180,31 @@ describe('OdemeIzlemePage', () => {
 
         expect(component.karsilastirSonuclari.length).toBe(1);
         expect(component.karsilastirSonuclari[0].guvenSeviyesi).toBe('Kesin');
+    });
+
+    it('kismi belge no eslesmesi KESIN olarak gosterilmez ve toleransli tarih birebir sayilmaz', () => {
+        serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+        serviceSpy.karsilastir.and.returnValue(
+            of([{
+                odemeId: 2, belgeNo: 'B-2', belgeTarihi: '2026-07-23', tutar: 100, paraBirimi: 'TRY', odemeYontemi: 'Nakit',
+                cariUnvan: 'Y', guvenSeviyesi: 'IncelenmesiGereken',
+                gerekce: 'Yalnızca tutar, para birimi ve tarih uyuşuyor.',
+                eslesenAlanlar: ['Tutar', 'Para birimi'],
+                uyusmayanAlanlar: ['Belge/dekont no'],
+                tarihBirebirMi: false, tarihFarkiGun: 1
+            }])
+        );
+
+        const component = createComponent();
+        component.ngOnInit();
+        component.beyanTutar = 100;
+        component.calistirKarsilastirma();
+
+        const s = component.karsilastirSonuclari[0];
+        expect(s.guvenSeviyesi).not.toBe('Kesin');
+        expect(s.tarihBirebirMi).toBeFalse();
+        expect(s.tarihFarkiGun).toBe(1);
+        expect(component.getGuvenSeviyesiSeverity(s.guvenSeviyesi)).toBe('info');
     });
 
     it('para bicimlendirme: pozitif/negatif/sifir tutarlar farkli siniflar alir', () => {

@@ -707,12 +707,13 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 21) Gecmis rapor tarihinden ONCE aktarilmis (fisi rapor tarihinden ONCE tarihli) POS kaydi
-    //     bekleyen toplama GIRMEZ - muhasebe bakiyesi zaten aktarimi icerdigi icin (ayni FisTarihi
-    //     kriteriyle) mukerrer sayim olusmaz.
+    // 21) GECMIS TARIH KARARI: POS valor tarihcesi (iptal zamani / durum gecis gecmisi) veri
+    //     modelinde TUTULMADIGI icin gecmis tarihli raporda POS pozisyonu HIC hesaplanmaz - tum POS
+    //     tutarlari finansal toplamlarin disinda birakilir ve durum acikca bildirilir. Muhasebe
+    //     bakiyesi ise (gercek FisTarihi'ne dayandigi icin) gecmis tarihte hesaplanmaya DEVAM EDER.
     // ─────────────────────────────────────────────────────────────
     [IntegrationFact]
-    public async Task GecmisTarihte_RaporTarihindenOnceAktarilmisKayit_BekleyenTutaraGirmez()
+    public async Task GecmisTarih_PosPozisyonuHicHesaplanmaz_MuhasebeBakiyesiHesaplanmayaDevamEder()
     {
         var suffix = YeniSuffix();
         await using var dbContext = CreateDbContext();
@@ -723,33 +724,42 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
 
-        var raporTarihi = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-10));
-        var aktarimTarihi = raporTarihi.AddDays(-1).ToDateTime(TimeOnly.MinValue); // rapor tarihinden ONCE aktarilmis.
-        var fisId = await YeniFisAsync(dbContext, tesisId, aktarimTarihi, MuhasebeFisDurumlari.Onayli, (hpBanka, 980m, 0m));
+        var raporTarihi = BugunIstanbul().AddDays(-10);
 
+        // Rapor tarihinden ONCE tarihli, gercek bir muhasebe hareketi.
+        await YeniFisAsync(dbContext, tesisId, raporTarihi.AddDays(-1).ToDateTime(TimeOnly.MinValue), MuhasebeFisDurumlari.Onayli, (hpBanka, 750m, 0m));
+
+        // Bekleyen bir POS kaydi - gecmis raporda HICBIR toplama girmemeli.
         var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
-        await YeniValorAsync(
-            dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktarildi,
-            raporTarihi.AddDays(-1), 1000m, 20m, 980m, muhasebeFisId: fisId);
-        // Ayrica OdemeTarihi'ni aktarim tarihinden ONCEYE cekelim ki rapor tarihinde "var olan" kayit olsun.
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE [Muhasebe].[PosTahsilatValorleri] SET [OdemeTarihi] = {aktarimTarihi.AddDays(-1)} WHERE [Id] IN (SELECT Id FROM [Muhasebe].[PosTahsilatValorleri] WHERE [TahsilatOdemeBelgesiId] = {belge})");
+        await YeniValorAsync(dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor,
+            raporTarihi, 1000m, 20m, 980m);
 
         var svc = CreateService(dbContext, tesisId);
         var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = raporTarihi });
         var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
         Assert.True(sonuc.GecmisTarihRaporuMu);
+        Assert.False(sonuc.PosPozisyonuHesaplandiMi);
+        Assert.NotNull(sonuc.PosPozisyonuHesaplanmamaNedeni);
+        Assert.Contains(sonuc.Uyarilar, u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.GecmisTarihPosPozisyonuHesaplanmadi);
+
+        // POS'a ait HICBIR tutar uretilmedi.
         Assert.Equal(0m, banka.ToplamBekleyenNet);
-        Assert.Equal(980m, banka.StysMuhasebeBakiyesi); // muhasebe bakiyesi ayni FisTarihi kriteriyle zaten aktarimi icerir.
+        Assert.Equal(0m, banka.MutabakatBekleyenNet);
+        Assert.Equal(0m, banka.HataliNet);
+        Assert.Equal(0m, sonuc.Ozet.ToplamBekleyenNetPos);
+
+        // Muhasebe bakiyesi ise gercekten hesaplandi ve tahmini bakiye YALNIZCA ona esit.
+        Assert.Equal(750m, banka.StysMuhasebeBakiyesi);
+        Assert.Equal(750m, banka.TahminiBakiye);
+        Assert.Equal(750m, sonuc.Ozet.TahminiToplamBankaPozisyonu);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 22) Gecmiste, rapor tarihinden SONRA aktarilmis (fis tarihi rapor tarihinden sonra) kayit
-    //     hala BEKLEYEN sayilir - ileriki bir tarihte gerceklesen aktarim gecmis raporu bozmaz.
+    // 22) Bugunun raporunda POS pozisyonu normal sekilde hesaplanir.
     // ─────────────────────────────────────────────────────────────
     [IntegrationFact]
-    public async Task GecmisTarihte_RaporTarihindenSonraAktarilanKayit_HalaBekleyenSayilir()
+    public async Task BugunRaporu_PosPozisyonuHesaplanir()
     {
         var suffix = YeniSuffix();
         await using var dbContext = CreateDbContext();
@@ -759,27 +769,135 @@ public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
         var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
         var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
-
-        var raporTarihi = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-10));
-        var aktarimTarihi = raporTarihi.AddDays(3).ToDateTime(TimeOnly.MinValue); // rapor tarihinden SONRA aktarilmis.
-        var fisId = await YeniFisAsync(dbContext, tesisId, aktarimTarihi, MuhasebeFisDurumlari.Onayli, (hpBanka, 980m, 0m));
+        var bugun = BugunIstanbul();
 
         var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
-        await YeniValorAsync(
-            dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktarildi,
-            raporTarihi, 1000m, 20m, 980m, muhasebeFisId: fisId);
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE [Muhasebe].[PosTahsilatValorleri] SET [OdemeTarihi] = {raporTarihi.AddDays(-1).ToDateTime(TimeOnly.MinValue)} WHERE [TahsilatOdemeBelgesiId] = {belge}");
+        await YeniValorAsync(dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor,
+            bugun, 1000m, 20m, 980m);
 
         var svc = CreateService(dbContext, tesisId);
-        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = raporTarihi });
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
         var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
 
-        // Aktarim raporTarihi'nden SONRA gerceklesti - o gun icin hala BEKLEYEN sayilmali (rule c/e).
+        Assert.True(sonuc.PosPozisyonuHesaplandiMi);
         Assert.Equal(980m, banka.BugunGelecekNet);
         Assert.Equal(980m, banka.ToplamBekleyenNet);
-        // Fis rapor tarihinden SONRA tarihli oldugu icin muhasebe bakiyesi bu tarihte HENUZ onu icermez.
-        Assert.Equal(0m, banka.StysMuhasebeBakiyesi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 23) Tanınmayan durum + ara durumlar normal bekleyene GIRMEZ (allowlist davranisi).
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task AraDurumlarVeTaninmayanDurum_NormalBekleyeneGIRMEZ()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = BugunIstanbul();
+
+        var b1 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 100m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, b1, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.Aktariliyor, bugun, 100m, 0m, 100m);
+        var b2 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 200m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, b2, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.TersKayitOlusturuluyor, bugun, 200m, 0m, 200m);
+
+        // Projede TANIMLI OLMAYAN bir durum degeri - dogrudan SQL ile yazilir (guvenli varsayilan testi).
+        var b3 = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 400m, YeniSuffix());
+        var v3 = await YeniValorAsync(dbContext, tesisId, b3, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 400m, 0m, 400m);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[PosTahsilatValorleri] SET [Durum] = 'GelecektekiYeniDurum' WHERE [Id] = {v3}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+
+        Assert.Equal(0m, banka.ToplamBekleyenNet);
+        Assert.Contains(sonuc.Uyarilar, u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.TaninmayanValorDurumu);
+        Assert.Contains(banka.UyariliTutarlar, x => x.UyariTipi == NakitBankaPozisyonuUyariTipleri.AktarimSurecindeValor && x.ToplamNetTutar == 300m);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 24) Pasif muhasebe hesabi normal pozisyona girmez ve sahte tahmini bakiye uretmez.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task PasifMuhasebeHesabi_PozisyonaDahilEdilmez_TahminiBakiyeUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hpBanka = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hpBanka, iban: "TR00");
+        var hpKk = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var krediKartiHesapId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hpKk);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = BugunIstanbul();
+
+        await YeniFisAsync(dbContext, tesisId, bugun.ToDateTime(TimeOnly.MinValue), MuhasebeFisDurumlari.Onayli, (hpBanka, 5000m, 0m));
+        var belge = await YeniTahsilatBelgesiAsync(dbContext, cariId, krediKartiHesapId, 1000m, YeniSuffix());
+        await YeniValorAsync(dbContext, tesisId, belge, krediKartiHesapId, bankaId, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 1000m, 20m, 980m);
+
+        // Bagli muhasebe hesabi PASIF hale getirildi.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[MuhasebeHesapPlanlari] SET [AktifMi] = 0 WHERE [Id] = {hpBanka}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId, RaporTarihi = bugun });
+        var banka = sonuc.BankaHesaplari.Single(x => x.KasaBankaHesapId == bankaId);
+
+        Assert.False(banka.MuhasebeBakiyesiGecerliMi);
+        Assert.Equal(0m, banka.StysMuhasebeBakiyesi);   // pasif hesabin bakiyesi hesaplanmaz
+        Assert.Null(banka.TahminiBakiye);               // SAHTE tahmini bakiye URETILMEZ
+        Assert.Equal(0m, banka.ToplamBekleyenNet);      // POS tutari da normal toplama girmez
+        Assert.Contains(sonuc.Uyarilar, u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.PasifBaglantiliMuhasebeHesabi);
+        Assert.Equal(0m, sonuc.Ozet.ToplamBankaMuhasebeBakiyesi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 25) Ayni hesap planinin FARKLI tesislerde kullanilmasi sahte mukerrerlik uyarisi URETMEZ.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task AyniHesapPlaniFarkliTesislerde_SahteMukerrerlikUyarisiUretmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffix + "A");
+        var tesisB = await YeniTesisAsync(dbContext, suffix + "B");
+        var hpPaylasilan = await YeniHesapPlaniAsync(dbContext, suffix, "PAYLASILAN");
+
+        await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.Banka, suffix + "A", "BNK", hpPaylasilan, iban: "TR01");
+        await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.Banka, suffix + "B", "BNK", hpPaylasilan, iban: "TR02");
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto());
+
+        // Farkli TESISLERDE ayni (global) hesap planini kullanmak mukerrerlik DEGILDIR.
+        Assert.DoesNotContain(sonuc.Uyarilar,
+            u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.AyniMuhasebeHesabinaBirdenFazlaAktifBankaHesabiBagli);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 26) AYNI tesiste ayni hesap planina birden fazla banka hesabi baglanmasi UYARI URETIR.
+    // ─────────────────────────────────────────────────────────────
+    [IntegrationFact]
+    public async Task AyniTesisteAyniHesapPlani_MukerrerlikUyarisiUretir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "PAYLASILAN");
+
+        await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix + "1", "BNK", hp, iban: "TR01");
+        await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix + "2", "BNK", hp, iban: "TR02");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.GetPozisyonAsync(new NakitBankaPozisyonuFilterDto { TesisId = tesisId });
+
+        Assert.Contains(sonuc.Uyarilar,
+            u => u.UyariTipi == NakitBankaPozisyonuUyariTipleri.AyniMuhasebeHesabinaBirdenFazlaAktifBankaHesabiBagli);
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -5,13 +5,44 @@ namespace STYS.Muhasebe.OdemeIzleme.Dtos;
 /// IBAN/kasa, aciklama, kullanici, iptal/ters kayit iliskisi) birlikte degerlendirilmesiyle belirlenir.</summary>
 public static class OdemeGuvenSeviyeleri
 {
-    /// <summary>Veri butunlugu acisindan KESIN (ornegin mukerrer BelgeNo, eksik zorunlu FK) - tahmin degil.</summary>
+    /// <summary>Yalnizca GUCLU ve benzersiz bir referansin (belge no / fis no) BIREBIR (normalize
+    /// edilmis tam esitlik) eslesmesiyle uretilir. Kismi metin (Contains), yalnizca tutar veya
+    /// yalnizca tarih+tutar eslesmesi ASLA bu seviyeyi uretmez.</summary>
     public const string Kesin = "Kesin";
-    /// <summary>Birden fazla guclu sinyal (tarih+tutar+banka/yontem) ortusuyor ama kesin degil.</summary>
+
+    /// <summary>Birden fazla kuvvetli alan (tutar + para birimi + dar tarih araligi + yontem/hesap
+    /// veya cari) birlikte ortusuyor, ancak benzersiz referans dogrulanmadi.</summary>
     public const string YuksekOlasilik = "YuksekOlasilik";
+
     /// <summary>Yalnizca zayif sinyaller (ör. yalnizca tarih+tutar) - incelenmesi onerilir, kesin sunulmaz.</summary>
     public const string IncelenmesiGereken = "IncelenmesiGereken";
+
     public const string EslesmeYok = "EslesmeYok";
+}
+
+/// <summary>Bir odemenin bakiyeye dahil olup olmadigini aciklayan neden kodlari.</summary>
+public static class BakiyeyeDahilEdilmemeNedenKodlari
+{
+    public const string OdemeIptalEdilmis = "OdemeIptalEdilmis";
+    public const string CariHareketiYok = "CariHareketiYok";
+    public const string CariHareketiIptalEdilmis = "CariHareketiIptalEdilmis";
+    public const string ZorunluMuhasebeFisiYok = "ZorunluMuhasebeFisiYok";
+    public const string MuhasebeFisiIptalEdilmis = "MuhasebeFisiIptalEdilmis";
+    public const string PosValorKaydiYok = "PosValorKaydiYok";
+    public const string PosValorHenuzAktarilmamis = "PosValorHenuzAktarilmamis";
+}
+
+/// <summary>Bakiyeye dahil olma durumunun UST duzey ozeti.</summary>
+public static class BakiyeyeDahilEdilmeDurumlari
+{
+    /// <summary>Tum gerekli kayitlar mevcut - odeme bakiyeyi gercekten etkiliyor.</summary>
+    public const string TamamenDahil = "TamamenDahil";
+
+    /// <summary>Cari bakiyeyi etkiliyor ancak muhasebe/POS tarafinda eksik iliski var.</summary>
+    public const string KismenDahil = "KismenDahil";
+
+    /// <summary>Bakiyeyi etkilemiyor.</summary>
+    public const string DahilDegil = "DahilDegil";
 }
 
 public static class OdemeUyariTipleri
@@ -129,10 +160,20 @@ public class OdemeDetayDto
     public string? DegistirenKullanici { get; set; }
     public DateTime? DegisiklikTarihi { get; set; }
 
-    /// <summary>Bu odeme rapor/bakiye hesaplarina (ör. Nakit ve Banka Pozisyonu, Hizli Mizan) DAHIL mi -
-    /// ve degilse NEDEN (ör. "Iptal edilmis").</summary>
+    /// <summary>Odemenin bakiyeyi GERCEKTEN etkileyip etkilemedigi - yalnizca belgenin Durum'una
+    /// degil, cari hareket/muhasebe fisi/POS valor iliskilerinin gercek varligina bakilarak
+    /// hesaplanir (bkz. BakiyeyeDahilEdilmeDurumu ve neden kodlari).</summary>
     public bool BakiyeyeDahilMi { get; set; }
-    public string? BakiyeyeDahilDegilGerekcesi { get; set; }
+
+    /// <summary>TamamenDahil | KismenDahil | DahilDegil (bkz. BakiyeyeDahilEdilmeDurumlari).</summary>
+    public string BakiyeyeDahilEdilmeDurumu { get; set; } = string.Empty;
+
+    public List<string> BakiyeyeDahilEdilmemeNedenKodlari { get; set; } = [];
+    public List<string> BakiyeyeDahilEdilmemeAciklamalari { get; set; } = [];
+
+    /// <summary>Odemenin fiilen etkiledigi cari hesap/borc (kapama hareketi varsa onun hedefi).</summary>
+    public string? EtkiledigiCariVeyaBorc { get; set; }
+    public decimal? EtkiledigiTutar { get; set; }
 
     public List<OdemeUyariDto> Uyarilar { get; set; } = [];
 }
@@ -158,12 +199,42 @@ public class CariHareketDokumSatiriDto
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
     public bool KapandiMi { get; set; }
+    public string ParaBirimi { get; set; } = "TRY";
     /// <summary>Bu hareket dahil, acilis bakiyesinden itibaren kumulatif bakiye (Borc - Alacak, yalnizca
     /// Durum=Aktif hareketler dahil edilir).</summary>
     public decimal KumulatifBakiye { get; set; }
     /// <summary>Bu hareket hesaplama disi mi birakildi (ör. Iptal durumunda) - true ise KumulatifBakiye
     /// bir onceki satirla AYNIDIR (bu hareket bakiyeyi degistirmemistir).</summary>
     public bool HesaplamaDisiMi { get; set; }
+}
+
+/// <summary>Bir carinin bakiyesini ayristiran, PARA BIRIMI bazinda tutulan toplamlar. Farkli para
+/// birimleri ASLA tek bir toplamda birlestirilmez. Her hareket bu gruplardan YALNIZCA BIRINDE
+/// sayilir - ayni odeme belge/cari hareket/valor/fis kayitlarinda bulundugu icin mukerrer toplanmaz.</summary>
+public class CariBakiyeParaBirimiOzetiDto
+{
+    public string ParaBirimi { get; set; } = "TRY";
+
+    public decimal ToplamBorc { get; set; }
+    public decimal ToplamAlacak { get; set; }
+
+    /// <summary>Iptal edilmis (Durum != Aktif) cari hareketlerin tutari - bakiyeye DAHIL DEGILDIR.</summary>
+    public decimal IptalEdilmisTutar { get; set; }
+
+    /// <summary>Durum=ValorBekliyor olan, normal seyrinde aktarilmayi bekleyen POS tahsilatlari.</summary>
+    public decimal NormalAktarilmayiBekleyenPos { get; set; }
+
+    /// <summary>Durum=MutabakatBekliyor - normal bekleyenle BIRLESTIRILMEZ.</summary>
+    public decimal MutabakatBekleyenPos { get; set; }
+
+    /// <summary>Durum=Hata - normal bekleyenle BIRLESTIRILMEZ.</summary>
+    public decimal HataliPos { get; set; }
+
+    /// <summary>Aktarim/ters kayit ara durumlarindaki (sonucu kesinlesmemis) POS tutari.</summary>
+    public decimal AktarimSurecindekiPos { get; set; }
+
+    /// <summary>Acilis bakiyesi + aktif hareketlerden hesaplanan, ACIKLANAN kalan bakiye.</summary>
+    public decimal AciklananKalanBakiye { get; set; }
 }
 
 /// <summary>Bir carinin bakiyesini ACIKLANABILIR sekilde aciklayan tam dokum - "eksik odeme" yalnizca
@@ -176,13 +247,8 @@ public class CariHareketDokumDto
     public string? AcilisBakiyeYonu { get; set; }
     public List<CariHareketDokumSatiriDto> Hareketler { get; set; } = [];
 
-    public decimal ToplamBorc { get; set; }
-    public decimal ToplamAlacak { get; set; }
-    public decimal ToplamIptalEdilmisTutar { get; set; }
-    /// <summary>Bu cariye ait, POS valor'u henuz bankaya aktarilmamis (bekleyen) tahsilatlarin toplami -
-    /// bu tutar KalanBakiye'ye NEDEN dahil olmadigini/oldugunu aciklamak icin ayrica gosterilir.</summary>
-    public decimal AktarilmayiBekleyenPosTutari { get; set; }
-    public decimal KalanBakiye { get; set; }
+    /// <summary>Para birimi bazinda ayristirilmis toplamlar - tek bir birlesik toplam URETILMEZ.</summary>
+    public List<CariBakiyeParaBirimiOzetiDto> ParaBirimiOzetleri { get; set; } = [];
 }
 
 public class BeyanEdilenOdemeKarsilastirmaFilterDto
@@ -195,9 +261,15 @@ public class BeyanEdilenOdemeKarsilastirmaFilterDto
     public string ParaBirimi { get; set; } = "TRY";
     public string? OdemeYontemi { get; set; }
     public int? KasaBankaHesapId { get; set; }
-    /// <summary>Kullanicinin hatirladigi/dekonttaki belge no - dosya yukleme YOKTUR, yalnizca metin arama.</summary>
+    /// <summary>Kullanicinin hatirladigi/dekonttaki belge no - dosya yukleme YOKTUR, yalnizca metin
+    /// arama. KESIN eslesme icin bu deger normalize edilmis haliyle BIREBIR esitlenmelidir; kismi
+    /// metin kesin eslesme uretmez. Cok kisa degerlerle genis/hassas arama yapilmasini engellemek
+    /// icin backend'de minimum uzunluk dogrulamasi uygulanir (bkz. MinimumReferansUzunlugu).</summary>
     public string? BelgeNoTahmini { get; set; }
     public int? CariKartId { get; set; }
+
+    /// <summary>Referans aramalarinda kabul edilen en kisa (normalize edilmis) uzunluk.</summary>
+    public const int MinimumReferansUzunlugu = 4;
 }
 
 public class BeyanEdilenOdemeEslesmeDto
@@ -211,4 +283,15 @@ public class BeyanEdilenOdemeEslesmeDto
     public string CariUnvan { get; set; } = string.Empty;
     public string GuvenSeviyesi { get; set; } = string.Empty;
     public string Gerekce { get; set; } = string.Empty;
+
+    /// <summary>Hangi alanlarin eslestigi (kullaniciya aciklanabilirlik icin).</summary>
+    public List<string> EslesenAlanlar { get; set; } = [];
+
+    /// <summary>Hangi alanlarin UYUSMADIGI veya dogrulanamadigi.</summary>
+    public List<string> UyusmayanAlanlar { get; set; } = [];
+
+    /// <summary>Tarih birebir mi yoksa tolerans araligiyla mi eslesti - toleransli eslesme
+    /// "birebir tarih" olarak RAPORLANMAZ.</summary>
+    public bool TarihBirebirMi { get; set; }
+    public int TarihFarkiGun { get; set; }
 }

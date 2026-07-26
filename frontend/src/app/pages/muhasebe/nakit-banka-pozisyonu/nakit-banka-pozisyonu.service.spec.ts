@@ -58,6 +58,7 @@ describe('NakitBankaPozisyonuService', () => {
         const beklenen: NakitBankaPozisyonuModel = {
             raporTarihi: '2026-07-24',
             gecmisTarihRaporuMu: false,
+            posPozisyonuHesaplandiMi: true,
             ozet: {
                 raporTarihi: '2026-07-24',
                 toplamNakit: 1000,
@@ -74,7 +75,9 @@ describe('NakitBankaPozisyonuService', () => {
                 hataliToplam: 0,
                 hataliAdet: 0,
                 gecmisTarihRaporuMu: false,
+                posPozisyonuHesaplandiMi: true,
                 uyariSayisi: 0,
+                uyariliTutarlar: [],
                 paraBirimiOzetleri: []
             },
             kasaHesaplari: [],

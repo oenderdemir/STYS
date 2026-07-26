@@ -11,11 +11,9 @@
         <i class="pi pi-info-circle mr-1"></i>
         Gösterilen banka bakiyeleri STYS muhasebe kayıtlarına dayanır. Bankanın gerçek kullanılabilir bakiyesiyle farklılık gösterebilir.
     </div>
-    <div class="text-sm text-orange-600 mt-1" *ngIf="sonuc?.gecmisTarihRaporuMu">
+    <div class="text-sm text-orange-600 mt-1" *ngIf="sonuc && !sonuc.posPozisyonuHesaplandiMi">
         <i class="pi pi-exclamation-triangle mr-1"></i>
-        Geçmiş bir rapor tarihi seçtiniz: Mutabakat Bekliyor / Hatalı ayrımı yalnızca <strong>bugünün</strong> tarihi için güvenilirdir - geçmiş
-        tarihlerde bu kayıtların durumu zaman damgalı olarak tutulmadığından tutarı "bekleyen" toplamına dahil edilmiş, alt kırılım ayrımı yapılmamıştır.
-        Detaylar için aşağıdaki uyarı listesine bakın.
+        {{ sonuc.posPozisyonuHesaplanmamaNedeni }}
     </div>
 </div>
 
@@ -69,48 +67,79 @@
                 <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.toplamBankaMuhasebeBakiyesi)">{{ s.ozet.toplamBankaMuhasebeBakiyesi | number: '1.2-2' }}</div>
             </p-card>
         </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">Valörü Geçmiş Bekleyen Net</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.valoruGecmisBekleyenNet)">{{ s.ozet.valoruGecmisBekleyenNet | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">Bugün Gelecek Net</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.bugunGelecekNet)">{{ s.ozet.bugunGelecekNet | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">Yarın Gelecek Net</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.yarinGelecekNet)">{{ s.ozet.yarinGelecekNet | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">Takip Eden 2-7 Gün Gelecek Net</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.takip2_7GunGelecekNet)">{{ s.ozet.takip2_7GunGelecekNet | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">7 Günden Sonrası Gelecek Net</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.sonraki7GundenSonraNet)">{{ s.ozet.sonraki7GundenSonraNet | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
-        <div class="col-span-6 md:col-span-3 lg:col-span-2">
-            <p-card styleClass="text-center shadow-1 h-full">
-                <div class="text-sm text-color-secondary mb-1">Toplam Bekleyen Net POS Tutarı</div>
-                <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.toplamBekleyenNetPos)">{{ s.ozet.toplamBekleyenNetPos | number: '1.2-2' }}</div>
-            </p-card>
-        </div>
+        <!-- POS'a bagli kartlar YALNIZCA POS pozisyonu gercekten hesaplandiginda gosterilir -
+             gecmis tarihte hesaplanmayan bir degeri "0" olarak gostermek yaniltici olurdu. -->
+        <ng-container *ngIf="s.posPozisyonuHesaplandiMi">
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">Valörü Geçmiş Bekleyen Net</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.valoruGecmisBekleyenNet)">{{ s.ozet.valoruGecmisBekleyenNet | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">Bugün Gelecek Net</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.bugunGelecekNet)">{{ s.ozet.bugunGelecekNet | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">Yarın Gelecek Net</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.yarinGelecekNet)">{{ s.ozet.yarinGelecekNet | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">Takip Eden 2-7 Gün Gelecek Net</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.takip2_7GunGelecekNet)">{{ s.ozet.takip2_7GunGelecekNet | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">7 Günden Sonrası Gelecek Net</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.sonraki7GundenSonraNet)">{{ s.ozet.sonraki7GundenSonraNet | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+            <div class="col-span-6 md:col-span-3 lg:col-span-2">
+                <p-card styleClass="text-center shadow-1 h-full">
+                    <div class="text-sm text-color-secondary mb-1">Toplam Bekleyen Net POS Tutarı</div>
+                    <div class="text-xl font-bold" [ngClass]="getTutarClass(s.ozet.toplamBekleyenNetPos)">{{ s.ozet.toplamBekleyenNetPos | number: '1.2-2' }}</div>
+                </p-card>
+            </div>
+        </ng-container>
         <div class="col-span-6 md:col-span-3 lg:col-span-2">
             <p-card styleClass="text-center shadow-1 h-full border-primary">
-                <div class="text-sm text-color-secondary mb-1">Tahmini Toplam Banka Pozisyonu</div>
+                <div class="text-sm text-color-secondary mb-1">
+                    {{ s.posPozisyonuHesaplandiMi ? 'Tahmini Toplam Banka Pozisyonu' : 'Toplam Banka Muhasebe Pozisyonu (POS hariç)' }}
+                </div>
                 <div class="text-xl font-bold text-primary">{{ s.ozet.tahminiToplamBankaPozisyonu | number: '1.2-2' }}</div>
             </p-card>
         </div>
+    </div>
+
+    <!-- Normal toplamin DISINDA tutulan tutarlar - neden + para birimi bazinda -->
+    <div class="card mb-3" *ngIf="s.ozet.uyariliTutarlar.length">
+        <h6 class="mb-2">Tahmini Bakiyeye Dahil Edilmeyen Tutarlar</h6>
+        <p-table [value]="s.ozet.uyariliTutarlar" responsiveLayout="scroll">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Neden</th>
+                    <th>Para Birimi</th>
+                    <th>Adet</th>
+                    <th>Toplam Net Tutar</th>
+                    <th>Açıklama</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-u>
+                <tr>
+                    <td><p-tag severity="warn" [value]="getUyariLabel(u.uyariTipi)" /></td>
+                    <td>{{ u.paraBirimi }}</td>
+                    <td>{{ u.adet }}</td>
+                    <td>{{ u.toplamNetTutar | number: '1.2-2' }}</td>
+                    <td class="text-color-secondary">{{ u.aciklama }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
     </div>
 
     <!-- Uyari ozeti + para birimi ozetleri -->
@@ -210,14 +239,24 @@
                         <p-button *ngIf="item.iban" icon="pi pi-copy" size="small" text="true" pTooltip="IBAN'ı kopyala" (onClick)="copyIban(item.iban)" />
                     </td>
                     <td>{{ item.paraBirimi }}</td>
-                    <td [ngClass]="getTutarClass(item.stysMuhasebeBakiyesi)">{{ item.stysMuhasebeBakiyesi | number: '1.2-2' }}</td>
+                    <td [ngClass]="getTutarClass(item.stysMuhasebeBakiyesi)">
+                        <span *ngIf="item.muhasebeBakiyesiGecerliMi; else bakiyeYok">{{ item.stysMuhasebeBakiyesi | number: '1.2-2' }}</span>
+                        <ng-template #bakiyeYok>
+                            <span class="text-orange-600" pTooltip="Hesabın geçerli (mevcut, aktif, silinmemiş) bir muhasebe hesabı bağlantısı yok.">—</span>
+                        </ng-template>
+                    </td>
                     <td [ngClass]="getTutarClass(item.valoruGecmisBekleyenNet)">{{ item.valoruGecmisBekleyenNet | number: '1.2-2' }}</td>
                     <td [ngClass]="getTutarClass(item.bugunGelecekNet)">{{ item.bugunGelecekNet | number: '1.2-2' }}</td>
                     <td [ngClass]="getTutarClass(item.yarinGelecekNet)">{{ item.yarinGelecekNet | number: '1.2-2' }}</td>
                     <td [ngClass]="getTutarClass(item.takip2_7GunGelecekNet)">{{ item.takip2_7GunGelecekNet | number: '1.2-2' }}</td>
                     <td [ngClass]="getTutarClass(item.sonraki7GundenSonraNet)">{{ item.sonraki7GundenSonraNet | number: '1.2-2' }}</td>
                     <td [ngClass]="getTutarClass(item.toplamBekleyenNet)">{{ item.toplamBekleyenNet | number: '1.2-2' }}</td>
-                    <td [ngClass]="getTutarClass(item.tahminiBakiye)"><strong>{{ item.tahminiBakiye | number: '1.2-2' }}</strong></td>
+                    <td [ngClass]="item.tahminiBakiye != null ? getTutarClass(item.tahminiBakiye) : ''">
+                        <strong *ngIf="item.tahminiBakiye != null; else tahminiYok">{{ item.tahminiBakiye | number: '1.2-2' }}</strong>
+                        <ng-template #tahminiYok>
+                            <span class="text-orange-600" pTooltip="Muhasebe bağlantısı geçersiz olduğu için tahmini bakiye üretilmedi.">Hesaplanamıyor</span>
+                        </ng-template>
+                    </td>
                     <td>{{ item.sonMuhasebeHareketTarihi ? (item.sonMuhasebeHareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
                     <td>
                         <p-button icon="pi pi-calendar" size="small" text="true" pTooltip="Valör Takvimi" (onClick)="openValorTakvimi(item)" />
@@ -240,6 +279,7 @@
                     <th>Açıklama</th>
                     <th>Adet</th>
                     <th>Tutar</th>
+                    <th>Para Birimi</th>
                 </tr>
             </ng-template>
             <ng-template pTemplate="body" let-uyari>
@@ -248,6 +288,7 @@
                     <td>{{ uyari.aciklama }}</td>
                     <td>{{ uyari.adet }}</td>
                     <td>{{ uyari.tutar != null ? (uyari.tutar | number: '1.2-2') : '-' }}</td>
+                    <td>{{ uyari.paraBirimi ?? '-' }}</td>
                 </tr>
             </ng-template>
         </p-table>

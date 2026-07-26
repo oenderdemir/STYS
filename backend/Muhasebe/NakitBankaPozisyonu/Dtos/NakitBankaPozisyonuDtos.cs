@@ -42,32 +42,35 @@ public class NakitBankaPozisyonuOzetDto
     public decimal Takip2_7GunGelecekNet { get; set; }
     public decimal Sonraki7GundenSonraNet { get; set; }
 
-    /// <summary>Rapor tarihi itibariyla henuz bankaya aktarilmamis (bekleyen) net POS tutarlarinin
-    /// toplami. Rapor tarihi BUGUN ise bu yalnizca Durum=ValorBekliyor kayitlari icerir (Mutabakat/
-    /// Hata ayri raporlanir). Rapor tarihi GECMISTE ise (bkz. GecmisTarihRaporuMu), bu deger o
-    /// tarihte henuz aktarilmamis TUM kayitlarin toplamidir - gecmis tarihte hangi alt durumda
-    /// (bekliyor/mutabakat/hata) olduklari guvenilir sekilde yeniden olusturulamadigi icin alt
-    /// kirilim uygulanmaz, yalnizca "aktarilmamisti" bilgisi (fis tarihinden turetilir) kullanilir.</summary>
+    /// <summary>YALNIZCA veri kalitesi kapisindan gecmis, Durum=ValorBekliyor kayitlarin net
+    /// toplami. Rapor tarihi GECMISTE ise bu deger HER ZAMAN 0'dir - gecmis tarihli POS pozisyonu
+    /// desteklenmez (bkz. PosPozisyonuHesaplandiMi).</summary>
     public decimal ToplamBekleyenNetPos { get; set; }
 
-    /// <summary>ToplamBankaMuhasebeBakiyesi + ToplamBekleyenNetPos - AYNI zaman esasini (rapor
-    /// tarihi itibariyla FisTarihi &lt;= rapor tarihi) kullanir, bu yuzden iki bilesen tutarlidir.</summary>
+    /// <summary>ToplamBankaMuhasebeBakiyesi + ToplamBekleyenNetPos. Gecmis tarihte POS bileseni
+    /// 0 oldugu icin bu deger yalnizca muhasebe bakiyesine esittir (uydurma POS tahmini yapilmaz).</summary>
     public decimal TahminiToplamBankaPozisyonu { get; set; }
 
-    /// <summary>Yalnizca rapor tarihi BUGUN oldugunda anlamlidir (gecmis tarihte guvenilir sekilde
-    /// ayirt edilemez, bkz. ToplamBekleyenNetPos aciklamasi).</summary>
     public decimal MutabakatBekleyenToplam { get; set; }
     public int MutabakatBekleyenAdet { get; set; }
     public decimal HataliToplam { get; set; }
     public int HataliAdet { get; set; }
 
-    /// <summary>true ise secilen rapor tarihi bugunden ONCESIDIR; bu durumda Mutabakat/Hata alt
-    /// kirilimlari 0 gelir (guvenilir sekilde reconstruct edilemedigi icin) ve bunun yerine ilgili
-    /// kayitlar ToplamBekleyenNetPos icinde, GecmisTarihIcinDurumBelirsiz uyarisiyla birlikte yer
-    /// alir. Frontend bu alani gorunur bir bilgi notu olarak kullanmalidir.</summary>
+    /// <summary>true ise secilen rapor tarihi bugunden ONCESIDIR.</summary>
     public bool GecmisTarihRaporuMu { get; set; }
 
+    /// <summary>false ise POS/valor pozisyonu HIC hesaplanmamistir (gecmis tarih secildigi icin) -
+    /// tum POS alanlari 0'dir ve tahmini bakiye yalnizca muhasebe bakiyesini yansitir. Frontend bu
+    /// durumda POS kartlarini gostermemeli veya "hesaplanmadi" olarak isaretlemelidir.</summary>
+    public bool PosPozisyonuHesaplandiMi { get; set; } = true;
+
+    /// <summary>PosPozisyonuHesaplandiMi=false ise nedenini aciklayan, kullaniciya gosterilebilir metin.</summary>
+    public string? PosPozisyonuHesaplanmamaNedeni { get; set; }
+
     public int UyariSayisi { get; set; }
+
+    /// <summary>Normal toplamin DISINDA tutulan tutarlarin neden+para birimi bazinda ozeti.</summary>
+    public List<UyariliTutarOzetiDto> UyariliTutarlar { get; set; } = [];
 
     /// <summary>Para birimine gore ayri toplamlar - farkli para birimleri DOGRUDAN TOPLANMAZ
     /// (kur donusum altyapisi projede yok).</summary>
@@ -118,17 +121,26 @@ public class BankaHesapPozisyonuDto
     public decimal Takip2_7GunGelecekNet { get; set; }
     public decimal Sonraki7GundenSonraNet { get; set; }
 
-    /// <summary>Bu hesaba ait, rapor tarihi itibariyla henuz aktarilmamis tum kayitlarin net
-    /// toplami (tarih gruplarinin toplami ile ayni). Bkz. NakitBankaPozisyonuOzetDto.ToplamBekleyenNetPos.</summary>
+    /// <summary>Bu hesaba ait, veri kalitesi kapisindan gecmis normal bekleyen kayitlarin net
+    /// toplami. Gecmis tarihli raporda HER ZAMAN 0'dir.</summary>
     public decimal ToplamBekleyenNet { get; set; }
 
-    /// <summary>StysMuhasebeBakiyesi + ToplamBekleyenNet.</summary>
-    public decimal TahminiBakiye { get; set; }
+    /// <summary>StysMuhasebeBakiyesi + ToplamBekleyenNet. MuhasebeBakiyesiGecerliMi=false ise
+    /// (hesabin gecerli bir muhasebe baglantisi yoksa) bu alan null'dir - yalnizca POS tutarindan
+    /// olusan sahte bir "bakiye" URETILMEZ.</summary>
+    public decimal? TahminiBakiye { get; set; }
+
+    /// <summary>false ise hesabin gecerli (mevcut+aktif+silinmemis) bir muhasebe hesabi baglantisi
+    /// yoktur; StysMuhasebeBakiyesi anlamsizdir ve TahminiBakiye uretilmez.</summary>
+    public bool MuhasebeBakiyesiGecerliMi { get; set; } = true;
 
     public decimal MutabakatBekleyenNet { get; set; }
     public int MutabakatBekleyenAdet { get; set; }
     public decimal HataliNet { get; set; }
     public int HataliAdet { get; set; }
+
+    /// <summary>Bu hesaba ait, normal toplama dahil EDILMEYEN tutarlarin neden bazinda ozeti.</summary>
+    public List<UyariliTutarOzetiDto> UyariliTutarlar { get; set; } = [];
 
     public DateTime? SonMuhasebeHareketTarihi { get; set; }
 }
@@ -140,6 +152,10 @@ public class NakitBankaPozisyonuDto
 {
     public DateOnly RaporTarihi { get; set; }
     public bool GecmisTarihRaporuMu { get; set; }
+
+    /// <summary>Bkz. NakitBankaPozisyonuOzetDto.PosPozisyonuHesaplandiMi.</summary>
+    public bool PosPozisyonuHesaplandiMi { get; set; } = true;
+    public string? PosPozisyonuHesaplanmamaNedeni { get; set; }
     public NakitBankaPozisyonuOzetDto Ozet { get; set; } = new();
     public List<NakitHesapPozisyonuDto> KasaHesaplari { get; set; } = [];
     public List<BankaHesapPozisyonuDto> BankaHesaplari { get; set; } = [];
@@ -158,6 +174,10 @@ public class VeriKalitesiUyariDto
     public int? KasaBankaHesapId { get; set; }
     public int? PosTahsilatValorId { get; set; }
     public decimal? Tutar { get; set; }
+
+    /// <summary>Tutarin para birimi - farkli para birimlerindeki uyarilar AYRI satirlarda toplanir,
+    /// birlestirilmez.</summary>
+    public string? ParaBirimi { get; set; }
 
     /// <summary>Bu uyariya konu kayit adedi - ayni UyariTipi+KasaBankaHesapId icin birden fazla
     /// PosTahsilatValor kaydi varsa, servis bunlari TEK bir ozet satirinda toplar (adet+tutar) -
@@ -225,17 +245,47 @@ public static class NakitBankaPozisyonuUyariTipleri
     /// kur donusum altyapisi olmadigi icin bu kayit o bankanin toplamina KATILAMAZ.</summary>
     public const string ParaBirimiUyusmuyor = "ParaBirimiUyusmuyor";
 
-    /// <summary>Secilen rapor tarihi GECMISTE ve bu kayit rapor tarihi itibariyla henuz
-    /// aktarilmamisti (bekleyen tutara dahil edildi) ancak GUNCEL durumu (Mutabakat Bekliyor / Hata
-    /// / Iptal) rapor tarihindeki durumuyla AYNI OLMAYABILIR - PosTahsilatValor'da durum
-    /// gecislerinin zaman damgali bir gecmisi tutulmadigindan bu ayrim gecmise donuk guvenilir
-    /// sekilde yeniden olusturulamaz; yalnizca "aktarilmamisti" bilgisi (MuhasebeFisId'nin bagli
-    /// oldugu fisin FisTarihi'nden turetilir) kullanilmistir.</summary>
-    public const string GecmisTarihIcinDurumBelirsiz = "GecmisTarihIcinDurumBelirsiz";
+    /// <summary>Secilen rapor tarihi GECMISTE oldugu icin POS/valor pozisyonu HIC hesaplanmadi.
+    /// PosTahsilatValor'da iptal zamani ve durum gecis tarihcesi TUTULMADIGINDAN (yalnizca
+    /// CreatedAt/AktarimTarihi/DeletedAt mevcuttur) bir kaydin gecmis bir tarihteki gercek durumu
+    /// deterministik olarak kurulamaz; bu yuzden tahmini bir POS tutari URETILMEZ (bkz. teslim
+    /// raporu - "gecmis tarihli POS pozisyonu desteklenmiyor").</summary>
+    public const string GecmisTarihPosPozisyonuHesaplanmadi = "GecmisTarihPosPozisyonuHesaplanmadi";
 
-    /// <summary>Kayit su an Iptal durumunda ve iptalin rapor tarihinden ONCE mi SONRA mi
-    /// gerceklestigi guvenilir sekilde bilinemiyor (IptalTarihi alani yok) - kayit temkinli
-    /// sekilde bekleyen toplamdan HARIC tutulmustur; iptal aslinda rapor tarihinden SONRA
-    /// gerceklesmisse bu, o gun icin pozisyonun OLDUGUNDAN DUSUK gorunmesine yol acabilir.</summary>
-    public const string GecmisTarihIcinIptalZamanlamasiBelirsiz = "GecmisTarihIcinIptalZamanlamasiBelirsiz";
+    /// <summary>Kaydin Durum degeri bu ekran tarafindan taninmiyor (projeye sonradan eklenmis
+    /// olabilir) - guvenli varsayilan olarak finansal toplamlarin DISINDA tutuldu.</summary>
+    public const string TaninmayanValorDurumu = "TaninmayanValorDurumu";
+
+    /// <summary>Bagli banka hesabinin gecerli (mevcut + aktif + silinmemis) bir muhasebe hesabi
+    /// baglantisi yok - muhasebe bakiyesi hesaplanamadigi icin bu hesap icin tahmini bakiye
+    /// URETILMEZ (yalnizca POS tutarindan olusan sahte bir "bakiye" gosterilmez).</summary>
+    public const string BankaHesabininMuhasebeBaglantisiGecersiz = "BankaHesabininMuhasebeBaglantisiGecersiz";
+
+    /// <summary>Bagli muhasebe hesabi PASIF (AktifMi=false) - normal pozisyona dahil edilmez.</summary>
+    public const string PasifBaglantiliMuhasebeHesabi = "PasifBaglantiliMuhasebeHesabi";
+
+    /// <summary>Mutabakat bekleyen tutar - normal toplamin disinda, ayri izlenir.</summary>
+    public const string MutabakatBekleyen = "MutabakatBekleyen";
+
+    /// <summary>Aktarimi hata ile sonuclanmis tutar - normal toplamin disinda, ayri izlenir.</summary>
+    public const string HataliValor = "HataliValor";
+
+    /// <summary>Aktarim/ters kayit ara durumundaki (sonucu kesinlesmemis) tutar.</summary>
+    public const string AktarimSurecindeValor = "AktarimSurecindeValor";
+
+    /// <summary>AYNI banka/IBAN hesabinin birden fazla aktif muhasebe hesabina baglanmasi.
+    /// KasaBankaHesap.MuhasebeHesapPlaniId TEKIL bir FK oldugu icin bu yon semayla yapisal olarak
+    /// IMKANSIZDIR; sabit yalnizca iki yonun karistirilmamasi icin ayrica tanimlanmistir.</summary>
+    public const string AyniBankaHesabiBirdenFazlaMuhasebeHesabinaBagli = "AyniBankaHesabiBirdenFazlaMuhasebeHesabinaBagli";
+}
+
+/// <summary>Normal finansal toplamin DISINDA tutulan tutarlarin, DAHIL EDILMEME NEDENINE ve PARA
+/// BIRIMINE gore ayristirilmis ozeti. Bu tutarlar tahmini bakiyeye HICBIR ZAMAN eklenmez.</summary>
+public class UyariliTutarOzetiDto
+{
+    public string UyariTipi { get; set; } = string.Empty;
+    public string ParaBirimi { get; set; } = "TRY";
+    public int Adet { get; set; }
+    public decimal ToplamNetTutar { get; set; }
+    public string Aciklama { get; set; } = string.Empty;
 }

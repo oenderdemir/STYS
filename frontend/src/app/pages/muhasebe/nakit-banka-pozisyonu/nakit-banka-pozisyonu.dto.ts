@@ -33,12 +33,23 @@ export interface NakitBankaPozisyonuOzetModel {
     mutabakatBekleyenAdet: number;
     hataliToplam: number;
     hataliAdet: number;
-    /** true ise secilen rapor tarihi bugunden oncesidir - Mutabakat/Hata alt kirilimlari bu
-     * durumda 0 gelir (gecmise donuk guvenilir sekilde ayirt edilemedigi icin), ilgili tutarlar
-     * bunun yerine toplamBekleyenNetPos icinde yer alir. */
+    /** true ise secilen rapor tarihi bugunden oncesidir. */
     gecmisTarihRaporuMu: boolean;
+    /** false ise POS/valor pozisyonu HIC hesaplanmamistir (gecmis tarih) - tum POS alanlari 0'dir. */
+    posPozisyonuHesaplandiMi: boolean;
+    posPozisyonuHesaplanmamaNedeni?: string | null;
     uyariSayisi: number;
+    uyariliTutarlar: UyariliTutarOzetiModel[];
     paraBirimiOzetleri: ParaBirimiOzetModel[];
+}
+
+/** Normal finansal toplamin DISINDA tutulan tutarlarin neden + para birimi bazinda ozeti. */
+export interface UyariliTutarOzetiModel {
+    uyariTipi: string;
+    paraBirimi: string;
+    adet: number;
+    toplamNetTutar: number;
+    aciklama: string;
 }
 
 export interface NakitHesapPozisyonuModel {
@@ -70,11 +81,14 @@ export interface BankaHesapPozisyonuModel {
     takip2_7GunGelecekNet: number;
     sonraki7GundenSonraNet: number;
     toplamBekleyenNet: number;
-    tahminiBakiye: number;
+    /** null ise hesabin gecerli bir muhasebe baglantisi yoktur - sahte "bakiye" uretilmez. */
+    tahminiBakiye: number | null;
+    muhasebeBakiyesiGecerliMi: boolean;
     mutabakatBekleyenNet: number;
     mutabakatBekleyenAdet: number;
     hataliNet: number;
     hataliAdet: number;
+    uyariliTutarlar: UyariliTutarOzetiModel[];
     sonMuhasebeHareketTarihi?: string | null;
 }
 
@@ -84,6 +98,7 @@ export interface VeriKalitesiUyariModel {
     kasaBankaHesapId?: number | null;
     posTahsilatValorId?: number | null;
     tutar?: number | null;
+    paraBirimi?: string | null;
     adet: number;
 }
 
@@ -91,6 +106,8 @@ export interface VeriKalitesiUyariModel {
 export interface NakitBankaPozisyonuModel {
     raporTarihi: string;
     gecmisTarihRaporuMu: boolean;
+    posPozisyonuHesaplandiMi: boolean;
+    posPozisyonuHesaplanmamaNedeni?: string | null;
     ozet: NakitBankaPozisyonuOzetModel;
     kasaHesaplari: NakitHesapPozisyonuModel[];
     bankaHesaplari: BankaHesapPozisyonuModel[];
@@ -160,10 +177,16 @@ export const VERI_KALITESI_UYARI_LABELLARI: Record<string, string> = {
     NetVeyaKomisyonBilgisiEksik: 'Net/komisyon bilgisi eksik',
     ValorTarihiBos: 'Valör tarihi boş',
     AktarimDurumuFisIliskisiTutarsiz: 'Aktarım durumu / fiş ilişkisi tutarsız',
-    AyniMuhasebeHesabinaBirdenFazlaAktifBankaHesabiBagli: 'Aynı muhasebe hesabına birden fazla aktif banka hesabı bağlı',
+    AyniMuhasebeHesabinaBirdenFazlaAktifBankaHesabiBagli: 'Aynı tesiste aynı muhasebe hesabına birden fazla aktif banka hesabı bağlı',
+    AyniBankaHesabiBirdenFazlaMuhasebeHesabinaBagli: 'Aynı banka hesabı birden fazla aktif muhasebe hesabına bağlı',
     SoftDeleteEdilmisBaglantiliMuhasebeHesabi: 'Bağlı muhasebe hesabı silinmiş',
+    PasifBaglantiliMuhasebeHesabi: 'Bağlı muhasebe hesabı pasif',
+    BankaHesabininMuhasebeBaglantisiGecersiz: 'Banka hesabının geçerli muhasebe bağlantısı yok',
     BankaHesabiBulunamadiVeyaPasif: 'Bağlı banka hesabı bulunamadı veya pasif',
     ParaBirimiUyusmuyor: 'Para birimi banka hesabıyla uyuşmuyor',
-    GecmisTarihIcinDurumBelirsiz: 'Geçmiş tarih için alt durum kesin değil (tutar bekleyene dahil edildi)',
-    GecmisTarihIcinIptalZamanlamasiBelirsiz: 'İptalin rapor tarihinden önce mi sonra mı olduğu belirsiz'
+    TaninmayanValorDurumu: 'Tanınmayan valör durumu (güvenli davranışla toplam dışı bırakıldı)',
+    MutabakatBekleyen: 'Mutabakat bekliyor',
+    HataliValor: 'Hatalı valör kaydı',
+    AktarimSurecindeValor: 'Aktarım/ters kayıt süreci devam ediyor',
+    GecmisTarihPosPozisyonuHesaplanmadi: 'Geçmiş tarihte POS pozisyonu hesaplanmadı'
 };

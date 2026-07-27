@@ -437,9 +437,13 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         dto.KapatildiMi = belge.KapatilacakCariHareketId.HasValue && kapamaHareketi is not null;
 
+        // Rezervasyon yalnizca baglanti/rezervasyon silinmemisse VE odemenin KENDI tesisiyle
+        // (CariKart.TesisId) ayni tesise aitse DTO'ya tasinir - baska tesise ait bir rezervasyon
+        // (kullanici o tesise de yetkili olsa dahi) asla gosterilmemeli.
         var rezervasyonOdeme = await _dbContext.RezervasyonOdemeler.AsNoTracking()
-            .Where(r => r.TahsilatOdemeBelgesiId == belge.Id)
-            .Select(r => new { r.RezervasyonId, ReferansNo = r.Rezervasyon != null ? r.Rezervasyon.ReferansNo : null })
+            .Where(r => !r.IsDeleted && r.TahsilatOdemeBelgesiId == belge.Id
+                && r.Rezervasyon != null && !r.Rezervasyon.IsDeleted && r.Rezervasyon.TesisId == tesisId)
+            .Select(r => new { r.RezervasyonId, ReferansNo = r.Rezervasyon!.ReferansNo })
             .FirstOrDefaultAsync(cancellationToken);
         if (rezervasyonOdeme is not null)
         {
@@ -730,10 +734,13 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // (TahsilatOdemeBelgesi.BelgeTarihi) - cari hareket de bu belgeden dogar. Bu nedenle
         // filtreleme belge tarihine gore yapilir; OdemeTarihi/BeklenenValorTarihi/AktarimTarihi
         // birbirinin yerine KULLANILMAZ.
+        // POS kaydi yalnizca carinin KENDI tesisiyle (cari.TesisId) ayni tesise aitse dahil edilir -
+        // baska tesise ait bir POS kaydi (kullanici o tesise de yetkili olsa dahi) bu carinin POS
+        // toplamlarina asla girmemeli.
         var posQuery =
             from v in _dbContext.PosTahsilatValorleri.AsNoTracking()
             join b in _dbContext.TahsilatOdemeBelgeleri.AsNoTracking() on v.TahsilatOdemeBelgesiId equals b.Id
-            where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id
+            where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id && v.TesisId == cari.TesisId
             select new { v.Durum, v.ParaBirimi, v.NetTutar, BelgeTarihi = (DateTime?)b.BelgeTarihi };
 
         if (baslangicUst.HasValue)
@@ -782,7 +789,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             var tarihsizPos = await (
                 from v in _dbContext.PosTahsilatValorleri.AsNoTracking()
                 join b in _dbContext.TahsilatOdemeBelgeleri.AsNoTracking() on v.TahsilatOdemeBelgesiId equals b.Id
-                where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id && b.BelgeTarihi == default
+                where !v.IsDeleted && !b.IsDeleted && b.CariKartId == cari.Id && b.BelgeTarihi == default && v.TesisId == cari.TesisId
                 group v by v.ParaBirimi into g
                 select new { ParaBirimi = g.Key, Toplam = g.Sum(x => x.NetTutar), Adet = g.Count() })
                 .ToListAsync(cancellationToken);
@@ -852,7 +859,12 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             .Select(b => new
             {
                 b.Id, b.BelgeNo, b.BelgeTarihi, b.Tutar, b.ParaBirimi, b.OdemeYontemi, b.KasaBankaHesapId,
-                CariUnvan = b.CariKart != null ? b.CariKart.UnvanAdSoyad : string.Empty
+                CariUnvan = b.CariKart != null ? b.CariKart.UnvanAdSoyad : string.Empty,
+                // Bagli hesap yalnizca mevcut/silinmemis VE adayin KENDI tesisiyle (CariKart.TesisId)
+                // ayni tesise aitse "gecerli" sayilir - baska tesise ait bir hesap (kullanici o
+                // tesise de yetkili olsa dahi) eslesme olcutu olarak asla kullanilmamali.
+                KasaBankaHesapTesisUyumluMu = b.KasaBankaHesap != null && !b.KasaBankaHesap.IsDeleted
+                    && b.KasaBankaHesap.TesisId.HasValue && b.CariKart != null && b.KasaBankaHesap.TesisId == b.CariKart.TesisId
             })
             .ToListAsync(cancellationToken);
 
@@ -904,7 +916,8 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             var yontemVerildi = !string.IsNullOrWhiteSpace(filter.OdemeYontemi);
             var hesapVerildi = filter.KasaBankaHesapId.HasValue;
             var yontemEslesiyor = !yontemVerildi || a.OdemeYontemi == filter.OdemeYontemi;
-            var hesapEslesiyor = !hesapVerildi || a.KasaBankaHesapId == filter.KasaBankaHesapId!.Value;
+            var hesapEslesiyor = !hesapVerildi
+                || (a.KasaBankaHesapId == filter.KasaBankaHesapId!.Value && a.KasaBankaHesapTesisUyumluMu);
 
             if (yontemVerildi)
             {

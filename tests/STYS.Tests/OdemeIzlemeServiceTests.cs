@@ -1954,6 +1954,178 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             && u.IliskiliBelgeId == belgeId2);
     }
 
+    [IntegrationFact]
+    public async Task Detay_KullaniciHemAHemBTesisineYetkiliyken_ABelgesiBRezervasyonunaBagliysa_RezervasyonBilgisiSizmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 100m, $"{suffixA}-A", DateTime.UtcNow.Date);
+        var referansNo = $"{suffixB}-REZ";
+        await YeniRezervasyonOdemeBaglantisiAsync(dbContext, tesisB, suffixB, belgeId, referansNo);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Null(detay.RezervasyonId);
+        Assert.Null(detay.RezervasyonReferansNo);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_OdemeVeRezervasyonAyniTesistiyse_RezervasyonBilgisiDonmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", DateTime.UtcNow.Date);
+        var referansNo = $"{suffix}-REZ";
+        await YeniRezervasyonOdemeBaglantisiAsync(dbContext, tesisId, suffix, belgeId, referansNo);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.NotNull(detay.RezervasyonId);
+        Assert.Equal(referansNo, detay.RezervasyonReferansNo);
+    }
+
+    [IntegrationFact]
+    public async Task CariDokum_BaskaTesistekiPosKaydi_ToplamaEklenmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var hp = await YeniHesapPlaniAsync(dbContext, suffixA, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.KrediKarti, suffixA, "KK1", hp);
+        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 300m, $"{suffixA}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
+        // POS valor kaydi yanlislikla TesisB'ye ait olarak olusturulmus - odeme/cari TesisA'da.
+        await YeniValorAsync(dbContext, tesisB, belgeId, kkId, null, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 300m);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var dokum = await svc.GetCariHareketDokumuAsync(new CariHareketDokumFilterDto { CariKartId = cariA });
+
+        Assert.DoesNotContain(dokum.ParaBirimiOzetleri, x => x.NormalAktarilmayiBekleyenPos > 0);
+        Assert.DoesNotContain(dokum.ParaBirimiOzetleri, x => x.MutabakatBekleyenPos > 0);
+        Assert.DoesNotContain(dokum.ParaBirimiOzetleri, x => x.HataliPos > 0);
+        Assert.DoesNotContain(dokum.ParaBirimiOzetleri, x => x.AktarimSurecindekiPos > 0);
+    }
+
+    [IntegrationFact]
+    public async Task CariDokum_BelirsizTarihliBelgeninBaskaTesistekiPosKaydi_ToplamaEklenmezUyariUretilmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var hp = await YeniHesapPlaniAsync(dbContext, suffixA, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.KrediKarti, suffixA, "KK1", hp);
+        var bugun = DateTime.UtcNow.Date;
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 300m, $"{suffixA}-KK", bugun, OdemeYontemleri.KrediKarti, kkId);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[TahsilatOdemeBelgeleri] SET [BelgeTarihi] = '0001-01-01' WHERE [Id] = {belgeId}");
+        // POS valor kaydi yanlislikla TesisB'ye ait olarak olusturulmus.
+        await YeniValorAsync(dbContext, tesisB, belgeId, kkId, null, PosTahsilatValorDurumlari.ValorBekliyor,
+            DateOnly.FromDateTime(bugun), 300m);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var dokum = await svc.GetCariHareketDokumuAsync(new CariHareketDokumFilterDto
+        {
+            CariKartId = cariA,
+            TarihBaslangic = DateOnly.FromDateTime(bugun.AddDays(-10)),
+            TarihBitis = DateOnly.FromDateTime(bugun.AddDays(10))
+        });
+
+        Assert.DoesNotContain(dokum.ParaBirimiOzetleri, x => x.DonemeKatilmayanBelirsizTarihliPos > 0);
+        Assert.DoesNotContain(dokum.Uyarilar, u => u.Contains("belge tarihi tanımsız"));
+    }
+
+    [IntegrationFact]
+    public async Task CariDokum_OdemeCariVePosValorKaydiAyniTesistiyse_ToplamaEklenmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hp);
+        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
+        await YeniValorAsync(dbContext, tesisId, belgeId, kkId, null, PosTahsilatValorDurumlari.ValorBekliyor, bugun, 300m);
+
+        var svc = CreateService(dbContext, tesisId);
+        var dokum = await svc.GetCariHareketDokumuAsync(new CariHareketDokumFilterDto { CariKartId = cariId });
+
+        var tryOzet = dokum.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "TRY");
+        Assert.Equal(300m, tryOzet.NormalAktarilmayiBekleyenPos);
+    }
+
+    [IntegrationFact]
+    public async Task Karsilastir_BaskaTesisinHesabiEslesmeOlcutuOlarakKullanilmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hpB = await YeniHesapPlaniAsync(dbContext, suffixB, "BANKA");
+        var bankaHesabiTesisB = await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.Banka, suffixB, "BNK", hpB);
+
+        await YeniBelgeAsync(dbContext, cariA, 450m, $"{suffixA}-X", bugun, OdemeYontemleri.HavaleEft, bankaHesabiTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.KarsilastirAsync(new BeyanEdilenOdemeKarsilastirmaFilterDto
+        {
+            TesisId = tesisA, Tarih = DateOnly.FromDateTime(bugun), Tutar = 450m, ParaBirimi = "TRY", KasaBankaHesapId = bankaHesabiTesisB
+        });
+
+        Assert.Single(sonuc);
+        Assert.Equal(OdemeGuvenSeviyeleri.IncelenmesiGereken, sonuc[0].GuvenSeviyesi);
+        Assert.Contains(sonuc[0].UyusmayanAlanlar, x => x.Contains("Kasa/banka"));
+        Assert.DoesNotContain(sonuc[0].EslesenAlanlar, x => x.Contains("Kasa/banka"));
+    }
+
+    [IntegrationFact]
+    public async Task Karsilastir_AyniTesisinGecerliHesabiEslesmeOlcutuOlarakKullanilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp);
+
+        await YeniBelgeAsync(dbContext, cariId, 450m, $"{suffix}-X", bugun, OdemeYontemleri.HavaleEft, bankaHesabi);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.KarsilastirAsync(new BeyanEdilenOdemeKarsilastirmaFilterDto
+        {
+            TesisId = tesisId, Tarih = DateOnly.FromDateTime(bugun), Tutar = 450m, ParaBirimi = "TRY", KasaBankaHesapId = bankaHesabi
+        });
+
+        Assert.Single(sonuc);
+        Assert.Equal(OdemeGuvenSeviyeleri.YuksekOlasilik, sonuc[0].GuvenSeviyesi);
+        Assert.Contains(sonuc[0].EslesenAlanlar, x => x.Contains("Kasa/banka"));
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

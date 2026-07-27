@@ -768,9 +768,18 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : q.Where(f => f.Durum == MuhasebeFisDurumlari.Onayli);
         }
 
+        // GECERLI BAGLANTI: KaynakModul/KaynakId dolu VE isaret edilen belge silinmemis VE bu fisle
+        // AYNI tesise ait (b.CariKart.TesisId == f.TesisId). Tesis iliskisi dogrulanamiyorsa (CariKart
+        // null/TesisId farkli) veya belge baska tesisteyse baglanti GECERSIZ sayilir - "BELGE:{id}"
+        // anahtari URETILMEZ, yabanci belge ID'si/ayrintisi DTO'ya TASINMAZ, aday bagimsiz
+        // (BagimsizKayit=1) sayilarak asla YuksekOlasilik URETILMEZ. KONTROL SQL SORGUSUNDA
+        // uygulanir - sonradan DTO temizligi YAPILMAZ (bkz. CariHareketAdaylari/KasaHareketAdaylari/
+        // BankaHareketAdaylari/PosValorAdaylari ile ayni yaklasim).
         return q.Select(f => new AdayHam
         {
             Anahtar = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && f.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == f.TesisId)
                 ? "BELGE:" + f.KaynakId.ToString()
                 : "FIS:" + f.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.MuhasebeFis,
@@ -800,7 +809,10 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 .OrderBy(s => s.SiraNo).Select(s => (int?)s.MuhasebeHesapPlaniId).FirstOrDefault(),
             MaliYil = f.MaliYil,
             Donem = f.Donem,
-            TahsilatOdemeBelgesiId = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? f.KaynakId : null,
+            TahsilatOdemeBelgesiId = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && f.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == f.TesisId)
+                ? f.KaynakId : null,
             CariHareketId = null,
             PosTahsilatValorId = null,
             MuhasebeFisId = f.Id,
@@ -809,6 +821,8 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             KopuklukCariYok = 0,
             KopuklukValorYok = 0,
             KopuklukHedefHesapYok = 0,
+            // Belge HICBIR TESISTE bulunamiyor (silinmis/hic var olmamis) - tesis uyumsuzlugundan
+            // AYRI bir kopuklukdur.
             KopuklukOdemeBaglantisiYok = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
                 && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId)
                 ? 1 : 0,
@@ -816,8 +830,22 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && _dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Any(b => b.IsDeleted && b.Id == f.KaynakId
                     && b.CariKart != null && b.CariKart.TesisId.HasValue && tesisIds.Contains(b.CariKart.TesisId.Value))
                 ? 1 : 0,
-            KopuklukYetkiDisindaOdemeBaglantisi = 0,
-            BagimsizKayit = f.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
+            // Belge AKTIF olarak baska bir yerde bulunuyor (silinmemis) ANCAK bu fisin tesisiyle
+            // UYUSMUYOR (veya tesis iliskisi dogrulanamiyor) - yetki kapsami disinda bir baglanti,
+            // "belge yok" ile KARISTIRILMAZ.
+            KopuklukYetkiDisindaOdemeBaglantisi = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && f.KaynakId != null
+                && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == f.TesisId)
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId)
+                ? 1 : 0,
+            // BAGIMSIZ: hicbir odeme belgesine GECERLI sekilde baglanmamis muhasebe fisi (KaynakModul
+            // farkli/bos OLDUGU gibi, KaynakModul dogru ama baglanti tesis uyumsuzlugu YUZUNDEN
+            // GECERSIZ oldugunda da bagimsiz sayilir).
+            BagimsizKayit = f.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
+                || f.KaynakId == null
+                || !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == f.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == f.TesisId)
+                ? 1 : 0
         });
     }
 

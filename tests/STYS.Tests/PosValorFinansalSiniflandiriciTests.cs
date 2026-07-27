@@ -32,15 +32,24 @@ public class PosValorFinansalSiniflandiriciTests
             // Fis'e bagli durumlarda varsayilan olarak TAM GECERLI bir dogrulanmis fis verilir;
             // testler bunu bilincli olarak bozarak gecersizlik davranisini dogrular.
             DogrulanmisAktarimFisi = durum == PosTahsilatValorDurumlari.Aktarildi ? GecerliDogrulanmisFis(5) : null,
-            DogrulanmisTersKayitFisi = durum == PosTahsilatValorDurumlari.AktarimFisiIptalEdildi ? GecerliDogrulanmisFis(9) : null
+            DogrulanmisTersKayitFisi = durum == PosTahsilatValorDurumlari.AktarimFisiIptalEdildi ? GecerliDogrulanmisFis(9) : null,
+            // AktarimFisiIptalEdildi durumunda ters kayit iliskisinin de GERCEKTEN dogrulanmasi
+            // gerekir (IptalEdilenFisId ile) - varsayilan olarak TAM GECERLI bir iliski verilir.
+            TersKayitIliskisi = durum == PosTahsilatValorDurumlari.AktarimFisiIptalEdildi ? GecerliTersKayitIliskisi() : null
         };
         ayarla?.Invoke(a);
         return new PosValorSiniflandirmaGirdisi(
             a.Durum, a.BeklenenValorTarihi, a.BrutTutar, a.KomisyonTutari, a.NetTutar,
             a.ValorParaBirimi, a.BankaHesabiParaBirimi, a.MuhasebeFisId, a.TersKayitMuhasebeFisId,
             a.BankaHesabiGecerliMi, a.MuhasebeHesabiGecerliMi,
-            a.DogrulanmisAktarimFisi, a.DogrulanmisTersKayitFisi, a.ValorTesisId, a.BankaHesabiTesisId);
+            a.DogrulanmisAktarimFisi, a.DogrulanmisTersKayitFisi, a.ValorTesisId, a.BankaHesabiTesisId,
+            a.TersKayitIliskisi);
     }
+
+    private static TersKayitIliskisi GecerliTersKayitIliskisi() => new(
+        TersKayitFisId: 9, AsilFisId: 5, TersKayitIptalEdilenFisId: 5,
+        TersKayitTesisId: 1, AsilFisTesisId: 1,
+        TersKayitToplamBorc: 1000m, AsilFisToplamBorc: 1000m, AyniAsilFiseBagliTersKayitSayisi: 1);
 
     /// <summary>Tam gecerli (bulundu + silinmemis + Onayli + dogru tesis + beklenen hesap etkilenmis)
     /// bir dogrulanmis fis.</summary>
@@ -66,6 +75,7 @@ public class PosValorFinansalSiniflandiriciTests
         public DogrulanmisFis? DogrulanmisTersKayitFisi;
         public int? ValorTesisId;
         public int? BankaHesabiTesisId;
+        public TersKayitIliskisi? TersKayitIliskisi;
     }
 
     // ─────────────────────────────────────────────────────────────

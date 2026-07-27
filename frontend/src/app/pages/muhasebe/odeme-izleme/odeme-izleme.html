@@ -175,6 +175,13 @@
         <div class="col-span-6"><strong>Oluşturan:</strong> {{ d.olusturanKullanici ?? '-' }} ({{ d.olusturmaTarihi | date: 'dd.MM.yyyy HH:mm' }})</div>
         <div class="col-span-6" *ngIf="d.degistirenKullanici"><strong>Son Değiştiren:</strong> {{ d.degistirenKullanici }} ({{ d.degisiklikTarihi | date: 'dd.MM.yyyy HH:mm' }})</div>
 
+        <div class="col-span-12" *ngIf="d.bagliHesapErisimKisitliMi || d.bagliFisErisimKisitliMi">
+            <div class="p-2 border-1 surface-border border-round text-sm" style="background-color: var(--yellow-50, #fffbeb)">
+                <i class="pi pi-lock mr-2 text-yellow-700"></i>
+                <span *ngFor="let kod of d.erisimKisitiNedenKodlari" class="block text-yellow-800">{{ erisimKisitiLabellari[kod] ?? kod }}</span>
+            </div>
+        </div>
+
         <div class="col-span-12 mt-3" *ngIf="d.uyarilar.length">
             <h6 class="mb-2">Uyarılar</h6>
             <div *ngFor="let u of d.uyarilar" class="mb-2 p-2 border-1 surface-border border-round">
@@ -257,18 +264,59 @@
         <i class="pi pi-info-circle mr-1"></i>
         Bu arama ödeme belgesiyle sınırlı değildir: cari hareket, POS valör, kasa/banka hareketi ve muhasebe fişi kaynaklarından da bağımsız
         aday üretir. Aynı mali işlem birden fazla kaynakta bulunduğunda tekilleştirilir (mükerrer sayılmaz).
+        Bağımsız (herhangi bir ödeme/tahsilat belgesine bağlı olmayan) adaylar <strong>kanıtlanmamış</strong> sayılır ve ayrı işaretlenir.
     </div>
 
-    <div class="mb-3">
-        <label class="block mb-2 text-sm">Kopukluk Türü</label>
-        <p-select
-            [(ngModel)]="caprazKopuklukTipi"
-            [options]="[{ label: 'Tümü', value: null }, { label: 'Ödeme bağlantısı olmayan muhasebe fişi', value: 'OdemeBaglantisiOlmayanMuhasebeFisi' }, { label: 'Muhasebe fişi olmayan ödeme belgesi', value: 'MuhasebeFisiOlmayanOdemeBelgesi' }, { label: 'Ödeme belgesi olmayan cari hareket', value: 'OdemeBelgesiOlmayanCariHareket' }, { label: 'Valör kaydı olmayan POS tahsilatı', value: 'ValorKaydiOlmayanPosTahsilati' }, { label: 'Hedef banka hesabı olmayan valör', value: 'HedefBankaHesabiOlmayanValor' }]"
-            optionLabel="label"
-            optionValue="value"
-            class="w-full md:w-20rem"
-            (onChange)="caprazSayfa = 1; loadCaprazArama()"
-        />
+    <div class="grid grid-cols-12 gap-3 align-items-end mb-3">
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Cari Kart Id</label>
+            <p-inputNumber [(ngModel)]="caprazCariKartId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Belge No</label>
+            <input pInputText class="w-full" [(ngModel)]="caprazBelgeNo" (change)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Muhasebe Fiş No</label>
+            <input pInputText class="w-full" [(ngModel)]="caprazMuhasebeFisNo" (change)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Kasa/Banka Hesap Id</label>
+            <p-inputNumber [(ngModel)]="caprazKasaBankaHesapId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tarih Başlangıç</label>
+            <p-datepicker [(ngModel)]="caprazTarihBaslangic" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" (onSelect)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tarih Bitiş</label>
+            <p-datepicker [(ngModel)]="caprazTarihBitis" dateFormat="dd.mm.yy" [showIcon]="true" class="w-full" (onSelect)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tutar Min</label>
+            <p-inputNumber [(ngModel)]="caprazTutarMin" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Tutar Max</label>
+            <p-inputNumber [(ngModel)]="caprazTutarMax" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-12 md:col-span-4">
+            <label class="block mb-2 text-sm">Kopukluk Türü</label>
+            <p-select
+                [(ngModel)]="caprazKopuklukTipi"
+                [options]="[{ label: 'Tümü', value: null }, { label: 'Ödeme bağlantısı olmayan muhasebe fişi', value: 'OdemeBaglantisiOlmayanMuhasebeFisi' }, { label: 'Muhasebe fişi olmayan ödeme belgesi', value: 'MuhasebeFisiOlmayanOdemeBelgesi' }, { label: 'Ödeme belgesi olmayan cari hareket', value: 'OdemeBelgesiOlmayanCariHareket' }, { label: 'Valör kaydı olmayan POS tahsilatı', value: 'ValorKaydiOlmayanPosTahsilati' }, { label: 'Hedef banka hesabı olmayan valör', value: 'HedefBankaHesabiOlmayanValor' }]"
+                optionLabel="label"
+                optionValue="value"
+                class="w-full"
+                (onChange)="onCaprazFiltreDegisti()"
+            />
+        </div>
+    </div>
+
+    <div *ngIf="caprazDaralticiAlanUyarisi" class="mb-3 p-2 border-1 surface-border border-round text-sm text-orange-700" style="background-color: var(--orange-50, #fff7ed)">
+        <i class="pi pi-exclamation-triangle mr-2"></i>
+        Aşırı geniş bir taramayı önlemek için en az bir daraltıcı alan girmelisiniz: cari hesap, belge no, muhasebe fiş no, kasa/banka hesabı,
+        tarih aralığı (başlangıç + bitiş) veya tutar aralığı.
     </div>
 
     <div *ngIf="caprazLoading" class="flex align-items-center justify-content-center py-4">
@@ -276,7 +324,7 @@
     </div>
 
     <p-table
-        *ngIf="!caprazLoading"
+        *ngIf="!caprazLoading && !caprazDaralticiAlanUyarisi"
         [value]="caprazAdaylar"
         [lazy]="true"
         [paginator]="true"
@@ -289,6 +337,7 @@
     >
         <ng-template pTemplate="header">
             <tr>
+                <th>Güven</th>
                 <th>Bulunduğu Kaynaklar</th>
                 <th>Belge/Fiş No</th>
                 <th>Tarih</th>
@@ -299,6 +348,10 @@
         </ng-template>
         <ng-template pTemplate="body" let-a>
             <tr>
+                <td>
+                    <p-tag [severity]="getGuvenSeviyesiSeverity(a.guvenSeviyesi)" [value]="getGuvenSeviyesiLabel(a.guvenSeviyesi)" pTooltip="{{ a.guvenGerekcesi }}" />
+                    <p-tag *ngIf="a.bagimsizKayitMi" severity="secondary" value="Bağımsız kayıt" class="ml-1" />
+                </td>
                 <td>
                     <p-tag *ngFor="let k of a.bulunduguKaynaklar" severity="secondary" [value]="getKaynakLabel(k)" class="mr-1" />
                 </td>
@@ -315,7 +368,7 @@
             </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
-            <tr><td colspan="6" class="text-center">Kopukluk tespit edilmedi.</td></tr>
+            <tr><td colspan="7" class="text-center">Kopukluk tespit edilmedi.</td></tr>
         </ng-template>
     </p-table>
 

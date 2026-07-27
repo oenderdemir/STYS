@@ -12,6 +12,21 @@ public static class FisGecersizlikNedenKodlari
     public const string FisFarkliTesiseAit = "FisFarkliTesiseAit";
     public const string FisDonemiUyumsuz = "FisDonemiUyumsuz";
     public const string FisSatirindaBeklenenHesapYok = "FisSatirindaBeklenenHesapYok";
+
+    /// <summary>Beklenen tesis verilmis fakat fisin TesisId'si null - dogrulanamaz.</summary>
+    public const string FisTesisiBelirsiz = "FisTesisiBelirsiz";
+
+    /// <summary>Fisin mali yili beklenen mali yildan farkli.</summary>
+    public const string FisMaliYiliUyumsuz = "FisMaliYiliUyumsuz";
+
+    /// <summary>Fisin donem no'su beklenen donemden farkli.</summary>
+    public const string FisDonemNoUyumsuz = "FisDonemNoUyumsuz";
+
+    /// <summary>Fis tarihi hic yok - donem/tarih kontrolleri yapilamaz.</summary>
+    public const string FisTarihiYok = "FisTarihiYok";
+
+    /// <summary>Hesap kontrolu ISTENDI fakat sonuc null (dogrulanamadi) - basari SAYILMAZ.</summary>
+    public const string FisHesapKontroluYapilamadi = "FisHesapKontroluYapilamadi";
 }
 
 /// <summary>
@@ -64,12 +79,16 @@ public static class MuhasebeFisDogrulama
     /// <param name="donemBitis">Donem araligi bitisi (dahil).</param>
     /// <param name="kasaBankaHesabiKontrolEdilsinMi">Fis satirlarinda beklenen kasa/banka hesabinin
     /// etkilenmis olmasi sarti aranacak mi.</param>
+    /// <param name="beklenenMaliYil">Fisin ait olmasi beklenen mali yil; null ise kontrol edilmez.</param>
+    /// <param name="beklenenDonem">Fisin ait olmasi beklenen donem no; null ise kontrol edilmez.</param>
     public static FisGecerlilikSonucu Degerlendir(
         DogrulanmisFis? fis,
         int? beklenenTesisId = null,
         DateTime? donemBaslangic = null,
         DateTime? donemBitis = null,
-        bool kasaBankaHesabiKontrolEdilsinMi = false)
+        bool kasaBankaHesabiKontrolEdilsinMi = false,
+        int? beklenenMaliYil = null,
+        int? beklenenDonem = null)
     {
         var nedenler = new List<string>();
         var aciklamalar = new List<string>();
@@ -93,23 +112,63 @@ public static class MuhasebeFisDogrulama
             aciklamalar.Add($"Bağlı muhasebe fişi '{fis.Durum}' durumunda; bakiyeye yansımaz (yalnızca Onaylı/TersKayit fişler yansır).");
         }
 
-        if (beklenenTesisId.HasValue && fis.TesisId.HasValue && fis.TesisId.Value != beklenenTesisId.Value)
+        if (beklenenTesisId.HasValue)
         {
-            nedenler.Add(FisGecersizlikNedenKodlari.FisFarkliTesiseAit);
-            aciklamalar.Add($"Bağlı muhasebe fişi farklı bir tesise ait (fiş tesisi: {fis.TesisId}, beklenen: {beklenenTesisId}).");
+            if (!fis.TesisId.HasValue)
+            {
+                // Beklenen tesis DOLU ama fisin tesisi belirsiz - "farkli degil" diye gecerli SAYILMAZ.
+                nedenler.Add(FisGecersizlikNedenKodlari.FisTesisiBelirsiz);
+                aciklamalar.Add("Beklenen tesis belirtilmiş ancak fişin tesisi belirsiz; tesis uyumu doğrulanamadı.");
+            }
+            else if (fis.TesisId.Value != beklenenTesisId.Value)
+            {
+                nedenler.Add(FisGecersizlikNedenKodlari.FisFarkliTesiseAit);
+                aciklamalar.Add($"Bağlı muhasebe fişi farklı bir tesise ait (fiş tesisi: {fis.TesisId}, beklenen: {beklenenTesisId}).");
+            }
         }
 
-        if (donemBaslangic.HasValue && donemBitis.HasValue && fis.FisTarihi.HasValue
-            && (fis.FisTarihi.Value.Date < donemBaslangic.Value.Date || fis.FisTarihi.Value.Date > donemBitis.Value.Date))
+        // MALI YIL / DONEM: artik gercekten karsilastirilir (onceki surumde tasiniyor ama
+        // KULLANILMIYORDU).
+        if (beklenenMaliYil.HasValue && fis.MaliYil.HasValue && fis.MaliYil.Value != beklenenMaliYil.Value)
         {
-            nedenler.Add(FisGecersizlikNedenKodlari.FisDonemiUyumsuz);
-            aciklamalar.Add($"Fiş tarihi ({fis.FisTarihi:yyyy-MM-dd}) beklenen muhasebe dönemi aralığının ({donemBaslangic:yyyy-MM-dd} - {donemBitis:yyyy-MM-dd}) dışında.");
+            nedenler.Add(FisGecersizlikNedenKodlari.FisMaliYiliUyumsuz);
+            aciklamalar.Add($"Fişin mali yılı ({fis.MaliYil}) beklenen mali yıldan ({beklenenMaliYil}) farklı.");
         }
 
-        if (kasaBankaHesabiKontrolEdilsinMi && fis.BeklenenKasaBankaHesabiEtkilenmisMi == false)
+        if (beklenenDonem.HasValue && fis.Donem.HasValue && fis.Donem.Value != beklenenDonem.Value)
         {
-            nedenler.Add(FisGecersizlikNedenKodlari.FisSatirindaBeklenenHesapYok);
-            aciklamalar.Add("Muhasebe fişinin hiçbir satırı beklenen kasa/banka hesabını etkilemiyor; fiş başka bir hesaba işlenmiş olabilir.");
+            nedenler.Add(FisGecersizlikNedenKodlari.FisDonemNoUyumsuz);
+            aciklamalar.Add($"Fişin dönemi ({fis.Donem}) beklenen dönemden ({beklenenDonem}) farklı.");
+        }
+
+        if (donemBaslangic.HasValue && donemBitis.HasValue)
+        {
+            if (!fis.FisTarihi.HasValue)
+            {
+                nedenler.Add(FisGecersizlikNedenKodlari.FisTarihiYok);
+                aciklamalar.Add("Fiş tarihi bulunmadığı için dönem uyumu doğrulanamadı.");
+            }
+            else if (fis.FisTarihi.Value.Date < donemBaslangic.Value.Date || fis.FisTarihi.Value.Date > donemBitis.Value.Date)
+            {
+                nedenler.Add(FisGecersizlikNedenKodlari.FisDonemiUyumsuz);
+                aciklamalar.Add($"Fiş tarihi ({fis.FisTarihi:yyyy-MM-dd}) beklenen muhasebe dönemi aralığının ({donemBaslangic:yyyy-MM-dd} - {donemBitis:yyyy-MM-dd}) dışında.");
+            }
+        }
+
+        if (kasaBankaHesabiKontrolEdilsinMi)
+        {
+            // KONTROL ZORUNLUYSA yalnizca ACIK true basari sayilir. null = "dogrulanamadi" ->
+            // basari DEGIL (onceki surumde `== false` kullanildigi icin null sessizce geciyordu).
+            if (fis.BeklenenKasaBankaHesabiEtkilenmisMi is null)
+            {
+                nedenler.Add(FisGecersizlikNedenKodlari.FisHesapKontroluYapilamadi);
+                aciklamalar.Add("Fiş satırlarında beklenen kasa/banka hesabının etkilenip etkilenmediği doğrulanamadı.");
+            }
+            else if (fis.BeklenenKasaBankaHesabiEtkilenmisMi.Value == false)
+            {
+                nedenler.Add(FisGecersizlikNedenKodlari.FisSatirindaBeklenenHesapYok);
+                aciklamalar.Add("Muhasebe fişinin hiçbir satırı beklenen kasa/banka hesabını etkilemiyor; fiş başka bir hesaba işlenmiş olabilir.");
+            }
         }
 
         return new(nedenler.Count == 0, nedenler, aciklamalar);

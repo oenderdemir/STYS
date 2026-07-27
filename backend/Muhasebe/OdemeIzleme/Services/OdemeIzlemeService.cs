@@ -270,10 +270,18 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (belge.KasaBankaHesapId.HasValue)
         {
+            // YETKI KAPSAMI SORGUNUN KENDISINDE: hesap YALNIZCA kullanicinin yetkili oldugu
+            // tesislerden biriyse yuklenir. Baska tesise ait bir hesabin adi/banka adi/IBAN'i
+            // (maskeli dahi olsa)/muhasebe hesap kodu DTO'ya HIC girmez - "once oku sonra temizle"
+            // yaklasimi kullanilmaz.
+            var yetkiliTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+
             var hesap = await _dbContext.KasaBankaHesaplari.AsNoTracking()
-                .Where(x => x.Id == belge.KasaBankaHesapId.Value)
+                .Where(x => x.Id == belge.KasaBankaHesapId.Value
+                    && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value))
                 .Select(x => new { x.Ad, x.Tip, x.BankaAdi, x.Iban, MuhasebeHesapKodu = x.MuhasebeHesapPlani != null ? x.MuhasebeHesapPlani.TamKod : null })
                 .FirstOrDefaultAsync(cancellationToken);
+
             if (hesap is not null)
             {
                 dto.KasaBankaHesapAdi = hesap.Ad;
@@ -281,6 +289,18 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 dto.BankaAdi = hesap.BankaAdi;
                 dto.IbanMaskeli = MaskeleIban(hesap.Iban);
                 dto.MuhasebeHesapKodu = hesap.MuhasebeHesapKodu;
+            }
+            else
+            {
+                // Hesap ya yok ya da YETKI KAPSAMI DISINDA - hangisi oldugu bile ifsa edilmez.
+                dto.BagliHesapErisimKisitliMi = true;
+                dto.ErisimKisitiNedenKodlari.Add(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi);
+                dto.Uyarilar.Add(new OdemeUyariDto
+                {
+                    UyariTipi = OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi,
+                    GuvenSeviyesi = OdemeGuvenSeviyeleri.Kesin,
+                    Aciklama = "Bağlı kasa/banka hesabı mevcut yetki kapsamınızla uyuşmuyor; hesap ayrıntıları gösterilmiyor."
+                });
             }
         }
 
@@ -290,15 +310,30 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         DogrulanmisFis? dogrulanmisFis = null;
         if (belge.MuhasebeFisId.HasValue)
         {
+            // YETKI KAPSAMI SORGUNUN KENDISINDE: fis yalnizca yetkili tesislerden birine aitse
+            // yuklenir. IgnoreQueryFilters KASITLI (soft-delete'i "bulunamadi"dan ayirmak icin)
+            // ANCAK tesis kisiti KALDIRILMAZ - baska tesisin fis no/tarihi asla donmez.
+            var yetkiliTesisIdsFis = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+
             var fis = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
-                .Where(f => f.Id == belge.MuhasebeFisId.Value)
+                .Where(f => f.Id == belge.MuhasebeFisId.Value && yetkiliTesisIdsFis.Contains(f.TesisId))
                 .Select(f => new { f.Id, f.FisNo, f.FisTarihi, f.Durum, f.IsDeleted, f.TesisId, f.MaliYil, f.Donem })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (fis is null)
             {
+                // Fis ya yok ya da yetki kapsami disinda - ayirt edilmez, ayrinti donmez.
                 dogrulanmisFis = new DogrulanmisFis(belge.MuhasebeFisId.Value, Bulundu: false, SoftDeleteEdilmis: false,
                     Durum: null, TesisId: null, MaliYil: null, Donem: null, FisTarihi: null, BeklenenKasaBankaHesabiEtkilenmisMi: null);
+
+                dto.BagliFisErisimKisitliMi = true;
+                dto.ErisimKisitiNedenKodlari.Add(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi);
+                dto.Uyarilar.Add(new OdemeUyariDto
+                {
+                    UyariTipi = OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi,
+                    GuvenSeviyesi = OdemeGuvenSeviyeleri.Kesin,
+                    Aciklama = "Bağlı muhasebe fişi bulunamadı veya mevcut yetki kapsamınızla uyuşmuyor; fiş ayrıntıları gösterilmiyor."
+                });
             }
             else
             {

@@ -119,7 +119,8 @@ describe('OdemeIzlemePage', () => {
                 id: 1, belgeNo: 'B-001', belgeTarihi: '2026-07-24', belgeTipi: 'Tahsilat', durum: 'Aktif', tutar: 500, paraBirimi: 'TRY',
                 odemeYontemi: 'Nakit', cariKartId: 10, cariKodu: 'C-01', cariUnvan: 'Test Müşteri', kapatildiMi: false,
                 bakiyeyeDahilMi: true, bakiyeyeDahilEdilmeDurumu: 'TamamenDahil',
-                bakiyeyeDahilEdilmemeNedenKodlari: [], bakiyeyeDahilEdilmemeAciklamalari: [], uyarilar: []
+                bakiyeyeDahilEdilmemeNedenKodlari: [], bakiyeyeDahilEdilmemeAciklamalari: [], uyarilar: [],
+                bagliHesapErisimKisitliMi: false, bagliFisErisimKisitliMi: false, erisimKisitiNedenKodlari: []
             })
         );
 
@@ -141,7 +142,8 @@ describe('OdemeIzlemePage', () => {
                 bakiyeyeDahilEdilmeDurumu: 'DahilDegil',
                 bakiyeyeDahilEdilmemeNedenKodlari: ['CariHareketiYok', 'ZorunluMuhasebeFisiYok'],
                 bakiyeyeDahilEdilmemeAciklamalari: ['Cari hareket oluşmamış.', 'Muhasebe fişi üretilmemiş.'],
-                uyarilar: []
+                uyarilar: [],
+                bagliHesapErisimKisitliMi: false, bagliFisErisimKisitliMi: false, erisimKisitiNedenKodlari: []
             })
         );
 
@@ -219,7 +221,10 @@ describe('OdemeIzlemePage', () => {
                         bulunduguKaynaklar: ['MuhasebeFis'],
                         kopuklukKodlari: ['OdemeBaglantisiOlmayanMuhasebeFisi'],
                         kopuklukAciklamalari: ['Bağlı ödeme belgesi bulunamadı.'],
-                        muhasebeFisId: 10
+                        muhasebeFisId: 10,
+                        bagimsizKayitMi: true,
+                        guvenSeviyesi: 'IncelenmesiGereken',
+                        guvenGerekcesi: 'Bu kayıt herhangi bir tahsilat/ödeme belgesine bağlı değil.'
                     }
                 ],
                 pageNumber: 1, pageSize: 20, totalCount: 1, totalPages: 1, hasPreviousPage: false, hasNextPage: false
@@ -228,13 +233,29 @@ describe('OdemeIzlemePage', () => {
 
         const component = createComponent();
         component.ngOnInit();
+        // Daraltici alan zorunlulugu (backend'in "en az bir daraltici alan" kurali) - test bir
+        // cari kart id vererek bunu karsilar.
+        component.caprazCariKartId = 5;
         component.openCaprazArama();
 
         expect(component.caprazVisible).toBeTrue();
+        expect(component.caprazDaralticiAlanUyarisi).toBeFalse();
         expect(component.caprazAdaylar.length).toBe(1);
         expect(component.caprazToplam).toBe(1);
         expect(component.getKopuklukLabel('OdemeBaglantisiOlmayanMuhasebeFisi')).toContain('Ödeme bağlantısı olmayan');
         expect(component.getKaynakLabel('MuhasebeFis')).toBe('Muhasebe Fişi');
+    });
+
+    it('capraz arama: daraltici alan yoksa istek GONDERILMEZ ve uyari gosterilir', () => {
+        serviceSpy.ara.and.returnValue(of({ items: [], pageNumber: 1, pageSize: 20, totalCount: 0, totalPages: 0, hasPreviousPage: false, hasNextPage: false }));
+
+        const component = createComponent();
+        component.ngOnInit();
+        component.openCaprazArama();
+
+        expect(component.caprazDaralticiAlanUyarisi).toBeTrue();
+        expect(serviceSpy.caprazAra).not.toHaveBeenCalled();
+        expect(component.caprazAdaylar.length).toBe(0);
     });
 
     it('capraz arama sayfalamasi: ayni sayfa/boyut icin gereksiz yeniden yukleme yapmaz', () => {
@@ -243,6 +264,7 @@ describe('OdemeIzlemePage', () => {
 
         const component = createComponent();
         component.ngOnInit();
+        component.caprazCariKartId = 5;
         component.openCaprazArama();
         const ilkCagriSayisi = serviceSpy.caprazAra.calls.count();
 

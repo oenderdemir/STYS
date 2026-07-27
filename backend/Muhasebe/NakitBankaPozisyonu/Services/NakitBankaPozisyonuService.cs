@@ -119,6 +119,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         List<ValorProjeksiyon> valorKayitlari = [];
         var fisDogrulamalari = new Dictionary<int, DogrulanmisFis>();
         var fisEtkilenenHesaplar = new Dictionary<int, HashSet<int>>();
+        var fisOzetleri = new Dictionary<int, (int? IptalEdilenFisId, decimal ToplamBorc, int TesisId, int TersKayitAdedi)>();
         if (gecmisTarihRaporuMu)
         {
             sonuc.PosPozisyonuHesaplandiMi = false;
@@ -151,10 +152,29 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
 
             if (fisIdleri.Count > 0)
             {
+                // Tesis kisiti KORUNUR: IgnoreQueryFilters yalnizca soft-delete'i "bulunamadi"dan
+                // ayirt etmek icindir; baska tesisin fis verisi bu sorguya GIRMEZ.
                 var fisler = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
-                    .Where(f => fisIdleri.Contains(f.Id))
-                    .Select(f => new { f.Id, f.IsDeleted, f.Durum, f.TesisId, f.MaliYil, f.Donem, f.FisTarihi })
+                    .Where(f => fisIdleri.Contains(f.Id) && tesisIds.Contains(f.TesisId))
+                    .Select(f => new { f.Id, f.IsDeleted, f.Durum, f.TesisId, f.MaliYil, f.Donem, f.FisTarihi, f.ToplamBorc, f.IptalEdilenFisId })
                     .ToListAsync(cancellationToken);
+
+                // Ters kayit iliskisi: ters kayit fisinin IptalEdilenFisId'si ve ayni asil fise
+                // bagli ters kayit adedi (mukerrer terslenme tespiti) - TEK gruplu sorgu.
+                var iptalEdilenIdler = fisler.Where(f => f.IptalEdilenFisId.HasValue).Select(f => f.IptalEdilenFisId!.Value).Distinct().ToList();
+                var tersKayitSayaclari = iptalEdilenIdler.Count == 0
+                    ? []
+                    : await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
+                        .Where(f => f.IptalEdilenFisId.HasValue && iptalEdilenIdler.Contains(f.IptalEdilenFisId.Value)
+                            && tesisIds.Contains(f.TesisId))
+                        .GroupBy(f => f.IptalEdilenFisId!.Value)
+                        .Select(g => new { AsilFisId = g.Key, Adet = g.Count() })
+                        .ToDictionaryAsync(x => x.AsilFisId, x => x.Adet, cancellationToken);
+
+                fisOzetleri = fisler.ToDictionary(
+                    f => f.Id,
+                    f => (f.IptalEdilenFisId, f.ToplamBorc, f.TesisId,
+                          TersKayitAdedi: f.IptalEdilenFisId.HasValue ? tersKayitSayaclari.GetValueOrDefault(f.IptalEdilenFisId.Value) : 0));
 
                 // (FisId, KasaBankaHesapId) - fis satirlarinda hangi kasa/banka hesaplarinin
                 // etkilendigi. Yalnizca ilgili fisler icin, tek sorgu.
@@ -198,7 +218,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
                 TesisId = h.TesisId,
                 Ad = h.Ad,
                 Kod = h.Kod,
-                ParaBirimi = h.ParaBirimi ?? "TRY",
+                ParaBirimi = NormalizeParaBirimi(h.ParaBirimi),
                 MuhasebeHesapPlaniId = h.MuhasebeHesapPlaniId,
                 MuhasebeHesapKodu = hesapPlani?.TamKod,
                 MuhasebeHesapAdi = hesapPlani?.Ad,
@@ -224,7 +244,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
                 BankaAdi = h.BankaAdi ?? string.Empty,
                 HesapAdi = h.Ad,
                 Iban = h.Iban,
-                ParaBirimi = h.ParaBirimi ?? "TRY",
+                ParaBirimi = NormalizeParaBirimi(h.ParaBirimi),
                 MuhasebeHesapPlaniId = h.MuhasebeHesapPlaniId,
                 MuhasebeHesapKodu = hesapPlani?.TamKod,
                 MuhasebeBakiyesiGecerliMi = muhasebeBaglantisiGecerli,
@@ -234,7 +254,7 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
 
             foreach (var v in valorKayitlari.Where(v => v.BagliBankaHesapId == h.Id))
             {
-                UygulaValorKaydi(v, h, dto, raporTarihi, muhasebeBaglantisiGecerli, uyarilar, fisDogrulamalari, fisEtkilenenHesaplar);
+                UygulaValorKaydi(v, h, dto, raporTarihi, muhasebeBaglantisiGecerli, uyarilar, fisDogrulamalari, fisEtkilenenHesaplar, fisOzetleri);
             }
 
             dto.ToplamBekleyenNet = dto.ValoruGecmisBekleyenNet + dto.BugunGelecekNet + dto.YarinGelecekNet
@@ -437,7 +457,8 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
         ValorProjeksiyon v, HesapProjeksiyon h, BankaHesapPozisyonuDto dto, DateOnly raporTarihi,
         bool muhasebeBaglantisiGecerli, UyariToplayici uyarilar,
         IReadOnlyDictionary<int, DogrulanmisFis> fisDogrulamalari,
-        IReadOnlyDictionary<int, HashSet<int>> fisEtkilenenHesaplar)
+        IReadOnlyDictionary<int, HashSet<int>> fisEtkilenenHesaplar,
+        IReadOnlyDictionary<int, (int? IptalEdilenFisId, decimal ToplamBorc, int TesisId, int TersKayitAdedi)> fisOzetleri)
     {
         var siniflandirma = PosValorFinansalSiniflandirici.Siniflandir(new PosValorSiniflandirmaGirdisi(
             Durum: v.Durum,
@@ -454,7 +475,8 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
             DogrulanmisAktarimFisi: CozumleFis(v.MuhasebeFisId, h.Id, fisDogrulamalari, fisEtkilenenHesaplar),
             DogrulanmisTersKayitFisi: CozumleFis(v.TersKayitMuhasebeFisId, h.Id, fisDogrulamalari, fisEtkilenenHesaplar),
             ValorTesisId: v.TesisId,
-            BankaHesabiTesisId: h.TesisId));
+            BankaHesabiTesisId: h.TesisId,
+            TersKayitIliskisi: CozumleTersKayitIliskisi(v, fisOzetleri)));
 
         switch (siniflandirma.Kategori)
         {
@@ -541,6 +563,32 @@ public class NakitBankaPozisyonuService : INakitBankaPozisyonuService
             && hesaplar.Contains(beklenenKasaBankaHesapId);
 
         return fis with { BeklenenKasaBankaHesabiEtkilenmisMi = hesapEtkilenmis };
+    }
+
+    /// <summary>Ters kayit fisinin ASIL fisi gercekten tersleyip terslemedigini degerlendirmek icin
+    /// gereken gercek verileri (IptalEdilenFisId, tutarlar, tesisler, mukerrer ters kayit adedi)
+    /// toplar. Veri yoksa null doner - bu durumda dogrulama "kanitlanamadi" sonucunu uretir.</summary>
+    private static TersKayitIliskisi? CozumleTersKayitIliskisi(
+        ValorProjeksiyon v,
+        IReadOnlyDictionary<int, (int? IptalEdilenFisId, decimal ToplamBorc, int TesisId, int TersKayitAdedi)> fisOzetleri)
+    {
+        if (!v.TersKayitMuhasebeFisId.HasValue || !fisOzetleri.TryGetValue(v.TersKayitMuhasebeFisId.Value, out var ters))
+        {
+            return null;
+        }
+
+        (int? IptalEdilenFisId, decimal ToplamBorc, int TesisId, int TersKayitAdedi)? asil =
+            v.MuhasebeFisId.HasValue && fisOzetleri.TryGetValue(v.MuhasebeFisId.Value, out var a) ? a : null;
+
+        return new TersKayitIliskisi(
+            TersKayitFisId: v.TersKayitMuhasebeFisId.Value,
+            AsilFisId: v.MuhasebeFisId,
+            TersKayitIptalEdilenFisId: ters.IptalEdilenFisId,
+            TersKayitTesisId: ters.TesisId,
+            AsilFisTesisId: asil?.TesisId,
+            TersKayitToplamBorc: ters.ToplamBorc,
+            AsilFisToplamBorc: asil?.ToplamBorc,
+            AyniAsilFiseBagliTersKayitSayisi: ters.TersKayitAdedi);
     }
 
     /// <summary>Normal toplamin disinda kalan tutarlari, hesap bazinda (UyariTipi, ParaBirimi)

@@ -129,6 +129,69 @@ public class MuhasebeFisDogrulamaTests
         Assert.True(sonuc.GecerliMi);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Mali yil / donem / nullable hesap kontrolu (madde 6)
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void FarkliMaliYil_GECERSIZ()
+    {
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(Gecerli(), beklenenMaliYil: 2025);
+
+        Assert.False(sonuc.GecerliMi);
+        Assert.Contains(FisGecersizlikNedenKodlari.FisMaliYiliUyumsuz, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void FarkliDonem_GECERSIZ()
+    {
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(Gecerli(), beklenenDonem: 3);
+
+        Assert.False(sonuc.GecerliMi);
+        Assert.Contains(FisGecersizlikNedenKodlari.FisDonemNoUyumsuz, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void AyniMaliYilVeDonem_GECERLI()
+    {
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(Gecerli(), beklenenMaliYil: 2026, beklenenDonem: 7);
+
+        Assert.True(sonuc.GecerliMi);
+    }
+
+    [Fact]
+    public void BeklenenTesisDoluAmaFisTesisiNull_GECERSIZ()
+    {
+        // Kritik: "farkli degil" diye sessizce gecerli SAYILMAMALI.
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(Gecerli(a => a.TesisId = null), beklenenTesisId: 1);
+
+        Assert.False(sonuc.GecerliMi);
+        Assert.Contains(FisGecersizlikNedenKodlari.FisTesisiBelirsiz, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void HesapKontroluZorunluAmaSonucNull_BASARILI_SAYILMAZ()
+    {
+        // Kritik: `== false` yerine acik `true` sarti - null "dogrulanamadi" demektir.
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(
+            Gecerli(a => a.HesapEtkilenmis = null), kasaBankaHesabiKontrolEdilsinMi: true);
+
+        Assert.False(sonuc.GecerliMi);
+        Assert.Contains(FisGecersizlikNedenKodlari.FisHesapKontroluYapilamadi, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void DonemAraligiVerildiFakatFisTarihiYok_GECERSIZ()
+    {
+        var sonuc = MuhasebeFisDogrulama.Degerlendir(
+            Gecerli(a => a.FisTarihi = null),
+            donemBaslangic: new DateTime(2026, 7, 1),
+            donemBitis: new DateTime(2026, 7, 31));
+
+        Assert.False(sonuc.GecerliMi);
+        Assert.Contains(FisGecersizlikNedenKodlari.FisTarihiYok, sonuc.NedenKodlari);
+    }
+
     [Fact]
     public void BirdenFazlaSorun_TumNedenKodlariDoner()
     {

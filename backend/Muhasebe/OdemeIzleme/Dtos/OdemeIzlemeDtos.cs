@@ -20,6 +20,16 @@ public static class OdemeGuvenSeviyeleri
     public const string EslesmeYok = "EslesmeYok";
 }
 
+/// <summary>Yetki kapsami disindaki bir kayda baglanildiginda donen GUVENLI neden kodlari.
+/// Hicbiri hedef kaydin ayrintisini (ad, IBAN, fis no, tesis adi vb.) ifsa etmez.</summary>
+public static class OdemeErisimKisitiNedenKodlari
+{
+    public const string YetkiKapsamiDisindaHesapBaglantisi = "YETKI_KAPSAMI_DISINDA_HESAP_BAGLANTISI";
+    public const string YetkiKapsamiDisindaFisBaglantisi = "YETKI_KAPSAMI_DISINDA_FIS_BAGLANTISI";
+    public const string TesisUyusmazligi = "TESIS_UYUSMAZLIGI";
+    public const string KurumUyusmazligi = "KURUM_UYUSMAZLIGI";
+}
+
 /// <summary>Bir odemenin bakiyeye dahil olup olmadigini aciklayan neden kodlari.</summary>
 public static class BakiyeyeDahilEdilmemeNedenKodlari
 {
@@ -106,8 +116,18 @@ public class OdemeAdayiDto
     /// <summary>Bu adayda tespit edilen kopukluk kodlari (bkz. OdemeKopuklukTipleri).</summary>
     public List<string> KopuklukKodlari { get; set; } = [];
     public List<string> KopuklukAciklamalari { get; set; } = [];
+
+    /// <summary>true ise bu kayit HICBIR odeme belgesine bagli degildir - aranan odemeyle iliskisi
+    /// KANITLANMAMISTIR, yalnizca filtre kriterleriyle daraltilmis bir adaydir.</summary>
+    public bool BagimsizKayitMi { get; set; }
+
+    public string GuvenSeviyesi { get; set; } = string.Empty;
+    public string GuvenGerekcesi { get; set; } = string.Empty;
 }
 
+/// <summary>Capraz-kaynak arastirma filtresi. Bagimsiz kaynak taramasi genis olabildiginden
+/// backend EN AZ BIR daraltici alan ister (cari, belge no, fis no, kasa/banka hesabi, tarih
+/// araligi veya tutar araligi) - aksi halde 400 doner.</summary>
 public class OdemeCaprazAramaFilterDto
 {
     public int? TesisId { get; set; }
@@ -116,6 +136,13 @@ public class OdemeCaprazAramaFilterDto
     public decimal? TutarMin { get; set; }
     public decimal? TutarMax { get; set; }
     public int? CariKartId { get; set; }
+    public string? ParaBirimi { get; set; }
+    public string? BelgeNo { get; set; }
+    public string? MuhasebeFisNo { get; set; }
+    public int? KasaBankaHesapId { get; set; }
+    public int? MaliYil { get; set; }
+    public int? Donem { get; set; }
+    public bool? SadeceIptalEdilmisOlanlar { get; set; }
 
     /// <summary>Yalnizca belirtilen kopukluk turunu tasiyan adaylari dondurur.</summary>
     public string? KopuklukTipi { get; set; }
@@ -281,6 +308,16 @@ public class OdemeDetayDto
 
     /// <summary>Etkilenen tutarin para birimi - farkli para birimleri birlestirilmediginden ayrica tasinir.</summary>
     public string? EtkiledigiParaBirimi { get; set; }
+
+    /// <summary>true ise bagli kasa/banka hesabi yetki kapsami disinda; hesap ayrintilari
+    /// (ad, banka adi, maskeli IBAN, muhasebe hesap kodu) DOLDURULMAMISTIR.</summary>
+    public bool BagliHesapErisimKisitliMi { get; set; }
+
+    /// <summary>true ise bagli muhasebe fisi yetki kapsami disinda; fis no/tarih/durum DOLDURULMAMISTIR.</summary>
+    public bool BagliFisErisimKisitliMi { get; set; }
+
+    /// <summary>Guvenli erisim kisiti neden kodlari (bkz. OdemeErisimKisitiNedenKodlari).</summary>
+    public List<string> ErisimKisitiNedenKodlari { get; set; } = [];
 
     public List<OdemeUyariDto> Uyarilar { get; set; } = [];
 }

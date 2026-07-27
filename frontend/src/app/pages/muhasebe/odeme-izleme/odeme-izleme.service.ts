@@ -36,6 +36,13 @@ export class OdemeIzlemeService {
         if (filter.cariKartId) params = params.set('cariKartId', filter.cariKartId);
         if (filter.kopuklukTipi) params = params.set('kopuklukTipi', filter.kopuklukTipi);
         if (filter.sadeceKopukOlanlar != null) params = params.set('sadeceKopukOlanlar', filter.sadeceKopukOlanlar);
+        if (filter.paraBirimi) params = params.set('paraBirimi', filter.paraBirimi);
+        if (filter.belgeNo) params = params.set('belgeNo', filter.belgeNo);
+        if (filter.muhasebeFisNo) params = params.set('muhasebeFisNo', filter.muhasebeFisNo);
+        if (filter.kasaBankaHesapId) params = params.set('kasaBankaHesapId', filter.kasaBankaHesapId);
+        if (filter.maliYil) params = params.set('maliYil', filter.maliYil);
+        if (filter.donem) params = params.set('donem', filter.donem);
+        if (filter.sadeceIptalEdilmisOlanlar != null) params = params.set('sadeceIptalEdilmisOlanlar', filter.sadeceIptalEdilmisOlanlar);
         return this.http.get<ApiResponse<PagedResponseDto<OdemeAdayiModel>>>(`${this.baseUrl}/capraz-arama`, { params }).pipe(map(this.unwrapOne));
     }
 

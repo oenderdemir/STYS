@@ -51,7 +51,8 @@ public sealed record PosValorSiniflandirmaGirdisi(
     DogrulanmisFis? DogrulanmisAktarimFisi = null,
     DogrulanmisFis? DogrulanmisTersKayitFisi = null,
     int? ValorTesisId = null,
-    int? BankaHesabiTesisId = null);
+    int? BankaHesabiTesisId = null,
+    TersKayitIliskisi? TersKayitIliskisi = null);
 
 public sealed record PosValorSiniflandirmaSonucu(
     PosValorKategori Kategori,
@@ -129,11 +130,21 @@ public static class PosValorFinansalSiniflandirici
                 var tersSonuc = MuhasebeFisDogrulama.Degerlendir(
                     girdi.DogrulanmisTersKayitFisi, beklenenTesisId: girdi.ValorTesisId);
 
-                return tersSonuc.GecerliMi
-                    ? new(PosValorKategori.TersKayitSurecinde, null, null)
-                    : new(PosValorKategori.VeriKalitesiUyarisi,
+                if (!tersSonuc.GecerliMi)
+                {
+                    return new(PosValorKategori.VeriKalitesiUyarisi,
                         NakitBankaPozisyonuUyariTipleri.AktarimFisiDogrulanamadi,
                         "Ters kayıt fişi doğrulanamadı: " + string.Join(" ", tersSonuc.Aciklamalar));
+                }
+
+                // Fisin kendisi gecerli olsa bile, ASIL FISI GERCEKTEN TERSLEDIGI ayrica
+                // dogrulanmalidir - yalnizca TersKayitMuhasebeFisId'nin dolu olmasi yeterli DEGILDIR.
+                var tersIliski = TersKayitIliskisiDogrulama.Degerlendir(girdi.TersKayitIliskisi);
+                return tersIliski.DogrulandiMi
+                    ? new(PosValorKategori.TersKayitSurecinde, null, null)
+                    : new(PosValorKategori.VeriKalitesiUyarisi,
+                        NakitBankaPozisyonuUyariTipleri.TersKayitIliskisiDogrulanamadi,
+                        "Ters kayıt ilişkisi doğrulanamadı: " + string.Join(" ", tersIliski.Aciklamalar));
             }
 
             case PosTahsilatValorDurumlari.TersKayitOlusturuluyor:

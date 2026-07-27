@@ -16,6 +16,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
@@ -24,7 +25,9 @@ import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-c
 import {
     BeyanEdilenOdemeEslesmeModel,
     CariHareketDokumModel,
+    caprazAramaDaralticiAlanVarMi,
     DURUM_SECENEKLERI,
+    ERISIM_KISITI_LABELLARI,
     GUVEN_SEVIYESI_LABELLARI,
     KOPUKLUK_LABELLARI,
     ODEME_ADAY_KAYNAKLARI,
@@ -32,6 +35,7 @@ import {
     OdemeAdayiModel,
     OdemeAramaFilterModel,
     OdemeAramaSatiriModel,
+    OdemeCaprazAramaFilterModel,
     OdemeDetayModel,
     UYARI_LABELLARI
 } from './odeme-izleme.dto';
@@ -55,6 +59,7 @@ import { OdemeIzlemeService } from './odeme-izleme.service';
         TagModule,
         ToastModule,
         ToolbarModule,
+        TooltipModule,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
@@ -101,8 +106,19 @@ export class OdemeIzlemePage implements OnInit {
     caprazSayfa = 1;
     caprazSayfaBoyutu = 20;
     caprazKopuklukTipi: string | null = null;
+    caprazCariKartId: number | null = null;
+    caprazBelgeNo: string | null = null;
+    caprazMuhasebeFisNo: string | null = null;
+    caprazKasaBankaHesapId: number | null = null;
+    caprazTutarMin: number | null = null;
+    caprazTutarMax: number | null = null;
+    caprazTarihBaslangic: Date | null = null;
+    caprazTarihBitis: Date | null = null;
+    /** Backend'in "en az bir daraltıcı alan zorunlu" kuralını göndermeden ÖNCE kullanıcıya gösterir. */
+    caprazDaralticiAlanUyarisi = false;
     readonly kopuklukLabellari = KOPUKLUK_LABELLARI;
     readonly adayKaynaklari = ODEME_ADAY_KAYNAKLARI;
+    readonly erisimKisitiLabellari = ERISIM_KISITI_LABELLARI;
 
     readonly odemeYontemiSecenekleri = ODEME_YONTEMI_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
@@ -224,6 +240,18 @@ export class OdemeIzlemePage implements OnInit {
     openCaprazArama(): void {
         this.caprazVisible = true;
         this.caprazSayfa = 1;
+        // Ana ekrandaki tarih/tutar/fis-no filtreleri varsa baslangic degeri olarak devral.
+        this.caprazTarihBaslangic = this.tarihBaslangic;
+        this.caprazTarihBitis = this.tarihBitis;
+        this.caprazTutarMin = this.tutarMin;
+        this.caprazTutarMax = this.tutarMax;
+        this.caprazMuhasebeFisNo = this.muhasebeFisNo;
+        this.caprazBelgeNo = this.belgeNo;
+        this.onCaprazFiltreDegisti();
+    }
+
+    onCaprazFiltreDegisti(): void {
+        this.caprazSayfa = 1;
         this.loadCaprazArama();
     }
 
@@ -238,21 +266,41 @@ export class OdemeIzlemePage implements OnInit {
         this.loadCaprazArama();
     }
 
+    private buildCaprazFilter(tesisId: number): OdemeCaprazAramaFilterModel {
+        return {
+            tesisId,
+            tarihBaslangic: this.toIsoDate(this.caprazTarihBaslangic),
+            tarihBitis: this.toIsoDate(this.caprazTarihBitis),
+            tutarMin: this.caprazTutarMin,
+            tutarMax: this.caprazTutarMax,
+            cariKartId: this.caprazCariKartId,
+            belgeNo: this.caprazBelgeNo,
+            muhasebeFisNo: this.caprazMuhasebeFisNo,
+            kasaBankaHesapId: this.caprazKasaBankaHesapId,
+            kopuklukTipi: this.caprazKopuklukTipi,
+            sadeceKopukOlanlar: true
+        };
+    }
+
     loadCaprazArama(): void {
         const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
         if (!tesisId) {
             return;
         }
 
+        const filter = this.buildCaprazFilter(tesisId);
+        // Backend'e gondermeden ONCE ayni kurali istemcide de uygula - kullaniciya net bir mesaj
+        // goster ve gereksiz bir 400 istegi yapma.
+        this.caprazDaralticiAlanUyarisi = !caprazAramaDaralticiAlanVarMi(filter);
+        if (this.caprazDaralticiAlanUyarisi) {
+            this.caprazAdaylar = [];
+            this.caprazToplam = 0;
+            return;
+        }
+
         this.caprazLoading = true;
         this.service
-            .caprazAra(this.caprazSayfa, this.caprazSayfaBoyutu, {
-                tesisId,
-                tarihBaslangic: this.toIsoDate(this.tarihBaslangic),
-                tarihBitis: this.toIsoDate(this.tarihBitis),
-                kopuklukTipi: this.caprazKopuklukTipi,
-                sadeceKopukOlanlar: true
-            })
+            .caprazAra(this.caprazSayfa, this.caprazSayfaBoyutu, filter)
             .pipe(finalize(() => { this.caprazLoading = false; this.cdr.detectChanges(); }))
             .subscribe({
                 next: (sonuc) => {

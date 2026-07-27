@@ -860,7 +860,11 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             $"UPDATE [Muhasebe].[MuhasebeFisler] SET [KaynakModul] = 'TahsilatOdemeBelgesi', [KaynakId] = 999999999 WHERE [Id] = {fisId}");
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto
+        {
+            TesisId = tesisId, TarihBaslangic = bugun, TarihBitis = bugun
+        });
 
         Assert.Contains(sonuc.Items, x => x.MuhasebeFisId == fisId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.OdemeBaglantisiOlmayanMuhasebeFisi));
@@ -876,7 +880,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 400m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.TahsilatOdemeBelgesiId == belgeId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.MuhasebeFisiOlmayanOdemeBelgesi));
@@ -894,7 +898,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 600m, $"{suffix}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.TahsilatOdemeBelgesiId == belgeId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.ValorKaydiOlmayanPosTahsilati));
@@ -915,7 +919,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             DateOnly.FromDateTime(DateTime.UtcNow.Date), 600m);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.PosTahsilatValorId == valorId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.HedefBankaHesabiOlmayanValor));
@@ -939,7 +943,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
 
         // TEK aday olmali (uc kaynak da ayni tekillestirme anahtarinda birlesir).
         var adaylar = sonuc.Items.Where(x => x.TahsilatOdemeBelgesiId == belgeId).ToList();
@@ -963,15 +967,16 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         await YeniBelgeAsync(dbContext, cariB, 100m, $"{suffixB}-B", DateTime.UtcNow.Date);
 
         // Yalnizca TesisA yetkisi.
+        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var svc = CreateCaprazServis(dbContext, tesisA);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto());
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TarihBaslangic = bugun, TarihBitis = bugun });
 
         Assert.All(sonuc.Items, x => Assert.NotEqual(tesisB, x.TesisId));
         // totalCount'a da sizmamali.
         Assert.Equal(sonuc.Items.Count, sonuc.TotalCount);
 
         var ex = await Assert.ThrowsAsync<BaseException>(() =>
-            svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisB }));
+            svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisB, TarihBaslangic = bugun, TarihBitis = bugun }));
         Assert.Equal(403, ex.ErrorCode);
     }
 
@@ -991,14 +996,69 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
 
         // Asiri buyuk page size istegi MAKSIMUMA kirpilir.
         var buyuk = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 100_000 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
         Assert.True(buyuk.PageSize <= 200);
 
-        var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId });
-        var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 2, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId });
+        var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 2, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
 
         Assert.Equal(5, s1.TotalCount);
         Assert.Empty(s1.Items.Select(x => x.TekillestirmeAnahtari).Intersect(s2.Items.Select(x => x.TekillestirmeAnahtari)));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Capraz-tesis hesap/fis baglanti sizintisi (madde 5)
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task Detay_BagliKasaBankaHesabiBaskaTesisteyse_HesapDetayiSizmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var hpB = await YeniHesapPlaniAsync(dbContext, suffixB, "BANKA");
+        // Hesap TesisB'ye ait - ancak belge TesisA'da ve BU hesaba isaret ediyor (dangling/yanlis baglanti senaryosu).
+        var bankaHesabiTesisB = await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.Banka, suffixB, "BNK", hpB, iban: "TR330006100519786457841326");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabiTesisB);
+
+        // Kullanici SADECE TesisA'ya yetkili.
+        var svc = CreateService(dbContext, tesisA);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.True(detay.BagliHesapErisimKisitliMi);
+        Assert.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi, detay.ErisimKisitiNedenKodlari);
+        // TesisB'ye ait hesap adi/IBAN/kod HICBIR yerde (maskeli bile olsa) gorunmemeli.
+        Assert.Null(detay.IbanMaskeli);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains(suffixB));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_BagliMuhasebeFisiBaskaTesisteyse_FisDetayiSizmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        // Fis TesisB'ye ait - belge TesisA'da ve BU fise isaret ediyor.
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.True(detay.BagliFisErisimKisitliMi);
+        Assert.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi, detay.ErisimKisitiNedenKodlari);
+        // "Odeme var fis yok" gibi yaniltici bir uyari da URETILMEMELI - fis var ama erisim disinda.
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
     }
 
     // ─────────────────────────────────────────────────────────────

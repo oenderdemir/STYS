@@ -286,3 +286,119 @@ döviz kuru · yalnızca tutar benzerliğinden ödeme sahipliği çıkarma · ye
 gösterme · ilgisiz genel refactoring · gereksiz migration.
 
 Her iki ekran da **salt-okunur** araştırma/raporlama aracı olarak kalmıştır.
+
+---
+
+## 16. İkinci tur (2026-07-27) — SQL-taraflı sayfalama, gerçekten bağımsız aday keşfi, ters kayıt doğrulama, tesis-sızıntı kapatma
+
+Bu tur, önceki turdaki uygulamanın **bellek-içi sayfalama** yaptığını, bağımsız kaynak aramasının
+`KaynakModul==TahsilatOdemeBelgesi` şartına gizlice bağımlı kaldığını, `MuhasebeFisDogrulama`'nın
+`MaliYil`/`Donem` alanlarını taşıyıp hiç karşılaştırmadığını, ters kayıt doğrulamasının yalnızca
+`TersKayitMuhasebeFisId` doluluğuna baktığını ve bağlı hesap/fiş kaydı başka bir tesise ait olduğunda
+bunun sızabildiğini tespit eden yeni bir talimat üzerine, **mevcut kodu (yeni modül eklemeden)
+düzelterek** bu sorunları giderir.
+
+### 16.1 Değişen dosyalar ve amaçları
+
+| Dosya | Amaç |
+|---|---|
+| `backend/Muhasebe/OdemeIzleme/Services/OdemeCaprazAramaService.cs` | Tamamen yeniden yazıldı: 6 kaynağın ortak `AdayHam` projeksiyonu `Concat` (→ SQL `UNION ALL`) ile birleşir; tekilleştirme/sıralama/sayfalama `GroupBy`+`OrderBy`+`Skip`+`Take` ile **SQL Server tarafında** (`OFFSET/FETCH`, `COUNT`, `GROUP BY`) yapılır. `KaynakModul` gate'i kaldırıldı — cari/kasa/banka hareketi ve muhasebe fişi kaynakları artık **bağımsız (belgeye bağlı olmayan)** kayıtları da bulur. |
+| `backend/Muhasebe/OdemeIzleme/Dtos/OdemeIzlemeDtos.cs` | `OdemeErisimKisitiNedenKodlari` (4 kod), `OdemeDetayDto.BagliHesapErisimKisitliMi/BagliFisErisimKisitliMi/ErisimKisitiNedenKodlari`, `OdemeAdayiDto.BagimsizKayitMi/GuvenSeviyesi/GuvenGerekcesi`, `OdemeCaprazAramaFilterDto` genişletmesi (`ParaBirimi/BelgeNo/MuhasebeFisNo/KasaBankaHesapId/MaliYil/Donem/SadeceIptalEdilmisOlanlar`). |
+| `backend/Muhasebe/Common/Services/MuhasebeFisDogrulama.cs` | `MaliYil`/`Donem` artık gerçekten karşılaştırılıyor; "beklenen tesis dolu, fiş tesisi null" artık **reddediliyor** (önceden `HasValue` guard'ı nedeniyle sessizce geçiyordu); hesap kontrolü `null` sonucunu **ayrı bir "doğrulanamadı" kod** (`FisHesapKontroluYapilamadi`) ile işaretliyor, `== false` ile karıştırmıyor; dönem-tarih aralığı verildiğinde `FisTarihi` null ise de reddediyor (`FisTarihiYok`). |
+| `backend/Muhasebe/Common/Services/TersKayitIliskisiDogrulama.cs` (yeni) | Ters kaydın asıl fişi **gerçekten** terslediğini `IptalEdilenFisId` (otoriter ilişki) üzerinden doğrular; tesis uyumu, tutar uyumu, mükerrer ters kayıt sayısı kontrol edilir. Kanıtlanamıyorsa `TERS_KAYIT_ILISKISI_DOGRULANAMADI`. |
+| `backend/Muhasebe/NakitBankaPozisyonu/Services/PosValorFinansalSiniflandirici.cs`, `NakitBankaPozisyonuService.cs` | Ters kayıt sınıflandırması artık `TersKayitIliskisiDogrulama` sonucuna bağlı; kanıtlanamayan ters kayıt `VeriKalitesiUyarisi`'na düşer (önceden salt `Durum` alanına göre otomatik `TersKayitSurecinde` sayılıyordu). `ParaBirimi ?? "TRY"` kalıntıları `NormalizeParaBirimi`'ye çevrildi. |
+| `backend/Muhasebe/OdemeIzleme/Services/OdemeIzlemeService.cs` | `GetDetayAsync`'te `KasaBankaHesaplari`/`MuhasebeFisler` sorguları artık **yetkili tesis id listesini WHERE koşuluna dahil ediyor**; başka tesise ait kayıt bulunduğunda (veya kayıt hiç yoksa — bilerek ayrım yapılmaz) hesap/fiş DETAYI hiç dönmüyor, yalnızca güvenli bayrak + neden kodu + kullanıcıya gösterilecek genel uyarı dönüyor. |
+| `tests/STYS.Tests/OdemeCaprazAramaSqlKanitiTests.cs` | (Bu turda doğrulandı, değişmedi) SQL-taraflı sayfalama kanıtı — bkz. §16.3. |
+| `tests/STYS.Tests/OdemeCaprazAramaBagimsizAdayVeYetkiTests.cs` (yeni) | Bağımsız cari/kasa/banka/fiş adayı keşfi, tesis-yetki sızıntısı yokluğu, filtre-uygulanamayan-kaynağın-sessizce-dışlanması, aynı ödeme belgesine bağlı cari hareketin TEK adaya birleşmesi — 6 test. |
+| `tests/STYS.Tests/TersKayitIliskisiDogrulamaTests.cs` (yeni) | `TersKayitIliskisiDogrulama` saf mantık testleri — 9 test. |
+| `tests/STYS.Tests/MuhasebeFisDogrulamaTests.cs` | 6 yeni test: mali yıl/dönem uyumsuzluğu, tesis-null-reddi, hesap-kontrolü-null-reddi, dönem aralığı verilip fiş tarihi yoksa red. |
+| `tests/STYS.Tests/OdemeIzlemeServiceTests.cs` | 2 yeni test: bağlı kasa/banka hesabı başka tesiste → sızmaz; bağlı muhasebe fişi başka tesiste → sızmaz. Ayrıca 7 mevcut çapraz-arama testi, yeni "daraltıcı alan zorunlu" kuralına uyacak şekilde güncellendi (narrowing field eklendi). |
+| `tests/STYS.Tests/PosValorFinansalSiniflandiriciTests.cs` | Test fixture'ı, `AktarimFisiIptalEdildi` senaryosu için geçerli bir `TersKayitIliskisi` üretecek şekilde güncellendi (yeni zorunlu doğrulama nedeniyle). |
+| Frontend: `odeme-izleme.dto.ts`, `odeme-izleme.service.ts`, `odeme-izleme.ts`, `odeme-izleme.html`, `odeme-izleme.spec.ts` | Çapraz arama dialoguna daraltıcı-alan filtreleri (cari, belge no, fiş no, kasa/banka hesabı, tutar/tarih aralığı) eklendi; alan girilmeden arama YAPILMIYOR, backend kuralıyla birebir aynı istemci-taraflı uyarı gösteriliyor; sonuç satırlarına güven seviyesi + "Bağımsız kayıt" etiketi eklendi; detay dialogunda yetki-dışı hesap/fiş bağlantısı için güvenli uyarı (silinen ayrıntı yerine) gösteriliyor. |
+
+### 16.2 Filtre × kaynak uygulanabilirlik tablosu
+
+| Filtre | Ödeme Belgesi | Cari Hareket | POS/Valör | Banka H. | Kasa H. | Muhasebe Fişi |
+|---|---|---|---|---|---|---|
+| Tarih aralığı | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan |
+| Tutar aralığı | ✅ doğrudan | ✅ doğrudan (borç/alacak) | ✅ (net tutar) | ✅ doğrudan | ✅ doğrudan | ✅ (toplam borç) |
+| Cari hesap | ✅ doğrudan | ✅ doğrudan | ✅ (belge üzerinden EXISTS) | ✅ doğrudan | ✅ doğrudan | ✅ (fiş satırı EXISTS) |
+| Para birimi | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ (satır EXISTS — başlıkta yok) |
+| Belge no | ✅ doğrudan | ✅ doğrudan | ✅ (belge EXISTS) | ✅ doğrudan | ✅ doğrudan | ✅ (fiş no ile) |
+| Muhasebe fiş no | ✅ (fiş EXISTS) | ❌ **kaynak dışı bırakılır** | ✅ (fiş EXISTS) | ❌ **kaynak dışı bırakılır** | ❌ **kaynak dışı bırakılır** | ✅ doğrudan |
+| Kasa/banka hesabı | ✅ doğrudan | ❌ **kaynak dışı bırakılır** | ✅ doğrudan | ✅ doğrudan | ✅ doğrudan | ✅ (satır EXISTS) |
+| Mali yıl / dönem | ✅ (fiş EXISTS) | ❌ **kaynak dışı bırakılır** | ✅ (fiş EXISTS) | ❌ **kaynak dışı bırakılır** | ❌ **kaynak dışı bırakılır** | ✅ doğrudan (fiş başlığı) |
+| Sadece iptal edilmiş | ✅ (Durum) | ✅ (Durum) | ✅ (Durum) | — (uygulanmadı) | — (uygulanmadı) | — (uygulanmadı) |
+
+"❌ kaynak dışı bırakılır": ilgili filtre bu kaynakta güvenilir bir alan/ilişki üzerinden
+uygulanamadığı için, bu filtre verildiğinde **o kaynak sorgudan tamamen çıkarılır**
+(`Where(_ => false)`) — filtre sessizce yok sayılıp yanıltıcı "eşleşme yok" sonucu üretilmez.
+
+### 16.3 SQL-taraflı sayfalama kanıtı (gerçek, bu turda tekrar doğrulandı)
+
+`OdemeCaprazAramaSqlKanitiTests` içindeki `DbCommandInterceptor`, gerçek SQL Server'a giden komut
+metnini yakalıyor. Bu turun koşusunda `C:\Users\...\Temp\capraz-arama-sql.txt` dosyasına yazılan
+SQL'de somut olarak şunlar sayıldı:
+
+- `UNION ALL`: **15** kez (6 kaynağın `Concat` zinciri)
+- `OFFSET`: **1**, `FETCH NEXT`: **1** (sayfa sorgusu SQL Server'da `OFFSET/FETCH` ile yapılıyor)
+- `GROUP BY`: **2** (tekilleştirme + sayaç sorgusu)
+- `COUNT(`: **1** (post-filtre+dedup gerçek `totalElements`)
+
+Sayfa başına materyalize edilen satır sayısı = sayfa boyutu (test: `PageSize=5` → `Items.Count<=5`,
+gerçek `TotalCount=25`); kaynak tabloların tamamı asla `ToListAsync()` ile belleğe alınmıyor.
+
+### 16.4 Tekilleştirme anahtarı/öncelik tablosu
+
+| Durum | Anahtar |
+|---|---|
+| Kayıt bir `TahsilatOdemeBelgesi`'ne (`KaynakModul`/`KaynakId` ile) bağlı | `BELGE:{belgeId}` — tüm kaynaklar aynı anahtarda birleşir |
+| Bağımsız cari hareket | `CARIHAREKET:{id}` |
+| Bağımsız kasa hareketi | `KASAHAREKET:{id}` |
+| Bağımsız banka hareketi | `BANKAHAREKET:{id}` |
+| Bağımsız muhasebe fişi | `FIS:{id}` |
+
+Bağımsız anahtarlar `BagimsizKayitMi=true` + `GuvenSeviyesi=IncelenmesiGereken` ile işaretlenir;
+belge-bağlantılı anahtarlar `YuksekOlasilik` alır. Hiçbir aday yalnızca tutar eşleşmesiyle "Kesin"
+sayılmaz.
+
+### 16.5 Yetki/tesis-sızıntı kapatma — nasıl uygulandı
+
+`OdemeIzlemeService.GetDetayAsync`'te `KasaBankaHesaplari`/`MuhasebeFisler` sorguları artık
+`yetkiliTesisIds.Contains(...)` koşulunu **doğrudan WHERE'e** ekliyor (önce oku-sonra-sil deseni
+DEĞİL). Kayıt bulunamadığında (gerçekten yok / var ama yetki dışı — **kasıtlı olarak ayrım
+yapılmıyor**), `BagliHesapErisimKisitliMi`/`BagliFisErisimKisitliMi=true` + ilgili neden kodu
+(`YETKI_KAPSAMI_DISINDA_HESAP_BAGLANTISI`/`YETKI_KAPSAMI_DISINDA_FIS_BAGLANTISI`) set edilir; hesap
+adı/IBAN/kod/fiş no/tarih/durum alanları boş kalır. `totalElements`/aday sayılarına bu kayıtlar
+sızmaz çünkü kaynak sorgu zaten tesis kapsamıyla filtrelenmiştir.
+
+### 16.6 Bu turda çalıştırılan komutlar ve gerçek sonuçlar
+
+| # | Komut | Toplam | Başarılı | Başarısız | Veritabanı |
+|---|---|---|---|---|---|
+| 1 | `dotnet build STYS.sln` | — | ✅ 0 error, 0 warning | — | — |
+| 2 | `dotnet test tests/STYS.Tests/STYS.Tests.csproj` (tam koşu) | **491** | **491** | **0** | Gerçek SQL Server (`localhost,14333`/`STYSDB`) |
+| 3 | `npx ng build --configuration development` | — | ✅ 0 error | — | — |
+| 4 | `npx ng test --watch=false --browsers=ChromeHeadless` | **38** | **38** | **0** | — |
+
+**Dürüst not:** tam test koşusu ilk iki denemede sırasıyla 8 ve 5 testin **paralel test sınıfları
+arasındaki SQL Server deadlock/duplicate-key/ FK çakışması** nedeniyle başarısız olduğunu gösterdi
+(`BackfillMissingPosTahsilatValorSnapshotsMigrationTests`, `RezervasyonOdemeMuhasebeIntegrationTests`,
+`PosTahsilatValorIntegrationTests` gibi bu turda **hiç dokunulmayan** sınıflarda). Bu testler tek
+başına/izole çalıştırıldığında sorunsuz geçti; üçüncü tam koşu **491/491** başarılı sonuçlandı. Bu,
+üretim kodunda bir regresyon değil, aynı SQL Server örneğine karşı yüksek paralellikle çalışan
+bağımsız test sınıfları arasındaki bilinen bir kaynak çakışmasıdır (önceki turun raporunda da §13'te
+aynı sınıf deadlock'ları not edilmişti).
+
+### 16.7 Bilinen sınırlamalar (bu turda eklenen)
+
+- `MuhasebeFisSatir.MuhasebeHesapPlaniId` zorunlu FK olduğu için cross-source aramada "hiç var
+  olmayan bir kasa/banka hesabına bağlı ödeme belgesi" senaryosu DB seviyesinde zaten imkânsız
+  (FK constraint) — yalnızca "var ama başka tesise ait" senaryosu gerçekçi ve test edildi.
+- Migration gerekmedi; veri modeli değişmedi.
+
+---
+
+**Sonuç:** Sunucu-taraflı sayfalama, bağımsız kaynak keşfi ve tesis-arası veri gizliliği artık gerçek
+kodla (prose değil) kanıtlanmış; 33 yeni/güncellenen test dahil toplam 491 backend + 38 frontend testi
+gerçek SQL Server'a karşı yeşil.

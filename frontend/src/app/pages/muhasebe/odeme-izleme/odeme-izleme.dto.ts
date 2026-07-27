@@ -81,6 +81,27 @@ export interface OdemeCaprazAramaFilterModel {
     cariKartId?: number | null;
     kopuklukTipi?: string | null;
     sadeceKopukOlanlar?: boolean;
+    paraBirimi?: string | null;
+    belgeNo?: string | null;
+    muhasebeFisNo?: string | null;
+    kasaBankaHesapId?: number | null;
+    maliYil?: number | null;
+    donem?: number | null;
+    sadeceIptalEdilmisOlanlar?: boolean | null;
+}
+
+/** En az bir alan dolu olmadan capraz arama backend tarafindan REDDEDILIR (400).
+ * Frontend bu listeyi kullanarak istegi gondermeden ONCE kullaniciyi uyarir. */
+export function caprazAramaDaralticiAlanVarMi(f: OdemeCaprazAramaFilterModel): boolean {
+    return !!(
+        f.cariKartId ||
+        (f.belgeNo && f.belgeNo.trim()) ||
+        (f.muhasebeFisNo && f.muhasebeFisNo.trim()) ||
+        f.kasaBankaHesapId ||
+        (f.tarihBaslangic && f.tarihBitis) ||
+        f.tutarMin != null ||
+        f.tutarMax != null
+    );
 }
 
 export interface OdemeAdayiModel {
@@ -103,6 +124,12 @@ export interface OdemeAdayiModel {
     aciklama?: string | null;
     kopuklukKodlari: string[];
     kopuklukAciklamalari: string[];
+    /** Bu aday hicbir odeme/tahsilat belgesine BAGLI degil - KANITLANMAMIS, yalnizca filtre
+     * kriterleriyle (tarih/tutar/cari/hesap) daraltilmis bagimsiz bir kayittir. */
+    bagimsizKayitMi: boolean;
+    /** Kesin | YuksekOlasilik | IncelenmesiGereken */
+    guvenSeviyesi: string;
+    guvenGerekcesi: string;
 }
 
 export interface OdemeAramaSatiriModel {
@@ -174,7 +201,21 @@ export interface OdemeDetayModel {
     etkiledigiCariVeyaBorc?: string | null;
     etkiledigiTutar?: number | null;
     uyarilar: OdemeUyariModel[];
+    /** true ise bagli kasa/banka hesabinin adi/IBAN'i/kodu mevcut yetki kapsamiyla
+     * uyusmadigi icin GOSTERILMEMISTIR (asagidaki alanlar bilerek bos birakilmistir). */
+    bagliHesapErisimKisitliMi: boolean;
+    /** true ise bagli muhasebe fisinin no/tarih/durum bilgisi mevcut yetki kapsamiyla
+     * uyusmadigi icin GOSTERILMEMISTIR. */
+    bagliFisErisimKisitliMi: boolean;
+    erisimKisitiNedenKodlari: string[];
 }
+
+export const ERISIM_KISITI_LABELLARI: Partial<Record<string, string>> = {
+    YETKI_KAPSAMI_DISINDA_HESAP_BAGLANTISI: 'Bağlı hesap mevcut yetki kapsamınızla uyuşmuyor.',
+    YETKI_KAPSAMI_DISINDA_FIS_BAGLANTISI: 'Bağlı muhasebe fişi mevcut yetki kapsamınızla uyuşmuyor.',
+    TESIS_UYUSMAZLIGI: 'Bağlı kayıt farklı bir tesise ait.',
+    KURUM_UYUSMAZLIGI: 'Bağlı kayıt farklı bir kuruma ait.'
+};
 
 export interface CariHareketDokumFilterModel {
     cariKartId: number;

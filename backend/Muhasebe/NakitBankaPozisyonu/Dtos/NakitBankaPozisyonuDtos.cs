@@ -289,6 +289,11 @@ public static class NakitBankaPozisyonuUyariTipleri
 
     /// <summary>Para birimi tanimsiz/bos - TRY VARSAYILMAZ, hicbir toplama dahil edilmez.</summary>
     public const string ParaBirimiTanimsiz = "ParaBirimiTanimsiz";
+
+    /// <summary>Ters kayit fisi gecerli olsa bile ASIL fisi gercekten tersledigi
+    /// KANITLANAMADI (IptalEdilenFisId iliskisi yok/farkli, tesis veya tutar uyumsuz, ya da ayni
+    /// asil fise birden fazla ters kayit bagli).</summary>
+    public const string TersKayitIliskisiDogrulanamadi = "TersKayitIliskisiDogrulanamadi";
 }
 
 /// <summary>Normal finansal toplamin DISINDA tutulan tutarlarin, DAHIL EDILMEME NEDENINE ve PARA

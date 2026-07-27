@@ -435,7 +435,23 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             .Select(h => new { h.Id, h.Durum, h.BorcTutari, h.AlacakTutari, h.ParaBirimi, h.IliskiliCariHareketId })
             .FirstOrDefaultAsync(cancellationToken);
 
-        dto.KapatildiMi = belge.KapatilacakCariHareketId.HasValue && kapamaHareketi is not null;
+        // Kapama SADECE ham "IliskiliCariHareketId == KapatilacakCariHareketId" esitligiyle DEGIL,
+        // hedef hareketin GERCEKTEN var oldugu, silinmedigi ve AYNI cariye ait oldugu da
+        // dogrulanarak kabul edilir - yanlis/yabanci bir hedefe isaret eden ham ID iliskisi tek
+        // basina yeterli DEGILDIR.
+        int? dogrulanmisKapamaHedefId = null;
+        if (belge.KapatilacakCariHareketId.HasValue && kapamaHareketi is not null
+            && kapamaHareketi.IliskiliCariHareketId == belge.KapatilacakCariHareketId.Value)
+        {
+            var hedefGecerliMi = await _dbContext.CariHareketler.AsNoTracking()
+                .AnyAsync(h => h.Id == belge.KapatilacakCariHareketId.Value && !h.IsDeleted && h.CariKartId == belge.CariKartId, cancellationToken);
+            if (hedefGecerliMi)
+            {
+                dogrulanmisKapamaHedefId = belge.KapatilacakCariHareketId.Value;
+            }
+        }
+
+        dto.KapatildiMi = dogrulanmisKapamaHedefId.HasValue;
 
         // Rezervasyon yalnizca baglanti/rezervasyon silinmemisse VE odemenin KENDI tesisiyle
         // (CariKart.TesisId) ayni tesise aitse DTO'ya tasinir - baska tesise ait bir rezervasyon
@@ -559,8 +575,8 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         {
             dto.EtkiledigiTutar = kapamaHareketi.BorcTutari - kapamaHareketi.AlacakTutari;
             dto.EtkiledigiParaBirimi = string.IsNullOrWhiteSpace(kapamaHareketi.ParaBirimi) ? null : kapamaHareketi.ParaBirimi;
-            dto.EtkiledigiCariVeyaBorc = kapamaHareketi.IliskiliCariHareketId.HasValue
-                ? $"{dto.CariUnvan} - kapatılan cari hareket #{kapamaHareketi.IliskiliCariHareketId}"
+            dto.EtkiledigiCariVeyaBorc = dogrulanmisKapamaHedefId.HasValue
+                ? $"{dto.CariUnvan} - kapatılan cari hareket #{dogrulanmisKapamaHedefId}"
                 : dto.CariUnvan;
         }
 
@@ -568,8 +584,13 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // BagliFisErisimKisitliMi) TASIYOR OLABILIR - dogrudan ATAMA yaparsak bu guvenlik uyarilari
         // SESSIZCE KAYBOLUR. Bunun yerine BIRLESTIRILIR, ayni UyariTipi icin MUKERRER eklenmez,
         // ve sira KARARLIDIR (once mevcut/guvenlik uyarilari, sonra BuildUyarilarAsync sonuclari).
+        // Fisin gecerliligi (varlik/silinme/tesis) - GetDetayAsync'in zaten dogruladigi
+        // dogrulanmisFis sonucundan turetilir; ham MuhasebeFisId'nin dolu olmasi TEK BASINA
+        // yeterli SAYILMAZ (bkz. asagidaki OdemeVarFisYok kontrolu).
+        var gecerliFisVarMi = dogrulanmisFis is { Bulundu: true, SoftDeleteEdilmis: false };
+
         var ekUyarilar = await BuildUyarilarAsync(belge.Id, belge.BelgeNo, belge.BelgeTarihi, belge.Tutar, belge.Durum, belge.OdemeYontemi,
-            belge.ParaBirimi, belge.KasaBankaHesapId, belge.CariKartId, belge.MuhasebeFisId, belge.KapatilacakCariHareketId, tesisId, cancellationToken);
+            belge.ParaBirimi, belge.KasaBankaHesapId, belge.CariKartId, belge.MuhasebeFisId, gecerliFisVarMi, belge.KapatilacakCariHareketId, tesisId, cancellationToken);
 
         var gorulenUyariTipleri = dto.Uyarilar.Select(u => u.UyariTipi).ToHashSet();
         foreach (var uyari in ekUyarilar)
@@ -1021,13 +1042,16 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
     private async Task<List<OdemeUyariDto>> BuildUyarilarAsync(
         int belgeId, string belgeNo, DateTime belgeTarihi, decimal tutar, string durum, string odemeYontemi, string paraBirimi,
-        int? kasaBankaHesapId, int cariKartId, int? muhasebeFisId, int? kapatilacakCariHareketId, int tesisId, CancellationToken cancellationToken)
+        int? kasaBankaHesapId, int cariKartId, int? muhasebeFisId, bool gecerliFisVarMi, int? kapatilacakCariHareketId, int tesisId, CancellationToken cancellationToken)
     {
         var uyarilar = new List<OdemeUyariDto>();
         var aktif = durum == TahsilatOdemeBelgeDurumlari.Aktif;
 
-        // 1) Odeme var, fis yok.
-        if (aktif && muhasebeFisId is null && OdemeYontemleri.NakitHareketiGerektirenler.Contains(odemeYontemi))
+        // 1) Odeme var, fis yok. Ham MuhasebeFisId'nin dolu olmasi YETERLI DEGILDIR - fis
+        // bulunamamis, soft-delete edilmis veya baska tesise aitse (gecerliFisVarMi=false) de bu
+        // uyari uretilir (fisin durum/donem/hesap gibi DIGER geçersizlikleri bu kapsama girmez,
+        // onlar MuhasebeFisDogrulama neden kodlarinca ayrica raporlanir).
+        if (aktif && !gecerliFisVarMi && OdemeYontemleri.NakitHareketiGerektirenler.Contains(odemeYontemi))
         {
             uyarilar.Add(new OdemeUyariDto
             {
@@ -1059,10 +1083,20 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             var kapamaHareketi = await _dbContext.CariHareketler.AsNoTracking()
                 .Where(h => !h.IsDeleted && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId == belgeId
                     && h.CariKartId == cariKartId)
-                .Select(h => new { h.Id, h.Durum })
+                .Select(h => new { h.Id, h.Durum, h.IliskiliCariHareketId })
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (aktif && kapamaHareketi is null)
+            // Kapama yalnizca kaynak hareketin ISARET ETTIGI hedef ID dogruysa VE bu hedef hareket
+            // GERCEKTEN var/silinmemis/AYNI cariye aitse GECERLI sayilir - yanlis/yabanci bir hedefe
+            // isaret eden ham IliskiliCariHareketId esitligi TEK BASINA yeterli DEGILDIR.
+            var dogrulanmisKapamaVarMi = false;
+            if (kapamaHareketi is not null && kapamaHareketi.IliskiliCariHareketId == kapatilacakCariHareketId.Value)
+            {
+                dogrulanmisKapamaVarMi = await _dbContext.CariHareketler.AsNoTracking()
+                    .AnyAsync(h => h.Id == kapatilacakCariHareketId.Value && !h.IsDeleted && h.CariKartId == cariKartId, cancellationToken);
+            }
+
+            if (aktif && !dogrulanmisKapamaVarMi)
             {
                 uyarilar.Add(new OdemeUyariDto
                 {
@@ -1071,7 +1105,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                     Aciklama = "Ödeme bir borç kapatmak üzere işaretlenmiş ancak karşılık gelen kapama hareketi bulunamadı."
                 });
             }
-            else if (!aktif && kapamaHareketi is not null && kapamaHareketi.Durum == CariHareketDurumlari.Aktif)
+            else if (!aktif && dogrulanmisKapamaVarMi && kapamaHareketi!.Durum == CariHareketDurumlari.Aktif)
             {
                 uyarilar.Add(new OdemeUyariDto
                 {

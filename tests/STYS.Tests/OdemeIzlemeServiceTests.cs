@@ -138,12 +138,13 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
 
     private async Task<int> YeniCariHareketAsync(
         StysAppDbContext dbContext, int cariKartId, decimal borc, decimal alacak, DateTime tarih,
-        string durum = CariHareketDurumlari.Aktif, string? kaynakModul = null, int? kaynakId = null)
+        string durum = CariHareketDurumlari.Aktif, string? kaynakModul = null, int? kaynakId = null, int? iliskiliCariHareketId = null)
     {
         var hareket = new CariHareket
         {
             CariKartId = cariKartId, HareketTarihi = tarih, BelgeTuru = "Test", BorcTutari = borc, AlacakTutari = alacak,
-            KalanTutar = borc - alacak, ParaBirimi = "TRY", Durum = durum, KaynakModul = kaynakModul, KaynakId = kaynakId
+            KalanTutar = borc - alacak, ParaBirimi = "TRY", Durum = durum, KaynakModul = kaynakModul, KaynakId = kaynakId,
+            IliskiliCariHareketId = iliskiliCariHareketId
         };
         dbContext.CariHareketler.Add(hareket);
         await dbContext.SaveChangesAsync();
@@ -2124,6 +2125,207 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.Single(sonuc);
         Assert.Equal(OdemeGuvenSeviyeleri.YuksekOlasilik, sonuc[0].GuvenSeviyesi);
         Assert.Contains(sonuc[0].EslesenAlanlar, x => x.Contains("Kasa/banka"));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_UretilenHareketYanlisHedefeBagli_KapatildiMiFalseVeUyariUretilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefX = await YeniCariHareketAsync(dbContext, cariId, 100m, 0m, bugun);
+        var hedefY = await YeniCariHareketAsync(dbContext, cariId, 50m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefX);
+        await YeniCariHareketAsync(dbContext, cariId, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefY);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.KapatildiMi);
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.KapatmaHedefiVarAmaKapanmamis);
+        Assert.DoesNotContain($"#{hedefY}", detay.EtkiledigiCariVeyaBorc ?? string.Empty);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_UretilenHareketDogruHedefeBagli_KapatildiMiTrueVeUyariUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefX = await YeniCariHareketAsync(dbContext, cariId, 100m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefX);
+        await YeniCariHareketAsync(dbContext, cariId, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefX);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.True(detay.KapatildiMi);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.KapatmaHedefiVarAmaKapanmamis);
+        Assert.Contains($"#{hedefX}", detay.EtkiledigiCariVeyaBorc);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_IptalOdemeninAktifKaynakHareketiYanlisHedefeBagli_IptalAmaKapamaGeriAlinmamisUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefX = await YeniCariHareketAsync(dbContext, cariId, 100m, 0m, bugun);
+        var hedefY = await YeniCariHareketAsync(dbContext, cariId, 50m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefX, durum: TahsilatOdemeBelgeDurumlari.Iptal);
+        var kaynakHareketId = await YeniCariHareketAsync(dbContext, cariId, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefY);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.IptalAmaKapamaGeriAlinmamis);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.IliskiliBelgeId == kaynakHareketId);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_IptalOdemeninAktifKaynakHareketiDogruHedefeBagli_IptalAmaKapamaGeriAlinmamisUretilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefX = await YeniCariHareketAsync(dbContext, cariId, 100m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefX, durum: TahsilatOdemeBelgeDurumlari.Iptal);
+        var kaynakHareketId = await YeniCariHareketAsync(dbContext, cariId, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefX);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.IptalAmaKapamaGeriAlinmamis
+            && u.IliskiliBelgeId == kaynakHareketId);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_YanlisKapamaHedefindeBileGercekCariEtkisiKaybolmaz()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefX = await YeniCariHareketAsync(dbContext, cariId, 100m, 0m, bugun);
+        var hedefY = await YeniCariHareketAsync(dbContext, cariId, 50m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefX);
+        await YeniCariHareketAsync(dbContext, cariId, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefY);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.KapatildiMi);
+        Assert.True(detay.BakiyeyeDahilMi);
+        Assert.Equal(-100m, detay.EtkiledigiTutar);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_KapatilacakHareketBaskaCariyeAitse_KapamaDogrulanmazVeYabanciDetayTasinmaz()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariA = await YeniCariKartAsync(dbContext, tesisId, suffix + "A");
+        var cariB = await YeniCariKartAsync(dbContext, tesisId, suffix + "B");
+        var bugun = DateTime.UtcNow.Date;
+
+        var hedefB = await YeniCariHareketAsync(dbContext, cariB, 100m, 0m, bugun);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 100m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit,
+            kapatilacakCariHareketId: hedefB);
+        await YeniCariHareketAsync(dbContext, cariA, 0m, 100m, bugun,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId, iliskiliCariHareketId: hedefB);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.KapatildiMi);
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.KapatmaHedefiVarAmaKapanmamis);
+        Assert.DoesNotContain("#", detay.EtkiledigiCariVeyaBorc ?? string.Empty);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_BaskaTesisinFisineBagliAktifNakitOdeme_OdemeVarFisYokUretilirVeFisAyrintisiSizmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", bugun, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
+        Assert.True(detay.BagliFisErisimKisitliMi);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains(suffixB));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_AyniTesisteSoftDeleteEdilmisFiseBagliAktifNakitOdeme_OdemeVarFisYokUretilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[MuhasebeFisler] SET [IsDeleted] = 1 WHERE [Id] = {fisId}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_AyniTesisteGecerliFiseBagliAktifNakitOdeme_OdemeVarFisYokUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
     }
 
     // ─────────────────────────────────────────────────────────────

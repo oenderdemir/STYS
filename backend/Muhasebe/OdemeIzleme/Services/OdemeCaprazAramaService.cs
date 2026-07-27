@@ -632,9 +632,18 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             q = q.Where(_ => false);
         }
 
+        // GECERLI BAGLANTI: KaynakModul/KaynakId dolu VE isaret edilen belge silinmemis VE bu
+        // hareketin kasa/banka hesabiyla AYNI tesise ait (b.CariKart.TesisId == h.KasaBankaHesap.TesisId).
+        // Tesis iliskisi dogrulanamiyorsa (CariKart null/TesisId farkli) veya belge baska tesisteyse
+        // baglanti GECERSIZ sayilir - "BELGE:{id}" anahtari URETILMEZ, yabanci belge ID'si/ayrintisi
+        // DTO'ya TASINMAZ, aday bagimsiz (BagimsizKayit=1) sayilarak asla YuksekOlasilik URETILMEZ.
+        // KONTROL SQL SORGUSUNDA uygulanir - sonradan DTO temizligi YAPILMAZ (bkz. CariHareketAdaylari/
+        // KasaHareketAdaylari ile ayni yaklasim).
         return q.Select(h => new AdayHam
         {
             Anahtar = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.KasaBankaHesap!.TesisId)
                 ? "BELGE:" + h.KaynakId.ToString()
                 : "BANKAHAREKET:" + h.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.BankaHareket,
@@ -654,7 +663,10 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : _dbContext.KasaBankaHesaplari.Where(k => k.Id == h.KasaBankaHesapId).Select(k => k.MuhasebeHesapPlaniId).FirstOrDefault(),
             MaliYil = null,
             Donem = null,
-            TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? h.KaynakId : null,
+            TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.KasaBankaHesap!.TesisId)
+                ? h.KaynakId : null,
             CariHareketId = null,
             PosTahsilatValorId = null,
             MuhasebeFisId = null,
@@ -663,12 +675,28 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             KopuklukCariYok = 0,
             KopuklukValorYok = 0,
             KopuklukHedefHesapYok = 0,
+            // Odeme belgesinden dogdugu ISARETLI ama kaynak belge HICBIR TESISTE bulunamiyor
+            // (silinmis/hic var olmamis) - tesis uyumsuzlugundan AYRI bir kopuklukdur.
             KopuklukOdemeBaglantisiYok = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
                 && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
                 ? 1 : 0,
             KopuklukSoftDelete = 0,
-            KopuklukYetkiDisindaOdemeBaglantisi = 0,
-            BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
+            // Belge AKTIF olarak baska bir yerde bulunuyor (silinmemis) ANCAK bu hareketin
+            // kasa/banka hesabinin tesisiyle UYUSMUYOR (veya tesis iliskisi dogrulanamiyor) -
+            // yetki kapsami disinda bir baglanti, "belge yok" ile KARISTIRILMAZ.
+            KopuklukYetkiDisindaOdemeBaglantisi = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.KasaBankaHesap!.TesisId)
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
+                ? 1 : 0,
+            // BAGIMSIZ: hicbir odeme belgesine GECERLI sekilde baglanmamis banka hareketi (KaynakModul
+            // farkli/bos OLDUGU gibi, KaynakModul dogru ama baglanti tesis uyumsuzlugu YUZUNDEN
+            // GECERSIZ oldugunda da bagimsiz sayilir).
+            BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
+                || h.KaynakId == null
+                || !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.KasaBankaHesap!.TesisId)
+                ? 1 : 0
         });
     }
 

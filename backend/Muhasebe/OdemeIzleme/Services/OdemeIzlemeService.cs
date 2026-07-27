@@ -270,15 +270,19 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (belge.KasaBankaHesapId.HasValue)
         {
-            // YETKI KAPSAMI SORGUNUN KENDISINDE: hesap YALNIZCA kullanicinin yetkili oldugu
-            // tesislerden biriyse yuklenir. Baska tesise ait bir hesabin adi/banka adi/IBAN'i
-            // (maskeli dahi olsa)/muhasebe hesap kodu DTO'ya HIC girmez - "once oku sonra temizle"
-            // yaklasimi kullanilmaz.
+            // YETKI KAPSAMI SORGUNUN KENDISINDE: hesap YALNIZCA (a) kullanicinin yetkili oldugu
+            // tesislerden biriyse VE (b) odemenin KENDI tesisiyle (CariKart.TesisId) AYNI tesise
+            // aitse yuklenir. Kullanici birden fazla tesise yetkili olabilir - "yetkili herhangi bir
+            // tesise ait" YETERLI DEGILDIR, hesap MUTLAKA bu odemenin tesisiyle eslesmelidir. Hesabin
+            // TesisId'si null ise de GECERLI SAYILMAZ (x.TesisId == tesisId, null icin hep false).
+            // Baska tesise ait bir hesabin adi/banka adi/IBAN'i (maskeli dahi olsa)/muhasebe hesap
+            // kodu DTO'ya HIC girmez - "once oku sonra temizle" yaklasimi kullanilmaz.
             var yetkiliTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
 
             var hesap = await _dbContext.KasaBankaHesaplari.AsNoTracking()
                 .Where(x => x.Id == belge.KasaBankaHesapId.Value
-                    && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value))
+                    && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value)
+                    && x.TesisId == tesisId)
                 .Select(x => new { x.Ad, x.Tip, x.BankaAdi, x.Iban, MuhasebeHesapKodu = x.MuhasebeHesapPlani != null ? x.MuhasebeHesapPlani.TamKod : null })
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -292,14 +296,28 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             }
             else
             {
-                // Hesap ya yok ya da YETKI KAPSAMI DISINDA - hangisi oldugu bile ifsa edilmez.
                 dto.BagliHesapErisimKisitliMi = true;
-                dto.ErisimKisitiNedenKodlari.Add(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi);
+
+                // Neden kodu SECIMI GUVENLIDIR - hesap adi/IBAN/kod gibi hicbir ayrinti okumaz,
+                // yalnizca ID ve TesisId'nin kullanicinin ZATEN yetkili oldugu bir tesise ait olup
+                // olmadigini kontrol eder. Kullanici o tesisi zaten gorebildigi icin bu bilgi ekstra
+                // bir sey ifsa etmez: yetkili bir tesisteyse ama odemenin tesisinden FARKLIYSA
+                // TESIS_UYUSMAZLIGI donulur; hesap hic yoksa veya kullanicinin YETKILI OLMADIGI bir
+                // tesisteyse (hangisi oldugu ifsa edilmeden) genel yetki kapsami disi kodu donulur.
+                var yetkiliTesisteVarMi = await _dbContext.KasaBankaHesaplari.AsNoTracking()
+                    .AnyAsync(x => x.Id == belge.KasaBankaHesapId.Value
+                        && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value), cancellationToken);
+
+                var nedenKodu = yetkiliTesisteVarMi
+                    ? OdemeErisimKisitiNedenKodlari.TesisUyusmazligi
+                    : OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi;
+
+                dto.ErisimKisitiNedenKodlari.Add(nedenKodu);
                 dto.Uyarilar.Add(new OdemeUyariDto
                 {
-                    UyariTipi = OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi,
+                    UyariTipi = nedenKodu,
                     GuvenSeviyesi = OdemeGuvenSeviyeleri.Kesin,
-                    Aciklama = "Bağlı kasa/banka hesabı mevcut yetki kapsamınızla uyuşmuyor; hesap ayrıntıları gösterilmiyor."
+                    Aciklama = "Bağlı kasa/banka hesabı mevcut yetki kapsamınızla veya ödemenin tesisiyle uyuşmuyor; hesap ayrıntıları gösterilmiyor."
                 });
             }
         }

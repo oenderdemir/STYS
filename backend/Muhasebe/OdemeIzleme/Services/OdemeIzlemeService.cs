@@ -83,7 +83,9 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         }
         if (filter.KasaBankaHesapId.HasValue)
         {
-            query = query.Where(b => b.KasaBankaHesapId == filter.KasaBankaHesapId.Value);
+            query = query.Where(b => b.KasaBankaHesapId == filter.KasaBankaHesapId.Value
+                && b.KasaBankaHesap != null && !b.KasaBankaHesap.IsDeleted
+                && b.KasaBankaHesap.TesisId.HasValue && b.CariKart != null && b.KasaBankaHesap.TesisId == b.CariKart.TesisId);
         }
         if (!string.IsNullOrWhiteSpace(filter.Durum))
         {

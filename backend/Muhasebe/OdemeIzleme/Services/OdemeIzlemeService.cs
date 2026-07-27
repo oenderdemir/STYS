@@ -328,29 +328,50 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         DogrulanmisFis? dogrulanmisFis = null;
         if (belge.MuhasebeFisId.HasValue)
         {
-            // YETKI KAPSAMI SORGUNUN KENDISINDE: fis yalnizca yetkili tesislerden birine aitse
-            // yuklenir. IgnoreQueryFilters KASITLI (soft-delete'i "bulunamadi"dan ayirmak icin)
-            // ANCAK tesis kisiti KALDIRILMAZ - baska tesisin fis no/tarihi asla donmez.
+            // YETKI KAPSAMI SORGUNUN KENDISINDE: fis YALNIZCA (a) kullanicinin yetkili oldugu
+            // tesislerden biriyse VE (b) odemenin KENDI tesisiyle (CariKart.TesisId) AYNI tesise
+            // aitse yuklenir. Kullanici birden fazla tesise yetkili olabilir - "yetkili herhangi bir
+            // tesise ait" YETERLI DEGILDIR, fis MUTLAKA bu odemenin tesisiyle eslesmelidir.
+            // IgnoreQueryFilters KASITLI (soft-delete'i "bulunamadi"dan ayirmak icin) ANCAK tesis
+            // kisiti KALDIRILMAZ - baska tesisin fis no/tarihi/durumu asla donmez.
             var yetkiliTesisIdsFis = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
 
             var fis = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
-                .Where(f => f.Id == belge.MuhasebeFisId.Value && yetkiliTesisIdsFis.Contains(f.TesisId))
+                .Where(f => f.Id == belge.MuhasebeFisId.Value && yetkiliTesisIdsFis.Contains(f.TesisId)
+                    && f.TesisId == tesisId)
                 .Select(f => new { f.Id, f.FisNo, f.FisTarihi, f.Durum, f.IsDeleted, f.TesisId, f.MaliYil, f.Donem })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (fis is null)
             {
-                // Fis ya yok ya da yetki kapsami disinda - ayirt edilmez, ayrinti donmez.
+                // Fis ya yok, ya yetki kapsami disinda, ya da odemenin tesisinden FARKLI bir tesise
+                // ait - hangisi oldugu ifsa edilmez, ayrinti donmez. Bakiye degerlendirmesinde
+                // Bulundu=false oldugu icin bu fis ASLA gecerli kabul edilmez (MuhasebeFisDogrulama
+                // degistirilmedi).
                 dogrulanmisFis = new DogrulanmisFis(belge.MuhasebeFisId.Value, Bulundu: false, SoftDeleteEdilmis: false,
                     Durum: null, TesisId: null, MaliYil: null, Donem: null, FisTarihi: null, BeklenenKasaBankaHesabiEtkilenmisMi: null);
 
                 dto.BagliFisErisimKisitliMi = true;
-                dto.ErisimKisitiNedenKodlari.Add(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi);
+
+                // Neden kodu SECIMI GUVENLIDIR - fis no/tarih/durum gibi hicbir ayrinti okumaz,
+                // yalnizca ID ve TesisId'nin kullanicinin ZATEN yetkili oldugu bir tesise ait olup
+                // olmadigini kontrol eder. Kullanici o tesisi zaten gorebildigi icin bu bilgi ekstra
+                // bir sey ifsa etmez: yetkili bir tesisteyse ama odemenin tesisinden FARKLIYSA
+                // TESIS_UYUSMAZLIGI donulur; fis hic yoksa veya kullanicinin YETKILI OLMADIGI bir
+                // tesisteyse (hangisi oldugu ifsa edilmeden) genel yetki kapsami disi kodu donulur.
+                var yetkiliTesisteVarMi = await _dbContext.MuhasebeFisler.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(f => f.Id == belge.MuhasebeFisId.Value && yetkiliTesisIdsFis.Contains(f.TesisId), cancellationToken);
+
+                var nedenKodu = yetkiliTesisteVarMi
+                    ? OdemeErisimKisitiNedenKodlari.TesisUyusmazligi
+                    : OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi;
+
+                dto.ErisimKisitiNedenKodlari.Add(nedenKodu);
                 dto.Uyarilar.Add(new OdemeUyariDto
                 {
-                    UyariTipi = OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi,
+                    UyariTipi = nedenKodu,
                     GuvenSeviyesi = OdemeGuvenSeviyeleri.Kesin,
-                    Aciklama = "Bağlı muhasebe fişi bulunamadı veya mevcut yetki kapsamınızla uyuşmuyor; fiş ayrıntıları gösterilmiyor."
+                    Aciklama = "Bağlı muhasebe fişi bulunamadı veya mevcut yetki kapsamınızla/ödemenin tesisiyle uyuşmuyor; fiş ayrıntıları gösterilmiyor."
                 });
             }
             else

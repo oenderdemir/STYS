@@ -1295,6 +1295,54 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
     }
 
+    [IntegrationFact]
+    public async Task Detay_KullaniciHemAHemBTesisineYetkiliyken_ABelgesiBFisineBagliysa_TesisUyusmazligiDoner()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        // Fis TesisB'ye ait - belge TesisA'da ve BU fise isaret ediyor.
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        // Kullanici HEM TesisA HEM TesisB'ye yetkili - "yetkili herhangi bir tesise ait" YETERLI
+        // SAYILMAMALI, fis MUTLAKA odemenin (TesisA'nin) kendi tesisiyle eslesmelidir.
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.True(detay.BagliFisErisimKisitliMi);
+        Assert.Contains(OdemeErisimKisitiNedenKodlari.TesisUyusmazligi, detay.ErisimKisitiNedenKodlari);
+        Assert.Null(detay.MuhasebeFisNo);
+        Assert.Null(detay.MuhasebeFisTarihi);
+        Assert.Null(detay.MuhasebeFisDurumu);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains(suffixB));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_OdemeVeFisAyniTesistiyse_FisDetaylariGosterilirVeTesisUyusmazligiUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.BagliFisErisimKisitliMi);
+        Assert.DoesNotContain(OdemeErisimKisitiNedenKodlari.TesisUyusmazligi, detay.ErisimKisitiNedenKodlari);
+        Assert.NotNull(detay.MuhasebeFisNo);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

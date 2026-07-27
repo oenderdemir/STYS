@@ -2328,6 +2328,140 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
     }
 
+    [IntegrationFact]
+    public async Task Detay_AyniTesisteSoftDeleteEdilmisHesabaBagliOdeme_HesapAyrintisiSizmaz()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp, iban: "TR330006100519786457841326");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[KasaBankaHesaplari] SET [IsDeleted] = 1 WHERE [Id] = {bankaHesabi}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.True(detay.BagliHesapErisimKisitliMi);
+        Assert.Null(detay.KasaBankaHesapAdi);
+        Assert.Null(detay.KasaBankaHesapTipi);
+        Assert.Null(detay.BankaAdi);
+        Assert.Null(detay.IbanMaskeli);
+        Assert.Null(detay.MuhasebeHesapKodu);
+        Assert.NotEmpty(detay.ErisimKisitiNedenKodlari);
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi
+            || u.UyariTipi == OdemeErisimKisitiNedenKodlari.TesisUyusmazligi);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains("BNK"));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_AyniTesisteSilinmemisGecerliHesabaBagliOdeme_HesapAyrintisiDonmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp, iban: "TR330006100519786457841326");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.BagliHesapErisimKisitliMi);
+        Assert.NotNull(detay.KasaBankaHesapAdi);
+        Assert.Equal("TR33 **** **** **** **26", detay.IbanMaskeli);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi
+            || u.UyariTipi == OdemeErisimKisitiNedenKodlari.TesisUyusmazligi);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_BaskaTesisinFisineBagliAktifNakitOdeme_UyariSayisiBirOlur()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", bugun, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Equal(1, satir.UyariSayisi);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_AyniTesisteSoftDeleteEdilmisFiseBagliAktifNakitOdeme_UyariSayisiBirOlur()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [Muhasebe].[MuhasebeFisler] SET [IsDeleted] = 1 WHERE [Id] = {fisId}");
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Equal(1, satir.UyariSayisi);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_AyniTesisteGecerliFiseBagliAktifNakitOdeme_UyariSayisiSifirOlur()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Equal(0, satir.UyariSayisi);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_MuhasebeFisIdNullAktifNakitOdeme_UyariSayisiBirOlur()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Equal(1, satir.UyariSayisi);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

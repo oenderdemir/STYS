@@ -210,11 +210,17 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // Sayfadaki her satir icin HAFIF uyari sayaci (tam liste yalnizca detayda) - iki ek, ID-bazli
         // (dar kapsamli) sorgu ile, N+1 OLMADAN.
         var sayfaIdler = satirlar.Select(x => x.Id).ToList();
+        // Fissiz sayilma kosulu DETAY EKRANIYLA (OdemeVarFisYok) UYUMLU olmalidir: ham MuhasebeFisId'nin
+        // dolu olmasi YETERLI DEGILDIR - fis mevcut olmali, silinmemis olmali VE odemenin KENDI
+        // tesisiyle (CariKart.TesisId) ayni tesise ait olmalidir. Bu kontrol tek bir SQL sorgusunda
+        // (EXISTS alt sorgusu) uygulanir - sayfa basina N+1 veya tam BuildUyarilarAsync cagrisi YOKTUR.
         var fissizAktifNakitIdler = sayfaIdler.Count == 0
             ? []
             : await _dbContext.TahsilatOdemeBelgeleri.AsNoTracking()
                 .Where(b => sayfaIdler.Contains(b.Id) && b.Durum == TahsilatOdemeBelgeDurumlari.Aktif
-                    && b.MuhasebeFisId == null && OdemeYontemleri.NakitHareketiGerektirenler.Contains(b.OdemeYontemi))
+                    && OdemeYontemleri.NakitHareketiGerektirenler.Contains(b.OdemeYontemi)
+                    && (!b.MuhasebeFisId.HasValue || !_dbContext.MuhasebeFisler.AsNoTracking()
+                        .Any(f => f.Id == b.MuhasebeFisId.Value && !f.IsDeleted && b.CariKart != null && f.TesisId == b.CariKart.TesisId)))
                 .Select(b => b.Id)
                 .ToListAsync(cancellationToken);
 
@@ -302,7 +308,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             var yetkiliTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
 
             var hesap = await _dbContext.KasaBankaHesaplari.AsNoTracking()
-                .Where(x => x.Id == belge.KasaBankaHesapId.Value
+                .Where(x => x.Id == belge.KasaBankaHesapId.Value && !x.IsDeleted
                     && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value)
                     && x.TesisId == tesisId)
                 .Select(x => new { x.Ad, x.Tip, x.BankaAdi, x.Iban, MuhasebeHesapKodu = x.MuhasebeHesapPlani != null ? x.MuhasebeHesapPlani.TamKod : null })
@@ -327,7 +333,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 // TESIS_UYUSMAZLIGI donulur; hesap hic yoksa veya kullanicinin YETKILI OLMADIGI bir
                 // tesisteyse (hangisi oldugu ifsa edilmeden) genel yetki kapsami disi kodu donulur.
                 var yetkiliTesisteVarMi = await _dbContext.KasaBankaHesaplari.AsNoTracking()
-                    .AnyAsync(x => x.Id == belge.KasaBankaHesapId.Value
+                    .AnyAsync(x => x.Id == belge.KasaBankaHesapId.Value && !x.IsDeleted
                         && x.TesisId.HasValue && yetkiliTesisIds.Contains(x.TesisId.Value), cancellationToken);
 
                 var nedenKodu = yetkiliTesisteVarMi

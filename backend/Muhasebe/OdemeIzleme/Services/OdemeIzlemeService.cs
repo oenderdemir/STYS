@@ -1092,11 +1092,16 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         {
             var gunBaslangic = belgeTarihi.Date;
             var gunBitis = gunBaslangic.AddDays(1);
+            // Ortak hesap yalnizca mevcut/silinmemis VE odemenin KENDI tesisiyle (tesisId) ayni tesise
+            // aitse eslesme olcutu olarak kullanilabilir - baska tesise ait bir hesap (kullanici o
+            // tesise de yetkili olsa dahi) bu uyariyi asla tetiklememeli.
             var benzer = await _dbContext.TahsilatOdemeBelgeleri.AsNoTracking()
                 .Where(b => !b.IsDeleted && b.Id != belgeId && b.CariKartId != cariKartId
                     && b.KasaBankaHesapId == kasaBankaHesapId.Value && b.Tutar == tutar
                     && b.BelgeTarihi >= gunBaslangic && b.BelgeTarihi < gunBitis
-                    && b.CariKart != null && b.CariKart.TesisId == tesisId)
+                    && b.CariKart != null && b.CariKart.TesisId == tesisId
+                    && _dbContext.KasaBankaHesaplari.AsNoTracking().Any(k => k.Id == kasaBankaHesapId.Value
+                        && !k.IsDeleted && k.TesisId.HasValue && k.TesisId == tesisId))
                 .Select(b => (int?)b.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             if (benzer.HasValue)

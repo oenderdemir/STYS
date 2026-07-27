@@ -8,6 +8,7 @@ using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.OdemeIzleme.Dtos;
@@ -44,6 +45,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
     private readonly List<int> _cariHareketIdler = [];
     private readonly List<int> _valorIdler = [];
     private readonly List<int> _fisIdler = [];
+    private readonly List<int> _donemIdler = [];
 
     private static StysAppDbContext CreateDbContext()
     {
@@ -172,10 +174,45 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         return fis.Id;
     }
 
+    /// <summary>MaliYil/Donem'i fisTarihi'nden BAGIMSIZ acikca belirleyen varyant - donem
+    /// uyumsuzlugu senaryolarini test etmek icin.</summary>
+    private async Task<int> YeniFisAsync(StysAppDbContext dbContext, int tesisId, DateTime fisTarihi, string durum, int maliYil, int donem)
+    {
+        var fis = new MuhasebeFis
+        {
+            TesisId = tesisId, MaliYil = maliYil, Donem = donem, FisNo = $"{TestMarker}-{Guid.NewGuid():N}"[..20],
+            FisTarihi = fisTarihi, FisTipi = MuhasebeFisTipleri.Mahsup, Durum = durum, ToplamBorc = 0, ToplamAlacak = 0
+        };
+        dbContext.MuhasebeFisler.Add(fis);
+        await dbContext.SaveChangesAsync();
+        _fisIdler.Add(fis.Id);
+        return fis.Id;
+    }
+
+    private async Task<int> YeniMuhasebeDonemAsync(
+        StysAppDbContext dbContext, int tesisId, int maliYil, int donemNo, DateTime baslangicTarihi, DateTime bitisTarihi)
+    {
+        var donem = new MuhasebeDonem
+        {
+            TesisId = tesisId, MaliYil = maliYil, DonemNo = donemNo,
+            BaslangicTarihi = baslangicTarihi, BitisTarihi = bitisTarihi, KapaliMi = false
+        };
+        dbContext.MuhasebeDonemler.Add(donem);
+        await dbContext.SaveChangesAsync();
+        _donemIdler.Add(donem.Id);
+        return donem.Id;
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     private List<STYS.Tests.TestSupport.CleanupAdimi> OlusturCleanupAdimlari() =>
     [
+        new("MuhasebeDonemler silme", async () =>
+        {
+            if (_donemIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.MuhasebeDonemler.IgnoreQueryFilters().Where(x => _donemIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
         new("MuhasebeFisler silme", async () =>
         {
             if (_fisIdler.Count == 0) return;
@@ -249,6 +286,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             if (adet > 0) kalanlar[tabloAdi] = adet;
         }
 
+        if (_donemIdler.Count > 0) await KontrolEt("MuhasebeDonemler", dbContext.MuhasebeDonemler.IgnoreQueryFilters().Where(x => _donemIdler.Contains(x.Id)));
         if (_fisIdler.Count > 0) await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.Id)));
         if (_valorIdler.Count > 0) await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.IgnoreQueryFilters().Where(x => _valorIdler.Contains(x.Id)));
         if (_cariHareketIdler.Count > 0) await KontrolEt("CariHareketler", dbContext.CariHareketler.IgnoreQueryFilters().Where(x => _cariHareketIdler.Contains(x.Id)));
@@ -387,6 +425,85 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var detay = await svc.GetDetayAsync(belgeId);
 
         Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.PosVarValorYok);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Fis donem dogrulamasinin GERCEK GetDetayAsync akisina baglanmasi (bu turun duzeltmesi) -
+    // MuhasebeDonem kaydindan cozulen MaliYil/DonemNo/tarih araligi Degerlendir'e GERCEKTEN
+    // gecirildigini kanitlar (yalnizca MuhasebeFisDogrulama birim testi DEGIL).
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task Detay_FisMaliYiliBeklenenDonemdenFarkli_FisMaliYiliUyumsuzDoner()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        // Odeme tarihinin GERCEKTEN ait oldugu donem: MaliYil=2026, DonemNo=bugun.Month.
+        await YeniMuhasebeDonemAsync(dbContext, tesisId, 2026, bugun.Month,
+            new DateTime(bugun.Year, bugun.Month, 1), new DateTime(bugun.Year, bugun.Month, 1).AddMonths(1).AddDays(-1));
+
+        // Fis AYNI donem numarasini ve tarihini tasiyor ama FARKLI bir mali yila (2025) ait.
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2025, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, muhasebeFisId: fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(FisGecersizlikNedenKodlari.FisMaliYiliUyumsuz, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.Contains(detay.BakiyeyeDahilEdilmemeAciklamalari, a => a.Contains("mali yılı"));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_FisDonemNoBeklenenDonemdenFarkli_FisDonemNoUyumsuzDoner()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        await YeniMuhasebeDonemAsync(dbContext, tesisId, 2026, bugun.Month,
+            new DateTime(bugun.Year, bugun.Month, 1), new DateTime(bugun.Year, bugun.Month, 1).AddMonths(1).AddDays(-1));
+
+        // Fis AYNI mali yili ve tarihini tasiyor ama FARKLI bir donem no'suna ait.
+        var farkliDonemNo = bugun.Month == 1 ? 2 : 1;
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: farkliDonemNo);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, muhasebeFisId: fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(FisGecersizlikNedenKodlari.FisDonemNoUyumsuz, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.Contains(detay.BakiyeyeDahilEdilmemeAciklamalari, a => a.Contains("dönemi"));
+    }
+
+    [IntegrationFact]
+    public async Task Detay_FisMaliYilDonemVeTarihiUyumlu_DonemHatasiUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        await YeniMuhasebeDonemAsync(dbContext, tesisId, 2026, bugun.Month,
+            new DateTime(bugun.Year, bugun.Month, 1), new DateTime(bugun.Year, bugun.Month, 1).AddMonths(1).AddDays(-1));
+
+        // Fis mali yili, donemi VE tarihi beklenen donemle TAM uyumlu.
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, muhasebeFisId: fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(FisGecersizlikNedenKodlari.FisMaliYiliUyumsuz, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.DoesNotContain(FisGecersizlikNedenKodlari.FisDonemNoUyumsuz, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.DoesNotContain(FisGecersizlikNedenKodlari.FisDonemiUyumsuz, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.DoesNotContain(FisGecersizlikNedenKodlari.FisTarihiYok, detay.BakiyeyeDahilEdilmemeNedenKodlari);
     }
 
     /// <summary>OdemeUyariTipleri.MukerrerBelgeNo kontrolu, ayni tesiste (aktif) iki farkli odemenin

@@ -418,13 +418,29 @@ public class OdemeIzlemeService : IOdemeIzlemeService
             }
             else if (belge.MuhasebeFisId.HasValue)
             {
+                // Odeme belgesinin TesisId+BelgeTarihi'ne karsilik gelen GERCEK muhasebe donemi -
+                // bagli fisin MaliYil/DonemNo/FisTarihi'nin bu donemle uyup uymadigini dogrulamak
+                // icin kullanilir. Kapali/acik ayrimi KASITLI olarak burada uygulanmaz (bu kontrol
+                // "hangi doneme ait olmasi gerekiyordu" sorusuna cevap arar, "donem su an acik mi"
+                // sorusuna degil) - yalnizca tarih araligina gore eslesen donem aranir.
+                var beklenenDonemKaydi = await _dbContext.MuhasebeDonemler.AsNoTracking()
+                    .Where(d => !d.IsDeleted && d.TesisId == tesisId
+                        && d.BaslangicTarihi <= belge.BelgeTarihi && d.BitisTarihi >= belge.BelgeTarihi)
+                    .Select(d => new { d.MaliYil, d.DonemNo, d.BaslangicTarihi, d.BitisTarihi })
+                    .FirstOrDefaultAsync(cancellationToken);
+
                 // ID'nin dolu olmasi TEK BASINA yeterli DEGILDIR - fis gercekten var mi, silinmis mi,
                 // mali etki olusturan durumda mi, dogru tesise mi ait, dogru kasa/banka hesabini mi
-                // etkiliyor: hepsi dogrulanir.
+                // etkiliyor, dogru mali yil/donem ve donem tarih araligina mi denk geliyor: hepsi
+                // dogrulanir.
                 var fisSonucu = MuhasebeFisDogrulama.Degerlendir(
                     dogrulanmisFis,
                     beklenenTesisId: tesisId,
-                    kasaBankaHesabiKontrolEdilsinMi: belge.KasaBankaHesapId.HasValue);
+                    donemBaslangic: beklenenDonemKaydi?.BaslangicTarihi,
+                    donemBitis: beklenenDonemKaydi?.BitisTarihi,
+                    kasaBankaHesabiKontrolEdilsinMi: belge.KasaBankaHesapId.HasValue,
+                    beklenenMaliYil: beklenenDonemKaydi?.MaliYil,
+                    beklenenDonem: beklenenDonemKaydi?.DonemNo);
 
                 if (!fisSonucu.GecerliMi)
                 {

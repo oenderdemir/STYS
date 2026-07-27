@@ -15,6 +15,8 @@ using STYS.Muhasebe.OdemeIzleme.Dtos;
 using STYS.Muhasebe.OdemeIzleme.Services;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Rezervasyonlar;
+using STYS.Rezervasyonlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -46,6 +48,8 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
     private readonly List<int> _valorIdler = [];
     private readonly List<int> _fisIdler = [];
     private readonly List<int> _donemIdler = [];
+    private readonly List<int> _rezervasyonOdemeIdler = [];
+    private readonly List<int> _rezervasyonIdler = [];
 
     private static StysAppDbContext CreateDbContext()
     {
@@ -203,6 +207,28 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         return donem.Id;
     }
 
+    private async Task YeniRezervasyonOdemeBaglantisiAsync(StysAppDbContext dbContext, int tesisId, string suffix, int belgeId, string referansNo)
+    {
+        var rezervasyon = new Rezervasyon
+        {
+            ReferansNo = referansNo, TesisId = tesisId, GirisTarihi = DateTime.UtcNow.Date, CikisTarihi = DateTime.UtcNow.Date.AddDays(1),
+            ToplamBazUcret = 100m, ToplamUcret = 100m, ParaBirimi = "TRY",
+            MisafirAdiSoyadi = "Test Misafir " + suffix, MisafirTelefon = "0000000000", RezervasyonDurumu = RezervasyonDurumlari.Onayli
+        };
+        dbContext.Rezervasyonlar.Add(rezervasyon);
+        await dbContext.SaveChangesAsync();
+        _rezervasyonIdler.Add(rezervasyon.Id);
+
+        var rezervasyonOdeme = new RezervasyonOdeme
+        {
+            RezervasyonId = rezervasyon.Id, OdemeTutari = 100m, ParaBirimi = "TRY",
+            OdemeTipi = OdemeTipleri.Nakit, TahsilatOdemeBelgesiId = belgeId, Durum = RezervasyonOdemeDurumlari.Aktif
+        };
+        dbContext.RezervasyonOdemeler.Add(rezervasyonOdeme);
+        await dbContext.SaveChangesAsync();
+        _rezervasyonOdemeIdler.Add(rezervasyonOdeme.Id);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     private List<STYS.Tests.TestSupport.CleanupAdimi> OlusturCleanupAdimlari() =>
@@ -230,6 +256,18 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             if (_cariHareketIdler.Count == 0) return;
             await using var dbContext = CreateDbContext();
             await dbContext.CariHareketler.IgnoreQueryFilters().Where(x => _cariHareketIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("RezervasyonOdemeler silme", async () =>
+        {
+            if (_rezervasyonOdemeIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.RezervasyonOdemeler.IgnoreQueryFilters().Where(x => _rezervasyonOdemeIdler.Contains(x.Id)).ExecuteDeleteAsync();
+        }),
+        new("Rezervasyonlar silme", async () =>
+        {
+            if (_rezervasyonIdler.Count == 0) return;
+            await using var dbContext = CreateDbContext();
+            await dbContext.Rezervasyonlar.IgnoreQueryFilters().Where(x => _rezervasyonIdler.Contains(x.Id)).ExecuteDeleteAsync();
         }),
         new("TahsilatOdemeBelgeleri silme", async () =>
         {
@@ -290,6 +328,8 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         if (_fisIdler.Count > 0) await KontrolEt("MuhasebeFisler", dbContext.MuhasebeFisler.IgnoreQueryFilters().Where(x => _fisIdler.Contains(x.Id)));
         if (_valorIdler.Count > 0) await KontrolEt("PosTahsilatValorleri", dbContext.PosTahsilatValorleri.IgnoreQueryFilters().Where(x => _valorIdler.Contains(x.Id)));
         if (_cariHareketIdler.Count > 0) await KontrolEt("CariHareketler", dbContext.CariHareketler.IgnoreQueryFilters().Where(x => _cariHareketIdler.Contains(x.Id)));
+        if (_rezervasyonOdemeIdler.Count > 0) await KontrolEt("RezervasyonOdemeler", dbContext.RezervasyonOdemeler.IgnoreQueryFilters().Where(x => _rezervasyonOdemeIdler.Contains(x.Id)));
+        if (_rezervasyonIdler.Count > 0) await KontrolEt("Rezervasyonlar", dbContext.Rezervasyonlar.IgnoreQueryFilters().Where(x => _rezervasyonIdler.Contains(x.Id)));
         if (_belgeIdler.Count > 0) await KontrolEt("TahsilatOdemeBelgeleri", dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => _belgeIdler.Contains(x.Id)));
         if (_kasaBankaHesapIdler.Count > 0) await KontrolEt("KasaBankaHesaplari", dbContext.KasaBankaHesaplari.IgnoreQueryFilters().Where(x => _kasaBankaHesapIdler.Contains(x.Id)));
         if (_cariKartIdler.Count > 0) await KontrolEt("CariKartlar", dbContext.CariKartlar.IgnoreQueryFilters().Where(x => _cariKartIdler.Contains(x.Id)));
@@ -1778,6 +1818,44 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
 
         var svc = CreateService(dbContext, tesisId);
         var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, MaliYil = 2026, Donem = bugun.Month });
+
+        Assert.Contains(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_RezervasyonReferansNoFiltresi_BaskaTesisinRezervasyonuylaEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 100m, $"{suffixA}-A", DateTime.UtcNow.Date);
+        var referansNo = $"{suffixB}-REZ";
+        await YeniRezervasyonOdemeBaglantisiAsync(dbContext, tesisB, suffixB, belgeId, referansNo);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, RezervasyonReferansNo = referansNo });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_RezervasyonReferansNoFiltresi_AyniTesisinRezervasyonuylaEslesmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 100m, $"{suffix}-A", DateTime.UtcNow.Date);
+        var referansNo = $"{suffix}-REZ";
+        await YeniRezervasyonOdemeBaglantisiAsync(dbContext, tesisId, suffix, belgeId, referansNo);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, RezervasyonReferansNo = referansNo });
 
         Assert.Contains(sonuc.Items, x => x.Id == belgeId);
     }

@@ -135,11 +135,16 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
+            // Rezervasyon yalnizca ReferansNo eslesirse DEGIL, AYRICA odemenin KENDI tesisiyle
+            // (CariKart.TesisId) ayni tesise aitse eslesir - baska tesise ait bir rezervasyon
+            // (kullanici o tesise de yetkili olsa dahi) bu odemeyi asla eslestirmemeli.
             var rezervasyonBelgeIdler = _dbContext.RezervasyonOdemeler.AsNoTracking()
-                .Where(r => r.TahsilatOdemeBelgesiId.HasValue
-                    && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo))
-                .Select(r => r.TahsilatOdemeBelgesiId!.Value);
-            query = query.Where(b => rezervasyonBelgeIdler.Contains(b.Id));
+                .Where(r => !r.IsDeleted && r.TahsilatOdemeBelgesiId.HasValue
+                    && r.Rezervasyon != null && !r.Rezervasyon.IsDeleted
+                    && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo))
+                .Select(r => new { BelgeId = r.TahsilatOdemeBelgesiId!.Value, TesisId = r.Rezervasyon!.TesisId });
+            query = query.Where(b => rezervasyonBelgeIdler.Any(r => r.BelgeId == b.Id
+                && b.CariKart != null && r.TesisId == b.CariKart.TesisId));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Iban))

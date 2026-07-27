@@ -429,6 +429,16 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                     .Select(d => new { d.MaliYil, d.DonemNo, d.BaslangicTarihi, d.BitisTarihi })
                     .FirstOrDefaultAsync(cancellationToken);
 
+                if (beklenenDonemKaydi is null)
+                {
+                    // Beklenen donem BULUNAMADI - bu, fisin donem uyumunun (mali yil/donem/tarih
+                    // araligi) GUVENILIR bicimde dogrulanamadigi anlamina gelir. "Donem bulunamadi"
+                    // sessizce "gecerli" SAYILMAZ - ayri, acik bir neden koduyla bildirilir.
+                    nedenKodlari.Add(BakiyeyeDahilEdilmemeNedenKodlari.MuhasebeDonemiBulunamadi);
+                    nedenAciklamalari.Add(
+                        "Ödeme tarihine karşılık gelen bir muhasebe dönemi tanımı bulunamadı; bağlı fişin mali yıl/dönem/tarih uyumu doğrulanamadı.");
+                }
+
                 // ID'nin dolu olmasi TEK BASINA yeterli DEGILDIR - fis gercekten var mi, silinmis mi,
                 // mali etki olusturan durumda mi, dogru tesise mi ait, dogru kasa/banka hesabini mi
                 // etkiliyor, dogru mali yil/donem ve donem tarih araligina mi denk geliyor: hepsi

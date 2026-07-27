@@ -506,6 +506,48 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.DoesNotContain(FisGecersizlikNedenKodlari.FisTarihiYok, detay.BakiyeyeDahilEdilmemeNedenKodlari);
     }
 
+    [IntegrationFact]
+    public async Task Detay_OdemeTarihineKarsilikGelenMuhasebeDonemiYok_MuhasebeDonemiBulunamadiDoner()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        // KASITLI: bu tesis icin HICBIR MuhasebeDonem kaydi olusturulmuyor - odeme tarihine
+        // karsilik gelen bir donem tanimi YOK.
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, muhasebeFisId: fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(BakiyeyeDahilEdilmemeNedenKodlari.MuhasebeDonemiBulunamadi, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.NotEqual(BakiyeyeDahilEdilmeDurumlari.TamamenDahil, detay.BakiyeyeDahilEdilmeDurumu);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_OdemeTarihineKarsilikGelenAktifMuhasebeDonemiVar_MuhasebeDonemiBulunamadiUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        await YeniMuhasebeDonemAsync(dbContext, tesisId, 2026, bugun.Month,
+            new DateTime(bugun.Year, bugun.Month, 1), new DateTime(bugun.Year, bugun.Month, 1).AddMonths(1).AddDays(-1));
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 300m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, muhasebeFisId: fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(BakiyeyeDahilEdilmemeNedenKodlari.MuhasebeDonemiBulunamadi, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+    }
+
     /// <summary>OdemeUyariTipleri.MukerrerBelgeNo kontrolu, ayni tesiste (aktif) iki farkli odemenin
     /// AYNI BelgeNo'ya sahip olabilecegi varsayimiyla yazilmisti - ANCAK bu test, veritabanindaki
     /// gercek "IX_TahsilatOdemeBelgeleri_BelgeNo" (unique, IsDeleted=0 filtreli, TUM sistem genelinde

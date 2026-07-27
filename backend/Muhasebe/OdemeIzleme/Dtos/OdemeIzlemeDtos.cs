@@ -41,6 +41,10 @@ public static class BakiyeyeDahilEdilmemeNedenKodlari
     public const string MuhasebeFisiIptalEdilmis = "MuhasebeFisiIptalEdilmis";
     public const string PosValorKaydiYok = "PosValorKaydiYok";
     public const string PosValorHenuzAktarilmamis = "PosValorHenuzAktarilmamis";
+
+    /// <summary>Odemenin tesis/tarihine karsilik gelen bir MuhasebeDonem kaydi bulunamadi (soft-delete
+    /// edilmis bir donem GECERLI SAYILMAZ) - fisin mali yil/donem/tarih uyumu bu yuzden dogrulanamadi.</summary>
+    public const string MuhasebeDonemiBulunamadi = "MuhasebeDonemiBulunamadi";
 }
 
 /// <summary>Bakiyeye dahil olma durumunun UST duzey ozeti.</summary>

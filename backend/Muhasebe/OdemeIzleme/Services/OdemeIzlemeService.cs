@@ -121,12 +121,16 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (filter.MaliYil.HasValue || filter.Donem.HasValue)
         {
+            // Fis yalnizca MaliYil/Donem eslesirse DEGIL, AYRICA odemenin KENDI tesisiyle
+            // (CariKart.TesisId) ayni tesise aitse eslesir - baska tesise ait bir fis (kullanici o
+            // tesise de yetkili olsa dahi) bu odemeyi asla eslestirmemeli.
             var donemFisIdler = _dbContext.MuhasebeFisler.AsNoTracking()
                 .Where(f => !f.IsDeleted
                     && (!filter.MaliYil.HasValue || f.MaliYil == filter.MaliYil.Value)
                     && (!filter.Donem.HasValue || f.Donem == filter.Donem.Value))
-                .Select(f => (int?)f.Id);
-            query = query.Where(b => donemFisIdler.Contains(b.MuhasebeFisId));
+                .Select(f => new { FisId = (int?)f.Id, f.TesisId });
+            query = query.Where(b => donemFisIdler.Any(f => f.FisId == b.MuhasebeFisId
+                && b.CariKart != null && f.TesisId == b.CariKart.TesisId));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))

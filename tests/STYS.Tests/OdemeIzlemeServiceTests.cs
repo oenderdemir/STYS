@@ -1724,6 +1724,64 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.Contains(sonuc.Items, x => x.Id == belgeId);
     }
 
+    [IntegrationFact]
+    public async Task Arama_MaliYilFiltresi_BaskaTesisinFisiyleEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", bugun, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, MaliYil = 2026 });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_DonemFiltresi_BaskaTesisinFisiyleEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", bugun, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, Donem = bugun.Month });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_MaliYilVeDonemFiltresi_AyniTesisinFisiyleEslesmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2026, donem: bugun.Month);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, MaliYil = 2026, Donem = bugun.Month });
+
+        Assert.Contains(sonuc.Items, x => x.Id == belgeId);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

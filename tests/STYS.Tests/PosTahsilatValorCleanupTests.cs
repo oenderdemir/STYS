@@ -12,6 +12,7 @@ namespace STYS.Tests;
 /// testler GERCEK SQL Server'a karsi, DisposeAsync'in kendisini (OlusturCleanupAdimlari/
 /// DogrulaTemizlikKalintilariAsync araciligiyla) uctan uca dogrular.
 /// </summary>
+[Collection(SqlServerIntegrationCollection.Name)]
 public class PosTahsilatValorCleanupTests
 {
     // ─────────────────────────────────────────────────────────────

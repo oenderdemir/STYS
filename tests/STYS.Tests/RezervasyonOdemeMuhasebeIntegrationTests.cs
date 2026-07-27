@@ -87,6 +87,7 @@ public sealed class IntegrationFactAttribute : FactAttribute
 /// DisposeAsync icinde temizlenir.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =

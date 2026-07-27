@@ -23,6 +23,7 @@ namespace STYS.Tests;
 /// yetki disi tesise ait kayitlarin sizmadigini KANITLAR.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =

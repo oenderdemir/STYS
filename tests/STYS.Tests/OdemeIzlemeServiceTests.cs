@@ -30,6 +30,7 @@ namespace STYS.Tests;
 /// TwoPhaseCleanupRunner ile bagimsiz adimlarla temizler ve fiziksel kalinti olmadigini dogrular.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class OdemeIzlemeServiceTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =
@@ -105,12 +106,12 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         return hesap.Id;
     }
 
-    private async Task<int> YeniKasaBankaHesabiAsync(StysAppDbContext dbContext, int tesisId, string tip, string suffix, string etiket, int? muhasebeHesapPlaniId, string? iban = null)
+    private async Task<int> YeniKasaBankaHesabiAsync(StysAppDbContext dbContext, int tesisId, string tip, string suffix, string etiket, int? muhasebeHesapPlaniId, string? iban = null, string? ad = null, string? bankaAdi = null)
     {
         var hesap = new KasaBankaHesap
         {
-            TesisId = tesisId, Tip = tip, Kod = $"{suffix}-{etiket}", Ad = "Test " + etiket, ParaBirimi = "TRY", AktifMi = true,
-            MuhasebeHesapPlaniId = muhasebeHesapPlaniId, Iban = iban
+            TesisId = tesisId, Tip = tip, Kod = $"{suffix}-{etiket}", Ad = ad ?? "Test " + etiket, ParaBirimi = "TRY", AktifMi = true,
+            MuhasebeHesapPlaniId = muhasebeHesapPlaniId, Iban = iban, BankaAdi = bankaAdi
         };
         dbContext.KasaBankaHesaplari.Add(hesap);
         await dbContext.SaveChangesAsync();
@@ -1332,8 +1333,16 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
 
         Assert.True(detay.BagliFisErisimKisitliMi);
         Assert.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaFisBaglantisi, detay.ErisimKisitiNedenKodlari);
-        // "Odeme var fis yok" gibi yaniltici bir uyari da URETILMEMELI - fis var ama erisim disinda.
-        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
+        // Baska tesise ait fis bu odeme acisindan GECERLI FIS SAYILMAZ (bkz. a4b1dd8) - aktif nakit
+        // odemede OdemeVarFisYok de UYUMLU sekilde URETILIR (ham MuhasebeFisId'nin dolu olmasi
+        // yeterli degildir, dogrulanmis fis sonucu kullanilir).
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.OdemeVarFisYok);
+        // Yabanci fis ayrintilari (no/tarih/durum) HICBIR sekilde DTO'ya veya uyari aciklamalarina
+        // tasinmamalidir.
+        Assert.Null(detay.MuhasebeFisNo);
+        Assert.Null(detay.MuhasebeFisTarihi);
+        Assert.Null(detay.MuhasebeFisDurumu);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains(suffixB));
     }
 
     [IntegrationFact]
@@ -2336,8 +2345,15 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var tesisId = await YeniTesisAsync(dbContext, suffix);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
 
+        var hesapAdi = $"HesapAdi-{suffix}";
+        var bankaAdi = $"BankaAdi-{suffix}";
+        var iban = "TR330006100519786457841326";
+        var ibanMaskeli = "TR33 **** **** **** **26";
+
         var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
-        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp, iban: "TR330006100519786457841326");
+        var muhasebeHesapKodu = $"1.10.{suffix}-BANKA";
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp,
+            iban: iban, ad: hesapAdi, bankaAdi: bankaAdi);
 
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
 
@@ -2356,7 +2372,21 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.NotEmpty(detay.ErisimKisitiNedenKodlari);
         Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi
             || u.UyariTipi == OdemeErisimKisitiNedenKodlari.TesisUyusmazligi);
-        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains("BNK"));
+
+        // Sizinti kontrolu tek bir ortak parcayla DEGIL, olusturulan HER bir ayirt edici degerle
+        // ayri ayri dogrulanir - DTO'nun hicbir metin alaninda veya uyari aciklamalarinda bulunmamalilar.
+        bool GecerNerede(string deger) =>
+            (detay.KasaBankaHesapAdi != null && detay.KasaBankaHesapAdi.Contains(deger)) ||
+            (detay.BankaAdi != null && detay.BankaAdi.Contains(deger)) ||
+            (detay.IbanMaskeli != null && detay.IbanMaskeli.Contains(deger)) ||
+            (detay.MuhasebeHesapKodu != null && detay.MuhasebeHesapKodu.Contains(deger)) ||
+            detay.Uyarilar.Any(u => u.Aciklama != null && u.Aciklama.Contains(deger));
+
+        Assert.False(GecerNerede(hesapAdi));
+        Assert.False(GecerNerede(bankaAdi));
+        Assert.False(GecerNerede(iban));
+        Assert.False(GecerNerede(ibanMaskeli));
+        Assert.False(GecerNerede(muhasebeHesapKodu));
     }
 
     [IntegrationFact]
@@ -2367,8 +2397,15 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var tesisId = await YeniTesisAsync(dbContext, suffix);
         var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
 
+        var hesapAdi = $"HesapAdi-{suffix}";
+        var bankaAdi = $"BankaAdi-{suffix}";
+        var iban = "TR330006100519786457841326";
+        var ibanMaskeli = "TR33 **** **** **** **26";
+
         var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
-        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp, iban: "TR330006100519786457841326");
+        var muhasebeHesapKodu = $"1.10.{suffix}-BANKA";
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp,
+            iban: iban, ad: hesapAdi, bankaAdi: bankaAdi);
 
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
 
@@ -2376,8 +2413,11 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var detay = await svc.GetDetayAsync(belgeId);
 
         Assert.False(detay.BagliHesapErisimKisitliMi);
-        Assert.NotNull(detay.KasaBankaHesapAdi);
-        Assert.Equal("TR33 **** **** **** **26", detay.IbanMaskeli);
+        Assert.Equal(hesapAdi, detay.KasaBankaHesapAdi);
+        Assert.Equal(KasaBankaHesapTipleri.Banka, detay.KasaBankaHesapTipi);
+        Assert.Equal(bankaAdi, detay.BankaAdi);
+        Assert.Equal(ibanMaskeli, detay.IbanMaskeli);
+        Assert.Equal(muhasebeHesapKodu, detay.MuhasebeHesapKodu);
         Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaHesapBaglantisi
             || u.UyariTipi == OdemeErisimKisitiNedenKodlari.TesisUyusmazligi);
     }

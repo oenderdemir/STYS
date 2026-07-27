@@ -26,6 +26,7 @@ namespace STYS.Tests;
 /// olmaz).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class BackfillMissingPosTahsilatValorSnapshotsMigrationTests
 {
     private static readonly string? ConnectionString =

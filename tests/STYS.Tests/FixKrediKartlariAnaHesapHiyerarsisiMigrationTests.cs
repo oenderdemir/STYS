@@ -21,6 +21,7 @@ namespace STYS.Tests;
 /// paylasilan dev veritabaninda IZ BIRAKMAZ.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class FixKrediKartlariAnaHesapHiyerarsisiMigrationTests
 {
     private static readonly string? ConnectionString =

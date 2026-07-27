@@ -54,6 +54,7 @@ namespace STYS.Tests;
 ///      duzeltme-ters-kayit sonrasi orijinal Iptal, yeni fis TersKayit).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class PosTahsilatValorIntegrationTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =

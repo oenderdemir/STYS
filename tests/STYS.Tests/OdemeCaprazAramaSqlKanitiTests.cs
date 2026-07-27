@@ -20,6 +20,7 @@ namespace STYS.Tests;
 /// belleye ALINMAZ.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =

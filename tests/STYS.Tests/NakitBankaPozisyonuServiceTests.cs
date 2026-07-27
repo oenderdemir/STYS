@@ -25,6 +25,7 @@ namespace STYS.Tests;
 /// GERCEKTEN temizler (ID bazli, guvenli silme).
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
 public class NakitBankaPozisyonuServiceTests : IAsyncLifetime
 {
     private static readonly string? ConnectionString =

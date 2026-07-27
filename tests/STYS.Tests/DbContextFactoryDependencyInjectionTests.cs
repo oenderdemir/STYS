@@ -51,6 +51,7 @@ namespace STYS.Tests;
 /// manuel olarak dogrulandi — bkz. docs/pos-tahsilat-valor-takip-uygulama-raporu.md "Güncelleme 6"
 /// bolumundeki komutlar ve ciktilar.
 /// </summary>
+[Collection(SqlServerIntegrationCollection.Name)]
 public class DbContextFactoryDependencyInjectionTests
 {
     private static readonly string? ConnectionString =

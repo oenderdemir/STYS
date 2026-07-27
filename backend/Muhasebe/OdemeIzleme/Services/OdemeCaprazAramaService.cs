@@ -452,9 +452,13 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (filter.TutarMin.HasValue) q = q.Where(v => v.NetTutar >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(v => v.NetTutar <= filter.TutarMax.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(v => v.ParaBirimi == filter.ParaBirimi);
+        // BelgeNo/RezervasyonReferansNo filtreleri yalnizca AYNI tesisteki (yetki kapsamindaki)
+        // belge/rezervasyon uzerinden eslesir - yabanci tesisin belgesi/rezervasyonu bu filtreler
+        // araciligiyla SONUC URETMEMELIDIR (bkz. metot yorumu, GECERLI BAGLANTI ile ayni kural).
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo))
         {
-            q = q.Where(v => _dbContext.TahsilatOdemeBelgeleri.Any(b => b.Id == v.TahsilatOdemeBelgesiId && b.BelgeNo.Contains(filter.BelgeNo)));
+            q = q.Where(v => _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                && b.BelgeNo.Contains(filter.BelgeNo) && b.CariKart != null && b.CariKart.TesisId == v.TesisId));
         }
         if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo))
         {
@@ -464,7 +468,9 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
             q = q.Where(v => _dbContext.RezervasyonOdemeler.Any(r => r.TahsilatOdemeBelgesiId == v.TahsilatOdemeBelgesiId
-                && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo)));
+                && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo)
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId)));
         }
         if (filter.SadeceIptalEdilmisOlanlar.HasValue)
         {
@@ -473,9 +479,19 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : q.Where(v => v.Durum != PosTahsilatValorDurumlari.Iptal && v.Durum != PosTahsilatValorDurumlari.AktarimFisiIptalEdildi);
         }
 
+        // GECERLI BAGLANTI: isaret edilen belge silinmemis VE bu POS valor kaydiyla AYNI tesise ait
+        // (b.CariKart.TesisId == v.TesisId). Tesis iliskisi dogrulanamiyorsa (CariKart null/TesisId
+        // farkli) veya belge baska tesisteyse baglanti GECERSIZ sayilir - "BELGE:{id}" anahtari
+        // URETILMEZ, yabanci belge ID'si/ayrintisi DTO'ya TASINMAZ, aday bagimsiz (BagimsizKayit=1)
+        // sayilarak asla YuksekOlasilik URETILMEZ. KONTROL SQL SORGUSUNDA uygulanir - sonradan DTO
+        // temizligi YAPILMAZ (bkz. CariHareketAdaylari/KasaHareketAdaylari/BankaHareketAdaylari ile
+        // ayni yaklasim).
         return q.Select(v => new AdayHam
         {
-            Anahtar = "BELGE:" + v.TahsilatOdemeBelgesiId.ToString(),
+            Anahtar = _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId)
+                ? "BELGE:" + v.TahsilatOdemeBelgesiId.ToString()
+                : "POSVALOR:" + v.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.PosTahsilatValor,
             KaynakId = v.Id,
             KaynakOncelik = 3,
@@ -495,7 +511,9 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : _dbContext.MuhasebeFisler.Where(f => f.Id == v.MuhasebeFisId).Select(f => (int?)f.MaliYil).FirstOrDefault(),
             Donem = v.MuhasebeFisId == null ? null
                 : _dbContext.MuhasebeFisler.Where(f => f.Id == v.MuhasebeFisId).Select(f => (int?)f.Donem).FirstOrDefault(),
-            TahsilatOdemeBelgesiId = v.TahsilatOdemeBelgesiId,
+            TahsilatOdemeBelgesiId = _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId)
+                ? v.TahsilatOdemeBelgesiId : (int?)null,
             CariHareketId = null,
             PosTahsilatValorId = v.Id,
             MuhasebeFisId = v.MuhasebeFisId,
@@ -508,10 +526,23 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && (v.BagliBankaHesapId == null
                     || !_dbContext.KasaBankaHesaplari.Any(k => !k.IsDeleted && k.AktifMi && k.Id == v.BagliBankaHesapId && k.TesisId == v.TesisId))
                 ? 1 : 0,
-            KopuklukOdemeBaglantisiYok = 0,
+            // Belge HICBIR TESISTE bulunamiyor (silinmis/hic var olmamis) - tesis uyumsuzlugundan
+            // AYRI bir kopuklukdur.
+            KopuklukOdemeBaglantisiYok = !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId)
+                ? 1 : 0,
             KopuklukSoftDelete = 0,
-            KopuklukYetkiDisindaOdemeBaglantisi = 0,
-            BagimsizKayit = 0
+            // Belge AKTIF olarak baska bir yerde bulunuyor (silinmemis) ANCAK bu POS valor kaydinin
+            // tesisiyle UYUSMUYOR (veya tesis iliskisi dogrulanamiyor) - yetki kapsami disinda bir
+            // baglanti, "belge yok" ile KARISTIRILMAZ.
+            KopuklukYetkiDisindaOdemeBaglantisi = !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId)
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId)
+                ? 1 : 0,
+            // BAGIMSIZ: belgeye GECERLI sekilde baglanmamis POS valor kaydi (belge yok/silinmis VEYA
+            // tesis uyumsuzlugu YUZUNDEN baglanti GECERSIZ).
+            BagimsizKayit = !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == v.TahsilatOdemeBelgesiId
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId)
+                ? 1 : 0
         });
     }
 

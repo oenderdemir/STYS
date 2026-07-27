@@ -1007,7 +1007,8 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // 2) POS var, valor kaydi yok.
         if (aktif && odemeYontemi == OdemeYontemleri.KrediKarti)
         {
-            var posVarMi = await _dbContext.PosTahsilatValorleri.AsNoTracking().AnyAsync(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belgeId, cancellationToken);
+            var posVarMi = await _dbContext.PosTahsilatValorleri.AsNoTracking()
+                .AnyAsync(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belgeId && v.TesisId == tesisId, cancellationToken);
             if (!posVarMi)
             {
                 uyarilar.Add(new OdemeUyariDto
@@ -1092,7 +1093,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         // 7) Para birimi tutarsizligi (POS valor kaydiyla).
         var posParaBirimi = await _dbContext.PosTahsilatValorleri.AsNoTracking()
-            .Where(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belgeId)
+            .Where(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belgeId && v.TesisId == tesisId)
             .Select(v => v.ParaBirimi)
             .FirstOrDefaultAsync(cancellationToken);
         if (posParaBirimi is not null && !string.Equals(posParaBirimi, paraBirimi, StringComparison.OrdinalIgnoreCase))

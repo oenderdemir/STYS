@@ -1560,6 +1560,50 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.PosVarValorYok);
     }
 
+    [IntegrationFact]
+    public async Task Arama_KullaniciHemAHemBTesisineYetkiliyken_ABelgesiBHesabinaBagliysa_HesapAdiSizmaz()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var hpB = await YeniHesapPlaniAsync(dbContext, suffixB, "BANKA");
+        var bankaHesabiTesisB = await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.Banka, suffixB, "BNK", hpB);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabiTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Null(satir.KasaBankaHesapAdi);
+        Assert.DoesNotContain(sonuc.Items, x => x.KasaBankaHesapAdi != null && x.KasaBankaHesapAdi.Contains(suffixB));
+    }
+
+    [IntegrationFact]
+    public async Task Arama_OdemeVeHesapAyniTesistiyse_HesapAdiGosterilmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.NotNull(satir.KasaBankaHesapAdi);
+        Assert.Contains("BNK", satir.KasaBankaHesapAdi);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

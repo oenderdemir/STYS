@@ -182,7 +182,10 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 CariKartId = b.CariKartId,
                 CariKodu = b.CariKart != null ? b.CariKart.CariKodu : string.Empty,
                 CariUnvan = b.CariKart != null ? b.CariKart.UnvanAdSoyad : string.Empty,
-                KasaBankaHesapAdi = b.KasaBankaHesap != null ? b.KasaBankaHesap.Ad : null,
+                KasaBankaHesapAdi = b.KasaBankaHesap != null && !b.KasaBankaHesap.IsDeleted
+                    && b.KasaBankaHesap.TesisId.HasValue && b.CariKart != null && b.KasaBankaHesap.TesisId == b.CariKart.TesisId
+                    ? b.KasaBankaHesap.Ad
+                    : null,
                 MuhasebeFisId = b.MuhasebeFisId
             })
             .ToListAsync(cancellationToken);

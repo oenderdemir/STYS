@@ -1860,6 +1860,51 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.Contains(sonuc.Items, x => x.Id == belgeId);
     }
 
+    [IntegrationFact]
+    public async Task Uyari_BaskaTesistekiFarkliDonemliFis_FarkliMuhasebeDonemineDusmeUretilmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+        var bugun = DateTime.UtcNow.Date;
+        var farkliDonemNo = bugun.Month == 12 ? 1 : bugun.Month + 1;
+
+        // Fis TesisB'ye ait - donemi de odeme tarihinden farkli.
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2030, donem: farkliDonemNo);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", bugun, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.FarkliMuhasebeDonemineDusme);
+        Assert.DoesNotContain(detay.Uyarilar, u => u.Aciklama != null && u.Aciklama.Contains("2030"));
+    }
+
+    [IntegrationFact]
+    public async Task Uyari_AyniTesistekiFarkliDonemliFis_FarkliMuhasebeDonemineDusmeUretilir()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+        var bugun = DateTime.UtcNow.Date;
+        var farkliDonemNo = bugun.Month == 12 ? 1 : bugun.Month + 1;
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, bugun, MuhasebeFisDurumlari.Onayli, maliYil: 2030, donem: farkliDonemNo);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", bugun, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.Contains(detay.Uyarilar, u => u.UyariTipi == OdemeUyariTipleri.FarkliMuhasebeDonemineDusme
+            && u.Aciklama != null && u.Aciklama.Contains("2030"));
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

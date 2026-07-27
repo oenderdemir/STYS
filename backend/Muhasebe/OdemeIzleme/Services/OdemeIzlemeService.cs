@@ -1130,7 +1130,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         if (muhasebeFisId.HasValue)
         {
             var fisDonem = await _dbContext.MuhasebeFisler.AsNoTracking()
-                .Where(f => f.Id == muhasebeFisId.Value)
+                .Where(f => f.Id == muhasebeFisId.Value && !f.IsDeleted && f.TesisId == tesisId)
                 .Select(f => new { f.MaliYil, f.Donem })
                 .FirstOrDefaultAsync(cancellationToken);
             if (fisDonem is not null && (fisDonem.MaliYil != belgeTarihi.Year || fisDonem.Donem != belgeTarihi.Month))

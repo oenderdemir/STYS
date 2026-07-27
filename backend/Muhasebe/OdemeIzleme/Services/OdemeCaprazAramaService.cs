@@ -3,6 +3,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.OdemeIzleme.Dtos;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
@@ -18,12 +19,30 @@ namespace STYS.Muhasebe.OdemeIzleme.Services;
 /// uretilir ve bu projeksiyonlar <c>Concat</c> ile TEK bir IQueryable'da birlestirilir (EF Core
 /// bunu SQL'de <c>UNION ALL</c>'a cevirir). Tekillestirme <c>GroupBy</c> ile, siralama ve sayfalama
 /// <c>OrderBy/Skip/Take</c> ile VERITABANI TARAFINDA yapilir (SQL Server'da OFFSET/FETCH).
-/// Bir sayfa icin belleye alinan satir sayisi = sayfa boyutu (+ detay zenginlestirme icin ayni
-/// anahtarlara ait sinirli sayida satir). Kaynak tablolarin tamami ASLA belleye alinmaz.
+///
+/// BEKLENEN vs BULUNAN (madde 1): <see cref="OdemeCaprazAramaFilterDto"/>'daki Beklenen* alanlari
+/// (cari, banka/kasa hesabi, muhasebe hesabi, mali yil, donem, tesis, kurum, tutar, para birimi)
+/// ARTIK WHERE'e GIRMEZ - bir adayi ELEMEK icin kullanilmaz. Bunun yerine, bulunan aday ile
+/// KARSILASTIRILIR ve celiski varsa aday yine DONER, yalnizca CelisenAlanlar/OdemeCeliskiKodlari
+/// ile isaretlenir. Boylece "baska hesaba/cariye/doneme yanlislikla islenmis" kayitlar SESSIZCE
+/// elenmez - asil arastirmanin hedefi budur.
+///
+/// DETERMINISTIK BIRLESTIRME (madde 3): her kaynagin KaynakOncelik degeri vardir (dusuk deger =
+/// yuksek oncelik). Ayni tekillestirme anahtarina birden fazla kaynak dustugunde, gosterilecek
+/// tek (Tutar/ParaBirimi/Tarih/CariKartId/... ) deger SQL'in fiziksel satir sirasina DEGIL, bu
+/// onceliğe gore secilir - materyalizasyon sorgusu KaynakOncelik+KaynakId ile ACIKCA siralanir.
 /// </summary>
 public class OdemeCaprazAramaService : IOdemeCaprazAramaService
 {
     private const int MaksimumSayfaBoyutu = 200;
+
+    /// <summary>Yalnizca tutar/tarih araligiyla (guclu bir referans olmadan) arama yapildiginda
+    /// izin verilen en genis tarih araligi (gun). Asiri genis, hesap taramasi niteligindeki
+    /// sorgulari engellemek icin konuldu; proje veri hacmi buyudukce yeniden degerlendirilmelidir.</summary>
+    private const int MaksimumDaralticiTarihAraligiGunSayisiReferansYokken = 92;
+
+    /// <summary>Tutar karsilastirmasinda kabul edilen yuvarlama toleransi.</summary>
+    private const decimal TutarKarsilastirmaToleransi = 0.01m;
 
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeTesisScopeService _tesisScopeService;
@@ -48,12 +67,26 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         public string Anahtar { get; set; } = string.Empty;
         public string Kaynak { get; set; } = string.Empty;
         public int KaynakId { get; set; }
+
+        /// <summary>Dusuk deger = yuksek oncelik. Deterministik birlestirme icin kullanilir
+        /// (madde 3): 1=OdemeBelgesi, 2=Banka/KasaHareket, 3=PosValor, 4=CariHareket, 5=MuhasebeFis.</summary>
+        public int KaynakOncelik { get; set; }
+
         public DateTime? Tarih { get; set; }
         public decimal? Tutar { get; set; }
+        /// <summary>Tutarin ANLAMI (madde 3) - "Brüt"/"Net"/"Borç-Alacak Net"/"İşaretli" vb.
+        /// Farkli kaynaklarin tutarlari birbirinin YERINE KULLANILMAZ, yalnizca gosterim icin
+        /// ayri ayri tasinir (bkz. OdemeAdayiDto.KaynakTutarlari).</summary>
+        public string TutarTuru { get; set; } = string.Empty;
         public string? ParaBirimi { get; set; }
         public int? TesisId { get; set; }
+        public int? KurumId { get; set; }
         public int? CariKartId { get; set; }
         public int? KasaBankaHesapId { get; set; }
+        public string? KasaBankaHesapTipi { get; set; }
+        public int? MuhasebeHesapPlaniId { get; set; }
+        public int? MaliYil { get; set; }
+        public int? Donem { get; set; }
         public int? TahsilatOdemeBelgesiId { get; set; }
         public int? CariHareketId { get; set; }
         public int? PosTahsilatValorId { get; set; }
@@ -71,7 +104,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
     public async Task<PagedResult<OdemeAdayiDto>> AraAsync(
         PagedRequest request, OdemeCaprazAramaFilterDto filter, CancellationToken cancellationToken = default)
     {
-        DogrulaDaralticiAlanVarligi(filter);
+        DogrulaSorguSinirlari(filter);
 
         var (pageNumber, pageSizeIstenen) = request.Normalize();
         var pageSize = Math.Min(pageSizeIstenen, MaksimumSayfaBoyutu);
@@ -139,8 +172,12 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         }
 
         // Zenginlestirme: YALNIZCA sayfadaki anahtarlara ait ham satirlar cekilir (sinirli).
+        // DETERMINISTIK BIRLESTIRME icin, satirlar SQL'de KaynakOncelik+KaynakId'ye gore
+        // SIRALANARAK cekilir - Birlestir() bu sirayla ilerledigi icin ayni veri kumesinde HER
+        // ZAMAN AYNI sonucu uretir; SQL'in fiziksel satir donusum sirasina BAGLI DEGILDIR.
         var sayfaSatirlari = await birlesik
             .Where(x => sayfaAnahtarlari.Contains(x.Anahtar))
+            .OrderBy(x => x.KaynakOncelik).ThenBy(x => x.KaynakId)
             .ToListAsync(cancellationToken);
 
         var adaylar = Birlestir(sayfaSatirlari, sayfaAnahtarlari, filter);
@@ -148,28 +185,63 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
     }
 
     /// <summary>
-    /// Asiri genis (daraltici alani olmayan) finansal taramayi engeller. Bagimsiz kaynak
-    /// arastirmasi, yetki kapsamindaki TUM banka/kasa/cari/fis kayitlarini tarayabildigi icin
-    /// en az BIR guclu daraltici alan zorunludur.
+    /// Asiri genis (daraltici alani olmayan) finansal taramayi engeller (madde 5). Beklenen*
+    /// alanlari (cari/hesap/donem) ARTIK DARALTICI SAYILMAZ - onlar sadece karsilastirma icindir
+    /// ve SQL'e hic girmezler; bu yuzden guclu bir referans veya (tutar araligi + dar tarih
+    /// araligi) sarti aranir.
     /// </summary>
-    private static void DogrulaDaralticiAlanVarligi(OdemeCaprazAramaFilterDto filter)
+    private static void DogrulaSorguSinirlari(OdemeCaprazAramaFilterDto filter)
     {
-        var tarihAraligiVar = filter.TarihBaslangic.HasValue && filter.TarihBitis.HasValue;
-        var tutarVar = filter.TutarMin.HasValue || filter.TutarMax.HasValue;
-
-        var daralticiVar =
-            filter.CariKartId.HasValue
-            || !string.IsNullOrWhiteSpace(filter.BelgeNo)
-            || !string.IsNullOrWhiteSpace(filter.MuhasebeFisNo)
-            || filter.KasaBankaHesapId.HasValue
-            || tarihAraligiVar
-            || tutarVar;
-
-        if (!daralticiVar)
+        if (filter.TutarMin.HasValue && filter.TutarMax.HasValue && filter.TutarMin.Value > filter.TutarMax.Value)
         {
-            throw new BaseException(
-                "Çapraz kaynak araştırması için en az bir daraltıcı alan girilmelidir: cari hesap, belge no, " +
-                "muhasebe fiş no, kasa/banka hesabı, tarih aralığı (başlangıç+bitiş) veya tutar aralığı.", 400);
+            throw new BaseException("Tutar aralığı geçersiz: alt sınır üst sınırdan büyük olamaz.", 400);
+        }
+
+        if (filter.TarihBaslangic.HasValue && filter.TarihBitis.HasValue && filter.TarihBaslangic.Value > filter.TarihBitis.Value)
+        {
+            throw new BaseException("Tarih aralığı geçersiz: başlangıç bitişten sonra olamaz.", 400);
+        }
+
+        var guclüReferansVar =
+            !string.IsNullOrWhiteSpace(filter.BelgeNo)
+            || !string.IsNullOrWhiteSpace(filter.MuhasebeFisNo)
+            || !string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo);
+
+        var tutarAraligiTamVar = filter.TutarMin.HasValue && filter.TutarMax.HasValue;
+        var tarihAraligiVar = filter.TarihBaslangic.HasValue && filter.TarihBitis.HasValue;
+
+        if (!guclüReferansVar)
+        {
+            if (filter.TutarMin.HasValue != filter.TutarMax.HasValue)
+            {
+                throw new BaseException(
+                    "Güçlü bir referans (belge no, muhasebe fiş no, rezervasyon referans no) verilmediyse tutar aralığının " +
+                    "hem alt hem üst sınırı birlikte girilmelidir; tek taraflı tutar sınırı çok geniş bir tarama yapar.", 400);
+            }
+
+            if (!tutarAraligiTamVar)
+            {
+                throw new BaseException(
+                    "Çapraz kaynak araştırması için en az bir güçlü referans (belge no, muhasebe fiş no, rezervasyon referans no) " +
+                    "veya birlikte verilmiş tutar aralığı + tarih aralığı girilmelidir.", 400);
+            }
+
+            if (!tarihAraligiVar)
+            {
+                throw new BaseException(
+                    "Yalnızca tutar aralığıyla arama yapılıyorsa dar bir tarih aralığı (başlangıç + bitiş) da zorunludur.", 400);
+            }
+        }
+
+        if (tarihAraligiVar)
+        {
+            var gunFarki = (filter.TarihBitis!.Value.ToDateTime(TimeOnly.MinValue) - filter.TarihBaslangic!.Value.ToDateTime(TimeOnly.MinValue)).Days;
+            if (!guclüReferansVar && gunFarki > MaksimumDaralticiTarihAraligiGunSayisiReferansYokken)
+            {
+                throw new BaseException(
+                    $"Güçlü bir referans verilmediyse tarih aralığı en fazla {MaksimumDaralticiTarihAraligiGunSayisiReferansYokken} gün olabilir " +
+                    $"(girilen: {gunFarki} gün).", 400);
+            }
         }
     }
 
@@ -200,20 +272,17 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (bitis.HasValue) q = q.Where(b => b.BelgeTarihi < bitis.Value);
         if (filter.TutarMin.HasValue) q = q.Where(b => b.Tutar >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(b => b.Tutar <= filter.TutarMax.Value);
-        if (filter.CariKartId.HasValue) q = q.Where(b => b.CariKartId == filter.CariKartId.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(b => b.ParaBirimi == filter.ParaBirimi);
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo)) q = q.Where(b => b.BelgeNo.Contains(filter.BelgeNo));
-        if (filter.KasaBankaHesapId.HasValue) q = q.Where(b => b.KasaBankaHesapId == filter.KasaBankaHesapId.Value);
         if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo))
         {
             q = q.Where(b => b.MuhasebeFisId != null
                 && _dbContext.MuhasebeFisler.Any(f => f.Id == b.MuhasebeFisId && f.FisNo.Contains(filter.MuhasebeFisNo)));
         }
-        if (filter.MaliYil.HasValue || filter.Donem.HasValue)
+        if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
-            q = q.Where(b => b.MuhasebeFisId != null && _dbContext.MuhasebeFisler.Any(f => f.Id == b.MuhasebeFisId
-                && (!filter.MaliYil.HasValue || f.MaliYil == filter.MaliYil.Value)
-                && (!filter.Donem.HasValue || f.Donem == filter.Donem.Value)));
+            q = q.Where(b => _dbContext.RezervasyonOdemeler.Any(r => r.TahsilatOdemeBelgesiId == b.Id
+                && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo)));
         }
         if (filter.SadeceIptalEdilmisOlanlar.HasValue)
         {
@@ -227,12 +296,23 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             Anahtar = "BELGE:" + b.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.TahsilatOdemeBelgesi,
             KaynakId = b.Id,
+            KaynakOncelik = 1,
             Tarih = b.BelgeTarihi,
             Tutar = b.Tutar,
+            TutarTuru = "Belge Tutarı",
             ParaBirimi = b.ParaBirimi,
             TesisId = b.CariKart!.TesisId,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == b.CariKart.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
             CariKartId = b.CariKartId,
             KasaBankaHesapId = b.KasaBankaHesapId,
+            KasaBankaHesapTipi = b.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == b.KasaBankaHesapId).Select(k => k.Tip).FirstOrDefault(),
+            MuhasebeHesapPlaniId = b.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == b.KasaBankaHesapId).Select(k => k.MuhasebeHesapPlaniId).FirstOrDefault(),
+            MaliYil = b.MuhasebeFisId == null ? null
+                : _dbContext.MuhasebeFisler.Where(f => f.Id == b.MuhasebeFisId).Select(f => (int?)f.MaliYil).FirstOrDefault(),
+            Donem = b.MuhasebeFisId == null ? null
+                : _dbContext.MuhasebeFisler.Where(f => f.Id == b.MuhasebeFisId).Select(f => (int?)f.Donem).FirstOrDefault(),
             TahsilatOdemeBelgesiId = b.Id,
             CariHareketId = null,
             PosTahsilatValorId = null,
@@ -259,13 +339,14 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         IReadOnlyList<int> tesisIds, OdemeCaprazAramaFilterDto filter, DateTime? baslangic, DateTime? bitis)
     {
         // BAGIMSIZ ARASTIRMA: KaynakModul kisiti YOKTUR - odeme belgesine hic baglanmamis
-        // (KaynakModul null/farkli) cari hareketler de aday olur.
+        // (KaynakModul null/farkli) cari hareketler de aday olur. CariKartId/MaliYil/Donem ARTIK
+        // BURADA FILTRELEMEZ (bkz. sinif aciklamasi, madde 1) - yalnizca gercek narrowing alanlari
+        // (tarih, tutar, para birimi, belge no) uygulanir.
         var q = _dbContext.CariHareketler.AsNoTracking()
             .Where(h => !h.IsDeleted && h.CariKart != null && h.CariKart.TesisId.HasValue && tesisIds.Contains(h.CariKart.TesisId.Value));
 
         if (baslangic.HasValue) q = q.Where(h => h.HareketTarihi >= baslangic.Value);
         if (bitis.HasValue) q = q.Where(h => h.HareketTarihi < bitis.Value);
-        if (filter.CariKartId.HasValue) q = q.Where(h => h.CariKartId == filter.CariKartId.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(h => h.ParaBirimi == filter.ParaBirimi);
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo)) q = q.Where(h => h.BelgeNo != null && h.BelgeNo.Contains(filter.BelgeNo));
         if (filter.TutarMin.HasValue) q = q.Where(h => h.BorcTutari >= filter.TutarMin.Value || h.AlacakTutari >= filter.TutarMin.Value);
@@ -276,11 +357,10 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 ? q.Where(h => h.Durum != CariHareketDurumlari.Aktif)
                 : q.Where(h => h.Durum == CariHareketDurumlari.Aktif);
         }
-        // Kasa/banka hesabi ve muhasebe fis no filtreleri CariHareket'te DOGRUDAN veya guvenilir bir
+        // Muhasebe fis no / rezervasyon referansi CariHareket'te DOGRUDAN veya guvenilir bir
         // iliski uzerinden uygulanamaz -> bu filtreler verildiginde bu KAYNAK SONUC DISI birakilir
         // (sessizce yok sayilmaz, bkz. teslim raporu filtre tablosu).
-        if (filter.KasaBankaHesapId.HasValue || !string.IsNullOrWhiteSpace(filter.MuhasebeFisNo)
-            || filter.MaliYil.HasValue || filter.Donem.HasValue)
+        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo) || !string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
             q = q.Where(_ => false);
         }
@@ -292,12 +372,19 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : "CARIHAREKET:" + h.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.CariHareket,
             KaynakId = h.Id,
+            KaynakOncelik = 4,
             Tarih = h.HareketTarihi,
             Tutar = h.BorcTutari - h.AlacakTutari,
+            TutarTuru = "İşaretli (Borç-Alacak)",
             ParaBirimi = h.ParaBirimi,
             TesisId = h.CariKart!.TesisId,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == h.CariKart.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
             CariKartId = h.CariKartId,
             KasaBankaHesapId = null,
+            KasaBankaHesapTipi = null,
+            MuhasebeHesapPlaniId = null,
+            MaliYil = null,
+            Donem = null,
             TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? h.KaynakId : null,
             CariHareketId = h.Id,
             PosTahsilatValorId = null,
@@ -332,11 +419,6 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (filter.TutarMin.HasValue) q = q.Where(v => v.NetTutar >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(v => v.NetTutar <= filter.TutarMax.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(v => v.ParaBirimi == filter.ParaBirimi);
-        if (filter.KasaBankaHesapId.HasValue) q = q.Where(v => v.BagliBankaHesapId == filter.KasaBankaHesapId.Value);
-        if (filter.CariKartId.HasValue)
-        {
-            q = q.Where(v => _dbContext.TahsilatOdemeBelgeleri.Any(b => b.Id == v.TahsilatOdemeBelgesiId && b.CariKartId == filter.CariKartId.Value));
-        }
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo))
         {
             q = q.Where(v => _dbContext.TahsilatOdemeBelgeleri.Any(b => b.Id == v.TahsilatOdemeBelgesiId && b.BelgeNo.Contains(filter.BelgeNo)));
@@ -346,11 +428,10 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             q = q.Where(v => v.MuhasebeFisId != null
                 && _dbContext.MuhasebeFisler.Any(f => f.Id == v.MuhasebeFisId && f.FisNo.Contains(filter.MuhasebeFisNo)));
         }
-        if (filter.MaliYil.HasValue || filter.Donem.HasValue)
+        if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
-            q = q.Where(v => v.MuhasebeFisId != null && _dbContext.MuhasebeFisler.Any(f => f.Id == v.MuhasebeFisId
-                && (!filter.MaliYil.HasValue || f.MaliYil == filter.MaliYil.Value)
-                && (!filter.Donem.HasValue || f.Donem == filter.Donem.Value)));
+            q = q.Where(v => _dbContext.RezervasyonOdemeler.Any(r => r.TahsilatOdemeBelgesiId == v.TahsilatOdemeBelgesiId
+                && r.Rezervasyon != null && r.Rezervasyon.ReferansNo.Contains(filter.RezervasyonReferansNo)));
         }
         if (filter.SadeceIptalEdilmisOlanlar.HasValue)
         {
@@ -364,12 +445,23 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             Anahtar = "BELGE:" + v.TahsilatOdemeBelgesiId.ToString(),
             Kaynak = OdemeAdayKaynaklari.PosTahsilatValor,
             KaynakId = v.Id,
+            KaynakOncelik = 3,
             Tarih = v.OdemeTarihi,
             Tutar = v.NetTutar,
+            TutarTuru = "Net Tutar",
             ParaBirimi = v.ParaBirimi,
             TesisId = v.TesisId,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == v.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
             CariKartId = null,
             KasaBankaHesapId = v.BagliBankaHesapId,
+            KasaBankaHesapTipi = v.BagliBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == v.BagliBankaHesapId).Select(k => k.Tip).FirstOrDefault(),
+            MuhasebeHesapPlaniId = v.BagliBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == v.BagliBankaHesapId).Select(k => k.MuhasebeHesapPlaniId).FirstOrDefault(),
+            MaliYil = v.MuhasebeFisId == null ? null
+                : _dbContext.MuhasebeFisler.Where(f => f.Id == v.MuhasebeFisId).Select(f => (int?)f.MaliYil).FirstOrDefault(),
+            Donem = v.MuhasebeFisId == null ? null
+                : _dbContext.MuhasebeFisler.Where(f => f.Id == v.MuhasebeFisId).Select(f => (int?)f.Donem).FirstOrDefault(),
             TahsilatOdemeBelgesiId = v.TahsilatOdemeBelgesiId,
             CariHareketId = null,
             PosTahsilatValorId = v.Id,
@@ -402,12 +494,16 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (filter.TutarMin.HasValue) q = q.Where(h => h.Tutar >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(h => h.Tutar <= filter.TutarMax.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(h => h.ParaBirimi == filter.ParaBirimi);
-        if (filter.CariKartId.HasValue) q = q.Where(h => h.CariKartId == filter.CariKartId.Value);
-        if (filter.KasaBankaHesapId.HasValue) q = q.Where(h => h.KasaBankaHesapId == filter.KasaBankaHesapId.Value);
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo)) q = q.Where(h => h.BelgeNo != null && h.BelgeNo.Contains(filter.BelgeNo));
-        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo) || filter.MaliYil.HasValue || filter.Donem.HasValue)
+        if (filter.SadeceIptalEdilmisOlanlar.HasValue)
         {
-            q = q.Where(_ => false); // KasaHareket'te guvenilir fis/donem iliskisi yok.
+            q = filter.SadeceIptalEdilmisOlanlar.Value
+                ? q.Where(h => h.Durum != CariHareketDurumlari.Aktif)
+                : q.Where(h => h.Durum == CariHareketDurumlari.Aktif);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo) || !string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
+        {
+            q = q.Where(_ => false); // KasaHareket'te guvenilir fis/rezervasyon iliskisi yok.
         }
 
         return q.Select(h => new AdayHam
@@ -417,12 +513,21 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : "KASAHAREKET:" + h.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.KasaHareket,
             KaynakId = h.Id,
+            KaynakOncelik = 2,
             Tarih = h.HareketTarihi,
             Tutar = h.Tutar,
+            TutarTuru = "Hareket Tutarı",
             ParaBirimi = h.ParaBirimi,
             TesisId = h.KasaBankaHesap!.TesisId,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == h.KasaBankaHesap.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
             CariKartId = h.CariKartId,
             KasaBankaHesapId = h.KasaBankaHesapId,
+            KasaBankaHesapTipi = h.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == h.KasaBankaHesapId).Select(k => k.Tip).FirstOrDefault(),
+            MuhasebeHesapPlaniId = h.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == h.KasaBankaHesapId).Select(k => k.MuhasebeHesapPlaniId).FirstOrDefault(),
+            MaliYil = null,
+            Donem = null,
             TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? h.KaynakId : null,
             CariHareketId = null,
             PosTahsilatValorId = null,
@@ -452,10 +557,14 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (filter.TutarMin.HasValue) q = q.Where(h => h.Tutar >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(h => h.Tutar <= filter.TutarMax.Value);
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi)) q = q.Where(h => h.ParaBirimi == filter.ParaBirimi);
-        if (filter.CariKartId.HasValue) q = q.Where(h => h.CariKartId == filter.CariKartId.Value);
-        if (filter.KasaBankaHesapId.HasValue) q = q.Where(h => h.KasaBankaHesapId == filter.KasaBankaHesapId.Value);
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo)) q = q.Where(h => h.BelgeNo != null && h.BelgeNo.Contains(filter.BelgeNo));
-        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo) || filter.MaliYil.HasValue || filter.Donem.HasValue)
+        if (filter.SadeceIptalEdilmisOlanlar.HasValue)
+        {
+            q = filter.SadeceIptalEdilmisOlanlar.Value
+                ? q.Where(h => h.Durum != CariHareketDurumlari.Aktif)
+                : q.Where(h => h.Durum == CariHareketDurumlari.Aktif);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo) || !string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
         {
             q = q.Where(_ => false);
         }
@@ -467,12 +576,21 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : "BANKAHAREKET:" + h.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.BankaHareket,
             KaynakId = h.Id,
+            KaynakOncelik = 2,
             Tarih = h.HareketTarihi,
             Tutar = h.Tutar,
+            TutarTuru = "Hareket Tutarı",
             ParaBirimi = h.ParaBirimi,
             TesisId = h.KasaBankaHesap!.TesisId,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == h.KasaBankaHesap.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
             CariKartId = h.CariKartId,
             KasaBankaHesapId = h.KasaBankaHesapId,
+            KasaBankaHesapTipi = h.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == h.KasaBankaHesapId).Select(k => k.Tip).FirstOrDefault(),
+            MuhasebeHesapPlaniId = h.KasaBankaHesapId == null ? null
+                : _dbContext.KasaBankaHesaplari.Where(k => k.Id == h.KasaBankaHesapId).Select(k => k.MuhasebeHesapPlaniId).FirstOrDefault(),
+            MaliYil = null,
+            Donem = null,
             TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? h.KaynakId : null,
             CariHareketId = null,
             PosTahsilatValorId = null,
@@ -495,6 +613,11 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
     {
         // BAGIMSIZ ARASTIRMA: KaynakModul kisiti YOKTUR - odeme belgesine hic baglanmamis fisler de
         // aday olur (mali etki olusturan durumlarla sinirli).
+        //
+        // ITpal/ters kayit ayrimi (madde 4): base sorgu YALNIZCA mali etki olusturan durumlar
+        // (Onayli/TersKayit) ile sinirlidir. "SadeceIptalEdilmisOlanlar=true" istendiginde bu,
+        // KAYNAK KAYDIN iptali (Durum=Iptal) DEGIL, bu fisin bir TERS KAYIT niteliginde olup
+        // olmadigini ifade eder (Durum=TersKayit) - iki kavram BILINCLI olarak KARISTIRILMAZ.
         var q = _dbContext.MuhasebeFisler.AsNoTracking()
             .Where(f => !f.IsDeleted && tesisIds.Contains(f.TesisId)
                 && (f.Durum == MuhasebeFisDurumlari.Onayli || f.Durum == MuhasebeFisDurumlari.TersKayit));
@@ -504,23 +627,22 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         if (filter.TutarMin.HasValue) q = q.Where(f => f.ToplamBorc >= filter.TutarMin.Value);
         if (filter.TutarMax.HasValue) q = q.Where(f => f.ToplamBorc <= filter.TutarMax.Value);
         if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo)) q = q.Where(f => f.FisNo.Contains(filter.MuhasebeFisNo));
-        if (filter.MaliYil.HasValue) q = q.Where(f => f.MaliYil == filter.MaliYil.Value);
-        if (filter.Donem.HasValue) q = q.Where(f => f.Donem == filter.Donem.Value);
-        if (filter.CariKartId.HasValue)
-        {
-            // Fis SATIRLARINDA ilgili cari etkilenmis mi (gercek iliski).
-            q = q.Where(f => _dbContext.MuhasebeFisSatirlari.Any(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.CariKartId == filter.CariKartId.Value));
-        }
-        if (filter.KasaBankaHesapId.HasValue)
-        {
-            q = q.Where(f => _dbContext.MuhasebeFisSatirlari.Any(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.KasaBankaHesapId == filter.KasaBankaHesapId.Value));
-        }
         if (!string.IsNullOrWhiteSpace(filter.BelgeNo)) q = q.Where(f => f.FisNo.Contains(filter.BelgeNo));
         // Para birimi fis BASLIGINDA yok; satir bazindadir - guvenilir sekilde uygulanamadigi icin
         // bu filtre verildiginde fis kaynagi sonuc disi birakilir.
         if (!string.IsNullOrWhiteSpace(filter.ParaBirimi))
         {
             q = q.Where(f => _dbContext.MuhasebeFisSatirlari.Any(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.ParaBirimi == filter.ParaBirimi));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.RezervasyonReferansNo))
+        {
+            q = q.Where(_ => false); // MuhasebeFis'te guvenilir rezervasyon iliskisi yok.
+        }
+        if (filter.SadeceIptalEdilmisOlanlar.HasValue)
+        {
+            q = filter.SadeceIptalEdilmisOlanlar.Value
+                ? q.Where(f => f.Durum == MuhasebeFisDurumlari.TersKayit)
+                : q.Where(f => f.Durum == MuhasebeFisDurumlari.Onayli);
         }
 
         return q.Select(f => new AdayHam
@@ -530,12 +652,31 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 : "FIS:" + f.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.MuhasebeFis,
             KaynakId = f.Id,
+            KaynakOncelik = 5,
             Tarih = f.FisTarihi,
             Tutar = f.ToplamBorc,
-            ParaBirimi = null,
+            TutarTuru = "Toplam Borç",
+            ParaBirimi = _dbContext.MuhasebeFisSatirlari
+                .Where(s => !s.IsDeleted && s.MuhasebeFisId == f.Id)
+                .OrderBy(s => s.SiraNo).Select(s => s.ParaBirimi).FirstOrDefault(),
             TesisId = f.TesisId,
-            CariKartId = null,
-            KasaBankaHesapId = null,
+            KurumId = _dbContext.Tesisler.Where(t => t.Id == f.TesisId).Select(t => (int?)t.KurumId).FirstOrDefault(),
+            CariKartId = _dbContext.MuhasebeFisSatirlari
+                .Where(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.CariKartId != null)
+                .OrderBy(s => s.SiraNo).Select(s => s.CariKartId).FirstOrDefault(),
+            KasaBankaHesapId = _dbContext.MuhasebeFisSatirlari
+                .Where(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.KasaBankaHesapId != null)
+                .OrderBy(s => s.SiraNo).Select(s => s.KasaBankaHesapId).FirstOrDefault(),
+            KasaBankaHesapTipi = _dbContext.MuhasebeFisSatirlari
+                .Where(s => !s.IsDeleted && s.MuhasebeFisId == f.Id && s.KasaBankaHesapId != null)
+                .OrderBy(s => s.SiraNo)
+                .Select(s => _dbContext.KasaBankaHesaplari.Where(k => k.Id == s.KasaBankaHesapId).Select(k => k.Tip).FirstOrDefault())
+                .FirstOrDefault(),
+            MuhasebeHesapPlaniId = _dbContext.MuhasebeFisSatirlari
+                .Where(s => !s.IsDeleted && s.MuhasebeFisId == f.Id)
+                .OrderBy(s => s.SiraNo).Select(s => (int?)s.MuhasebeHesapPlaniId).FirstOrDefault(),
+            MaliYil = f.MaliYil,
+            Donem = f.Donem,
             TahsilatOdemeBelgesiId = f.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? f.KaynakId : null,
             CariHareketId = null,
             PosTahsilatValorId = null,
@@ -557,15 +698,18 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Sayfa satirlarini DTO'ya donusturme
+    // Sayfa satirlarini DTO'ya donusturme (DETERMINISTIK - bkz. sinif aciklamasi)
     // ─────────────────────────────────────────────────────────────
 
     private static List<OdemeAdayiDto> Birlestir(
-        List<AdayHam> satirlar, List<string> sirali, OdemeCaprazAramaFilterDto filter)
+        List<AdayHam> satirlarKaynakOncelikSirali, List<string> sirali, OdemeCaprazAramaFilterDto filter)
     {
         var sozluk = new Dictionary<string, OdemeAdayiDto>(StringComparer.Ordinal);
 
-        foreach (var s in satirlar)
+        // satirlarKaynakOncelikSirali ZATEN KaynakOncelik+KaynakId'ye gore SIRALI geldigi icin
+        // (SQL'de OrderBy uygulandi) buradaki ??= atamalari deterministiktir - hangi kaynagin
+        // "kazanacagi" SQL'in fiziksel satir donusum sirasina DEGIL, acikca tanimlanmis onceliğe baglidir.
+        foreach (var s in satirlarKaynakOncelikSirali)
         {
             if (!sozluk.TryGetValue(s.Anahtar, out var aday))
             {
@@ -578,12 +722,28 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 aday.BulunduguKaynaklar.Add(s.Kaynak);
             }
 
+            // Madde 3: her kaynagin KENDI tutari, kendi anlamiyla ayrica saklanir - birbirinin
+            // yerine kullanilmaz.
+            aday.KaynakTutarlari.Add(new OdemeKaynakTutariDto
+            {
+                Kaynak = s.Kaynak,
+                KaynakId = s.KaynakId,
+                Tutar = s.Tutar,
+                ParaBirimi = s.ParaBirimi,
+                TutarTuru = s.TutarTuru
+            });
+
             aday.Tarih ??= s.Tarih;
             aday.Tutar ??= s.Tutar;
             aday.ParaBirimi ??= s.ParaBirimi;
             aday.TesisId ??= s.TesisId;
+            aday.BulunanKurumId ??= s.KurumId;
             aday.CariKartId ??= s.CariKartId;
             aday.KasaBankaHesapId ??= s.KasaBankaHesapId;
+            aday.BulunanKasaBankaHesapTipi ??= s.KasaBankaHesapTipi;
+            aday.BulunanMuhasebeHesapPlaniId ??= s.MuhasebeHesapPlaniId;
+            aday.BulunanMaliYil ??= s.MaliYil;
+            aday.BulunanDonem ??= s.Donem;
             aday.TahsilatOdemeBelgesiId ??= s.TahsilatOdemeBelgesiId;
             aday.CariHareketId ??= s.CariHareketId;
             aday.PosTahsilatValorId ??= s.PosTahsilatValorId;
@@ -605,21 +765,137 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             if (s.BagimsizKayit == 1)
             {
                 aday.BagimsizKayitMi = true;
+            }
+        }
+
+        foreach (var aday in sozluk.Values)
+        {
+            KarsilastirBeklenenVeBulunan(aday, filter);
+
+            if (aday.BagimsizKayitMi)
+            {
                 aday.GuvenSeviyesi = OdemeGuvenSeviyeleri.IncelenmesiGereken;
                 aday.GuvenGerekcesi =
                     "Bu kayıt herhangi bir tahsilat/ödeme belgesine bağlı değil. Aynı ödemeye ait olup olmadığı " +
                     "yalnızca filtre kriterleriyle (tarih/tutar/cari/hesap) daraltılmıştır; KANITLANMAMIŞTIR.";
             }
-        }
-
-        foreach (var aday in sozluk.Values.Where(x => !x.BagimsizKayitMi))
-        {
-            aday.GuvenSeviyesi = OdemeGuvenSeviyeleri.YuksekOlasilik;
-            aday.GuvenGerekcesi = "Kayıtlar ödeme belgesi kimliği üzerinden birbirine gerçekten bağlıdır.";
+            else if (aday.CelisenAlanlar.Count > 0)
+            {
+                // Kaynaklar arasi baglanti gercek olsa bile, beklenen ile CELISEN bir kayit
+                // "yuksek olasilik" olarak sunulamaz - kullanicinin dikkatle incelemesi gerekir.
+                aday.GuvenSeviyesi = OdemeGuvenSeviyeleri.IncelenmesiGereken;
+                aday.GuvenGerekcesi =
+                    "Kayıtlar ödeme belgesi kimliği üzerinden birbirine bağlıdır ANCAK beklenen değerlerden " +
+                    $"{aday.CelisenAlanlar.Count} alanda çelişki tespit edildi (bkz. ÇelişenAlanlar) - incelenmelidir.";
+            }
+            else
+            {
+                aday.GuvenSeviyesi = OdemeGuvenSeviyeleri.YuksekOlasilik;
+                aday.GuvenGerekcesi = "Kayıtlar ödeme belgesi kimliği üzerinden birbirine gerçekten bağlıdır.";
+            }
         }
 
         // Sayfa sirasini SQL'den gelen anahtar sirasina gore koru.
         return [.. sirali.Where(sozluk.ContainsKey).Select(a => sozluk[a])];
+    }
+
+    /// <summary>Madde 1: Beklenen* alanlarini bulunan adayin GERCEK degerleriyle karsilastirir.
+    /// Hicbir sekilde adayi ELEMEZ - yalnizca Eslesen/Celisen listelerini ve veri kalitesi
+    /// uyarilarini doldurur.</summary>
+    private static void KarsilastirBeklenenVeBulunan(OdemeAdayiDto aday, OdemeCaprazAramaFilterDto filter)
+    {
+        void Karsilastir(int? beklenen, int? bulunan, string alanEtiketi, string uyusmazlikKodu, string? veriYokMesaji)
+        {
+            if (!beklenen.HasValue)
+            {
+                return;
+            }
+            if (!bulunan.HasValue)
+            {
+                if (veriYokMesaji is not null)
+                {
+                    aday.VeriKalitesiUyarilari.Add(veriYokMesaji);
+                }
+                return;
+            }
+            if (beklenen.Value == bulunan.Value)
+            {
+                aday.EslesenAlanlar.Add(alanEtiketi);
+            }
+            else
+            {
+                aday.CelisenAlanlar.Add(uyusmazlikKodu);
+            }
+        }
+
+        Karsilastir(filter.BeklenenCariKartId, aday.CariKartId, "Cari Kart", OdemeCeliskiKodlari.CariHesapUyusmazligi,
+            filter.BeklenenCariKartId.HasValue ? "Bu adayın hangi cari karta ait olduğu bulunamadı; cari karşılaştırması yapılamadı." : null);
+
+        if (filter.BeklenenBankaHesapId.HasValue || filter.BeklenenKasaHesapId.HasValue)
+        {
+            if (!aday.KasaBankaHesapId.HasValue)
+            {
+                aday.VeriKalitesiUyarilari.Add("Bu adayın bağlı olduğu kasa/banka hesabı bulunamadı; hesap karşılaştırması yapılamadı.");
+            }
+            else if (string.Equals(aday.BulunanKasaBankaHesapTipi, KasaBankaHesapTipleri.Banka, StringComparison.Ordinal) && filter.BeklenenBankaHesapId.HasValue)
+            {
+                Karsilastir(filter.BeklenenBankaHesapId, aday.KasaBankaHesapId, "Banka Hesabı", OdemeCeliskiKodlari.BankaHesabiUyusmazligi, null);
+            }
+            else if (string.Equals(aday.BulunanKasaBankaHesapTipi, KasaBankaHesapTipleri.NakitKasa, StringComparison.Ordinal) && filter.BeklenenKasaHesapId.HasValue)
+            {
+                Karsilastir(filter.BeklenenKasaHesapId, aday.KasaBankaHesapId, "Kasa Hesabı", OdemeCeliskiKodlari.KasaHesabiUyusmazligi, null);
+            }
+            else
+            {
+                var beklenen = filter.BeklenenBankaHesapId ?? filter.BeklenenKasaHesapId;
+                var kod = filter.BeklenenBankaHesapId.HasValue ? OdemeCeliskiKodlari.BankaHesabiUyusmazligi : OdemeCeliskiKodlari.KasaHesabiUyusmazligi;
+                Karsilastir(beklenen, aday.KasaBankaHesapId, "Kasa/Banka Hesabı", kod, null);
+            }
+        }
+
+        Karsilastir(filter.BeklenenMuhasebeHesapPlaniId, aday.BulunanMuhasebeHesapPlaniId, "Muhasebe Hesabı", OdemeCeliskiKodlari.MuhasebeHesabiUyusmazligi,
+            filter.BeklenenMuhasebeHesapPlaniId.HasValue ? "Bu adayın muhasebe hesabı belirlenemedi; hesap karşılaştırması yapılamadı." : null);
+
+        Karsilastir(filter.BeklenenMaliYil, aday.BulunanMaliYil, "Mali Yıl", OdemeCeliskiKodlari.MaliYilUyusmazligi,
+            filter.BeklenenMaliYil.HasValue ? "Bu adayın mali yılı belirlenemedi (bağlı bir muhasebe fişi yok/bulunamadı)." : null);
+
+        Karsilastir(filter.BeklenenDonem, aday.BulunanDonem, "Dönem", OdemeCeliskiKodlari.DonemUyusmazligi,
+            filter.BeklenenDonem.HasValue ? "Bu adayın dönemi belirlenemedi (bağlı bir muhasebe fişi yok/bulunamadı)." : null);
+
+        Karsilastir(filter.BeklenenTesisId, aday.TesisId, "Tesis", OdemeCeliskiKodlari.TesisUyusmazligi, null);
+        Karsilastir(filter.BeklenenKurumId, aday.BulunanKurumId, "Kurum", OdemeCeliskiKodlari.KurumUyusmazligi, null);
+
+        if (filter.BeklenenTutar.HasValue)
+        {
+            if (!aday.Tutar.HasValue)
+            {
+                aday.VeriKalitesiUyarilari.Add("Bu adayın tutarı belirlenemedi; tutar karşılaştırması yapılamadı.");
+            }
+            else if (Math.Abs(aday.Tutar.Value - filter.BeklenenTutar.Value) <= TutarKarsilastirmaToleransi)
+            {
+                aday.EslesenAlanlar.Add("Tutar");
+            }
+            else
+            {
+                aday.CelisenAlanlar.Add(OdemeCeliskiKodlari.TutarUyusmazligi);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.BeklenenParaBirimi))
+        {
+            if (string.IsNullOrWhiteSpace(aday.ParaBirimi))
+            {
+                aday.VeriKalitesiUyarilari.Add("Bu adayın para birimi belirlenemedi; para birimi karşılaştırması yapılamadı.");
+            }
+            else if (string.Equals(aday.ParaBirimi, filter.BeklenenParaBirimi, StringComparison.OrdinalIgnoreCase))
+            {
+                aday.EslesenAlanlar.Add("Para Birimi");
+            }
+            else
+            {
+                aday.CelisenAlanlar.Add(OdemeCeliskiKodlari.ParaBirimiUyusmazligi);
+            }
+        }
     }
 
     private static void EkleKopukluk(OdemeAdayiDto aday, string kod, string aciklama)

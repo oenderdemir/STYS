@@ -234,13 +234,20 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
         var sonuc = await svc.AraAsync(
             new PagedRequest { PageNumber = 1, PageSize = 20 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+            new OdemeCaprazAramaFilterDto
+            {
+                TesisId = tesisId, BeklenenCariKartId = cariId,
+                TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                TutarMin = 0m, TutarMax = 1_000_000m
+            });
 
         var aday = Assert.Single(sonuc.Items);
         Assert.True(aday.BagimsizKayitMi);
         Assert.Equal(OdemeGuvenSeviyeleri.IncelenmesiGereken, aday.GuvenSeviyesi);
         Assert.Contains(OdemeAdayKaynaklari.CariHareket, aday.BulunduguKaynaklar);
         Assert.Equal($"CARIHAREKET:{hareket.Id}", aday.TekillestirmeAnahtari);
+        // Beklenen cari GERCEKTEN eslesiyor - eslesenAlanlar'da gorunmeli.
+        Assert.Contains("Cari Kart", aday.EslesenAlanlar);
     }
 
     [IntegrationFact]
@@ -265,7 +272,12 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
         var sonuc = await svc.AraAsync(
             new PagedRequest { PageNumber = 1, PageSize = 20 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+            new OdemeCaprazAramaFilterDto
+            {
+                TesisId = tesisId, BeklenenCariKartId = cariId,
+                TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                TutarMin = 0m, TutarMax = 1_000_000m
+            });
 
         var aday = Assert.Single(sonuc.Items);
         Assert.True(aday.BagimsizKayitMi);
@@ -304,7 +316,12 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
         var sonuc = await svc.AraAsync(
             new PagedRequest { PageNumber = 1, PageSize = 20 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+            new OdemeCaprazAramaFilterDto
+            {
+                TesisId = tesisId, BeklenenCariKartId = cariId,
+                TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                TutarMin = 0m, TutarMax = 1_000_000m
+            });
 
         Assert.Equal(2, sonuc.Items.Count);
         Assert.Contains(sonuc.Items, a => a.TekillestirmeAnahtari == $"KASAHAREKET:{kasa.Id}" && a.BagimsizKayitMi);
@@ -339,7 +356,8 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
             {
                 TesisId = yetkiliTesisId,
                 TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date),
-                TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date)
+                TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                TutarMin = 0m, TutarMax = 1_000_000m
             });
 
         Assert.Empty(sonuc.Items);
@@ -347,13 +365,12 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task KasaBankaHesapFiltresi_CariHareketKaynaginda_GuvenilirIliskiOlmadigiIcinSonucDisiBirakilir()
+    public async Task MuhasebeFisNoFiltresi_CariHareketKaynaginda_GuvenilirIliskiOlmadigiIcinSonucDisiBirakilir()
     {
         await using var db = CreateDbContext();
         var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
         var tesisId = await SeedTesisAsync(db, suffix);
         var cariId = await SeedCariKartAsync(db, tesisId, suffix);
-        var hesapId = await SeedKasaBankaHesapAsync(db, tesisId, suffix);
 
         var hareket = new CariHareket
         {
@@ -367,11 +384,11 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
 
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
 
-        // KasaBankaHesapId filtresi CariHareket icin guvenilir bir sekilde uygulanamaz -> bu kaynak
+        // MuhasebeFisNo filtresi CariHareket icin guvenilir bir sekilde uygulanamaz -> bu kaynak
         // SESSIZCE yok sayilmaz, SONUC DISI birakilir (yaniltici "eslesme yok" yerine kaynak disi kalir).
         var sonuc = await svc.AraAsync(
             new PagedRequest { PageNumber = 1, PageSize = 20 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, KasaBankaHesapId = hesapId });
+            new OdemeCaprazAramaFilterDto { TesisId = tesisId, MuhasebeFisNo = suffix });
 
         Assert.Empty(sonuc.Items);
     }
@@ -413,13 +430,198 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
             var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
             var sonuc = await svc.AraAsync(
                 new PagedRequest { PageNumber = 1, PageSize = 20 },
-                new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+                new OdemeCaprazAramaFilterDto
+                {
+                    TesisId = tesisId, BeklenenCariKartId = cariId,
+                    TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                    TutarMin = 0m, TutarMax = 1_000_000m
+                });
 
             var aday = Assert.Single(sonuc.Items);
             Assert.False(aday.BagimsizKayitMi);
             Assert.Equal($"BELGE:{belge.Id}", aday.TekillestirmeAnahtari);
             Assert.Contains(OdemeAdayKaynaklari.TahsilatOdemeBelgesi, aday.BulunduguKaynaklar);
             Assert.Contains(OdemeAdayKaynaklari.CariHareket, aday.BulunduguKaynaklar);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belge.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Beklenen vs Bulunan karsilastirmasi (madde 1) - guclu bir aday BEKLENENden farkli
+    // cari/hesap/donem tasidigi icin SONUCTAN ELENMEZ, celiski koduyla birlikte DONER.
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task BeklenenCariFarkliOlanGuclu_Aday_ELENMEZ_CeliskiIleDoner()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisId = await SeedTesisAsync(db, suffix);
+        var beklenenCari = await SeedCariKartAsync(db, tesisId, suffix + "-BEKLENEN");
+        var gercekCari = await SeedCariKartAsync(db, tesisId, suffix + "-GERCEK");
+
+        // Odeme GERCEKTE baska bir cariye (gercekCari) islenmis - kullanici beklenenCari'yi ariyor.
+        var belge = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-YANLISCARI",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = gercekCari,
+            Tutar = 500m,
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.Nakit,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belge);
+        await db.SaveChangesAsync();
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
+            var sonuc = await svc.AraAsync(
+                new PagedRequest { PageNumber = 1, PageSize = 20 },
+                new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = beklenenCari });
+
+            // KRITIK: aday SONUCTAN ELENMEDI - hala donuyor.
+            var aday = Assert.Single(sonuc.Items);
+            Assert.Equal(gercekCari, aday.CariKartId);
+            Assert.Contains(OdemeCeliskiKodlari.CariHesapUyusmazligi, aday.CelisenAlanlar);
+            Assert.DoesNotContain("Cari Kart", aday.EslesenAlanlar);
+            // Celisen bir aday asla "yuksek olasilik" gibi sunulmaz.
+            Assert.Equal(OdemeGuvenSeviyeleri.IncelenmesiGereken, aday.GuvenSeviyesi);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belge.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    [IntegrationFact]
+    public async Task BeklenenBankaHesabiFarkliOlanAday_ELENMEZ_CeliskiIleDoner()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisId = await SeedTesisAsync(db, suffix);
+        var cariId = await SeedCariKartAsync(db, tesisId, suffix);
+        var beklenenHesap = await SeedKasaBankaHesapAsync(db, tesisId, suffix + "-BEKLENEN");
+        var gercekHesap = await SeedKasaBankaHesapAsync(db, tesisId, suffix + "-GERCEK");
+
+        var belge = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-YANLISHESAP",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariId,
+            KasaBankaHesapId = gercekHesap,
+            Tutar = 700m,
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.HavaleEft,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belge);
+        await db.SaveChangesAsync();
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
+            var sonuc = await svc.AraAsync(
+                new PagedRequest { PageNumber = 1, PageSize = 20 },
+                new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenBankaHesapId = beklenenHesap });
+
+            var aday = Assert.Single(sonuc.Items);
+            Assert.Equal(gercekHesap, aday.KasaBankaHesapId);
+            Assert.Contains(OdemeCeliskiKodlari.BankaHesabiUyusmazligi, aday.CelisenAlanlar);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belge.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    [IntegrationFact]
+    public async Task BeklenenMaliYilVeDonemFarkliOlanFis_ELENMEZ_CeliskiIleDoner()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisId = await SeedTesisAsync(db, suffix);
+
+        // Fis GERCEKTE 2024/3 donemine ait - kullanici 2026/7'yi ariyor.
+        var fisId = await SeedMuhasebeFisAsync(db, tesisId, $"{suffix}-FIS", kaynakModul: null, kaynakId: null, maliYil: 2024, donem: 3);
+
+        var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
+        var sonuc = await svc.AraAsync(
+            new PagedRequest { PageNumber = 1, PageSize = 20 },
+            new OdemeCaprazAramaFilterDto { TesisId = tesisId, MuhasebeFisNo = suffix, BeklenenMaliYil = 2026, BeklenenDonem = 7 });
+
+        var aday = Assert.Single(sonuc.Items);
+        Assert.Equal(fisId, aday.MuhasebeFisId);
+        Assert.Contains(OdemeCeliskiKodlari.MaliYilUyusmazligi, aday.CelisenAlanlar);
+        Assert.Contains(OdemeCeliskiKodlari.DonemUyusmazligi, aday.CelisenAlanlar);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Deterministik birlestirme (madde 3) - kaynak onceligi
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task FarkliKaynaklarinCelisenTutarlari_KaynakOnceligineGoreDeterministikBirlesir()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisId = await SeedTesisAsync(db, suffix);
+        var cariId = await SeedCariKartAsync(db, tesisId, suffix);
+
+        var belge = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-OZET",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariId,
+            Tutar = 500m, // Kaynak onceligi 1 (en yuksek) - bu deger KAZANMALI.
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.Nakit,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belge);
+        await db.SaveChangesAsync();
+
+        // Ayni mali isleme bagli cari hareket FARKLI (isaretli) bir tutar tasir - kaynak onceligi
+        // 4 (belgeden dusuk) oldugu icin OZET Tutar alaninda KAZANMAMALI.
+        var hareket = new CariHareket
+        {
+            CariKartId = cariId, HareketTarihi = DateTime.UtcNow.Date, BelgeTuru = "TahsilatOdemeBelgesi",
+            BelgeNo = belge.BelgeNo,
+            BorcTutari = 0m, AlacakTutari = 500m, ParaBirimi = "TRY", Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, KaynakId = belge.Id
+        };
+        db.CariHareketler.Add(hareket);
+        await db.SaveChangesAsync();
+        _cariHareketIdler.Add(hareket.Id);
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
+            var filtre = new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId };
+
+            // Iki kez calistir - SONUC HER SEFERINDE AYNI olmali (fiziksel SQL satir sirasina
+            // BAGLI DEGIL, KaynakOncelik'e gore ACIKCA siralanmis materyalizasyondan gelir).
+            var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 20 }, filtre);
+            var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 20 }, filtre);
+
+            var aday1 = Assert.Single(s1.Items);
+            var aday2 = Assert.Single(s2.Items);
+
+            // Belgenin (KaynakOncelik=1) tutari (500) OZET Tutar alaninda GECERLI - cari hareketin
+            // isaretli tutari (500, ayni sayisal deger ama farkli anlam - "İşaretli") degil, ANLAM
+            // olarak da OdemeBelgesi'nin "Belge Tutarı" kaynagindan gelmis olmali.
+            Assert.Equal(500m, aday1.Tutar);
+            Assert.Equal(500m, aday2.Tutar);
+            Assert.Equal(2, aday1.KaynakTutarlari.Count);
+            Assert.Contains(aday1.KaynakTutarlari, k => k.Kaynak == OdemeAdayKaynaklari.TahsilatOdemeBelgesi && k.TutarTuru == "Belge Tutarı" && k.Tutar == 500m);
+            Assert.Contains(aday1.KaynakTutarlari, k => k.Kaynak == OdemeAdayKaynaklari.CariHareket && k.TutarTuru.Contains("İşaretli"));
         }
         finally
         {

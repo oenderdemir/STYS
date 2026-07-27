@@ -48,8 +48,10 @@ public class PosValorFinansalSiniflandiriciTests
 
     private static TersKayitIliskisi GecerliTersKayitIliskisi() => new(
         TersKayitFisId: 9, AsilFisId: 5, TersKayitIptalEdilenFisId: 5,
-        TersKayitTesisId: 1, AsilFisTesisId: 1,
-        TersKayitToplamBorc: 1000m, AsilFisToplamBorc: 1000m, AyniAsilFiseBagliTersKayitSayisi: 1);
+        TersKayitTesisId: 1, AsilFisTesisId: 1, TersKayitKurumId: 1, AsilFisKurumId: 1,
+        TersKayitToplamBorc: 1000m, AsilFisToplamBorc: 1000m,
+        TersKayitParaBirimi: "TRY", AsilFisParaBirimi: "TRY",
+        TersYonluHesapEtkisiUyumluMu: true, AyniAsilFiseBagliTersKayitSayisi: 1);
 
     /// <summary>Tam gecerli (bulundu + silinmemis + Onayli + dogru tesis + beklenen hesap etkilenmis)
     /// bir dogrulanmis fis.</summary>

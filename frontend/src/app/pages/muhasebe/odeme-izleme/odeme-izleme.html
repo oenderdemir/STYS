@@ -267,11 +267,8 @@
         Bağımsız (herhangi bir ödeme/tahsilat belgesine bağlı olmayan) adaylar <strong>kanıtlanmamış</strong> sayılır ve ayrı işaretlenir.
     </div>
 
+    <div class="text-sm mb-2"><strong>Aramayı Daraltan Alanlar</strong> <span class="text-color-secondary">(en az biri veya tutar+tarih aralığı birlikte zorunlu)</span></div>
     <div class="grid grid-cols-12 gap-3 align-items-end mb-3">
-        <div class="col-span-6 md:col-span-2">
-            <label class="block mb-2 text-sm">Cari Kart Id</label>
-            <p-inputNumber [(ngModel)]="caprazCariKartId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
-        </div>
         <div class="col-span-6 md:col-span-2">
             <label class="block mb-2 text-sm">Belge No</label>
             <input pInputText class="w-full" [(ngModel)]="caprazBelgeNo" (change)="onCaprazFiltreDegisti()" />
@@ -281,8 +278,8 @@
             <input pInputText class="w-full" [(ngModel)]="caprazMuhasebeFisNo" (change)="onCaprazFiltreDegisti()" />
         </div>
         <div class="col-span-6 md:col-span-2">
-            <label class="block mb-2 text-sm">Kasa/Banka Hesap Id</label>
-            <p-inputNumber [(ngModel)]="caprazKasaBankaHesapId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+            <label class="block mb-2 text-sm">Rezervasyon Ref. No</label>
+            <input pInputText class="w-full" [(ngModel)]="caprazRezervasyonReferansNo" (change)="onCaprazFiltreDegisti()" />
         </div>
         <div class="col-span-6 md:col-span-2">
             <label class="block mb-2 text-sm">Tarih Başlangıç</label>
@@ -315,8 +312,39 @@
 
     <div *ngIf="caprazDaralticiAlanUyarisi" class="mb-3 p-2 border-1 surface-border border-round text-sm text-orange-700" style="background-color: var(--orange-50, #fff7ed)">
         <i class="pi pi-exclamation-triangle mr-2"></i>
-        Aşırı geniş bir taramayı önlemek için en az bir daraltıcı alan girmelisiniz: cari hesap, belge no, muhasebe fiş no, kasa/banka hesabı,
-        tarih aralığı (başlangıç + bitiş) veya tutar aralığı.
+        Aşırı geniş bir taramayı önlemek için güçlü bir referans (belge no, muhasebe fiş no, rezervasyon ref. no) veya birlikte verilmiş
+        tutar aralığı + tarih aralığı girmelisiniz.
+    </div>
+
+    <div class="text-sm mb-2 mt-2">
+        <strong>Beklenen Değerler</strong>
+        <span class="text-color-secondary"> (yalnızca karşılaştırma içindir - sonucu daraltmaz/elemez; uyuşmayan güçlü bir aday da bulunursa çelişkiyle birlikte gösterilir)</span>
+    </div>
+    <div class="grid grid-cols-12 gap-3 align-items-end mb-3">
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Cari Kart Id</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenCariKartId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Banka Hesap Id</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenBankaHesapId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Kasa Hesap Id</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenKasaHesapId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Muhasebe Hesabı Id</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenMuhasebeHesapPlaniId" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Mali Yıl</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenMaliYil" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block mb-2 text-sm">Beklenen Dönem</label>
+            <p-inputNumber [(ngModel)]="caprazBeklenenDonem" [useGrouping]="false" class="w-full" (onBlur)="onCaprazFiltreDegisti()" />
+        </div>
     </div>
 
     <div *ngIf="caprazLoading" class="flex align-items-center justify-content-center py-4">
@@ -341,8 +369,9 @@
                 <th>Bulunduğu Kaynaklar</th>
                 <th>Belge/Fiş No</th>
                 <th>Tarih</th>
-                <th>Tutar</th>
+                <th>Tutar (kaynak bazlı)</th>
                 <th>Cari</th>
+                <th>Eşleşen / Çelişen Alanlar</th>
                 <th>Tespit Edilen Kopukluklar</th>
             </tr>
         </ng-template>
@@ -357,8 +386,18 @@
                 </td>
                 <td>{{ a.belgeNo ?? '-' }}</td>
                 <td>{{ a.tarih ? (a.tarih | date: 'dd.MM.yyyy') : '-' }}</td>
-                <td>{{ a.tutar != null ? (a.tutar | number: '1.2-2') : '-' }} {{ a.paraBirimi }}</td>
+                <td>
+                    <div>{{ a.tutar != null ? (a.tutar | number: '1.2-2') : '-' }} {{ a.paraBirimi }}</div>
+                    <div class="text-xs text-color-secondary" *ngFor="let kt of a.kaynakTutarlari">
+                        {{ getKaynakLabel(kt.kaynak) }} ({{ kt.tutarTuru }}): {{ kt.tutar != null ? (kt.tutar | number: '1.2-2') : '-' }} {{ kt.paraBirimi }}
+                    </div>
+                </td>
                 <td>{{ a.cariUnvan ?? '-' }}</td>
+                <td>
+                    <p-tag *ngFor="let e of a.eslesenAlanlar" severity="success" [value]="e" class="mr-1 mb-1" />
+                    <p-tag *ngFor="let c of a.celisenAlanlar" severity="danger" [value]="getCeliskiLabel(c)" class="mr-1 mb-1" />
+                    <div class="text-xs text-color-secondary" *ngFor="let u of a.veriKalitesiUyarilari">{{ u }}</div>
+                </td>
                 <td>
                     <div *ngFor="let k of a.kopuklukKodlari; let i = index" class="mb-1">
                         <p-tag severity="warn" [value]="getKopuklukLabel(k)" />
@@ -368,7 +407,7 @@
             </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
-            <tr><td colspan="7" class="text-center">Kopukluk tespit edilmedi.</td></tr>
+            <tr><td colspan="8" class="text-center">Kopukluk tespit edilmedi.</td></tr>
         </ng-template>
     </p-table>
 

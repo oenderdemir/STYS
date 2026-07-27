@@ -33,16 +33,23 @@ export class OdemeIzlemeService {
         if (filter.tarihBitis) params = params.set('tarihBitis', filter.tarihBitis);
         if (filter.tutarMin != null) params = params.set('tutarMin', filter.tutarMin);
         if (filter.tutarMax != null) params = params.set('tutarMax', filter.tutarMax);
-        if (filter.cariKartId) params = params.set('cariKartId', filter.cariKartId);
         if (filter.kopuklukTipi) params = params.set('kopuklukTipi', filter.kopuklukTipi);
         if (filter.sadeceKopukOlanlar != null) params = params.set('sadeceKopukOlanlar', filter.sadeceKopukOlanlar);
         if (filter.paraBirimi) params = params.set('paraBirimi', filter.paraBirimi);
         if (filter.belgeNo) params = params.set('belgeNo', filter.belgeNo);
         if (filter.muhasebeFisNo) params = params.set('muhasebeFisNo', filter.muhasebeFisNo);
-        if (filter.kasaBankaHesapId) params = params.set('kasaBankaHesapId', filter.kasaBankaHesapId);
-        if (filter.maliYil) params = params.set('maliYil', filter.maliYil);
-        if (filter.donem) params = params.set('donem', filter.donem);
+        if (filter.rezervasyonReferansNo) params = params.set('rezervasyonReferansNo', filter.rezervasyonReferansNo);
         if (filter.sadeceIptalEdilmisOlanlar != null) params = params.set('sadeceIptalEdilmisOlanlar', filter.sadeceIptalEdilmisOlanlar);
+        if (filter.beklenenCariKartId) params = params.set('beklenenCariKartId', filter.beklenenCariKartId);
+        if (filter.beklenenBankaHesapId) params = params.set('beklenenBankaHesapId', filter.beklenenBankaHesapId);
+        if (filter.beklenenKasaHesapId) params = params.set('beklenenKasaHesapId', filter.beklenenKasaHesapId);
+        if (filter.beklenenMuhasebeHesapPlaniId) params = params.set('beklenenMuhasebeHesapPlaniId', filter.beklenenMuhasebeHesapPlaniId);
+        if (filter.beklenenMaliYil) params = params.set('beklenenMaliYil', filter.beklenenMaliYil);
+        if (filter.beklenenDonem) params = params.set('beklenenDonem', filter.beklenenDonem);
+        if (filter.beklenenTesisId) params = params.set('beklenenTesisId', filter.beklenenTesisId);
+        if (filter.beklenenKurumId) params = params.set('beklenenKurumId', filter.beklenenKurumId);
+        if (filter.beklenenTutar != null) params = params.set('beklenenTutar', filter.beklenenTutar);
+        if (filter.beklenenParaBirimi) params = params.set('beklenenParaBirimi', filter.beklenenParaBirimi);
         return this.http.get<ApiResponse<PagedResponseDto<OdemeAdayiModel>>>(`${this.baseUrl}/capraz-arama`, { params }).pipe(map(this.unwrapOne));
     }
 

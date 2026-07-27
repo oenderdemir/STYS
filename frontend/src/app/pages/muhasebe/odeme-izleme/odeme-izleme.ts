@@ -31,6 +31,7 @@ import {
     GUVEN_SEVIYESI_LABELLARI,
     KOPUKLUK_LABELLARI,
     ODEME_ADAY_KAYNAKLARI,
+    ODEME_CELISKI_LABELLARI,
     ODEME_YONTEMI_SECENEKLERI,
     OdemeAdayiModel,
     OdemeAramaFilterModel,
@@ -106,19 +107,26 @@ export class OdemeIzlemePage implements OnInit {
     caprazSayfa = 1;
     caprazSayfaBoyutu = 20;
     caprazKopuklukTipi: string | null = null;
-    caprazCariKartId: number | null = null;
     caprazBelgeNo: string | null = null;
     caprazMuhasebeFisNo: string | null = null;
-    caprazKasaBankaHesapId: number | null = null;
+    caprazRezervasyonReferansNo: string | null = null;
     caprazTutarMin: number | null = null;
     caprazTutarMax: number | null = null;
     caprazTarihBaslangic: Date | null = null;
     caprazTarihBitis: Date | null = null;
+    // ── Beklenen (karsilastirma icin) alanlar - SONUCU DARALTMAZ, yalnizca celiski/eslesme uretir ──
+    caprazBeklenenCariKartId: number | null = null;
+    caprazBeklenenBankaHesapId: number | null = null;
+    caprazBeklenenKasaHesapId: number | null = null;
+    caprazBeklenenMuhasebeHesapPlaniId: number | null = null;
+    caprazBeklenenMaliYil: number | null = null;
+    caprazBeklenenDonem: number | null = null;
     /** Backend'in "en az bir daraltıcı alan zorunlu" kuralını göndermeden ÖNCE kullanıcıya gösterir. */
     caprazDaralticiAlanUyarisi = false;
     readonly kopuklukLabellari = KOPUKLUK_LABELLARI;
     readonly adayKaynaklari = ODEME_ADAY_KAYNAKLARI;
     readonly erisimKisitiLabellari = ERISIM_KISITI_LABELLARI;
+    readonly celiskiLabellari = ODEME_CELISKI_LABELLARI;
 
     readonly odemeYontemiSecenekleri = ODEME_YONTEMI_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
@@ -273,13 +281,22 @@ export class OdemeIzlemePage implements OnInit {
             tarihBitis: this.toIsoDate(this.caprazTarihBitis),
             tutarMin: this.caprazTutarMin,
             tutarMax: this.caprazTutarMax,
-            cariKartId: this.caprazCariKartId,
             belgeNo: this.caprazBelgeNo,
             muhasebeFisNo: this.caprazMuhasebeFisNo,
-            kasaBankaHesapId: this.caprazKasaBankaHesapId,
+            rezervasyonReferansNo: this.caprazRezervasyonReferansNo,
             kopuklukTipi: this.caprazKopuklukTipi,
-            sadeceKopukOlanlar: true
+            sadeceKopukOlanlar: true,
+            beklenenCariKartId: this.caprazBeklenenCariKartId,
+            beklenenBankaHesapId: this.caprazBeklenenBankaHesapId,
+            beklenenKasaHesapId: this.caprazBeklenenKasaHesapId,
+            beklenenMuhasebeHesapPlaniId: this.caprazBeklenenMuhasebeHesapPlaniId,
+            beklenenMaliYil: this.caprazBeklenenMaliYil,
+            beklenenDonem: this.caprazBeklenenDonem
         };
+    }
+
+    getCeliskiLabel(kod: string): string {
+        return this.celiskiLabellari[kod] ?? kod;
     }
 
     loadCaprazArama(): void {

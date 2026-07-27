@@ -402,3 +402,113 @@ aynı sınıf deadlock'ları not edilmişti).
 **Sonuç:** Sunucu-taraflı sayfalama, bağımsız kaynak keşfi ve tesis-arası veri gizliliği artık gerçek
 kodla (prose değil) kanıtlanmış; 33 yeni/güncellenen test dahil toplam 491 backend + 38 frontend testi
 gerçek SQL Server'a karşı yeşil.
+
+---
+
+## 18. Üçüncü tur (2026-07-27) — Beklenen/Bulunan ayrımı, deterministik birleştirme, ters kayıt kesinleştirme
+
+Esas alınan başlangıç commiti: `35b36688a1b18745c13f8b3e862e25e3861c22a4`.
+
+Bu tur, bir önceki turun çapraz aramasının `CariKartId`/`KasaBankaHesapId`/`MaliYil`/`Donem`
+alanlarını **yalnızca sonuç filtresi** olarak kullandığını — yani "başka hesaba/cariye/döneme
+yanlışlıkla işlenmiş" tam da aranan kayıtların bu filtreler yüzünden SESSİZCE elendiğini tespit eden
+yeni bir talimat üzerine, mevcut kodu (yeni modül eklemeden) baştan kurar.
+
+### 18.1 Değişen dosyalar ve amaçları
+
+| Dosya | Amaç |
+|---|---|
+| `backend/Muhasebe/OdemeIzleme/Dtos/OdemeIzlemeDtos.cs` | `OdemeCaprazAramaFilterDto`'dan `CariKartId`/`KasaBankaHesapId`/`MaliYil`/`Donem` kaldırıldı; yerine **karşılaştırma-amaçlı, SONUCU DARALTMAYAN** `Beklenen*` alanları (`BeklenenCariKartId`, `BeklenenBankaHesapId`, `BeklenenKasaHesapId`, `BeklenenMuhasebeHesapPlaniId`, `BeklenenMaliYil`, `BeklenenDonem`, `BeklenenTesisId`, `BeklenenKurumId`, `BeklenenTutar`, `BeklenenParaBirimi`) eklendi. Yeni `RezervasyonReferansNo` gerçek bir narrowing alanı olarak eklendi. `OdemeAdayiDto`'ya `EslesenAlanlar`/`CelisenAlanlar`/`VeriKalitesiUyarilari`/`AyrintiYetkiNedeniyleGizliMi`/`GuvenliNedenKodlari`/`KaynakTutarlari` (madde 3 - kaynak bazlı tutarlar) eklendi. Yeni `OdemeCeliskiKodlari` sabit sınıfı (10 çelişki kodu). |
+| `backend/Muhasebe/OdemeIzleme/Services/OdemeCaprazAramaService.cs` | Tamamen yeniden yazıldı: (1) altı sağlayıcının WHERE'inden cari/hesap/dönem filtreleri kaldırıldı — artık yalnızca gerçek narrowing alanları (tarih, tutar, para birimi, belge no, fiş no, rezervasyon no) filtreler; (2) `KarsilastirBeklenenVeBulunan` — bulunan adayın gerçek cari/hesap/hesap-türü/dönem/tesis/kurum/tutar/para birimi değerlerini `Beklenen*` ile karşılaştırıp **ELEMEDEN** `EslesenAlanlar`/`CelisenAlanlar` üretir; (3) `AdayHam`'a `KaynakOncelik` (1=Belge, 2=Banka/Kasa Hareketi, 3=POS/Valör, 4=Cari Hareket, 5=Muhasebe Fişi) + `MuhasebeHesapPlaniId`/`MaliYil`/`Donem`/`KurumId`/`KasaBankaHesapTipi`/`TutarTuru` eklendi; sayfa-zenginleştirme sorgusu artık `OrderBy(KaynakOncelik).ThenBy(KaynakId)` ile açıkça sıralanarak **deterministik birleştirme** sağlanıyor (fiziksel SQL satır sırasına bağlı değil); (4) `DogrulaSorguSinirlari` (eski `DogrulaDaralticiAlanVarligi`'nin yerine) — güçlü referans (belge/fiş/rezervasyon no) YOKSA tutar aralığının hem alt hem üst sınırı + dar tarih aralığı (≤92 gün) birlikte zorunlu; tek taraflı tutar/tarih reddedilir. |
+| `backend/Muhasebe/Common/Services/TersKayitIliskisiDogrulama.cs` | `AsilFisId` null iken `IptalEdilenFisId` dolu olsa bile artık **ASIL_FIS_BILINMIYOR** ile reddediliyor (önceki turda bu boşluk vardı — null AsilFisId kontrolü atlanıyordu). Para birimi (`TersKayitParaBirimi`/`AsilFisParaBirimi`) modele taşındı ve karşılaştırılıyor (`TERS_KAYIT_PARA_BIRIMI_UYUSMAZLIGI`). Kurum karşılaştırması eklendi (`TERS_KAYIT_KURUM_UYUSMAZLIGI`). Yeni `TersYonluHesapEtkisiUyumluMu` (bool?) alanı — `null` (doğrulanamadı) VEYA `false` iken asla "doğrulandı" üretilmiyor (`TERS_YONLU_HESAP_ETKISI_DOGRULANAMADI`). |
+| `backend/Muhasebe/NakitBankaPozisyonu/Services/NakitBankaPozisyonuService.cs` | Yeni `FisOzeti` record'u (KurumId + ParaBirimi eklendi). Fiş-satırı sorgusu artık (FisId,HesapId)→net etki (Borç-Alacak) sözlüğü de üretiyor; `CozumleTersKayitIliskisi` bu sözlükten **asıl fişin BU spesifik hesaptaki net etkisi ile ters kaydın net etkisinin toplamda sıfıra yaklaşıp yaklaşmadığını** (`Math.Abs(asilNet + tersNet) <= 0.01`) hesaplayarak `TersYonluHesapEtkisiUyumluMu`'yu GERÇEKTEN dolduruyor (varsayım değil). |
+| `backend/Muhasebe/OdemeIzleme/Services/OdemeIzlemeService.cs` | **Madde 9 hatası düzeltildi**: `GetDetayAsync`'te `dto.Uyarilar = await BuildUyarilarAsync(...)` satırı, önceden eklenen yetki/erişim-kısıtı uyarılarını (`BagliHesapErisimKisitliMi`/`BagliFisErisimKisitliMi`) SESSİZCE siliyordu — artık birleştiriliyor (`UyariTipi`'ne göre tekilleştirilerek). **Madde 8 hatası düzeltildi**: `RaporlamaParaBirimi = "TRY"` sabiti (cari kart açılış bakiyesini varsayılan TRY sayan kod) tamamen kaldırıldı; açılış bakiyesi artık güvenilir bir para birimi kaynağı (kurum/tesis bazlı ayar) OLMADIĞI için `Bilinmiyor` grubuna yazılıyor, normal/TRY toplamlarına katılmıyor, veri kalitesi uyarısı üretiyor. |
+| `tests/STYS.Tests/TersKayitIliskisiDogrulamaTests.cs` | 6 yeni test: `AsilFisBilinmiyor`, `FarkliKurum`, `ParaBirimiUyumsuzlugu`, `TersYonluHesapEtkisiDogrulanamadi` (null), `TersYonluHesapEtkisiUyumsuz` (false) + mevcutlar güncellendi (yeni kayıt alanları). |
+| `tests/STYS.Tests/PosValorFinansalSiniflandiriciTests.cs` | `GecerliTersKayitIliskisi()` fixture'ı yeni alanlarla (kurum, para birimi, ters yönlü hesap etkisi=true) güncellendi. |
+| `tests/STYS.Tests/OdemeCaprazAramaBagimsizAdayVeYetkiTests.cs` | 4 yeni test (bkz. §18.3) + mevcut testler yeni sözleşmeye (Beklenen* alanları artık daraltmıyor) uyacak şekilde güncellendi. |
+| `tests/STYS.Tests/OdemeCaprazAramaSqlKanitiTests.cs`, `tests/STYS.Tests/OdemeIzlemeServiceTests.cs` | Mevcut testler yeni filtre sözleşmesine (CariKartId→BeklenenCariKartId + gerçek narrowing alanı) taşındı; açılış bakiyesi testleri (2 adet) yeni "Bilinmiyor" davranışına göre güncellendi. |
+| `docs/odeme-izleme-capraz-kaynak-ve-fis-dogrulama-raporu.md` | Bu bölüm (§18). |
+
+### 18.2 Arama alanları ile beklenen karşılaştırma alanlarının ayrımı
+
+| Kategori | Alanlar | Davranış |
+|---|---|---|
+| **Aramayı daraltan** (gerçek SQL filtresi) | `BelgeNo`, `MuhasebeFisNo`, `RezervasyonReferansNo`, `TutarMin`/`TutarMax`, `TarihBaslangic`/`TarihBitis`, `ParaBirimi`, `SadeceIptalEdilmisOlanlar` | WHERE'e girer; adayı SQL seviyesinde bulur/eler |
+| **Beklenen** (yalnızca karşılaştırma) | `BeklenenCariKartId`, `BeklenenBankaHesapId`, `BeklenenKasaHesapId`, `BeklenenMuhasebeHesapPlaniId`, `BeklenenMaliYil`, `BeklenenDonem`, `BeklenenTesisId`, `BeklenenKurumId`, `BeklenenTutar`, `BeklenenParaBirimi` | WHERE'e HİÇ girmez; bulunan adayın gerçek değeriyle karşılaştırılır, uyuşmazlık `CelisenAlanlar`'a yazılır — aday ELENMEZ |
+
+Not: `KasaBankaHesap` modelde tek bir tablo olup `Tip` alanıyla (Banka/NakitKasa/KrediKarti/DovizHesabi)
+ayrışır; bu yüzden "beklenen banka hesabı" ve "beklenen kasa hesabı" iki ayrı giriş alanı olarak
+sunulur ama karşılaştırma, bulunan hesabın gerçek `Tip`'ine göre doğru `Beklenen*` alanıyla eşlenir.
+
+### 18.3 Üç zorunlu kanıt — gerçek kod + test
+
+**1) Beklenen hesap/cari farklı yerdeki güçlü adayı elemiyor:**
+`OdemeCaprazAramaBagimsizAdayVeYetkiTests.BeklenenCariFarkliOlanGuclu_Aday_ELENMEZ_CeliskiIleDoner`
+— `BeklenenCariKartId=10` verilirken gerçek kayıt cari 20'ye ait; test adayın **DÖNDÜĞÜNÜ**,
+`CariKartId==20`, `CelisenAlanlar` içinde `CARI_HESAP_UYUSMAZLIGI` ve `EslesenAlanlar`'da "Cari Kart"
+OLMADIĞINI doğrular. Aynı desen banka hesabı (`BeklenenBankaHesabiFarkliOlanAday_...`) ve mali
+yıl/dönem (`BeklenenMaliYilVeDonemFarkliOlanFis_...`) için de ayrı testlerle kanıtlanmıştır.
+
+**2) Tesisler arası yanlış bağlantı geçerli/yüksek-olasılık sayılmıyor:** (önceki turdan korunan,
+bu turda da regresyonsuz doğrulanan) `OdemeIzlemeServiceTests.Detay_BagliKasaBankaHesabiBaskaTesisteyse_...`
+ve `Detay_BagliMuhasebeFisiBaskaTesisteyse_...` — yetki dışı tesise ait hesap/fiş asla `YuksekOlasilik`
+üretmiyor, yalnızca güvenli neden kodu dönüyor, IBAN maskeli dahi gösterilmiyor.
+
+**3) Deterministik birleştirme eklenirken SQL sayfalaması bozulmadı:**
+`FarkliKaynaklarinCelisenTutarlari_KaynakOnceligineGoreDeterministikBirlesir` — aynı mali işlemin
+belge (öncelik 1, tutar 500) ve cari hareket (öncelik 4, işaretli tutar 500 ama farklı anlam)
+kaynaklarından geldiği, `AraAsync`'in İKİ KEZ çağrılmasının HER İKİSİNDE de özet `Tutar`'ın belge
+kaynağından (`"Belge Tutarı"`) geldiğini ve `KaynakTutarlari` listesinin her iki kaynağı da ayrı
+ayrı (kendi `TutarTuru`'yla) taşıdığını kanıtlar. `OdemeCaprazAramaSqlKanitiTests` (önceki turdan,
+bu turda da yeşil) `UNION ALL`/`OFFSET`/`FETCH NEXT`/`GROUP BY`/`COUNT(` varlığını gerçek SQL
+metninde doğrulamaya devam ediyor — deterministik `OrderBy(KaynakOncelik)` eklenmesi bu SQL yapısını
+bozmadı.
+
+### 18.4 Ters kayıt ilişkisi — bu turda eklenen kesinleştirmeler
+
+- `AsilFisId` bilinmiyorsa (`null`), ters fişte `IptalEdilenFisId` dolu olsa bile ilişki
+  KANITLANMAMIŞ sayılır (`ASIL_FIS_BILINMIYOR`).
+- Para birimi artık gerçekten karşılaştırılıyor (fiş satırlarından okunan temsili para birimi).
+- Kurum karşılaştırması eklendi (Tesis→Kurum çözümlemesi üzerinden).
+- **Ters yönlü hesap etkisi** artık varsayım değil: `NakitBankaPozisyonuService`, asıl fiş ile ters
+  kaydın AYNI banka/kasa hesabındaki net (Borç−Alacak) etkilerini fiş satırlarından hesaplayıp
+  toplamının sıfıra yakın olup olmadığını (`±0.01`) doğruluyor; doğrulanamıyorsa (ilgili hesap
+  satırı yoksa) veya uyumsuzsa `TERS_YONLU_HESAP_ETKISI_DOGRULANAMADI` ile "doğrulandı" ASLA
+  üretilmiyor.
+
+### 18.5 Bu turda çalıştırılan komutlar ve gerçek sonuçlar
+
+| # | Komut | Toplam | Başarılı | Başarısız | Veritabanı |
+|---|---|---|---|---|---|
+| 1 | `dotnet build STYS.sln` | — | ✅ 0 error, 0 warning | — | — |
+| 2 | `dotnet test tests/STYS.Tests/STYS.Tests.csproj -- xUnit.MaxParallelThreads=1` | **500** | **500** | **0** | Gerçek SQL Server (`localhost,14333`/`STYSDB`) |
+| 3 | `npx ng build --configuration development` | — | ✅ 0 error | — | — |
+| 4 | `npx ng test --watch=false --browsers=ChromeHeadless` | **38** | **38** | **0** | — |
+
+**Dürüst not:** varsayılan (paralel) test koşusunda, bu turda dokunulmayan sınıflarda (ör.
+`BackfillMissingPosTahsilatValorSnapshotsMigrationTests`, `RezervasyonOdemeMuhasebeIntegrationTests`,
+`NakitBankaPozisyonuServiceTests`) ara sıra SQL Server deadlock/duplicate-key kaynaklı geçici hatalar
+gözlendi (izole çalıştırıldıklarında sorunsuz geçiyorlar) — bu, `xUnit.MaxParallelThreads=1` ile
+tekrar çalıştırılarak **500/500 başarılı** olarak doğrulandı. Bu, aynı SQL Server örneğine karşı
+yüksek paralellikle çalışan bağımsız test sınıfları arasındaki bilinen bir kaynak çakışmasıdır
+(önceki iki turun raporlarında da not edilmişti), üretim kodunda regresyon değildir.
+
+### 18.6 Bilinen sınırlamalar (bu turda eklenen)
+
+- `Beklenen*` alanlarının çözümlenmesi için her sağlayıcıya `KasaBankaHesaplari`/`Tesisler`/
+  `MuhasebeFisler` üzerine ek korele alt sorgular eklendi (MuhasebeHesapPlaniId, KurumId, MaliYil/
+  Donem, KasaBankaHesapTipi) — bu, sorgu karmaşıklığını artırır; veri hacmi büyüdükçe bu alt
+  sorguların indekslenmesi ayrıca değerlendirilmelidir (bu turun kapsamı dışında, refactor değil).
+- Tarih aralığı üst sınırı (92 gün) proje veri hacmine göre keyfi seçilmiştir; gerçek kullanım
+  verisiyle yeniden değerlendirilebilir.
+- Ters yönlü hesap etkisi doğrulaması, valörün bağlı olduğu SPESİFİK banka hesabı üzerinden yapılır
+  (fişin tüm satırları değil) — bu, gerçek kullanım senaryosuna (tek hesaba etki) uygundur ancak
+  çoklu-hesap etkileyen fişlerin diğer hesaplarının ters yönlülüğünü doğrulamaz.
+- Migration gerekmedi; veri modeli değişmedi.
+
+---
+
+**Sonuç (üçüncü tur):** Beklenen/bulunan ayrımı, tesisler-arası yanlış bağlantı reddi ve deterministik
+kaynak-öncelikli birleştirme artık üç ayrı, isimlendirilmiş entegrasyon testiyle kanıtlanmıştır;
+toplam 500 backend + 38 frontend testi gerçek SQL Server'a karşı yeşil. Başlangıç commiti
+`35b36688a1b18745c13f8b3e862e25e3861c22a4`.

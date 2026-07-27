@@ -80,6 +80,35 @@ public static class OdemeKopuklukTipleri
     public const string SoftDeleteIliskiNedeniyleGorunmeyen = "SoftDeleteIliskiNedeniyleGorunmeyen";
 }
 
+/// <summary>Bir adayin "beklenen" (aranan) deger ile karsilastirilmasi sonucu tespit edilen
+/// CELISKI kodlari. Bu kodlar adayi SONUCTAN ELEMatmaz - yalnizca kullaniciya "bu kayit beklediginiz
+/// hesap/cari/donemle uyusmuyor" bilgisini tasir.</summary>
+public static class OdemeCeliskiKodlari
+{
+    public const string CariHesapUyusmazligi = "CARI_HESAP_UYUSMAZLIGI";
+    public const string BankaHesabiUyusmazligi = "BANKA_HESABI_UYUSMAZLIGI";
+    public const string KasaHesabiUyusmazligi = "KASA_HESABI_UYUSMAZLIGI";
+    public const string MuhasebeHesabiUyusmazligi = "MUHASEBE_HESABI_UYUSMAZLIGI";
+    public const string MaliYilUyusmazligi = "MALI_YIL_UYUSMAZLIGI";
+    public const string DonemUyusmazligi = "DONEM_UYUSMAZLIGI";
+    public const string TutarUyusmazligi = "TUTAR_UYUSMAZLIGI";
+    public const string ParaBirimiUyusmazligi = "PARA_BIRIMI_UYUSMAZLIGI";
+    public const string TesisUyusmazligi = "TESIS_UYUSMAZLIGI";
+    public const string KurumUyusmazligi = "KURUM_UYUSMAZLIGI";
+}
+
+/// <summary>Bir adayin hangi kaynaklardan hangi tutarla geldigini tasiyan, kaynak bazli tutar
+/// gorunumu (madde 3 - farkli kaynaklarin farkli anlam tasiyan tutarlari TEK bir alana zorlanamaz).</summary>
+public class OdemeKaynakTutariDto
+{
+    public string Kaynak { get; set; } = string.Empty;
+    public int KaynakId { get; set; }
+    public decimal? Tutar { get; set; }
+    public string? ParaBirimi { get; set; }
+    /// <summary>Bu tutarin anlami (ör. "Brüt", "Net", "Borç", "Alacak", "İşaretli").</summary>
+    public string TutarTuru { get; set; } = string.Empty;
+}
+
 /// <summary>Capraz-kaynak arastirma sonucundaki TEK bir aday. Ayni mali islem birden fazla kaynakta
 /// bulunabildiginden adaylar tekillestirilir (bkz. TekillestirmeAnahtari).</summary>
 public class OdemeAdayiDto
@@ -123,11 +152,74 @@ public class OdemeAdayiDto
 
     public string GuvenSeviyesi { get; set; } = string.Empty;
     public string GuvenGerekcesi { get; set; } = string.Empty;
+
+    // ── Beklenen (aranan) ile BULUNAN degerlerin karsilastirilmasi (madde 1) ──
+    // Beklenen* alanlari SONUCU DARALTMAZ - yalnizca kiyaslama icindir. Bulunan* alanlari, bu
+    // adayin kaynak kayitlarindan (kaynak oncelik sirasina gore, bkz. madde 3) GERCEKTEN okunan
+    // degerlerdir. Eslesen/Celisen listeleri hangi alanlarin karsilastirildigini ve sonucunu tasir.
+
+    /// <summary>Karsilastirmada hangi alanlarin BEKLENENLE UYUSTUGU (madde 1 DTO sozlesmesi).</summary>
+    public List<string> EslesenAlanlar { get; set; } = [];
+
+    /// <summary>Karsilastirmada hangi alanlarin BEKLENENLE CELISTIGI - bu celiskiler adayi SONUCTAN
+    /// ELEMEZ, yalnizca kullaniciya gosterilir (bkz. OdemeCeliskiKodlari).</summary>
+    public List<string> CelisenAlanlar { get; set; } = [];
+
+    public int? BeklenenCariKartId { get; set; }
+    /// <summary>Bulunan cari kart - mevcut CariKartId alaniyla AYNI (isim tekrarindan kacinmak icin
+    /// ayri bir alan acilmadi); BeklenenCariKartId ile karsilastirilir.</summary>
+    public int? BulunanCariKartId => CariKartId;
+
+    public int? BeklenenBankaHesapId { get; set; }
+    public int? BeklenenKasaHesapId { get; set; }
+    /// <summary>Bulunan kasa/banka hesabi - mevcut KasaBankaHesapId alaniyla AYNI.</summary>
+    public int? BulunanKasaBankaHesapId => KasaBankaHesapId;
+    /// <summary>Bulunan hesabin turu (KasaBankaHesapTipleri.*) - Beklenen alanin Banka mi Kasa mi
+    /// oldugunun dogru karsilastirmayla eslenmesi icin tasinir.</summary>
+    public string? BulunanKasaBankaHesapTipi { get; set; }
+
+    public int? BeklenenMuhasebeHesapPlaniId { get; set; }
+    public int? BulunanMuhasebeHesapPlaniId { get; set; }
+
+    public int? BeklenenMaliYil { get; set; }
+    public int? BulunanMaliYil { get; set; }
+    public int? BeklenenDonem { get; set; }
+    public int? BulunanDonem { get; set; }
+
+    public int? BeklenenTesisId { get; set; }
+    public int? BeklenenKurumId { get; set; }
+    public int? BulunanKurumId { get; set; }
+
+    public decimal? BeklenenTutar { get; set; }
+    public string? BeklenenParaBirimi { get; set; }
+
+    /// <summary>Veri kalitesi uyarilari (ör. bulunan mali yil/donem bilinmiyor, bulunan hesap turu
+    /// belirsiz) - celiski DEGILDIR, yalnizca karsilastirmanin guvenilirligini aciklar.</summary>
+    public List<string> VeriKalitesiUyarilari { get; set; } = [];
+
+    /// <summary>true ise bu adayin ayrintisi (hesap adi, fis no, cari adi vb.) yetki kapsami
+    /// disinda oldugu icin GIZLENMISTIR - yalnizca guvenli neden kodlari dondurulur.</summary>
+    public bool AyrintiYetkiNedeniyleGizliMi { get; set; }
+
+    /// <summary>Yetki gizleme veya diger guvenli durumlar icin neden kodlari (bkz.
+    /// OdemeErisimKisitiNedenKodlari).</summary>
+    public List<string> GuvenliNedenKodlari { get; set; } = [];
+
+    /// <summary>Bu adayin GERCEKTEN bulundugu her kaynaktaki tutari, o kaynagin kendi anlamiyla
+    /// (brüt/net/borç/alacak) tasir - madde 3: farkli kaynaklarin tutarlari TEK bir alana
+    /// zorlanmaz, <see cref="Tutar"/> yalnizca kaynak-oncelikli OZET gorunumdur.</summary>
+    public List<OdemeKaynakTutariDto> KaynakTutarlari { get; set; } = [];
 }
 
 /// <summary>Capraz-kaynak arastirma filtresi. Bagimsiz kaynak taramasi genis olabildiginden
 /// backend EN AZ BIR daraltici alan ister (cari, belge no, fis no, kasa/banka hesabi, tarih
-/// araligi veya tutar araligi) - aksi halde 400 doner.</summary>
+/// araligi veya tutar araligi) - aksi halde 400 doner.
+///
+/// ONEMLI (madde 1): <see cref="CariKartId"/>/<see cref="KasaBankaHesapId"/>/<see cref="MaliYil"/>/
+/// <see cref="Donem"/> ARTIK SONUCU DARALTMAZ (WHERE'e girmez) - guclu bir aday, cari/hesap/donem
+/// farkli diye SONUCTAN ELENMEZ. Bunun yerine <c>Beklenen*</c> alanlarina tasindilar: bulunan
+/// adayin GERCEK cari/hesap/donem degerleriyle KARSILASTIRILIR, uyusmuyorsa aday CELISKI koduyla
+/// (bkz. OdemeCeliskiKodlari) birlikte DONER - ELENMEZ.</summary>
 public class OdemeCaprazAramaFilterDto
 {
     public int? TesisId { get; set; }
@@ -135,13 +227,10 @@ public class OdemeCaprazAramaFilterDto
     public DateOnly? TarihBitis { get; set; }
     public decimal? TutarMin { get; set; }
     public decimal? TutarMax { get; set; }
-    public int? CariKartId { get; set; }
     public string? ParaBirimi { get; set; }
     public string? BelgeNo { get; set; }
     public string? MuhasebeFisNo { get; set; }
-    public int? KasaBankaHesapId { get; set; }
-    public int? MaliYil { get; set; }
-    public int? Donem { get; set; }
+    public string? RezervasyonReferansNo { get; set; }
     public bool? SadeceIptalEdilmisOlanlar { get; set; }
 
     /// <summary>Yalnizca belirtilen kopukluk turunu tasiyan adaylari dondurur.</summary>
@@ -149,6 +238,18 @@ public class OdemeCaprazAramaFilterDto
 
     /// <summary>true ise yalnizca en az bir kopukluk tespit edilen adaylar dondurulur.</summary>
     public bool SadeceKopukOlanlar { get; set; } = true;
+
+    // ── Beklenen (karsilastirma icin) degerler - SONUCU DARALTMAZ, bkz. sinif aciklamasi ──
+    public int? BeklenenCariKartId { get; set; }
+    public int? BeklenenBankaHesapId { get; set; }
+    public int? BeklenenKasaHesapId { get; set; }
+    public int? BeklenenMuhasebeHesapPlaniId { get; set; }
+    public int? BeklenenMaliYil { get; set; }
+    public int? BeklenenDonem { get; set; }
+    public int? BeklenenTesisId { get; set; }
+    public int? BeklenenKurumId { get; set; }
+    public decimal? BeklenenTutar { get; set; }
+    public string? BeklenenParaBirimi { get; set; }
 }
 
 public static class OdemeUyariTipleri

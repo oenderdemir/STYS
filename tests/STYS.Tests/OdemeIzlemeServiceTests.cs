@@ -448,11 +448,17 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var svc = CreateService(dbContext, tesisId);
         var dokum = await svc.GetCariHareketDokumuAsync(new CariHareketDokumFilterDto { CariKartId = cariId });
 
-        // Acilis 1000 (Borc) - 400 (aktif alacak) = 600; iptal edilen 200'luk hareket HESABA KATILMAZ.
+        // Acilis bakiyesinin para birimi guvenilir bicimde bilinmedigi icin (madde 8) TRY
+        // VARSAYILMAZ - acilis 1000 "Bilinmiyor" grubuna gider, TRY toplami YALNIZCA aktif
+        // hareketten (0 - 400) olusur; iptal edilen 200'luk hareket HESABA KATILMAZ.
         var tryOzet = dokum.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "TRY");
-        Assert.Equal(600m, tryOzet.AciklananKalanBakiye);
+        Assert.Equal(-400m, tryOzet.AciklananKalanBakiye);
         Assert.Equal(200m, tryOzet.IptalEdilmisTutar);
         Assert.True(dokum.Hareketler.Single(h => h.AlacakTutari == 200m).HesaplamaDisiMi);
+
+        var bilinmiyorOzet = dokum.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "Bilinmiyor");
+        Assert.Equal(1000m, bilinmiyorOzet.DevredenBakiye);
+        Assert.Equal(1000m, bilinmiyorOzet.AciklananKalanBakiye);
     }
 
     [IntegrationFact]
@@ -758,12 +764,18 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             TarihBitis = DateOnly.FromDateTime(bugun)
         });
 
+        // Acilis bakiyesi (100) artik TRY VARSAYILMAZ (madde 8) - "Bilinmiyor" grubuna gider.
+        // TRY devreden bakiyesi YALNIZCA donem oncesi GERCEK hareketten (500) olusur.
         var tryOzet = dokum.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "TRY");
-        Assert.Equal(600m, tryOzet.DevredenBakiye);              // acilis 100 + donem oncesi 500
-        Assert.Equal(200m, tryOzet.ToplamAlacak);                // yalnizca donem ici
-        Assert.Equal(0m, tryOzet.ToplamBorc);                    // donem sonrasi 999 GIRMEZ
-        Assert.Equal(400m, tryOzet.AciklananKalanBakiye);        // 600 - 200
-        Assert.Single(dokum.Hareketler);                         // yalnizca donem ici hareket listelenir
+        Assert.Equal(500m, tryOzet.DevredenBakiye);               // donem oncesi 500 (acilis DAHIL DEGIL)
+        Assert.Equal(200m, tryOzet.ToplamAlacak);                 // yalnizca donem ici
+        Assert.Equal(0m, tryOzet.ToplamBorc);                     // donem sonrasi 999 GIRMEZ
+        Assert.Equal(300m, tryOzet.AciklananKalanBakiye);         // 500 - 200
+        Assert.Single(dokum.Hareketler);                          // yalnizca donem ici hareket listelenir
+
+        var bilinmiyorOzet = dokum.ParaBirimiOzetleri.Single(x => x.ParaBirimi == "Bilinmiyor");
+        Assert.Equal(100m, bilinmiyorOzet.DevredenBakiye);
+        Assert.Equal(100m, bilinmiyorOzet.AciklananKalanBakiye);
     }
 
     [IntegrationFact]
@@ -863,7 +875,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto
         {
-            TesisId = tesisId, TarihBaslangic = bugun, TarihBitis = bugun
+            TesisId = tesisId, TarihBaslangic = bugun, TarihBitis = bugun, TutarMin = 0m, TutarMax = 1_000_000m
         });
 
         Assert.Contains(sonuc.Items, x => x.MuhasebeFisId == fisId
@@ -880,7 +892,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 400m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.TahsilatOdemeBelgesiId == belgeId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.MuhasebeFisiOlmayanOdemeBelgesi));
@@ -898,7 +910,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         var belgeId = await YeniBelgeAsync(dbContext, cariId, 600m, $"{suffix}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.TahsilatOdemeBelgesiId == belgeId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.ValorKaydiOlmayanPosTahsilati));
@@ -919,7 +931,7 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             DateOnly.FromDateTime(DateTime.UtcNow.Date), 600m);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
 
         Assert.Contains(sonuc.Items, x => x.PosTahsilatValorId == valorId
             && x.KopuklukKodlari.Contains(OdemeKopuklukTipleri.HedefBankaHesabiOlmayanValor));
@@ -943,7 +955,12 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
             kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId);
 
         var svc = CreateCaprazServis(dbContext, tesisId);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto
+        {
+            TesisId = tesisId, BeklenenCariKartId = cariId,
+            TarihBaslangic = bugun, TarihBitis = bugun, TutarMin = 0m, TutarMax = 1_000_000m
+        });
 
         // TEK aday olmali (uc kaynak da ayni tekillestirme anahtarinda birlesir).
         var adaylar = sonuc.Items.Where(x => x.TahsilatOdemeBelgesiId == belgeId).ToList();
@@ -969,14 +986,20 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         // Yalnizca TesisA yetkisi.
         var bugun = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var svc = CreateCaprazServis(dbContext, tesisA);
-        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TarihBaslangic = bugun, TarihBitis = bugun });
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto
+        {
+            TarihBaslangic = bugun, TarihBitis = bugun, TutarMin = 0m, TutarMax = 1_000_000m
+        });
 
         Assert.All(sonuc.Items, x => Assert.NotEqual(tesisB, x.TesisId));
         // totalCount'a da sizmamali.
         Assert.Equal(sonuc.Items.Count, sonuc.TotalCount);
 
         var ex = await Assert.ThrowsAsync<BaseException>(() =>
-            svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisB, TarihBaslangic = bugun, TarihBitis = bugun }));
+            svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto
+            {
+                TesisId = tesisB, TarihBaslangic = bugun, TarihBitis = bugun, TutarMin = 0m, TutarMax = 1_000_000m
+            }));
         Assert.Equal(403, ex.ErrorCode);
     }
 
@@ -996,11 +1019,11 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
 
         // Asiri buyuk page size istegi MAKSIMUMA kirpilir.
         var buyuk = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 100_000 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+            new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
         Assert.True(buyuk.PageSize <= 200);
 
-        var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
-        var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 2, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId });
+        var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
+        var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 2, PageSize = 2 }, new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId });
 
         Assert.Equal(5, s1.TotalCount);
         Assert.Empty(s1.Items.Select(x => x.TekillestirmeAnahtari).Intersect(s2.Items.Select(x => x.TekillestirmeAnahtari)));

@@ -19,8 +19,13 @@ public class TersKayitIliskisiDogrulamaTests
             TersKayitIptalEdilenFisId: a.TersKayitIptalEdilenFisId,
             TersKayitTesisId: a.TersKayitTesisId,
             AsilFisTesisId: a.AsilFisTesisId,
+            TersKayitKurumId: a.TersKayitKurumId,
+            AsilFisKurumId: a.AsilFisKurumId,
             TersKayitToplamBorc: a.TersKayitToplamBorc,
             AsilFisToplamBorc: a.AsilFisToplamBorc,
+            TersKayitParaBirimi: a.TersKayitParaBirimi,
+            AsilFisParaBirimi: a.AsilFisParaBirimi,
+            TersYonluHesapEtkisiUyumluMu: a.TersYonluHesapEtkisiUyumluMu,
             AyniAsilFiseBagliTersKayitSayisi: a.TersKayitAdedi);
     }
 
@@ -30,8 +35,13 @@ public class TersKayitIliskisiDogrulamaTests
         public int? TersKayitIptalEdilenFisId = 100;
         public int? TersKayitTesisId = 1;
         public int? AsilFisTesisId = 1;
+        public int? TersKayitKurumId = 10;
+        public int? AsilFisKurumId = 10;
         public decimal? TersKayitToplamBorc = 500m;
         public decimal? AsilFisToplamBorc = 500m;
+        public string? TersKayitParaBirimi = "TRY";
+        public string? AsilFisParaBirimi = "TRY";
+        public bool? TersYonluHesapEtkisiUyumluMu = true;
         public int TersKayitAdedi = 1;
     }
 
@@ -51,6 +61,17 @@ public class TersKayitIliskisiDogrulamaTests
 
         Assert.False(sonuc.DogrulandiMi);
         Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitIliskisiDogrulanamadi, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void AsilFisIdBilinmiyor_IptalEdilenFisIdDoluOlsaBileGECERSIZ()
+    {
+        // Kritik (madde 7): asil fis ID'si bilinmiyorsa, ters fiste HERHANGI BIR IptalEdilenFisId
+        // bulunmasi TEK BASINA gecerli iliski sayilmaz.
+        var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.AsilFisId = null));
+
+        Assert.False(sonuc.DogrulandiMi);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.AsilFisBilinmiyor, sonuc.NedenKodlari);
     }
 
     [Fact]
@@ -80,7 +101,16 @@ public class TersKayitIliskisiDogrulamaTests
         var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersKayitTesisId = 2));
 
         Assert.False(sonuc.DogrulandiMi);
-        Assert.Contains(TersKayitIliskisiNedenKodlari.FarkliTesisVeyaKurum, sonuc.NedenKodlari);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitTesisUyusmazligi, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void FarkliKurum_REDDEDILIR()
+    {
+        var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersKayitKurumId = 20));
+
+        Assert.False(sonuc.DogrulandiMi);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitKurumUyusmazligi, sonuc.NedenKodlari);
     }
 
     [Fact]
@@ -89,7 +119,7 @@ public class TersKayitIliskisiDogrulamaTests
         var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersKayitToplamBorc = 400m));
 
         Assert.False(sonuc.DogrulandiMi);
-        Assert.Contains(TersKayitIliskisiNedenKodlari.TutarUyumsuz, sonuc.NedenKodlari);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitTutarUyusmazligi, sonuc.NedenKodlari);
     }
 
     [Fact]
@@ -98,6 +128,34 @@ public class TersKayitIliskisiDogrulamaTests
         var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersKayitToplamBorc = 500.005m));
 
         Assert.True(sonuc.DogrulandiMi);
+    }
+
+    [Fact]
+    public void ParaBirimiUyumsuzlugu_UYARIR()
+    {
+        var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersKayitParaBirimi = "USD"));
+
+        Assert.False(sonuc.DogrulandiMi);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitParaBirimiUyusmazligi, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void TersYonluHesapEtkisiDogrulanamadi_Null_GECERSIZ()
+    {
+        // Kritik: veri modeli ters yonlu hesap etkisini KANITLAYAMIYORSA "dogrulandi" URETILMEZ.
+        var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersYonluHesapEtkisiUyumluMu = null));
+
+        Assert.False(sonuc.DogrulandiMi);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersYonluHesapEtkisiDogrulanamadi, sonuc.NedenKodlari);
+    }
+
+    [Fact]
+    public void TersYonluHesapEtkisiUyumsuz_False_GECERSIZ()
+    {
+        var sonuc = TersKayitIliskisiDogrulama.Degerlendir(Gecerli(a => a.TersYonluHesapEtkisiUyumluMu = false));
+
+        Assert.False(sonuc.DogrulandiMi);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersYonluHesapEtkisiDogrulanamadi, sonuc.NedenKodlari);
     }
 
     [Fact]
@@ -122,7 +180,7 @@ public class TersKayitIliskisiDogrulamaTests
         Assert.False(sonuc.DogrulandiMi);
         Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitIliskisiDogrulanamadi, sonuc.NedenKodlari);
         Assert.Contains(TersKayitIliskisiNedenKodlari.AsilFisIliskisiYok, sonuc.NedenKodlari);
-        Assert.Contains(TersKayitIliskisiNedenKodlari.FarkliTesisVeyaKurum, sonuc.NedenKodlari);
+        Assert.Contains(TersKayitIliskisiNedenKodlari.TersKayitTesisUyusmazligi, sonuc.NedenKodlari);
         Assert.Contains(TersKayitIliskisiNedenKodlari.BirdenFazlaTersKayit, sonuc.NedenKodlari);
         // Genel ozet kodu (TersKayitIliskisiDogrulanamadi) kendi aciklamasini tasimaz, bu yuzden
         // NedenKodlari sayisi Aciklamalar sayisindan tam olarak 1 fazladir.

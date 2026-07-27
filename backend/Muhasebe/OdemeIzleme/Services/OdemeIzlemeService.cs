@@ -472,8 +472,21 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 : dto.CariUnvan;
         }
 
-        dto.Uyarilar = await BuildUyarilarAsync(belge.Id, belge.BelgeNo, belge.BelgeTarihi, belge.Tutar, belge.Durum, belge.OdemeYontemi,
+        // ONEMLI (madde 9): dto.Uyarilar bu noktada zaten yetki/erisim uyarilari (BagliHesapErisimKisitliMi/
+        // BagliFisErisimKisitliMi) TASIYOR OLABILIR - dogrudan ATAMA yaparsak bu guvenlik uyarilari
+        // SESSIZCE KAYBOLUR. Bunun yerine BIRLESTIRILIR, ayni UyariTipi icin MUKERRER eklenmez,
+        // ve sira KARARLIDIR (once mevcut/guvenlik uyarilari, sonra BuildUyarilarAsync sonuclari).
+        var ekUyarilar = await BuildUyarilarAsync(belge.Id, belge.BelgeNo, belge.BelgeTarihi, belge.Tutar, belge.Durum, belge.OdemeYontemi,
             belge.ParaBirimi, belge.KasaBankaHesapId, belge.CariKartId, belge.MuhasebeFisId, belge.KapatilacakCariHareketId, tesisId, cancellationToken);
+
+        var gorulenUyariTipleri = dto.Uyarilar.Select(u => u.UyariTipi).ToHashSet();
+        foreach (var uyari in ekUyarilar)
+        {
+            if (gorulenUyariTipleri.Add(uyari.UyariTipi))
+            {
+                dto.Uyarilar.Add(uyari);
+            }
+        }
 
         return dto;
     }
@@ -549,9 +562,12 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         {
             if (!ozetler.TryGetValue(paraBirimi, out var o))
             {
-                // Acilis bakiyesi yalnizca RAPORLAMA para biriminde anlamlidir (CariKart'ta acilis
-                // bakiyesinin para birimi alani yoktur) - baska para birimleri sifirdan baslar.
-                var acilis = string.Equals(paraBirimi, RaporlamaParaBirimi, StringComparison.OrdinalIgnoreCase) ? acilisNet : 0m;
+                // Acilis bakiyesinin para birimi CariKart'ta ayrica TUTULMUYOR ve kurum/tesis
+                // seviyesinde guvenilir bir "baz para birimi" ayari da YOK (bkz. arastirma - Tesis/
+                // Kurum/CariKart entity'lerinde boyle bir alan bulunmuyor). Bu yuzden TRY VARSAYILMAZ:
+                // acilis bakiyesi yalnizca "Bilinmiyor" grubuna yazilir, normal/TRY toplamlarina
+                // KATILMAZ (madde 8).
+                var acilis = string.Equals(paraBirimi, BilinmeyenParaBirimi, StringComparison.OrdinalIgnoreCase) ? acilisNet : 0m;
                 var devreden = acilis + devredenler.GetValueOrDefault(paraBirimi);
 
                 o = new CariBakiyeParaBirimiOzetiDto { ParaBirimi = paraBirimi, DevredenBakiye = devreden };
@@ -566,6 +582,17 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         foreach (var pbKey in devredenler.Keys)
         {
             OzetAl(pbKey);
+        }
+
+        // Acilis bakiyesi varsa ve carinin hic hareketi/devreden kaydi yoksa bile "Bilinmiyor"
+        // grubu OLUSTURULMALIDIR - aksi halde acilis bakiyesi hicbir ozette gorunmeden KAYBOLUR.
+        if (acilisNet != 0m)
+        {
+            OzetAl(BilinmeyenParaBirimi);
+            dto.Uyarilar.Add(
+                "Cari kartın açılış bakiyesi için güvenilir bir para birimi kaydı yok (kart üzerinde ayrı bir para " +
+                "birimi alanı, kurum/tesis bazında güvenilir bir baz para birimi ayarı da bulunmuyor); TRY varsayılmadı, " +
+                "'Bilinmiyor' grubunda ayrı gösterildi ve normal/TRY toplamlarına dahil edilmedi.");
         }
 
         foreach (var h in hareketler)
@@ -694,10 +721,6 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         dto.ParaBirimiOzetleri = [.. ozetler.Values.OrderBy(x => x.ParaBirimi)];
         return dto;
     }
-
-    /// <summary>Acilis bakiyesinin varsayilan olarak ait sayildigi para birimi (CariKart'ta acilis
-    /// bakiyesi icin ayri bir para birimi alani YOKTUR).</summary>
-    private const string RaporlamaParaBirimi = "TRY";
 
     /// <summary>Para birimi tanimsiz kayitlarin etiketi - TRY VARSAYILMAZ.</summary>
     private const string BilinmeyenParaBirimi = "Bilinmiyor";

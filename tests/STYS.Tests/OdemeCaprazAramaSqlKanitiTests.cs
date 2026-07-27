@@ -122,7 +122,7 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
         }
     }
 
-    private async Task<(int TesisId, int CariKartId)> SeedAsync(StysAppDbContext db, int belgeSayisi)
+    private async Task<(int TesisId, int CariKartId, string Suffix)> SeedAsync(StysAppDbContext db, int belgeSayisi)
     {
         var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
 
@@ -169,7 +169,7 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
             _belgeIdler.Add(belge.Id);
         }
 
-        return (tesis.Id, cari.Id);
+        return (tesis.Id, cari.Id, suffix);
     }
 
     [IntegrationFact]
@@ -177,14 +177,14 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
     {
         var yakalayici = new SqlYakalayici();
         await using var db = CreateDbContext(yakalayici);
-        var (tesisId, cariId) = await SeedAsync(db, belgeSayisi: 25);
+        var (tesisId, cariId, suffix) = await SeedAsync(db, belgeSayisi: 25);
 
         yakalayici.Komutlar.Clear();
 
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
         var sonuc = await svc.AraAsync(
             new PagedRequest { PageNumber = 2, PageSize = 5 },
-            new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId, SadeceKopukOlanlar = true });
+            new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId, SadeceKopukOlanlar = true });
 
         var tumSql = string.Join("\n---\n", yakalayici.Komutlar);
 
@@ -212,10 +212,10 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
     public async Task Sayfalar_arasinda_tekrar_veya_atlama_olmaz_ve_maksimum_page_size_uygulanir()
     {
         await using var db = CreateDbContext();
-        var (tesisId, cariId) = await SeedAsync(db, belgeSayisi: 12);
+        var (tesisId, cariId, suffix) = await SeedAsync(db, belgeSayisi: 12);
 
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
-        var filtre = new OdemeCaprazAramaFilterDto { TesisId = tesisId, CariKartId = cariId, SadeceKopukOlanlar = true };
+        var filtre = new OdemeCaprazAramaFilterDto { TesisId = tesisId, BelgeNo = suffix, BeklenenCariKartId = cariId, SadeceKopukOlanlar = true };
 
         var s1 = await svc.AraAsync(new PagedRequest { PageNumber = 1, PageSize = 5 }, filtre);
         var s2 = await svc.AraAsync(new PagedRequest { PageNumber = 2, PageSize = 5 }, filtre);
@@ -235,7 +235,7 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
     public async Task Daraltici_alan_verilmezse_asiri_genis_sorgu_REDDEDILIR()
     {
         await using var db = CreateDbContext();
-        var (tesisId, _) = await SeedAsync(db, belgeSayisi: 1);
+        var (tesisId, _, _) = await SeedAsync(db, belgeSayisi: 1);
 
         var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
 
@@ -243,7 +243,7 @@ public class OdemeCaprazAramaSqlKanitiTests : IAsyncLifetime
             svc.AraAsync(new PagedRequest(), new OdemeCaprazAramaFilterDto { TesisId = tesisId }));
 
         Assert.Equal(400, ex.ErrorCode);
-        Assert.Contains("daraltıcı alan", ex.Message);
+        Assert.Contains("referans", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Fake'ler ──

@@ -72,36 +72,72 @@ export const KOPUKLUK_LABELLARI: Record<string, string> = {
     SoftDeleteIliskiNedeniyleGorunmeyen: 'Soft-delete ilişki nedeniyle görünmeyen kayıt'
 };
 
+/** Capraz arama sozlesmesi ARAMAYI DARALTAN alanlar (SQL'i gercekten filtreler) ile BEKLENEN
+ * (yalnizca karsilastirma icin, SONUCU DARALTMAZ/ELEMEZ) alanlari AYIRIR. Beklenen* alanlari
+ * verildiginde, bulunan guclu bir aday cari/hesap/donem farkli diye ELENMEZ - celiski koduyla
+ * birlikte DONER (bkz. OdemeAdayiModel.celisenAlanlar). */
 export interface OdemeCaprazAramaFilterModel {
     tesisId?: number | null;
+    // ── Aramayi daraltan alanlar (gercek SQL filtresi) ──
     tarihBaslangic?: string | null;
     tarihBitis?: string | null;
     tutarMin?: number | null;
     tutarMax?: number | null;
-    cariKartId?: number | null;
-    kopuklukTipi?: string | null;
-    sadeceKopukOlanlar?: boolean;
     paraBirimi?: string | null;
     belgeNo?: string | null;
     muhasebeFisNo?: string | null;
-    kasaBankaHesapId?: number | null;
-    maliYil?: number | null;
-    donem?: number | null;
+    rezervasyonReferansNo?: string | null;
     sadeceIptalEdilmisOlanlar?: boolean | null;
+    kopuklukTipi?: string | null;
+    sadeceKopukOlanlar?: boolean;
+    // ── Beklenen (karsilastirma icin) degerler - SONUCU DARALTMAZ ──
+    beklenenCariKartId?: number | null;
+    beklenenBankaHesapId?: number | null;
+    beklenenKasaHesapId?: number | null;
+    beklenenMuhasebeHesapPlaniId?: number | null;
+    beklenenMaliYil?: number | null;
+    beklenenDonem?: number | null;
+    beklenenTesisId?: number | null;
+    beklenenKurumId?: number | null;
+    beklenenTutar?: number | null;
+    beklenenParaBirimi?: string | null;
 }
 
-/** En az bir alan dolu olmadan capraz arama backend tarafindan REDDEDILIR (400).
- * Frontend bu listeyi kullanarak istegi gondermeden ONCE kullaniciyi uyarir. */
+/** En az bir GUCLU referans (belge/fiş/rezervasyon no) veya birlikte verilmis tutar+tarih
+ * araligi olmadan capraz arama backend tarafindan REDDEDILIR (400). Frontend bu kurali istemci
+ * tarafinda da uygulayarak gereksiz bir istek gondermeden kullaniciyi uyarir. Beklenen* alanlari
+ * bu kontrole KATILMAZ - onlar artik daraltici sayilmiyor (yalnizca karsilastirma icin). */
 export function caprazAramaDaralticiAlanVarMi(f: OdemeCaprazAramaFilterModel): boolean {
-    return !!(
-        f.cariKartId ||
+    const gucluReferansVar = !!(
         (f.belgeNo && f.belgeNo.trim()) ||
         (f.muhasebeFisNo && f.muhasebeFisNo.trim()) ||
-        f.kasaBankaHesapId ||
-        (f.tarihBaslangic && f.tarihBitis) ||
-        f.tutarMin != null ||
-        f.tutarMax != null
+        (f.rezervasyonReferansNo && f.rezervasyonReferansNo.trim())
     );
+    const tutarAraligiTamVar = f.tutarMin != null && f.tutarMax != null;
+    const tarihAraligiVar = !!(f.tarihBaslangic && f.tarihBitis);
+
+    return gucluReferansVar || (tutarAraligiTamVar && tarihAraligiVar);
+}
+
+export const ODEME_CELISKI_LABELLARI: Partial<Record<string, string>> = {
+    CARI_HESAP_UYUSMAZLIGI: 'Beklenen cari kartla uyuşmuyor',
+    BANKA_HESABI_UYUSMAZLIGI: 'Beklenen banka hesabıyla uyuşmuyor',
+    KASA_HESABI_UYUSMAZLIGI: 'Beklenen kasa hesabıyla uyuşmuyor',
+    MUHASEBE_HESABI_UYUSMAZLIGI: 'Beklenen muhasebe hesabıyla uyuşmuyor',
+    MALI_YIL_UYUSMAZLIGI: 'Beklenen mali yılla uyuşmuyor',
+    DONEM_UYUSMAZLIGI: 'Beklenen dönemle uyuşmuyor',
+    TUTAR_UYUSMAZLIGI: 'Beklenen tutarla uyuşmuyor',
+    PARA_BIRIMI_UYUSMAZLIGI: 'Beklenen para birimiyle uyuşmuyor',
+    TESIS_UYUSMAZLIGI: 'Beklenen tesisle uyuşmuyor',
+    KURUM_UYUSMAZLIGI: 'Beklenen kurumla uyuşmuyor'
+};
+
+export interface OdemeKaynakTutariModel {
+    kaynak: string;
+    kaynakId: number;
+    tutar?: number | null;
+    paraBirimi?: string | null;
+    tutarTuru: string;
 }
 
 export interface OdemeAdayiModel {
@@ -130,6 +166,14 @@ export interface OdemeAdayiModel {
     /** Kesin | YuksekOlasilik | IncelenmesiGereken */
     guvenSeviyesi: string;
     guvenGerekcesi: string;
+    /** Beklenen alanlarla UYUSAN alan etiketleri (ör. "Cari Kart", "Tutar"). */
+    eslesenAlanlar: string[];
+    /** Beklenen alanlarla CELISEN kodlar (bkz. OdemeCeliskiKodlari) - aday BUNA RAGMEN doner. */
+    celisenAlanlar: string[];
+    veriKalitesiUyarilari: string[];
+    ayrintiYetkiNedeniyleGizliMi: boolean;
+    guvenliNedenKodlari: string[];
+    kaynakTutarlari: OdemeKaynakTutariModel[];
 }
 
 export interface OdemeAramaSatiriModel {

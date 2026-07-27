@@ -224,7 +224,13 @@ describe('OdemeIzlemePage', () => {
                         muhasebeFisId: 10,
                         bagimsizKayitMi: true,
                         guvenSeviyesi: 'IncelenmesiGereken',
-                        guvenGerekcesi: 'Bu kayıt herhangi bir tahsilat/ödeme belgesine bağlı değil.'
+                        guvenGerekcesi: 'Bu kayıt herhangi bir tahsilat/ödeme belgesine bağlı değil.',
+                        eslesenAlanlar: [],
+                        celisenAlanlar: [],
+                        veriKalitesiUyarilari: [],
+                        ayrintiYetkiNedeniyleGizliMi: false,
+                        guvenliNedenKodlari: [],
+                        kaynakTutarlari: []
                     }
                 ],
                 pageNumber: 1, pageSize: 20, totalCount: 1, totalPages: 1, hasPreviousPage: false, hasNextPage: false
@@ -233,9 +239,9 @@ describe('OdemeIzlemePage', () => {
 
         const component = createComponent();
         component.ngOnInit();
-        // Daraltici alan zorunlulugu (backend'in "en az bir daraltici alan" kurali) - test bir
-        // cari kart id vererek bunu karsilar.
-        component.caprazCariKartId = 5;
+        // Daraltici alan zorunlulugu (backend'in "en az bir guclu referans" kurali) - test bir
+        // belge no vererek bunu karsilar (Beklenen* alanlari artik daraltici SAYILMAZ).
+        component.belgeNo = 'B-005';
         component.openCaprazArama();
 
         expect(component.caprazVisible).toBeTrue();
@@ -264,7 +270,7 @@ describe('OdemeIzlemePage', () => {
 
         const component = createComponent();
         component.ngOnInit();
-        component.caprazCariKartId = 5;
+        component.belgeNo = 'B-005';
         component.openCaprazArama();
         const ilkCagriSayisi = serviceSpy.caprazAra.calls.count();
 

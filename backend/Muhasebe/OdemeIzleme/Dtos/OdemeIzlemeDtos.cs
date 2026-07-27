@@ -26,6 +26,7 @@ public static class OdemeErisimKisitiNedenKodlari
 {
     public const string YetkiKapsamiDisindaHesapBaglantisi = "YETKI_KAPSAMI_DISINDA_HESAP_BAGLANTISI";
     public const string YetkiKapsamiDisindaFisBaglantisi = "YETKI_KAPSAMI_DISINDA_FIS_BAGLANTISI";
+    public const string YetkiKapsamiDisindaOdemeBaglantisi = "YETKI_KAPSAMI_DISINDA_ODEME_BAGLANTISI";
     public const string TesisUyusmazligi = "TESIS_UYUSMAZLIGI";
     public const string KurumUyusmazligi = "KURUM_UYUSMAZLIGI";
 }

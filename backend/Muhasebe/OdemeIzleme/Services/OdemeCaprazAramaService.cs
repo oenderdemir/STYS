@@ -99,6 +99,12 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
         public int KopuklukOdemeBaglantisiYok { get; set; }
         public int KopuklukSoftDelete { get; set; }
         public int BagimsizKayit { get; set; }
+
+        /// <summary>Kaynak, bir odeme belgesine baglanmis GORUNUYOR (KaynakModul/KaynakId dolu) ANCAK
+        /// o belge baska bir tesise ait oldugu icin (veya tesis iliskisi dogrulanamadigi icin) bu
+        /// baglanti GECERSIZ sayildi - "BELGE:{id}" anahtari URETILMEDI, bagimsiz kayit olarak
+        /// isaretlendi. Yalnizca CariHareketAdaylari tarafindan doldurulur (bkz. metot yorumu).</summary>
+        public int KopuklukYetkiDisindaOdemeBaglantisi { get; set; }
     }
 
     public async Task<PagedResult<OdemeAdayiDto>> AraAsync(
@@ -331,6 +337,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             KopuklukHedefHesapYok = 0,
             KopuklukOdemeBaglantisiYok = 0,
             KopuklukSoftDelete = 0,
+            KopuklukYetkiDisindaOdemeBaglantisi = 0,
             BagimsizKayit = 0
         });
     }
@@ -365,9 +372,17 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             q = q.Where(_ => false);
         }
 
+        // GECERLI BAGLANTI: KaynakModul/KaynakId dolu VE isaret edilen belge silinmemis VE bu
+        // hareketle AYNI tesise ait (b.CariKart.TesisId == h.CariKart.TesisId). Tesis iliskisi
+        // dogrulanamiyorsa (CariKart null/TesisId farkli) veya belge baska tesisteyse baglanti
+        // GECERSIZ sayilir - "BELGE:{id}" anahtari URETILMEZ, yabanci belge ID'si/ayrintisi DTO'ya
+        // TASINMAZ, aday bagimsiz (BagimsizKayit=1) sayilarak asla YuksekOlasilik URETILMEZ.
+        // KONTROL SQL SORGUSUNDA uygulanir - sonradan DTO temizligi YAPILMAZ.
         return q.Select(h => new AdayHam
         {
             Anahtar = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.CariKart!.TesisId)
                 ? "BELGE:" + h.KaynakId.ToString()
                 : "CARIHAREKET:" + h.Id.ToString(),
             Kaynak = OdemeAdayKaynaklari.CariHareket,
@@ -385,7 +400,10 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             MuhasebeHesapPlaniId = null,
             MaliYil = null,
             Donem = null,
-            TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? h.KaynakId : null,
+            TahsilatOdemeBelgesiId = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.CariKart!.TesisId)
+                ? h.KaynakId : null,
             CariHareketId = h.Id,
             PosTahsilatValorId = null,
             MuhasebeFisId = null,
@@ -394,7 +412,8 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
             KopuklukCariYok = 0,
             KopuklukValorYok = 0,
             KopuklukHedefHesapYok = 0,
-            // Odeme belgesinden dogdugu ISARETLI ama kaynak belge bulunamiyor.
+            // Odeme belgesinden dogdugu ISARETLI ama kaynak belge HICBIR TESISTE bulunamiyor
+            // (silinmis/hic var olmamis) - tesis uyumsuzlugundan AYRI bir kopuklukdur.
             KopuklukOdemeBaglantisiYok = h.Durum == CariHareketDurumlari.Aktif
                 && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
                 && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
@@ -403,8 +422,22 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && _dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Any(b => b.IsDeleted && b.Id == h.KaynakId
                     && b.CariKart != null && b.CariKart.TesisId.HasValue && tesisIds.Contains(b.CariKart.TesisId.Value))
                 ? 1 : 0,
-            // BAGIMSIZ: hicbir odeme belgesine baglanmamis cari hareket.
-            BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
+            // Belge AKTIF olarak baska bir yerde bulunuyor (silinmemis) ANCAK bu hareketin
+            // tesisiyle UYUSMUYOR (veya tesis iliskisi dogrulanamiyor) - yetki kapsami disinda
+            // bir baglanti, "belge yok" (KopuklukOdemeBaglantisiYok) ile KARISTIRILMAZ.
+            KopuklukYetkiDisindaOdemeBaglantisi = h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId != null
+                && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.CariKart!.TesisId)
+                && _dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
+                ? 1 : 0,
+            // BAGIMSIZ: hicbir odeme belgesine GECERLI sekilde baglanmamis cari hareket (KaynakModul
+            // farkli/bos OLDUGU gibi, KaynakModul dogru ama baglanti tesis uyumsuzlugu YUZUNDEN
+            // GECERSIZ oldugunda da bagimsiz sayilir).
+            BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
+                || h.KaynakId == null
+                || !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId
+                    && b.CariKart != null && b.CariKart.TesisId == h.CariKart!.TesisId)
+                ? 1 : 0
         });
     }
 
@@ -477,6 +510,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 ? 1 : 0,
             KopuklukOdemeBaglantisiYok = 0,
             KopuklukSoftDelete = 0,
+            KopuklukYetkiDisindaOdemeBaglantisi = 0,
             BagimsizKayit = 0
         });
     }
@@ -541,6 +575,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
                 ? 1 : 0,
             KopuklukSoftDelete = 0,
+            KopuklukYetkiDisindaOdemeBaglantisi = 0,
             BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
         });
     }
@@ -604,6 +639,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && !_dbContext.TahsilatOdemeBelgeleri.Any(b => !b.IsDeleted && b.Id == h.KaynakId)
                 ? 1 : 0,
             KopuklukSoftDelete = 0,
+            KopuklukYetkiDisindaOdemeBaglantisi = 0,
             BagimsizKayit = h.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
         });
     }
@@ -693,6 +729,7 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 && _dbContext.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Any(b => b.IsDeleted && b.Id == f.KaynakId
                     && b.CariKart != null && b.CariKart.TesisId.HasValue && tesisIds.Contains(b.CariKart.TesisId.Value))
                 ? 1 : 0,
+            KopuklukYetkiDisindaOdemeBaglantisi = 0,
             BagimsizKayit = f.KaynakModul != MuhasebeKaynakModulleri.TahsilatOdemeBelgesi ? 1 : 0
         });
     }
@@ -762,6 +799,14 @@ public class OdemeCaprazAramaService : IOdemeCaprazAramaService
                 "Kayıt tahsilat/ödeme kaynaklı görünüyor ancak bağlı ödeme belgesi bulunamadı.");
             if (s.KopuklukSoftDelete == 1) EkleKopukluk(aday, OdemeKopuklukTipleri.SoftDeleteIliskiNedeniyleGorunmeyen,
                 "Kaynak ödeme belgesi silinmiş (soft-delete); normal aramalarda görünmez.");
+            if (s.KopuklukYetkiDisindaOdemeBaglantisi == 1)
+            {
+                aday.AyrintiYetkiNedeniyleGizliMi = true;
+                if (!aday.GuvenliNedenKodlari.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaOdemeBaglantisi))
+                {
+                    aday.GuvenliNedenKodlari.Add(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaOdemeBaglantisi);
+                }
+            }
             if (s.BagimsizKayit == 1)
             {
                 aday.BagimsizKayitMi = true;

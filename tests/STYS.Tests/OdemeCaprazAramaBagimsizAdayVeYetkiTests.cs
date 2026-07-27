@@ -629,6 +629,189 @@ public class OdemeCaprazAramaBagimsizAdayVeYetkiTests : IAsyncLifetime
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // CariHareketAdaylari - tesisler arasi yanlis "BELGE:" baglantisi (bu turun duzeltmesi)
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task CariHareket_BaskaTesisinBelgesineBagliysa_BELGE_AnahtariUretilmez_ve_BelgeIdSizmaz()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisA = await SeedTesisAsync(db, suffix + "-A");
+        var tesisB = await SeedTesisAsync(db, suffix + "-B");
+        var cariB = await SeedCariKartAsync(db, tesisB, suffix + "-B");
+        var cariA = await SeedCariKartAsync(db, tesisA, suffix + "-A");
+
+        // Belge TesisB'ye ait (cariB uzerinden).
+        var belgeTesisB = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-BASKATESIS",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariB,
+            Tutar = 400m,
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.Nakit,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belgeTesisB);
+        await db.SaveChangesAsync();
+
+        // Cari hareket TesisA'da, ama (veri hatasi/yanlis eslesme senaryosu) TesisB'nin belgesine
+        // KaynakId ile isaret ediyor.
+        var hareket = new CariHareket
+        {
+            CariKartId = cariA, HareketTarihi = DateTime.UtcNow.Date, BelgeTuru = "TahsilatOdemeBelgesi",
+            BorcTutari = 0m, AlacakTutari = 400m, ParaBirimi = "TRY", Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, KaynakId = belgeTesisB.Id
+        };
+        db.CariHareketler.Add(hareket);
+        await db.SaveChangesAsync();
+        _cariHareketIdler.Add(hareket.Id);
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisA]));
+            var sonuc = await svc.AraAsync(
+                new PagedRequest { PageNumber = 1, PageSize = 20 },
+                new OdemeCaprazAramaFilterDto
+                {
+                    TesisId = tesisA, BeklenenCariKartId = cariA,
+                    TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                    TutarMin = 0m, TutarMax = 1_000_000m
+                });
+
+            var aday = Assert.Single(sonuc.Items);
+            // KRITIK: "BELGE:{id}" anahtari URETILMEMELI - bagimsiz cari hareket anahtari donmeli.
+            Assert.Equal($"CARIHAREKET:{hareket.Id}", aday.TekillestirmeAnahtari);
+            // Yabanci belge ID'si DTO'ya SIZMAMALI.
+            Assert.Null(aday.TahsilatOdemeBelgesiId);
+            Assert.True(aday.BagimsizKayitMi);
+            Assert.Equal(OdemeGuvenSeviyeleri.IncelenmesiGereken, aday.GuvenSeviyesi);
+            Assert.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaOdemeBaglantisi, aday.GuvenliNedenKodlari);
+            Assert.True(aday.AyrintiYetkiNedeniyleGizliMi);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belgeTesisB.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    [IntegrationFact]
+    public async Task CariHareket_AyniTesisinBelgesineBagliysa_BELGE_AnahtariKorunur()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisId = await SeedTesisAsync(db, suffix);
+        var cariId = await SeedCariKartAsync(db, tesisId, suffix);
+
+        var belge = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-AYNITESIS",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariId,
+            Tutar = 350m,
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.Nakit,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belge);
+        await db.SaveChangesAsync();
+
+        var hareket = new CariHareket
+        {
+            CariKartId = cariId, HareketTarihi = DateTime.UtcNow.Date, BelgeTuru = "TahsilatOdemeBelgesi",
+            BorcTutari = 0m, AlacakTutari = 350m, ParaBirimi = "TRY", Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, KaynakId = belge.Id
+        };
+        db.CariHareketler.Add(hareket);
+        await db.SaveChangesAsync();
+        _cariHareketIdler.Add(hareket.Id);
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisId]));
+            var sonuc = await svc.AraAsync(
+                new PagedRequest { PageNumber = 1, PageSize = 20 },
+                new OdemeCaprazAramaFilterDto
+                {
+                    TesisId = tesisId, BeklenenCariKartId = cariId,
+                    TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                    TutarMin = 0m, TutarMax = 1_000_000m
+                });
+
+            var aday = Assert.Single(sonuc.Items);
+            Assert.Equal($"BELGE:{belge.Id}", aday.TekillestirmeAnahtari);
+            Assert.Equal(belge.Id, aday.TahsilatOdemeBelgesiId);
+            Assert.False(aday.BagimsizKayitMi);
+            Assert.DoesNotContain(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaOdemeBaglantisi, aday.GuvenliNedenKodlari);
+            Assert.Contains(OdemeAdayKaynaklari.TahsilatOdemeBelgesi, aday.BulunduguKaynaklar);
+            Assert.Contains(OdemeAdayKaynaklari.CariHareket, aday.BulunduguKaynaklar);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belge.Id).ExecuteDeleteAsync();
+        }
+    }
+
+    [IntegrationFact]
+    public async Task CariHareket_GecersizBaglanti_YuksekOlasilikUretmez_veNedenKoduTasir()
+    {
+        await using var db = CreateDbContext();
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..20];
+        var tesisA = await SeedTesisAsync(db, suffix + "-A");
+        var tesisB = await SeedTesisAsync(db, suffix + "-B");
+        var cariB = await SeedCariKartAsync(db, tesisB, suffix + "-B");
+        var cariA = await SeedCariKartAsync(db, tesisA, suffix + "-A");
+
+        var belgeTesisB = new STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"{suffix}-GECERSIZ",
+            BelgeTarihi = DateTime.UtcNow.Date,
+            BelgeTipi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariB,
+            Tutar = 250m,
+            ParaBirimi = "TRY",
+            OdemeYontemi = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.Nakit,
+            Durum = STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        db.TahsilatOdemeBelgeleri.Add(belgeTesisB);
+        await db.SaveChangesAsync();
+
+        var hareket = new CariHareket
+        {
+            CariKartId = cariA, HareketTarihi = DateTime.UtcNow.Date, BelgeTuru = "TahsilatOdemeBelgesi",
+            BorcTutari = 0m, AlacakTutari = 250m, ParaBirimi = "TRY", Durum = CariHareketDurumlari.Aktif,
+            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, KaynakId = belgeTesisB.Id
+        };
+        db.CariHareketler.Add(hareket);
+        await db.SaveChangesAsync();
+        _cariHareketIdler.Add(hareket.Id);
+
+        try
+        {
+            var svc = new OdemeCaprazAramaService(db, new FakeMuhasebeTesisScopeService([tesisA]));
+            var sonuc = await svc.AraAsync(
+                new PagedRequest { PageNumber = 1, PageSize = 20 },
+                new OdemeCaprazAramaFilterDto
+                {
+                    TesisId = tesisA, BeklenenCariKartId = cariA,
+                    TarihBaslangic = DateOnly.FromDateTime(DateTime.UtcNow.Date), TarihBitis = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                    TutarMin = 0m, TutarMax = 1_000_000m
+                });
+
+            var aday = Assert.Single(sonuc.Items);
+            Assert.NotEqual(OdemeGuvenSeviyeleri.YuksekOlasilik, aday.GuvenSeviyesi);
+            Assert.Contains(OdemeErisimKisitiNedenKodlari.YetkiKapsamiDisindaOdemeBaglantisi, aday.GuvenliNedenKodlari);
+        }
+        finally
+        {
+            await db.TahsilatOdemeBelgeleri.IgnoreQueryFilters().Where(x => x.Id == belgeTesisB.Id).ExecuteDeleteAsync();
+        }
+    }
+
     // ── Fake'ler ──
 
     private sealed class FakeCurrentUserAccessor : TOD.Platform.Security.Auth.Services.ICurrentUserAccessor

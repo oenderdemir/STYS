@@ -394,7 +394,7 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         }
 
         var posValor = await _dbContext.PosTahsilatValorleri.AsNoTracking()
-            .Where(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belge.Id)
+            .Where(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == belge.Id && v.TesisId == tesisId)
             .Select(v => new { v.Id, v.Durum, v.BeklenenValorTarihi, v.NetTutar })
             .FirstOrDefaultAsync(cancellationToken);
         if (posValor is not null)

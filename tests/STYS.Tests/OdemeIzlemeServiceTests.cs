@@ -1644,6 +1644,46 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.Contains(sonuc.Items, x => x.Id == belgeId);
     }
 
+    [IntegrationFact]
+    public async Task Arama_IbanFiltresi_BaskaTesisinHesabiylaEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var hpB = await YeniHesapPlaniAsync(dbContext, suffixB, "BANKA");
+        var bankaHesabiTesisB = await YeniKasaBankaHesabiAsync(dbContext, tesisB, KasaBankaHesapTipleri.Banka, suffixB, "BNK", hpB, iban: "TR330006100519786457841326");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabiTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, Iban = "TR3300061005197864578413" });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_IbanFiltresi_AyniTesisinHesabiylaEslesmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "BANKA");
+        var bankaHesabi = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.Banka, suffix, "BNK", hp, iban: "TR330006100519786457841326");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.HavaleEft, bankaHesabi);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, Iban = "TR3300061005197864578413" });
+
+        Assert.Contains(sonuc.Items, x => x.Id == belgeId);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

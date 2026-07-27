@@ -136,10 +136,12 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (!string.IsNullOrWhiteSpace(filter.Iban))
         {
-            var ibanHesapIdler = _dbContext.KasaBankaHesaplari.AsNoTracking()
-                .Where(k => !k.IsDeleted && k.Iban != null && k.Iban.Contains(filter.Iban))
-                .Select(k => (int?)k.Id);
-            query = query.Where(b => ibanHesapIdler.Contains(b.KasaBankaHesapId));
+            // Hesap yalnizca IBAN'i eslesirse DEGIL, AYRICA odemenin KENDI tesisiyle (CariKart.TesisId)
+            // ayni tesise aitse eslesir - baska tesise ait bir hesap (kullanici o tesise de yetkili
+            // olsa dahi) bu odemeyi asla eslestirmemeli.
+            query = query.Where(b => b.KasaBankaHesap != null && !b.KasaBankaHesap.IsDeleted
+                && b.KasaBankaHesap.Iban != null && b.KasaBankaHesap.Iban.Contains(filter.Iban)
+                && b.KasaBankaHesap.TesisId.HasValue && b.CariKart != null && b.KasaBankaHesap.TesisId == b.CariKart.TesisId);
         }
 
         if (filter.OlusturulmaBaslangic.HasValue)

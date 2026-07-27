@@ -408,7 +408,8 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         // Bu odemenin URETTIGI cari hareket (kapama kaydi) - bakiyeye gercekten etki edip
         // etmediginin BIRINCIL kanitidir.
         var kapamaHareketi = await _dbContext.CariHareketler.AsNoTracking()
-            .Where(h => !h.IsDeleted && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId == belge.Id)
+            .Where(h => !h.IsDeleted && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId == belge.Id
+                && h.CariKartId == belge.CariKartId)
             .Select(h => new { h.Id, h.Durum, h.BorcTutari, h.AlacakTutari, h.ParaBirimi, h.IliskiliCariHareketId })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -1020,7 +1021,8 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         if (kapatilacakCariHareketId.HasValue)
         {
             var kapamaHareketi = await _dbContext.CariHareketler.AsNoTracking()
-                .Where(h => !h.IsDeleted && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId == belgeId)
+                .Where(h => !h.IsDeleted && h.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && h.KaynakId == belgeId
+                    && h.CariKartId == cariKartId)
                 .Select(h => new { h.Id, h.Durum })
                 .FirstOrDefaultAsync(cancellationToken);
 

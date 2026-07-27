@@ -1343,6 +1343,52 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.NotNull(detay.MuhasebeFisNo);
     }
 
+    [IntegrationFact]
+    public async Task Detay_AyniKaynakIdliCariHareketBaskaCariyeAitse_DikkateAlinmazVeCariHareketiYokDoner()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariA = await YeniCariKartAsync(dbContext, tesisId, suffix + "A");
+        var cariB = await YeniCariKartAsync(dbContext, tesisId, suffix + "B");
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit);
+
+        // Ayni KaynakId'yi tasiyan ama BASKA cariye (cariB) ait bir hareket - yanlis baglanti senaryosu.
+        await YeniCariHareketAsync(dbContext, cariB, 250m, 0m, DateTime.UtcNow.Date,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.False(detay.KapatildiMi);
+        Assert.False(detay.BakiyeyeDahilMi);
+        Assert.NotEqual(BakiyeyeDahilEdilmeDurumlari.TamamenDahil, detay.BakiyeyeDahilEdilmeDurumu);
+        Assert.Contains(BakiyeyeDahilEdilmemeNedenKodlari.CariHareketiYok, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+        Assert.Null(detay.EtkiledigiTutar);
+        Assert.Null(detay.EtkiledigiParaBirimi);
+        Assert.Null(detay.EtkiledigiCariVeyaBorc);
+    }
+
+    [IntegrationFact]
+    public async Task Detay_OdemeVeCariHareketAyniCariyeAitse_MevcutDavranisKorunur()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit);
+
+        await YeniCariHareketAsync(dbContext, cariId, 250m, 0m, DateTime.UtcNow.Date,
+            kaynakModul: MuhasebeKaynakModulleri.TahsilatOdemeBelgesi, kaynakId: belgeId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var detay = await svc.GetDetayAsync(belgeId);
+
+        Assert.DoesNotContain(BakiyeyeDahilEdilmemeNedenKodlari.CariHareketiYok, detay.BakiyeyeDahilEdilmemeNedenKodlari);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

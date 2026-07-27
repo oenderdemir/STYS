@@ -1441,6 +1441,77 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.DoesNotContain(BakiyeyeDahilEdilmemeNedenKodlari.PosValorKaydiYok, detay.BakiyeyeDahilEdilmemeNedenKodlari);
     }
 
+    [IntegrationFact]
+    public async Task Arama_ValorDurumuFiltresi_BaskaTesistekiPosKaydiEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffixA, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.KrediKarti, suffixA, "KK1", hp);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 600m, $"{suffixA}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
+
+        // POS valor kaydi yanlislikla TesisB'ye ait olarak olusturulmus - odeme TesisA'da.
+        await YeniValorAsync(dbContext, tesisB, belgeId, kkId, null, PosTahsilatValorDurumlari.Aktarildi,
+            DateOnly.FromDateTime(DateTime.UtcNow.Date), 590m);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, ValorDurumu = PosTahsilatValorDurumlari.Aktarildi });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_BaskaTesistekiPosKaydi_UyariSayisindaPosEksikSayilir()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffixA, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisA, KasaBankaHesapTipleri.KrediKarti, suffixA, "KK1", hp);
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 600m, $"{suffixA}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId);
+
+        await YeniValorAsync(dbContext, tesisB, belgeId, kkId, null, PosTahsilatValorDurumlari.Aktarildi,
+            DateOnly.FromDateTime(DateTime.UtcNow.Date), 590m);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.True(satir.UyariSayisi >= 1);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_OdemeVePosValorKaydiAyniTesistiyse_ValorDurumuFiltresiEslesirVeUyariUretilmez()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var hp = await YeniHesapPlaniAsync(dbContext, suffix, "KK");
+        var kkId = await YeniKasaBankaHesabiAsync(dbContext, tesisId, KasaBankaHesapTipleri.KrediKarti, suffix, "KK1", hp);
+        var fisId = await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 600m, $"{suffix}-KK", DateTime.UtcNow.Date, OdemeYontemleri.KrediKarti, kkId, fisId);
+
+        await YeniValorAsync(dbContext, tesisId, belgeId, kkId, null, PosTahsilatValorDurumlari.Aktarildi,
+            DateOnly.FromDateTime(DateTime.UtcNow.Date), 590m);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, ValorDurumu = PosTahsilatValorDurumlari.Aktarildi });
+
+        var satir = Assert.Single(sonuc.Items, x => x.Id == belgeId);
+        Assert.Equal(0, satir.UyariSayisi);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

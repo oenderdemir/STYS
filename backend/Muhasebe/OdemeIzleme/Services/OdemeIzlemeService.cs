@@ -95,10 +95,12 @@ public class OdemeIzlemeService : IOdemeIzlemeService
         }
         if (!string.IsNullOrWhiteSpace(filter.ValorDurumu))
         {
-            var eslesenBelgeIdler = _dbContext.PosTahsilatValorleri.AsNoTracking()
-                .Where(v => !v.IsDeleted && v.Durum == filter.ValorDurumu)
-                .Select(v => v.TahsilatOdemeBelgesiId);
-            query = query.Where(b => eslesenBelgeIdler.Contains(b.Id));
+            // POS valor kaydi yalnizca odemenin KENDI tesisiyle (CariKart.TesisId) ayni tesisteyse
+            // eslesir - baska tesise ait bir kayit (kullanici o tesise de yetkili olsa dahi) bu
+            // odemeyi asla eslestirmemeli.
+            query = query.Where(b => _dbContext.PosTahsilatValorleri.AsNoTracking()
+                .Any(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == b.Id && v.Durum == filter.ValorDurumu
+                    && b.CariKart != null && b.CariKart.TesisId == v.TesisId));
         }
 
         // ── Ek filtreler (hepsi GERCEKTEN sorguya uygulanir) ──
@@ -204,10 +206,10 @@ public class OdemeIzlemeService : IOdemeIzlemeService
                 .ToListAsync(cancellationToken);
         var posVarOlanIdler = krediKartiIdler.Count == 0
             ? []
-            : await _dbContext.PosTahsilatValorleri.AsNoTracking()
-                .Where(v => !v.IsDeleted && krediKartiIdler.Contains(v.TahsilatOdemeBelgesiId))
-                .Select(v => v.TahsilatOdemeBelgesiId)
-                .Distinct()
+            : await _dbContext.TahsilatOdemeBelgeleri.AsNoTracking()
+                .Where(b => krediKartiIdler.Contains(b.Id) && _dbContext.PosTahsilatValorleri.AsNoTracking()
+                    .Any(v => !v.IsDeleted && v.TahsilatOdemeBelgesiId == b.Id && b.CariKart != null && b.CariKart.TesisId == v.TesisId))
+                .Select(b => b.Id)
                 .ToListAsync(cancellationToken);
         var posEksikIdler = krediKartiIdler.Except(posVarOlanIdler).ToHashSet();
 

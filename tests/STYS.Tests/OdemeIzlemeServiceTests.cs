@@ -1684,6 +1684,46 @@ public class OdemeIzlemeServiceTests : IAsyncLifetime
         Assert.Contains(sonuc.Items, x => x.Id == belgeId);
     }
 
+    [IntegrationFact]
+    public async Task Arama_MuhasebeFisNoFiltresi_BaskaTesisinFisiyleEslesmez()
+    {
+        var suffixA = YeniSuffix();
+        var suffixB = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisA = await YeniTesisAsync(dbContext, suffixA);
+        var tesisB = await YeniTesisAsync(dbContext, suffixB);
+        var cariA = await YeniCariKartAsync(dbContext, tesisA, suffixA);
+
+        var fisTesisB = await YeniFisAsync(dbContext, tesisB, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+        var fisNoTesisB = await dbContext.MuhasebeFisler.AsNoTracking().Where(f => f.Id == fisTesisB).Select(f => f.FisNo).SingleAsync();
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariA, 250m, $"{suffixA}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit, null, fisTesisB);
+
+        var svc = CreateService(dbContext, tesisA, tesisB);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisA, MuhasebeFisNo = fisNoTesisB });
+
+        Assert.DoesNotContain(sonuc.Items, x => x.Id == belgeId);
+    }
+
+    [IntegrationFact]
+    public async Task Arama_MuhasebeFisNoFiltresi_AyniTesisinFisiyleEslesmeyeDevamEder()
+    {
+        var suffix = YeniSuffix();
+        await using var dbContext = CreateDbContext();
+        var tesisId = await YeniTesisAsync(dbContext, suffix);
+        var cariId = await YeniCariKartAsync(dbContext, tesisId, suffix);
+
+        var fisId = await YeniFisAsync(dbContext, tesisId, DateTime.UtcNow.Date, MuhasebeFisDurumlari.Onayli);
+        var fisNo = await dbContext.MuhasebeFisler.AsNoTracking().Where(f => f.Id == fisId).Select(f => f.FisNo).SingleAsync();
+
+        var belgeId = await YeniBelgeAsync(dbContext, cariId, 250m, $"{suffix}-A", DateTime.UtcNow.Date, OdemeYontemleri.Nakit, null, fisId);
+
+        var svc = CreateService(dbContext, tesisId);
+        var sonuc = await svc.AraAsync(new PagedRequest(), new OdemeAramaFilterDto { TesisId = tesisId, MuhasebeFisNo = fisNo });
+
+        Assert.Contains(sonuc.Items, x => x.Id == belgeId);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Fake'ler
     // ─────────────────────────────────────────────────────────────

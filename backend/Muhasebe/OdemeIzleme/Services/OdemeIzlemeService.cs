@@ -109,10 +109,14 @@ public class OdemeIzlemeService : IOdemeIzlemeService
 
         if (!string.IsNullOrWhiteSpace(filter.MuhasebeFisNo))
         {
+            // Fis yalnizca FisNo eslesirse DEGIL, AYRICA odemenin KENDI tesisiyle (CariKart.TesisId)
+            // ayni tesise aitse eslesir - baska tesise ait bir fis (kullanici o tesise de yetkili
+            // olsa dahi) bu odemeyi asla eslestirmemeli.
             var fisIdler = _dbContext.MuhasebeFisler.AsNoTracking()
                 .Where(f => !f.IsDeleted && f.FisNo.Contains(filter.MuhasebeFisNo))
-                .Select(f => (int?)f.Id);
-            query = query.Where(b => fisIdler.Contains(b.MuhasebeFisId));
+                .Select(f => new { FisId = (int?)f.Id, f.TesisId });
+            query = query.Where(b => fisIdler.Any(f => f.FisId == b.MuhasebeFisId
+                && b.CariKart != null && f.TesisId == b.CariKart.TesisId));
         }
 
         if (filter.MaliYil.HasValue || filter.Donem.HasValue)

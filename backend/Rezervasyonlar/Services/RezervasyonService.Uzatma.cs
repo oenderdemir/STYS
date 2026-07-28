@@ -65,6 +65,28 @@ public partial class RezervasyonService
         var currentRoomIdInfoMap = currentRoomIdInfo.ToDictionary(x => x.OdaId);
         var currentRoomTypeIds = currentRoomIdInfo.Select(x => x.OdaTipiId).ToHashSet();
 
+        // Mevcut son segmentteki oda atamalari - AyniOdadaDevam VE degisim sayisi karsilastirmalari
+        // icin TEK, ORTAK bir DTO listesine cevrilir (bkz. CalculateRoomChangeCount).
+        var currentAtamaDtos = currentAssignments
+            .Select(x => new KonaklamaSenaryoOdaAtamaDto
+            {
+                OdaId = x.OdaId,
+                OdaNo = x.OdaNo,
+                BinaId = currentRoomIdInfoMap.TryGetValue(x.OdaId, out var info) ? info.BinaId : 0,
+                BinaAdi = x.BinaAdi,
+                OdaTipiId = currentRoomIdInfoMap.TryGetValue(x.OdaId, out var info2) ? info2.OdaTipiId : 0,
+                OdaTipiAdi = x.OdaTipiAdi,
+                PaylasimliMi = x.PaylasimliMi,
+                Kapasite = x.Kapasite,
+                AyrilanKisiSayisi = x.AyrilanKisiSayisi
+            })
+            .ToList();
+
+        // Mevcut dagilim BUTUNLUGU: son segmentteki toplam AyrilanKisiSayisi, rezervasyonun
+        // KisiSayisi'na esit degilse (eksik/parcali bir dagilim varsa) bu dagilim GECERLI bir
+        // "ayni odada devam" adayi SAYILMAZ - ne fiyatlandirilir ne de secenek olarak sunulur.
+        var currentAssignmentComplete = currentAtamaDtos.Sum(x => x.AyrilanKisiSayisi) == reservation.KisiSayisi;
+
         // Rezervasyonun MEVCUT (check-in yapilmis) konaklayanlarinin bilinen cinsiyetleri - paylasimli
         // oda/cinsiyet kurallarinin korunmasi icin GetKonaklamaSenaryolariAsync ile AYNI mekanizma
         // (BuildScenarioGuestGenderRequirements) kullanilir. Sayilar/cinsiyetler tam olarak
@@ -92,9 +114,9 @@ public partial class RezervasyonService
 
         var candidates = new List<UzatmaSenaryoAday>();
 
-        // 1) AyniOdadaDevam: mevcut son segmentteki TAM oda dagilimi, uzatma araliginin
-        // TAMAMINDA (kendi rezervasyonu haric tutularak) kullanilabiliyor mu?
-        var ayniOdaGecerliMi = currentAssignments.All(assignment =>
+        // 1) AyniOdadaDevam: mevcut son segmentteki TAM (ve KISI SAYISI ACISINDAN BUTUN) oda
+        // dagilimi, uzatma araliginin TAMAMINDA (kendi rezervasyonu haric tutularak) kullanilabiliyor mu?
+        var ayniOdaGecerliMi = currentAssignmentComplete && currentAssignments.All(assignment =>
         {
             var availability = fullAvailability.FirstOrDefault(x => x.OdaId == assignment.OdaId);
             return availability is not null && availability.RemainingCapacity >= assignment.AyrilanKisiSayisi;
@@ -102,21 +124,6 @@ public partial class RezervasyonService
 
         if (ayniOdaGecerliMi)
         {
-            var ayniOdaAtamalari = currentAssignments
-                .Select(x => new KonaklamaSenaryoOdaAtamaDto
-                {
-                    OdaId = x.OdaId,
-                    OdaNo = x.OdaNo,
-                    BinaId = currentRoomIdInfoMap.TryGetValue(x.OdaId, out var info) ? info.BinaId : 0,
-                    BinaAdi = x.BinaAdi,
-                    OdaTipiId = currentRoomIdInfoMap.TryGetValue(x.OdaId, out var info2) ? info2.OdaTipiId : 0,
-                    OdaTipiAdi = x.OdaTipiAdi,
-                    PaylasimliMi = x.PaylasimliMi,
-                    Kapasite = x.Kapasite,
-                    AyrilanKisiSayisi = x.AyrilanKisiSayisi
-                })
-                .ToList();
-
             candidates.Add(new UzatmaSenaryoAday(
                 RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam,
                 "Mevcut odada uzatma",
@@ -126,7 +133,7 @@ public partial class RezervasyonService
                     {
                         BaslangicTarihi = extendStart,
                         BitisTarihi = extendEnd,
-                        OdaAtamalari = ayniOdaAtamalari
+                        OdaAtamalari = currentAtamaDtos
                     }
                 ]));
         }
@@ -134,7 +141,6 @@ public partial class RezervasyonService
         // 2) CheckoutGunundeOdaDegisimi: uzatma araliginin TAMAMI icin (mevcut oda uygun olsun ya
         // da olmasin) alternatif tek-segmentli oda dagilimlari - mevcut GetKonaklamaSenaryolariAsync
         // akisiyla AYNI ureteci (BuildSingleSegmentVariants) kullanilir, farkli bicimde kopyalanmaz.
-        var oldRoomIds = currentAssignments.Select(x => x.OdaId).Distinct().ToHashSet();
         var fullIntervalVariants = BuildSingleSegmentVariants(
             reservation.KisiSayisi,
             guestGenderRequirements,
@@ -145,20 +151,22 @@ public partial class RezervasyonService
         foreach (var variant in fullIntervalVariants)
         {
             var segment = variant.Segmentler[0];
-            var newRoomIds = segment.OdaAtamalari.Select(x => x.OdaId).Distinct().ToHashSet();
-            var isSameAsCurrent = oldRoomIds.SetEquals(newRoomIds)
-                && segment.OdaAtamalari
-                    .Select(x => (x.OdaId, x.AyrilanKisiSayisi))
-                    .OrderBy(x => x.OdaId)
-                    .SequenceEqual(currentAssignments.Select(x => (x.OdaId, x.AyrilanKisiSayisi)).OrderBy(x => x.OdaId));
+            var rawDegisimSayisi = CalculateRoomChangeCount(currentAtamaDtos, segment.OdaAtamalari);
 
-            if (isSameAsCurrent)
+            // Mevcut dagilim EKSIKSE (currentAssignmentComplete=false), TAM bir alternatif plan
+            // TANIM GEREGI asla "mevcutla ayni" SAYILAMAZ - kisi sayilari zaten farklidir. Ancak
+            // CalculateRoomChangeCount yalnizca ONCEKI odalarin durumuna bakar; eksik dagilimda
+            // var OLAN tek odanin kisi sayisi degismeden YENI bir oda EKLENMISSE (ör. {101:1} ->
+            // {101:1,102:1}) ham hesap yanlislikla 0 dönebilir - bu durumda deger EN AZ 1'e
+            // yukseltilir.
+            var odaDegisimSayisi = currentAssignmentComplete ? rawDegisimSayisi : Math.Max(rawDegisimSayisi, 1);
+
+            if (odaDegisimSayisi == 0)
             {
                 candidates.Add(new UzatmaSenaryoAday(RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam, "Mevcut odada uzatma", 0, [segment]));
                 continue;
             }
 
-            var odaDegisimSayisi = oldRoomIds.Except(newRoomIds).Count();
             candidates.Add(new UzatmaSenaryoAday(
                 RezervasyonUzatmaSenaryoTipleri.CheckoutGunundeOdaDegisimi,
                 $"Cikis gunu oda degisimiyle uzatma ({variant.Aciklama})",
@@ -167,11 +175,12 @@ public partial class RezervasyonService
         }
 
         // 3) UzatmaSirasindaOdaDegisimi: uzatma araliginin TAMAMINDA tek bir oda dagilimi
-        // bulunamiyorsa, gercek musaitlik sinirlarindan uretilen en fazla bir oda degisikligi
-        // iceren iki segmentli bir plan aranir.
+        // bulunamiyorsa, gercek musaitlik sinirlarindan uretilen, en fazla bir oda degisikligi
+        // iceren iki segmentli planlar aranir (birden fazla aday uretilebilir, ilk bulunanda
+        // aranmaz - siralama/ilk-5 kurali nihai secimi yapar).
         if (fullIntervalVariants.Count == 0 && !ayniOdaGecerliMi)
         {
-            var twoSegmentCandidate = await BuildUzatmaTwoSegmentScenarioAsync(
+            var twoSegmentCandidates = await BuildUzatmaTwoSegmentScenariosAsync(
                 reservation.TesisId,
                 rezervasyonId,
                 reservation.KisiSayisi,
@@ -180,13 +189,10 @@ public partial class RezervasyonService
                 extendEnd,
                 cancellationToken);
 
-            if (twoSegmentCandidate is not null)
-            {
-                candidates.Add(twoSegmentCandidate);
-            }
+            candidates.AddRange(twoSegmentCandidates);
         }
 
-        // Ayni oda/segment plani birden fazla kez DONMEZ (madde 9) - GetKonaklamaSenaryolariAsync'in
+        // Ayni oda/segment plani birden fazla kez DONMEZ - GetKonaklamaSenaryolariAsync'in
         // CreateScenarioKey'i (segment+oda+kisi imzasi) AYNEN yeniden kullanilir.
         var distinctCandidates = candidates
             .GroupBy(x => CreateScenarioKey(new KonaklamaSenaryoDto { Segmentler = x.Segmentler }))
@@ -281,7 +287,16 @@ public partial class RezervasyonService
         };
     }
 
-    private async Task<UzatmaSenaryoAday?> BuildUzatmaTwoSegmentScenarioAsync(
+    /// <summary>
+    /// Uzatma araliginin TAMAMINDA tek bir oda dagilimi bulunamadigi durumlar icin, GERCEK
+    /// musaitlik sinirlarinin (cakisan rezervasyon segmentlerinin ve aktif oda kullanim
+    /// bloklarinin baslangic/bitis tarihlerinin) HER BIRINDE, BuildSingleSegmentVariants ile
+    /// uretilen BIRDEN FAZLA deterministik oda dagilimini birinci/ikinci aralik icin ayri ayri
+    /// dener ve GECERLI (en fazla bir oda degisikligi iceren) TUM kombinasyonlari dondurur.
+    /// Ilk bulunan adayda ARANMAZ - nihai secim/siralama GetUzatmaSecenekleriAsync'te yapilir.
+    /// Bolme tarihi ARALIGIN ORTA NOKTASI KULLANILMAZ.
+    /// </summary>
+    private async Task<List<UzatmaSenaryoAday>> BuildUzatmaTwoSegmentScenariosAsync(
         int tesisId,
         int rezervasyonId,
         int kisiSayisi,
@@ -290,9 +305,6 @@ public partial class RezervasyonService
         DateTime extendEnd,
         CancellationToken cancellationToken)
     {
-        // Bolme tarihi araligin orta noktasi OLAMAZ (bkz. istek) - yalnizca GERCEK musaitlik
-        // sinirlarindan (cakisan rezervasyon segmentlerinin ve aktif oda kullanim bloklarinin
-        // baslangic/bitis tarihlerinden) turetilen adaylar denenir.
         var segmentBoundaries = await (
                 from segment in _stysDbContext.RezervasyonSegmentleri
                 where segment.Rezervasyon != null
@@ -318,58 +330,59 @@ public partial class RezervasyonService
             .OrderBy(x => x)
             .ToList();
 
+        var results = new List<UzatmaSenaryoAday>();
+
         foreach (var boundary in boundaryPoints)
         {
             var firstAvailability = await GetRoomAvailabilitiesAsync(
                 tesisId, null, kisiSayisi, guestGenderRequirements, extendStart, boundary, cancellationToken, rezervasyonId);
-            var firstAllocations = AllocatePeople(
-                firstAvailability.OrderByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList(),
-                kisiSayisi,
-                guestGenderRequirements);
-            if (firstAllocations.Count == 0)
+            var firstVariants = BuildSingleSegmentVariants(kisiSayisi, guestGenderRequirements, extendStart, boundary, firstAvailability);
+            if (firstVariants.Count == 0)
             {
                 continue;
             }
 
             var secondAvailability = await GetRoomAvailabilitiesAsync(
                 tesisId, null, kisiSayisi, guestGenderRequirements, boundary, extendEnd, cancellationToken, rezervasyonId);
-            var secondAllocations = AllocatePeople(
-                secondAvailability.OrderByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList(),
-                kisiSayisi,
-                guestGenderRequirements);
-            if (secondAllocations.Count == 0)
+            var secondVariants = BuildSingleSegmentVariants(kisiSayisi, guestGenderRequirements, boundary, extendEnd, secondAvailability);
+            if (secondVariants.Count == 0)
             {
                 continue;
             }
 
-            var firstRoomIds = firstAllocations.Select(x => x.OdaId).Distinct().ToHashSet();
-            var secondRoomIds = secondAllocations.Select(x => x.OdaId).Distinct().ToHashSet();
-            if (firstRoomIds.SetEquals(secondRoomIds))
+            foreach (var firstVariant in firstVariants)
             {
-                // Iki segment arasinda GERCEK bir oda degisimi yok - bu, tek segmentli bir
-                // senaryoyla ayni anlama gelir ve zaten oradan uretilmis olmalidir.
-                continue;
-            }
+                var firstSegment = firstVariant.Segmentler[0];
 
-            var changedRoomCount = firstRoomIds.Except(secondRoomIds).Count();
-            if (changedRoomCount > 1)
-            {
-                // En fazla BIR oda degisikligi icermeyen (birden fazla es zamanli oda degisimi
-                // gerektiren) planlar bu asamada uretilmez.
-                continue;
-            }
+                foreach (var secondVariant in secondVariants)
+                {
+                    var secondSegment = secondVariant.Segmentler[0];
 
-            return new UzatmaSenaryoAday(
-                RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi,
-                $"Uzatma sirasinda {boundary:dd.MM.yyyy HH:mm} tarihinde oda degisimiyle uzatma",
-                changedRoomCount,
-                [
-                    new KonaklamaSenaryoSegmentDto { BaslangicTarihi = extendStart, BitisTarihi = boundary, OdaAtamalari = firstAllocations },
-                    new KonaklamaSenaryoSegmentDto { BaslangicTarihi = boundary, BitisTarihi = extendEnd, OdaAtamalari = secondAllocations }
-                ]);
+                    // "En fazla bir oda degisikligi" kurali, tek/iki segmentli seceneklerde AYNI
+                    // (kisi sayisi farkindaligi olan) ortak hesaplama metoduyla degerlendirilir.
+                    var changedRoomCount = CalculateRoomChangeCount(firstSegment.OdaAtamalari, secondSegment.OdaAtamalari);
+                    if (changedRoomCount is 0 or > 1)
+                    {
+                        // 0: segmentler arasinda GERCEK bir degisim yok (tek segmentli bir
+                        // senaryoyla ayni anlama gelir, oradan zaten uretilmis olmali).
+                        // >1: birden fazla es zamanli oda degisikligi gerektiren planlar
+                        // bu asamada uretilmez.
+                        continue;
+                    }
+
+                    results.Add(new UzatmaSenaryoAday(
+                        RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi,
+                        $"Uzatma sirasinda {boundary:dd.MM.yyyy HH:mm} tarihinde oda degisimiyle uzatma ({firstVariant.Aciklama} / {secondVariant.Aciklama})",
+                        changedRoomCount,
+                        [
+                            new KonaklamaSenaryoSegmentDto { BaslangicTarihi = extendStart, BitisTarihi = boundary, OdaAtamalari = firstSegment.OdaAtamalari },
+                            new KonaklamaSenaryoSegmentDto { BaslangicTarihi = boundary, BitisTarihi = extendEnd, OdaAtamalari = secondSegment.OdaAtamalari }
+                        ]));
+                }
+            }
         }
 
-        return null;
+        return results;
     }
 
     private async Task<string> BuildUzatmaMusaitlikYokMesajiAsync(
@@ -413,23 +426,93 @@ public partial class RezervasyonService
             return "Tesiste aktif oda tanimi bulunamadigi icin uzatma secenegi uretilemedi.";
         }
 
-        if (genderFreeAvailability.Count == 0)
+        var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
+            .Where(x => x.AktifMi && candidateRoomIds.Contains(x.OdaId) && x.BaslangicTarihi < extendEnd && x.BitisTarihi > extendStart)
+            .Select(x => x.OdaId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (blockedRoomIds.Count > 0)
         {
-            var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
-                .Where(x => x.AktifMi && candidateRoomIds.Contains(x.OdaId) && x.BaslangicTarihi < extendEnd && x.BitisTarihi > extendStart)
-                .Select(x => x.OdaId)
-                .Distinct()
+            // Bir bakim/ariza blogunun VAR OLMASI TEK BASINA yeterli degildir - blok(lar)
+            // KALDIRILMIS gibi bu odalarin gercek doluluk/kapasite durumu hesaplanip, tam
+            // kisi sayisini karsilayan bir plan GERCEKTEN kurulabiliyor MU diye dogrulanir.
+            var blockedRoomInfo = await (
+                    from oda in _stysDbContext.Odalar
+                    join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
+                    join odaTipi in _stysDbContext.OdaTipleri on oda.TesisOdaTipiId equals odaTipi.Id
+                    where blockedRoomIds.Contains(oda.Id)
+                    select new
+                    {
+                        OdaId = oda.Id,
+                        oda.OdaNo,
+                        BinaId = bina.Id,
+                        BinaAdi = bina.Ad,
+                        OdaTipiId = odaTipi.Id,
+                        OdaTipiAdi = odaTipi.Ad,
+                        odaTipi.Kapasite,
+                        odaTipi.PaylasimliMi
+                    })
                 .ToListAsync(cancellationToken);
 
-            if (blockedRoomIds.Count > 0)
+            var blockedRoomOccupancy = await GetCurrentOccupancyByRoomAsync(blockedRoomIds, extendStart, extendEnd, cancellationToken, rezervasyonId);
+
+            var wouldBeAvailableIfUnblocked = blockedRoomInfo
+                .Select(x =>
+                {
+                    var occupied = blockedRoomOccupancy.GetValueOrDefault(x.OdaId);
+                    var remaining = x.PaylasimliMi ? Math.Max(0, x.Kapasite - occupied) : occupied > 0 ? 0 : x.Kapasite;
+                    return new RoomAvailability(x.OdaId, x.OdaNo, x.BinaId, x.BinaAdi, x.OdaTipiId, x.OdaTipiAdi, x.Kapasite, x.PaylasimliMi, remaining, null);
+                })
+                .Where(x => x.RemainingCapacity > 0)
+                .ToList();
+
+            var combinedIgnoringBlocks = genderFreeAvailability.Concat(wouldBeAvailableIfUnblocked).ToList();
+            var wouldAllocateIfUnblocked = AllocatePeopleWithoutGenderRules(
+                combinedIgnoringBlocks.OrderByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList(),
+                kisiSayisi).Count > 0;
+
+            if (wouldAllocateIfUnblocked)
             {
                 return "Secilen tarih araliginda bakim/ariza kaydi nedeniyle uygun oda bulunamadi.";
             }
-
-            return "Secilen tarih araliginda uygun oda veya kapasite bulunamadi.";
         }
 
-        return "Secilen tarih araliginda uzatma icin genel musaitlik bulunamadi.";
+        return "Secilen tarih araliginda uygun oda veya kapasite bulunamadi.";
+    }
+
+    /// <summary>
+    /// Iki oda atama dagilimi ARASINDAKI degisiklik sayisini, YALNIZCA oda ID kumesi farkiyla
+    /// DEGIL, oda basina AYRILAN KISI SAYISI da dahil edilerek hesaplar - ayni oda ID'sinde bile
+    /// kisi sayisi degisiyorsa (or. {101:2} -> {101:1,102:1}) bu GERCEK bir degisikliktir. Tek ve
+    /// iki segmentli senaryolarda AYNI, ORTAK bu metot kullanilir - kural farkli bicimde
+    /// kopyalanip tutarsizlastirilmaz.
+    /// </summary>
+    private static int CalculateRoomChangeCount(
+        IReadOnlyCollection<KonaklamaSenaryoOdaAtamaDto> oncekiAtamalar,
+        IReadOnlyCollection<KonaklamaSenaryoOdaAtamaDto> sonrakiAtamalar)
+    {
+        var oncekiByRoom = oncekiAtamalar
+            .GroupBy(x => x.OdaId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AyrilanKisiSayisi));
+        var sonrakiByRoom = sonrakiAtamalar
+            .GroupBy(x => x.OdaId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AyrilanKisiSayisi));
+
+        // Bir oda ya SONRAKI dagilimda hic YOK (bosaltildi) ya da AYNI odada ayrilan kisi sayisi
+        // degisti - her iki durum da bir "oda atamasi degisikligi" olarak sayilir. Yeni dagilimda
+        // ONCEDEN OLMAYAN bir odanin (ör. bosaltilan odanin yerini alan oda) AYRICA sayilmasi
+        // GEREKMEZ - basit bir A->B takasi TEK bir degisiklik olarak sayilmalidir, iki degil.
+        var changedRoomCount = 0;
+        foreach (var (odaId, oncekiKisi) in oncekiByRoom)
+        {
+            if (!sonrakiByRoom.TryGetValue(odaId, out var sonrakiKisi) || sonrakiKisi != oncekiKisi)
+            {
+                changedRoomCount++;
+            }
+        }
+
+        return changedRoomCount;
     }
 
     private static bool MatchesCurrentRoomType(UzatmaSenaryoAday aday, HashSet<int> currentRoomTypeIds)

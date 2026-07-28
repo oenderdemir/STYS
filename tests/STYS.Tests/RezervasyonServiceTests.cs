@@ -4503,6 +4503,305 @@ public class RezervasyonServiceTests
         Assert.Equal(oncekiDurum, (await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 5111)).RezervasyonDurumu);
     }
 
+    [Fact]
+    public async Task UzatmaSecenekleri_AyniSinirdaBirdenFazlaIkiSegmentliAday_IlkAdaydaAramaDurmazVeMevcutTipEslesenTercihEdilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedThreeRoomUzatmaFixtureAsync(dbContext);
+
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var boundary = new DateTime(2026, 3, 10, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 11, 10, 0, 0);
+
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5201, 5202, odaId: 100, new DateTime(2026, 3, 8, 14, 0, 0), cikis);
+        // Mevcut oda (100), uzatmanin ILK gecesinde baska rezervasyona bagli.
+        await SeedDigerRezervasyonuAsync(dbContext, 5203, 5204, odaId: 100, cikis, boundary);
+        // Ayni tipteki alternatif oda (101) VE farkli tipteki daha buyuk kapasiteli oda (102),
+        // uzatmanin IKINCI gecesinde baska rezervasyonlara bagli - boylece ILK gece icin HER IKISI
+        // de (greedy=yuksek kapasiteli 102 VE tip-eslesen 101) gecerli birer aday olur.
+        await SeedDigerRezervasyonuAsync(dbContext, 5205, 5206, odaId: 101, boundary, yeniCikis);
+        await SeedDigerRezervasyonuAsync(dbContext, 5207, 5208, odaId: 102, boundary, yeniCikis);
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5201, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.SecenekBulundu, result.SonucKodu);
+
+        // Eski (tek greedy denemeli) yaklasim yalnizca daha yuksek kapasiteli Oda 102'yi bulurdu -
+        // yeni yaklasim, mevcut oda TIPIYLE eslesen Oda 101 alternatifini de bulmali ve ilk
+        // UzatmaSirasindaOdaDegisimi secenegi olarak TERCIH etmelidir.
+        Assert.Contains(result.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi
+            && x.Segmentler[0].OdaAtamalari.Any(a => a.OdaId == 101));
+
+        var ilkUzatmaSirasindaSecenek = result.Secenekler.First(x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi);
+        Assert.Equal(101, ilkUzatmaSirasindaSecenek.Segmentler[0].OdaAtamalari.Single().OdaId);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_IlkGercekSinirdaPlanYokIkinciSinirdaVarsaBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTwoRoomUzatmaFixtureAsync(dbContext);
+
+        var d0 = new DateTime(2026, 3, 9, 10, 0, 0);
+        var d1 = new DateTime(2026, 3, 10, 10, 0, 0);
+        var d2 = new DateTime(2026, 3, 11, 10, 0, 0);
+        var d3 = new DateTime(2026, 3, 12, 10, 0, 0);
+
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5211, 5212, odaId: 100, new DateTime(2026, 3, 8, 14, 0, 0), d0);
+        // Oda 100 (mevcut oda), uzatmanin SON gecesinde (d2-d3) baska rezervasyona bagli.
+        await SeedDigerRezervasyonuAsync(dbContext, 5213, 5214, odaId: 100, d2, d3);
+        // Oda 101, uzatmanin ORTA gecesinde (d1-d2) baska rezervasyona bagli.
+        await SeedDigerRezervasyonuAsync(dbContext, 5215, 5216, odaId: 101, d1, d2);
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5211, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = d3 });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.SecenekBulundu, result.SonucKodu);
+        var secim = Assert.Single(result.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi);
+
+        // Ilk gercek sinir (d1) HER IKI segment icin de basarisiz olmalidir; bulunan bolme
+        // tarihi, ikinci (basarili) gercek sinir olan d2 olmalidir.
+        Assert.Equal(d2, secim.Segmentler[0].BitisTarihi);
+        Assert.Equal(100, secim.Segmentler[0].OdaAtamalari.Single().OdaId);
+        Assert.Equal(101, secim.Segmentler[1].OdaAtamalari.Single().OdaId);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_OdaBolunmesi_101IkiKisidenBirBirKisiye_SifirOdaDegisimiSayilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        // Mevcut rezervasyon: 2 kisi, TAMAMEN Oda 101'de (paylasimli, kapasite 2).
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5221, 5222, odaId: 101, new DateTime(2026, 3, 8, 14, 0, 0), cikis, kisiSayisi: 2);
+
+        // Uzatma boyunca Oda 101'in 1 yatagi BASKA (cinsiyeti bilinen) bir konaklayan tarafindan
+        // dolduruluyor - geriye yalnizca 1 kisilik yer kaliyor, tam plan icin Oda 102 gerekiyor.
+        await SeedDigerPaylasimliRezervasyonuAsync(dbContext, 5223, 5224, odaId: 101, cikis, yeniCikis, KonaklayanCinsiyetleri.Kadin);
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5221, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.SecenekBulundu, result.SonucKodu);
+        var secim = Assert.Single(result.Secenekler, x =>
+            x.Segmentler.SelectMany(s => s.OdaAtamalari).Any(a => a.OdaId == 101) &&
+            x.Segmentler.SelectMany(s => s.OdaAtamalari).Any(a => a.OdaId == 102));
+
+        Assert.NotEqual(0, secim.OdaDegisimSayisi);
+        Assert.Equal(RezervasyonUzatmaSenaryoTipleri.CheckoutGunundeOdaDegisimi, secim.SenaryoTipi);
+        Assert.DoesNotContain(result.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_IkiSegmentliPlandaAyniOdaFarkliKisiSayisi_AyniKabulEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var boundary = new DateTime(2026, 3, 10, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 11, 10, 0, 0);
+
+        // Mevcut rezervasyon: 2 kisi, TAMAMEN Oda 101'de.
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5231, 5232, odaId: 101, new DateTime(2026, 3, 8, 14, 0, 0), cikis, kisiSayisi: 2);
+
+        // Oda 102, uzatmanin ILK gecesinde baska rezervasyona bagli (yalnizca ikinci gece kullanilabilir).
+        await SeedDigerRezervasyonuAsync(dbContext, 5233, 5234, odaId: 102, cikis, boundary);
+        // Oda 101'in 1 yatagi, uzatmanin IKINCI gecesinde BASKA bir konaklayan tarafindan dolduruluyor.
+        await SeedDigerPaylasimliRezervasyonuAsync(dbContext, 5235, 5236, odaId: 101, boundary, yeniCikis, KonaklayanCinsiyetleri.Kadin);
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5231, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.SecenekBulundu, result.SonucKodu);
+        var secim = Assert.Single(result.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.UzatmaSirasindaOdaDegisimi);
+
+        Assert.Equal(2, secim.Segmentler.Count);
+        Assert.Equal(101, Assert.Single(secim.Segmentler[0].OdaAtamalari).OdaId);
+        Assert.Equal(2, secim.Segmentler[0].OdaAtamalari.Single().AyrilanKisiSayisi);
+        Assert.Equal(2, secim.Segmentler[1].OdaAtamalari.Count);
+        Assert.Contains(secim.Segmentler[1].OdaAtamalari, a => a.OdaId == 101 && a.AyrilanKisiSayisi == 1);
+        Assert.Contains(secim.Segmentler[1].OdaAtamalari, a => a.OdaId == 102 && a.AyrilanKisiSayisi == 1);
+        // Oda ID'leri (101) AYNI kalsa da segmentler arasinda ayrilan kisi sayisi degistigi icin
+        // bu SIFIR oda degisimi SAYILMAMALIDIR.
+        Assert.Equal(1, secim.OdaDegisimSayisi);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_MevcutSegmentEksikKisiSayisiIcerirse_AyniOdadaDevamUretilmezVeEksikKisiFiyatlandirilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var girisTarihi = new DateTime(2026, 3, 8, 14, 0, 0);
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        // Rezervasyonun KisiSayisi=2 ANCAK mevcut segmentteki oda atamasi yalnizca 1 kisi
+        // gosteriyor (eksik/tutarsiz bir dagilim senaryosu - ör. veri girisi hatasi).
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 5241,
+            ReferansNo = "UZT-5241",
+            TesisId = 1,
+            KisiSayisi = 2,
+            MisafirTipiId = 1,
+            KonaklamaTipiId = 1,
+            GirisTarihi = girisTarihi,
+            CikisTarihi = cikis,
+            MisafirAdiSoyadi = "Eksik Dagilim Test",
+            MisafirTelefon = "000",
+            ToplamBazUcret = 100m,
+            ToplamUcret = 100m,
+            ParaBirimi = "TRY",
+            RezervasyonDurumu = RezervasyonDurumlari.CheckInTamamlandi,
+            AktifMi = true
+        });
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment
+        {
+            Id = 5242,
+            RezervasyonId = 5241,
+            SegmentSirasi = 1,
+            BaslangicTarihi = girisTarihi,
+            BitisTarihi = cikis
+        });
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = 5243,
+            RezervasyonSegmentId = 5242,
+            OdaId = 101,
+            AyrilanKisiSayisi = 1,
+            OdaNoSnapshot = "P-1",
+            BinaAdiSnapshot = "Blok",
+            OdaTipiAdiSnapshot = "Paylasimli Cift",
+            PaylasimliMiSnapshot = true,
+            KapasiteSnapshot = 2
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5241, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.SecenekBulundu, result.SonucKodu);
+        Assert.DoesNotContain(result.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam);
+        // Bulunan HER alternatif TAM kisi sayisini (2) karsilamalidir - eksik (1 kisilik) dagilim
+        // ne secenek olarak sunulur ne de fiyatlandirilir.
+        foreach (var secenek in result.Secenekler)
+        {
+            Assert.Equal(2, secenek.Segmentler.SelectMany(s => s.OdaAtamalari).Sum(a => a.AyrilanKisiSayisi));
+        }
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_BakimBlokuVarAmaDigerOdalarDaDoluysa_MesajYalnizcaBakimiNedenGostermez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTwoRoomUzatmaFixtureAsync(dbContext);
+
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5251, 5252, odaId: 100, new DateTime(2026, 3, 8, 14, 0, 0), cikis);
+
+        // Mevcut oda (100), uzatma boyunca GERCEK baska bir rezervasyona bagli.
+        await SeedDigerRezervasyonuAsync(dbContext, 5253, 5254, odaId: 100, cikis, yeniCikis);
+
+        // Alternatif oda (101), uzatma boyunca HEM gercek baska bir rezervasyona HEM DE
+        // (rastlantisal) bir bakim blogluna bagli - blok kaldirilsa DAHI gercek rezervasyon
+        // nedeniyle KULLANILAMAZ, dolayisiyla mesaj bakim/arizayi yanlislikla neden GOSTERMEMELIDIR.
+        await SeedDigerRezervasyonuAsync(dbContext, 5255, 5256, odaId: 101, cikis, yeniCikis);
+        dbContext.OdaKullanimBloklari.Add(new OdaKullanimBlok
+        {
+            Id = 9101,
+            TesisId = 1,
+            OdaId = 101,
+            BlokTipi = OdaKullanimBlokTipleri.Bakim,
+            BaslangicTarihi = cikis,
+            BitisTarihi = yeniCikis,
+            Aciklama = "Rastlantisal bakim",
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5251, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.MusaitlikYok, result.SonucKodu);
+        Assert.Empty(result.Secenekler);
+        Assert.DoesNotContain("bakim", result.Mesaj, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_BakimBlokuKaldirilinceKurulabilenPlan_BakimaOzguMesajDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedTwoRoomUzatmaFixtureAsync(dbContext);
+
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5261, 5262, odaId: 100, new DateTime(2026, 3, 8, 14, 0, 0), cikis);
+
+        // Mevcut oda (100), uzatma boyunca GERCEK baska bir rezervasyona bagli.
+        await SeedDigerRezervasyonuAsync(dbContext, 5263, 5264, odaId: 100, cikis, yeniCikis);
+
+        // Alternatif oda (101) BASKA HICBIR rezervasyona bagli DEGIL - yalnizca bir bakim blogu
+        // var; blok KALDIRILSAYDI bu oda TAM kisi sayisini karsilardi.
+        dbContext.OdaKullanimBloklari.Add(new OdaKullanimBlok
+        {
+            Id = 9102,
+            TesisId = 1,
+            OdaId = 101,
+            BlokTipi = OdaKullanimBlokTipleri.Bakim,
+            BaslangicTarihi = cikis,
+            BitisTarihi = yeniCikis,
+            Aciklama = "Gercek nedenli bakim",
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var result = await service.GetUzatmaSecenekleriAsync(5261, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(RezervasyonUzatmaSonucKodlari.MusaitlikYok, result.SonucKodu);
+        Assert.Empty(result.Secenekler);
+        Assert.Contains("bakim", result.Mesaj, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_SonuclarEnFazlaBesAdetVeIcerikDeterministiktir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        await SeedUzatmaRezervasyonuAsync(dbContext, 5271, 5272, odaId: 100, new DateTime(2026, 3, 8, 14, 0, 0), cikis);
+        // Mevcut oda (100), uzatma boyunca baska bir rezervasyona bagli - COK sayida alternatif
+        // (farkli oda tipi/kapasitede) tek segmentli secenek uretilmesi beklenir.
+        await SeedDigerRezervasyonuAsync(dbContext, 5273, 5274, odaId: 100, cikis, yeniCikis);
+
+        var service = CreateService(dbContext);
+        var request = new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis };
+
+        var sonuc1 = await service.GetUzatmaSecenekleriAsync(5271, request);
+        var sonuc2 = await service.GetUzatmaSecenekleriAsync(5271, request);
+
+        Assert.True(sonuc1.Secenekler.Count <= 5);
+        Assert.Equal(sonuc1.Secenekler.Select(x => x.SenaryoKodu), sonuc2.Secenekler.Select(x => x.SenaryoKodu));
+        Assert.Equal(sonuc1.Secenekler.Select(x => x.SenaryoTipi), sonuc2.Secenekler.Select(x => x.SenaryoTipi));
+        for (var i = 0; i < sonuc1.Secenekler.Count; i++)
+        {
+            Assert.Equal(
+                sonuc1.Secenekler[i].Segmentler.SelectMany(s => s.OdaAtamalari).Select(a => (a.OdaId, a.AyrilanKisiSayisi)),
+                sonuc2.Secenekler[i].Segmentler.SelectMany(s => s.OdaAtamalari).Select(a => (a.OdaId, a.AyrilanKisiSayisi)));
+        }
+    }
+
     private static async Task<int> SeedUzatmaRezervasyonuAsync(
         StysAppDbContext dbContext,
         int rezervasyonId,
@@ -4714,6 +5013,75 @@ public class RezervasyonServiceTests
         dbContext.OdaFiyatlari.AddRange(
             new OdaFiyat { Id = 1000, TesisOdaTipiId = 20, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 500m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
             new OdaFiyat { Id = 1001, TesisOdaTipiId = 21, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 700m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedThreeRoomUzatmaFixtureAsync(StysAppDbContext dbContext)
+    {
+        await SeedLookupsAsync(dbContext);
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1,
+            KurumId = 1,
+            Ad = "Uc Oda Uzatma Tesis",
+            IlId = 1,
+            Telefon = "000",
+            Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0),
+            CikisSaati = new TimeSpan(10, 0, 0),
+            AktifMi = true
+        });
+
+        dbContext.Binalar.Add(new Bina { Id = 10, TesisId = 1, Ad = "Blok", KatSayisi = 2, AktifMi = true });
+
+        dbContext.OdaTipleri.AddRange(
+            new OdaTipi { Id = 40, TesisId = 1, OdaSinifiId = 1, Ad = "Tip A", Kapasite = 1, PaylasimliMi = false, AktifMi = true },
+            new OdaTipi { Id = 41, TesisId = 1, OdaSinifiId = 1, Ad = "Tip B", Kapasite = 3, PaylasimliMi = false, AktifMi = true });
+
+        dbContext.Odalar.AddRange(
+            new Oda { Id = 100, OdaNo = "A-1", BinaId = 10, TesisOdaTipiId = 40, KatNo = 1, AktifMi = true },
+            new Oda { Id = 101, OdaNo = "A-2", BinaId = 10, TesisOdaTipiId = 40, KatNo = 1, AktifMi = true },
+            new Oda { Id = 102, OdaNo = "B-1", BinaId = 10, TesisOdaTipiId = 41, KatNo = 1, AktifMi = true });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat { Id = 4000, TesisOdaTipiId = 40, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 500m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
+            new OdaFiyat { Id = 4001, TesisOdaTipiId = 41, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 700m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedPaylasimliUzatmaFixtureAsync(StysAppDbContext dbContext)
+    {
+        await SeedLookupsAsync(dbContext);
+
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1,
+            KurumId = 1,
+            Ad = "Paylasimli Uzatma Tesis",
+            IlId = 1,
+            Telefon = "000",
+            Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0),
+            CikisSaati = new TimeSpan(10, 0, 0),
+            AktifMi = true
+        });
+
+        dbContext.Binalar.Add(new Bina { Id = 10, TesisId = 1, Ad = "Blok", KatSayisi = 2, AktifMi = true });
+
+        dbContext.OdaTipleri.AddRange(
+            new OdaTipi { Id = 30, TesisId = 1, OdaSinifiId = 1, Ad = "Paylasimli Cift", Kapasite = 2, PaylasimliMi = true, AktifMi = true },
+            new OdaTipi { Id = 31, TesisId = 1, OdaSinifiId = 1, Ad = "Tekli", Kapasite = 1, PaylasimliMi = false, AktifMi = true });
+
+        dbContext.Odalar.AddRange(
+            new Oda { Id = 101, OdaNo = "P-1", BinaId = 10, TesisOdaTipiId = 30, KatNo = 1, AktifMi = true },
+            new Oda { Id = 102, OdaNo = "T-1", BinaId = 10, TesisOdaTipiId = 31, KatNo = 1, AktifMi = true });
+
+        dbContext.OdaFiyatlari.AddRange(
+            new OdaFiyat { Id = 3000, TesisOdaTipiId = 30, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 400m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
+            new OdaFiyat { Id = 3001, TesisOdaTipiId = 31, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 600m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true });
 
         await dbContext.SaveChangesAsync();
     }

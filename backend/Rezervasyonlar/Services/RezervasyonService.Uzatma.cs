@@ -186,36 +186,21 @@ public partial class RezervasyonService
                 [segment]));
         }
 
-        // 3) UzatmaSirasindaOdaDegisimi: uzatma araliginin TAMAMINDA tek bir oda dagilimi
-        // bulunamiyorsa, gercek musaitlik sinirlarindan uretilen, en fazla bir oda degisikligi
-        // iceren iki segmentli planlar aranir (birden fazla aday uretilebilir, ilk bulunanda
-        // aranmaz - siralama/ilk-5 kurali nihai secimi yapar).
-        if (fullIntervalVariants.Count == 0 && !ayniOdaGecerliMi)
-        {
-            var twoSegmentCandidates = await BuildUzatmaTwoSegmentScenariosAsync(
-                reservation.TesisId,
-                rezervasyonId,
-                reservation.KisiSayisi,
-                guestGenderRequirements,
-                extendStart,
-                extendEnd,
-                cancellationToken);
-
-            candidates.AddRange(twoSegmentCandidates);
-        }
-
-        // Ayni oda/segment plani birden fazla kez DONMEZ - GetKonaklamaSenaryolariAsync'in
-        // CreateScenarioKey'i (segment+oda+kisi imzasi) AYNEN yeniden kullanilir.
-        var distinctCandidates = candidates
+        // Tek segmentli adaylar (AyniOdadaDevam + CheckoutGunundeOdaDegisimi) ONCE tekillestirilip
+        // KISI BAZLI dogrulanir. fullIntervalVariants/ayniOdaGecerliMi yalnizca ODA DUZEYINDEKI
+        // (sayisal kapasite + genel cinsiyet sayisi) musaitligi yansitir - bir adayin GERCEKTEN
+        // kaydedilebilir olup olmadigi (ör. paylasimli bir odada haricî cinsiyeti bilinmeyen bir
+        // kisi bulunmasi) yalnizca KISI BAZLI dogrulama (ValidateUzatmaCandidateAssignabilityAsync)
+        // ile bilinebilir. Bu yuzden iki segmentli aramaya gecis kararinda ARTIK YALNIZCA
+        // fullIntervalVariants.Count/ayniOdaGecerliMi'ye GUVENILMEZ - "en az bir KISI BAZLI GECERLI
+        // tek segmentli aday var mi" sorusu esas alinir.
+        var distinctSingleSegmentCandidates = candidates
             .GroupBy(x => CreateScenarioKey(new KonaklamaSenaryoDto { Segmentler = x.Segmentler }))
             .Select(group => group.First())
             .ToList();
 
-        // Fiyatlanip kullaniciya SUNULMADAN ONCE, her adayin KISI BAZLI konaklayan/yatak atamasinin
-        // GERCEKTEN kaydedilebilir oldugu (RezervasyonUzatAsync'in kullandigi AYNI ortak eslesme
-        // altyapisiyla) dogrulanir - bu dogrulamayi geçemeyen bir plan seçenek olarak GOSTERILMEZ.
-        var assignableCandidates = new List<UzatmaSenaryoAday>();
-        foreach (var candidate in distinctCandidates)
+        var validatedSingleSegmentCandidates = new List<UzatmaSenaryoAday>();
+        foreach (var candidate in distinctSingleSegmentCandidates)
         {
             var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
                 rezervasyonId,
@@ -228,7 +213,49 @@ public partial class RezervasyonService
 
             if (gecerliMi)
             {
-                assignableCandidates.Add(candidate);
+                validatedSingleSegmentCandidates.Add(candidate);
+            }
+        }
+
+        var assignableCandidates = new List<UzatmaSenaryoAday>(validatedSingleSegmentCandidates);
+
+        // 3) UzatmaSirasindaOdaDegisimi: KISI BAZLI GECERLI hicbir tek segmentli aday YOKSA aranir
+        // (oda duzeyinde uretilmis olup olmadiklarindan BAGIMSIZ - bkz. yukaridaki not). Boylece oda
+        // duzeyinde musait gorunen ama kisisel dogrulamada elenen bir tek segmentli aday yuzunden
+        // gecerli bir iki segmentli plan KACIRILMAZ.
+        if (validatedSingleSegmentCandidates.Count == 0)
+        {
+            var twoSegmentCandidates = await BuildUzatmaTwoSegmentScenariosAsync(
+                reservation.TesisId,
+                rezervasyonId,
+                reservation.KisiSayisi,
+                guestGenderRequirements,
+                extendStart,
+                extendEnd,
+                cancellationToken);
+
+            // Iki segmentli adaylar da AYNI sekilde tekillestirilip AYNI ortak yardimciyla kisi
+            // bazinda dogrulanir.
+            var distinctTwoSegmentCandidates = twoSegmentCandidates
+                .GroupBy(x => CreateScenarioKey(new KonaklamaSenaryoDto { Segmentler = x.Segmentler }))
+                .Select(group => group.First())
+                .ToList();
+
+            foreach (var candidate in distinctTwoSegmentCandidates)
+            {
+                var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
+                    rezervasyonId,
+                    oncekiOdaMevcut,
+                    oncekiYatakMevcut,
+                    candidate.Segmentler,
+                    tumKonaklayanlar,
+                    requireNoMovesForFirstSegment: false,
+                    cancellationToken);
+
+                if (gecerliMi)
+                {
+                    assignableCandidates.Add(candidate);
+                }
             }
         }
 

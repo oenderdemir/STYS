@@ -544,12 +544,17 @@ public partial class RezervasyonService
     /// Cinsiyet farkindaligi HER KONAKLAYAN ICIN AYRI AYRI degerlendirilir: bir konaklayanin cinsiyeti
     /// BILINIYORSA (Gelmedi disindaki BASKA bir konaklayanin cinsiyeti bilinmese veya rezervasyonun
     /// KisiSayisi'ndan az aktif konaklayan olsa BILE) sabit karsi cinsiyet odasina ATANMAZ ve bos bir
-    /// paylasimli odada farkli cinsiyetler KARISTIRILMAZ; cinsiyeti BILINMEYEN bir konaklayan ise
-    /// (mevcut sistemin bilincli, guvenli varsayimiyla) herhangi bir odaya girebilir ve BASKA hicbir
-    /// odanin cinsiyetini sabitlemez. Paylasimli her hedef odanin GERCEK (DB'den, baska
-    /// rezervasyonlardan gelen) sabit cinsiyeti GetSharedRoomGuestOccupanciesAsync/
-    /// GetDistinctSharedRoomGenders ile YENIDEN belirlenir; istemciden veya onceki hesaplamadan gelen
-    /// bilgiye GUVENILMEZ. Paylasimli odalarda yatak numarasi, oda eslesmesi KESINLESTIKTEN SONRA,
+    /// paylasimli odada farkli cinsiyetler KARISTIRILMAZ. Cinsiyeti BILINMEYEN bir konaklayan icin ise
+    /// MUHAFAZAKAR (guvenli) bir politika uygulanir - "herhangi bir odaya girebilir" DEGILDIR: SADECE
+    /// (a) paylasimli OLMAYAN (ozel) bir odaya, veya (b) hicbir dis rezervasyon (bilinen VEYA
+    /// cinsiyeti bilinmeyen bir kisi dahil) ya da bilinen bir konaklayan tarafindan sabitlenmemis/
+    /// engellenmemis TAMAMEN ACIK bir paylasimli odaya, ve o odada YALNIZCA kendisi (kendi
+    /// rezervasyonundan TEK aktif konaklayan) olacaksa atanabilir - bu odaya baska HICBIR konaklayan
+    /// (bilinen VEYA bilinmeyen cinsiyetli) SONRADAN KATILAMAZ. Paylasimli her hedef odanin GERCEK
+    /// (DB'den, baska rezervasyonlardan gelen) sabit cinsiyeti - ve cinsiyeti bilinmeyen HARICÎ aktif
+    /// bir kisinin varligi - GetSharedRoomGuestOccupanciesIncludingUnknownGenderAsync ile YENIDEN
+    /// belirlenir; istemciden veya onceki hesaplamadan gelen bilgiye GUVENILMEZ. Paylasimli odalarda
+    /// yatak numarasi, oda eslesmesi KESINLESTIKTEN SONRA,
     /// ReassignGuestSegmentAssignmentsAfterRoomChangeAsync ile AYNI "diger rezervasyonlarin isgal
     /// ettigi yataklari haric tut" desenini kullanir - yatak kontrolu cinsiyet kontrolunun YERINE
     /// GECMEZ.

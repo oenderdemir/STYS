@@ -6516,6 +6516,331 @@ public class RezervasyonServiceTests
         Assert.Equal(cikis, reservation.CikisTarihi);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Uzatma kaydet - guvenli simetri elemesi (tam durum anahtarli memoization) ve haricî
+    // cinsiyeti bilinmeyen doluluk
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ComputeUzatmaGuestAssignmentPlan_BosPaylasimliVeOzelOdaEsDegerSayilmazGecerliDagilimBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedLookupsAsync(dbContext);
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1, KurumId = 1, Ad = "Simetri Test", IlId = 1, Telefon = "000", Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0), CikisSaati = new TimeSpan(10, 0, 0), AktifMi = true
+        });
+        dbContext.Binalar.Add(new Bina { Id = 10, TesisId = 1, Ad = "Blok", KatSayisi = 1, AktifMi = true });
+        dbContext.OdaTipleri.AddRange(
+            new OdaTipi { Id = 60, TesisId = 1, OdaSinifiId = 1, Ad = "Paylasimli", Kapasite = 2, PaylasimliMi = true, AktifMi = true },
+            new OdaTipi { Id = 61, TesisId = 1, OdaSinifiId = 1, Ad = "Ozel", Kapasite = 2, PaylasimliMi = false, AktifMi = true });
+        // Oda 100 (KUCUK ID) = bos paylasimli; Oda 101 (BUYUK ID) = ozel (paylasimli olmayan).
+        dbContext.Odalar.AddRange(
+            new Oda { Id = 100, OdaNo = "PAY", BinaId = 10, TesisOdaTipiId = 60, KatNo = 1, AktifMi = true },
+            new Oda { Id = 101, OdaNo = "OZEL", BinaId = 10, TesisOdaTipiId = 61, KatNo = 1, AktifMi = true });
+        await dbContext.SaveChangesAsync();
+
+        var baslangic = new DateTime(2026, 3, 9, 10, 0, 0);
+        var bitis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var rezervasyonId = 9801;
+
+        // Birinci konaklayanin cinsiyeti bilinmiyor VE onceki odasi yok; digerleri 1 kadin + 2 erkek.
+        var bilinmeyen = new RezervasyonKonaklayan { Id = 9811, RezervasyonId = rezervasyonId, SiraNo = 1, AdSoyad = "Bilinmeyen", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var kadin = new RezervasyonKonaklayan { Id = 9812, RezervasyonId = rezervasyonId, SiraNo = 2, AdSoyad = "Kadin", Cinsiyet = KonaklayanCinsiyetleri.Kadin, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var erkek1 = new RezervasyonKonaklayan { Id = 9813, RezervasyonId = rezervasyonId, SiraNo = 3, AdSoyad = "Erkek1", Cinsiyet = KonaklayanCinsiyetleri.Erkek, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var erkek2 = new RezervasyonKonaklayan { Id = 9814, RezervasyonId = rezervasyonId, SiraNo = 4, AdSoyad = "Erkek2", Cinsiyet = KonaklayanCinsiyetleri.Erkek, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+
+        var plan = new KonaklamaSenaryoSegmentDto
+        {
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            OdaAtamalari =
+            [
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 100, OdaNo = "PAY", PaylasimliMi = true, Kapasite = 2, AyrilanKisiSayisi = 2 },
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 101, OdaNo = "OZEL", PaylasimliMi = false, Kapasite = 2, AyrilanKisiSayisi = 2 }
+            ]
+        };
+
+        var plans = await InvokeComputeUzatmaGuestAssignmentPlanAsync(
+            dbContext, rezervasyonId, new Dictionary<int, int>(), new Dictionary<int, int?>(), plan,
+            [bilinmeyen, kadin, erkek1, erkek2], 4);
+
+        // Gecerli TEK dagilim: bilinmeyen+kadin -> ozel oda (101); iki erkek -> bos paylasimli (100).
+        // Bilinmeyen kisi paylasimli odaya (kucuk ID) yalniz gidip erkeklere yer birakmayacak sekilde
+        // YANLIS bir "temsilci" ELENMESINE UGRAMAMALIDIR.
+        Assert.Equal(4, plans.Count);
+        Assert.Equal(101, plans.Single(x => x.KonaklayanId == bilinmeyen.Id).OdaId);
+        Assert.Equal(101, plans.Single(x => x.KonaklayanId == kadin.Id).OdaId);
+        Assert.Equal(100, plans.Single(x => x.KonaklayanId == erkek1.Id).OdaId);
+        Assert.Equal(100, plans.Single(x => x.KonaklayanId == erkek2.Id).OdaId);
+    }
+
+    [Fact]
+    public async Task ComputeUzatmaGuestAssignmentPlan_OdaIdleriTersCevrilinceDeGecerliSonucBulunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedLookupsAsync(dbContext);
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1, KurumId = 1, Ad = "Simetri Ters Test", IlId = 1, Telefon = "000", Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0), CikisSaati = new TimeSpan(10, 0, 0), AktifMi = true
+        });
+        dbContext.Binalar.Add(new Bina { Id = 10, TesisId = 1, Ad = "Blok", KatSayisi = 1, AktifMi = true });
+        dbContext.OdaTipleri.AddRange(
+            new OdaTipi { Id = 60, TesisId = 1, OdaSinifiId = 1, Ad = "Ozel", Kapasite = 2, PaylasimliMi = false, AktifMi = true },
+            new OdaTipi { Id = 61, TesisId = 1, OdaSinifiId = 1, Ad = "Paylasimli", Kapasite = 2, PaylasimliMi = true, AktifMi = true });
+        // Bu kez Oda 100 (KUCUK ID) = ozel; Oda 101 (BUYUK ID) = bos paylasimli - ID'ler TERS.
+        dbContext.Odalar.AddRange(
+            new Oda { Id = 100, OdaNo = "OZEL", BinaId = 10, TesisOdaTipiId = 60, KatNo = 1, AktifMi = true },
+            new Oda { Id = 101, OdaNo = "PAY", BinaId = 10, TesisOdaTipiId = 61, KatNo = 1, AktifMi = true });
+        await dbContext.SaveChangesAsync();
+
+        var baslangic = new DateTime(2026, 3, 9, 10, 0, 0);
+        var bitis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var rezervasyonId = 9821;
+
+        var bilinmeyen = new RezervasyonKonaklayan { Id = 9831, RezervasyonId = rezervasyonId, SiraNo = 1, AdSoyad = "Bilinmeyen", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var kadin = new RezervasyonKonaklayan { Id = 9832, RezervasyonId = rezervasyonId, SiraNo = 2, AdSoyad = "Kadin", Cinsiyet = KonaklayanCinsiyetleri.Kadin, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var erkek1 = new RezervasyonKonaklayan { Id = 9833, RezervasyonId = rezervasyonId, SiraNo = 3, AdSoyad = "Erkek1", Cinsiyet = KonaklayanCinsiyetleri.Erkek, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var erkek2 = new RezervasyonKonaklayan { Id = 9834, RezervasyonId = rezervasyonId, SiraNo = 4, AdSoyad = "Erkek2", Cinsiyet = KonaklayanCinsiyetleri.Erkek, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+
+        var plan = new KonaklamaSenaryoSegmentDto
+        {
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            OdaAtamalari =
+            [
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 100, OdaNo = "OZEL", PaylasimliMi = false, Kapasite = 2, AyrilanKisiSayisi = 2 },
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 101, OdaNo = "PAY", PaylasimliMi = true, Kapasite = 2, AyrilanKisiSayisi = 2 }
+            ]
+        };
+
+        var plans = await InvokeComputeUzatmaGuestAssignmentPlanAsync(
+            dbContext, rezervasyonId, new Dictionary<int, int>(), new Dictionary<int, int?>(), plan,
+            [bilinmeyen, kadin, erkek1, erkek2], 4);
+
+        Assert.Equal(4, plans.Count);
+        Assert.Equal(100, plans.Single(x => x.KonaklayanId == bilinmeyen.Id).OdaId);
+        Assert.Equal(100, plans.Single(x => x.KonaklayanId == kadin.Id).OdaId);
+        Assert.Equal(101, plans.Single(x => x.KonaklayanId == erkek1.Id).OdaId);
+        Assert.Equal(101, plans.Single(x => x.KonaklayanId == erkek2.Id).OdaId);
+    }
+
+    [Fact]
+    public async Task ComputeUzatmaGuestAssignmentPlan_SimetriElemeKalanKonaklayaninOncekiOdasiniElemezEnFazlaKisiKorunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedLookupsAsync(dbContext);
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 1, KurumId = 1, Ad = "Simetri Onceki Oda Test", IlId = 1, Telefon = "000", Adres = "Adres",
+            GirisSaati = new TimeSpan(14, 0, 0), CikisSaati = new TimeSpan(10, 0, 0), AktifMi = true
+        });
+        dbContext.Binalar.Add(new Bina { Id = 10, TesisId = 1, Ad = "Blok", KatSayisi = 1, AktifMi = true });
+        dbContext.OdaTipleri.Add(new OdaTipi { Id = 70, TesisId = 1, OdaSinifiId = 1, Ad = "Ozel", Kapasite = 1, PaylasimliMi = false, AktifMi = true });
+        // Iki BIREBIR AYNI (kapasite/durum) ozel oda - 200 (kucuk) ve 201 (buyuk).
+        dbContext.Odalar.AddRange(
+            new Oda { Id = 200, OdaNo = "OZEL-1", BinaId = 10, TesisOdaTipiId = 70, KatNo = 1, AktifMi = true },
+            new Oda { Id = 201, OdaNo = "OZEL-2", BinaId = 10, TesisOdaTipiId = 70, KatNo = 1, AktifMi = true });
+        await dbContext.SaveChangesAsync();
+
+        var baslangic = new DateTime(2026, 3, 9, 10, 0, 0);
+        var bitis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var rezervasyonId = 9841;
+
+        // Konaklayan B (SiraNo 1, ONCE islenir), onceki odasi YOK. Konaklayan A (SiraNo 2), onceki
+        // odasi 201 (BUYUK ID'li oda) - riskli bir simetri elemesi B'yi yalnizca kucuk ID'li (200)
+        // temsilciye zorlayip A'nin GERCEK onceki odasini (201) elinden alabilirdi.
+        var konaklayanB = new RezervasyonKonaklayan { Id = 9851, RezervasyonId = rezervasyonId, SiraNo = 1, AdSoyad = "Konaklayan B", KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var konaklayanA = new RezervasyonKonaklayan { Id = 9852, RezervasyonId = rezervasyonId, SiraNo = 2, AdSoyad = "Konaklayan A", KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+
+        var oncekiOda = new Dictionary<int, int> { [konaklayanA.Id] = 201 };
+
+        var plan = new KonaklamaSenaryoSegmentDto
+        {
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            OdaAtamalari =
+            [
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 200, OdaNo = "OZEL-1", PaylasimliMi = false, Kapasite = 1, AyrilanKisiSayisi = 1 },
+                new KonaklamaSenaryoOdaAtamaDto { OdaId = 201, OdaNo = "OZEL-2", PaylasimliMi = false, Kapasite = 1, AyrilanKisiSayisi = 1 }
+            ]
+        };
+
+        var plans = await InvokeComputeUzatmaGuestAssignmentPlanAsync(
+            dbContext, rezervasyonId, oncekiOda, new Dictionary<int, int?>(), plan,
+            [konaklayanB, konaklayanA], 2);
+
+        // Konaklayan A, GERCEK onceki odasinda (201) KALMALIDIR - B, A'nin onceki odasini
+        // "es deger bir temsilci ugruna" isgal ETMEMELIDIR.
+        Assert.Equal(201, plans.Single(x => x.KonaklayanId == konaklayanA.Id).OdaId);
+        Assert.Equal(200, plans.Single(x => x.KonaklayanId == konaklayanB.Id).OdaId);
+    }
+
+    [Fact]
+    public async Task ComputeUzatmaGuestAssignmentPlan_BilinmeyenVeBilinenAyniBosPaylasimliOdadaBirlestirilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var baslangic = new DateTime(2026, 3, 9, 10, 0, 0);
+        var bitis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var rezervasyonId = 9861;
+
+        // Oda 101 (paylasimli, cap2) TAMAMEN BOS - tek hedef oda budur, baska alternatif YOK.
+        var bilinmeyen = new RezervasyonKonaklayan { Id = 9871, RezervasyonId = rezervasyonId, SiraNo = 1, AdSoyad = "Bilinmeyen", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var kadin = new RezervasyonKonaklayan { Id = 9872, RezervasyonId = rezervasyonId, SiraNo = 2, AdSoyad = "Kadin", Cinsiyet = KonaklayanCinsiyetleri.Kadin, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+
+        var plan = new KonaklamaSenaryoSegmentDto
+        {
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            OdaAtamalari = [new KonaklamaSenaryoOdaAtamaDto { OdaId = 101, OdaNo = "P-1", PaylasimliMi = true, Kapasite = 2, AyrilanKisiSayisi = 2 }]
+        };
+
+        var service = CreateService(dbContext);
+        var method = typeof(RezervasyonService).GetMethod("ComputeUzatmaGuestAssignmentPlanAsync", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("ComputeUzatmaGuestAssignmentPlanAsync metodu bulunamadi.");
+
+        var task = (Task)method.Invoke(service, [
+            rezervasyonId, new Dictionary<int, int>(), new Dictionary<int, int?>(), plan,
+            new List<RezervasyonKonaklayan> { bilinmeyen, kadin }, 2, CancellationToken.None
+        ])!;
+
+        var ex = await Assert.ThrowsAsync<BaseException>(async () => await task);
+        Assert.Equal(409, ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ComputeUzatmaGuestAssignmentPlan_HaricîCinsiyetiBilinmeyenKisiliOdaBosSayilmazVeKimseAtanamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var baslangic = new DateTime(2026, 3, 9, 10, 0, 0);
+        var bitis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        // Oda 101'de (paylasimli, cap2) BASKA bir rezervasyondan AKTIF, cinsiyeti BILINMEYEN bir
+        // konaklayan kaliyor.
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 9901, ReferansNo = "DGR-9901", TesisId = 1, KisiSayisi = 1, MisafirTipiId = 1, KonaklamaTipiId = 1,
+            GirisTarihi = baslangic, CikisTarihi = bitis, MisafirAdiSoyadi = "Diger Bilinmeyen", MisafirTelefon = "000",
+            ToplamBazUcret = 100m, ToplamUcret = 100m, ParaBirimi = "TRY", RezervasyonDurumu = RezervasyonDurumlari.Onayli, AktifMi = true
+        });
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment { Id = 9902, RezervasyonId = 9901, SegmentSirasi = 1, BaslangicTarihi = baslangic, BitisTarihi = bitis });
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = 9903, RezervasyonSegmentId = 9902, OdaId = 101, AyrilanKisiSayisi = 1,
+            OdaNoSnapshot = "P-1", BinaAdiSnapshot = "Blok", OdaTipiAdiSnapshot = "Paylasimli Cift", PaylasimliMiSnapshot = true, KapasiteSnapshot = 2
+        });
+        dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan { Id = 9904, RezervasyonId = 9901, SiraNo = 1, AdSoyad = "Diger Bilinmeyen Misafir", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi });
+        dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama { Id = 9905, RezervasyonKonaklayanId = 9904, RezervasyonSegmentId = 9902, OdaId = 101 });
+        await dbContext.SaveChangesAsync();
+
+        var kendiRezervasyonId = 9910;
+        var kadin = new RezervasyonKonaklayan { Id = 9911, RezervasyonId = kendiRezervasyonId, SiraNo = 1, AdSoyad = "Kadin Misafir", Cinsiyet = KonaklayanCinsiyetleri.Kadin, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+
+        var plan = new KonaklamaSenaryoSegmentDto
+        {
+            BaslangicTarihi = baslangic,
+            BitisTarihi = bitis,
+            OdaAtamalari = [new KonaklamaSenaryoOdaAtamaDto { OdaId = 101, OdaNo = "P-1", PaylasimliMi = true, Kapasite = 2, AyrilanKisiSayisi = 1 }]
+        };
+
+        var service = CreateService(dbContext);
+        var method = typeof(RezervasyonService).GetMethod("ComputeUzatmaGuestAssignmentPlanAsync", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("ComputeUzatmaGuestAssignmentPlanAsync metodu bulunamadi.");
+
+        // Bilinen (kadin) konaklayan haricî bilinmeyen kisili odaya ATANAMAZ - tek hedef oda budur,
+        // dolayisiyla GECERLI hicbir atama yoktur (409).
+        var task = (Task)method.Invoke(service, [
+            kendiRezervasyonId, new Dictionary<int, int>(), new Dictionary<int, int?>(), plan,
+            new List<RezervasyonKonaklayan> { kadin }, 1, CancellationToken.None
+        ])!;
+        var ex = await Assert.ThrowsAsync<BaseException>(async () => await task);
+        Assert.Equal(409, ex.ErrorCode);
+
+        // Cinsiyeti bilinmeyen KENDI konaklayanimiz da (haricî bilinmeyen kisi tek basina kalma
+        // hakkini "bosa cikarmaz") ATANAMAZ.
+        var bilinmeyenKendi = new RezervasyonKonaklayan { Id = 9912, RezervasyonId = kendiRezervasyonId, SiraNo = 1, AdSoyad = "Bilinmeyen Kendi", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi };
+        var task2 = (Task)method.Invoke(service, [
+            kendiRezervasyonId, new Dictionary<int, int>(), new Dictionary<int, int?>(), plan,
+            new List<RezervasyonKonaklayan> { bilinmeyenKendi }, 1, CancellationToken.None
+        ])!;
+        var ex2 = await Assert.ThrowsAsync<BaseException>(async () => await task2);
+        Assert.Equal(409, ex2.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Uzat_KendiTekBilinmeyenKonaklayaniBosPaylasimliOdadaAyniOdadaDevamEdebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var girisTarihi = new DateTime(2026, 3, 8, 14, 0, 0);
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        // Kendi rezervasyonumuzun TEK konaklayani, cinsiyeti bilinmeyen, oda 101'de (paylasimli,
+        // cap2) TEK basina - baska hicbir dis dolulugu yok.
+        await SeedUzatmaRezervasyonuAsync(dbContext, 9921, 9922, odaId: 101, girisTarihi, cikis, cinsiyet: null);
+
+        var service = CreateService(dbContext);
+        var secenekler = await service.GetUzatmaSecenekleriAsync(9921, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+        var secim = secenekler.Secenekler.Single(x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam);
+
+        var sonuc = await service.RezervasyonUzatAsync(9921, new RezervasyonUzatRequestDto { YeniCikisTarihi = yeniCikis, SenaryoKodu = secim.SenaryoKodu });
+
+        Assert.Equal(yeniCikis, sonuc.YeniCikisTarihi);
+        var segment = Assert.Single(await dbContext.RezervasyonSegmentleri.Where(x => x.RezervasyonId == 9921).ToListAsync());
+        Assert.Equal(yeniCikis, segment.BitisTarihi);
+    }
+
+    [Fact]
+    public async Task UzatmaSecenekleri_HaricîBilinmeyenKisiliOdaGecersizPlanOlarakGosterilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPaylasimliUzatmaFixtureAsync(dbContext);
+
+        var girisTarihi = new DateTime(2026, 3, 8, 14, 0, 0);
+        var cikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+
+        // Kendi rezervasyonumuz, tek kadin konaklayan, oda 101'de.
+        await SeedUzatmaRezervasyonuAsync(dbContext, 9931, 9932, odaId: 101, girisTarihi, cikis, cinsiyet: KonaklayanCinsiyetleri.Kadin);
+
+        // Uzatma boyunca oda 101'e BASKA bir rezervasyondan cinsiyeti BILINMEYEN aktif bir
+        // konaklayan yerlesir.
+        dbContext.Rezervasyonlar.Add(new Rezervasyon
+        {
+            Id = 9941, ReferansNo = "DGR-9941", TesisId = 1, KisiSayisi = 1, MisafirTipiId = 1, KonaklamaTipiId = 1,
+            GirisTarihi = cikis, CikisTarihi = yeniCikis, MisafirAdiSoyadi = "Diger Bilinmeyen 2", MisafirTelefon = "000",
+            ToplamBazUcret = 100m, ToplamUcret = 100m, ParaBirimi = "TRY", RezervasyonDurumu = RezervasyonDurumlari.Onayli, AktifMi = true
+        });
+        dbContext.RezervasyonSegmentleri.Add(new RezervasyonSegment { Id = 9942, RezervasyonId = 9941, SegmentSirasi = 1, BaslangicTarihi = cikis, BitisTarihi = yeniCikis });
+        dbContext.RezervasyonSegmentOdaAtamalari.Add(new RezervasyonSegmentOdaAtama
+        {
+            Id = 9943, RezervasyonSegmentId = 9942, OdaId = 101, AyrilanKisiSayisi = 1,
+            OdaNoSnapshot = "P-1", BinaAdiSnapshot = "Blok", OdaTipiAdiSnapshot = "Paylasimli Cift", PaylasimliMiSnapshot = true, KapasiteSnapshot = 2
+        });
+        dbContext.RezervasyonKonaklayanlar.Add(new RezervasyonKonaklayan { Id = 9944, RezervasyonId = 9941, SiraNo = 1, AdSoyad = "Diger Bilinmeyen Misafir 2", Cinsiyet = null, KatilimDurumu = KonaklayanKatilimDurumlari.Geldi });
+        dbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama { Id = 9945, RezervasyonKonaklayanId = 9944, RezervasyonSegmentId = 9942, OdaId = 101 });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var secenekler = await service.GetUzatmaSecenekleriAsync(9931, new RezervasyonUzatmaSecenekleriRequestDto { YeniCikisTarihi = yeniCikis });
+
+        // AyniOdadaDevam ARTIK SUNULMAMALIDIR (kadin, haricî cinsiyeti bilinmeyen kisili odada
+        // KALAMAZ) - ve sunulan HERHANGI bir alternatif plan (varsa) GERCEKTEN kaydedilebilir olmalidir.
+        Assert.DoesNotContain(secenekler.Secenekler, x => x.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam);
+        foreach (var secim in secenekler.Secenekler)
+        {
+            Assert.DoesNotContain(secim.Segmentler.SelectMany(s => s.OdaAtamalari), a => a.OdaId == 101);
+        }
+    }
+
     private static string InvokeCreateUzatmaPlanKodu(
         int rezervasyonId,
         DateTime mevcutCikisTarihi,

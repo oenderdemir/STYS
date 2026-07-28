@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using STYS.Rezervasyonlar.Dto;
@@ -461,6 +462,70 @@ public partial class RezervasyonService
     }
 
     /// <summary>
+    /// Bir paylasimli odanin, kendi rezervasyonumuzdan HERHANGI BIR konaklayan icin (bilinen VEYA
+    /// bilinmeyen cinsiyetli) KULLANILAMAZ oldugunu isaretlemek icin kullanilan ozel bir "sabit
+    /// cinsiyet" degeri. Gercek bir Kadin/Erkek degerine ASLA esit olmadigindan (ve null da
+    /// OLMADIGINDAN), FindBestGuestRoomAssignment'in mevcut OdaUygunMu kontrolu (mevcutDurum is
+    /// null || string.Equals(mevcutDurum, cinsiyet)) bu degeri gordugunde HER cinsiyet icin
+    /// (bilinen VEYA bilinmeyen) otomatik olarak "uygun degil" sonucunu uretir - algoritmada baska
+    /// hicbir degisiklik gerektirmez.
+    /// </summary>
+    private const string ExternalUnknownGenderBlockedSentinel = "__STYS_UZATMA_DIS_BILINMEYEN_CINSIYET_ENGELLI__";
+
+    /// <summary>
+    /// GetSharedRoomGuestOccupanciesAsync ile TAMAMEN AYNI sorguyu (aktif/iptal-degil/checkout-
+    /// tamamlanmamis/Gelmedi-degil filtreleri dahil) calistirir - ANCAK cinsiyeti BILINMEYEN (null)
+    /// aktif konaklayanlari da SONUCTA TUTAR. GetSharedRoomGuestOccupanciesAsync bu satirlari
+    /// FILTRELER (baska, uzatma-disi cagiranlarin - check-in/oda degisimi/rezervasyon olusturma vb.
+    /// - MEVCUT davranisini bozmamak icin O metot DEGISTIRILMEDI); uzatma konaklayan eslesmesi ise
+    /// haricî cinsiyeti bilinmeyen bir kisinin VARLIGINI da bilmek ZORUNDADIR - aksi halde boyle
+    /// bir kisinin bulundugu paylasimli oda yanlislikla "bos/serbest" sayilip baska bir
+    /// konaklayan (bilinen VEYA bilinmeyen cinsiyetli) oraya atanabilir.
+    /// </summary>
+    private async Task<List<SharedRoomGuestOccupancy>> GetSharedRoomGuestOccupanciesIncludingUnknownGenderAsync(
+        IReadOnlyCollection<int> roomIds,
+        DateTime baslangic,
+        DateTime bitis,
+        CancellationToken cancellationToken,
+        int? excludeRezervasyonId = null)
+    {
+        if (roomIds.Count == 0)
+        {
+            return [];
+        }
+
+        var occupancies = await (
+                from atama in _stysDbContext.RezervasyonKonaklayanSegmentAtamalari
+                join konaklayan in _stysDbContext.RezervasyonKonaklayanlar on atama.RezervasyonKonaklayanId equals konaklayan.Id
+                join segment in _stysDbContext.RezervasyonSegmentleri on atama.RezervasyonSegmentId equals segment.Id
+                join rezervasyon in _stysDbContext.Rezervasyonlar on konaklayan.RezervasyonId equals rezervasyon.Id
+                where rezervasyon.AktifMi
+                      && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                      && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
+                      && konaklayan.KatilimDurumu != KonaklayanKatilimDurumlari.Gelmedi
+                      && (!excludeRezervasyonId.HasValue || rezervasyon.Id != excludeRezervasyonId.Value)
+                      && roomIds.Contains(atama.OdaId)
+                      && segment.BaslangicTarihi < bitis
+                      && segment.BitisTarihi > baslangic
+                select new
+                {
+                    atama.OdaId,
+                    segment.BaslangicTarihi,
+                    segment.BitisTarihi,
+                    konaklayan.Cinsiyet
+                })
+            .ToListAsync(cancellationToken);
+
+        return occupancies
+            .Select(x => new SharedRoomGuestOccupancy(
+                x.OdaId,
+                x.BaslangicTarihi,
+                x.BitisTarihi,
+                NormalizeStoredKonaklayanCinsiyet(x.Cinsiyet)))
+            .ToList();
+    }
+
+    /// <summary>
     /// Bir uzatma segmenti icin, rezervasyonun AKTIF (Gelmedi HARIC) konaklayanlarinin oda/yatak
     /// atama PLANINI, HICBIR VERITABANI YAZIMI YAPMADAN hesaplar (salt-okunur DB sorgulari haric) -
     /// gecersiz bir plan (cinsiyet veya kapasite acisindan) burada 409 firlatir ve cagiran, bu segment
@@ -514,27 +579,51 @@ public partial class RezervasyonService
         var odaInfoById = plan.OdaAtamalari.ToDictionary(x => x.OdaId);
 
         // Paylasimli her hedef odanin, bu uzatma segmentinin tarih araliginda GERCEK (DB'den, BASKA
-        // rezervasyonlardan gelen) sabit cinsiyetini yeniden belirle - mevcut ortak yardimcilar
-        // (GetSharedRoomGuestOccupanciesAsync/GetDistinctSharedRoomGenders) AYNEN yeniden kullanilir.
-        // Bu, konaklayanlarin cinsiyetinin bilinip bilinmemesinden VEYA sayilarinin KisiSayisi'na esit
-        // olup olmamasindan (Gelmedi kaydi) BAGIMSIZ, HER ZAMAN yapilir - boylece Gelmedi kaydi VARLIGI
-        // digerlerinin cinsiyet korumasini KAPATMAZ.
+        // rezervasyonlardan gelen) sabit cinsiyetini yeniden belirle. GetDistinctSharedRoomGenders
+        // (ve onun kullandigi GetSharedRoomGuestOccupanciesAsync) cinsiyeti BILINMEYEN aktif
+        // konaklayanlari SESSIZCE ELER - bu, diger (uzatma-disi) cagiranlarin mevcut davranisini
+        // BOZMAMAK icin degistirilmedi. Bunun yerine, uzatmaya OZEL
+        // GetSharedRoomGuestOccupanciesIncludingUnknownGenderAsync ile AYNI sorgu, cinsiyeti
+        // bilinmeyenleri de TUTARAK tekrar calistirilir - boylece haricî cinsiyeti bilinmeyen bir
+        // kisinin bulundugu paylasimli oda YANLISLIKLA "bos/serbest" sayilmaz. Bu, konaklayanlarin
+        // cinsiyetinin bilinip bilinmemesinden VEYA sayilarinin KisiSayisi'na esit olup olmamasindan
+        // (Gelmedi kaydi) BAGIMSIZ, HER ZAMAN yapilir - boylece Gelmedi kaydi VARLIGI digerlerinin
+        // cinsiyet korumasini KAPATMAZ.
         var sabitCinsiyetByOda = new Dictionary<int, string?>();
         var paylasimliOdaIds = plan.OdaAtamalari.Where(x => x.PaylasimliMi).Select(x => x.OdaId).Distinct().ToList();
         if (paylasimliOdaIds.Count > 0)
         {
-            var digerRezervasyonDoluluklari = await GetSharedRoomGuestOccupanciesAsync(
+            var digerRezervasyonDoluluklariButun = await GetSharedRoomGuestOccupanciesIncludingUnknownGenderAsync(
                 paylasimliOdaIds, plan.BaslangicTarihi, plan.BitisTarihi, cancellationToken, excludeRezervasyonId: rezervasyonId);
 
             foreach (var odaId in paylasimliOdaIds)
             {
-                var cinsiyetler = GetDistinctSharedRoomGenders(digerRezervasyonDoluluklari, odaId, plan.BaslangicTarihi, plan.BitisTarihi);
-                if (cinsiyetler.Count > 1)
+                var buOdadakiDoluluklar = digerRezervasyonDoluluklariButun
+                    .Where(x => x.OdaId == odaId && x.BaslangicTarihi < plan.BitisTarihi && x.BitisTarihi > plan.BaslangicTarihi)
+                    .ToList();
+
+                var bilinenCinsiyetler = buOdadakiDoluluklar
+                    .Where(x => x.Cinsiyet is not null)
+                    .Select(x => x.Cinsiyet!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (bilinenCinsiyetler.Count > 1)
                 {
                     throw new BaseException($"'{odaInfoById[odaId].OdaNo}' odasinda cinsiyet tutarsizligi tespit edildi; konaklayan atamasi yapilamiyor.", 409);
                 }
 
-                sabitCinsiyetByOda[odaId] = cinsiyetler.SingleOrDefault();
+                var bilinmeyenHaricîKisiVarMi = buOdadakiDoluluklar.Any(x => x.Cinsiyet is null);
+                if (bilinmeyenHaricîKisiVarMi)
+                {
+                    // Baska bir rezervasyondan, cinsiyeti bilinmeyen AKTIF bir konaklayan bu odada
+                    // kaliyor - uyumlulugu DOGRULANAMAYACAGI icin oda, kendi rezervasyonumuzdan
+                    // HICBIR konaklayan (bilinen VEYA bilinmeyen cinsiyetli) icin KULLANILAMAZ.
+                    sabitCinsiyetByOda[odaId] = ExternalUnknownGenderBlockedSentinel;
+                }
+                else
+                {
+                    sabitCinsiyetByOda[odaId] = bilinenCinsiyetler.SingleOrDefault();
+                }
             }
         }
 
@@ -628,47 +717,55 @@ public partial class RezervasyonService
     private sealed record UzatmaRoomMatchInput(int OdaId, int Kapasite, bool PaylasimliMi, string? SabitCinsiyet);
 
     /// <summary>
-    /// Konaklayan-oda eslesmesini BUDANMIS BACKTRACKING ile bulur: konaklayan/oda kombinasyonlarini
-    /// (kapasite ve cinsiyet kisitlarina uyanlari) dener, GECERLI TAM eslesmeler arasindan en fazla
-    /// konaklayanin ONCEKI odasinda kaldigi cozumu secer. Buyuk grup rezervasyonlarinda ussel
-    /// maliyeti sinirlamak icin uc teknik uygulanir:
-    /// 1) MRV (en kisitli konaklayan once): her adimda, uygun aday odasi EN AZ olan konaklayan
-    ///    islenir - bu, cikmaz sokaklarin erken (arama agacinin USTUNDE) tespit edilmesini saglar.
-    /// 2) UST SINIR BUDAMASI: "su ana kadar kalinan sayisi + kalan konaklayanlarin teorik olarak
-    ///    kalabilecegi AZAMI sayi" mevcut en iyi sonucu GECEMEYECEKSE dal hic aranmadan atlanir.
-    /// 3) SIMETRI ELEME: bir konaklayanin onceki odasi OLMAYAN aday odalar arasinda, kapasite ve
-    ///    cinsiyet durumu BIREBIR AYNI olan odalardan yalnizca EN KUCUK OdaId'li temsilci denenir -
-    ///    birbirinin aynisi odalar arasinda secim yapmanin sonucu etkilemeyecegi ic gozlemine dayanir.
-    /// Gecerli bir tam eslesme YOKSA null doner - cagiran bunu 409 olarak yorumlar. MRV siralamasinda
-    /// esitlik konaklayanin ORIJINAL listedeki sirasiyla (SiraNo/Id'ye gore ONCEDEN siralanmis) kirilir,
-    /// aday oda siralamasi da (onceki oda / sabit cinsiyetli oda / OdaId) deterministiktir - bu
-    /// yuzden SONUC, uygulanan budamalardan BAGIMSIZ olarak DETERMINISTIKTIR.
+    /// Konaklayan-oda eslesmesini TAM DURUM ANAHTARLI MEMOIZATION ile bulur: her alt problem
+    /// (kalan konaklayan kumesi + oda basina kalan kapasite + oda basina cinsiyet durumu + unknown-
+    /// solo odalar) TEK BIR anahtarla temsil edilir ve bir kez cozulur - AYNI duruma FARKLI bir
+    /// yoldan tekrar ulasilirsa onceki sonuc DOGRUDAN kullanilir. Bu, riskli/yerel bir "simetri
+    /// eleme" sezgiselinden (odalari kapasite+cinsiyet durumuna gore GRUPLAYIP yalnizca bir
+    /// temsilciyi deneme) KACINIR - boyle bir sezgisel, ozel (paylasimli olmayan) bir odayi bos bir
+    /// paylasimli odayla yanlislikla ES DEGER sayabilir (ikisi de "durum=null" gorunse de PAYLASIMLI
+    /// OLMA ozelligi FARKLIDIR) veya kalan bir konaklayanin ONCEKI odasini "sadece bir temsilci"
+    /// olarak elenebilir hale getirip "en fazla kisiyi ayni odada tut" hedefini bozabilirdi. Burada
+    /// HICBIR oda BASKA bir odayla ES DEGER sayilmaz - durum anahtari HER odayi (PaylasimliMi dahil)
+    /// AYRI AYRI kodlar; memoization yalnizca GERCEKTEN AYNI global duruma (ayni kalan konaklayan
+    /// kumesi + ayni tum oda durumlari) birden fazla yoldan ulasildiginda devreye girer, bu da HER
+    /// ZAMAN guvenlidir (klasik alt-kume + kaynak durumu DP'si).
+    ///
+    /// Performans icin iki teknik daha uygulanir:
+    /// 1) MRV (en kisitli konaklayan once): her alt problemde, uygun aday odasi EN AZ olan
+    ///    konaklayan islenir - cikmaz sokaklarin erken tespitini saglar VE ayni zamanda anahtarin
+    ///    "hangi konaklayan once islenecek" belirsizligini de deterministik kilar (bkz. asagida).
+    /// 2) YEREL UST SINIR BUDAMASI: bir konaklayanin aday odalari denenirken, "bu adayda kalinip
+    ///    kalinmadigi + kalan konaklayanlarin ULASILABILECEGI AZAMI ek kalma sayisi" o konaklayan
+    ///    icin su ana kadarki EN IYI sonucu GECEMEYECEKSE, o aday HICBIR SEKILDE aranmadan atlanir.
+    /// Gecerli bir tam eslesme YOKSA null doner - cagiran bunu 409 olarak yorumlar. MRV secimi VE
+    /// aday oda siralamasi (onceki oda / sabit cinsiyetli oda / OdaId) TAMAMEN deterministik
+    /// oldugundan ve memoization SADECE ayni girdi icin ayni ciktiyi tekrar kullandigindan, SONUC
+    /// HER ZAMAN DETERMINISTIKTIR.
     ///
     /// Cinsiyeti BILINMEYEN bir konaklayan icin MUHAFAZAKAR politika uygulanir: byle bir konaklayan
     /// SADECE (a) paylasimli OLMAYAN bir odaya, veya (b) hicbir dis rezervasyon VEYA bilinen
-    /// konaklayan tarafindan sabitlenmemis BOS bir paylasimli odaya, ve YALNIZCA o odadaki TEK
-    /// (kendi rezervasyonundan) aktif konaklayan olacaksa atanabilir - bu odaya baska HICBIR
-    /// konaklayan (bilinen VEYA bilinmeyen cinsiyetli) SONRADAN KATILAMAZ.
+    /// konaklayan tarafindan sabitlenmemis/engellenmemis BOS bir paylasimli odaya, ve YALNIZCA o
+    /// odadaki TEK (kendi rezervasyonundan) aktif konaklayan olacaksa atanabilir - bu odaya baska
+    /// HICBIR konaklayan (bilinen VEYA bilinmeyen cinsiyetli) SONRADAN KATILAMAZ. Haricî (baska bir
+    /// rezervasyondan) cinsiyeti bilinmeyen bir kisinin bulundugu paylasimli oda, ROOM.SabitCinsiyet
+    /// alaninda ExternalUnknownGenderBlockedSentinel degeriyle temsil edilir - bu deger GERCEK bir
+    /// Kadin/Erkek degerine ASLA esit olmadigindan (ve null da OLMADIGINDAN), asagidaki OdaUygunMu
+    /// kontrolu bu odayi HER cinsiyet (bilinen VEYA bilinmeyen) icin otomatik olarak "uygun degil"
+    /// sayar - ayrica bir ozel durum kodu gerekmez.
     /// </summary>
     private static Dictionary<int, int>? FindBestGuestRoomAssignment(
         IReadOnlyList<UzatmaGuestMatchInput> guests,
         IReadOnlyList<UzatmaRoomMatchInput> rooms)
     {
         var roomById = rooms.ToDictionary(x => x.OdaId);
-        var kalanKapasite = rooms.ToDictionary(x => x.OdaId, x => x.Kapasite);
-        // Paylasimli odalarin durumu: null = tamamen ACIK (dis rezervasyon YOK, bu aramada henuz
-        // hic konaklayan atanmadi); bir cinsiyet degeri = o cinsiyete SABITLENMIS (dis rezervasyon
-        // VEYA bilinen cinsiyetli bir konaklayan tarafindan); ayrica bkz. unknownSoloOdalar.
-        var odaDurumu = rooms.Where(x => x.PaylasimliMi).ToDictionary(x => x.OdaId, x => x.SabitCinsiyet);
-        // Cinsiyeti bilinmeyen bir konaklayan tarafindan TEK BASINA (baskasi giremeyecek sekilde)
-        // isgal edilmis paylasimli odalar.
-        var unknownSoloOdalar = new HashSet<int>();
+        var sortedRoomIds = rooms.Select(x => x.OdaId).OrderBy(x => x).ToList();
 
-        var atananOda = new Dictionary<int, int>();
-        Dictionary<int, int>? enIyiSonuc = null;
-        var enIyiKalmaSayisi = -1;
+        // Memoization: ayni (kalan konaklayan kumesi + tum odalarin kapasite/cinsiyet durumu)
+        // durumuna FARKLI bir yoldan tekrar ulasilirsa, alt problem TEKRAR COZULMEZ.
+        var memo = new Dictionary<string, (int BestEk, Dictionary<int, int>? Atama)>();
 
-        bool OdaUygunMu(int odaId, string? cinsiyet)
+        bool OdaUygunMu(IReadOnlyDictionary<int, int> kalanKapasite, IReadOnlyDictionary<int, string?> odaDurumu, HashSet<int> unknownSoloOdalar, int odaId, string? cinsiyet)
         {
             var oda = roomById[odaId];
             if (!oda.PaylasimliMi)
@@ -684,44 +781,70 @@ public partial class RezervasyonService
             var mevcutDurum = odaDurumu.GetValueOrDefault(odaId);
             if (cinsiyet is null)
             {
-                // Cinsiyeti bilinmeyen konaklayan, SADECE tamamen acik (dis/bilinen kisi tarafindan
-                // hic sabitlenmemis) bir paylasimli odaya girebilir - orada TEK basina kalacaktir.
+                // Cinsiyeti bilinmeyen konaklayan, SADECE tamamen acik (dis/bilinen/haricî-bilinmeyen
+                // kisi tarafindan hic sabitlenmemis/engellenmemis) bir paylasimli odaya girebilir.
                 return mevcutDurum is null;
             }
 
             return mevcutDurum is null || string.Equals(mevcutDurum, cinsiyet, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Ust sinir budamasi icin: hedef planda GECERLI SEKILDE mevcut olan (yani plandaki
-        // odalardan birine ait) onceki oda tercihine sahip konaklayan sayisi - bu, ULASILABILECEK
-        // AZAMI "kalma" sayisidir (kapasite/cinsiyet kisitlari nedeniyle GERCEKTE daha az olabilir,
-        // ama asla daha fazla olamaz - GUVENLI/admissible bir ust sinirdir).
-        var kalanPotansiyel = guests.Count(g => g.OncekiOdaId.HasValue && roomById.ContainsKey(g.OncekiOdaId.Value));
+        int MaxEkPotansiyel(List<int> indeksler) =>
+            indeksler.Count(i => guests[i].OncekiOdaId.HasValue && roomById.ContainsKey(guests[i].OncekiOdaId!.Value));
 
-        void Recurse(List<int> kalanIndeksler, int kalmaSayisi, int kalanPotansiyelKalan)
+        string BuildStateKey(List<int> kalanIndeksler, Dictionary<int, int> kalanKapasite, Dictionary<int, string?> odaDurumu, HashSet<int> unknownSoloOdalar)
         {
-            if (kalmaSayisi + kalanPotansiyelKalan <= enIyiKalmaSayisi)
+            var sb = new StringBuilder();
+            sb.Append(string.Join(',', kalanIndeksler.OrderBy(i => i)));
+            sb.Append('|');
+            foreach (var odaId in sortedRoomIds)
             {
-                // Bu daldan devam edilse bile mevcut en iyi sonuc GECILEMEZ - budanir.
-                return;
-            }
-
-            if (kalanIndeksler.Count == 0)
-            {
-                if (kalmaSayisi > enIyiKalmaSayisi)
+                sb.Append(odaId).Append(':').Append(kalanKapasite[odaId]).Append(':');
+                if (!roomById[odaId].PaylasimliMi)
                 {
-                    enIyiKalmaSayisi = kalmaSayisi;
-                    enIyiSonuc = new Dictionary<int, int>(atananOda);
+                    sb.Append('P'); // Ozel (paylasimli olmayan) - paylasimli bir odanin durum
+                                    // kodlarindan (cinsiyet adlari, "O"=acik, "U"=unknown-solo, sentinel)
+                                    // HER ZAMAN ayirt edilir; hicbir zaman onlarla ES DEGER sayilmaz.
+                }
+                else if (unknownSoloOdalar.Contains(odaId))
+                {
+                    sb.Append('U');
+                }
+                else
+                {
+                    sb.Append(odaDurumu.GetValueOrDefault(odaId) ?? "O");
                 }
 
-                return;
+                sb.Append(';');
+            }
+
+            return sb.ToString();
+        }
+
+        (int BestEk, Dictionary<int, int>? Atama) Solve(
+            List<int> kalanIndeksler,
+            Dictionary<int, int> kalanKapasite,
+            Dictionary<int, string?> odaDurumu,
+            HashSet<int> unknownSoloOdalar)
+        {
+            if (kalanIndeksler.Count == 0)
+            {
+                return (0, new Dictionary<int, int>());
+            }
+
+            var key = BuildStateKey(kalanIndeksler, kalanKapasite, odaDurumu, unknownSoloOdalar);
+            if (memo.TryGetValue(key, out var onbellek))
+            {
+                return onbellek;
             }
 
             // MRV: aday odasi EN AZ olan konaklayan ONCE islenir - esitlikte konaklayanin ORIJINAL
-            // (SiraNo/Id sirali) liste konumu kullanilir.
+            // (SiraNo/Id sirali) liste konumu kullanilir - bu, ayni durum icin HER ZAMAN AYNI
+            // konaklayanin secilmesini (dolayisiyla anahtarin GERCEKTEN ayni alt problemi temsil
+            // etmesini) garanti eder.
             var siraliAdaylar = kalanIndeksler
                 .Select(i => (Index: i, Adaylar: rooms
-                    .Where(r => kalanKapasite[r.OdaId] > 0 && OdaUygunMu(r.OdaId, guests[i].Cinsiyet))
+                    .Where(r => kalanKapasite[r.OdaId] > 0 && OdaUygunMu(kalanKapasite, odaDurumu, unknownSoloOdalar, r.OdaId, guests[i].Cinsiyet))
                     .Select(r => r.OdaId)
                     .ToList()))
                 .OrderBy(x => x.Adaylar.Count)
@@ -733,46 +856,41 @@ public partial class RezervasyonService
 
             if (siraliAdaylar.Adaylar.Count == 0)
             {
-                return; // Bu konaklayan icin GECERLI hicbir oda yok - bu dal cikmaz sokak.
+                var yok = (BestEk: int.MinValue, Atama: (Dictionary<int, int>?)null);
+                memo[key] = yok;
+                return yok;
             }
 
-            // Simetri eleme: konaklayanin ONCEKI odasi OLMAYAN adaylar arasinda, kapasite+cinsiyet
-            // durumu AYNI olanlardan yalnizca en kucuk OdaId'li temsilci denenir.
-            var temsilciler = new List<int>();
-            var gorulenImzalar = new HashSet<(int KalanKapasite, string? Durum)>();
-            foreach (var odaId in siraliAdaylar.Adaylar.OrderBy(x => x))
-            {
-                if (odaId == guest.OncekiOdaId)
-                {
-                    temsilciler.Add(odaId);
-                    continue;
-                }
-
-                var imza = (kalanKapasite[odaId], roomById[odaId].PaylasimliMi ? odaDurumu.GetValueOrDefault(odaId) : null);
-                if (gorulenImzalar.Add(imza))
-                {
-                    temsilciler.Add(odaId);
-                }
-            }
-
-            var adayOdalar = temsilciler
+            var adayOdalar = siraliAdaylar.Adaylar
                 .OrderBy(odaId => odaId == guest.OncekiOdaId ? 0 : 1)
                 .ThenBy(odaId => roomById[odaId].SabitCinsiyet is not null ? 0 : 1)
                 .ThenBy(odaId => odaId)
                 .ToList();
 
             var yeniKalanIndeksler = kalanIndeksler.Where(i => i != guestIndex).ToList();
-            var buKonaklayaninPotansiyeleKatkisiVarMi = guest.OncekiOdaId.HasValue && roomById.ContainsKey(guest.OncekiOdaId.Value);
+            var kalanMaxPotansiyel = MaxEkPotansiyel(yeniKalanIndeksler);
+
+            var enIyiEk = -1;
+            Dictionary<int, int>? enIyiAtama = null;
 
             foreach (var odaId in adayOdalar)
             {
-                var oncekiDurum = odaDurumu.GetValueOrDefault(odaId);
                 var kalindiMi = odaId == guest.OncekiOdaId;
+
+                // Yerel ust sinir budamasi: bu adayin en iyimser toplami (kalindiysa +1, artik
+                // kalan tum konaklayanlarin teorik AZAMI ek kalmasi), su ana kadarki en iyiyi
+                // GECEMEYECEKSE, bu aday HIC DENENMEDEN atlanir.
+                var buAdayinUstSiniri = (kalindiMi ? 1 : 0) + kalanMaxPotansiyel;
+                if (buAdayinUstSiniri <= enIyiEk)
+                {
+                    continue;
+                }
+
                 var paylasimli = roomById[odaId].PaylasimliMi;
+                var oncekiDurum = odaDurumu.GetValueOrDefault(odaId);
                 var unknownAtandi = paylasimli && guest.Cinsiyet is null;
 
                 kalanKapasite[odaId]--;
-                atananOda[guest.KonaklayanId] = odaId;
                 if (paylasimli)
                 {
                     if (guest.Cinsiyet is not null)
@@ -785,13 +903,9 @@ public partial class RezervasyonService
                     }
                 }
 
-                Recurse(
-                    yeniKalanIndeksler,
-                    kalmaSayisi + (kalindiMi ? 1 : 0),
-                    kalanPotansiyelKalan - (buKonaklayaninPotansiyeleKatkisiVarMi ? 1 : 0));
+                var altSonuc = Solve(yeniKalanIndeksler, kalanKapasite, odaDurumu, unknownSoloOdalar);
 
                 kalanKapasite[odaId]++;
-                atananOda.Remove(guest.KonaklayanId);
                 if (paylasimli)
                 {
                     if (unknownAtandi)
@@ -803,11 +917,34 @@ public partial class RezervasyonService
                         odaDurumu[odaId] = oncekiDurum;
                     }
                 }
+
+                if (altSonuc.Atama is null)
+                {
+                    continue; // Bu dal cikmaz sokak.
+                }
+
+                var toplamEk = (kalindiMi ? 1 : 0) + altSonuc.BestEk;
+                if (toplamEk > enIyiEk)
+                {
+                    enIyiEk = toplamEk;
+                    enIyiAtama = new Dictionary<int, int>(altSonuc.Atama) { [guest.KonaklayanId] = odaId };
+                }
             }
+
+            var sonuc = (BestEk: enIyiAtama is null ? int.MinValue : enIyiEk, Atama: enIyiAtama);
+            memo[key] = sonuc;
+            return sonuc;
         }
 
-        Recurse(Enumerable.Range(0, guests.Count).ToList(), 0, kalanPotansiyel);
-        return enIyiSonuc;
+        var baslangicKalanKapasite = rooms.ToDictionary(x => x.OdaId, x => x.Kapasite);
+        // Paylasimli odalarin baslangic durumu: null = tamamen ACIK; bir cinsiyet degeri = o
+        // cinsiyete SABITLENMIS; ExternalUnknownGenderBlockedSentinel = haricî cinsiyeti bilinmeyen
+        // biri nedeniyle TAMAMEN ENGELLI.
+        var baslangicOdaDurumu = rooms.Where(x => x.PaylasimliMi).ToDictionary(x => x.OdaId, x => x.SabitCinsiyet);
+        var baslangicUnknownSoloOdalar = new HashSet<int>();
+
+        var sonuc = Solve(Enumerable.Range(0, guests.Count).ToList(), baslangicKalanKapasite, baslangicOdaDurumu, baslangicUnknownSoloOdalar);
+        return sonuc.Atama;
     }
 
     /// <summary>

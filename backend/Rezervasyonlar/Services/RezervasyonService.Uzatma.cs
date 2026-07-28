@@ -104,6 +104,21 @@ public partial class RezervasyonService
             ? BuildScenarioGuestGenderRequirements(activeGuestGenders, reservation.KisiSayisi)
             : ScenarioGuestGenderRequirements.None(reservation.KisiSayisi);
 
+        // Oda-DUZEYINDEKI (yukaridaki) cinsiyet farkindaligi, Gelmedi kaydi veya eksik cinsiyet
+        // verisi durumunda TAMAMEN kapanabilir - ancak bu, KISI BAZLI (her aktif konaklayanin
+        // GERCEK, DB'den yeniden hesaplanan sabit-cinsiyetli odalarla uyumu) dogrulamayi
+        // ATLAMAMALIDIR. Bu yuzden, asagida her adayin fiyatlanip kullaniciya sunulmadan ONCE,
+        // RezervasyonUzatAsync'in kaydetme sirasinda kullandigi AYNI ortak eslesme altyapisi
+        // (ComputeUzatmaGuestAssignmentPlanAsync/ValidateUzatmaCandidateAssignabilityAsync) ile
+        // SALT OKUNUR olarak dogrulanir - seceneklerde ASLA kisisel olarak kaydedilemeyecek bir
+        // plan SUNULMAZ.
+        var tumKonaklayanlar = await _stysDbContext.RezervasyonKonaklayanlar
+            .Where(x => x.RezervasyonId == rezervasyonId)
+            .ToListAsync(cancellationToken);
+
+        var currentSegmentId = currentAssignments[0].SegmentId;
+        var (oncekiOdaMevcut, oncekiYatakMevcut) = await GetSegmentGuestRoomBedMapAsync(currentSegmentId, cancellationToken);
+
         var fullAvailability = await GetRoomAvailabilitiesAsync(
             reservation.TesisId,
             null,
@@ -196,13 +211,34 @@ public partial class RezervasyonService
             .Select(group => group.First())
             .ToList();
 
+        // Fiyatlanip kullaniciya SUNULMADAN ONCE, her adayin KISI BAZLI konaklayan/yatak atamasinin
+        // GERCEKTEN kaydedilebilir oldugu (RezervasyonUzatAsync'in kullandigi AYNI ortak eslesme
+        // altyapisiyla) dogrulanir - bu dogrulamayi geçemeyen bir plan seçenek olarak GOSTERILMEZ.
+        var assignableCandidates = new List<UzatmaSenaryoAday>();
+        foreach (var candidate in distinctCandidates)
+        {
+            var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
+                rezervasyonId,
+                oncekiOdaMevcut,
+                oncekiYatakMevcut,
+                candidate.Segmentler,
+                tumKonaklayanlar,
+                requireNoMovesForFirstSegment: candidate.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam,
+                cancellationToken);
+
+            if (gecerliMi)
+            {
+                assignableCandidates.Add(candidate);
+            }
+        }
+
         var existingDiscounts = DeserializeAppliedDiscounts(reservation.UygulananIndirimlerJson);
         var fiyatUyarisi = existingDiscounts.Count > 0
             ? "Rezervasyonun mevcut doneminde uygulanmis indirim(ler) bu uzatma tutarina otomatik olarak yansitilmadi; gerekiyorsa manuel degerlendirin."
             : null;
 
         var priced = new List<(UzatmaSenaryoAday Aday, SenaryoFiyatHesaplamaSonucuDto Fiyat)>();
-        foreach (var candidate in distinctCandidates)
+        foreach (var candidate in assignableCandidates)
         {
             var fiyat = await CalculateScenarioPriceAsync(
                 reservation.TesisId,

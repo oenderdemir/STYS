@@ -123,12 +123,24 @@ public partial class RezervasyonService
             case RezervasyonUzatmaSenaryoTipleri.CheckoutGunundeOdaDegisimi:
             {
                 var segmentPlan = secilenSecenek.Segmentler[0];
-                var yeniSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, segmentPlan, cancellationToken);
 
+                // Konaklayan/yatak/cinsiyet plani, HERHANGI BIR segment/atama olusturulmadan ONCE
+                // TAMAMEN hesaplanip dogrulanir - boylece cinsiyet/kapasite/yatak acisindan gecerli
+                // bir atama kurulamazsa (409) hicbir kismi kayit (segment dahil) birakilmaz.
+                List<UzatmaGuestPlanEntry>? guestPlan = null;
                 if (konaklayanKaydiVarMi)
                 {
-                    await AssignGuestsToNewUzatmaSegmentAsync(
-                        reservation.Id, lastSegment.Id, yeniSegment, segmentPlan, tumKonaklayanlar, cancellationToken);
+                    var (oncekiOda, oncekiYatak) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
+                    guestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
+                        reservation.Id, oncekiOda, oncekiYatak, segmentPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+                }
+
+                var yeniSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, segmentPlan, cancellationToken);
+
+                if (guestPlan is not null)
+                {
+                    MaterializeUzatmaGuestAssignments(yeniSegment, guestPlan);
+                    await _stysDbContext.SaveChangesAsync(cancellationToken);
                 }
 
                 break;
@@ -139,20 +151,40 @@ public partial class RezervasyonService
                 var ilkPlan = secilenSecenek.Segmentler[0];
                 var ikinciPlan = secilenSecenek.Segmentler[1];
 
-                var ilkSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, ilkPlan, cancellationToken);
+                // Her iki segmentin konaklayan/yatak/cinsiyet plani da, HERHANGI BIR segment/atama
+                // olusturulmadan ONCE tamamen hesaplanip dogrulanir (ikinci segmentin plani, ilk
+                // segmentin HENUZ veritabanina yazilmamis dry-run sonucu uzerinden kurulur) - boylece
+                // iki segmentten HERHANGI biri icin gecerli bir atama kurulamazsa hicbir kismi kayit
+                // (ilk segment dahil) birakilmaz.
+                List<UzatmaGuestPlanEntry>? ilkGuestPlan = null;
+                List<UzatmaGuestPlanEntry>? ikinciGuestPlan = null;
 
                 if (konaklayanKaydiVarMi)
                 {
-                    await AssignGuestsToNewUzatmaSegmentAsync(
-                        reservation.Id, lastSegment.Id, ilkSegment, ilkPlan, tumKonaklayanlar, cancellationToken);
+                    var (oncekiOda1, oncekiYatak1) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
+                    ilkGuestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
+                        reservation.Id, oncekiOda1, oncekiYatak1, ilkPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+
+                    var oncekiOda2 = ilkGuestPlan.ToDictionary(x => x.KonaklayanId, x => x.OdaId);
+                    var oncekiYatak2 = ilkGuestPlan.ToDictionary(x => x.KonaklayanId, x => x.YatakNo);
+                    ikinciGuestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
+                        reservation.Id, oncekiOda2, oncekiYatak2, ikinciPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+                }
+
+                var ilkSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, ilkPlan, cancellationToken);
+
+                if (ilkGuestPlan is not null)
+                {
+                    MaterializeUzatmaGuestAssignments(ilkSegment, ilkGuestPlan);
+                    await _stysDbContext.SaveChangesAsync(cancellationToken);
                 }
 
                 var ikinciSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 2, ikinciPlan, cancellationToken);
 
-                if (konaklayanKaydiVarMi)
+                if (ikinciGuestPlan is not null)
                 {
-                    await AssignGuestsToNewUzatmaSegmentAsync(
-                        reservation.Id, ilkSegment.Id, ikinciSegment, ikinciPlan, tumKonaklayanlar, cancellationToken);
+                    MaterializeUzatmaGuestAssignments(ikinciSegment, ikinciGuestPlan);
+                    await _stysDbContext.SaveChangesAsync(cancellationToken);
                 }
 
                 break;
@@ -322,19 +354,55 @@ public partial class RezervasyonService
     }
 
     /// <summary>
-    /// Yeni olusturulan bir uzatma segmenti icin, rezervasyonun AKTIF (Gelmedi HARIC) konaklayanlarina
-    /// oda/yatak atamasi olusturur. Onceki segmentteki oda hala hedef dagilimda mevcutsa konaklayan
-    /// O ODADA TUTULUR (mumkun oldugunca az kisi taginir); kalan konaklayanlar deterministik
-    /// bicimde (konaklayan SiraNo, hedef oda ID sirasiyla) kalan slotlara atanir. Paylasimli odalarda
-    /// yatak numarasi, ReassignGuestSegmentAssignmentsAfterRoomChangeAsync ile AYNI "diger
-    /// rezervasyonlarin isgal ettigi yataklari haric tut" desenini kullanir.
+    /// Bir uzatma segmentindeki bir konaklayanin PLANLANAN (henuz veritabanina yazilmamis) oda/yatak
+    /// atamasini tutar. GetSegmentGuestRoomBedMapAsync (gercek, onceden var olan bir segmentten) veya
+    /// bir onceki ComputeUzatmaGuestAssignmentPlanAsync cagrisinin sonucundan (henuz olusturulmamis
+    /// bir "onceki" segment icin dry-run) turetilerek zincirlenebilir.
     /// </summary>
-    private async Task AssignGuestsToNewUzatmaSegmentAsync(
+    private sealed class UzatmaGuestPlanEntry
+    {
+        public required int KonaklayanId { get; init; }
+        public required int OdaId { get; init; }
+        public int? YatakNo { get; set; }
+    }
+
+    private async Task<(Dictionary<int, int> OdaByKonaklayanId, Dictionary<int, int?> YatakByKonaklayanId)> GetSegmentGuestRoomBedMapAsync(
+        int segmentId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _stysDbContext.RezervasyonKonaklayanSegmentAtamalari
+            .Where(x => x.RezervasyonSegmentId == segmentId)
+            .Select(x => new { x.RezervasyonKonaklayanId, x.OdaId, x.YatakNo })
+            .ToListAsync(cancellationToken);
+
+        return (
+            rows.ToDictionary(x => x.RezervasyonKonaklayanId, x => x.OdaId),
+            rows.ToDictionary(x => x.RezervasyonKonaklayanId, x => x.YatakNo));
+    }
+
+    /// <summary>
+    /// Bir uzatma segmenti icin, rezervasyonun AKTIF (Gelmedi HARIC) konaklayanlarinin oda/yatak
+    /// atama PLANINI, HICBIR VERITABANI YAZIMI YAPMADAN hesaplar (salt-okunur DB sorgulari haric) -
+    /// gecersiz bir plan (cinsiyet veya kapasite acisindan) burada 409 firlatir ve cagiran, bu segment
+    /// (veya iki-segmentli senaryoda ONCEKI segment) icin HENUZ HICBIR entity OLUSTURMAMIS olur.
+    /// Onceki segmentteki oda hala hedef dagilimda mevcutsa VE cinsiyet acisindan uygunsa konaklayan
+    /// O ODADA TUTULUR; kalan konaklayanlar deterministik bicimde (konaklayan SiraNo, hedef oda ID
+    /// sirasiyla) kalan slotlara atanir. Cinsiyet farkindaligi tam olarak GetUzatmaSecenekleriAsync'in
+    /// uyguladigi kosulda (tum aktif konaklayanlarin cinsiyeti biliniyor ve sayilari KisiSayisi'na
+    /// esitse) devreye girer - paylasimli her hedef odanin GERCEK (DB'den, baska rezervasyonlardan
+    /// gelen) sabit cinsiyeti GetSharedRoomGuestOccupanciesAsync/GetDistinctSharedRoomGenders ile
+    /// YENIDEN belirlenir; istemciden veya onceki hesaplamadan gelen bilgiye GUVENILMEZ. Paylasimli
+    /// odalarda yatak numarasi, ReassignGuestSegmentAssignmentsAfterRoomChangeAsync ile AYNI "diger
+    /// rezervasyonlarin isgal ettigi yataklari haric tut" desenini kullanir - yatak kontrolu cinsiyet
+    /// kontrolunun YERINE GECMEZ, cinsiyet uygunlugu ayrica ve ONCE dogrulanir.
+    /// </summary>
+    private async Task<List<UzatmaGuestPlanEntry>> ComputeUzatmaGuestAssignmentPlanAsync(
         int rezervasyonId,
-        int oncekiSegmentId,
-        RezervasyonSegment yeniSegment,
+        IReadOnlyDictionary<int, int> oncekiOdaByKonaklayanId,
+        IReadOnlyDictionary<int, int?> oncekiYatakByKonaklayanId,
         KonaklamaSenaryoSegmentDto plan,
         IReadOnlyCollection<RezervasyonKonaklayan> tumKonaklayanlar,
+        int kisiSayisi,
         CancellationToken cancellationToken)
     {
         var aktifKonaklayanlar = tumKonaklayanlar
@@ -345,33 +413,92 @@ public partial class RezervasyonService
 
         if (aktifKonaklayanlar.Count == 0)
         {
-            return;
+            return [];
         }
 
-        var oncekiOdaByKonaklayanId = await _stysDbContext.RezervasyonKonaklayanSegmentAtamalari
-            .Where(x => x.RezervasyonSegmentId == oncekiSegmentId)
-            .ToDictionaryAsync(x => x.RezervasyonKonaklayanId, x => x.OdaId, cancellationToken);
-
+        var odaInfoById = plan.OdaAtamalari.ToDictionary(x => x.OdaId);
         var kalanSlotByOda = plan.OdaAtamalari
             .OrderBy(x => x.OdaId)
             .ToDictionary(x => x.OdaId, x => x.AyrilanKisiSayisi);
 
-        var atananOdaByKonaklayanId = new Dictionary<int, int>();
+        // GetUzatmaSecenekleriAsync ile BIREBIR AYNI kosul: tum aktif konaklayanlarin cinsiyeti
+        // biliniyor VE sayilari rezervasyonun KisiSayisi'na esitse cinsiyet farkindaligi UYGULANIR -
+        // aksi halde (secenek uretiminde de oldugu gibi) cinsiyet kisitlanmaz.
+        var normalizedCinsiyetler = aktifKonaklayanlar
+            .Select(x => NormalizeStoredKonaklayanCinsiyet(x.Cinsiyet))
+            .ToList();
+        var cinsiyetFarkindaligiGerekli = aktifKonaklayanlar.Count == kisiSayisi
+            && normalizedCinsiyetler.All(x => x is not null);
 
-        // 1) Konaklayanin onceki odasi hedef dagilimda hala mevcutsa AYNI odada tutulur.
-        foreach (var konaklayan in aktifKonaklayanlar)
+        // Paylasimli her hedef odanin, bu uzatma segmentinin tarih araliginda GERCEK (DB'den, BASKA
+        // rezervasyonlardan gelen) sabit cinsiyetini yeniden belirle - mevcut ortak yardimcilar
+        // (GetSharedRoomGuestOccupanciesAsync/GetDistinctSharedRoomGenders) AYNEN yeniden kullanilir.
+        var sabitCinsiyetByOda = new Dictionary<int, string?>();
+        if (cinsiyetFarkindaligiGerekli)
         {
-            if (oncekiOdaByKonaklayanId.TryGetValue(konaklayan.Id, out var oncekiOdaId)
-                && kalanSlotByOda.TryGetValue(oncekiOdaId, out var kalan)
-                && kalan > 0)
+            var paylasimliOdaIds = plan.OdaAtamalari.Where(x => x.PaylasimliMi).Select(x => x.OdaId).Distinct().ToList();
+            var digerRezervasyonDoluluklari = await GetSharedRoomGuestOccupanciesAsync(
+                paylasimliOdaIds, plan.BaslangicTarihi, plan.BitisTarihi, cancellationToken, excludeRezervasyonId: rezervasyonId);
+
+            foreach (var odaId in paylasimliOdaIds)
             {
-                atananOdaByKonaklayanId[konaklayan.Id] = oncekiOdaId;
-                kalanSlotByOda[oncekiOdaId] = kalan - 1;
+                var cinsiyetler = GetDistinctSharedRoomGenders(digerRezervasyonDoluluklari, odaId, plan.BaslangicTarihi, plan.BitisTarihi);
+                if (cinsiyetler.Count > 1)
+                {
+                    throw new BaseException($"'{odaInfoById[odaId].OdaNo}' odasinda cinsiyet tutarsizligi tespit edildi; konaklayan atamasi yapilamiyor.", 409);
+                }
+
+                sabitCinsiyetByOda[odaId] = cinsiyetler.SingleOrDefault();
             }
         }
 
-        // 2) Yalnizca GERCEKTEN tasinmasi gereken konaklayanlar, deterministik sirayla kalan
-        // slotlara atanir.
+        // Bos (dis rezervasyonlarca henuz sabitlenmemis) paylasimli bir odaya BU atama sirasinda
+        // hangi cinsiyetin yerlestirildigini izler - ayni odada FARKLI cinsiyetler KARISTIRILMAZ.
+        var atananBatchCinsiyetByOda = new Dictionary<int, string?>(sabitCinsiyetByOda);
+
+        bool OdaUygunMu(int odaId, string? konaklayanCinsiyeti)
+        {
+            if (!cinsiyetFarkindaligiGerekli || !odaInfoById[odaId].PaylasimliMi)
+            {
+                return true;
+            }
+
+            var mevcutBatch = atananBatchCinsiyetByOda.GetValueOrDefault(odaId);
+            return mevcutBatch is null
+                || konaklayanCinsiyeti is null
+                || string.Equals(mevcutBatch, konaklayanCinsiyeti, StringComparison.OrdinalIgnoreCase);
+        }
+
+        void OdaCinsiyetiniKaydet(int odaId, string? konaklayanCinsiyeti)
+        {
+            if (cinsiyetFarkindaligiGerekli && odaInfoById[odaId].PaylasimliMi && konaklayanCinsiyeti is not null)
+            {
+                atananBatchCinsiyetByOda[odaId] = konaklayanCinsiyeti;
+            }
+        }
+
+        var atananOdaByKonaklayanId = new Dictionary<int, int>();
+
+        // 1) Konaklayanin onceki odasi hedef dagilimda hala mevcutsa VE cinsiyet acisindan uygunsa
+        // AYNI odada tutulur - sabit kadin odasina erkek, sabit erkek odasina kadin ATANMAZ.
+        foreach (var konaklayan in aktifKonaklayanlar)
+        {
+            var kendiCinsiyeti = NormalizeStoredKonaklayanCinsiyet(konaklayan.Cinsiyet);
+            if (oncekiOdaByKonaklayanId.TryGetValue(konaklayan.Id, out var oncekiOdaId)
+                && kalanSlotByOda.TryGetValue(oncekiOdaId, out var kalan)
+                && kalan > 0
+                && OdaUygunMu(oncekiOdaId, kendiCinsiyeti))
+            {
+                atananOdaByKonaklayanId[konaklayan.Id] = oncekiOdaId;
+                kalanSlotByOda[oncekiOdaId] = kalan - 1;
+                OdaCinsiyetiniKaydet(oncekiOdaId, kendiCinsiyeti);
+            }
+        }
+
+        // 2) Yalnizca GERCEKTEN tasinmasi gereken konaklayanlar, hedef odanin cinsiyet ihtiyacina
+        // gore DETERMINISTIK sirayla kalan slotlara atanir - dis rezervasyonlarca sabitlenmis odalar
+        // ONCELIKLI doldurulur (aksi halde bos bir odaya yanlis cinsiyet yerlesip sabit odanin
+        // ihtiyaci karsilanamaz hale gelebilir).
         foreach (var konaklayan in aktifKonaklayanlar)
         {
             if (atananOdaByKonaklayanId.ContainsKey(konaklayan.Id))
@@ -379,22 +506,29 @@ public partial class RezervasyonService
                 continue;
             }
 
+            var kendiCinsiyeti = NormalizeStoredKonaklayanCinsiyet(konaklayan.Cinsiyet);
             var hedefOdaId = kalanSlotByOda
-                .Where(x => x.Value > 0)
-                .OrderBy(x => x.Key)
+                .Where(x => x.Value > 0 && OdaUygunMu(x.Key, kendiCinsiyeti))
+                .OrderBy(x => sabitCinsiyetByOda.GetValueOrDefault(x.Key) is not null ? 0 : 1)
+                .ThenBy(x => x.Key)
                 .Select(x => (int?)x.Key)
                 .FirstOrDefault();
 
             if (hedefOdaId is null)
             {
-                throw new BaseException("Konaklayanlar icin yeterli oda/kapasite bulunamadi.", 409);
+                throw new BaseException(
+                    cinsiyetFarkindaligiGerekli
+                        ? "Konaklayanlar icin cinsiyet acisindan gecerli oda/kapasite bulunamadi."
+                        : "Konaklayanlar icin yeterli oda/kapasite bulunamadi.",
+                    409);
             }
 
             atananOdaByKonaklayanId[konaklayan.Id] = hedefOdaId.Value;
             kalanSlotByOda[hedefOdaId.Value] -= 1;
+            OdaCinsiyetiniKaydet(hedefOdaId.Value, kendiCinsiyeti);
         }
 
-        var odaInfoById = plan.OdaAtamalari.ToDictionary(x => x.OdaId);
+        var sonuc = new List<UzatmaGuestPlanEntry>();
 
         foreach (var odaGrubu in atananOdaByKonaklayanId.GroupBy(x => x.Value).OrderBy(x => x.Key))
         {
@@ -404,17 +538,7 @@ public partial class RezervasyonService
 
             if (!odaInfo.PaylasimliMi)
             {
-                foreach (var konaklayanId in konaklayanIdsInOda)
-                {
-                    _stysDbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
-                    {
-                        RezervasyonKonaklayanId = konaklayanId,
-                        RezervasyonSegmentId = yeniSegment.Id,
-                        OdaId = odaId,
-                        YatakNo = null
-                    });
-                }
-
+                sonuc.AddRange(konaklayanIdsInOda.Select(id => new UzatmaGuestPlanEntry { KonaklayanId = id, OdaId = odaId, YatakNo = null }));
                 continue;
             }
 
@@ -424,8 +548,8 @@ public partial class RezervasyonService
                     join konaklayan in _stysDbContext.RezervasyonKonaklayanlar on atama.RezervasyonKonaklayanId equals konaklayan.Id
                     where atama.OdaId == odaId
                           && atama.YatakNo.HasValue
-                          && segment.BaslangicTarihi < yeniSegment.BitisTarihi
-                          && segment.BitisTarihi > yeniSegment.BaslangicTarihi
+                          && segment.BaslangicTarihi < plan.BitisTarihi
+                          && segment.BitisTarihi > plan.BaslangicTarihi
                           && konaklayan.KatilimDurumu != KonaklayanKatilimDurumlari.Gelmedi
                           && konaklayan.RezervasyonId != rezervasyonId
                     select atama.YatakNo!.Value)
@@ -442,46 +566,52 @@ public partial class RezervasyonService
                 throw new BaseException($"'{odaInfo.OdaNo}' odasi icin konaklayan yatak atamasi yapilamadi.", 409);
             }
 
-            var oncekiYatakByKonaklayanId = await _stysDbContext.RezervasyonKonaklayanSegmentAtamalari
-                .Where(x => x.RezervasyonSegmentId == oncekiSegmentId
-                            && x.OdaId == odaId
-                            && konaklayanIdsInOda.Contains(x.RezervasyonKonaklayanId))
-                .ToDictionaryAsync(x => x.RezervasyonKonaklayanId, x => x.YatakNo, cancellationToken);
-
-            var yeniAtamalar = new List<RezervasyonKonaklayanSegmentAtama>();
+            var odaPlanlari = new List<UzatmaGuestPlanEntry>();
 
             foreach (var konaklayanId in konaklayanIdsInOda)
             {
-                var atama = new RezervasyonKonaklayanSegmentAtama
-                {
-                    RezervasyonKonaklayanId = konaklayanId,
-                    RezervasyonSegmentId = yeniSegment.Id,
-                    OdaId = odaId
-                };
+                var entry = new UzatmaGuestPlanEntry { KonaklayanId = konaklayanId, OdaId = odaId };
 
                 if (oncekiYatakByKonaklayanId.TryGetValue(konaklayanId, out var oncekiYatak)
                     && oncekiYatak.HasValue
                     && musaitYataklar.Remove(oncekiYatak.Value))
                 {
-                    atama.YatakNo = oncekiYatak.Value;
+                    entry.YatakNo = oncekiYatak.Value;
                 }
 
-                yeniAtamalar.Add(atama);
+                odaPlanlari.Add(entry);
             }
 
-            foreach (var atama in yeniAtamalar.Where(x => !x.YatakNo.HasValue))
+            foreach (var entry in odaPlanlari.Where(x => !x.YatakNo.HasValue))
             {
                 var sonrakiYatak = musaitYataklar[0];
                 musaitYataklar.RemoveAt(0);
-                atama.YatakNo = sonrakiYatak;
+                entry.YatakNo = sonrakiYatak;
             }
 
-            _stysDbContext.RezervasyonKonaklayanSegmentAtamalari.AddRange(yeniAtamalar);
+            sonuc.AddRange(odaPlanlari);
         }
 
-        // Bir sonraki segmentin "onceki oda/yatak" sorgulari bu segmentin kayitlarini DB'den
-        // GORMELIDIR (EF, henuz kaydedilmemis Added entity'leri LINQ-to-SQL sorgularina yansitmaz).
-        await _stysDbContext.SaveChangesAsync(cancellationToken);
+        return sonuc;
+    }
+
+    /// <summary>
+    /// ComputeUzatmaGuestAssignmentPlanAsync tarafindan ONCEDEN DOGRULANMIS bir plani, artik
+    /// veritabaninda var olan (Id'si uretilmis) bir segmente GERCEK RezervasyonKonaklayanSegmentAtama
+    /// kayitlari olarak ekler. Bu asamada hicbir dogrulama/hesaplama yapilmaz - yalnizca yazilir.
+    /// </summary>
+    private void MaterializeUzatmaGuestAssignments(RezervasyonSegment yeniSegment, List<UzatmaGuestPlanEntry> plan)
+    {
+        foreach (var entry in plan)
+        {
+            _stysDbContext.RezervasyonKonaklayanSegmentAtamalari.Add(new RezervasyonKonaklayanSegmentAtama
+            {
+                RezervasyonKonaklayanId = entry.KonaklayanId,
+                RezervasyonSegmentId = yeniSegment.Id,
+                OdaId = entry.OdaId,
+                YatakNo = entry.YatakNo
+            });
+        }
     }
 
     private async Task AddExtensionKonaklamaHaklariAsync(
@@ -490,42 +620,63 @@ public partial class RezervasyonService
         DateTime yeniCikisTarihi,
         CancellationToken cancellationToken)
     {
-        // KonaklamaBoyunca (bir kereye mahsus) haklarin HakTarihi'nin HER ZAMAN GirisTarihi olmasi
-        // sayesinde, TAM araligi (girisTarihi -> yeniCikisTarihi) yeniden uretip yalnizca
-        // eskiCikisTarihi'nden ITIBAREN OLAN haklari eklemek, hem bu haklari DOGAL olarak
-        // mukerrerlemeyi ONLER hem de eski cikis gununun artik ARA GUN olmasinin Gunluk haklara
-        // etkisini (CheckOutGunuGecerliMi artik yeni son geceye uygulanir) DOGRU sekilde yansitir.
-        var tumHaklar = await BuildKonaklamaHaklariAsync(
+        // "HakTarihi >= eskiCikisTarihi" filtresi YANLIS - eski konaklamanin SON GECESI (ör.
+        // CheckOutGunuGecerliMi=false oldugu icin ilk rezervasyonda hic uretilmemis bir hak),
+        // uzatma sonrasi ARA GUN haline geldiginde HakTarihi hala eskiCikisTarihi'NDEN ONCEKI bir
+        // tarih olabilir ve bu filtreyle atlanir. Bunun yerine KUME FARKI yaklasimi kullanilir:
+        // 1) eski TOPLAM aralik (giris->eski cikis) icin beklenen haklar,
+        // 2) yeni TOPLAM aralik (giris->yeni cikis) icin beklenen haklar uretilir,
+        // 3) yenide olup eskide OLMAYAN haklar (anahtar: HizmetKodu+HakTarihi) belirlenir,
+        // 4) veritabaninda zaten var olan AKTIF haklar da dislanir,
+        // 5) yalnizca GERCEKTEN yeni doğan haklar eklenir. Onceki haklar SILINMEZ/yeniden
+        // OLUSTURULMAZ, KonaklamaBoyunca haklar (HakTarihi hep GirisTarihi) bu kume farkinda dogal
+        // olarak her iki tarafta da ayni anahtarla yer alip ELENIR - cogaltilmaz.
+        var eskiHaklar = await BuildKonaklamaHaklariAsync(
+            reservation.TesisId,
+            reservation.KonaklamaTipiId!.Value,
+            reservation.GirisTarihi,
+            eskiCikisTarihi,
+            cancellationToken);
+
+        var yeniToplamHaklar = await BuildKonaklamaHaklariAsync(
             reservation.TesisId,
             reservation.KonaklamaTipiId!.Value,
             reservation.GirisTarihi,
             yeniCikisTarihi,
             cancellationToken);
 
-        var yeniHaklar = tumHaklar
-            .Where(x => x.HakTarihi.HasValue && x.HakTarihi.Value.Date >= eskiCikisTarihi.Date)
+        var eskiAnahtarSeti = eskiHaklar
+            .Select(x => (x.HizmetKodu, x.HakTarihi, x.Periyot, x.KullanimTipi))
+            .ToHashSet();
+
+        var sonradanDoganHaklar = yeniToplamHaklar
+            .Where(x => !eskiAnahtarSeti.Contains((x.HizmetKodu, x.HakTarihi, x.Periyot, x.KullanimTipi)))
             .ToList();
 
-        if (yeniHaklar.Count == 0)
+        if (sonradanDoganHaklar.Count == 0)
         {
             return;
         }
 
         var mevcutAnahtarlar = await _stysDbContext.RezervasyonKonaklamaHaklari
             .Where(x => x.RezervasyonId == reservation.Id && x.AktifMi)
-            .Select(x => new { x.HizmetKodu, x.HakTarihi })
+            .Select(x => new { x.HizmetKodu, x.HakTarihi, x.Periyot, x.KullanimTipi })
             .ToListAsync(cancellationToken);
         var mevcutAnahtarSeti = mevcutAnahtarlar
-            .Select(x => (x.HizmetKodu, x.HakTarihi))
+            .Select(x => (x.HizmetKodu, x.HakTarihi, x.Periyot, x.KullanimTipi))
             .ToHashSet();
 
         var eklenecekHaklar = new List<RezervasyonKonaklamaHakki>();
-        foreach (var hak in yeniHaklar)
+        foreach (var hak in sonradanDoganHaklar)
         {
-            if (mevcutAnahtarSeti.Contains((hak.HizmetKodu, hak.HakTarihi)))
+            var anahtar = (hak.HizmetKodu, hak.HakTarihi, hak.Periyot, hak.KullanimTipi);
+            if (mevcutAnahtarSeti.Contains(anahtar))
             {
                 continue;
             }
+
+            // Ayni (henuz kaydedilmemis) toplu eklemede de mukerrer anahtar birikmesin.
+            mevcutAnahtarSeti.Add(anahtar);
 
             hak.RezervasyonId = reservation.Id;
             eklenecekHaklar.Add(hak);

@@ -688,3 +688,51 @@ export interface RezervasyonEkHizmetKaydetRequestDto {
     birimFiyat: number | null;
     aciklama: string | null;
 }
+
+export interface RezervasyonUzatmaSecenekleriRequestDto {
+    yeniCikisTarihi: string;
+}
+
+export interface RezervasyonUzatmaSecenegiDto {
+    senaryoKodu: string;
+    senaryoTipi: string;
+    aciklama: string;
+    odaDegisimSayisi: number;
+    ekBazUcret: number;
+    ekNihaiUcret: number;
+    paraBirimi: string;
+    fiyatlamaTipi: string;
+    fiyatUyarisi: string | null;
+    segmentler: KonaklamaSenaryoSegmentDto[];
+}
+
+export interface RezervasyonUzatmaSecenekleriDto {
+    rezervasyonId: number;
+    referansNo: string;
+    mevcutCikisTarihi: string;
+    yeniCikisTarihi: string;
+    sonucKodu: string;
+    mesaj: string;
+    secenekler: RezervasyonUzatmaSecenegiDto[];
+}
+
+export interface RezervasyonUzatRequestDto {
+    yeniCikisTarihi: string;
+    senaryoKodu: string;
+}
+
+export interface RezervasyonUzatmaSonucDto {
+    rezervasyonId: number;
+    referansNo: string;
+    senaryoKodu: string;
+    senaryoTipi: string;
+    eskiCikisTarihi: string;
+    yeniCikisTarihi: string;
+    ekBazUcret: number;
+    ekNihaiUcret: number;
+    yeniToplamBazUcret: number;
+    yeniToplamUcret: number;
+    paraBirimi: string;
+    segmentler: KonaklamaSenaryoSegmentDto[];
+    mesaj: string;
+}

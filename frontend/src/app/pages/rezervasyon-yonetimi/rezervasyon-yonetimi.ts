@@ -7,6 +7,7 @@ import { RezervasyonDegisiklikGecmisiDialogComponent } from './components/rezerv
 import { RezervasyonKonaklayanPlaniDialogComponent } from './components/rezervasyon-konaklayan-plani-dialog/rezervasyon-konaklayan-plani-dialog';
 import { RezervasyonOdaDegisimiDialogComponent } from './components/rezervasyon-oda-degisimi-dialog/rezervasyon-oda-degisimi-dialog';
 import { RezervasyonOdemeDialogComponent } from './components/rezervasyon-odeme-dialog/rezervasyon-odeme-dialog';
+import { RezervasyonUzatmaDialogComponent } from './components/rezervasyon-uzatma-dialog/rezervasyon-uzatma-dialog';
 import { EMPTY, finalize, Observable, switchMap } from 'rxjs';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -58,12 +59,13 @@ type RezervasyonNavAction =
     | 'odeme'
     | 'odaDegisim'
     | 'konaklayanPlan'
-    | 'degisiklikGecmisi';
+    | 'degisiklikGecmisi'
+    | 'uzatma';
 
 @Component({
     selector: 'app-rezervasyon-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent, RezervasyonOdaDegisimiDialogComponent, RezervasyonOdemeDialogComponent],
+    imports: [CommonModule, FormsModule, RouterLink, ButtonModule, CheckboxModule, ConfirmDialogModule, DatePickerModule, DialogModule, InputTextModule, MenuModule, MultiSelectModule, SelectModule, TableModule, TagModule, ToastModule, ToolbarModule, TooltipModule, RezervasyonDegisiklikGecmisiDialogComponent, RezervasyonKonaklayanPlaniDialogComponent, RezervasyonOdaDegisimiDialogComponent, RezervasyonOdemeDialogComponent, RezervasyonUzatmaDialogComponent],
     templateUrl: './rezervasyon-yonetimi.html',
     styleUrl: './rezervasyon-yonetimi.scss',
     providers: [MessageService, ConfirmationService]
@@ -123,6 +125,11 @@ export class RezervasyonYonetimi implements OnInit {
     odaDegisimRezervasyonId: number | null = null;
     odaDegisimReferansNo = '';
     odaDegisimRezervasyonDurumu: string | null = null;
+    uzatmaDialogVisible = false;
+    uzatmaRezervasyonId: number | null = null;
+    uzatmaReferansNo = '';
+    uzatmaRezervasyonDurumu: string | null = null;
+    uzatmaMevcutCikisTarihi: string | null = null;
     alternatifOdaDialogVisible = false;
     alternatifOdaLoading = false;
     alternatifOdalar: UygunOdaDto[] = [];
@@ -274,6 +281,7 @@ export class RezervasyonYonetimi implements OnInit {
             case 'odaDegisim':
             case 'konaklayanPlan':
             case 'degisiklikGecmisi':
+            case 'uzatma':
                 return value;
             default:
                 return null;
@@ -310,6 +318,9 @@ export class RezervasyonYonetimi implements OnInit {
                 break;
             case 'degisiklikGecmisi':
                 this.openDegisiklikGecmisiDialog(kayit);
+                break;
+            case 'uzatma':
+                this.openUzatmaDialog(kayit);
                 break;
             default:
                 this.loadRezervasyonDetay(rezervasyonId);
@@ -1464,6 +1475,11 @@ export class RezervasyonYonetimi implements OnInit {
             messages.push(`Oda degistir: ${this.getRoomChangeDisabledMessage(kayit)}`);
         }
 
+        const uzatmaReason = this.getUzatmaDisabledReason(kayit);
+        if (uzatmaReason) {
+            messages.push(`Uzat: ${this.getUzatmaDisabledMessage(kayit)}`);
+        }
+
         const checkInReason = this.getCheckInDisabledReason(kayit);
         if (checkInReason) {
             messages.push(`Check-in: ${this.getCheckInDisabledMessage(kayit)}`);
@@ -1513,6 +1529,14 @@ export class RezervasyonYonetimi implements OnInit {
             icon: 'pi pi-sync',
             disabled: roomChangeDisabledReason !== null,
             command: () => this.openOdaDegisimDialog(kayit)
+        });
+
+        const uzatmaDisabledReason = this.getUzatmaDisabledReason(kayit);
+        items.push({
+            label: uzatmaDisabledReason ? `Uzat (${uzatmaDisabledReason})` : 'Uzat',
+            icon: 'pi pi-calendar-plus',
+            disabled: uzatmaDisabledReason !== null,
+            command: () => this.openUzatmaDialog(kayit)
         });
 
         const checkInDisabledReason = this.getCheckInDisabledReason(kayit);
@@ -1682,6 +1706,64 @@ export class RezervasyonYonetimi implements OnInit {
 
     onOdaDegisimiSaved(): void {
         this.araRezervasyonlar(this.aramaPage);
+    }
+
+    canOpenUzatmaDialog(kayit: RezervasyonListeDto): boolean {
+        return this.getUzatmaDisabledReason(kayit) === null;
+    }
+
+    getUzatmaDisabledReason(kayit: RezervasyonListeDto): string | null {
+        if (!this.canManage) {
+            return 'Yonetim yetkisi yok';
+        }
+
+        if (kayit.rezervasyonDurumu !== this.durumCheckInTamamlandi) {
+            return 'Check-in tamamlanmadi';
+        }
+
+        return null;
+    }
+
+    getUzatmaDisabledMessage(kayit: RezervasyonListeDto): string {
+        const reason = this.getUzatmaDisabledReason(kayit);
+        if (reason === 'Check-in tamamlanmadi') {
+            return 'Rezervasyon uzatma islemi yalnizca check-in tamamlanmis rezervasyonlarda yapilabilir.';
+        }
+
+        if (reason === 'Yonetim yetkisi yok') {
+            return 'Bu islem icin yetkiniz bulunmuyor.';
+        }
+
+        return 'Rezervasyon uzatma islemi su anda acilamaz.';
+    }
+
+    openUzatmaDialog(kayit: RezervasyonListeDto): void {
+        if (!this.canOpenUzatmaDialog(kayit)) {
+            return;
+        }
+
+        this.uzatmaRezervasyonId = kayit.id;
+        this.uzatmaReferansNo = kayit.referansNo;
+        this.uzatmaRezervasyonDurumu = kayit.rezervasyonDurumu;
+        this.uzatmaMevcutCikisTarihi = kayit.cikisTarihi;
+        this.uzatmaDialogVisible = true;
+    }
+
+    closeUzatmaDialog(): void {
+        this.uzatmaDialogVisible = false;
+        this.uzatmaRezervasyonId = null;
+        this.uzatmaReferansNo = '';
+        this.uzatmaRezervasyonDurumu = null;
+        this.uzatmaMevcutCikisTarihi = null;
+    }
+
+    onUzatmaSaved(): void {
+        this.araRezervasyonlar(this.aramaPage);
+        const id = this.uzatmaRezervasyonId;
+        if (id) {
+            delete this.rezervasyonDetayById[id];
+            this.loadRezervasyonDetay(id);
+        }
     }
 
     openOdemeDialog(kayit: RezervasyonListeDto): void {

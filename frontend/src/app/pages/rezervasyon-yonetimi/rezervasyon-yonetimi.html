@@ -1095,6 +1095,15 @@
     (saved)="onOdaDegisimiSaved()">
 </app-rezervasyon-oda-degisimi-dialog>
 
+<app-rezervasyon-uzatma-dialog
+    [(visible)]="uzatmaDialogVisible"
+    [rezervasyonId]="uzatmaRezervasyonId"
+    [referansNo]="uzatmaReferansNo"
+    [rezervasyonDurumu]="uzatmaRezervasyonDurumu"
+    [mevcutCikisTarihi]="uzatmaMevcutCikisTarihi"
+    (saved)="onUzatmaSaved()">
+</app-rezervasyon-uzatma-dialog>
+
 <app-rezervasyon-odeme-dialog
     [(visible)]="odemeDialogVisible"
     [rezervasyonId]="odemeRezervasyonId"

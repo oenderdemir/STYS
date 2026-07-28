@@ -38,6 +38,10 @@ import {
     RezervasyonAramaSonucDto,
     RezervasyonCariKartHizliOlusturRequestDto,
     RezervasyonTesisDto,
+    RezervasyonUzatmaSecenekleriDto,
+    RezervasyonUzatmaSecenekleriRequestDto,
+    RezervasyonUzatmaSonucDto,
+    RezervasyonUzatRequestDto,
     SenaryoFiyatHesaplaRequestDto,
     SenaryoFiyatHesaplamaSonucuDto,
     UygunOdaAramaRequestDto,
@@ -258,6 +262,30 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Oda degisimi kaydedilemedi.');
+            })
+        );
+    }
+
+    getUzatmaSecenekleri(rezervasyonId: number, request: RezervasyonUzatmaSecenekleriRequestDto): Observable<RezervasyonUzatmaSecenekleriDto> {
+        return this.http.post<ApiResponse<RezervasyonUzatmaSecenekleriDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/uzatma-secenekleri`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Uzatma secenekleri alinamadi.');
+            })
+        );
+    }
+
+    uzatRezervasyon(rezervasyonId: number, request: RezervasyonUzatRequestDto): Observable<RezervasyonUzatmaSonucDto> {
+        return this.http.post<ApiResponse<RezervasyonUzatmaSonucDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/uzat`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon uzatilamadi.');
             })
         );
     }

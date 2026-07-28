@@ -1,0 +1,115 @@
+<p-confirmDialog />
+
+<p-dialog
+    header="Rezervasyon Uzat"
+    [visible]="visible"
+    [modal]="true"
+    [style]="{ width: '56rem', 'max-width': '98vw' }"
+    [breakpoints]="{ '1200px': '97vw' }"
+    (onHide)="kapat()"
+>
+    <div class="text-sm mb-3">
+        <div><strong>Referans:</strong> {{ referansNo }}</div>
+        <div><strong>Mevcut Cikis Tarihi:</strong> {{ formatDateTime(mevcutCikisTarihi) }}</div>
+    </div>
+
+    <div class="flex flex-wrap items-end gap-3 mb-4">
+        <div style="min-width: 220px">
+            <label for="uzatmaYeniCikis" class="block font-medium mb-2">Yeni Cikis Tarihi</label>
+            <p-datepicker
+                inputId="uzatmaYeniCikis"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [(ngModel)]="yeniCikisTarihi"
+                [disabled]="loading || saving"
+                [showIcon]="true"
+                [showTime]="true"
+                hourFormat="24"
+                dateFormat="dd.mm.yy"
+                appendTo="body"
+            />
+            @if (yeniCikisTarihi && !isYeniCikisTarihiGecerli()) {
+                <div class="text-xs text-red-500 mt-1">Yeni cikis tarihi, mevcut cikis tarihinden sonra olmalidir.</div>
+            }
+        </div>
+        <p-button
+            label="Uzatma Seceneklerini Getir"
+            icon="pi pi-search"
+            [loading]="loading"
+            [disabled]="!canGetirSecenekleri()"
+            (onClick)="getirSecenekleri()"
+        />
+    </div>
+
+    @if (loading) {
+        <div>Uzatma secenekleri yukleniyor...</div>
+    } @else if (secenekler && sonucMusaitlikYokMu) {
+        <div class="text-sm text-orange-600 p-3 border-round surface-100">
+            {{ secenekler.mesaj }}
+        </div>
+    } @else if (secenekler && secenekler.secenekler.length > 0) {
+        <div class="flex flex-col gap-3">
+            @for (secenek of secenekler.secenekler; track secenek.senaryoKodu) {
+                <div
+                    class="card cursor-pointer border-2"
+                    [class.border-primary]="seciliSecenek === secenek"
+                    [class.border-transparent]="seciliSecenek !== secenek"
+                    role="button"
+                    tabindex="0"
+                    (click)="seciliSecenegiSec(secenek)"
+                    (keydown.enter)="seciliSecenegiSec(secenek)"
+                >
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <p-tag [value]="getSenaryoTipiEtiketi(secenek.senaryoTipi)" severity="info" [rounded]="true" />
+                            @if (seciliSecenek === secenek) {
+                                <p-tag value="Secildi" severity="success" [rounded]="true" />
+                            }
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold">{{ formatCurrency(secenek.ekNihaiUcret, secenek.paraBirimi) }}</div>
+                            <div class="text-xs text-color-secondary">Baz: {{ formatCurrency(secenek.ekBazUcret, secenek.paraBirimi) }} | {{ secenek.fiyatlamaTipi }}</div>
+                        </div>
+                    </div>
+
+                    <div class="text-sm mb-2">{{ secenek.aciklama }}</div>
+                    <div class="text-xs text-color-secondary mb-2">Oda degisikligi sayisi: {{ secenek.odaDegisimSayisi }}</div>
+
+                    @if (secenek.fiyatUyarisi) {
+                        <div class="text-xs text-orange-600 mb-2">{{ secenek.fiyatUyarisi }}</div>
+                    }
+
+                    <div class="border-top-1 surface-border pt-2 mt-2">
+                        @for (segment of secenek.segmentler; track $index) {
+                            <div class="text-xs mb-1">
+                                <span class="font-medium">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</span>
+                                <span class="text-color-secondary">
+                                    :
+                                    @for (atama of segment.odaAtamalari; track atama.odaId) {
+                                        {{ atama.odaNo }} ({{ atama.binaAdi }}, {{ atama.odaTipiAdi }}, {{ atama.ayrilanKisiSayisi }} kisi)@if (!$last) {, }
+                                    }
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    } @else if (secenekler) {
+        <div>Bu tarih araligi icin uzatma secenegi bulunamadi.</div>
+    } @else {
+        <div class="text-color-secondary">Uzatma seceneklerini gormek icin yeni cikis tarihini secip "Uzatma Seceneklerini Getir" butonuna tiklayin.</div>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="kapat()" />
+        <p-button
+            label="Rezervasyonu Uzat"
+            icon="pi pi-check"
+            [loading]="saving"
+            [disabled]="!canUzat()"
+            (onClick)="rezervasyonuUzatOnayla()"
+        />
+    </ng-template>
+</p-dialog>

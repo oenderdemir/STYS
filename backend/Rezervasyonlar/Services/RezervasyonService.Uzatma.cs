@@ -151,15 +151,10 @@ public partial class RezervasyonService
         foreach (var variant in fullIntervalVariants)
         {
             var segment = variant.Segmentler[0];
-            var rawDegisimSayisi = CalculateRoomChangeCount(currentAtamaDtos, segment.OdaAtamalari);
-
-            // Mevcut dagilim EKSIKSE (currentAssignmentComplete=false), TAM bir alternatif plan
-            // TANIM GEREGI asla "mevcutla ayni" SAYILAMAZ - kisi sayilari zaten farklidir. Ancak
-            // CalculateRoomChangeCount yalnizca ONCEKI odalarin durumuna bakar; eksik dagilimda
-            // var OLAN tek odanin kisi sayisi degismeden YENI bir oda EKLENMISSE (ör. {101:1} ->
-            // {101:1,102:1}) ham hesap yanlislikla 0 dönebilir - bu durumda deger EN AZ 1'e
-            // yukseltilir.
-            var odaDegisimSayisi = currentAssignmentComplete ? rawDegisimSayisi : Math.Max(rawDegisimSayisi, 1);
+            // CalculateRoomChangeCount SIMETRIKTIR ve toplam kisi sayisi farkini da yansitir - mevcut
+            // dagilim EKSIK (currentAssignmentComplete=false) oldugunda toplamlar farkli olacagi icin
+            // sonuc HER ZAMAN >0'dir; ayrica bir "en az 1'e yukselt" duzeltmesine gerek YOKTUR.
+            var odaDegisimSayisi = CalculateRoomChangeCount(currentAtamaDtos, segment.OdaAtamalari);
 
             if (odaDegisimSayisi == 0)
             {
@@ -305,12 +300,18 @@ public partial class RezervasyonService
         DateTime extendEnd,
         CancellationToken cancellationToken)
     {
+        // Sinir uretiminde KULLANILAN durum filtresi, GetCurrentOccupancyByRoomAsync/
+        // GetSharedRoomGuestOccupanciesAsync'in doluluk hesabinda "aktif/engelleyici" saydigi
+        // durumlarla BIREBIR AYNIDIR (Iptal VE CheckOutTamamlandi haric tutulur) - check-out
+        // tamamlanmis veya iptal edilmis bir rezervasyonun tarihi, doluluga hicbir etkisi
+        // olmadigi icin GERCEK bir musaitlik sinirini de OLUSTURMAMALIDIR.
         var segmentBoundaries = await (
                 from segment in _stysDbContext.RezervasyonSegmentleri
                 where segment.Rezervasyon != null
                       && segment.Rezervasyon.TesisId == tesisId
                       && segment.Rezervasyon.AktifMi
                       && segment.Rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                      && segment.Rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
                       && segment.RezervasyonId != rezervasyonId
                       && segment.BaslangicTarihi < extendEnd
                       && segment.BitisTarihi > extendStart
@@ -426,67 +427,54 @@ public partial class RezervasyonService
             return "Tesiste aktif oda tanimi bulunamadigi icin uzatma secenegi uretilemedi.";
         }
 
-        var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
-            .Where(x => x.AktifMi && candidateRoomIds.Contains(x.OdaId) && x.BaslangicTarihi < extendEnd && x.BitisTarihi > extendStart)
-            .Select(x => x.OdaId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        // Bir bakim/ariza blogunun VAR OLMASI TEK BASINA yeterli degildir - blok(lar) KALDIRILMIS
+        // GIBI, GetRoomAvailabilitiesAsync'in KENDI (kapasite + doluluk + PAYLASIMLI ODA CINSIYET)
+        // kurallariyla, GERCEK guestGenderRequirements kullanilarak tam bir plan kurulabiliyor MU
+        // diye dogrulanir. RoomAvailability nesneleri elle, eksik bilgiyle (ör. cinsiyet bilgisi
+        // olmadan) KURULMAZ - ayni ortak altyapi, yalnizca "bakim bloklarini yok say" bayragiyla
+        // tekrar cagrilir; bu bayrak SADECE bu neden analizinde kullanilir, normal aramayi etkilemez.
+        var availabilityIgnoringBlocks = await GetRoomAvailabilitiesAsync(
+            tesisId,
+            null,
+            kisiSayisi,
+            guestGenderRequirements,
+            extendStart,
+            extendEnd,
+            cancellationToken,
+            rezervasyonId,
+            ignoreMaintenanceBlocks: true);
 
-        if (blockedRoomIds.Count > 0)
+        var allocationsIgnoringBlocks = AllocatePeople(
+            availabilityIgnoringBlocks.OrderByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList(),
+            kisiSayisi,
+            guestGenderRequirements);
+
+        if (allocationsIgnoringBlocks.Count > 0)
         {
-            // Bir bakim/ariza blogunun VAR OLMASI TEK BASINA yeterli degildir - blok(lar)
-            // KALDIRILMIS gibi bu odalarin gercek doluluk/kapasite durumu hesaplanip, tam
-            // kisi sayisini karsilayan bir plan GERCEKTEN kurulabiliyor MU diye dogrulanir.
-            var blockedRoomInfo = await (
-                    from oda in _stysDbContext.Odalar
-                    join bina in _stysDbContext.Binalar on oda.BinaId equals bina.Id
-                    join odaTipi in _stysDbContext.OdaTipleri on oda.TesisOdaTipiId equals odaTipi.Id
-                    where blockedRoomIds.Contains(oda.Id)
-                    select new
-                    {
-                        OdaId = oda.Id,
-                        oda.OdaNo,
-                        BinaId = bina.Id,
-                        BinaAdi = bina.Ad,
-                        OdaTipiId = odaTipi.Id,
-                        OdaTipiAdi = odaTipi.Ad,
-                        odaTipi.Kapasite,
-                        odaTipi.PaylasimliMi
-                    })
-                .ToListAsync(cancellationToken);
-
-            var blockedRoomOccupancy = await GetCurrentOccupancyByRoomAsync(blockedRoomIds, extendStart, extendEnd, cancellationToken, rezervasyonId);
-
-            var wouldBeAvailableIfUnblocked = blockedRoomInfo
-                .Select(x =>
-                {
-                    var occupied = blockedRoomOccupancy.GetValueOrDefault(x.OdaId);
-                    var remaining = x.PaylasimliMi ? Math.Max(0, x.Kapasite - occupied) : occupied > 0 ? 0 : x.Kapasite;
-                    return new RoomAvailability(x.OdaId, x.OdaNo, x.BinaId, x.BinaAdi, x.OdaTipiId, x.OdaTipiAdi, x.Kapasite, x.PaylasimliMi, remaining, null);
-                })
-                .Where(x => x.RemainingCapacity > 0)
-                .ToList();
-
-            var combinedIgnoringBlocks = genderFreeAvailability.Concat(wouldBeAvailableIfUnblocked).ToList();
-            var wouldAllocateIfUnblocked = AllocatePeopleWithoutGenderRules(
-                combinedIgnoringBlocks.OrderByDescending(x => x.RemainingCapacity).ThenBy(x => x.OdaId).ToList(),
-                kisiSayisi).Count > 0;
-
-            if (wouldAllocateIfUnblocked)
-            {
-                return "Secilen tarih araliginda bakim/ariza kaydi nedeniyle uygun oda bulunamadi.";
-            }
+            // Bloklar GERCEKTEN kaldirilsaydi kapasite, doluluk VE cinsiyet kurallarinin TUMUYLE
+            // uyumlu tam bir plan kurulabilecegi dogrulandi - bakim/ariza GERCEK nedendir.
+            return "Secilen tarih araliginda bakim/ariza kaydi nedeniyle uygun oda bulunamadi.";
         }
 
         return "Secilen tarih araliginda uygun oda veya kapasite bulunamadi.";
     }
 
     /// <summary>
-    /// Iki oda atama dagilimi ARASINDAKI degisiklik sayisini, YALNIZCA oda ID kumesi farkiyla
-    /// DEGIL, oda basina AYRILAN KISI SAYISI da dahil edilerek hesaplar - ayni oda ID'sinde bile
-    /// kisi sayisi degisiyorsa (or. {101:2} -> {101:1,102:1}) bu GERCEK bir degisikliktir. Tek ve
-    /// iki segmentli senaryolarda AYNI, ORTAK bu metot kullanilir - kural farkli bicimde
-    /// kopyalanip tutarsizlastirilmaz.
+    /// Iki oda atama dagilimi ARASINDA ODA DEGISTIREN KISI SAYISINI hesaplar. YON BAGIMSIZDIR
+    /// (CalculateRoomChangeCount(A,B) == CalculateRoomChangeCount(B,A)) ve oda basina AYRILAN KISI
+    /// SAYISINI da dikkate alir - ayni oda ID'sinde bile kisi sayisi degisiyorsa (ör.
+    /// {101:2} -> {101:1,102:1}) bu GERCEK bir degisikliktir.
+    ///
+    /// Yontem: "ayni odada kalabilecek" kisi sayisi, HER oda ID'si icin onceki/sonraki kisi
+    /// sayisinin MINIMUM'unun toplamidir (bir kisi ayni odada TUTULABILIR ancak hem onceki hem
+    /// sonraki dagilimda o odada yer varsa). Tasinan kisi sayisi ise:
+    ///   max(toplam onceki kisi, toplam sonraki kisi) - ayni odada kalabilen kisi sayisi.
+    /// Bu formul dogal olarak simetriktir (max ve min islemleri simetriktir), toplam kisi sayisi
+    /// farkli olan (ör. eksik/tutarsiz) dagilimlarda da GUVENLI ve ACIKLANABILIR bir sonuc uretir
+    /// (sonuc her zaman >= |toplam farki|), ve basit bir A->B tam takasinda (ayni kisi sayisiyla)
+    /// dogru sekilde "o kisi sayisi kadar" degisiklik dondurur - iki farkli odanin ID'si TEK
+    /// BASINA fazladan bir degisiklik olarak SAYILMAZ. Tek ve iki segmentli senaryolarda AYNI,
+    /// ORTAK bu metot kullanilir - kural farkli bicimde kopyalanip tutarsizlastirilmaz.
     /// </summary>
     private static int CalculateRoomChangeCount(
         IReadOnlyCollection<KonaklamaSenaryoOdaAtamaDto> oncekiAtamalar,
@@ -499,20 +487,14 @@ public partial class RezervasyonService
             .GroupBy(x => x.OdaId)
             .ToDictionary(g => g.Key, g => g.Sum(x => x.AyrilanKisiSayisi));
 
-        // Bir oda ya SONRAKI dagilimda hic YOK (bosaltildi) ya da AYNI odada ayrilan kisi sayisi
-        // degisti - her iki durum da bir "oda atamasi degisikligi" olarak sayilir. Yeni dagilimda
-        // ONCEDEN OLMAYAN bir odanin (ör. bosaltilan odanin yerini alan oda) AYRICA sayilmasi
-        // GEREKMEZ - basit bir A->B takasi TEK bir degisiklik olarak sayilmalidir, iki degil.
-        var changedRoomCount = 0;
-        foreach (var (odaId, oncekiKisi) in oncekiByRoom)
-        {
-            if (!sonrakiByRoom.TryGetValue(odaId, out var sonrakiKisi) || sonrakiKisi != oncekiKisi)
-            {
-                changedRoomCount++;
-            }
-        }
+        var oncekiToplam = oncekiByRoom.Values.Sum();
+        var sonrakiToplam = sonrakiByRoom.Values.Sum();
 
-        return changedRoomCount;
+        var ayniOdadaKalabilenKisiSayisi = oncekiByRoom.Keys
+            .Union(sonrakiByRoom.Keys)
+            .Sum(odaId => Math.Min(oncekiByRoom.GetValueOrDefault(odaId), sonrakiByRoom.GetValueOrDefault(odaId)));
+
+        return Math.Max(oncekiToplam, sonrakiToplam) - ayniOdadaKalabilenKisiSayisi;
     }
 
     private static bool MatchesCurrentRoomType(UzatmaSenaryoAday aday, HashSet<int> currentRoomTypeIds)

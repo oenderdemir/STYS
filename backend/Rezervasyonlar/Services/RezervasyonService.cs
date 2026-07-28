@@ -5826,7 +5826,8 @@ public partial class RezervasyonService : IRezervasyonService
         DateTime baslangic,
         DateTime bitis,
         CancellationToken cancellationToken,
-        int? excludeRezervasyonId = null)
+        int? excludeRezervasyonId = null,
+        bool ignoreMaintenanceBlocks = false)
     {
         if (odaTipiId.HasValue && odaTipiId.Value > 0)
         {
@@ -5874,16 +5875,22 @@ public partial class RezervasyonService : IRezervasyonService
             .Distinct()
             .ToList();
 
-        var blockedRoomIds = await _stysDbContext.OdaKullanimBloklari
-            .Where(x =>
-                x.AktifMi
-                && candidateRoomIds.Contains(x.OdaId)
-                && x.BaslangicTarihi < bitis
-                && x.BitisTarihi > baslangic)
-            .Select(x => x.OdaId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-        var blockedRoomSet = blockedRoomIds.ToHashSet();
+        // ignoreMaintenanceBlocks: yalnizca UZATMA "MusaitlikYok" neden analizinde (bakim/ariza
+        // blogu KALDIRILMIS OLSAYDI ne olurdu sorusuna cevap aramak icin) kullanilir; VARSAYILAN
+        // (false) davranis DEGISMEZ - normal musaitlik/senaryo aramasi bloklari HER ZAMAN dikkate
+        // alir.
+        var blockedRoomSet = ignoreMaintenanceBlocks
+            ? new HashSet<int>()
+            : (await _stysDbContext.OdaKullanimBloklari
+                .Where(x =>
+                    x.AktifMi
+                    && candidateRoomIds.Contains(x.OdaId)
+                    && x.BaslangicTarihi < bitis
+                    && x.BitisTarihi > baslangic)
+                .Select(x => x.OdaId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
 
         var occupancyByRoom = await GetCurrentOccupancyByRoomAsync(
             candidateRoomIds,

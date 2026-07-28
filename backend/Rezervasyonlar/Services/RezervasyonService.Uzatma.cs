@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
@@ -242,7 +244,7 @@ public partial class RezervasyonService
             var (aday, fiyat) = sorted[i];
             secenekler.Add(new RezervasyonUzatmaSecenegiDto
             {
-                SenaryoKodu = $"UZATMA-{i + 1}",
+                SenaryoKodu = CreateUzatmaPlanKodu(rezervasyonId, extendStart, extendEnd, aday.Segmentler),
                 SenaryoTipi = aday.SenaryoTipi,
                 Aciklama = aday.Aciklama,
                 OdaDegisimSayisi = aday.OdaDegisimSayisi,
@@ -495,6 +497,35 @@ public partial class RezervasyonService
             .Sum(odaId => Math.Min(oncekiByRoom.GetValueOrDefault(odaId), sonrakiByRoom.GetValueOrDefault(odaId)));
 
         return Math.Max(oncekiToplam, sonrakiToplam) - ayniOdadaKalabilenKisiSayisi;
+    }
+
+    /// <summary>
+    /// Uzatma secenegi icin KARARLI (siralamadaki sira numarasina BAGLI OLMAYAN) bir plan kimligi
+    /// uretir. Kimlik; rezervasyon ID, mevcut/yeni cikis tarihi ve segment tarihleri+(OdaId,
+    /// AyrilanKisiSayisi) dagilimindan turetilir - AYNI plan HER ZAMAN ayni kodu, FARKLI bir plan
+    /// (musaitlik degisip baska bir dagilim olustugunda) FARKLI bir kod uretir. Kodun tahmin
+    /// edilebilir olmasi GUVENLIK SORUNU degildir - kaydetme sirasinda (RezervasyonUzatAsync) plan
+    /// MUTLAKA sunucuda yeniden hesaplanip bu kodla eslestirilir; istemciden gelen kod DOGRUDAN
+    /// GUVENILMEZ.
+    /// </summary>
+    private static string CreateUzatmaPlanKodu(
+        int rezervasyonId,
+        DateTime mevcutCikisTarihi,
+        DateTime yeniCikisTarihi,
+        IReadOnlyList<KonaklamaSenaryoSegmentDto> segmentler)
+    {
+        var segmentImzasi = string.Join("|", segmentler.Select(s =>
+        {
+            var odaImzasi = string.Join(",", s.OdaAtamalari
+                .OrderBy(a => a.OdaId)
+                .ThenBy(a => a.AyrilanKisiSayisi)
+                .Select(a => $"{a.OdaId}:{a.AyrilanKisiSayisi}"));
+            return $"{s.BaslangicTarihi:O}~{s.BitisTarihi:O}~[{odaImzasi}]";
+        }));
+
+        var kaynakMetin = $"{rezervasyonId}|{mevcutCikisTarihi:O}|{yeniCikisTarihi:O}|{segmentImzasi}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(kaynakMetin));
+        return "UZT-" + Convert.ToHexString(hash)[..12];
     }
 
     private static bool MatchesCurrentRoomType(UzatmaSenaryoAday aday, HashSet<int> currentRoomTypeIds)

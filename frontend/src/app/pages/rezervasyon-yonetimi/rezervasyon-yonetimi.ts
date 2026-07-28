@@ -130,6 +130,7 @@ export class RezervasyonYonetimi implements OnInit {
     uzatmaReferansNo = '';
     uzatmaRezervasyonDurumu: string | null = null;
     uzatmaMevcutCikisTarihi: string | null = null;
+    uzatmaTesisCikisSaati: string | null = null;
     alternatifOdaDialogVisible = false;
     alternatifOdaLoading = false;
     alternatifOdalar: UygunOdaDto[] = [];
@@ -1746,6 +1747,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.uzatmaReferansNo = kayit.referansNo;
         this.uzatmaRezervasyonDurumu = kayit.rezervasyonDurumu;
         this.uzatmaMevcutCikisTarihi = kayit.cikisTarihi;
+        this.uzatmaTesisCikisSaati = this.tesisler.find((x) => x.id === kayit.tesisId)?.cikisSaati ?? null;
         this.uzatmaDialogVisible = true;
     }
 
@@ -1755,6 +1757,7 @@ export class RezervasyonYonetimi implements OnInit {
         this.uzatmaReferansNo = '';
         this.uzatmaRezervasyonDurumu = null;
         this.uzatmaMevcutCikisTarihi = null;
+        this.uzatmaTesisCikisSaati = null;
     }
 
     onUzatmaSaved(): void {

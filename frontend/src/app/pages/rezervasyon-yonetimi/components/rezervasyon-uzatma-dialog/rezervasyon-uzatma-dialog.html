@@ -21,14 +21,14 @@
                 class="w-full"
                 styleClass="w-full"
                 inputStyleClass="w-full"
-                [(ngModel)]="yeniCikisTarihi"
+                [ngModel]="yeniCikisTarihi"
+                (ngModelChange)="onYeniCikisTarihiChange($event)"
                 [disabled]="loading || saving"
                 [showIcon]="true"
-                [showTime]="true"
-                hourFormat="24"
                 dateFormat="dd.mm.yy"
                 appendTo="body"
             />
+            <div class="text-xs text-color-secondary mt-1">Cikis saati, tesisin varsayilan cikis saati ({{ formattedTesisCikisSaati }}) olarak uygulanir.</div>
             @if (yeniCikisTarihi && !isYeniCikisTarihiGecerli()) {
                 <div class="text-xs text-red-500 mt-1">Yeni cikis tarihi, mevcut cikis tarihinden sonra olmalidir.</div>
             }
@@ -49,10 +49,10 @@
             {{ secenekler.mesaj }}
         </div>
     } @else if (secenekler && secenekler.secenekler.length > 0) {
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-3" style="max-height: 55vh; overflow: auto;">
             @for (secenek of secenekler.secenekler; track secenek.senaryoKodu) {
                 <div
-                    class="card cursor-pointer border-2"
+                    class="card cursor-pointer border-2 uzatma-secenek-karti"
                     [class.border-primary]="seciliSecenek === secenek"
                     [class.border-transparent]="seciliSecenek !== secenek"
                     role="button"
@@ -60,36 +60,59 @@
                     (click)="seciliSecenegiSec(secenek)"
                     (keydown.enter)="seciliSecenegiSec(secenek)"
                 >
-                    <div class="flex items-center justify-between mb-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
                         <div class="flex items-center gap-2">
-                            <p-tag [value]="getSenaryoTipiEtiketi(secenek.senaryoTipi)" severity="info" [rounded]="true" />
+                            <p-tag
+                                [value]="getSenaryoTipiEtiketi(secenek.senaryoTipi)"
+                                [severity]="getSenaryoTipiSeverity(secenek.senaryoTipi)"
+                                [rounded]="true"
+                                styleClass="text-base px-3 py-2 font-bold"
+                            />
                             @if (seciliSecenek === secenek) {
-                                <p-tag value="Secildi" severity="success" [rounded]="true" />
+                                <p-tag value="Secildi" severity="success" icon="pi pi-check" [rounded]="true" />
                             }
                         </div>
                         <div class="text-right">
-                            <div class="text-lg font-bold">{{ formatCurrency(secenek.ekNihaiUcret, secenek.paraBirimi) }}</div>
-                            <div class="text-xs text-color-secondary">Baz: {{ formatCurrency(secenek.ekBazUcret, secenek.paraBirimi) }} | {{ secenek.fiyatlamaTipi }}</div>
+                            <div class="text-2xl font-bold text-primary">{{ formatCurrency(secenek.ekNihaiUcret, secenek.paraBirimi) }}</div>
+                            <div class="text-xs text-color-secondary">Baz ucret: {{ formatCurrency(secenek.ekBazUcret, secenek.paraBirimi) }} &middot; {{ secenek.fiyatlamaTipi }}</div>
                         </div>
                     </div>
 
-                    <div class="text-sm mb-2">{{ secenek.aciklama }}</div>
-                    <div class="text-xs text-color-secondary mb-2">Oda degisikligi sayisi: {{ secenek.odaDegisimSayisi }}</div>
+                    <div class="mb-3">
+                        <div class="text-xs font-semibold uppercase text-color-secondary mb-1">Aciklama</div>
+                        <div class="text-base">{{ secenek.aciklama }}</div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-4 mb-3">
+                        <div>
+                            <div class="text-xs font-semibold uppercase text-color-secondary mb-1">Oda Degisikligi Sayisi</div>
+                            <p-tag
+                                [value]="secenek.odaDegisimSayisi === 0 ? 'Degisiklik yok' : (secenek.odaDegisimSayisi + ' kisi tasinacak')"
+                                [severity]="secenek.odaDegisimSayisi === 0 ? 'success' : 'warn'"
+                            />
+                        </div>
+                    </div>
 
                     @if (secenek.fiyatUyarisi) {
-                        <div class="text-xs text-orange-600 mb-2">{{ secenek.fiyatUyarisi }}</div>
+                        <div class="text-sm text-orange-600 mb-3 p-2 border-round surface-100">
+                            <i class="pi pi-exclamation-triangle mr-2"></i>{{ secenek.fiyatUyarisi }}
+                        </div>
                     }
 
-                    <div class="border-top-1 surface-border pt-2 mt-2">
+                    <div class="border-top-1 surface-border pt-3 mt-1">
+                        <div class="text-xs font-semibold uppercase text-color-secondary mb-2">Segmentler</div>
                         @for (segment of secenek.segmentler; track $index) {
-                            <div class="text-xs mb-1">
-                                <span class="font-medium">{{ formatDateTime(segment.baslangicTarihi) }} - {{ formatDateTime(segment.bitisTarihi) }}</span>
-                                <span class="text-color-secondary">
-                                    :
+                            <div class="mb-2 p-2 border-round surface-50">
+                                <div class="text-sm font-medium mb-1">
+                                    <i class="pi pi-calendar mr-1"></i>{{ formatDateTime(segment.baslangicTarihi) }} &rarr; {{ formatDateTime(segment.bitisTarihi) }}
+                                </div>
+                                <div class="flex flex-wrap gap-2">
                                     @for (atama of segment.odaAtamalari; track atama.odaId) {
-                                        {{ atama.odaNo }} ({{ atama.binaAdi }}, {{ atama.odaTipiAdi }}, {{ atama.ayrilanKisiSayisi }} kisi)@if (!$last) {, }
+                                        <span class="text-sm px-2 py-1 border-round surface-200">
+                                            <i class="pi pi-home mr-1"></i><strong>{{ atama.odaNo }}</strong> &middot; {{ atama.binaAdi }} &middot; {{ atama.odaTipiAdi }} &middot; {{ atama.ayrilanKisiSayisi }} kisi
+                                        </span>
                                     }
-                                </span>
+                                </div>
                             </div>
                         }
                     </div>

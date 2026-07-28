@@ -45,6 +45,7 @@ export class RezervasyonUzatmaDialogComponent implements OnChanges {
     @Input() referansNo = '';
     @Input() rezervasyonDurumu: string | null = null;
     @Input() mevcutCikisTarihi: string | null = null;
+    @Input() tesisCikisSaati: string | null = null;
     @Output() visibleChange = new EventEmitter<boolean>();
     @Output() saved = new EventEmitter<void>();
 
@@ -77,6 +78,10 @@ export class RezervasyonUzatmaDialogComponent implements OnChanges {
     kapat(): void {
         this.visibleChange.emit(false);
         this.reset();
+    }
+
+    onYeniCikisTarihiChange(value: Date | null): void {
+        this.yeniCikisTarihi = this.applyTesisCikisSaati(value);
     }
 
     isYeniCikisTarihiGecerli(): boolean {
@@ -168,6 +173,12 @@ export class RezervasyonUzatmaDialogComponent implements OnChanges {
         return SENARYO_TIPI_ETIKETLERI[senaryoTipi] ?? senaryoTipi;
     }
 
+    getSenaryoTipiSeverity(senaryoTipi: string): 'success' | 'warn' | 'info' {
+        if (senaryoTipi === 'AyniOdadaDevam') return 'success';
+        if (senaryoTipi === 'CheckoutGunundeOdaDegisimi') return 'warn';
+        return 'info';
+    }
+
     formatCurrency(value: number, currency: string): string {
         const safeValue = Number.isFinite(value) ? value : 0;
         const safeCurrency = (currency || 'TRY').toUpperCase();
@@ -243,8 +254,30 @@ export class RezervasyonUzatmaDialogComponent implements OnChanges {
             });
     }
 
+    get formattedTesisCikisSaati(): string {
+        const value = (this.tesisCikisSaati ?? '').trim();
+        const match = /^(\d{1,2}):(\d{2})/.exec(value);
+        return match ? `${match[1].padStart(2, '0')}:${match[2]}` : (value || '-');
+    }
+
     get sonucMusaitlikYokMu(): boolean {
         return this.secenekler?.sonucKodu === this.sonucKoduMusaitlikYok;
+    }
+
+    /// Kullanici yalnizca TARIH secer - saat, tesisin varsayilan cikis saatine (cikisSaati,
+    /// "HH:mm:ss" formatinda) SABITLENIR; kullaniciya ayrica saat secimi sunulmaz.
+    private applyTesisCikisSaati(value: Date | null): Date | null {
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+            return null;
+        }
+
+        const parts = (this.tesisCikisSaati ?? '').split(':').map((x) => Number.parseInt(x, 10));
+        const hour = Number.isFinite(parts[0]) ? parts[0] : 0;
+        const minute = Number.isFinite(parts[1]) ? parts[1] : 0;
+        const second = Number.isFinite(parts[2]) ? parts[2] : 0;
+
+        const result = new Date(value.getFullYear(), value.getMonth(), value.getDate(), hour, minute, second);
+        return result;
     }
 
     private reset(): void {

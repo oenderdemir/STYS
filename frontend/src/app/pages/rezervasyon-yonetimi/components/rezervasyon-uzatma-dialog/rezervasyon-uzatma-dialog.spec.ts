@@ -235,4 +235,20 @@ describe('RezervasyonUzatmaDialogComponent', () => {
         expect(component.secenekler).toBeNull();
         expect(component.yeniCikisTarihi).toBeNull();
     });
+
+    it('yeni cikis tarihi secildiginde saat kullanicidan alinmaz - tesisin varsayilan cikis saatine sabitlenir', () => {
+        const component = createComponent();
+        component.tesisCikisSaati = '10:00:00';
+
+        // Kullanici yalnizca TARIH secer (p-datepicker artik [showTime] icermez) - datepicker'in
+        // urettigi Date nesnesinin saat kismi ne olursa olsun (varsayilan gece yarisi dahil),
+        // onYeniCikisTarihiChange bunu tesisin cikis saatiyle DEGISTIRMELIDIR.
+        component.onYeniCikisTarihiChange(new Date(2026, 2, 15, 0, 0, 0));
+
+        expect(component.yeniCikisTarihi?.getFullYear()).toBe(2026);
+        expect(component.yeniCikisTarihi?.getMonth()).toBe(2);
+        expect(component.yeniCikisTarihi?.getDate()).toBe(15);
+        expect(component.yeniCikisTarihi?.getHours()).toBe(10);
+        expect(component.yeniCikisTarihi?.getMinutes()).toBe(0);
+    });
 });

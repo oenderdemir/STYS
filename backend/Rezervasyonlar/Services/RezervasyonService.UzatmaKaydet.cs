@@ -123,7 +123,7 @@ public partial class RezervasyonService
                 if (konaklayanKaydiVarMi)
                 {
                     var (oncekiOda, oncekiYatak) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
-                    var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
+                    var dogrulama = await ComputeUzatmaCandidateAssignabilityAsync(
                         reservation.Id,
                         oncekiOda,
                         oncekiYatak,
@@ -132,7 +132,7 @@ public partial class RezervasyonService
                         requireNoMovesForFirstSegment: true,
                         cancellationToken);
 
-                    if (!gecerliMi)
+                    if (!dogrulama.GecerliMi)
                     {
                         throw new BaseException("Seçilen uzatma planı artık müsait değil. Lütfen seçenekleri yenileyin.", 409);
                     }
@@ -151,13 +151,24 @@ public partial class RezervasyonService
 
                 // Konaklayan/yatak/cinsiyet plani, HERHANGI BIR segment/atama olusturulmadan ONCE
                 // TAMAMEN hesaplanip dogrulanir - boylece cinsiyet/kapasite/yatak acisindan gecerli
-                // bir atama kurulamazsa (409) hicbir kismi kayit (segment dahil) birakilmaz.
+                // bir atama kurulamazsa VEYA gercek toplam hareket sayisi urun kuralini asarsa (409)
+                // hicbir kismi kayit (segment dahil) birakilmaz. Secenek uretiminde kullanilan AYNI
+                // paylasilan dogrulayici burada da cagrilir (bkz. GetUzatmaSecenekleriAsync) - boylece
+                // kaydetme sirasinda FARKLI bir hareket sayisi/kural uygulanamaz.
                 List<UzatmaGuestPlanEntry>? guestPlan = null;
                 if (konaklayanKaydiVarMi)
                 {
                     var (oncekiOda, oncekiYatak) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
-                    guestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
-                        reservation.Id, oncekiOda, oncekiYatak, segmentPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+                    var dogrulama = await ComputeUzatmaCandidateAssignabilityAsync(
+                        reservation.Id, oncekiOda, oncekiYatak, [segmentPlan], tumKonaklayanlar,
+                        requireNoMovesForFirstSegment: false, cancellationToken);
+
+                    if (!dogrulama.GecerliMi)
+                    {
+                        throw new BaseException("Seçilen uzatma planı artık müsait değil. Lütfen seçenekleri yenileyin.", 409);
+                    }
+
+                    guestPlan = dogrulama.SegmentPlanlari[0];
                 }
 
                 var yeniSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, segmentPlan, cancellationToken);
@@ -179,21 +190,27 @@ public partial class RezervasyonService
                 // Her iki segmentin konaklayan/yatak/cinsiyet plani da, HERHANGI BIR segment/atama
                 // olusturulmadan ONCE tamamen hesaplanip dogrulanir (ikinci segmentin plani, ilk
                 // segmentin HENUZ veritabanina yazilmamis dry-run sonucu uzerinden kurulur) - boylece
-                // iki segmentten HERHANGI biri icin gecerli bir atama kurulamazsa hicbir kismi kayit
-                // (ilk segment dahil) birakilmaz.
+                // iki segmentten HERHANGI biri icin gecerli bir atama kurulamazsa, ilk segmentte
+                // konaklayanlar mevcut odalarinda kalmazsa VEYA toplam gercek hareket sayisi 1'i
+                // asarsa hicbir kismi kayit (ilk segment dahil) birakilmaz. Secenek uretiminde
+                // kullanilan AYNI paylasilan dogrulayici burada da cagrilir.
                 List<UzatmaGuestPlanEntry>? ilkGuestPlan = null;
                 List<UzatmaGuestPlanEntry>? ikinciGuestPlan = null;
 
                 if (konaklayanKaydiVarMi)
                 {
-                    var (oncekiOda1, oncekiYatak1) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
-                    ilkGuestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
-                        reservation.Id, oncekiOda1, oncekiYatak1, ilkPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+                    var (oncekiOda, oncekiYatak) = await GetSegmentGuestRoomBedMapAsync(lastSegment.Id, cancellationToken);
+                    var dogrulama = await ComputeUzatmaCandidateAssignabilityAsync(
+                        reservation.Id, oncekiOda, oncekiYatak, [ilkPlan, ikinciPlan], tumKonaklayanlar,
+                        requireNoMovesForFirstSegment: true, cancellationToken);
 
-                    var oncekiOda2 = ilkGuestPlan.ToDictionary(x => x.KonaklayanId, x => x.OdaId);
-                    var oncekiYatak2 = ilkGuestPlan.ToDictionary(x => x.KonaklayanId, x => x.YatakNo);
-                    ikinciGuestPlan = await ComputeUzatmaGuestAssignmentPlanAsync(
-                        reservation.Id, oncekiOda2, oncekiYatak2, ikinciPlan, tumKonaklayanlar, reservation.KisiSayisi, cancellationToken);
+                    if (!dogrulama.GecerliMi)
+                    {
+                        throw new BaseException("Seçilen uzatma planı artık müsait değil. Lütfen seçenekleri yenileyin.", 409);
+                    }
+
+                    ilkGuestPlan = dogrulama.SegmentPlanlari[0];
+                    ikinciGuestPlan = dogrulama.SegmentPlanlari[1];
                 }
 
                 var ilkSegment = await CreateUzatmaSegmentAsync(reservation.Id, maxSegmentSirasi + 1, ilkPlan, cancellationToken);
@@ -392,19 +409,57 @@ public partial class RezervasyonService
     }
 
     /// <summary>
-    /// Bir uzatma adayinin (1 veya 2 segmentli) kisisel konaklayan/yatak atamasinin GERCEKTEN
-    /// kaydedilebilir olup olmadigini, HICBIR VERITABANI YAZIMI YAPMADAN dogrular.
-    /// GetUzatmaSecenekleriAsync (secenek uretimi, salt okunur, fiyatlanip kullaniciya sunulmadan
-    /// ONCE her aday icin) VE RezervasyonUzatAsync (kilit altinda, baglayici yeniden dogrulama
-    /// sirasinda AyniOdadaDevam icin) TARAFINDAN AYNI SEKILDE cagirilir - boylece "seceneklerde
-    /// gosterilen bir plan kisisel olarak kaydedilemez" tutarsizligi yapisal olarak olusamaz.
-    /// requireNoMovesForFirstSegment=true ise (AyniOdadaDevam VEYA oda degisim sayisi 0 olan
-    /// tek-segmentli adaylar), BIRINCI segmentte HICBIR aktif konaklayanin oda degistirmemesi
-    /// sarti da aranir - aksi halde "AyniOdadaDevam" adi yaniltici olur (konaklayan sessizce
-    /// baska bir odaya tasinmis olur). Konaklayan kaydi yoksa (eski/planli-doluluk-only
-    /// rezervasyonlar) dogrulama uygulanmaz - mevcut davranis korunur.
+    /// ComputeUzatmaCandidateAssignabilityAsync'in sonucunu tasir: adayin GERCEKTEN kaydedilebilir
+    /// olup olmadigi, tum segmentler boyunca GERCEK (kisi bazli, KonaklayanId uzerinden karsilastirilan)
+    /// oda gecisi sayisi, ve HER segment icin uretilen gercek konaklayan/oda dry-run plani (Gelmedi
+    /// konaklayanlar bu planlarda hic YER ALMAZ - ComputeUzatmaGuestAssignmentPlanAsync onlari zaten
+    /// aktifKonaklayanlar disinda tutar). GecerliMi=false ise ToplamGercekHareket=0 ve
+    /// SegmentPlanlari bostur - cagiran bu degerlere GUVENMEMELIDIR.
     /// </summary>
-    private async Task<bool> ValidateUzatmaCandidateAssignabilityAsync(
+    private sealed class UzatmaCandidateAssignabilityResult
+    {
+        public required bool GecerliMi { get; init; }
+        public required int ToplamGercekHareket { get; init; }
+        public required List<List<UzatmaGuestPlanEntry>> SegmentPlanlari { get; init; }
+    }
+
+    /// <summary>
+    /// Bir uzatma adayinin (1 veya 2 segmentli) kisisel konaklayan/yatak atamasinin GERCEKTEN
+    /// kaydedilebilir olup olmadigini, HICBIR VERITABANI YAZIMI YAPMADAN dogrular VE bu arada
+    /// uretilen GERCEK (kisi bazli) dry-run planlarini/hareket sayisini da dondurur - boylece
+    /// cagiran (kaydetme akisi dahil) ayrica ComputeUzatmaGuestAssignmentPlanAsync'i TEKRAR
+    /// cagirmak zorunda kalmaz. GetUzatmaSecenekleriAsync (secenek uretimi, salt okunur,
+    /// fiyatlanip kullaniciya sunulmadan ONCE her aday icin) VE RezervasyonUzatAsync (kilit
+    /// altinda, baglayici yeniden dogrulama/materyalizasyon sirasinda TUM senaryo tipleri icin)
+    /// TARAFINDAN AYNI SEKILDE cagirilir - boylece "seceneklerde gosterilen bir plan kisisel
+    /// olarak kaydedilemez VEYA farkli bir hareket sayisiyla kaydedilir" tutarsizligi yapisal
+    /// olarak olusamaz.
+    ///
+    /// Hareket sayisi, HER segment gecisinde (mevcut son segment -> 1. uzatma segmenti, 1. uzatma
+    /// segmenti -> 2. uzatma segmenti) her aktif konaklayanin KonaklayanId'si uzerinden GERCEK oda
+    /// atamasi karsilastirilarak hesaplanir - TOPLU (oda bazli kisi sayisi) karsilastirma KULLANILMAZ,
+    /// cunku toplu karsilastirma iki farkli konaklayanin birbirinin onceki odasina TAKAS yapmasini
+    /// (ayni oda ID kumesi + ayni sayilar korundugu icin) "degisiklik yok" olarak YANLIS raporlayabilir.
+    ///
+    /// requireNoMovesForFirstSegment=true ise (AyniOdadaDevam, oda degisim sayisi 0 olan tek-segmentli
+    /// adaylar, VE UzatmaSirasindaOdaDegisimi'nin ILK segmenti - konaklayanlar checkout gununde degil,
+    /// YALNIZCA uzatma sirasindaki sinirda tasinmalidir), BIRINCI segmentte HICBIR aktif konaklayanin
+    /// oda degistirmemesi sarti da aranir. Ayrica - iki SEGMENTLI (UzatmaSirasindaOdaDegisimi) adaylar
+    /// icin mevcut urun kurali "en fazla bir oda degisikligi" oldugu icin, TUM segmentler boyunca
+    /// toplanan GERCEK hareket sayisi 1'i asarsa aday GECERSIZ sayilir - bu, "checkout gununde bir +
+    /// uzatma sirasinda ikinci degisiklik" gibi cift hareketli iki-segmentli planlari kapsar (varsayilan
+    /// "tek toplam hareket" politikasi; iş kurali gelecekte ikinci degisikligi acikca izin verirse bu
+    /// kisitlama ayrica gevsetilmelidir - bkz. GetUzatmaSecenekleriAsync). TEK segmentli (ör.
+    /// CheckoutGunundeOdaDegisimi) adaylarda ise BIRDEN FAZLA konaklayanin AYNI checkout-gunu
+    /// degisikliginde es zamanli GERCEKTEN yer degistirmesi (ör. paylasilan bir odanin iki farkli
+    /// cinsiyet-sabit odaya bolunmesi) tek bir "degisiklik olayi" sayilir ve bu kisitlamaya TABI
+    /// DEGILDIR - OdaDegisimSayisi bu durumda gercek hareket sayisini (>1 olabilir) DOGRU sekilde
+    /// yansitir. Toplu CalculateRoomChangeCount, HER IKI durumda da nihai karar icin KULLANILMAZ,
+    /// yalnizca aday uretiminde erken/iyimser eleme icin kullanilabilir. Konaklayan kaydi yoksa (eski/
+    /// planli-doluluk-only rezervasyonlar) dogrulama uygulanmaz - mevcut davranis korunur
+    /// (GecerliMi=true, ToplamGercekHareket=0, SegmentPlanlari bos).
+    /// </summary>
+    private async Task<UzatmaCandidateAssignabilityResult> ComputeUzatmaCandidateAssignabilityAsync(
         int rezervasyonId,
         IReadOnlyDictionary<int, int> oncekiOdaBaslangic,
         IReadOnlyDictionary<int, int?> oncekiYatakBaslangic,
@@ -415,35 +470,61 @@ public partial class RezervasyonService
     {
         if (tumKonaklayanlar.Count == 0)
         {
-            return true;
+            return new UzatmaCandidateAssignabilityResult { GecerliMi = true, ToplamGercekHareket = 0, SegmentPlanlari = [] };
         }
+
+        static UzatmaCandidateAssignabilityResult Gecersiz() =>
+            new() { GecerliMi = false, ToplamGercekHareket = 0, SegmentPlanlari = [] };
 
         try
         {
             var oncekiOda = oncekiOdaBaslangic;
             var oncekiYatak = oncekiYatakBaslangic;
+            var segmentPlanlari = new List<List<UzatmaGuestPlanEntry>>();
+            var toplamHareket = 0;
 
             for (var i = 0; i < segmentler.Count; i++)
             {
                 var sonuc = await ComputeUzatmaGuestAssignmentPlanAsync(
                     rezervasyonId, oncekiOda, oncekiYatak, segmentler[i], tumKonaklayanlar, 0, cancellationToken);
 
-                if (i == 0
-                    && requireNoMovesForFirstSegment
-                    && !sonuc.All(x => oncekiOda.TryGetValue(x.KonaklayanId, out var oda) && oda == x.OdaId))
+                var oncekiOdaSnapshot = oncekiOda;
+                var hareketSayisi = sonuc.Count(x => !oncekiOdaSnapshot.TryGetValue(x.KonaklayanId, out var oda) || oda != x.OdaId);
+
+                if (i == 0 && requireNoMovesForFirstSegment && hareketSayisi > 0)
                 {
-                    return false;
+                    return Gecersiz();
                 }
+
+                toplamHareket += hareketSayisi;
+                segmentPlanlari.Add(sonuc);
 
                 oncekiOda = sonuc.ToDictionary(x => x.KonaklayanId, x => x.OdaId);
                 oncekiYatak = sonuc.ToDictionary(x => x.KonaklayanId, x => x.YatakNo);
             }
 
-            return true;
+            // "En fazla bir oda degisikligi" toplam-hareket kisitlamasi yalnizca IKI SEGMENTLI
+            // (UzatmaSirasindaOdaDegisimi) adaylara uygulanir - tek segmentli adaylarda (ör.
+            // CheckoutGunundeOdaDegisimi) birden fazla konaklayanin AYNI checkout-gunu degisikliginde
+            // es zamanli yer degistirmesi tek bir "degisiklik olayi"dir ve reddedilmez. Bu durumda
+            // (GecerliMi=false DONSE BILE) GERCEK hesaplanan ToplamGercekHareket DEGERI korunur
+            // (SegmentPlanlari bos birakilir) - boylece cagiran/testler "kac gercek hareket TESPIT
+            // EDILDI" bilgisini, adayin NEDEN reddedildiginden BAGIMSIZ olarak gozlemleyebilir.
+            if (segmentler.Count > 1 && toplamHareket > 1)
+            {
+                return new UzatmaCandidateAssignabilityResult { GecerliMi = false, ToplamGercekHareket = toplamHareket, SegmentPlanlari = [] };
+            }
+
+            return new UzatmaCandidateAssignabilityResult
+            {
+                GecerliMi = true,
+                ToplamGercekHareket = toplamHareket,
+                SegmentPlanlari = segmentPlanlari
+            };
         }
         catch (BaseException)
         {
-            return false;
+            return Gecersiz();
         }
     }
 

@@ -202,7 +202,7 @@ public partial class RezervasyonService
         var validatedSingleSegmentCandidates = new List<UzatmaSenaryoAday>();
         foreach (var candidate in distinctSingleSegmentCandidates)
         {
-            var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
+            var dogrulama = await ComputeUzatmaCandidateAssignabilityAsync(
                 rezervasyonId,
                 oncekiOdaMevcut,
                 oncekiYatakMevcut,
@@ -211,10 +211,18 @@ public partial class RezervasyonService
                 requireNoMovesForFirstSegment: candidate.SenaryoTipi == RezervasyonUzatmaSenaryoTipleri.AyniOdadaDevam,
                 cancellationToken);
 
-            if (gecerliMi)
+            if (!dogrulama.GecerliMi)
             {
-                validatedSingleSegmentCandidates.Add(candidate);
+                continue;
             }
+
+            // OdaDegisimSayisi, konaklayan kaydi VARSA (kisi bazli dogrulama gercekten calistiysa)
+            // GERCEK hareket sayisiyla degistirilir - toplu CalculateRoomChangeCount yalnizca aday
+            // SINIFLANDIRMASI (AyniOdadaDevam/CheckoutGunundeOdaDegisimi ayrimi, yukarida) icin
+            // kullanilir, nihai raporlanan/siralanan deger DEGILDIR. Konaklayan kaydi yoksa (eski/
+            // planli-doluluk-only rezervasyonlar) kisi bazli hareket bilinemez - toplu deger korunur.
+            var gercekOdaDegisimSayisi = tumKonaklayanlar.Count > 0 ? dogrulama.ToplamGercekHareket : candidate.OdaDegisimSayisi;
+            validatedSingleSegmentCandidates.Add(candidate with { OdaDegisimSayisi = gercekOdaDegisimSayisi });
         }
 
         var assignableCandidates = new List<UzatmaSenaryoAday>(validatedSingleSegmentCandidates);
@@ -243,19 +251,27 @@ public partial class RezervasyonService
 
             foreach (var candidate in distinctTwoSegmentCandidates)
             {
-                var gecerliMi = await ValidateUzatmaCandidateAssignabilityAsync(
+                // UzatmaSirasindaOdaDegisimi'nin ILK segmenti, checkout gununde DEGIL, yalnizca
+                // uzatma sirasindaki (iki uzatma segmenti arasindaki) sinirda oda degisikligine izin
+                // verir - bu yuzden konaklayanlar BIRINCI uzatma segmentinde MEVCUT (checkout
+                // oncesindeki) odalarinda kalmalidir; checkout gununde degisiklik zaten
+                // CheckoutGunundeOdaDegisimi tipi tarafindan ayrica sunulur.
+                var dogrulama = await ComputeUzatmaCandidateAssignabilityAsync(
                     rezervasyonId,
                     oncekiOdaMevcut,
                     oncekiYatakMevcut,
                     candidate.Segmentler,
                     tumKonaklayanlar,
-                    requireNoMovesForFirstSegment: false,
+                    requireNoMovesForFirstSegment: true,
                     cancellationToken);
 
-                if (gecerliMi)
+                if (!dogrulama.GecerliMi)
                 {
-                    assignableCandidates.Add(candidate);
+                    continue;
                 }
+
+                var gercekOdaDegisimSayisi = tumKonaklayanlar.Count > 0 ? dogrulama.ToplamGercekHareket : candidate.OdaDegisimSayisi;
+                assignableCandidates.Add(candidate with { OdaDegisimSayisi = gercekOdaDegisimSayisi });
             }
         }
 

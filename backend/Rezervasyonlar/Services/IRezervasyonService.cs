@@ -49,6 +49,11 @@ public interface IRezervasyonService
 
     Task<RezervasyonOdaDegisimSecenekDto> GetOdaDegisimSecenekleriAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
+    Task<RezervasyonUzatmaSecenekleriDto> GetUzatmaSecenekleriAsync(
+        int rezervasyonId,
+        RezervasyonUzatmaSecenekleriRequestDto request,
+        CancellationToken cancellationToken = default);
+
     Task<RezervasyonKayitSonucDto> KaydetOdaDegisimiAsync(int rezervasyonId, RezervasyonOdaDegisimKaydetRequestDto request, CancellationToken cancellationToken = default);
 
     Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default);

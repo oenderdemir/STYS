@@ -29,7 +29,7 @@ using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
 
-public class RezervasyonService : IRezervasyonService
+public partial class RezervasyonService : IRezervasyonService
 {
     private readonly StysAppDbContext _stysDbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
@@ -5101,6 +5101,7 @@ public class RezervasyonService : IRezervasyonService
             join rezervasyon in _stysDbContext.Rezervasyonlar on segment.RezervasyonId equals rezervasyon.Id
             where rezervasyon.AktifMi
                   && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                  && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
                   && (!excludeRezervasyonId.HasValue || rezervasyon.Id != excludeRezervasyonId.Value)
                   && roomIds.Contains(atama.OdaId)
                   && segment.BaslangicTarihi < bitis
@@ -5195,6 +5196,7 @@ public class RezervasyonService : IRezervasyonService
                 join rezervasyon in _stysDbContext.Rezervasyonlar on konaklayan.RezervasyonId equals rezervasyon.Id
                 where rezervasyon.AktifMi
                       && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.Iptal
+                      && rezervasyon.RezervasyonDurumu != RezervasyonDurumlari.CheckOutTamamlandi
                       && konaklayan.KatilimDurumu != KonaklayanKatilimDurumlari.Gelmedi
                       && (!excludeRezervasyonId.HasValue || rezervasyon.Id != excludeRezervasyonId.Value)
                       && roomIds.Contains(atama.OdaId)
@@ -5823,7 +5825,8 @@ public class RezervasyonService : IRezervasyonService
         ScenarioGuestGenderRequirements guestGenderRequirements,
         DateTime baslangic,
         DateTime bitis,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? excludeRezervasyonId = null)
     {
         if (odaTipiId.HasValue && odaTipiId.Value > 0)
         {
@@ -5886,12 +5889,14 @@ public class RezervasyonService : IRezervasyonService
             candidateRoomIds,
             baslangic,
             bitis,
-            cancellationToken);
+            cancellationToken,
+            excludeRezervasyonId);
         var sharedRoomOccupancies = await GetSharedRoomGuestOccupanciesAsync(
             candidateRoomIds,
             baslangic,
             bitis,
-            cancellationToken);
+            cancellationToken,
+            excludeRezervasyonId);
 
         var result = new List<RoomAvailability>();
         foreach (var room in candidateRooms)

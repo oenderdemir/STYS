@@ -186,6 +186,17 @@ public class RezervasyonController : UIController
         return Ok(result);
     }
 
+    [HttpPost("kayitlar/{rezervasyonId:int}/uzatma-secenekleri")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonUzatmaSecenekleriDto>> GetUzatmaSecenekleri(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonUzatmaSecenekleriRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetUzatmaSecenekleriAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("uygun-odalar")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<List<UygunOdaDto>>> GetUygunOdalar([FromBody] UygunOdaAramaRequestDto request, CancellationToken cancellationToken)

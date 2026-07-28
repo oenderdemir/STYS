@@ -1,6 +1,7 @@
 interface RuntimeEnvironment {
     apiBaseUrl?: string;
     sessionInactivityTimeoutMs?: number;
+    sessionInactivityWarningMs?: number;
     appBasePath?: string;
     environment?: string;
 }
@@ -13,6 +14,7 @@ declare global {
 
 const defaultApiBaseUrl = '/api';
 const defaultSessionInactivityTimeoutMs = 10 * 60 * 1000;
+const defaultSessionInactivityWarningMs = 2 * 60 * 1000;
 
 export function getApiBaseUrl(): string {
     if (typeof window === 'undefined') {
@@ -43,6 +45,19 @@ export function getSessionInactivityTimeoutMs(): number {
     }
 
     return configuredTimeout;
+}
+
+export function getSessionInactivityWarningMs(): number {
+    if (typeof window === 'undefined') {
+        return defaultSessionInactivityWarningMs;
+    }
+
+    const configuredWarning = window.__env?.sessionInactivityWarningMs;
+    if (typeof configuredWarning !== 'number' || !Number.isFinite(configuredWarning) || configuredWarning <= 0) {
+        return defaultSessionInactivityWarningMs;
+    }
+
+    return configuredWarning;
 }
 
 export function getAppBasePath(): string {

@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
-import { getApiBaseUrl, getAppBasePath, getEnvironment, getSessionInactivityTimeoutMs } from './app-runtime.config';
+import { getApiBaseUrl, getAppBasePath, getEnvironment, getSessionInactivityTimeoutMs, getSessionInactivityWarningMs } from './app-runtime.config';
 
 @Injectable({ providedIn: 'root' })
 export class EnvService {
     readonly apiBaseUrl = getApiBaseUrl();
     readonly sessionInactivityTimeoutMs = getSessionInactivityTimeoutMs();
+    readonly sessionInactivityWarningMs = getSessionInactivityWarningMs();
     readonly appBasePath = getAppBasePath();
     readonly environment = getEnvironment();
 

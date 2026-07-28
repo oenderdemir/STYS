@@ -5,6 +5,7 @@ import { AppTopbar } from './app.topbar';
 import { AppSidebar } from './app.sidebar';
 import { AppFooter } from './app.footer';
 import { AppBreadcrumb } from './app.breadcrumb';
+import { AppInactivityWarningDialog } from './app.inactivity-warning-dialog';
 import { LayoutService } from '@/app/layout/service/layout.service';
 import { AuthService } from '../../pages/auth';
 import { filter } from 'rxjs';
@@ -12,7 +13,7 @@ import { filter } from 'rxjs';
 @Component({
     selector: 'app-layout',
     standalone: true,
-    imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter, AppBreadcrumb],
+    imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter, AppBreadcrumb, AppInactivityWarningDialog],
     template: `<div class="layout-wrapper" [ngClass]="containerClass()">
         @if (isAuthenticated()) {
             <app-topbar></app-topbar>
@@ -24,6 +25,7 @@ import { filter } from 'rxjs';
                 </div>
                 <app-footer></app-footer>
             </div>
+            <app-inactivity-warning-dialog></app-inactivity-warning-dialog>
         } @else {
             <div class="layout-main-container">
                 <div class="layout-main">

@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, finalize, map, Observable, of, shareReplay, tap } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
-import { getApiBaseUrl, getSessionInactivityTimeoutMs } from '../../core/config';
+import { getApiBaseUrl, getSessionInactivityTimeoutMs, getSessionInactivityWarningMs } from '../../core/config';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import { ChangePasswordRequestDto, CurrentUserDto, LoginRequestDto, LoginResponseDto } from './dto';
 
@@ -26,8 +26,11 @@ export class AuthService {
     private readonly isKurumAdminStorageKey = 'stys.auth.is_kurum_admin';
     private readonly isSuperAdminStorageKey = 'stys.auth.is_super_admin';
     private readonly inactivityTimeoutMs = getSessionInactivityTimeoutMs();
+    private readonly inactivityWarningMs = getSessionInactivityWarningMs();
     private readonly apiBaseUrl = getApiBaseUrl();
     private inactivityTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    private inactivityWarningTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    private inactivityCountdownIntervalHandle: ReturnType<typeof setInterval> | null = null;
     private refreshInFlight$: Observable<LoginResponseDto> | null = null;
     private readonly muhasebeTesisContext = inject(MuhasebeTesisContextService);
     readonly aktifKurumId = signal<number | null>(this.readStoredNumber(this.activeKurumIdStorageKey));
@@ -36,6 +39,10 @@ export class AuthService {
     readonly isKurumAdmin = signal(this.readStoredBoolean(this.isKurumAdminStorageKey));
     readonly isSuperAdmin = signal(this.readStoredBoolean(this.isSuperAdminStorageKey));
     readonly sessionRevision = signal(0);
+    /** Hareketsizlik nedeniyle oturumun yakinda kapatilacagini bildiren uyari diyaloğunun gorunurlugu. */
+    readonly showInactivityWarning = signal(false);
+    /** Uyari gosterildiginde, otomatik cikisa kalan saniye (geri sayim gostermek icin). */
+    readonly inactivityWarningSecondsRemaining = signal(0);
 
     constructor() {
         this.addActivityListeners();
@@ -166,6 +173,7 @@ export class AuthService {
         this.refreshInFlight$ = null;
         this.muhasebeTesisContext.clearPersistedTesis();
         this.clearInactivityTimer();
+        this.hideInactivityWarning();
         this.bumpSessionRevision();
     }
 
@@ -355,24 +363,78 @@ export class AuthService {
         }
 
         this.clearInactivityTimer();
+        this.hideInactivityWarning();
+
+        const warningDelayMs = Math.max(this.inactivityTimeoutMs - this.inactivityWarningMs, 0);
+        this.inactivityWarningTimeoutHandle = setTimeout(() => {
+            this.beginInactivityWarning();
+        }, warningDelayMs);
+
         this.inactivityTimeoutHandle = setTimeout(() => {
             this.logout({ reason: 'inactivity' });
         }, this.inactivityTimeoutMs);
     }
 
-    private resetInactivityTimerIfNeeded(): void {
-        if (this.isAuthenticated()) {
-            this.resetInactivityTimer();
-        }
+    /** Kullanici uyari diyaloğunda "ek sure istiyorum" dedigin de cagrilir - hareketsizlik
+     * penceresini bastan baslatir ve uyariyi kapatir. */
+    extendSession(): void {
+        this.resetInactivityTimer();
     }
 
-    private clearInactivityTimer(): void {
-        if (this.inactivityTimeoutHandle === null) {
+    private resetInactivityTimerIfNeeded(): void {
+        if (!this.isAuthenticated()) {
             return;
         }
 
-        clearTimeout(this.inactivityTimeoutHandle);
-        this.inactivityTimeoutHandle = null;
+        // Uyari diyaloğu GORUNURKEN pasif fare/klavye hareketi sessizce oturumu UZATMAZ - kullanici
+        // ACIKCA "ek sure istiyorum" tusuna basmalidir (bkz. extendSession). Aksi halde diyalog,
+        // kullanici sadece fareyi oynatarak farkina bile varmadan kapanmis olurdu.
+        if (this.showInactivityWarning()) {
+            return;
+        }
+
+        this.resetInactivityTimer();
+    }
+
+    private beginInactivityWarning(): void {
+        if (!this.isAuthenticated()) {
+            return;
+        }
+
+        this.showInactivityWarning.set(true);
+        const totalSeconds = Math.max(Math.round(this.inactivityWarningMs / 1000), 0);
+        this.inactivityWarningSecondsRemaining.set(totalSeconds);
+
+        this.clearInactivityCountdownInterval();
+        this.inactivityCountdownIntervalHandle = setInterval(() => {
+            this.inactivityWarningSecondsRemaining.update((value) => Math.max(value - 1, 0));
+        }, 1000);
+    }
+
+    private hideInactivityWarning(): void {
+        this.showInactivityWarning.set(false);
+        this.clearInactivityCountdownInterval();
+    }
+
+    private clearInactivityCountdownInterval(): void {
+        if (this.inactivityCountdownIntervalHandle === null) {
+            return;
+        }
+
+        clearInterval(this.inactivityCountdownIntervalHandle);
+        this.inactivityCountdownIntervalHandle = null;
+    }
+
+    private clearInactivityTimer(): void {
+        if (this.inactivityTimeoutHandle !== null) {
+            clearTimeout(this.inactivityTimeoutHandle);
+            this.inactivityTimeoutHandle = null;
+        }
+
+        if (this.inactivityWarningTimeoutHandle !== null) {
+            clearTimeout(this.inactivityWarningTimeoutHandle);
+            this.inactivityWarningTimeoutHandle = null;
+        }
     }
 
     private normalizeLoginResponse(response: LoginResponseDto): LoginResponseDto {

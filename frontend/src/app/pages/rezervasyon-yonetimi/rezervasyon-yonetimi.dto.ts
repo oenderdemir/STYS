@@ -624,25 +624,32 @@ export interface RezervasyonKasaBankaHesapSecenekDto {
     ad: string;
     tip: string;
     kod: string;
-    pavoTerminalId: number | null;
-    pavoTerminalAdi: string | null;
+    posTerminaller: RezervasyonPosTerminalSecenekDto[];
 }
 
-export interface PavoOdemeBaslatRequestDto {
+export interface RezervasyonPosTerminalSecenekDto {
+    id: number;
+    saglayiciKodu: string;
+    ad: string;
+    serialNumber: string;
+}
+
+export interface PosOdemeBaslatRequestDto {
     rezervasyonId: number;
-    pavoTerminalId: number;
+    posTerminalId: number;
     tutar: number;
     cariKartId: number | null;
     aciklama: string | null;
 }
 
-export interface PavoOdemeIslemiDto {
+export interface PosOdemeIslemiDto {
     id: number;
     rezervasyonId: number;
-    pavoTerminalId: number;
+    posTerminalId: number;
     kasaBankaHesapId: number;
-    paymentLinkId: number | null;
-    paymentLinkReference: string;
+    saglayiciKodu: string;
+    saglayiciIslemId: string | null;
+    islemReferansi: string;
     tutar: number;
     paraBirimi: string;
     durum: string;

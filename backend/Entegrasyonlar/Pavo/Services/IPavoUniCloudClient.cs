@@ -1,13 +1,13 @@
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 
 namespace STYS.Entegrasyonlar.Pavo.Services;
 
 public interface IPavoUniCloudClient
 {
-    Task<PavoPairingResult> PairingRequestAsync(PavoTerminal terminal, CancellationToken cancellationToken);
-    Task<PavoPairingResult> CheckPairingAsync(PavoTerminal terminal, CancellationToken cancellationToken);
-    Task<PavoCreateLinkResult> CreateLinkAsync(PavoTerminal terminal, string reference, decimal amount, string currency, CancellationToken cancellationToken);
-    Task<PavoCheckLinkResult> CheckLinkAsync(PavoTerminal terminal, long paymentLinkId, string reference, CancellationToken cancellationToken);
+    Task<PavoPairingResult> PairingRequestAsync(PosTerminal terminal, CancellationToken cancellationToken);
+    Task<PavoPairingResult> CheckPairingAsync(PosTerminal terminal, CancellationToken cancellationToken);
+    Task<PavoCreateLinkResult> CreateLinkAsync(PosTerminal terminal, string reference, decimal amount, string currency, CancellationToken cancellationToken);
+    Task<PavoCheckLinkResult> CheckLinkAsync(PosTerminal terminal, long paymentLinkId, string reference, CancellationToken cancellationToken);
 }
 
 public sealed record PavoPairingResult(

@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, PavoTerminalKaydetRequest, PavoTerminalModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KasaBankaHesapModel, KasaBankaHesapTipi, PosSaglayiciModel, PosTerminalKaydetRequest, PosTerminalModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KasaBankaHesaplariService {
@@ -49,30 +49,34 @@ export class KasaBankaHesaplariService {
         }));
     }
 
-    getPavoTerminaller(kasaBankaHesapId: number): Observable<PavoTerminalModel[]> {
+    getPosSaglayicilar(): Observable<PosSaglayiciModel[]> {
+        return this.http.get<ApiResponse<PosSaglayiciModel[]>>(`${this.apiBaseUrl}/ui/pos/saglayicilar`).pipe(map(this.unwrapOne));
+    }
+
+    getPosTerminaller(kasaBankaHesapId: number): Observable<PosTerminalModel[]> {
         const params = new HttpParams().set('kasaBankaHesapId', kasaBankaHesapId);
-        return this.http.get<ApiResponse<PavoTerminalModel[]>>(`${this.apiBaseUrl}/ui/pavo/terminaller`, { params }).pipe(map((envelope) => {
+        return this.http.get<ApiResponse<PosTerminalModel[]>>(`${this.apiBaseUrl}/ui/pos/terminaller`, { params }).pipe(map((envelope) => {
             if (envelope.success && envelope.data) {
                 return envelope.data;
             }
-            throw new Error(tryReadApiMessage(envelope) ?? 'PAVO terminal bilgisi alinamadi.');
+            throw new Error(tryReadApiMessage(envelope) ?? 'POS terminal bilgisi alinamadi.');
         }));
     }
 
-    savePavoTerminal(id: number | null, request: PavoTerminalKaydetRequest): Observable<PavoTerminalModel> {
-        const url = id ? `${this.apiBaseUrl}/ui/pavo/terminaller/${id}` : `${this.apiBaseUrl}/ui/pavo/terminaller`;
+    savePosTerminal(id: number | null, request: PosTerminalKaydetRequest): Observable<PosTerminalModel> {
+        const url = id ? `${this.apiBaseUrl}/ui/pos/terminaller/${id}` : `${this.apiBaseUrl}/ui/pos/terminaller`;
         const call = id
-            ? this.http.put<ApiResponse<PavoTerminalModel>>(url, request)
-            : this.http.post<ApiResponse<PavoTerminalModel>>(url, request);
+            ? this.http.put<ApiResponse<PosTerminalModel>>(url, request)
+            : this.http.post<ApiResponse<PosTerminalModel>>(url, request);
         return call.pipe(map(this.unwrapOne));
     }
 
-    pavoEslesmeBaslat(id: number): Observable<PavoTerminalModel> {
-        return this.http.post<ApiResponse<PavoTerminalModel>>(`${this.apiBaseUrl}/ui/pavo/terminaller/${id}/eslestir`, {}).pipe(map(this.unwrapOne));
+    posEslesmeBaslat(id: number): Observable<PosTerminalModel> {
+        return this.http.post<ApiResponse<PosTerminalModel>>(`${this.apiBaseUrl}/ui/pos/terminaller/${id}/eslestir`, {}).pipe(map(this.unwrapOne));
     }
 
-    pavoEslesmeKontrol(id: number): Observable<PavoTerminalModel> {
-        return this.http.post<ApiResponse<PavoTerminalModel>>(`${this.apiBaseUrl}/ui/pavo/terminaller/${id}/eslestirme-kontrol`, {}).pipe(map(this.unwrapOne));
+    posEslesmeKontrol(id: number): Observable<PosTerminalModel> {
+        return this.http.post<ApiResponse<PosTerminalModel>>(`${this.apiBaseUrl}/ui/pos/terminaller/${id}/eslestirme-kontrol`, {}).pipe(map(this.unwrapOne));
     }
 
     private unwrapList(envelope: ApiResponse<KasaBankaHesapModel[]>): KasaBankaHesapModel[] {

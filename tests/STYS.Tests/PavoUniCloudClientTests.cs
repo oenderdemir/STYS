@@ -2,7 +2,8 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
+using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Entegrasyonlar.Pavo.Options;
 using STYS.Entegrasyonlar.Pavo.Services;
 
@@ -10,6 +11,22 @@ namespace STYS.Tests;
 
 public class PavoUniCloudClientTests
 {
+    [Fact]
+    public void Pavo_SaglayiciBagimsizPosSozlesmesiniUygular()
+    {
+        IPosOdemeSaglayicisi saglayici = new PavoPosOdemeSaglayicisi(null!);
+
+        Assert.Equal("PAVO", saglayici.Kod);
+        Assert.True(saglayici.EslesmeDestekliyorMu);
+        saglayici.TerminalBilgileriniDogrula(new PosTerminal
+        {
+            SaglayiciKodu = "PAVO",
+            Ad = "Resepsiyon",
+            SerialNumber = "PAV960000079",
+            SourceFingerprint = "stys-3"
+        });
+    }
+
     [Fact]
     public async Task CreateLink_UniCloudCiftAsamaliTokenVeTerminalHedefiyleGonderilir()
     {
@@ -28,7 +45,7 @@ public class PavoUniCloudClientTests
             ApiKey = "api-key"
         });
         var client = new PavoUniCloudClient(httpClient, options, NullLogger<PavoUniCloudClient>.Instance);
-        var terminal = new PavoTerminal
+        var terminal = new PosTerminal
         {
             Id = 7,
             TesisId = 3,

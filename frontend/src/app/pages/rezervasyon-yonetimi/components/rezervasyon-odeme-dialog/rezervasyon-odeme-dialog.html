@@ -332,14 +332,29 @@
                                 [showClear]="false"
                                 [disabled]="saving || kasaBankaHesapYukleniyor"
                                 [placeholder]="kasaBankaHesapYukleniyor ? 'Yukleniyor...' : 'Hesap seciniz'"
-                            [(ngModel)]="kasaBankaHesapId"
+                                [(ngModel)]="kasaBankaHesapId"
+                                (ngModelChange)="onKasaBankaHesapChange()"
                             />
-                            @if (seciliPavoTerminalAdi) {
-                                <div class="text-xs text-primary mt-1">PAVO: {{ seciliPavoTerminalAdi }}</div>
-                            }
                             @if (!kasaBankaHesapYukleniyor && kasaBankaHesapSecenekleri.length === 0) {
                                 <div class="text-xs text-orange-600 mt-1">Bu tesis icin '{{ odemeTipi }}' tipinde tanimli hesap bulunamadi.</div>
                             }
+                        </div>
+                    }
+                    @if (posTerminalSecenekleri.length > 0) {
+                        <div class="col-span-12 md:col-span-3">
+                            <label for="posTerminal" class="block font-medium mb-2">POS Terminali</label>
+                            <p-select
+                                inputId="posTerminal"
+                                class="w-full"
+                                [options]="posTerminalSecenekleri"
+                                optionLabel="label"
+                                optionValue="value"
+                                [appendTo]="'body'"
+                                [showClear]="false"
+                                [disabled]="saving || posSaving"
+                                [placeholder]="posTerminalSecenekleri.length > 1 ? 'Terminal seciniz' : ''"
+                                [(ngModel)]="posTerminalId"
+                            />
                         </div>
                     }
                     <div class="col-span-12" [class.md:col-span-3]="kasaBankaHesapGerekli" [class.md:col-span-6]="!kasaBankaHesapGerekli">
@@ -560,20 +575,20 @@
 
     <ng-template #footer>
         <div class="rez-odeme-action-row">
-            @if (pavoOdemeDurumu) {
-                <span class="text-sm text-color-secondary mr-auto">{{ pavoOdemeDurumu }}</span>
+            @if (posOdemeDurumu) {
+                <span class="text-sm text-color-secondary mr-auto">{{ posOdemeDurumu }}</span>
             }
-            <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || pavoSaving || ekHizmetSaving" (onClick)="kapat()" />
-            @if (seciliPavoTerminalId) {
+            <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || posSaving || ekHizmetSaving" (onClick)="kapat()" />
+            @if (seciliPosTerminalId) {
                 <p-button
-                    label="PAVO ile Tahsil Et"
+                    [label]="seciliPosSaglayiciAdi + ' ile Tahsil Et'"
                     icon="pi pi-credit-card"
                     severity="info"
-                    [loading]="pavoSaving"
+                    [loading]="posSaving"
                     [disabled]="odemeKaydetDisabled || saving"
-                    (onClick)="pavoIleTahsilEt()" />
+                    (onClick)="posIleTahsilEt()" />
             }
-            <p-button label="Manuel Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled || pavoSaving" (onClick)="kaydetOdeme()" />
+            <p-button label="Manuel Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled || posSaving" (onClick)="kaydetOdeme()" />
         </div>
     </ng-template>
 </p-dialog>

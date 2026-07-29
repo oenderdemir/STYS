@@ -10,6 +10,7 @@ using STYS.Countries.Mapping;
 using STYS.ErisimTeshis.Services;
 using STYS.Entegrasyonlar.Pavo.Options;
 using STYS.Entegrasyonlar.Pavo.Services;
+using STYS.Entegrasyonlar.Pos.Services;
 using STYS.GarsonServis.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
@@ -117,7 +118,8 @@ builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((service
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/'));
     client.Timeout = TimeSpan.FromSeconds(Math.Clamp(options.RequestTimeoutSeconds, 5, 120));
 });
-builder.Services.AddScoped<IPavoService, PavoService>();
+builder.Services.AddScoped<IPosOdemeSaglayicisi, PavoPosOdemeSaglayicisi>();
+builder.Services.AddScoped<IPosService, PosService>();
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();

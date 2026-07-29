@@ -26,7 +26,7 @@ public class RezervasyonOdemeDto
 
     public int? TahsilatOdemeBelgesiId { get; set; }
 
-    public int? PavoOdemeIslemiId { get; set; }
+    public int? PosOdemeIslemiId { get; set; }
 
     public string? TahsilatOdemeBelgesiNo { get; set; }
 

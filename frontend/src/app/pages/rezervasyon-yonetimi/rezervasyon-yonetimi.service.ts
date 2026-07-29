@@ -25,8 +25,8 @@ import {
     RezervasyonMisafirTipiDto,
     RezervasyonCariKartSecenekDto,
     RezervasyonKasaBankaHesapSecenekDto,
-    PavoOdemeBaslatRequestDto,
-    PavoOdemeIslemiDto,
+    PosOdemeBaslatRequestDto,
+    PosOdemeIslemiDto,
     RezervasyonOdemeIptalRequestDto,
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
@@ -562,39 +562,39 @@ export class RezervasyonYonetimiService {
         );
     }
 
-    pavoOdemeBaslat(request: PavoOdemeBaslatRequestDto): Observable<PavoOdemeIslemiDto> {
-        return this.http.post<ApiResponse<PavoOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pavo/odemeler`, request).pipe(
+    posOdemeBaslat(request: PosOdemeBaslatRequestDto): Observable<PosOdemeIslemiDto> {
+        return this.http.post<ApiResponse<PosOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pos/odemeler`, request).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
                 }
 
-                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'PAVO odemesi baslatilamadi.');
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'POS odemesi baslatilamadi.');
             })
         );
     }
 
-    getPavoOdemeDurumu(islemId: number): Observable<PavoOdemeIslemiDto> {
-        return this.http.get<ApiResponse<PavoOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pavo/odemeler/${islemId}`).pipe(
+    getPosOdemeDurumu(islemId: number): Observable<PosOdemeIslemiDto> {
+        return this.http.get<ApiResponse<PosOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pos/odemeler/${islemId}`).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;
                 }
 
-                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'PAVO odeme durumu alinamadi.');
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'POS odeme durumu alinamadi.');
             })
         );
     }
 
-    getBekleyenPavoOdeme(rezervasyonId: number): Observable<PavoOdemeIslemiDto | null> {
+    getBekleyenPosOdeme(rezervasyonId: number): Observable<PosOdemeIslemiDto | null> {
         const params = new HttpParams().set('rezervasyonId', rezervasyonId);
-        return this.http.get<ApiResponse<PavoOdemeIslemiDto | null>>(`${this.apiBaseUrl}/ui/pavo/odemeler/bekleyen`, { params }).pipe(
+        return this.http.get<ApiResponse<PosOdemeIslemiDto | null>>(`${this.apiBaseUrl}/ui/pos/odemeler/bekleyen`, { params }).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success) {
                     return responseEnvelope.data ?? null;
                 }
 
-                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bekleyen PAVO odemesi sorgulanamadi.');
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bekleyen POS odemesi sorgulanamadi.');
             })
         );
     }

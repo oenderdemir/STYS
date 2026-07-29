@@ -102,11 +102,12 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
     odemeTipi = 'Nakit';
     odemeAciklama = '';
     kasaBankaHesapId: number | null = null;
+    posTerminalId: number | null = null;
     kasaBankaHesapSecenekleri: RezervasyonKasaBankaHesapSecenekDto[] = [];
     kasaBankaHesapYukleniyor = false;
-    pavoSaving = false;
-    pavoOdemeDurumu: string | null = null;
-    private pavoBaslatmaBekliyor = false;
+    posSaving = false;
+    posOdemeDurumu: string | null = null;
+    private posBaslatmaBekliyor = false;
 
     cariKartSecimiGerekli = false;
     cariKartOverrideGoster = false;
@@ -152,20 +153,34 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         return this.nakitHareketiGerektirenler.includes(this.odemeTipi);
     }
 
-    get seciliPavoTerminalId(): number | null {
-        if (this.odemeTipi !== 'KrediKarti' || !this.kasaBankaHesapId) {
-            return null;
-        }
-
-        return this.kasaBankaHesapSecenekleri.find((x) => x.id === this.kasaBankaHesapId)?.pavoTerminalId ?? null;
+    get seciliPosTerminalId(): number | null {
+        return this.posTerminalSecenekleri.some((x) => x.value === this.posTerminalId)
+            ? this.posTerminalId
+            : null;
     }
 
-    get seciliPavoTerminalAdi(): string | null {
-        if (!this.kasaBankaHesapId) {
-            return null;
+    get seciliPosTerminalAdi(): string | null {
+        return this.posTerminalSecenekleri.find((x) => x.value === this.posTerminalId)?.label ?? null;
+    }
+
+    get seciliPosSaglayiciAdi(): string {
+        if (!this.kasaBankaHesapId || !this.posTerminalId) {
+            return 'Fiziksel POS';
         }
 
-        return this.kasaBankaHesapSecenekleri.find((x) => x.id === this.kasaBankaHesapId)?.pavoTerminalAdi ?? null;
+        return this.kasaBankaHesapSecenekleri
+            .find((x) => x.id === this.kasaBankaHesapId)
+            ?.posTerminaller.find((x) => x.id === this.posTerminalId)
+            ?.saglayiciKodu ?? 'Fiziksel POS';
+    }
+
+    get posTerminalSecenekleri(): Array<{ label: string; value: number }> {
+        if (this.odemeTipi !== 'KrediKarti' || !this.kasaBankaHesapId) {
+            return [];
+        }
+
+        return (this.kasaBankaHesapSecenekleri.find((x) => x.id === this.kasaBankaHesapId)?.posTerminaller ?? [])
+            .map((x) => ({ label: `${x.saglayiciKodu} - ${x.ad} (${x.serialNumber})`, value: x.id }));
     }
 
     /** Zorunlu (422) veya kullanicinin kendi istegiyle actigi opsiyonel cari secim paneli. */
@@ -362,7 +377,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             this.loadOdemeOzeti(this.rezervasyonId!);
             this.loadEkHizmetSecenekleri(this.rezervasyonId!);
             this.loadKasaBankaHesapSecenekleri();
-            this.resumeBekleyenPavoOdeme();
+            this.resumeBekleyenPosOdeme();
             if (this.rezervasyonDurumu === this.durumCheckOutTamamlandi) {
                 this.loadGelirOzeti(this.rezervasyonId!);
             }
@@ -568,7 +583,13 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
 
     onOdemeTipiChange(): void {
         this.kasaBankaHesapId = null;
+        this.posTerminalId = null;
         this.loadKasaBankaHesapSecenekleri();
+    }
+
+    onKasaBankaHesapChange(): void {
+        const terminaller = this.posTerminalSecenekleri;
+        this.posTerminalId = terminaller.length === 1 ? terminaller[0].value : null;
     }
 
     kaydetOdeme(): void {
@@ -593,12 +614,12 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         }
 
         this.sonOdemeIstegi = { odemeTutari: tutar, odemeTipi: this.odemeTipi, aciklama: this.normalizeOptional(this.odemeAciklama) };
-        this.pavoBaslatmaBekliyor = false;
+        this.posBaslatmaBekliyor = false;
         this.executeKaydetOdeme();
     }
 
-    pavoIleTahsilEt(): void {
-        if (!this.rezervasyonId || !this.odemeOzeti || this.saving || this.pavoSaving) {
+    posIleTahsilEt(): void {
+        if (!this.rezervasyonId || !this.odemeOzeti || this.saving || this.posSaving) {
             return;
         }
 
@@ -608,95 +629,102 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             return;
         }
 
-        if (!this.kasaBankaHesapId || !this.seciliPavoTerminalId) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'PAVO Terminali Yok', detail: 'Secilen kredi karti hesabina bagli aktif ve eslesmis bir PAVO terminali bulunmuyor.' });
+        if (!this.kasaBankaHesapId || !this.seciliPosTerminalId) {
+            const terminalVarMi = this.posTerminalSecenekleri.length > 0;
+            this.messageService.add({
+                severity: UiSeverity.Warn,
+                summary: terminalVarMi ? 'Terminal Secilmedi' : 'POS Terminali Yok',
+                detail: terminalVarMi
+                    ? 'Fiziksel POS ile tahsilat icin kullanilacak terminali seciniz.'
+                    : 'Secilen kredi karti hesabina bagli aktif ve kullanima hazir bir POS terminali bulunmuyor.'
+            });
             return;
         }
 
         this.sonOdemeIstegi = { odemeTutari: tutar, odemeTipi: 'KrediKarti', aciklama: this.normalizeOptional(this.odemeAciklama) };
-        this.pavoBaslatmaBekliyor = true;
-        this.executePavoOdeme();
+        this.posBaslatmaBekliyor = true;
+        this.executePosOdeme();
     }
 
-    private executePavoOdeme(): void {
-        if (!this.rezervasyonId || !this.sonOdemeIstegi || !this.seciliPavoTerminalId) {
+    private executePosOdeme(): void {
+        if (!this.rezervasyonId || !this.sonOdemeIstegi || !this.seciliPosTerminalId) {
             return;
         }
 
-        this.pavoSaving = true;
-        this.pavoOdemeDurumu = 'POS cihazina gonderiliyor';
+        this.posSaving = true;
+        this.posOdemeDurumu = 'POS cihazina gonderiliyor';
         this.service
-            .pavoOdemeBaslat({
+            .posOdemeBaslat({
                 rezervasyonId: this.rezervasyonId,
-                pavoTerminalId: this.seciliPavoTerminalId,
+                posTerminalId: this.seciliPosTerminalId,
                 tutar: this.sonOdemeIstegi.odemeTutari,
                 cariKartId: this.cariKartId,
                 aciklama: this.sonOdemeIstegi.aciklama
             })
             .subscribe({
-                next: (islem) => this.pavoOdemeDurumuTakipEt(islem.id),
+                next: (islem) => this.posOdemeDurumuTakipEt(islem.id),
                 error: (error: unknown) => {
-                    this.pavoSaving = false;
+                    this.posSaving = false;
                     if (error instanceof HttpErrorResponse && error.status === 422) {
                         this.cariKartSecimiGerekli = true;
                         this.loadCariKartSecenekleri();
                     }
-                    this.pavoOdemeDurumu = null;
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'PAVO Hatasi', detail: this.resolveErrorMessage(error) });
+                    this.posOdemeDurumu = null;
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'POS Hatasi', detail: this.resolveErrorMessage(error) });
                     this.cdr.markForCheck();
                 }
             });
     }
 
-    private pavoOdemeDurumuTakipEt(islemId: number): void {
-        this.pavoOdemeDurumu = 'POS islemi bekleniyor';
+    private posOdemeDurumuTakipEt(islemId: number): void {
+        this.posOdemeDurumu = 'POS islemi bekleniyor';
         timer(0, 3000)
             .pipe(
-                switchMap(() => this.service.getPavoOdemeDurumu(islemId)),
+                switchMap(() => this.service.getPosOdemeDurumu(islemId)),
                 takeWhile((x) => !x.tamamlandiMi, true),
                 finalize(() => {
-                    this.pavoSaving = false;
+                    this.posSaving = false;
                     this.cdr.markForCheck();
                 })
             )
             .subscribe({
                 next: (islem) => {
-                    this.pavoOdemeDurumu = islem.durum;
+                    this.posOdemeDurumu = islem.durum;
                     if (!islem.tamamlandiMi) {
                         this.cdr.markForCheck();
                         return;
                     }
 
-                    this.pavoBaslatmaBekliyor = false;
+                    this.posBaslatmaBekliyor = false;
                     this.sonOdemeIstegi = null;
                     if (islem.durum === 'Muhasebelestirildi') {
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'PAVO odemesi alindi ve kaydedildi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'POS odemesi alindi ve kaydedildi.' });
                         this.loadOdemeOzeti(this.rezervasyonId!);
                     } else {
-                        this.messageService.add({ severity: UiSeverity.Error, summary: 'PAVO Odemesi Basarisiz', detail: islem.hataMesaji ?? 'POS islemi onaylanmadi.' });
+                        this.messageService.add({ severity: UiSeverity.Error, summary: 'POS Odemesi Basarisiz', detail: islem.hataMesaji ?? 'POS islemi onaylanmadi.' });
                     }
                 },
                 error: (error: unknown) => {
-                    this.pavoOdemeDurumu = 'Sonuc sorgulanamadi';
-                    this.messageService.add({ severity: UiSeverity.Error, summary: 'PAVO Durum Hatasi', detail: this.resolveErrorMessage(error) });
+                    this.posOdemeDurumu = 'Sonuc sorgulanamadi';
+                    this.messageService.add({ severity: UiSeverity.Error, summary: 'POS Durum Hatasi', detail: this.resolveErrorMessage(error) });
                 }
             });
     }
 
-    private resumeBekleyenPavoOdeme(): void {
-        if (!this.rezervasyonId || this.pavoSaving) {
+    private resumeBekleyenPosOdeme(): void {
+        if (!this.rezervasyonId || this.posSaving) {
             return;
         }
 
-        this.service.getBekleyenPavoOdeme(this.rezervasyonId).subscribe({
+        this.service.getBekleyenPosOdeme(this.rezervasyonId).subscribe({
             next: (islem) => {
-                if (!islem || !this.visible || this.pavoSaving) {
+                if (!islem || !this.visible || this.posSaving) {
                     return;
                 }
 
-                this.pavoSaving = true;
-                this.pavoOdemeDurumu = 'Bekleyen PAVO islemi yeniden sorgulaniyor';
-                this.pavoOdemeDurumuTakipEt(islem.id);
+                this.posSaving = true;
+                this.posOdemeDurumu = 'Bekleyen POS islemi yeniden sorgulaniyor';
+                this.posOdemeDurumuTakipEt(islem.id);
                 this.cdr.markForCheck();
             },
             error: () => {
@@ -762,8 +790,8 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
             return;
         }
 
-        if (this.pavoBaslatmaBekliyor) {
-            this.executePavoOdeme();
+        if (this.posBaslatmaBekliyor) {
+            this.executePosOdeme();
         } else {
             this.executeKaydetOdeme();
         }
@@ -774,8 +802,8 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.cariKartOverrideGoster = false;
         this.cariKartId = null;
         this.sonOdemeIstegi = null;
-        this.pavoBaslatmaBekliyor = false;
-        this.pavoOdemeDurumu = null;
+        this.posBaslatmaBekliyor = false;
+        this.posOdemeDurumu = null;
     }
 
     /** Rezervasyonun zaten bir ana carisi olsa bile, kullanici bu odemeyi bilincli olarak
@@ -1393,6 +1421,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.odemeTipi = 'Nakit';
         this.odemeAciklama = '';
         this.kasaBankaHesapId = null;
+        this.posTerminalId = null;
         this.kasaBankaHesapSecenekleri = [];
         this.cariKartSecimiGerekli = false;
         this.cariKartOverrideGoster = false;
@@ -1400,8 +1429,8 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.cariKartSecenekleri = [];
         this.cariKartAramaMetni = '';
         this.sonOdemeIstegi = null;
-        this.pavoBaslatmaBekliyor = false;
-        this.pavoOdemeDurumu = null;
+        this.posBaslatmaBekliyor = false;
+        this.posOdemeDurumu = null;
         this.gelirOzeti = null;
         this.yeniCariKartDialogVisible = false;
         this.yeniCariKartModel = { unvanAdSoyad: '', vergiNoTckn: '', telefon: '' };
@@ -1416,7 +1445,7 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         this.resetFormState();
         this.loading = false;
         this.saving = false;
-        this.pavoSaving = false;
+        this.posSaving = false;
         this.ekHizmetSaving = false;
         this.iptalEdilenOdemeId = null;
         this.gelirYukleniyor = false;

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using System.Data;
 using System.Diagnostics;
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 using System.Text.Json;
 using STYS.AccessScope;
 using TOD.Platform.AspNetCore.Logging;
@@ -3449,24 +3449,24 @@ public partial class RezervasyonService : IRezervasyonService
         await using var transaction = await _stysDbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            PavoOdemeIslemi? pavoIslemi = null;
-            if (request.PavoOdemeIslemiId.HasValue)
+            PosOdemeIslemi? posIslemi = null;
+            if (request.PosOdemeIslemiId.HasValue)
             {
-                pavoIslemi = await _stysDbContext.PavoOdemeIslemleri
-                    .FirstOrDefaultAsync(x => x.Id == request.PavoOdemeIslemiId.Value, cancellationToken)
-                    ?? throw new BaseException("PAVO odeme islemi bulunamadi.", 404);
+                posIslemi = await _stysDbContext.PosOdemeIslemleri
+                    .FirstOrDefaultAsync(x => x.Id == request.PosOdemeIslemiId.Value, cancellationToken)
+                    ?? throw new BaseException("POS odeme islemi bulunamadi.", 404);
 
-                if (pavoIslemi.RezervasyonId != reservation.Id
-                    || pavoIslemi.KasaBankaHesapId != request.KasaBankaHesapId
-                    || pavoIslemi.Tutar != request.OdemeTutari
-                    || pavoIslemi.Durum != PavoOdemeDurumlari.Basarili)
+                if (posIslemi.RezervasyonId != reservation.Id
+                    || posIslemi.KasaBankaHesapId != request.KasaBankaHesapId
+                    || posIslemi.Tutar != request.OdemeTutari
+                    || posIslemi.Durum != PosOdemeDurumlari.Basarili)
                 {
-                    throw new BaseException("PAVO odeme islemi rezervasyon odemesiyle uyumlu degil.", 409);
+                    throw new BaseException("POS odeme islemi rezervasyon odemesiyle uyumlu degil.", 409);
                 }
 
-                if (pavoIslemi.RezervasyonOdemeId.HasValue)
+                if (posIslemi.RezervasyonOdemeId.HasValue)
                 {
-                    throw new BaseException("PAVO odeme islemi daha once muhasebelestirilmis.", 409);
+                    throw new BaseException("POS odeme islemi daha once muhasebelestirilmis.", 409);
                 }
             }
 
@@ -3478,7 +3478,7 @@ public partial class RezervasyonService : IRezervasyonService
                 ParaBirimi = reservation.ParaBirimi,
                 OdemeTipi = normalizedOdemeTipi,
                 Aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim(),
-                PavoOdemeIslemiId = request.PavoOdemeIslemiId
+                PosOdemeIslemiId = request.PosOdemeIslemiId
             };
             await _stysDbContext.RezervasyonOdemeler.AddAsync(odeme, cancellationToken);
             await _stysDbContext.SaveChangesAsync(cancellationToken); // Id uretilsin
@@ -3486,12 +3486,12 @@ public partial class RezervasyonService : IRezervasyonService
             await _rezervasyonOdemeMuhasebeService.TahsilatOlusturAsync(
                 reservation, odeme, request.KasaBankaHesapId, request.CariKartId, cancellationToken);
 
-            if (pavoIslemi is not null)
+            if (posIslemi is not null)
             {
-                pavoIslemi.RezervasyonOdemeId = odeme.Id;
-                pavoIslemi.Durum = PavoOdemeDurumlari.Muhasebelestirildi;
-                pavoIslemi.TamamlanmaTarihi = DateTime.UtcNow;
-                pavoIslemi.ConcurrencyToken = Guid.NewGuid();
+                posIslemi.RezervasyonOdemeId = odeme.Id;
+                posIslemi.Durum = PosOdemeDurumlari.Muhasebelestirildi;
+                posIslemi.TamamlanmaTarihi = DateTime.UtcNow;
+                posIslemi.ConcurrencyToken = Guid.NewGuid();
             }
 
             AppendHistoryEntry(
@@ -3648,16 +3648,18 @@ public partial class RezervasyonService : IRezervasyonService
                 Ad = x.Ad,
                 Tip = x.Tip,
                 Kod = x.Kod,
-                PavoTerminalId = _stysDbContext.PavoTerminaller
+                PosTerminaller = _stysDbContext.PosTerminaller
                     .Where(t => t.KasaBankaHesapId == x.Id && t.AktifMi && t.EslesmeOnayliMi)
-                    .OrderBy(t => t.Id)
-                    .Select(t => (int?)t.Id)
-                    .FirstOrDefault(),
-                PavoTerminalAdi = _stysDbContext.PavoTerminaller
-                    .Where(t => t.KasaBankaHesapId == x.Id && t.AktifMi && t.EslesmeOnayliMi)
-                    .OrderBy(t => t.Id)
-                    .Select(t => t.Ad)
-                    .FirstOrDefault()
+                    .OrderBy(t => t.Ad)
+                    .ThenBy(t => t.Id)
+                    .Select(t => new RezervasyonPosTerminalSecenekDto
+                    {
+                        Id = t.Id,
+                        SaglayiciKodu = t.SaglayiciKodu,
+                        Ad = t.Ad,
+                        SerialNumber = t.SerialNumber
+                    })
+                    .ToList()
             })
             .ToListAsync(cancellationToken);
     }

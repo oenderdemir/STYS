@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, PavoTerminalModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, PosSaglayiciModel, PosTerminalModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from './kasa-banka-hesaplari.service';
 
 @Component({
@@ -38,8 +38,10 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     loading = false;
     saving = false;
-    pavoSaving = false;
-    pavoTerminal: PavoTerminalModel | null = null;
+    posSaving = false;
+    posTerminaller: PosTerminalModel[] = [];
+    posTerminal: PosTerminalModel | null = null;
+    posSaglayicilar: PosSaglayiciModel[] = [];
     dialogVisible = false;
     tipDialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
@@ -80,6 +82,13 @@ export class KasaBankaHesaplariPage implements OnInit {
     });
 
     ngOnInit(): void {
+        this.service.getPosSaglayicilar().subscribe({
+            next: (items) => {
+                this.posSaglayicilar = items;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
         this.tesisContext.initialize().subscribe({
             next: () => {
                 this.contextInitialized = true;
@@ -141,7 +150,8 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.dialogMode = 'create';
         this.model = this.createEmpty(this.secilenYeniTip);
         this.model.tesisId = tesisId;
-        this.pavoTerminal = null;
+        this.posTerminaller = [];
+        this.posTerminal = null;
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
         this.refreshKomisyonGiderHesapSecenekleri();
@@ -153,46 +163,64 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
         this.refreshKomisyonGiderHesapSecenekleri();
-        this.loadPavoTerminal();
+        this.loadPosTerminaller();
     }
 
-    savePavoTerminal(): void {
-        if (!this.model.id || !this.model.tesisId || !this.pavoTerminal) {
+    yeniPosTerminal(): void {
+        if (!this.model.id || !this.model.tesisId) {
             return;
         }
-        if (!this.pavoTerminal.ad.trim() || !this.pavoTerminal.serialNumber.trim() || !this.pavoTerminal.sourceFingerprint.trim()) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'PAVO terminal adi, seri numarasi ve fingerprint zorunludur.' });
+        this.posTerminal = this.createEmptyPosTerminal(this.model.id, this.model.tesisId);
+    }
+
+    posTerminalDuzenle(terminal: PosTerminalModel): void {
+        this.posTerminal = { ...terminal };
+    }
+
+    savePosTerminal(): void {
+        if (!this.model.id || !this.model.tesisId || !this.posTerminal) {
+            return;
+        }
+        if (!this.posTerminal.saglayiciKodu || !this.posTerminal.ad.trim() || !this.posTerminal.serialNumber.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Saglayici, terminal adi ve seri numarasi zorunludur.' });
+            return;
+        }
+        if (this.posTerminal.saglayiciKodu === 'PAVO' && !this.posTerminal.sourceFingerprint?.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'PAVO terminali icin fingerprint zorunludur.' });
             return;
         }
 
-        this.pavoSaving = true;
-        this.service.savePavoTerminal(this.pavoTerminal.id || null, {
+        this.posSaving = true;
+        this.service.savePosTerminal(this.posTerminal.id || null, {
             tesisId: this.model.tesisId,
             kasaBankaHesapId: this.model.id,
-            ad: this.pavoTerminal.ad.trim(),
-            serialNumber: this.pavoTerminal.serialNumber.trim(),
-            sourceFingerprint: this.pavoTerminal.sourceFingerprint.trim(),
-            sourceTerminalReference: this.pavoTerminal.sourceTerminalReference?.trim() || null,
-            aktifMi: this.pavoTerminal.aktifMi
-        }).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+            saglayiciKodu: this.posTerminal.saglayiciKodu,
+            ad: this.posTerminal.ad.trim(),
+            serialNumber: this.posTerminal.serialNumber.trim(),
+            sourceFingerprint: this.posTerminal.sourceFingerprint?.trim() || null,
+            sourceTerminalReference: this.posTerminal.sourceTerminalReference?.trim() || null,
+            aktifMi: this.posTerminal.aktifMi
+        }).pipe(finalize(() => (this.posSaving = false))).subscribe({
             next: (terminal) => {
-                this.pavoTerminal = terminal;
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'PAVO terminali kaydedildi.' });
+                this.posTerminal = terminal;
+                this.upsertPosTerminal(terminal);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'POS terminali kaydedildi.' });
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => this.showError(error)
         });
     }
 
-    pavoEslesmeBaslat(): void {
-        if (!this.pavoTerminal?.id) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Once Kaydedin', detail: 'Eslesmeden once PAVO terminalini kaydedin.' });
+    posEslesmeBaslat(): void {
+        if (!this.posTerminal?.id) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Once Kaydedin', detail: 'Eslesmeden once POS terminalini kaydedin.' });
             return;
         }
-        this.pavoSaving = true;
-        this.service.pavoEslesmeBaslat(this.pavoTerminal.id).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+        this.posSaving = true;
+        this.service.posEslesmeBaslat(this.posTerminal.id).pipe(finalize(() => (this.posSaving = false))).subscribe({
             next: (terminal) => {
-                this.pavoTerminal = terminal;
+                this.posTerminal = terminal;
+                this.upsertPosTerminal(terminal);
                 this.messageService.add({ severity: UiSeverity.Info, summary: 'Eslesme Kodu', detail: terminal.pairingCode ? `POS cihazinda ${terminal.pairingCode} kodunu onaylayin.` : 'Eslesme talebi olusturuldu.' });
                 this.cdr.detectChanges();
             },
@@ -200,18 +228,19 @@ export class KasaBankaHesaplariPage implements OnInit {
         });
     }
 
-    pavoEslesmeKontrol(): void {
-        if (!this.pavoTerminal?.id) {
+    posEslesmeKontrol(): void {
+        if (!this.posTerminal?.id) {
             return;
         }
-        this.pavoSaving = true;
-        this.service.pavoEslesmeKontrol(this.pavoTerminal.id).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+        this.posSaving = true;
+        this.service.posEslesmeKontrol(this.posTerminal.id).pipe(finalize(() => (this.posSaving = false))).subscribe({
             next: (terminal) => {
-                this.pavoTerminal = terminal;
+                this.posTerminal = terminal;
+                this.upsertPosTerminal(terminal);
                 this.messageService.add({
                     severity: terminal.eslesmeOnayliMi ? UiSeverity.Success : UiSeverity.Warn,
                     summary: terminal.eslesmeOnayliMi ? 'Eslesme Tamamlandi' : 'Onay Bekleniyor',
-                    detail: terminal.eslesmeOnayliMi ? 'PAVO terminali kullanima hazir.' : 'POS cihazindaki eslesme onayi henuz tamamlanmadi.'
+                    detail: terminal.eslesmeOnayliMi ? 'POS terminali kullanima hazir.' : 'POS cihazindaki eslesme onayi henuz tamamlanmadi.'
                 });
                 this.cdr.detectChanges();
             },
@@ -219,26 +248,18 @@ export class KasaBankaHesaplariPage implements OnInit {
         });
     }
 
-    private loadPavoTerminal(): void {
+    private loadPosTerminaller(): void {
         if (this.model.tip !== 'KrediKarti' || !this.model.id || !this.model.tesisId) {
-            this.pavoTerminal = null;
+            this.posTerminaller = [];
+            this.posTerminal = null;
             return;
         }
-        this.service.getPavoTerminaller(this.model.id).subscribe({
+        this.service.getPosTerminaller(this.model.id).subscribe({
             next: (items) => {
-                this.pavoTerminal = items[0] ?? {
-                    id: 0,
-                    tesisId: this.model.tesisId!,
-                    kasaBankaHesapId: this.model.id!,
-                    ad: '',
-                    serialNumber: '',
-                    sourceFingerprint: `STYS-${this.model.tesisId}-${this.model.id}`,
-                    sourceTerminalReference: null,
-                    eslesmeOnayliMi: false,
-                    aktifMi: true,
-                    pairingId: null,
-                    pairingCode: null
-                };
+                this.posTerminaller = items;
+                this.posTerminal = items.length === 0
+                    ? this.createEmptyPosTerminal(this.model.id!, this.model.tesisId!)
+                    : null;
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => this.showError(error)
@@ -248,7 +269,8 @@ export class KasaBankaHesaplariPage implements OnInit {
     onTipChange(): void {
         const next = this.model.tip;
         if (next !== 'KrediKarti') {
-            this.pavoTerminal = null;
+            this.posTerminaller = [];
+            this.posTerminal = null;
         }
         const defaults = this.createEmpty(next);
         this.model = {
@@ -481,7 +503,43 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.dialogVisible = false;
         this.tipDialogVisible = false;
         this.model = this.createEmpty();
+        this.posTerminaller = [];
+        this.posTerminal = null;
         this.bagliBankaSecenekleri = [];
+    }
+
+    private createEmptyPosTerminal(kasaBankaHesapId: number, tesisId: number): PosTerminalModel {
+        return {
+            id: 0,
+            tesisId,
+            kasaBankaHesapId,
+            saglayiciKodu: this.posSaglayicilar[0]?.kod ?? 'PAVO',
+            ad: '',
+            serialNumber: '',
+            sourceFingerprint: `STYS-${tesisId}-${kasaBankaHesapId}-${this.posTerminaller.length + 1}`,
+            sourceTerminalReference: null,
+            eslesmeOnayliMi: false,
+            aktifMi: true,
+            pairingId: null,
+            pairingCode: null
+        };
+    }
+
+    private upsertPosTerminal(terminal: PosTerminalModel): void {
+        const index = this.posTerminaller.findIndex((item) => item.id === terminal.id);
+        if (index >= 0) {
+            this.posTerminaller = this.posTerminaller.map((item) => item.id === terminal.id ? terminal : item);
+            return;
+        }
+        this.posTerminaller = [...this.posTerminaller, terminal];
+    }
+
+    posSaglayiciAdi(kod: string): string {
+        return this.posSaglayicilar.find((item) => item.kod === kod)?.ad ?? kod;
+    }
+
+    get seciliPosSaglayici(): PosSaglayiciModel | null {
+        return this.posSaglayicilar.find((item) => item.kod === this.posTerminal?.saglayiciKodu) ?? null;
     }
 
     private getSeciliTesisIdOrWarn(): number | null {

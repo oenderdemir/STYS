@@ -85,13 +85,20 @@ export interface MuhasebeTesisModel {
     ad: string;
 }
 
-export interface PavoTerminalModel {
+export interface PosSaglayiciModel {
+    kod: string;
+    ad: string;
+    eslesmeDestekliyorMu: boolean;
+}
+
+export interface PosTerminalModel {
     id: number;
     tesisId: number;
     kasaBankaHesapId: number;
+    saglayiciKodu: string;
     ad: string;
     serialNumber: string;
-    sourceFingerprint: string;
+    sourceFingerprint: string | null;
     sourceTerminalReference: string | null;
     eslesmeOnayliMi: boolean;
     aktifMi: boolean;
@@ -99,12 +106,13 @@ export interface PavoTerminalModel {
     pairingCode: string | null;
 }
 
-export interface PavoTerminalKaydetRequest {
+export interface PosTerminalKaydetRequest {
     tesisId: number;
     kasaBankaHesapId: number;
+    saglayiciKodu: string;
     ad: string;
     serialNumber: string;
-    sourceFingerprint: string;
+    sourceFingerprint: string | null;
     sourceTerminalReference: string | null;
     aktifMi: boolean;
 }

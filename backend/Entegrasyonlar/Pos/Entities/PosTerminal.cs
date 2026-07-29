@@ -3,13 +3,16 @@ using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
-namespace STYS.Entegrasyonlar.Pavo.Entities;
+namespace STYS.Entegrasyonlar.Pos.Entities;
 
-public class PavoTerminal : BaseEntity<int>, ITenantEntity
+public class PosTerminal : BaseEntity<int>, ITenantEntity
 {
     public int KurumId { get; set; }
     public int TesisId { get; set; }
     public int KasaBankaHesapId { get; set; }
+
+    [Required, MaxLength(32)]
+    public string SaglayiciKodu { get; set; } = string.Empty;
 
     [Required, MaxLength(128)]
     public string Ad { get; set; } = string.Empty;
@@ -17,8 +20,8 @@ public class PavoTerminal : BaseEntity<int>, ITenantEntity
     [Required, MaxLength(64)]
     public string SerialNumber { get; set; } = string.Empty;
 
-    [Required, MaxLength(128)]
-    public string SourceFingerprint { get; set; } = string.Empty;
+    [MaxLength(128)]
+    public string? SourceFingerprint { get; set; }
 
     [MaxLength(128)]
     public string? SourceTerminalReference { get; set; }

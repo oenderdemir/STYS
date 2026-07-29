@@ -1,8 +1,20 @@
 # PAVO UniCloud Entegrasyonu
 
-PAVO entegrasyonu ödeme bazında isteğe bağlıdır. Bir kredi kartı/POS hesabına terminal
+Fiziksel POS entegrasyonu ödeme bazında isteğe bağlıdır. Bir kredi kartı/POS hesabına terminal
 tanımlanmış olsa bile mevcut manuel ödeme akışı değişmez. Kullanıcı rezervasyon ödeme
-ekranında açıkça **PAVO ile Tahsil Et** seçerse UniCloud akışı başlar.
+ekranında açıkça seçtiği sağlayıcı ile tahsilatı başlatırsa cihaz akışı başlar.
+
+## Sağlayıcı bağımsız mimari
+
+Terminal, ödeme işlemi, rezervasyon doğrulaması ve muhasebeleştirme `Entegrasyonlar/Pos`
+altındaki ortak katmanda yönetilir. PAVO yalnızca `IPosOdemeSaglayicisi` sözleşmesini
+uygulayan ilk adaptördür. Yeni bir marka eklenirken genel ödeme servisi veya muhasebe
+akışı kopyalanmaz; yeni sağlayıcı adaptörü DI'a kaydedilir.
+
+Ortak API rotası `/ui/pos`, tablolar ise `entegrasyon.PosTerminaller` ve
+`entegrasyon.PosOdemeIslemleri` adlarını kullanır. Her terminalde bir `SaglayiciKodu`
+bulunur. Eski PAVO kayıtları migration sırasında veri kaybı olmadan bu tablolara taşınır
+ve sağlayıcı kodları `PAVO` olarak atanır.
 
 ## Sunucu ayarları
 
@@ -26,22 +38,22 @@ https://overunipos-integration-gateway.pavopay.dev
 ## Terminal kurulumu
 
 1. Muhasebe → Kasa/Banka/POS Hesapları ekranında kredi kartı/POS hesabını açın.
-2. PAVO terminal adı, cihaz seri numarası ve sabit bir fingerprint girip kaydedin.
+2. Sağlayıcı olarak PAVO'yu seçin; terminal adı, cihaz seri numarası ve sabit bir fingerprint girip kaydedin.
 3. **Eşleşme Başlat** seçeneğini kullanın.
 4. Üretilen kodu POS cihazında onaylayın.
 5. **Eşleşmeyi Kontrol Et** ile durumun `Eşleşmiş` olduğunu doğrulayın.
 
-Terminal tanımı yoksa veya terminal aktif/eşleşmiş değilse rezervasyon ekranında PAVO
+Terminal tanımı yoksa veya terminal aktif/eşleşmiş değilse rezervasyon ekranında fiziksel POS
 butonu gösterilmez; manuel ödeme bugünkü haliyle çalışır.
 
 ## Finansal kayıt sırası
 
-PAVO işlemi ilk olarak `entegrasyon.PavoOdemeIslemleri` tablosunda bekleyen işlem olarak
+POS işlemi ilk olarak `entegrasyon.PosOdemeIslemleri` tablosunda bekleyen işlem olarak
 oluşturulur. Kart işlemi PAVO tarafından kesin başarılı bildirilmeden `RezervasyonOdeme`,
 `TahsilatOdemeBelgesi` ve POS valör kaydı oluşturulmaz.
 
 Başarılı sonuçtan sonra mevcut rezervasyon ödeme ve muhasebe servisi çağrılır. PAVO işlem
-bağlantısı unique index ile korunur; aynı PAVO işlemi iki kez muhasebeleştirilemez.
+bağlantısı unique index ile korunur; aynı POS işlemi iki kez muhasebeleştirilemez.
 
 ## Saha doğrulaması
 

@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Entegrasyonlar.Pavo.Options;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -30,7 +30,7 @@ public sealed class PavoUniCloudClient : IPavoUniCloudClient
         _logger = logger;
     }
 
-    public async Task<PavoPairingResult> PairingRequestAsync(PavoTerminal terminal, CancellationToken cancellationToken)
+    public async Task<PavoPairingResult> PairingRequestAsync(PosTerminal terminal, CancellationToken cancellationToken)
     {
         var token = await GetTerminalAccessTokenAsync(terminal.SerialNumber, cancellationToken);
         var root = await PostAsync(
@@ -53,7 +53,7 @@ public sealed class PavoUniCloudClient : IPavoUniCloudClient
             GetBool(data, "IsApproved"));
     }
 
-    public async Task<PavoPairingResult> CheckPairingAsync(PavoTerminal terminal, CancellationToken cancellationToken)
+    public async Task<PavoPairingResult> CheckPairingAsync(PosTerminal terminal, CancellationToken cancellationToken)
     {
         if (!terminal.PairingId.HasValue)
         {
@@ -81,7 +81,7 @@ public sealed class PavoUniCloudClient : IPavoUniCloudClient
     }
 
     public async Task<PavoCreateLinkResult> CreateLinkAsync(
-        PavoTerminal terminal,
+        PosTerminal terminal,
         string reference,
         decimal amount,
         string currency,
@@ -127,7 +127,7 @@ public sealed class PavoUniCloudClient : IPavoUniCloudClient
     }
 
     public async Task<PavoCheckLinkResult> CheckLinkAsync(
-        PavoTerminal terminal,
+        PosTerminal terminal,
         long paymentLinkId,
         string reference,
         CancellationToken cancellationToken)

@@ -16,8 +16,8 @@ public class RezervasyonOdemeKaydetRequestDto
 
     public string? Aciklama { get; set; }
 
-    /// <summary>Yalnizca sunucu ici PAVO tamamlama akisinda doldurulur; istemci JSON'undan kabul edilmez.</summary>
+    /// <summary>Yalnizca sunucu ici fiziksel POS tamamlama akisinda doldurulur; istemci JSON'undan kabul edilmez.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public int? PavoOdemeIslemiId { get; set; }
+    public int? PosOdemeIslemiId { get; set; }
 }
 

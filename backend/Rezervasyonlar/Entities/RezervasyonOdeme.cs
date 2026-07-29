@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
@@ -32,8 +32,8 @@ public class RezervasyonOdeme : BaseEntity<int>
     /// fise ihtiyac duyan akislar TahsilatOdemeBelgesi.MuhasebeFisId uzerinden erisir.</summary>
     public int? TahsilatOdemeBelgesiId { get; set; }
 
-    /// <summary>PAVO ile tahsil edilen odemelerde kaynak islemi gosterir. Manuel odemelerde null'dir.</summary>
-    public int? PavoOdemeIslemiId { get; set; }
+    /// <summary>Fiziksel POS ile tahsil edilen odemelerde kaynak islemi gosterir. Manuel odemelerde null'dir.</summary>
+    public int? PosOdemeIslemiId { get; set; }
 
     [Required]
     [MaxLength(16)]
@@ -49,6 +49,6 @@ public class RezervasyonOdeme : BaseEntity<int>
     public KasaBankaHesap? KasaBankaHesap { get; set; }
 
     public TahsilatOdemeBelgesi? TahsilatOdemeBelgesi { get; set; }
-    public PavoOdemeIslemi? PavoOdemeIslemi { get; set; }
+    public PosOdemeIslemi? PosOdemeIslemi { get; set; }
 }
 

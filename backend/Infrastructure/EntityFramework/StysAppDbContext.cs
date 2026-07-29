@@ -5,7 +5,7 @@ using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
 using STYS.EkHizmetler.Entities;
-using STYS.Entegrasyonlar.Pavo.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
@@ -142,8 +142,8 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonKonaklamaHakkiTuketimKaydi> RezervasyonKonaklamaHakkiTuketimKayitlari => Set<RezervasyonKonaklamaHakkiTuketimKaydi>();
     public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
-    public DbSet<PavoTerminal> PavoTerminaller => Set<PavoTerminal>();
-    public DbSet<PavoOdemeIslemi> PavoOdemeIslemleri => Set<PavoOdemeIslemi>();
+    public DbSet<PosTerminal> PosTerminaller => Set<PosTerminal>();
+    public DbSet<PosOdemeIslemi> PosOdemeIslemleri => Set<PosOdemeIslemi>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
     public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
@@ -1385,9 +1385,9 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.TahsilatOdemeBelgesiId)
                 .IsUnique()
                 .HasFilter("[TahsilatOdemeBelgesiId] IS NOT NULL");
-            entity.HasIndex(x => x.PavoOdemeIslemiId)
+            entity.HasIndex(x => x.PosOdemeIslemiId)
                 .IsUnique()
-                .HasFilter("[PavoOdemeIslemiId] IS NOT NULL");
+                .HasFilter("[PosOdemeIslemiId] IS NOT NULL");
 
             entity.HasOne(x => x.Rezervasyon)
                 .WithMany(x => x.Odemeler)
@@ -1404,9 +1404,9 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey(x => x.TahsilatOdemeBelgesiId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(x => x.PavoOdemeIslemi)
+            entity.HasOne(x => x.PosOdemeIslemi)
                 .WithMany()
-                .HasForeignKey(x => x.PavoOdemeIslemiId)
+                .HasForeignKey(x => x.PosOdemeIslemiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -1804,16 +1804,17 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<PavoTerminal>(entity =>
+        modelBuilder.Entity<PosTerminal>(entity =>
         {
-            entity.ToTable("PavoTerminaller", entegrasyonSchema);
+            entity.ToTable("PosTerminaller", entegrasyonSchema);
+            entity.Property(x => x.SaglayiciKodu).HasMaxLength(32).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.SerialNumber).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.SourceFingerprint).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SourceFingerprint).HasMaxLength(128);
             entity.Property(x => x.SourceTerminalReference).HasMaxLength(128);
             entity.Property(x => x.TargetFingerprint).HasMaxLength(256);
             entity.Property(x => x.PairingCode).HasMaxLength(32);
-            entity.HasIndex(x => new { x.KurumId, x.SerialNumber })
+            entity.HasIndex(x => new { x.KurumId, x.SaglayiciKodu, x.SerialNumber })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.TesisId, x.KasaBankaHesapId, x.AktifMi })
@@ -1828,10 +1829,11 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<PavoOdemeIslemi>(entity =>
+        modelBuilder.Entity<PosOdemeIslemi>(entity =>
         {
-            entity.ToTable("PavoOdemeIslemleri", entegrasyonSchema);
-            entity.Property(x => x.PaymentLinkReference).HasMaxLength(96).IsRequired();
+            entity.ToTable("PosOdemeIslemleri", entegrasyonSchema);
+            entity.Property(x => x.IslemReferansi).HasMaxLength(96).IsRequired();
+            entity.Property(x => x.SaglayiciIslemId).HasMaxLength(128);
             entity.Property(x => x.Tutar).HasPrecision(18, 2);
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Durum).HasMaxLength(32).IsRequired();
@@ -1840,19 +1842,19 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AcquirerReference).HasMaxLength(64);
             entity.Property(x => x.AuthorizationCode).HasMaxLength(64);
             entity.Property(x => x.HataMesaji).HasMaxLength(1024);
-            entity.Property(x => x.SonPavoYaniti).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.SonSaglayiciYaniti).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
-            entity.HasIndex(x => new { x.KurumId, x.PaymentLinkReference })
+            entity.HasIndex(x => new { x.KurumId, x.IslemReferansi })
                 .IsUnique();
-            entity.HasIndex(x => x.PaymentLinkId)
-                .HasFilter("[PaymentLinkId] IS NOT NULL");
+            entity.HasIndex(x => x.SaglayiciIslemId)
+                .HasFilter("[SaglayiciIslemId] IS NOT NULL");
             entity.HasIndex(x => new { x.TesisId, x.Durum });
             entity.HasIndex(x => x.RezervasyonOdemeId)
                 .IsUnique()
                 .HasFilter("[RezervasyonOdemeId] IS NOT NULL");
-            entity.HasOne(x => x.PavoTerminal)
+            entity.HasOne(x => x.PosTerminal)
                 .WithMany()
-                .HasForeignKey(x => x.PavoTerminalId)
+                .HasForeignKey(x => x.PosTerminalId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.KasaBankaHesap)
                 .WithMany()

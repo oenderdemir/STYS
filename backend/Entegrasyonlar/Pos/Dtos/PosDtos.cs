@@ -52,11 +52,14 @@ public sealed class PosOdemeIslemiDto
     public int KasaBankaHesapId { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string? SaglayiciIslemId { get; set; }
+    public string? SaglayiciDurumKodu { get; set; }
     public string IslemReferansi { get; set; } = string.Empty;
     public decimal Tutar { get; set; }
     public string ParaBirimi { get; set; } = "TRY";
     public string Durum { get; set; } = string.Empty;
     public string? HataMesaji { get; set; }
+    public DateTime? SonSorgulamaTarihi { get; set; }
+    public int SorgulamaDenemeSayisi { get; set; }
     public int? RezervasyonOdemeId { get; set; }
     public bool TamamlandiMi { get; set; }
 }

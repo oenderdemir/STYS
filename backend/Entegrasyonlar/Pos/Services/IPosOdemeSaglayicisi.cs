@@ -30,9 +30,13 @@ public sealed record PosEslesmeSonucu(
     string? TargetFingerprint,
     bool OnayliMi);
 
-public sealed record PosOdemeBaslatSonucu(string SaglayiciIslemId, string HamYanit);
+public sealed record PosOdemeBaslatSonucu(
+    string SaglayiciIslemId,
+    string? SaglayiciDurumKodu,
+    string HamYanit);
 
 public sealed record PosOdemeSorguSonucu(
+    string? SaglayiciDurumKodu,
     bool Bekliyor,
     bool Basarili,
     string HamYanit,

@@ -700,6 +700,8 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
                     if (islem.durum === 'Muhasebelestirildi') {
                         this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'POS odemesi alindi ve kaydedildi.' });
                         this.loadOdemeOzeti(this.rezervasyonId!);
+                    } else if (islem.durum === 'MutabakatGerekli') {
+                        this.messageService.add({ severity: UiSeverity.Warn, summary: 'POS Mutabakati Gerekli', detail: islem.hataMesaji ?? 'POS sonucu otomatik kesinlestirilemedi.' });
                     } else {
                         this.messageService.add({ severity: UiSeverity.Error, summary: 'POS Odemesi Basarisiz', detail: islem.hataMesaji ?? 'POS islemi onaylanmadi.' });
                     }

@@ -25,6 +25,8 @@ import {
     RezervasyonMisafirTipiDto,
     RezervasyonCariKartSecenekDto,
     RezervasyonKasaBankaHesapSecenekDto,
+    PavoOdemeBaslatRequestDto,
+    PavoOdemeIslemiDto,
     RezervasyonOdemeIptalRequestDto,
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
@@ -556,6 +558,43 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Kasa/banka hesap secenekleri alinamadi.');
+            })
+        );
+    }
+
+    pavoOdemeBaslat(request: PavoOdemeBaslatRequestDto): Observable<PavoOdemeIslemiDto> {
+        return this.http.post<ApiResponse<PavoOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pavo/odemeler`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'PAVO odemesi baslatilamadi.');
+            })
+        );
+    }
+
+    getPavoOdemeDurumu(islemId: number): Observable<PavoOdemeIslemiDto> {
+        return this.http.get<ApiResponse<PavoOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pavo/odemeler/${islemId}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'PAVO odeme durumu alinamadi.');
+            })
+        );
+    }
+
+    getBekleyenPavoOdeme(rezervasyonId: number): Observable<PavoOdemeIslemiDto | null> {
+        const params = new HttpParams().set('rezervasyonId', rezervasyonId);
+        return this.http.get<ApiResponse<PavoOdemeIslemiDto | null>>(`${this.apiBaseUrl}/ui/pavo/odemeler/bekleyen`, { params }).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success) {
+                    return responseEnvelope.data ?? null;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Bekleyen PAVO odemesi sorgulanamadi.');
             })
         );
     }

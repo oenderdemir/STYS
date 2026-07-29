@@ -84,3 +84,27 @@ export interface MuhasebeTesisModel {
     id: number;
     ad: string;
 }
+
+export interface PavoTerminalModel {
+    id: number;
+    tesisId: number;
+    kasaBankaHesapId: number;
+    ad: string;
+    serialNumber: string;
+    sourceFingerprint: string;
+    sourceTerminalReference: string | null;
+    eslesmeOnayliMi: boolean;
+    aktifMi: boolean;
+    pairingId: number | null;
+    pairingCode: string | null;
+}
+
+export interface PavoTerminalKaydetRequest {
+    tesisId: number;
+    kasaBankaHesapId: number;
+    ad: string;
+    serialNumber: string;
+    sourceFingerprint: string;
+    sourceTerminalReference: string | null;
+    aktifMi: boolean;
+}

@@ -332,8 +332,11 @@
                                 [showClear]="false"
                                 [disabled]="saving || kasaBankaHesapYukleniyor"
                                 [placeholder]="kasaBankaHesapYukleniyor ? 'Yukleniyor...' : 'Hesap seciniz'"
-                                [(ngModel)]="kasaBankaHesapId"
+                            [(ngModel)]="kasaBankaHesapId"
                             />
+                            @if (seciliPavoTerminalAdi) {
+                                <div class="text-xs text-primary mt-1">PAVO: {{ seciliPavoTerminalAdi }}</div>
+                            }
                             @if (!kasaBankaHesapYukleniyor && kasaBankaHesapSecenekleri.length === 0) {
                                 <div class="text-xs text-orange-600 mt-1">Bu tesis icin '{{ odemeTipi }}' tipinde tanimli hesap bulunamadi.</div>
                             }
@@ -557,8 +560,20 @@
 
     <ng-template #footer>
         <div class="rez-odeme-action-row">
-            <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || ekHizmetSaving" (onClick)="kapat()" />
-            <p-button label="Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled" (onClick)="kaydetOdeme()" />
+            @if (pavoOdemeDurumu) {
+                <span class="text-sm text-color-secondary mr-auto">{{ pavoOdemeDurumu }}</span>
+            }
+            <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving || pavoSaving || ekHizmetSaving" (onClick)="kapat()" />
+            @if (seciliPavoTerminalId) {
+                <p-button
+                    label="PAVO ile Tahsil Et"
+                    icon="pi pi-credit-card"
+                    severity="info"
+                    [loading]="pavoSaving"
+                    [disabled]="odemeKaydetDisabled || saving"
+                    (onClick)="pavoIleTahsilEt()" />
+            }
+            <p-button label="Manuel Odeme Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="odemeKaydetDisabled || pavoSaving" (onClick)="kaydetOdeme()" />
         </div>
     </ng-template>
 </p-dialog>

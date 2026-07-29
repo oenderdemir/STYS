@@ -18,7 +18,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
+import { CreateKasaBankaHesapRequest, KASA_BANKA_HESAP_TIPLERI, KasaBankaHesapModel, KasaBankaHesapTipi, PavoTerminalModel, UpdateKasaBankaHesapRequest } from './kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from './kasa-banka-hesaplari.service';
 
 @Component({
@@ -38,6 +38,8 @@ export class KasaBankaHesaplariPage implements OnInit {
 
     loading = false;
     saving = false;
+    pavoSaving = false;
+    pavoTerminal: PavoTerminalModel | null = null;
     dialogVisible = false;
     tipDialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
@@ -139,6 +141,7 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.dialogMode = 'create';
         this.model = this.createEmpty(this.secilenYeniTip);
         this.model.tesisId = tesisId;
+        this.pavoTerminal = null;
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
         this.refreshKomisyonGiderHesapSecenekleri();
@@ -150,10 +153,103 @@ export class KasaBankaHesaplariPage implements OnInit {
         this.dialogVisible = true;
         this.refreshBagliBankaSecenekleri();
         this.refreshKomisyonGiderHesapSecenekleri();
+        this.loadPavoTerminal();
+    }
+
+    savePavoTerminal(): void {
+        if (!this.model.id || !this.model.tesisId || !this.pavoTerminal) {
+            return;
+        }
+        if (!this.pavoTerminal.ad.trim() || !this.pavoTerminal.serialNumber.trim() || !this.pavoTerminal.sourceFingerprint.trim()) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'PAVO terminal adi, seri numarasi ve fingerprint zorunludur.' });
+            return;
+        }
+
+        this.pavoSaving = true;
+        this.service.savePavoTerminal(this.pavoTerminal.id || null, {
+            tesisId: this.model.tesisId,
+            kasaBankaHesapId: this.model.id,
+            ad: this.pavoTerminal.ad.trim(),
+            serialNumber: this.pavoTerminal.serialNumber.trim(),
+            sourceFingerprint: this.pavoTerminal.sourceFingerprint.trim(),
+            sourceTerminalReference: this.pavoTerminal.sourceTerminalReference?.trim() || null,
+            aktifMi: this.pavoTerminal.aktifMi
+        }).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+            next: (terminal) => {
+                this.pavoTerminal = terminal;
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'PAVO terminali kaydedildi.' });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    pavoEslesmeBaslat(): void {
+        if (!this.pavoTerminal?.id) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Once Kaydedin', detail: 'Eslesmeden once PAVO terminalini kaydedin.' });
+            return;
+        }
+        this.pavoSaving = true;
+        this.service.pavoEslesmeBaslat(this.pavoTerminal.id).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+            next: (terminal) => {
+                this.pavoTerminal = terminal;
+                this.messageService.add({ severity: UiSeverity.Info, summary: 'Eslesme Kodu', detail: terminal.pairingCode ? `POS cihazinda ${terminal.pairingCode} kodunu onaylayin.` : 'Eslesme talebi olusturuldu.' });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    pavoEslesmeKontrol(): void {
+        if (!this.pavoTerminal?.id) {
+            return;
+        }
+        this.pavoSaving = true;
+        this.service.pavoEslesmeKontrol(this.pavoTerminal.id).pipe(finalize(() => (this.pavoSaving = false))).subscribe({
+            next: (terminal) => {
+                this.pavoTerminal = terminal;
+                this.messageService.add({
+                    severity: terminal.eslesmeOnayliMi ? UiSeverity.Success : UiSeverity.Warn,
+                    summary: terminal.eslesmeOnayliMi ? 'Eslesme Tamamlandi' : 'Onay Bekleniyor',
+                    detail: terminal.eslesmeOnayliMi ? 'PAVO terminali kullanima hazir.' : 'POS cihazindaki eslesme onayi henuz tamamlanmadi.'
+                });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    private loadPavoTerminal(): void {
+        if (this.model.tip !== 'KrediKarti' || !this.model.id || !this.model.tesisId) {
+            this.pavoTerminal = null;
+            return;
+        }
+        this.service.getPavoTerminaller(this.model.id).subscribe({
+            next: (items) => {
+                this.pavoTerminal = items[0] ?? {
+                    id: 0,
+                    tesisId: this.model.tesisId!,
+                    kasaBankaHesapId: this.model.id!,
+                    ad: '',
+                    serialNumber: '',
+                    sourceFingerprint: `STYS-${this.model.tesisId}-${this.model.id}`,
+                    sourceTerminalReference: null,
+                    eslesmeOnayliMi: false,
+                    aktifMi: true,
+                    pairingId: null,
+                    pairingCode: null
+                };
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     onTipChange(): void {
         const next = this.model.tip;
+        if (next !== 'KrediKarti') {
+            this.pavoTerminal = null;
+        }
         const defaults = this.createEmpty(next);
         this.model = {
             ...this.model,

@@ -177,6 +177,53 @@
                 yalnızca STYS içi muhasebe kaydıdır; bankaya fiziksel para transferi yapılmaz. Komisyon oranı
                 girilmezse (belirsizse) otomatik aktarım "Mutabakat Bekliyor" durumunda insan onayı bekler.
             </div>
+            <div *ngIf="dialogMode === 'edit' && pavoTerminal" class="col-span-12 border-1 surface-border border-round p-3 mt-2">
+                <div class="flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <div class="font-semibold">PAVO Terminali (Opsiyonel)</div>
+                        <div class="text-sm text-color-secondary">
+                            Terminal tanimli olsa bile odemeler otomatik PAVO'ya gitmez; kullanici odeme aninda secim yapar.
+                        </div>
+                    </div>
+                    <span class="text-sm" [class.text-green-600]="pavoTerminal.eslesmeOnayliMi" [class.text-orange-600]="!pavoTerminal.eslesmeOnayliMi">
+                        {{ pavoTerminal.eslesmeOnayliMi ? 'Eslesmis' : 'Eslesmemis' }}
+                    </span>
+                </div>
+                <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-12 md:col-span-4">
+                        <label class="block mb-2">Terminal Adi</label>
+                        <input pInputText class="w-full" [(ngModel)]="pavoTerminal.ad" />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label class="block mb-2">POS Seri Numarasi</label>
+                        <input pInputText class="w-full" [(ngModel)]="pavoTerminal.serialNumber" />
+                    </div>
+                    <div class="col-span-12 md:col-span-4">
+                        <label class="block mb-2">Fingerprint</label>
+                        <input pInputText class="w-full" [(ngModel)]="pavoTerminal.sourceFingerprint" />
+                    </div>
+                    <div class="col-span-12 md:col-span-6">
+                        <label class="block mb-2">Kaynak Terminal Referansi</label>
+                        <input pInputText class="w-full" [(ngModel)]="pavoTerminal.sourceTerminalReference" />
+                    </div>
+                    <div class="col-span-12 md:col-span-3 flex align-items-end gap-2 pb-2">
+                        <p-checkbox [(ngModel)]="pavoTerminal.aktifMi" [binary]="true" inputId="pavoAktif" />
+                        <label for="pavoAktif">Aktif</label>
+                    </div>
+                    <div *ngIf="pavoTerminal.pairingCode && !pavoTerminal.eslesmeOnayliMi" class="col-span-12 md:col-span-3">
+                        <label class="block mb-2">Eslesme Kodu</label>
+                        <div class="text-xl font-semibold">{{ pavoTerminal.pairingCode }}</div>
+                    </div>
+                    <div class="col-span-12 flex gap-2 flex-wrap">
+                        <p-button label="Terminali Kaydet" icon="pi pi-save" [loading]="pavoSaving" (onClick)="savePavoTerminal()" />
+                        <p-button label="Eslesme Baslat" icon="pi pi-link" severity="secondary" [outlined]="true" [disabled]="!pavoTerminal.id || pavoSaving" (onClick)="pavoEslesmeBaslat()" />
+                        <p-button label="Eslesmeyi Kontrol Et" icon="pi pi-refresh" severity="secondary" [outlined]="true" [disabled]="!pavoTerminal.pairingId || pavoSaving" (onClick)="pavoEslesmeKontrol()" />
+                    </div>
+                </div>
+            </div>
+            <div *ngIf="dialogMode === 'create'" class="col-span-12 text-sm text-color-secondary">
+                PAVO terminali, kredi karti/POS hesabi ilk kez kaydedildikten sonra duzenleme ekranindan tanimlanabilir.
+            </div>
         </ng-container>
 
         <div class="col-span-12">

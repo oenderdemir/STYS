@@ -15,5 +15,9 @@ public class RezervasyonOdemeKaydetRequestDto
     public int? CariKartId { get; set; }
 
     public string? Aciklama { get; set; }
+
+    /// <summary>Yalnizca sunucu ici PAVO tamamlama akisinda doldurulur; istemci JSON'undan kabul edilmez.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int? PavoOdemeIslemiId { get; set; }
 }
 

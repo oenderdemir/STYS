@@ -624,6 +624,31 @@ export interface RezervasyonKasaBankaHesapSecenekDto {
     ad: string;
     tip: string;
     kod: string;
+    pavoTerminalId: number | null;
+    pavoTerminalAdi: string | null;
+}
+
+export interface PavoOdemeBaslatRequestDto {
+    rezervasyonId: number;
+    pavoTerminalId: number;
+    tutar: number;
+    cariKartId: number | null;
+    aciklama: string | null;
+}
+
+export interface PavoOdemeIslemiDto {
+    id: number;
+    rezervasyonId: number;
+    pavoTerminalId: number;
+    kasaBankaHesapId: number;
+    paymentLinkId: number | null;
+    paymentLinkReference: string;
+    tutar: number;
+    paraBirimi: string;
+    durum: string;
+    hataMesaji: string | null;
+    rezervasyonOdemeId: number | null;
+    tamamlandiMi: boolean;
 }
 
 export interface RezervasyonCariKartSecenekDto {

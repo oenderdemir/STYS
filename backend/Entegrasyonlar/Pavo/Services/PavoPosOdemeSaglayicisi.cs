@@ -49,7 +49,10 @@ public sealed class PavoPosOdemeSaglayicisi : IPosOdemeSaglayicisi
         CancellationToken cancellationToken)
     {
         var result = await _client.CreateLinkAsync(terminal, islemReferansi, tutar, paraBirimi, cancellationToken);
-        return new PosOdemeBaslatSonucu(result.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), result.RawJson);
+        return new PosOdemeBaslatSonucu(
+            result.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            result.StatusId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            result.RawJson);
     }
 
     public async Task<PosOdemeSorguSonucu> OdemeDurumuAsync(
@@ -65,6 +68,7 @@ public sealed class PavoPosOdemeSaglayicisi : IPosOdemeSaglayicisi
 
         var result = await _client.CheckLinkAsync(terminal, paymentLinkId, islemReferansi, cancellationToken);
         return new PosOdemeSorguSonucu(
+            result.StatusId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             result.Pending,
             result.Successful,
             result.RawJson,

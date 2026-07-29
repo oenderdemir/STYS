@@ -44,8 +44,18 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
     [MaxLength(1024)]
     public string? HataMesaji { get; set; }
 
+    [MaxLength(64)]
+    public string? SaglayiciDurumKodu { get; set; }
+
+    [MaxLength(1024)]
+    public string? SonSorgulamaHatasi { get; set; }
+
     public string? SonSaglayiciYaniti { get; set; }
     public DateTime? SonSorgulamaTarihi { get; set; }
+    public DateTime? SonrakiSorgulamaTarihi { get; set; }
+    public int SorgulamaDenemeSayisi { get; set; }
+    public Guid? TakipKilitToken { get; set; }
+    public DateTime? TakipKilitBitisTarihi { get; set; }
     public DateTime? TamamlanmaTarihi { get; set; }
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 

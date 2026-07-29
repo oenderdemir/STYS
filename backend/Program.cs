@@ -11,6 +11,7 @@ using STYS.ErisimTeshis.Services;
 using STYS.Entegrasyonlar.Pavo.Options;
 using STYS.Entegrasyonlar.Pavo.Services;
 using STYS.Entegrasyonlar.Pos.Services;
+using STYS.Entegrasyonlar.Pos.Options;
 using STYS.GarsonServis.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
@@ -112,6 +113,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.Configure<KurumLogoStorageOptions>(
     builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
+builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
 builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PavoOptions>>().Value;
@@ -120,6 +122,7 @@ builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((service
 });
 builder.Services.AddScoped<IPosOdemeSaglayicisi, PavoPosOdemeSaglayicisi>();
 builder.Services.AddScoped<IPosService, PosService>();
+builder.Services.AddHostedService<PosOdemeDurumTakipHostedService>();
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeTesisScopeService, STYS.Muhasebe.Common.Services.MuhasebeTesisScopeService>();
 builder.Services.AddScoped<STYS.Muhasebe.Common.Services.IMuhasebeDetayHesapService, STYS.Muhasebe.Common.Services.MuhasebeDetayHesapService>();

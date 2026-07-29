@@ -649,11 +649,14 @@ export interface PosOdemeIslemiDto {
     kasaBankaHesapId: number;
     saglayiciKodu: string;
     saglayiciIslemId: string | null;
+    saglayiciDurumKodu: string | null;
     islemReferansi: string;
     tutar: number;
     paraBirimi: string;
     durum: string;
     hataMesaji: string | null;
+    sonSorgulamaTarihi: string | null;
+    sorgulamaDenemeSayisi: number;
     rezervasyonOdemeId: number | null;
     tamamlandiMi: boolean;
 }

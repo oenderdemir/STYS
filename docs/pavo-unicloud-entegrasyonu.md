@@ -55,6 +55,19 @@ oluşturulur. Kart işlemi PAVO tarafından kesin başarılı bildirilmeden `Rez
 Başarılı sonuçtan sonra mevcut rezervasyon ödeme ve muhasebe servisi çağrılır. PAVO işlem
 bağlantısı unique index ile korunur; aynı POS işlemi iki kez muhasebeleştirilemez.
 
+## Arka plan durum takibi
+
+`PosOdemeDurumTakipHostedService`, bekleyen POS işlemlerini tarayıcı açık olmasa da
+periyodik olarak sorgular. Cloud uygulamasının birden fazla instance'ı çalıştığında aynı
+işlemin eşzamanlı sorgulanmasını engellemek için veritabanında süreli lease kullanılır.
+Sağlayıcının durum kodu, son sorgu zamanı, deneme sayısı ve geçici sorgu hatası işlem
+kaydında tutulur.
+
+Takip süresi veya deneme sınırı aşılırsa işlem otomatik başarısız sayılmaz;
+`MutabakatGerekli` durumuna alınır. Böylece cevabı kaybolmuş fakat karttan çekilmiş bir
+işlem yanlışlıkla başarısız olarak kapatılmaz. Ayarlar `PosOdemeTakip` appsettings
+bölümünden değiştirilebilir.
+
 ## Saha doğrulaması
 
 Canlıya geçmeden önce PAVO demo ortamında aşağıdaki senaryolar doğrulanmalıdır:

@@ -1842,6 +1842,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AcquirerReference).HasMaxLength(64);
             entity.Property(x => x.AuthorizationCode).HasMaxLength(64);
             entity.Property(x => x.HataMesaji).HasMaxLength(1024);
+            entity.Property(x => x.SaglayiciDurumKodu).HasMaxLength(64);
+            entity.Property(x => x.SonSorgulamaHatasi).HasMaxLength(1024);
             entity.Property(x => x.SonSaglayiciYaniti).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => new { x.KurumId, x.IslemReferansi })
@@ -1849,6 +1851,8 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.SaglayiciIslemId)
                 .HasFilter("[SaglayiciIslemId] IS NOT NULL");
             entity.HasIndex(x => new { x.TesisId, x.Durum });
+            entity.HasIndex(x => new { x.Durum, x.SonrakiSorgulamaTarihi, x.TakipKilitBitisTarihi })
+                .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.RezervasyonOdemeId)
                 .IsUnique()
                 .HasFilter("[RezervasyonOdemeId] IS NOT NULL");

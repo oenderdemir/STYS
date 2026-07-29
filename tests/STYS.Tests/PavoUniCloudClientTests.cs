@@ -28,6 +28,20 @@ public class PavoUniCloudClientTests
     }
 
     [Fact]
+    public async Task Pavo_StatusId_GenelSaglayiciDurumKodunaAktarilir()
+    {
+        IPosOdemeSaglayicisi saglayici = new PavoPosOdemeSaglayicisi(new FakePavoClient());
+        var result = await saglayici.OdemeDurumuAsync(
+            new PosTerminal { SerialNumber = "PAV960000079" },
+            "42",
+            "STYS-REF-1",
+            CancellationToken.None);
+
+        Assert.Equal("7", result.SaglayiciDurumKodu);
+        Assert.True(result.Bekliyor);
+    }
+
+    [Fact]
     public async Task CreateLink_UniCloudCiftAsamaliTokenVeTerminalHedefiyleGonderilir()
     {
         var handler = new QueueHttpMessageHandler(
@@ -85,6 +99,30 @@ public class PavoUniCloudClientTests
                 Content = new StringContent(_responses.Dequeue(), Encoding.UTF8, "application/json")
             };
         }
+    }
+
+    private sealed class FakePavoClient : IPavoUniCloudClient
+    {
+        public Task<PavoPairingResult> PairingRequestAsync(PosTerminal terminal, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPairingResult> CheckPairingAsync(PosTerminal terminal, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoCreateLinkResult> CreateLinkAsync(
+            PosTerminal terminal,
+            string reference,
+            decimal amount,
+            string currency,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoCheckLinkResult> CheckLinkAsync(
+            PosTerminal terminal,
+            long paymentLinkId,
+            string reference,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new PavoCheckLinkResult(7, true, false, "{}", null, null, null, null));
     }
 
     private sealed record CapturedRequest(string Path, string? Authorization, string Body);

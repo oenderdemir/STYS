@@ -745,28 +745,42 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
+        // Başlangıç değeri açıkça saklanır - "null değil" gibi zayıf bir kontrol yerine, çağrı
+        // sonrasında TAM eşitlik doğrulanacaktır.
+        var baslangicFaturaKesimTarihi = belgeDb.FaturaKesimTarihi;
+
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var sonuc = await service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "FMT" });
 
         Assert.Equal("FMT2026000000001", sonuc.ResmiFaturaNo);
         Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, sonuc.Durum);
+        Assert.Equal(baslangicFaturaKesimTarihi, sonuc.FaturaKesimTarihi);
 
         await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
+        Assert.Equal(baslangicFaturaKesimTarihi, belgeSonHal.FaturaKesimTarihi);
+
         var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
             .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "FMT");
         Assert.Equal(1, sayacDb.SonNumara);
     }
 
-    [Theory]
-    [InlineData("ABC2026+00000001")]
-    [InlineData("ABC2026-00000001")]
-    [InlineData("ABC2026 00000001")]
-    [InlineData("ABC2026000000000")]
-    [InlineData("ABC202600000000１")] // sondaki karakter ASCII '1' DEĞİL - tam genişlikli (fullwidth) Unicode rakam U+FF11
-    public async Task FaturaKesAsync_BozukResmiFaturaNo_ReddedilirVeHicbirSeyDegismez(string bozukNumara)
+    /// <summary>
+    /// Bozuk (format açısından geçersiz) bir ResmiFaturaNo ile FaturaKesAsync çağrıldığında:
+    /// isteğin reddedildiğini VE belge/sayaçtaki HİÇBİR alanın değişmediğini - çağrıdan ÖNCE
+    /// açıkça kaydedilen başlangıç değerleriyle TAM eşitlik üzerinden, yeni/no-tracking bir
+    /// DbContext ile - doğrular. Beş ayrı [IntegrationFact] senaryosu tarafından paylaşılır;
+    /// bu iş için ayrı bir genel [IntegrationTheory]-benzeri altyapı GEREKMEZ - proje zaten
+    /// SatisBelgesiMuhasebeTestSupport.IntegrationTheoryAttribute'a sahip, ancak burada tercih
+    /// edilen "ortak gövde + ayrı Fact'ler" deseni her senaryonun bağımsız, isimlendirilmiş bir
+    /// test olarak raporlanmasını sağlar.
+    /// </summary>
+    private async Task AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync(string bozukNumara)
     {
+        const string seriKodu = "ABC";
+
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        await SeedSayacAsync(dbContext, _kurumId, 2026, "ABC", sonNumara: 3);
+        await SeedSayacAsync(dbContext, _kurumId, 2026, seriKodu, sonNumara: 3);
 
         var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
         var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
@@ -775,23 +789,52 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
+        // Başlangıç değerleri açıkça kaydedilir - doğrulama bunlarla TAM eşitlik üzerinden yapılır.
+        var baslangicResmiFaturaNo = belgeDb.ResmiFaturaNo;
+        var baslangicDurum = belgeDb.Durum;
+        var baslangicFaturaKesimTarihi = belgeDb.FaturaKesimTarihi;
+
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var ex = await Assert.ThrowsAsync<BaseException>(() =>
-            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "ABC" }));
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = seriKodu }));
         Assert.Equal(500, ex.ErrorCode);
         Assert.Contains("beklenen formatta değil", ex.Message);
 
         // Yeni, no-tracking bir DbContext ile belge/sayaç HİÇBİR ŞEYİN değişmediğini doğrula.
         await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
-        Assert.Equal(bozukNumara, belgeSonHal.ResmiFaturaNo);
-        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, belgeSonHal.Durum);
-        Assert.NotNull(belgeSonHal.FaturaKesimTarihi);
+        Assert.Equal(baslangicResmiFaturaNo, belgeSonHal.ResmiFaturaNo);
+        Assert.Equal(baslangicDurum, belgeSonHal.Durum);
+        Assert.Equal(baslangicFaturaKesimTarihi, belgeSonHal.FaturaKesimTarihi);
 
-        var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
-            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "ABC");
+        // Yeni bir sayaç OLUŞMADIĞI da doğrulanır (yalnızca değeri değil, satır sayısı da).
+        var sayaclar = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .Where(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == seriKodu)
+            .ToListAsync();
+        var sayacDb = Assert.Single(sayaclar);
         Assert.Equal(3, sayacDb.SonNumara);
     }
+
+    [IntegrationFact]
+    public Task FaturaKesAsync_BozukResmiFaturaNo_ArtiIsaretliSira_ReddedilirVeHicbirSeyDegismez()
+        => AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync("ABC2026+00000001");
+
+    [IntegrationFact]
+    public Task FaturaKesAsync_BozukResmiFaturaNo_EksiIsaretliSira_ReddedilirVeHicbirSeyDegismez()
+        => AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync("ABC2026-00000001");
+
+    [IntegrationFact]
+    public Task FaturaKesAsync_BozukResmiFaturaNo_BosluklulSira_ReddedilirVeHicbirSeyDegismez()
+        => AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync("ABC2026 00000001");
+
+    [IntegrationFact]
+    public Task FaturaKesAsync_BozukResmiFaturaNo_TamamiSifirSira_ReddedilirVeHicbirSeyDegismez()
+        => AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync("ABC2026000000000");
+
+    [IntegrationFact]
+    public Task FaturaKesAsync_BozukResmiFaturaNo_AsciiDisiRakamIcerenSira_ReddedilirVeHicbirSeyDegismez()
+        // Sondaki karakter ASCII '1' DEĞİL - tam genişlikli (fullwidth) Unicode rakam U+FF11.
+        => AssertBozukResmiFaturaNoReddedilirVeHicbirSeyDegismezAsync("ABC202600000000１");
 
     // ─────────────────────────────────────────────────────────────
     // Eşzamanlılık — GERÇEK SQL Server, ayrı DbContext/servis örnekleri

@@ -71,8 +71,17 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (satisBelgesiId <= 0)
             throw new BaseException("Geçerli bir satış belgesi ID'si gereklidir.", 400);
 
-        // Belgeyi satırlarıyla birlikte transaction dışında al (transaction içinde tekrar okunacak)
-        var belgeOnOkuma = await _satisBelgesiRepository.GetByIdAsync(satisBelgesiId);
+        // Belgeyi transaction dışında SADECE ön kontrol amacıyla al. AsNoTracking KULLANILIR -
+        // aksi halde bu ilk okuma DbContext'in change tracker'ına eklenir ve 3a adımındaki
+        // "transaction içinde tekrar oku" sorgusu, DB'deki güncel satırı değil, EF'in identity
+        // map'ten döndürdüğü bu (artık eski/stale olabilecek) izlenen örneği geri verir - iki
+        // okuma arasında CariKartId değişmişse fiş satırı ile cari hareket farklı tedarikçileri
+        // kullanabilir. Bu metottan sonra belgeOnOkuma yalnızca aşağıdaki (transaction açılmadan
+        // ÖNCEKİ) ön kontrollerde kullanılır; transaction içindeki otoriter kaynak her zaman
+        // 3a'da yeniden okunan `belge`'dir.
+        var belgeOnOkuma = await _dbContext.SatisBelgeleri
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == satisBelgesiId, cancellationToken);
         if (belgeOnOkuma is null)
             throw new BaseException("Satış belgesi bulunamadı.", 404);
 
@@ -112,15 +121,6 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         // Tevkifat + Otv + Oiv + KonaklamaVergisi) hangi bileşenlerden oluştuğuna bağımlı
         // DEĞİLDİR, bu yüzden burada formülü tekrarlayan ayrı bir ön-kontrole gerek yoktur.
 
-        // ── 2. Açık dönem kontrolü ──
-        var aktifDonemDto = await _muhasebeDonemService.GetAktifDonemAsync(
-            belgeOnOkuma.TesisId.Value,
-            belgeOnOkuma.BelgeTarihi,
-            cancellationToken);
-
-        if (aktifDonemDto is null)
-            throw new BaseException("Satış belgesi tarihi için açık muhasebe dönemi bulunamadı.", 400);
-
         // ── 3. Transaction içinde ana işlem ──
         const int maxRetry = 3;
         for (int attempt = 0; attempt < maxRetry; attempt++)
@@ -130,6 +130,31 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             try
             {
                 // ── 3a. Belgeyi transaction içinde satırlarıyla yeniden oku ──
+                //
+                // Bu DbContext (scoped ömürlü olduğundan) bu belge/satırları için, bu çağrıdan
+                // ÖNCE, başka bir kod yolundan (ör. aynı istek kapsamında önceden yapılmış bir
+                // okuma) ZATEN izlenen (tracked) bir örneğe sahip olabilir. EF Core'un varsayılan
+                // identity resolution davranışı, aynı anahtara sahip bir entity ZATEN izleniyorsa
+                // yeni sorgunun DB'den getirdiği güncel sütun değerlerini bu izlenen örneğin
+                // ÜZERİNE YAZMAZ — sorgu, aşağıdaki Include() ile tekrar çalıştırılsa bile o eski
+                // (stale) izlenen örneği olduğu gibi geri döner. Transaction'ın "gerçekten güncel"
+                // bir snapshot üzerinden çalışması için, sorgudan önce bu Id'ye ait her türlü daha
+                // önce izlenen kaydı (hem belge hem satırları) DETACH ederek DB'den zorla taze
+                // okunmasını sağlıyoruz.
+                foreach (var staleBelgeEntry in _dbContext.ChangeTracker.Entries<SatisBelgesi>()
+                             .Where(e => e.Entity.Id == satisBelgesiId)
+                             .ToList())
+                {
+                    staleBelgeEntry.State = EntityState.Detached;
+                }
+
+                foreach (var staleSatirEntry in _dbContext.ChangeTracker.Entries<SatisBelgesiSatiri>()
+                             .Where(e => e.Entity.SatisBelgesiId == satisBelgesiId)
+                             .ToList())
+                {
+                    staleSatirEntry.State = EntityState.Detached;
+                }
+
                 var belge = await _dbContext.SatisBelgeleri
                     .Include(x => x.Satirlar.Where(s => !s.IsDeleted).OrderBy(s => s.SiraNo))
                     .FirstOrDefaultAsync(x => x.Id == satisBelgesiId && !x.IsDeleted, cancellationToken);
@@ -161,6 +186,21 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         $"Bu satış belgesi için zaten bir muhasebe fişi oluşturulmuş. Mevcut fiş: {mevcutFis.FisNo}",
                         409);
                 }
+
+                if (!belge.TesisId.HasValue)
+                    throw new BaseException("Satış belgesinde tesis bilgisi bulunamadı.", 400);
+
+                // Açık dönem, transaction içinde yeniden okunan `belge`nin (ön okuma DEĞİL)
+                // TesisId ve BelgeTarihi'sine göre belirlenir - aksi halde, iki okuma arasında
+                // tesis veya belge tarihi değişmişse, fişte kullanılan tesis/tarih ile artık
+                // ilgisiz kalmış bir döneme yazım yapılabilirdi.
+                var aktifDonemDto = await _muhasebeDonemService.GetAktifDonemAsync(
+                    belge.TesisId.Value,
+                    belge.BelgeTarihi,
+                    cancellationToken);
+
+                if (aktifDonemDto is null)
+                    throw new BaseException("Satış belgesi tarihi için açık muhasebe dönemi bulunamadı.", 400);
 
                 // ── 3b. Satır validasyonları ──
                 var aktifSatirlar = belge.Satirlar.ToList();
@@ -217,23 +257,28 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (strateji is null)
                     throw new BaseException("Bu belge tipi için muhasebe fişi üretimi desteklenmiyor.", 400);
 
-                var fisContext = belgeOnOkuma.BelgeTipi switch
+                // NOT: fisContext, ozellikle CariKartId dahil, HER ZAMAN transaction icinde
+                // yeniden okunan `belge`den (belgeOnOkuma'dan DEGIL) turetilir - aksi halde
+                // iki okuma arasinda tedarikci/musteri degismisse, muhasebe fisi satiri ile
+                // asagida CreateCariHareketAsync'in kullandigi CariKartId birbirinden farkli
+                // olabilirdi.
+                var fisContext = belge.BelgeTipi switch
                 {
                     SatisBelgesiTipi.AlisFaturasi or SatisBelgesiTipi.AlisIadeFaturasi => await BuildAlisFisContextAsync(
-                        belgeOnOkuma.TesisId!.Value,
+                        belge.TesisId!.Value,
                         maliYil,
                         donemNo,
-                        belgeOnOkuma.BelgeTarihi,
-                        belgeOnOkuma.BelgeNo,
-                        belgeOnOkuma.CariKartId,
+                        belge.BelgeTarihi,
+                        belge.BelgeNo,
+                        belge.CariKartId,
                         cancellationToken),
                     _ => await BuildSatisFisContextAsync(
-                        belgeOnOkuma.TesisId!.Value,
+                        belge.TesisId!.Value,
                         maliYil,
                         donemNo,
-                        belgeOnOkuma.BelgeTarihi,
-                        belgeOnOkuma.BelgeNo,
-                        belgeOnOkuma.CariKartId,
+                        belge.BelgeTarihi,
+                        belge.BelgeNo,
+                        belge.CariKartId,
                         cancellationToken)
                 };
 
@@ -293,25 +338,26 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
 
                 // ── 3h. Fiş no üret ──
                 var fisNo = await GenerateFisNoAsync(
-                    belgeOnOkuma.TesisId.Value,
+                    belge.TesisId!.Value,
                     maliYil,
                     MuhasebeFisTipleri.Mahsup,
                     MuhasebeKaynakModulleri.SatisBelgesi,
                     cancellationToken);
 
-                // ── 3i. Muhasebe fişi oluştur ──
+                // ── 3i. Muhasebe fişi oluştur ── (tesis/tarih/no/kaynak, hepsi transaction
+                // içindeki `belge`den — belgeOnOkuma'dan DEĞİL — alınır; bkz. 3a notu)
                 var fis = new MuhasebeFis
                 {
-                    TesisId = belgeOnOkuma.TesisId.Value,
+                    TesisId = belge.TesisId!.Value,
                     MaliYil = maliYil,
                     Donem = donemNo,
                     FisNo = fisNo,
-                    FisTarihi = belgeOnOkuma.BelgeTarihi,
+                    FisTarihi = belge.BelgeTarihi,
                     FisTipi = MuhasebeFisTipleri.Mahsup,
                     KaynakModul = MuhasebeKaynakModulleri.SatisBelgesi,
-                    KaynakId = belgeOnOkuma.Id,
+                    KaynakId = belge.Id,
                     Durum = MuhasebeFisDurumlari.Taslak,
-                    Aciklama = $"Satış belgesi muhasebe fişi - {belgeOnOkuma.BelgeNo}",
+                    Aciklama = $"Satış belgesi muhasebe fişi - {belge.BelgeNo}",
                     ToplamBorc = toplamBorc,
                     ToplamAlacak = toplamAlacak,
                     Satirlar = satirlar,

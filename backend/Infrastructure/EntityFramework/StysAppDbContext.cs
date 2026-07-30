@@ -2709,7 +2709,22 @@ public class StysAppDbContext : DbContext
 
         modelBuilder.Entity<KurumFaturaNumaraSayaci>(entity =>
         {
-            entity.ToTable("KurumFaturaNumaraSayaclari", muhasebeSchema);
+            entity.ToTable("KurumFaturaNumaraSayaclari", muhasebeSchema, t =>
+            {
+                // SonNumara: sıfırın altına düşemez, formatın 9 haneli sıra bölümünün üst
+                // sınırı olan 999999999'u aşamaz (bkz. SatisBelgesiService.FaturaKesAsync).
+                t.HasCheckConstraint(
+                    "CK_KurumFaturaNumaraSayaclari_SonNumara",
+                    "[SonNumara] >= 0 AND [SonNumara] <= 999999999");
+
+                // SeriKodu: tam 3 karakter, yalnızca büyük harf A-Z ve rakam 0-9. LIKE deseni
+                // COLLATE ile açıkça BIN2'ye (case-sensitive, byte-sıralı) zorlanır - aksi halde
+                // veritabanının varsayılan collation'ı case-insensitive olabilir ve "abc" gibi
+                // küçük harfli bir değeri de (yanlışlıkla) geçerli sayabilir.
+                t.HasCheckConstraint(
+                    "CK_KurumFaturaNumaraSayaclari_SeriKodu",
+                    "LEN([SeriKodu]) = 3 AND [SeriKodu] COLLATE Latin1_General_BIN2 NOT LIKE '%[^A-Z0-9]%'");
+            });
 
             entity.Property(x => x.SeriKodu)
                 .HasMaxLength(3)

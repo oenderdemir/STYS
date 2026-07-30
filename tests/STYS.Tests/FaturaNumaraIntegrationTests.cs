@@ -563,6 +563,169 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Değişmezlik/tutarlılık invariantları (hardening turu)
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_ResmiNumaraDoluAmaDurumMuhasebeOnaylandi_ReddedilirVeHicbirSeyDegismez()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "ABC", sonNumara: 5);
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
+        belgeDb.ResmiFaturaNo = "ABC2026000000005";
+        // Durum BİLEREK MuhasebeOnaylandi bırakıldı - ResmiFaturaNo dolu ama Durum FaturaKesildi
+        // DEĞİL senaryosu.
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "ABC" }));
+        Assert.Equal(500, ex.ErrorCode);
+        Assert.Contains("veri tutarsızlığı", ex.Message);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
+        Assert.Equal("ABC2026000000005", belgeSonHal.ResmiFaturaNo);
+        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, belgeSonHal.Durum);
+
+        var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "ABC");
+        Assert.Equal(5, sayacDb.SonNumara);
+    }
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_FaturaKesildiAmaFaturaKesimTarihiBos_Reddedilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
+        belgeDb.ResmiFaturaNo = "XYZ2026000000001";
+        belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        // FaturaKesimTarihi BİLEREK boş bırakıldı.
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "XYZ" }));
+        Assert.Equal(500, ex.ErrorCode);
+        Assert.Contains("fatura kesim tarihi bulunamadı", ex.Message);
+    }
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_SayacMevcutNumarininSirasindanKucukse_IdempotentBasariGibiDonulmez()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "LOW", sonNumara: 2);
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
+        belgeDb.ResmiFaturaNo = "LOW2026000000005";
+        belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "LOW" }));
+        Assert.Equal(500, ex.ErrorCode);
+        Assert.Contains("küçük", ex.Message);
+    }
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_DahaOnceFarkliSeriyleKesilmisBelge_YeniNumaraTuketmezCakismaVerir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "AAA");
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ilkSonuc = await service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "AAA" });
+        Assert.Equal("AAA2026000000001", ilkSonuc.ResmiFaturaNo);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "BBB" }));
+        Assert.Equal(409, ex.ErrorCode);
+        Assert.Contains("tekrar fatura kesilemez", ex.Message);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sayacAaaDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "AAA");
+        Assert.Equal(1, sayacAaaDb.SonNumara);
+
+        var sayacBbbVarMi = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .AnyAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "BBB");
+        Assert.False(sayacBbbVarMi);
+
+        var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
+        Assert.Equal("AAA2026000000001", belgeSonHal.ResmiFaturaNo);
+    }
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_SayacUstSinirdaysa_ReddedilirHicbirSeyDegismez()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "MAX", sonNumara: 999999999);
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "MAX" }));
+        Assert.Equal(409, ex.ErrorCode);
+        Assert.Contains("999999999", ex.Message);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "MAX");
+        Assert.Equal(999999999, sayacDb.SonNumara);
+
+        var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
+        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, belgeSonHal.Durum);
+        Assert.Null(belgeSonHal.ResmiFaturaNo);
+        Assert.Null(belgeSonHal.FaturaKesimTarihi);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Muhasebe fişi durum matrisi
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_TersKayitFisineBagliBelge_Kesilemez()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "TRK");
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var fisDb = await dbContext.MuhasebeFisler.FirstAsync(x => x.Id == belge.MuhasebeFisId!.Value);
+        fisDb.Durum = MuhasebeFisDurumlari.TersKayit;
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "TRK" }));
+        Assert.Contains("ters kayıt fişidir", ex.Message);
+    }
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_TaslakMuhasebeFisliNormalSatisFaturasi_BasariylaKesilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "TSL");
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var fisDb = await dbContext.MuhasebeFisler.AsNoTracking().FirstAsync(x => x.Id == belge.MuhasebeFisId!.Value);
+        Assert.Equal(MuhasebeFisDurumlari.Taslak, fisDb.Durum);
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var sonuc = await service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "TSL" });
+
+        Assert.Equal("TSL2026000000001", sonuc.ResmiFaturaNo);
+        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, sonuc.Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Eşzamanlılık — GERÇEK SQL Server, ayrı DbContext/servis örnekleri
     // ─────────────────────────────────────────────────────────────
 

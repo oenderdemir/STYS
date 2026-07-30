@@ -12,7 +12,7 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    [Migration("20260730174521_AddSatisBelgesiKurumSahipligiVeFaturaNumaraSayaci")]
+    [Migration("20260730184240_AddSatisBelgesiKurumSahipligiVeFaturaNumaraSayaci")]
     partial class AddSatisBelgesiKurumSahipligiVeFaturaNumaraSayaci
     {
         /// <inheritdoc />
@@ -5137,7 +5137,12 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("KurumFaturaNumaraSayaclari", "muhasebe");
+                    b.ToTable("KurumFaturaNumaraSayaclari", "muhasebe", t =>
+                        {
+                            t.HasCheckConstraint("CK_KurumFaturaNumaraSayaclari_SeriKodu", "LEN([SeriKodu]) = 3 AND [SeriKodu] COLLATE Latin1_General_BIN2 NOT LIKE '%[^A-Z0-9]%'");
+
+                            t.HasCheckConstraint("CK_KurumFaturaNumaraSayaclari_SonNumara", "[SonNumara] >= 0 AND [SonNumara] <= 999999999");
+                        });
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi", b =>

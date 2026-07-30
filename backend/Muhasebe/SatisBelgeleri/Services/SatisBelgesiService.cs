@@ -652,16 +652,68 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                     errorCode: 400);
             }
 
-            // İdempotency: belge zaten kesilmişse yeni numara TÜKETİLMEZ, mevcut sonuç
-            // döndürülür — ama önce mevcut numaranın başka bir belgeyle çakışmadığı
-            // doğrulanır (sessizce devam edilmez, tutarsızsa açık hata verilir).
-            if (belge.Durum == SatisBelgesiDurumu.FaturaKesildi)
+            // ── Değişmezlik/tutarlılık invariantları (kilitli okuma sonrası, sayaç/yazımdan ÖNCE) ──
+            // ResmiFaturaNo ve Durum=FaturaKesildi HER ZAMAN BİRLİKTE bulunmalıdır; biri diğeri
+            // olmadan asla "sessizce devam edilerek" kabul edilmez - ikisi arasında bir
+            // tutarsızlık varsa (ör. elle veri düzeltmesi, eksik migration, vb.) açık bir hata
+            // verilir ve mevcut numara/durum ASLA üzerine yazılmaz.
+            var resmiNumaraDoluMu = !string.IsNullOrWhiteSpace(belge.ResmiFaturaNo);
+            var durumFaturaKesildiMi = belge.Durum == SatisBelgesiDurumu.FaturaKesildi;
+
+            if (resmiNumaraDoluMu && !durumFaturaKesildiMi)
             {
-                if (string.IsNullOrWhiteSpace(belge.ResmiFaturaNo))
+                throw new BaseException(
+                    $"Belgede resmî fatura numarası ({belge.ResmiFaturaNo}) var ancak durum 'FaturaKesildi' değil (Durum: {belge.Durum}); " +
+                    $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    errorCode: 500);
+            }
+
+            if (durumFaturaKesildiMi && !resmiNumaraDoluMu)
+            {
+                throw new BaseException(
+                    $"Belge 'FaturaKesildi' durumunda ancak resmî fatura numarası bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    errorCode: 500);
+            }
+
+            if (durumFaturaKesildiMi && !belge.FaturaKesimTarihi.HasValue)
+            {
+                throw new BaseException(
+                    $"Belge 'FaturaKesildi' durumunda ancak fatura kesim tarihi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    errorCode: 500);
+            }
+
+            // İdempotency: belge zaten kesilmişse yeni numara TÜKETİLMEZ, mevcut sonuç
+            // döndürülür — ama önce mevcut numaranın gerçekten tutarlı olduğu (format, yıl,
+            // seri, çakışma, sayaç durumu) doğrulanır; sessizce devam edilmez, herhangi bir
+            // tutarsızlıkta açık hata verilir.
+            if (durumFaturaKesildiMi)
+            {
+                if (belge.ResmiFaturaNo!.Length != 16 ||
+                    !belge.ResmiFaturaNo[..3].All(c => (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) ||
+                    !int.TryParse(belge.ResmiFaturaNo.Substring(3, 4), out var mevcutYil) ||
+                    !int.TryParse(belge.ResmiFaturaNo.Substring(7, 9), out var mevcutSiraNo))
                 {
                     throw new BaseException(
-                        $"Belge 'FaturaKesildi' durumunda ancak resmî fatura numarası bulunamadı; veri tutarsızlığı. (Id: {id})",
+                        $"Belgenin mevcut resmî fatura numarası ({belge.ResmiFaturaNo}) beklenen formatta değil; " +
+                        $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                         errorCode: 500);
+                }
+
+                var mevcutSeriKodu = belge.ResmiFaturaNo[..3];
+
+                if (mevcutYil != belge.BelgeTarihi.Year)
+                {
+                    throw new BaseException(
+                        $"Belgenin mevcut resmî fatura numarasının yıl bölümü ({mevcutYil}) belge tarihinin yılıyla " +
+                        $"({belge.BelgeTarihi.Year}) uyuşmuyor; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                if (!string.Equals(mevcutSeriKodu, seriKodu, StringComparison.Ordinal))
+                {
+                    throw new BaseException(
+                        $"Belge zaten '{mevcutSeriKodu}' serisiyle kesilmiş; '{seriKodu}' serisiyle tekrar fatura kesilemez. (Id: {id})",
+                        errorCode: 409);
                 }
 
                 var cakisanBelgeVarMi = await _db.SatisBelgeleri
@@ -672,6 +724,26 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                 {
                     throw new BaseException(
                         $"Resmî fatura numarası ({belge.ResmiFaturaNo}) başka bir belgeyle çakışıyor; veri tutarsızlığı, sistem yöneticisine başvurun.",
+                        errorCode: 500);
+                }
+
+                var ilgiliSayac = await _db.KurumFaturaNumaraSayaclari
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => !x.IsDeleted && x.KurumId == belge.KurumId && x.MaliYil == mevcutYil && x.SeriKodu == mevcutSeriKodu, cancellationToken);
+
+                if (ilgiliSayac is null)
+                {
+                    throw new BaseException(
+                        $"Belgenin resmî fatura numarasına ({belge.ResmiFaturaNo}) karşılık gelen kurum/yıl/seri sayacı bulunamadı; " +
+                        $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                if (ilgiliSayac.SonNumara < mevcutSiraNo)
+                {
+                    throw new BaseException(
+                        $"'{mevcutSeriKodu}' serisinin sayacı ({ilgiliSayac.SonNumara}), belgenin mevcut resmî numarasının sıra değerinden " +
+                        $"({mevcutSiraNo}) küçük; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                         errorCode: 500);
                 }
 
@@ -691,13 +763,35 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
 
             var fis = await _db.MuhasebeFisler
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value, cancellationToken);
 
             if (fis is null)
                 throw new BaseException("Belgeye bağlı muhasebe fişi bulunamadı; fatura kesilemez.", errorCode: 400);
 
-            if (fis.Durum == MuhasebeFisDurumlari.Iptal)
-                throw new BaseException("Belgeye bağlı muhasebe fişi iptal edilmiş; fatura kesilemez.", errorCode: 400);
+            if (fis.IsDeleted)
+                throw new BaseException("Belgeye bağlı muhasebe fişi silinmiş; fatura kesilemez.", errorCode: 400);
+
+            // Muhasebe fişi durum matrisi: Taslak/Onaylı geçerli kabul edilir (mevcut fiş üretim
+            // akışı Taslak fiş üretir - bkz. SatisBelgesiMuhasebeFisService); İptal ve TersKayit
+            // reddedilir; bilinmeyen/beklenmeyen herhangi bir durum değeri de reddedilir - "belki
+            // geçerlidir" diye SESSİZCE kabul edilmez.
+            switch (fis.Durum)
+            {
+                case MuhasebeFisDurumlari.Taslak:
+                case MuhasebeFisDurumlari.Onayli:
+                    break;
+
+                case MuhasebeFisDurumlari.Iptal:
+                    throw new BaseException("Belgeye bağlı muhasebe fişi iptal edilmiş; fatura kesilemez.", errorCode: 400);
+
+                case MuhasebeFisDurumlari.TersKayit:
+                    throw new BaseException("Belgeye bağlı muhasebe fişi bir ters kayıt fişidir; fatura kesilemez.", errorCode: 400);
+
+                default:
+                    throw new BaseException(
+                        $"Belgeye bağlı muhasebe fişi bilinmeyen bir durumda ({fis.Durum}); fatura kesilemez.",
+                        errorCode: 400);
+            }
 
             if (!belge.TesisId.HasValue)
                 throw new BaseException("Belgede tesis bilgisi bulunamadı; fatura kesilemez.", errorCode: 400);
@@ -733,6 +827,17 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
             if (!sayac.AktifMi)
                 throw new BaseException($"'{seriKodu}' serisi pasif durumda.", errorCode: 400);
+
+            // 9 haneli sıra bölümünün üst sınırı: {SiraNo:000000000} formatı en fazla 999999999
+            // değerini taşıyabilir. Sayaç zaten bu değerdeyse ne sayaç ne belge değiştirilir -
+            // açık bir hata verilir (taşma sonrası format bozulur/yanlış bir numara üretilir).
+            if (sayac.SonNumara >= 999999999)
+            {
+                throw new BaseException(
+                    $"'{seriKodu}' serisi için {maliYil} mali yılındaki sıra numarası sınırına (999999999) ulaşıldı; " +
+                    "yeni resmî fatura numarası üretilemez. Yeni bir seri tanımlanmalıdır.",
+                    errorCode: 409);
+            }
 
             var siraNo = sayac.SonNumara + 1;
             sayac.SonNumara = siraNo;

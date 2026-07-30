@@ -11,16 +11,19 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // KurumId ÖNCE NULLABLE eklenir (kalıcı bir default DEĞER BIRAKILMAZ) - böylece
+            // backfill sırasında geçerli bir Tesis'e bağlanamayan legacy kayıtlar açıkça NULL
+            // kalabilir; kolonu NOT NULL yapmadan ÖNCE bu NULL'lar tespit edilip migration
+            // durdurulabilir. Hiçbir kayda varsayılan/ilk/rastgele bir Kurum ATANMAZ.
             migrationBuilder.AddColumn<int>(
                 name: "KurumId",
                 schema: "muhasebe",
                 table: "SatisBelgeleri",
                 type: "int",
-                nullable: false,
-                defaultValue: 0);
+                nullable: true);
 
-            // ── Legacy veri backfill: KurumId'yi bağlı TesisId üzerinden doldur ──
-            // Otoriter zincir: SatisBelgesi.TesisId -> Tesis.KurumId -> SatisBelgesi.KurumId
+            // ── Legacy veri backfill: KurumId'yi YALNIZCA gerçekten bağlı ve geçerli bir Tesis
+            // kaydı üzerinden doldur ── Otoriter zincir: SatisBelgesi.TesisId -> Tesis.KurumId
             // (bkz. SatisBelgesiService.ResolveKurumIdFromTesisAsync ile aynı mantık).
             migrationBuilder.Sql(@"
 UPDATE sb
@@ -30,32 +33,42 @@ INNER JOIN [dbo].[Tesisler] t ON t.Id = sb.TesisId
 WHERE sb.TesisId IS NOT NULL;
 ");
 
-            // TesisId'si bulunmayan veya geçerli bir tesise bağlanamayan (silinmiş/olmayan
-            // TesisId) legacy belgeler için: sistemdeki ilk (Id'si en küçük) aktif Kurum'a
-            // varsayılan olarak atanır. Sistemde HİÇ Kurum yoksa (ve hâlâ KurumId=0 olan satır
-            // varsa) migration RAISERROR ile açıkça durur - rastgele/güvensiz bir değer ASLA
-            // sessizce atanmaz.
+            // TesisId'si NULL olan veya geçerli bir Tesis'e bağlanamayan (silinmiş/olmayan
+            // TesisId) legacy belgeler KurumId=NULL olarak kalır. Böyle bir kayıt varsa migration
+            // AÇIK bir hata ile durur - hata mesajı eşleşmeyen kayıt SAYISINI belirtir. Hiçbir
+            // varsayılan/ilk/rastgele Kuruma ATAMA yapılmaz; bu davranış yanlış tenant sahipliği
+            // ve kurumlar arası veri sızıntısı riski taşıdığı için kasıtlı olarak KALDIRILDI.
             migrationBuilder.Sql(@"
-DECLARE @varsayilanKurumId INT;
-SELECT TOP 1 @varsayilanKurumId = Id FROM [dbo].[Kurumlar] WHERE IsDeleted = 0 ORDER BY Id;
+DECLARE @eslesmeyenSayisi INT;
+SELECT @eslesmeyenSayisi = COUNT(*) FROM [muhasebe].[SatisBelgeleri] WHERE KurumId IS NULL;
 
-IF @varsayilanKurumId IS NOT NULL
+IF @eslesmeyenSayisi > 0
 BEGIN
-    UPDATE [muhasebe].[SatisBelgeleri]
-    SET KurumId = @varsayilanKurumId
-    WHERE KurumId = 0;
-END
-
-IF EXISTS (SELECT 1 FROM [muhasebe].[SatisBelgeleri] WHERE KurumId = 0)
-BEGIN
-    RAISERROR('SatisBelgeleri.KurumId backfill basarisiz: TesisId uzerinden veya varsayilan kurum ile eslenemeyen (sistemde hic Kurum bulunamadigi icin) kayitlar var. Migration durduruldu; lutfen once en az bir Kurum kaydi olusturun veya bu belgeleri elle inceleyip duzeltin.', 16, 1);
+    DECLARE @hataMesaji NVARCHAR(4000) = N'SatisBelgeleri.KurumId backfill basarisiz: ' +
+        CAST(@eslesmeyenSayisi AS NVARCHAR(20)) +
+        N' kayit gecerli bir Tesis uzerinden bir Kuruma baglanamadi (TesisId NULL veya Tesisler tablosunda bulunamiyor). ' +
+        N'Bu kayitlara varsayilan/ilk/rastgele bir Kurum ATANMAZ - yanlis tenant sahipligi ve kurumlar arasi veri sizintisi olusturabilir. ' +
+        N'Migration durduruldu; lutfen bu kayitlari elle inceleyip dogru TesisId/KurumId ile eslestirin (veya gecersizse soft-delete edin), sonra migration''i tekrar calistirin.';
+    RAISERROR(@hataMesaji, 16, 1);
 END
 ");
 
+            // Tüm satırlar başarıyla dolduruldu (yukarıdaki kontrolü geçti) - kolon artık NOT
+            // NULL yapılabilir. Kalıcı bir default değer (0 vb.) YOKTUR.
+            migrationBuilder.AlterColumn<int>(
+                name: "KurumId",
+                schema: "muhasebe",
+                table: "SatisBelgeleri",
+                type: "int",
+                nullable: false,
+                oldClrType: typeof(int),
+                oldType: "int",
+                oldNullable: true);
+
             // ── Kurum içi mükerrer ResmiFaturaNo kontrolü (yeni unique index'ten ÖNCE) ──
-            // Mevcut kod tabanında ResmiFaturaNo'yu atayan hiçbir servis akışı yoktu, bu yüzden
-            // pratikte bu tabloda satır bulunması BEKLENMEZ; yine de veri sessizce yeniden
-            // numaralandırılmaz - mükerrer varsa migration açık bir hata ile durur.
+            // Mevcut kod tabanında ResmiFaturaNo'yu atayan hiçbir servis akışı bu migration'dan
+            // önce yoktu, bu yüzden pratikte bu tabloda satır bulunması BEKLENMEZ; yine de veri
+            // sessizce yeniden numaralandırılmaz - mükerrer varsa migration açık bir hata ile durur.
             migrationBuilder.Sql(@"
 IF EXISTS (
     SELECT KurumId, ResmiFaturaNo
@@ -92,6 +105,8 @@ END
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_KurumFaturaNumaraSayaclari", x => x.Id);
+                    table.CheckConstraint("CK_KurumFaturaNumaraSayaclari_SeriKodu", "LEN([SeriKodu]) = 3 AND [SeriKodu] COLLATE Latin1_General_BIN2 NOT LIKE '%[^A-Z0-9]%'");
+                    table.CheckConstraint("CK_KurumFaturaNumaraSayaclari_SonNumara", "[SonNumara] >= 0 AND [SonNumara] <= 999999999");
                     table.ForeignKey(
                         name: "FK_KurumFaturaNumaraSayaclari_Kurumlar_KurumId",
                         column: x => x.KurumId,

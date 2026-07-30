@@ -82,7 +82,8 @@ public sealed class AlisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhaseb
             SiraNo = siraNo++,
             Borc = belge.GenelToplam,
             Alacak = 0,
-            Aciklama = $"Satıcı borcu iadesi - {belge.BelgeNo}"
+            Aciklama = $"Satıcı borcu iadesi - {belge.BelgeNo}",
+            CariKartId = context.CariKartId
         });
 
         if (belge.ToplamKdv > 0)

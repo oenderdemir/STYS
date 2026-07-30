@@ -225,6 +225,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         donemNo,
                         belgeOnOkuma.BelgeTarihi,
                         belgeOnOkuma.BelgeNo,
+                        belgeOnOkuma.CariKartId,
                         cancellationToken),
                     _ => await BuildSatisFisContextAsync(
                         belgeOnOkuma.TesisId!.Value,
@@ -482,7 +483,17 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         // hesap planı kaydına yazılmalıdır — tesisteki "CariMusteri" ana kodu altındaki
         // rastgele/ilk detay hesaba değil (aksi halde fatura tamamen farklı bir müşterinin
         // cari hesabına borç kaydedilmiş olur).
-        var cariHesabi = await GetCariMuhasebeHesabiAsync(cariKartId, tesisId, cancellationToken);
+        var cariHesabi = await GetCariMuhasebeHesabiAsync(
+            cariKartId,
+            tesisId,
+            "Satış belgesinde cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.",
+            gecerliCariTipleri: null,
+            yanlisTipHatasi: null,
+            // Satış tarafının MEVCUT davranışı: yalnızca cari kartın var olduğu ve hesap
+            // planı bağlantısı olduğu kontrol edilir; AktifMi/TesisId eşleşmesi burada
+            // (bu görevin kapsamı dışında olduğu için) EKLENMEZ.
+            tamCariDogrulamasiUygula: false,
+            cancellationToken);
         var gelir = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.GelirSatis, tesisId, cancellationToken);
         var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken);
 
@@ -502,32 +513,65 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     }
 
     /// <summary>
-    /// Satış belgesinin kendi cari kartına bağlı hesap planı kaydını döner. Cari kart
-    /// veya onun MuhasebeHesapPlaniId'si eksikse (veri tutarsızlığı) açık bir hata verir —
-    /// asla tesisteki başka bir cariye ait detay hesaba sessizce düşmez.
+    /// Belgenin kendi cari kartına (SatisBelgesi.CariKartId) bağlı hesap planı kaydını döner.
+    /// Cari kart, onun CariTipi'si (istenirse) veya MuhasebeHesapPlaniId'si eksik/uyumsuzsa
+    /// (veri tutarsızlığı) açık bir hata verir — asla tesisteki başka bir cariye/tedarikçiye
+    /// ait "ilk" ana kod detay hesabına sessizce düşmez. Hem satış (müşteri) hem alış
+    /// (tedarikçi) tarafından, yön bazlı mesaj/CariTipi kontrolleriyle paylaşılan tek
+    /// çözümleme noktasıdır (bkz. görev: küçük, riskli olmayan ortaklaştırma).
     /// </summary>
+    /// <param name="gecerliCariTipleri">
+    /// Belirtilirse, cari kartın CariTipi'sinin bu listedeki değerlerden biriyle (case-insensitive)
+    /// eşleşmesi zorunlu tutulur; null ise CariTipi kontrol edilmez (satış tarafının mevcut
+    /// davranışı budur ve DEĞİŞTİRİLMEMİŞTİR).
+    /// </param>
+    /// <param name="yanlisTipHatasi">gecerliCariTipleri belirtildiğinde ve eşleşme sağlanamadığında fırlatılacak hata mesajı.</param>
+    /// <param name="tamCariDogrulamasiUygula">
+    /// true ise cari kartın AktifMi ve TesisId (varsa) uyumluluğu da kontrol edilir (alış
+    /// tarafı için istenen davranış). false ise (satış tarafının MEVCUT, DEĞİŞTİRİLMEMİŞ
+    /// davranışı) bu iki kontrol atlanır — yalnızca kaydın var/silinmemiş olması ve hesap
+    /// planı bağlantısı aranır.
+    /// </param>
     private async Task<MuhasebeHesapPlani> GetCariMuhasebeHesabiAsync(
         int? cariKartId,
         int tesisId,
+        string eksikCariHatasi,
+        string[]? gecerliCariTipleri,
+        string? yanlisTipHatasi,
+        bool tamCariDogrulamasiUygula,
         CancellationToken cancellationToken)
     {
         if (!cariKartId.HasValue)
-            throw new BaseException("Satış belgesinde cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.", 400);
+            throw new BaseException(eksikCariHatasi, 400);
 
-        var hesap = await _dbContext.CariKartlar
+        var cari = await _dbContext.CariKartlar
             .AsNoTracking()
-            .Where(x => x.Id == cariKartId.Value && !x.IsDeleted)
-            .Select(x => x.MuhasebeHesapPlaniId)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == cariKartId.Value && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException($"Cari kart bulunamadı. (Id: {cariKartId.Value})", 400);
 
-        if (!hesap.HasValue)
+        if (tamCariDogrulamasiUygula)
+        {
+            if (!cari.AktifMi)
+                throw new BaseException($"Cari kart pasif durumda. (Id: {cariKartId.Value})", 400);
+
+            if (cari.TesisId.HasValue && cari.TesisId != tesisId)
+                throw new BaseException($"Seçilen cari kart belge tesisiyle uyumlu değil. (Id: {cariKartId.Value})", 400);
+        }
+
+        if (gecerliCariTipleri is { Length: > 0 }
+            && !gecerliCariTipleri.Any(tip => string.Equals(tip, cari.CariTipi, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new BaseException(yanlisTipHatasi ?? "Seçilen cari kart bu belge tipiyle uyumlu değil.", 400);
+        }
+
+        if (!cari.MuhasebeHesapPlaniId.HasValue)
             throw new BaseException(
                 $"Cari kart (Id: {cariKartId.Value}) için hesap planı bağlantısı bulunamadı.",
                 400);
 
         var hesapPlani = await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
-            .Where(x => x.Id == hesap.Value
+            .Where(x => x.Id == cari.MuhasebeHesapPlaniId.Value
                         && !x.IsDeleted
                         && x.AktifMi
                         && x.HareketGorebilirMi
@@ -549,9 +593,22 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         int donemNo,
         DateTime fisTarihi,
         string belgeNo,
+        int? cariKartId,
         CancellationToken cancellationToken)
     {
-        var cari = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.CariTedarikci, tesisId, cancellationToken);
+        // Borç/alacak cari satırı, belgenin kendi tedarikçisinin (SatisBelgesi.CariKartId)
+        // hesap planı kaydına yazılmalıdır — tesisteki "CariTedarikci" ana kodu altındaki
+        // rastgele/ilk detay hesaba değil (aksi halde fatura tamamen farklı bir tedarikçinin
+        // cari hesabına alacak kaydedilmiş olur, CreateCariHareketAsync'in yazdığı doğru
+        // CariKartId'li cari hareketle tutarsız kalır).
+        var cari = await GetCariMuhasebeHesabiAsync(
+            cariKartId,
+            tesisId,
+            "Alış belgesinde tedarikçi cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.",
+            gecerliCariTipleri: [CariKartTipleri.Tedarikci],
+            yanlisTipHatasi: "Alış belgelerinde tedarikçi cari kart seçilmelidir.",
+            tamCariDogrulamasiUygula: true,
+            cancellationToken);
         var stok = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.StokTicariMal, tesisId, cancellationToken);
         var hizmet = await GetHesapPlaniFallbackAsync(
             tesisId,
@@ -569,6 +626,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             FisNo = string.Empty,
             BelgeNo = belgeNo,
             CariHesapPlaniId = cari.Id,
+            CariKartId = cariKartId,
             GelirHesapPlaniId = 0,
             KdvHesapPlaniId = kdv.Id,
             StokHesapPlaniId = stok.Id,
@@ -955,7 +1013,16 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         CancellationToken cancellationToken)
     {
         if (!belge.CariKartId.HasValue)
+        {
+            // Alış/alış iade için CariKartId zorunludur (bkz. BuildAlisFisContextAsync'in
+            // erken, transaction'daki ilk yazımdan önceki kontrolü) — bu belge tipleri için
+            // sessizce atlanmaz; buraya normalde ulaşılmaz ama savunma amaçlı aynı hata
+            // burada da tekrarlanır.
+            if (belge.BelgeTipi is SatisBelgesiTipi.AlisFaturasi or SatisBelgesiTipi.AlisIadeFaturasi)
+                throw new BaseException("Alış belgesinde tedarikçi cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.", 400);
+
             return;
+        }
 
         var mevcutCariHareketVarMi = await _dbContext.CariHareketler
             .AsNoTracking()

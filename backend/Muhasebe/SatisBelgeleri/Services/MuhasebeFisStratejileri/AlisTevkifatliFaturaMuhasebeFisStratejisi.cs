@@ -150,7 +150,8 @@ public sealed class AlisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMuh
             SiraNo = siraNo,
             Borc = 0,
             Alacak = belge.GenelToplam,
-            Aciklama = $"Tedarikçi borcu - {belge.BelgeNo}"
+            Aciklama = $"Tedarikçi borcu - {belge.BelgeNo}",
+            CariKartId = context.CariKartId
         });
 
         var toplamBorc = satirlar.Sum(x => x.Borc);

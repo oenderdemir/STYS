@@ -91,7 +91,8 @@ public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFis
             SiraNo = siraNo,
             Borc = 0,
             Alacak = belge.GenelToplam,
-            Aciklama = $"Tedarikçi borcu - {belge.BelgeNo}"
+            Aciklama = $"Tedarikçi borcu - {belge.BelgeNo}",
+            CariKartId = context.CariKartId
         });
 
         return satirlar;

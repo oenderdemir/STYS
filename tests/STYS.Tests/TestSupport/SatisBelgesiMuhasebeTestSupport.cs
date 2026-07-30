@@ -255,7 +255,17 @@ public static class SatisBelgesiMuhasebeTestSupport
 
     public static async Task AssertHicMuhasebeKaydiOlusmadiAsync(StysAppDbContext dbContext, int belgeId)
     {
-        Assert.False(await dbContext.MuhasebeFisler.AsNoTracking().AnyAsync(x => x.KaynakId == belgeId));
+        var fisIds = await dbContext.MuhasebeFisler.AsNoTracking()
+            .Where(x => x.KaynakId == belgeId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        Assert.Empty(fisIds);
+
+        // MuhasebeFisSatir, KaynakId ile değil MuhasebeFisId ile bağlıdır — üstteki kontrol
+        // MuhasebeFis'in hiç oluşmadığını doğrular, ama bunu VARSAYMAK yerine burada AYRICA
+        // açıkça doğrulanır: bu belgeye ait (fisIds boş olsa da) hiçbir fiş satırı yoktur.
+        Assert.False(await dbContext.MuhasebeFisSatirlari.AsNoTracking().AnyAsync(x => fisIds.Contains(x.MuhasebeFisId)));
+
         Assert.False(await dbContext.CariHareketler.AsNoTracking().AnyAsync(x => x.KaynakId == belgeId));
         Assert.False(await dbContext.StokHareketleri.AsNoTracking().AnyAsync(x => x.KaynakId == belgeId));
 

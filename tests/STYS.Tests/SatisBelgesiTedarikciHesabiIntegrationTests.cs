@@ -151,28 +151,52 @@ public class SatisBelgesiTedarikciHesabiIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task GecersizTedarikci_MuhasebeFisiEngellenirVeHicbirKayitOlusmaz()
+    public async Task TedarikciHesabiMuhasebeOnayindanSonraPasifYapilirsa_MuhasebeFisiEngellenirVeHicbirKayitOlusmaz()
     {
-        // Var olmayan bir CariKartId - "bulunamayan cari kart" senaryosu.
-        var request = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, 999_999_999, [
+        // Teste özel, GEÇERLİ tedarikçi (tedarikci1) ve hesap planıyla, gerçek public servis
+        // akışının tamamı çalıştırılır: belge oluştur -> muhasebe onayına gönder -> muhasebe
+        // onayını tamamla. Bu noktaya kadar hesap AKTİF olduğundan hiçbir adım başarısız olmaz.
+        var request = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikci1Id, [
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Hizmet alimi", Miktar = 1, BirimFiyat = 1000m,
                 KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
             }
         ]);
-        // CreateAsync CariKartId'yi cozumlemeye calisacagi icin (ResolveAndValidateCariKartAsync),
-        // gecersiz Id burada zaten reddedilir - bu, "gecersiz tedarikci/hesap plani" senaryosunun
-        // erken (fiş/cari/stok yazılmadan önce) durdurulduğunu dogrular.
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
 
-        var ex = await Assert.ThrowsAsync<BaseException>(() => satisService.CreateAsync(request, CancellationToken.None));
-        Assert.Contains("Cari kart bulunamadı", ex.Message);
+        await using (var olusturmaDbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(olusturmaDbContext);
+            var onaylanmisBelgeId = (await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, request)).Id!.Value;
 
-        // Belge dahi olusturulmamis olmali.
-        var belgeVarMi = await dbContext.SatisBelgeleri.AsNoTracking().AnyAsync(x => x.BelgeNo == request.BelgeNo);
-        Assert.False(belgeVarMi);
+            // Belge onaylandıktan SONRA, AYRI bir DbContext üzerinden tedarikçinin bağlı hesap
+            // planı pasif hâle getirilir - yani belge oluşturulurken/onaylanırken geçerli olan
+            // tedarikçi, muhasebeleştirme ANINDA artık geçersizdir.
+            await using (var gecersizlestirmeDbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+            {
+                var hesapPlani = await gecersizlestirmeDbContext.MuhasebeHesapPlanlari
+                    .FirstAsync(x => x.Id == _tedarikci1HesapId);
+                hesapPlani.AktifMi = false;
+                await gecersizlestirmeDbContext.SaveChangesAsync();
+            }
+
+            // Muhasebe fişi servisi TAMAMEN YENİ bir DbContext ile oluşturulur - böylece önceden
+            // (bu metodun üst kısmında) izlenmiş olabilecek herhangi bir entity değeri
+            // kullanılmaz; MuhasebeFisiOlusturAsync'in DB'den GERÇEKTEN güncel/geçersiz durumu
+            // okuduğu doğrulanır.
+            await using var fisDbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+            var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(fisDbContext);
+
+            var ex = await Assert.ThrowsAsync<BaseException>(
+                () => fisService.MuhasebeFisiOlusturAsync(onaylanmisBelgeId, CancellationToken.None));
+            Assert.Contains("aktif/hareket görebilir/detay hesap değil", ex.Message);
+
+            // Yeni/no-tracking bir doğrulama context'iyle: MuhasebeFis, MuhasebeFisSatir,
+            // CariHareket, StokHareketi kayıtlarının HİÇBİRİ oluşmamış ve belge.MuhasebeFisId
+            // null kalmış olmalı.
+            await using var dogrulamaDbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+            await SatisBelgesiMuhasebeTestSupport.AssertHicMuhasebeKaydiOlusmadiAsync(dogrulamaDbContext, onaylanmisBelgeId);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

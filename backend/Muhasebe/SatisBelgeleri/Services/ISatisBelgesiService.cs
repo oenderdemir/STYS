@@ -12,6 +12,7 @@ public interface ISatisBelgesiService
     Task DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task MuhasebeOnayinaGonderAsync(int id, CancellationToken cancellationToken = default);
     Task MuhasebeOnaylaAsync(int id, CancellationToken cancellationToken = default);
+    Task<SatisBelgesiDto> FaturaKesAsync(int id, FaturaKesRequest request, CancellationToken cancellationToken = default);
     Task ReddetAsync(int id, string redNedeni, CancellationToken cancellationToken = default);
     Task IptalEtAsync(int id, CancellationToken cancellationToken = default);
 }

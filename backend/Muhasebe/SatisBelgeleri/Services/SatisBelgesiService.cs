@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
@@ -10,6 +11,7 @@ using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
@@ -305,6 +307,21 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         });
 
         request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken);
+        if (!request.TesisId.HasValue)
+        {
+            throw new BaseException(
+                "Tesis seçimi zorunludur; belgenin kurum sahipliği tesis üzerinden belirlenir.",
+                errorCode: 400);
+        }
+
+        // Otoriter kurum sahipliği zinciri: SatisBelgesi.TesisId -> Tesis.KurumId -> SatisBelgesi.KurumId.
+        // İstemciden KurumId ALINMAZ (CreateSatisBelgesiRequest'te böyle bir alan yok) - Tesis
+        // sorgusunun kendisi zaten aktif kurum bağlamına göre filtrelendiğinden (Tesis de
+        // ITenantEntity'dir), scoped bir kullanıcı başka kuruma ait bir tesisi ASLA seçemez
+        // (sorgu onu görmez, "Tesis bulunamadı" döner) - SuperAdmin ise tüm tesisleri görür ve
+        // seçtiği tesisin kurumuna belge oluşturabilir.
+        var kurumId = await ResolveKurumIdFromTesisAsync(request.TesisId.Value, cancellationToken);
+
         if (request.CariKartId.HasValue)
         {
             var cari = await ResolveAndValidateCariKartAsync(
@@ -324,6 +341,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         // 3. Ana belge entity'sini oluştur
         var belge = new SatisBelgesi
         {
+            KurumId = kurumId,
             BelgeNo = belgeNo,
             BelgeTipi = request.BelgeTipi,
             Durum = SatisBelgesiDurumu.Taslak,
@@ -423,6 +441,21 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         }
 
         request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken, belge.TesisId);
+
+        // Tesis değiştiriliyorsa (mevcut TesisId'den farklıysa), yeni tesisin AYNI kuruma ait
+        // olduğu doğrulanır - belge başka bir kuruma taşınamaz. KurumId'nin kendisi (belge.KurumId)
+        // burada asla değiştirilmez; yalnızca tutarlılık kontrolü yapılır (gerçek değişmezlik
+        // garantisi StysAppDbContext.ApplyTenantRules'ta SaveChanges sırasında ayrıca uygulanır).
+        if (request.TesisId.HasValue && request.TesisId.Value != belge.TesisId)
+        {
+            var yeniTesisKurumId = await ResolveKurumIdFromTesisAsync(request.TesisId.Value, cancellationToken);
+            if (yeniTesisKurumId != belge.KurumId)
+            {
+                throw new BaseException(
+                    "Belge başka bir kuruma ait tesise taşınamaz.",
+                    errorCode: 400);
+            }
+        }
 
         if (request.CariKartId.HasValue)
         {
@@ -557,6 +590,202 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             YeniDurum = belge.Durum.ToString(),
             BusinessResult = "MuhasebeOnaylandi"
         });
+    }
+
+    // ──────────────────────────────────────────────
+    //  FaturaKesAsync
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Standart satış faturasına, kurum + mali yıl + seri bazlı, eşzamanlılığa güvenli bir
+    /// resmî fatura numarası atar ve belgeyi FaturaKesildi durumuna geçirir.
+    ///
+    /// İLK SÜRÜM KAPSAMI: yalnızca SatisBelgesiTipi.SatisFaturasi için otomatik numara üretilir.
+    /// AlisFaturasi, Proforma ve FaturaTaslagi için bu metot reddeder — alış faturasında
+    /// tedarikçinin düzenlediği harici fatura numarası ile STYS'nin ürettiği bu numara
+    /// KARIŞTIRILMAMALIDIR. SatisIadeFaturasi/AlisIadeFaturasi/IadeFaturasi için numara yönü
+    /// (iade faturasının kendi resmî numarası mı, orijinal faturanınki mi referans alınacak)
+    /// bu iş kapsamında TAHMİN EDİLEREK açılmamıştır — bkz. görev sonuç raporu.
+    /// </summary>
+    public async Task<SatisBelgesiDto> FaturaKesAsync(
+        int id,
+        FaturaKesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var seriKodu = NormalizeSeriKodu(request.SeriKodu);
+
+        // Ön kontrol (transaction dışı, no-tracking) — asıl otoriter kontrol aşağıda, belge
+        // satırı kilitlendikten SONRA tekrar yapılır; bu yalnızca ucuz/erken bir ret sağlar.
+        var belgeOnOkuma = await _db.SatisBelgeleri
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+        if (belgeOnOkuma.IsDeleted)
+            throw new BaseException("Satış belgesi silinmiş.", errorCode: 400);
+
+        if (belgeOnOkuma.BelgeTipi != SatisBelgesiTipi.SatisFaturasi)
+        {
+            throw new BaseException(
+                "Otomatik resmî fatura numarası yalnızca standart satış faturaları (SatisFaturasi) için üretilebilir.",
+                errorCode: 400);
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // Belgeyi transaction içinde KİLİTLEYEREK yeniden oku - aynı belgeye iki eşzamanlı
+            // FaturaKesAsync isteği, ikisi de sırayla bu satırı bekler; ikincisi birincinin
+            // commit ettiği (artık FaturaKesildi olan) durumu görür ve aşağıdaki idempotent
+            // dalından döner - ikinci bir numara TÜKETİLMEZ.
+            var belge = await _db.SatisBelgeleri
+                .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[SatisBelgeleri] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {id} AND [IsDeleted] = 0")
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+            if (belge.BelgeTipi != SatisBelgesiTipi.SatisFaturasi)
+            {
+                throw new BaseException(
+                    "Otomatik resmî fatura numarası yalnızca standart satış faturaları (SatisFaturasi) için üretilebilir.",
+                    errorCode: 400);
+            }
+
+            // İdempotency: belge zaten kesilmişse yeni numara TÜKETİLMEZ, mevcut sonuç
+            // döndürülür — ama önce mevcut numaranın başka bir belgeyle çakışmadığı
+            // doğrulanır (sessizce devam edilmez, tutarsızsa açık hata verilir).
+            if (belge.Durum == SatisBelgesiDurumu.FaturaKesildi)
+            {
+                if (string.IsNullOrWhiteSpace(belge.ResmiFaturaNo))
+                {
+                    throw new BaseException(
+                        $"Belge 'FaturaKesildi' durumunda ancak resmî fatura numarası bulunamadı; veri tutarsızlığı. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                var cakisanBelgeVarMi = await _db.SatisBelgeleri
+                    .AsNoTracking()
+                    .AnyAsync(x => x.Id != id && x.KurumId == belge.KurumId && x.ResmiFaturaNo == belge.ResmiFaturaNo, cancellationToken);
+
+                if (cakisanBelgeVarMi)
+                {
+                    throw new BaseException(
+                        $"Resmî fatura numarası ({belge.ResmiFaturaNo}) başka bir belgeyle çakışıyor; veri tutarsızlığı, sistem yöneticisine başvurun.",
+                        errorCode: 500);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+                return Mapper.Map<SatisBelgesiDto>(belge);
+            }
+
+            if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+            {
+                throw new BaseException(
+                    $"Yalnızca 'MuhasebeOnaylandı' durumundaki belgeler için fatura kesilebilir. Mevcut durum: {belge.Durum}",
+                    errorCode: 400);
+            }
+
+            if (!belge.MuhasebeFisId.HasValue)
+                throw new BaseException("Belgeye bağlı muhasebe fişi bulunamadı; fatura kesilemez.", errorCode: 400);
+
+            var fis = await _db.MuhasebeFisler
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == belge.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken);
+
+            if (fis is null)
+                throw new BaseException("Belgeye bağlı muhasebe fişi bulunamadı; fatura kesilemez.", errorCode: 400);
+
+            if (fis.Durum == MuhasebeFisDurumlari.Iptal)
+                throw new BaseException("Belgeye bağlı muhasebe fişi iptal edilmiş; fatura kesilemez.", errorCode: 400);
+
+            if (!belge.TesisId.HasValue)
+                throw new BaseException("Belgede tesis bilgisi bulunamadı; fatura kesilemez.", errorCode: 400);
+
+            // Tesis/kurum tutarlılığı — normalde ApplyTenantRules'un KurumId'yi değiştirilemez
+            // kıldığı ve CreateAsync'in bunu tesisten aldığı göz önüne alındığında bu her zaman
+            // tutarlı olmalıdır; savunma amaçlı ayrıca doğrulanır.
+            var tesisKurumId = await ResolveKurumIdFromTesisAsync(belge.TesisId.Value, cancellationToken);
+            if (tesisKurumId != belge.KurumId)
+            {
+                throw new BaseException(
+                    "Belgenin tesis ve kurum bilgileri tutarsız; fatura kesilemez.",
+                    errorCode: 500);
+            }
+
+            var maliYil = belge.BelgeTarihi.Year;
+
+            // Sayaç satırını WITH (UPDLOCK, ROWLOCK, HOLDLOCK) ile kilitle — aynı kurum/yıl/seri
+            // için eşzamanlı çalışan başka bir fatura kesme işlemi bu satırı serbest kalana
+            // kadar bekler; Max(ResmiFaturaNo)+1 yarışı YOKTUR.
+            var sayac = await _db.KurumFaturaNumaraSayaclari
+                .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[KurumFaturaNumaraSayaclari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} AND [SeriKodu] = {seriKodu}")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (sayac is null)
+            {
+                throw new BaseException(
+                    $"'{seriKodu}' serisi için {maliYil} mali yılında tanımlı bir fatura numarası sayacı bulunamadı.",
+                    errorCode: 400);
+            }
+
+            if (!sayac.AktifMi)
+                throw new BaseException($"'{seriKodu}' serisi pasif durumda.", errorCode: 400);
+
+            var siraNo = sayac.SonNumara + 1;
+            sayac.SonNumara = siraNo;
+
+            // {SeriKodu}{MaliYil:0000}{SiraNo:000000000} -> 3+4+9 = 16 karakter (ör. ABC2026000000001)
+            var resmiFaturaNo = $"{seriKodu}{maliYil:0000}{siraNo:000000000}";
+
+            belge.ResmiFaturaNo = resmiFaturaNo;
+            belge.FaturaKesimTarihi = DateTime.UtcNow;
+            belge.Durum = SatisBelgesiDurumu.FaturaKesildi;
+
+            try
+            {
+                // Sayaç artışı VE belge güncellemesi AYNI SaveChangesAsync/transaction'da -
+                // biri başarısız olursa (ör. unique index çakışması) ikisi de rollback olur.
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+            {
+                throw new BaseException(
+                    "Resmî fatura numarası üretilirken bir çakışma oluştu. Lütfen tekrar deneyin.",
+                    errorCode: 409);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+
+            return Mapper.Map<SatisBelgesiDto>(belge);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private static string NormalizeSeriKodu(string? seriKodu)
+    {
+        var normalized = (seriKodu ?? string.Empty).Trim().ToUpperInvariant();
+
+        if (normalized.Length != 3 || !normalized.All(c => (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+        {
+            throw new BaseException(
+                "Seri kodu, A-Z ve 0-9 karakterlerinden oluşan tam 3 karakter uzunluğunda olmalıdır.",
+                errorCode: 400);
+        }
+
+        return normalized;
+    }
+
+    private static bool IsUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx &&
+               (sqlEx.Number == 2601 || sqlEx.Number == 2627);
     }
 
     // ──────────────────────────────────────────────
@@ -1366,6 +1595,28 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         }
 
         return resolved is > 0 ? resolved : null;
+    }
+
+    /// <summary>
+    /// Otoriter kurum sahipliği zinciri: TesisId -> Tesis.KurumId. Tesis de ITenantEntity
+    /// olduğundan bu sorgu ZATEN aktif kurum bağlamına göre filtrelenir (StysAppDbContext'in
+    /// global query filter'ı) - scoped bir kullanıcı başka kuruma ait bir tesisi burada
+    /// GÖREMEZ (404 alır), SuperAdmin tüm tesisleri görür. Bu yüzden ayrıca elle bir
+    /// "aktif kurum == tesis kurumu" kontrolü yapmaya gerek yoktur; sorgunun kendisi bunu
+    /// zaten garanti eder.
+    /// </summary>
+    private async Task<int> ResolveKurumIdFromTesisAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var kurumId = await _db.Tesisler
+            .AsNoTracking()
+            .Where(x => x.Id == tesisId && !x.IsDeleted)
+            .Select(x => (int?)x.KurumId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!kurumId.HasValue)
+            throw new BaseException($"Tesis bulunamadı. (Id: {tesisId})", errorCode: 404);
+
+        return kurumId.Value;
     }
 
     // ──────────────────────────────────────────────

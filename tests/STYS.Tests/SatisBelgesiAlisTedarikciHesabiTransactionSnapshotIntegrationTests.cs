@@ -123,6 +123,7 @@ public class SatisBelgesiAlisTedarikciHesabiTransactionSnapshotIntegrationTests
 
             var belge = new SatisBelgesi
             {
+                KurumId = kurum.Id,
                 BelgeNo = $"BLG-{uniqueSuffix}",
                 BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
                 Durum = SatisBelgesiDurumu.MuhasebeOnaylandi,

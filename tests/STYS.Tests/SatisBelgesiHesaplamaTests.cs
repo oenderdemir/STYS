@@ -788,7 +788,18 @@ public class SatisBelgesiHesaplamaTests
             .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
-        return new StysAppDbContext(options);
+        // SatisBelgesi artik ITenantEntity oldugundan (bkz. kurum sahipligi), StysAppDbContext.
+        // ApplyTenantRules SaveChanges'te bir tenant accessor bekler; SuperAdmin modunda,
+        // testlerde acikca atanan KurumId degerleri oldugu gibi kabul edilir.
+        return new StysAppDbContext(options, null, new FakeSuperAdminTenantAccessor());
+    }
+
+    private sealed class FakeSuperAdminTenantAccessor : TOD.Platform.Security.Auth.Services.ICurrentTenantAccessor
+    {
+        public int? GetCurrentKurumId() => null;
+        public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+        public bool IsSuperAdmin() => true;
+        public bool IsKurumAdmin() => false;
     }
 
     private static IMapper CreateMapper()
@@ -826,6 +837,7 @@ public class SatisBelgesiHesaplamaTests
         IEnumerable<CreateSatisBelgesiSatiriRequest> satirRequestleri)
     {
         var belge = BuildSatisBelgesi(satirRequestleri);
+        belge.KurumId = 1;
         belge.BelgeTipi = belgeTipi;
         belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
 

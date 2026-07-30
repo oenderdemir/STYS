@@ -5,6 +5,8 @@ namespace STYS.Muhasebe.SatisBelgeleri.Dtos;
 
 public class SatisBelgesiDto : BaseRdbmsDto<int>
 {
+    /// <summary>Salt okunur — CreateAsync sırasında TesisId üzerinden atanır, istemciden alınmaz/değiştirilemez.</summary>
+    public int KurumId { get; set; }
     public string BelgeNo { get; set; } = string.Empty;
     public SatisBelgesiTipi BelgeTipi { get; set; }
     public SatisBelgesiDurumu Durum { get; set; }
@@ -176,6 +178,19 @@ public class UpdateSatisBelgesiSatiriRequest
     public decimal KonaklamaVergisiOrani { get; set; }
     public decimal KonaklamaVergisiTutari { get; set; }
     public string? KaynakSatirId { get; set; }
+}
+
+/// <summary>
+/// SatisBelgesiService.FaturaKesAsync isteği. İlk sürümde yalnızca standart SatisFaturasi için
+/// otomatik resmî numara üretilir (bkz. FaturaKesAsync XML doc'u).
+/// </summary>
+public class FaturaKesRequest
+{
+    /// <summary>
+    /// 3 alfanümerik karakter (A-Z, 0-9) — kurumun bu seri için önceden tanımlanmış AKTİF bir
+    /// KurumFaturaNumaraSayaci kaydı olmalıdır. Trim + büyük harf normalize edilir.
+    /// </summary>
+    public string SeriKodu { get; set; } = string.Empty;
 }
 
 public class SatisBelgesiFilterDto

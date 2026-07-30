@@ -24,6 +24,9 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
     private const string TestMarker = "KDVYON-355";
 
     private string _uniqueSuffix = TestMarker;
+    private int _kurumId;
+    private int _ilId;
+    private int _tesisId;
     private int _satisTanimId;
     private int _alisTanimId;
     private int _ikiYonluTanimId;
@@ -40,6 +43,13 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
         _uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+
+        // CreateAsync artik KurumId'yi TesisId -> Tesis.KurumId zincirinden aldigindan
+        // (bkz. ff/feat kurum sahipligi), bu testlerin de gecerli bir Tesis'e ihtiyaci var.
+        var (kurum, il, tesis) = await SatisBelgesiMuhasebeTestSupport.SeedKurumIlTesisAsync(dbContext, _uniqueSuffix);
+        _kurumId = kurum.Id;
+        _ilId = il.Id;
+        _tesisId = tesis.Id;
 
         var satisTanim = new KdvIstisnaTanim
         {
@@ -80,13 +90,13 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString) || _kurumId <= 0)
         {
             return;
         }
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix);
+        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
     }
 
     public static IEnumerable<object[]> YonMatrisi()
@@ -123,6 +133,7 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
             BelgeTipi = belgeTipi,
+            TesisId = _tesisId,
             BelgeTarihi = new DateTime(2026, 1, 15),
             MusteriAdSoyad = "Test Musteri " + _uniqueSuffix,
             Satirlar =
@@ -173,6 +184,7 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
             BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
+            TesisId = _tesisId,
             BelgeTarihi = new DateTime(2026, 1, 15),
             MusteriAdSoyad = "Test Musteri " + _uniqueSuffix,
             Satirlar =

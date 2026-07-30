@@ -5,8 +5,15 @@ using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Entities;
 
-public class SatisBelgesi : BaseEntity<int>
+public class SatisBelgesi : BaseEntity<int>, ITenantEntity
 {
+    /// <summary>
+    /// Belgenin sahibi kurum. Otoriter kaynak SatisBelgesi.TesisId -> Tesis.KurumId zinciridir
+    /// (bkz. SatisBelgesiService.CreateAsync); istemciden doğrudan alınmaz ve oluşturulduktan
+    /// sonra değiştirilemez (bkz. StysAppDbContext.ApplyTenantRules).
+    /// </summary>
+    public int KurumId { get; set; }
+
     public string BelgeNo { get; set; } = string.Empty;
 
     public SatisBelgesiTipi BelgeTipi { get; set; } = SatisBelgesiTipi.FaturaTaslagi;

@@ -186,6 +186,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
     public DbSet<SatisBelgesi> SatisBelgeleri => Set<SatisBelgesi>();
     public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
+    public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -2605,6 +2606,9 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("SatisBelgeleri", muhasebeSchema);
 
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
             entity.Property(x => x.BelgeNo)
                 .HasMaxLength(50)
                 .IsRequired();
@@ -2690,6 +2694,38 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.MuhasebeFisId)
                 .IsUnique()
                 .HasFilter("[MuhasebeFisId] IS NOT NULL AND [IsDeleted] = 0");
+
+            entity.HasIndex(x => x.KurumId);
+
+            entity.HasIndex(x => new { x.KurumId, x.ResmiFaturaNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [ResmiFaturaNo] IS NOT NULL");
+
+            entity.HasOne<Kurum>()
+                .WithMany()
+                .HasForeignKey(x => x.KurumId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KurumFaturaNumaraSayaci>(entity =>
+        {
+            entity.ToTable("KurumFaturaNumaraSayaclari", muhasebeSchema);
+
+            entity.Property(x => x.SeriKodu)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.HasIndex(x => new { x.KurumId, x.MaliYil, x.SeriKodu })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne<Kurum>()
+                .WithMany()
+                .HasForeignKey(x => x.KurumId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SatisBelgesiSatiri>(entity =>

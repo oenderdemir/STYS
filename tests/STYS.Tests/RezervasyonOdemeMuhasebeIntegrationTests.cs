@@ -1043,11 +1043,12 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
     /// oldugu icin (KapatOncekiTahsilatlariAsync ve CariHareketKapamaService), fatura onay/fis
     /// zincirinin tamamini yeniden kurmak gerekmez.
     /// </summary>
-    private static async Task<CariHareket> SeedFaturaCariHareketiAsync(
+    private async Task<CariHareket> SeedFaturaCariHareketiAsync(
         StysAppDbContext dbContext, Rezervasyon rezervasyon, int cariKartId, decimal genelToplam)
     {
         var satisBelgesi = new STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi
         {
+            KurumId = KurumId,
             BelgeNo = $"{TestMarker}-FAT-{Guid.NewGuid():N}"[..24],
             BelgeTipi = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiTipi.SatisFaturasi,
             Durum = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiDurumu.MuhasebeOnaylandi,

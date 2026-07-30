@@ -115,6 +115,17 @@ public class SatisBelgeleriController : UIController
         return Ok();
     }
 
+    [HttpPost("{id:int}/fatura-kes")]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
+    public async Task<IActionResult> FaturaKes(
+        int id,
+        [FromBody] FaturaKesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _service.FaturaKesAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("{id:int}/muhasebe-fisi-olustur")]
     [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage)]
     public async Task<IActionResult> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)

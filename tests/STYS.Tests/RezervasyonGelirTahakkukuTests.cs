@@ -185,6 +185,7 @@ public class RezervasyonGelirTahakkukuTests
         // satis belgesi onay/fis zincirinin kendisi degil (o zincir SatisBelgesiService'in kendi testlerinde kapsanir).
         var satisBelgesi = new STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi
         {
+            KurumId = 1,
             BelgeNo = "FAT-1",
             BelgeTipi = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiTipi.SatisFaturasi,
             Durum = STYS.Muhasebe.SatisBelgeleri.Enums.SatisBelgesiDurumu.MuhasebeOnaylandi,

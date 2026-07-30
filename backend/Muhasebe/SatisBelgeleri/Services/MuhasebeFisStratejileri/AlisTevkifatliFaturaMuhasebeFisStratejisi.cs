@@ -3,6 +3,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
@@ -74,11 +75,16 @@ public sealed class AlisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMuh
                 throw new BaseException($"Alış faturası stok satırı için taşınır kart seçilmelidir. Satır: {belgeSatiri.SiraNo}", 400);
 
             var hesap = await ResolveSatirHesabiAsync(belge, belgeSatiri, context, cancellationToken);
+
+            // ÖTV/ÖİV/konaklama vergisi için ayrı bir hesap planı eşlemesi tanımlı DEĞİL - bu
+            // tutarlar satırın kendi stok/gider hesabına eklenir, böylece fişin Alacak
+            // (GenelToplam, artık bu vergileri de içeriyor) = Borç dengesi korunur.
+            var satirEkVergiTutari = SatisBelgesiTutarHesaplayici.EkVergiTutari(belgeSatiri);
             satirlar.Add(new MuhasebeFisSatiriTaslak
             {
                 MuhasebeHesapPlaniId = hesap.Id,
                 SiraNo = siraNo++,
-                Borc = belgeSatiri.Matrah,
+                Borc = belgeSatiri.Matrah + satirEkVergiTutari,
                 Alacak = 0,
                 Aciklama = BuildSatirAciklama(belgeSatiri, belge.BelgeNo),
                 TasinirKartId = belgeSatiri.TasinirKartId,

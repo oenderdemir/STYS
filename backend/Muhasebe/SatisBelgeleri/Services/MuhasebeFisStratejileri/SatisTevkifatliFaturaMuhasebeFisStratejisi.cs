@@ -1,5 +1,6 @@
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
@@ -116,13 +117,21 @@ public sealed class SatisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMu
         if (toplamTevkifatTutari <= 0)
             throw new BaseException("Satış tevkifat tutarı hesaplanamadı.", 400);
 
+        // ÖTV/ÖİV/konaklama vergisi için ayrı bir hesap planı eşlemesi tanımlı DEĞİL (bkz.
+        // SatisBelgesiMuhasebeFisContext) - bu tutarlar, fişin Borç (GenelToplam + tevkifat
+        // karşılığı, artık bu vergileri de içeriyor) = Alacak dengesini korumak için Gelir
+        // hesabına eklenir.
+        var ekVergiToplami = SatisBelgesiTutarHesaplayici.HesaplaEkVergiToplami(aktifSatirlar);
+
         satirlar.Add(new MuhasebeFisSatiriTaslak
         {
             MuhasebeHesapPlaniId = context.GelirHesapPlaniId,
             SiraNo = siraNo++,
             Borc = 0,
-            Alacak = belge.ToplamMatrah,
-            Aciklama = $"Satış geliri - {belge.BelgeNo}"
+            Alacak = belge.ToplamMatrah + ekVergiToplami,
+            Aciklama = ekVergiToplami > 0
+                ? $"Satış geliri (ÖTV/ÖİV/konaklama vergisi dahil) - {belge.BelgeNo}"
+                : $"Satış geliri - {belge.BelgeNo}"
         });
 
         satirlar.Add(new MuhasebeFisSatiriTaslak

@@ -1,3 +1,4 @@
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.Kdv.Enums;
@@ -17,6 +18,11 @@ public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFi
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // ÖTV/ÖİV/konaklama vergisi için ayrı bir hesap planı eşlemesi tanımlı DEĞİL (bkz.
+        // SatisBelgesiMuhasebeFisContext) - bu tutarlar, fişin Borç (GenelToplam, artık bu
+        // vergileri de içeriyor) = Alacak dengesini korumak için Gelir hesabına eklenir.
+        var ekVergiToplami = SatisBelgesiTutarHesaplayici.HesaplaEkVergiToplami(belge.Satirlar.Where(s => !s.IsDeleted));
+
         var satirlar = new List<MuhasebeFisSatiriTaslak>
         {
             new()
@@ -33,8 +39,10 @@ public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFi
                 MuhasebeHesapPlaniId = context.GelirHesapPlaniId,
                 SiraNo = 2,
                 Borc = 0,
-                Alacak = belge.ToplamMatrah,
-                Aciklama = $"Satış geliri - {belge.BelgeNo}"
+                Alacak = belge.ToplamMatrah + ekVergiToplami,
+                Aciklama = ekVergiToplami > 0
+                    ? $"Satış geliri (ÖTV/ÖİV/konaklama vergisi dahil) - {belge.BelgeNo}"
+                    : $"Satış geliri - {belge.BelgeNo}"
             }
         };
 

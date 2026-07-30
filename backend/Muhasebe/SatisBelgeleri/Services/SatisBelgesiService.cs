@@ -1383,12 +1383,12 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         // İstisna / kapsam dışı → KDV hesaplanmaz
         var kdvTutari = KdvHesaplanmayanTipler.Contains(request.KdvUygulamaTipi)
             ? 0m
-            : matrah * kdvOrani / 100m;
+            : SatisBelgesiTutarHesaplayici.Yuvarla(matrah * kdvOrani / 100m);
 
         var tevkifatTutari = 0m;
         if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli && request.TevkifatPay.HasValue && request.TevkifatPayda.HasValue && request.TevkifatPayda.Value > 0)
         {
-            tevkifatTutari = kdvTutari * request.TevkifatPay.Value / request.TevkifatPayda.Value;
+            tevkifatTutari = SatisBelgesiTutarHesaplayici.Yuvarla(kdvTutari * request.TevkifatPay.Value / request.TevkifatPayda.Value);
         }
 
         var otvOrani = request.OtvOrani > 0
@@ -1406,7 +1406,12 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             : ResolveLineRate(request.KonaklamaVergisiTutari, matrah);
         var konaklamaVergisiTutari = ResolveRateBasedAmount(matrah, konaklamaVergisiOrani, request.KonaklamaVergisiTutari);
 
-        var satirToplami = matrah + (kdvTutari - tevkifatTutari);
+        // SatirToplami = Matrah + Kdv - Tevkifat + Otv + Oiv + KonaklamaVergisi (bkz.
+        // SatisBelgesiTutarHesaplayici) - ÖTV/ÖİV/konaklama vergisi ÖNCEDEN satıra
+        // yazılıyordu ama bu toplama hiç DAHIL EDİLMİYORDU; bu formül tek, paylaşılan
+        // hesaplayıcıdan gelir ki muhasebe fişi stratejileriyle TUTARSIZLAŞMASIN.
+        var satirToplami = SatisBelgesiTutarHesaplayici.HesaplaSatirToplami(
+            matrah, kdvTutari, tevkifatTutari, otvTutari, oivTutari, konaklamaVergisiTutari);
 
         return new SatisBelgesiSatiri
         {

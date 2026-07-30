@@ -104,12 +104,13 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.GenelToplam <= 0)
             throw new BaseException("Satış belgesinde genel toplam sıfırdan büyük olmalıdır.", 400);
 
-        // 0.01m toleransla toplam tutarlılık kontrolü
-        var beklenenToplam = belgeOnOkuma.ToplamMatrah + belgeOnOkuma.ToplamKdv;
-        if (Math.Abs(belgeOnOkuma.GenelToplam - beklenenToplam) > 0.01m)
-            throw new BaseException(
-                $"Satış belgesi toplamları tutarsız: Matrah + KDV = {beklenenToplam:N2}, GenelToplam = {belgeOnOkuma.GenelToplam:N2}",
-                400);
+        // NOT: Burada daha önce "GenelToplam == ToplamMatrah + ToplamKdv" varsayan sabit bir
+        // tutarlılık kontrolü vardı. Bu varsayım ÖTV/ÖİV/konaklama vergisi içeren (ve KDV
+        // tevkifatlı) belgelerle uyumsuzdu. Satır bazlı GERÇEK tutarlılık kontrolü aşağıda
+        // (3b adımında, transaction içinde) satır toplamlarının belge toplamlarıyla
+        // karşılaştırılmasıyla zaten yapılıyor - o kontrol SatirToplami'nin (Matrah + Kdv -
+        // Tevkifat + Otv + Oiv + KonaklamaVergisi) hangi bileşenlerden oluştuğuna bağımlı
+        // DEĞİLDİR, bu yüzden burada formülü tekrarlayan ayrı bir ön-kontrole gerek yoktur.
 
         // ── 2. Açık dönem kontrolü ──
         var aktifDonemDto = await _muhasebeDonemService.GetAktifDonemAsync(

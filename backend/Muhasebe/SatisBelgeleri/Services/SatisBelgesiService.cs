@@ -1352,7 +1352,10 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             return Math.Round(baseAmount * rate / 100m, 2, MidpointRounding.AwayFromZero);
         }
 
-        return Math.Max(0m, fallbackAmount);
+        // fallbackAmount, kullanıcı tarafından doğrudan girilen bir tutar olabilir (oran
+        // verilmediğinde) - oran bazlı dala eşit şekilde 2 ondalık/AwayFromZero'ya
+        // yuvarlanmazsa, doğrudan tutar girilen satırlarda kuruş farkı oluşabilir.
+        return SatisBelgesiTutarHesaplayici.Yuvarla(Math.Max(0m, fallbackAmount));
     }
 
     private static decimal ResolveLineRate(decimal amount, decimal baseAmount)
@@ -1377,7 +1380,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             throw new BaseException("İndirim tutarı satır matrahını aşamaz.", errorCode: 400);
         }
 
-        var matrah = brutMatrah - indirimTutari;
+        // Matrah kolonu decimal(18,2)'dir (bkz. StysAppDbContext) - Miktar*BirimFiyat (ikisi de
+        // decimal(18,2)) 4 ondalık basamağa kadar üretebilir; KDV/ÖTV/ÖİV/konaklama vergisi
+        // hesaplamaları ve SatirToplami'nin, veritabanına yazılacak (2 ondalık) Matrah ile
+        // TUTARLI kalması için matrah burada, kullanılmadan önce yuvarlanır.
+        var matrah = SatisBelgesiTutarHesaplayici.Yuvarla(brutMatrah - indirimTutari);
         var kdvOrani = request.KdvOrani;
 
         // İstisna / kapsam dışı → KDV hesaplanmaz

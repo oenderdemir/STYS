@@ -1,25 +1,46 @@
 using System.Reflection;
+using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
+using STYS.Muhasebe.MuhasebeDonemleri.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.SatisBelgeleri.Mapping;
+using STYS.Muhasebe.SatisBelgeleri.Repositories;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Dtos;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Dtos;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Entities;
 using STYS.Muhasebe.TevkifatHesapEslemeleri.Services;
 using TOD.Platform.Persistence.Rdbms.Paging;
+using TOD.Platform.SharedKernel.Exceptions;
 using Xunit;
 
 namespace STYS.Tests;
 
 /// <summary>
-/// SatisBelgesiTutarHesaplayici (satır/belge toplam formülü) ve bu formülü kullanan
-/// SatisBelgesiService.CreateSatirFromRequest / HesaplaBelgeToplamlari ile muhasebe fişi
-/// stratejilerinin (Borç/Alacak dengesi) testleri. "private static" metotlar reflection ile
-/// çağrılır - bu metotlar herhangi bir DbContext/servis bağımlılığı OLMADAN test edilebilir
-/// saf fonksiyonlardır.
+/// SatisBelgesiTutarHesaplayici (satır/belge toplam formülü), bu formülü kullanan
+/// SatisBelgesiService.CreateSatirFromRequest / HesaplaBelgeToplamlari, muhasebe fişi
+/// stratejilerinin (Borç/Alacak dengesi) ve SatisBelgesiMuhasebeFisService'in ÖTV/ÖİV/
+/// konaklama vergisi içeren belgeler için otomatik muhasebe fişi üretimini ENGELLEDİĞİNİ
+/// doğrulayan testler.
+///
+/// "private static" metotlar reflection ile çağrılır - DbContext/servis bağımlılığı
+/// OLMADAN test edilebilir saf fonksiyonlardır. DbContext gerektiren stratejiler ve
+/// SatisBelgesiMuhasebeFisService, EF Core InMemory sağlayıcısı ile GERÇEK sınıflar
+/// üzerinden (fake/mock değil) çağrılarak test edilir.
 /// </summary>
 public class SatisBelgesiHesaplamaTests
 {
@@ -247,6 +268,51 @@ public class SatisBelgesiHesaplamaTests
     }
 
     [Fact]
+    public void CreateSatirFromRequest_DogrudanTutarGirilenOtv_FallbackTutarDaYuvarlanirVeSatirToplaminaTutarliYansir()
+    {
+        // OtvOrani verilmediginde (0), OtvTutari dogrudan kullanicidan gelen bir tutar
+        // olarak kabul edilir (ResolveRateBasedAmount fallback dali). Bu tutar da,
+        // oran bazli daldakiyle AYNI kurala (2 ondalik, AwayFromZero) yuvarlanmalidir -
+        // aksi halde satir bazinda kuruş farki olusabilir (bkz. gorev talebi madde 8).
+        var satir = InvokeCreateSatirFromRequest(new CreateSatisBelgesiSatiriRequest
+        {
+            SiraNo = 1,
+            Aciklama = "Dogrudan OTV tutari",
+            Miktar = 1,
+            BirimFiyat = 1000m,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20m,
+            OtvTutari = 33.335m
+        });
+
+        Assert.Equal(33.34m, satir.OtvTutari); // 33.335 -> AwayFromZero -> 33.34
+        Assert.Equal(1233.34m, satir.SatirToplami); // 1000 + 200 + 33.34
+    }
+
+    [Fact]
+    public void CreateSatirFromRequest_KesirliMiktarVeBirimFiyatCarpimi_MatrahYuvarlanirVeBagimliHesaplarTutarliOlur()
+    {
+        // Matrah kolonu decimal(18,2)'dir (bkz. StysAppDbContext). Miktar*BirimFiyat
+        // (ikisi de decimal(18,2)) 4 ondalik basamaga kadar ham deger uretebilir
+        // (3 * 33.335 = 100.005). Bu deger kullanilmadan once yuvarlanmazsa, KDV/OTV/OIV/
+        // konaklama vergisi hesaplari ile veritabanina yazilacak (2 ondalik) Matrah
+        // TUTARSIZ kalir - bu test bu kuruş farkinin olusmadigini dogrular.
+        var satir = InvokeCreateSatirFromRequest(new CreateSatisBelgesiSatiriRequest
+        {
+            SiraNo = 1,
+            Aciklama = "Kesirli matrah",
+            Miktar = 3m,
+            BirimFiyat = 33.335m,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20m
+        });
+
+        Assert.Equal(100.01m, satir.Matrah); // 100.005 -> AwayFromZero -> 100.01
+        Assert.Equal(20.00m, satir.KdvTutari); // 100.01 * 20% = 20.002 -> 20.00
+        Assert.Equal(120.01m, satir.SatirToplami);
+    }
+
+    [Fact]
     public void HesaplaBelgeToplamlari_BirdenFazlaSatirdanOlusanBelge_GenelToplamSatirToplamlariToplamidir()
     {
         var belge = new SatisBelgesi();
@@ -310,7 +376,10 @@ public class SatisBelgesiHesaplamaTests
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Muhasebe fisi stratejileri — Borc/Alacak dengesi = belge.GenelToplam
+    // Muhasebe fisi stratejileri — Borc/Alacak dengesi
+    // (ÖTV/ÖİV/konaklama vergisi ARTIK bu stratejilere hic ULASMAZ - bkz.
+    // SatisBelgesiMuhasebeFisService'in engelleme testleri altta. Bu yuzden
+    // bu bolumdeki senaryolarin HICBIRI ek vergi ICERMEZ.)
     // ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -338,74 +407,14 @@ public class SatisBelgesiHesaplamaTests
     }
 
     [Fact]
-    public async Task SatisFaturasiMuhasebeFisStratejisi_OtvOivKonaklamaVergisiIcerenBelge_FisBorcAlacakDengesiKorunur()
+    public async Task SatisTevkifatliFaturaMuhasebeFisStratejisi_TevkifatliFatura_MevcutDavranislaDengeliKalir()
     {
         var belge = BuildSatisBelgesi([
             new CreateSatisBelgesiSatiriRequest
             {
-                SiraNo = 1, Aciklama = "Alkollu icecek (OTV)", Miktar = 1, BirimFiyat = 1000m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m
-            },
-            new CreateSatisBelgesiSatiriRequest
-            {
-                SiraNo = 2, Aciklama = "Konaklama (konaklama vergisi + OIV)", Miktar = 1, BirimFiyat = 500m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m, OivOrani = 5m, KonaklamaVergisiOrani = 2m
-            }
-        ]);
-
-        var context = BuildFisContext();
-        var strateji = new SatisFaturasiMuhasebeFisStratejisi();
-
-        var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
-
-        var toplamBorc = satirlar.Sum(x => x.Borc);
-        var toplamAlacak = satirlar.Sum(x => x.Alacak);
-
-        // Fis her zaman dengeli olmali VE belge.GenelToplam ile (kisisel dogrulama +
-        // "muhasebe fisi toplaminin belge genel toplamiyla uyumu" gereksinimi) esit olmalidir.
-        Assert.Equal(belge.GenelToplam, toplamBorc);
-        Assert.Equal(toplamBorc, toplamAlacak);
-
-        // Satir 1: 1000 + 200 + 250 = 1450 ; Satir 2: 500 + 50 + 25 + 10 = 585
-        Assert.Equal(1450m + 585m, belge.GenelToplam);
-    }
-
-    [Fact]
-    public async Task SatisIadeFaturasiMuhasebeFisStratejisi_Kullanilmiyor_OtvOivIcerenIade_MevcutIsaretYaklasimiKorunurVeDengeliKalir()
-    {
-        // SatisIadeFaturasiMuhasebeFisStratejisi bir MuhasebeHesapPlani lookup'i (StysAppDbContext)
-        // gerektirdigi icin bu senaryo, ayni Borc/Alacak dengesi mantigini DOGRUDAN (context
-        // sorgusu olmadan) sergileyen SatisFaturasiMuhasebeFisStratejisi uzerinden, iade
-        // isaretlerini (Borc<->Alacak yer degistirmesi TERSİNE cevrilmez, mevcut yaklasimla
-        // AYNI kalir) belgeleyen bir referans testtir; gercek DB'li iade stratejisi testi
-        // icin bkz. sonuc raporundaki not.
-        var belge = BuildSatisBelgesi([
-            new CreateSatisBelgesiSatiriRequest
-            {
-                SiraNo = 1, Aciklama = "Iade edilen konaklama", Miktar = 1, BirimFiyat = 800m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m, KonaklamaVergisiOrani = 2m
-            }
-        ]);
-
-        // GenelToplam = 800 + 80 + 16 = 896. Iade stratejisinin BORC/ALACAK yer degistirmis
-        // (isaret ters) hali icin, ayni ek-vergi ekleme mantigini elle uygulayip
-        // dogrulayabiliriz (ayrintili DB'li strateji testi olmadan bu formulun kendisini
-        // dogrular).
-        var ekVergi = SatisBelgesiTutarHesaplayici.HesaplaEkVergiToplami(belge.Satirlar);
-        var iadeBorcu = belge.ToplamMatrah + ekVergi;
-
-        Assert.Equal(belge.GenelToplam - belge.ToplamKdv, iadeBorcu);
-    }
-
-    [Fact]
-    public async Task SatisTevkifatliFaturaMuhasebeFisStratejisi_TevkifatliVeOtvIcerenBelge_FisBorcAlacakDengesiKorunur()
-    {
-        var belge = BuildSatisBelgesi([
-            new CreateSatisBelgesiSatiriRequest
-            {
-                SiraNo = 1, Aciklama = "Tevkifatli hizmet + OTV", Miktar = 1, BirimFiyat = 1000m,
+                SiraNo = 1, Aciklama = "Tevkifatli hizmet", Miktar = 1, BirimFiyat = 1000m,
                 KdvUygulamaTipi = (int)KdvUygulamaTipi.Tevkifatli, KdvOrani = 20m,
-                TevkifatPay = 7, TevkifatPayda = 10, OtvOrani = 15m
+                TevkifatPay = 7, TevkifatPayda = 10
             }
         ]);
 
@@ -416,22 +425,286 @@ public class SatisBelgesiHesaplamaTests
 
         var toplamBorc = satirlar.Sum(x => x.Borc);
         var toplamAlacak = satirlar.Sum(x => x.Alacak);
-
-        // Fis her zaman dengeli olmalidir (Borc == Alacak). Not: toplamBorc, GenelToplam'a
-        // esit DEGILDIR burada - cari hesap satiri GenelToplam'i tasir, AYRICA bir de
-        // tevkifat karsiligi Borc satiri vardir (bu, tevkifatli stratejinin kendi ic
-        // muhasebe modeli - cari borcun yaninda ayrica bir tevkifat karsiligi borclandirilir,
-        // karsiligi Gelir/KDV hesaplarinda Alacak olarak yansir).
         Assert.Equal(toplamBorc, toplamAlacak);
 
         var cariSatiri = Assert.Single(satirlar, x => x.MuhasebeHesapPlaniId == context.CariHesapPlaniId);
         Assert.Equal(belge.GenelToplam, cariSatiri.Borc);
 
-        // Matrah=1000, Kdv=200, Tevkifat=140, Otv=150 -> SatirToplami = 1000+200-140+150 = 1210
-        Assert.Equal(1210m, belge.GenelToplam);
+        // Matrah=1000, Kdv=200, Tevkifat=140 -> SatirToplami = 1000 + 200 - 140 = 1060
+        Assert.Equal(1060m, belge.GenelToplam);
 
         var tevkifatSatiri = Assert.Single(satirlar, x => x.MuhasebeHesapPlaniId == 999);
         Assert.Equal(140m, tevkifatSatiri.Borc);
+    }
+
+    [Fact]
+    public async Task SatisIadeFaturasiMuhasebeFisStratejisi_StandartIade_GercekStratejiCagrisiylaDengeliKalir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.SatisIade, tesisId: 1);
+
+        var belge = BuildSatisBelgesi([
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Iade edilen konaklama", Miktar = 1, BirimFiyat = 800m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m
+            }
+        ]);
+        belge.BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi;
+
+        var context = BuildFisContext();
+        var strateji = new SatisIadeFaturasiMuhasebeFisStratejisi(dbContext);
+
+        var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
+
+        var toplamBorc = satirlar.Sum(x => x.Borc);
+        var toplamAlacak = satirlar.Sum(x => x.Alacak);
+        Assert.Equal(toplamBorc, toplamAlacak);
+        Assert.Equal(belge.GenelToplam, toplamAlacak);
+        Assert.Equal(880m, belge.GenelToplam); // 800 + 80
+    }
+
+    [Fact]
+    public async Task AlisFaturasiMuhasebeFisStratejisi_StandartFatura_GercekStratejiCagrisiylaDengeliKalir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var giderHesap = await SeedDetayHesapAsync(dbContext, "TEST-GIDER-1");
+        var kdvHesap = await SeedDetayHesapAsync(dbContext, "TEST-KDV-1");
+        var cariHesap = await SeedDetayHesapAsync(dbContext, "TEST-CARI-1");
+
+        var belge = BuildSatisBelgesi([
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Hizmet alimi", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+        belge.BelgeTipi = SatisBelgesiTipi.AlisFaturasi;
+
+        var context = BuildAlisFisContext(cariHesap.Id, kdvHesap.Id, hizmetGiderHesapPlaniId: giderHesap.Id);
+        var strateji = new AlisFaturasiMuhasebeFisStratejisi(dbContext, new FakeTasinirKodMuhasebeHesapEslemeService());
+
+        var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
+
+        var toplamBorc = satirlar.Sum(x => x.Borc);
+        var toplamAlacak = satirlar.Sum(x => x.Alacak);
+        Assert.Equal(toplamBorc, toplamAlacak);
+        Assert.Equal(belge.GenelToplam, toplamAlacak);
+        Assert.Equal(1200m, belge.GenelToplam); // 1000 + 200, standart alis davranisi
+    }
+
+    [Fact]
+    public async Task AlisIadeFaturasiMuhasebeFisStratejisi_StandartIade_GercekStratejiCagrisiylaDengeliKalir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var giderHesap = await SeedDetayHesapAsync(dbContext, "TEST-GIDER-2");
+        var kdvHesap = await SeedDetayHesapAsync(dbContext, "TEST-KDV-2");
+        var cariHesap = await SeedDetayHesapAsync(dbContext, "TEST-CARI-2");
+
+        var belge = BuildSatisBelgesi([
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Iade edilen hizmet", Miktar = 1, BirimFiyat = 500m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+        belge.BelgeTipi = SatisBelgesiTipi.AlisIadeFaturasi;
+
+        var context = BuildAlisFisContext(cariHesap.Id, kdvHesap.Id, hizmetGiderHesapPlaniId: giderHesap.Id);
+        var strateji = new AlisIadeFaturasiMuhasebeFisStratejisi(dbContext, new FakeTasinirKodMuhasebeHesapEslemeService());
+
+        var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
+
+        var toplamBorc = satirlar.Sum(x => x.Borc);
+        var toplamAlacak = satirlar.Sum(x => x.Alacak);
+        Assert.Equal(toplamBorc, toplamAlacak);
+        Assert.Equal(belge.GenelToplam, toplamBorc);
+        Assert.Equal(600m, belge.GenelToplam); // 500 + 100
+    }
+
+    [Fact]
+    public async Task AlisTevkifatliFaturaMuhasebeFisStratejisi_TevkifatliFatura_GercekStratejiCagrisiylaDengeliKalir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var giderHesap = await SeedDetayHesapAsync(dbContext, "TEST-GIDER-3");
+        var kdvHesap = await SeedDetayHesapAsync(dbContext, "TEST-KDV-3");
+        var cariHesap = await SeedDetayHesapAsync(dbContext, "TEST-CARI-3");
+
+        var belge = BuildSatisBelgesi([
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Tevkifatli hizmet alimi", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Tevkifatli, KdvOrani = 20m,
+                TevkifatPay = 5, TevkifatPayda = 10
+            }
+        ]);
+        belge.BelgeTipi = SatisBelgesiTipi.AlisFaturasi;
+
+        var context = BuildAlisFisContext(cariHesap.Id, kdvHesap.Id, hizmetGiderHesapPlaniId: giderHesap.Id);
+        var strateji = new AlisTevkifatliFaturaMuhasebeFisStratejisi(
+            dbContext, new FakeTasinirKodMuhasebeHesapEslemeService(), new FakeTevkifatHesapEslemeService(hesapPlaniId: 999));
+
+        var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
+
+        var toplamBorc = satirlar.Sum(x => x.Borc);
+        var toplamAlacak = satirlar.Sum(x => x.Alacak);
+        Assert.Equal(toplamBorc, toplamAlacak);
+
+        // Matrah=1000, Kdv=200, Tevkifat=100 -> GenelToplam (cari alacak) = 1000+200-100=1100
+        Assert.Equal(1100m, belge.GenelToplam);
+        var cariSatiri = Assert.Single(satirlar, x => x.MuhasebeHesapPlaniId == context.CariHesapPlaniId);
+        Assert.Equal(belge.GenelToplam, cariSatiri.Alacak);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SatisBelgesiMuhasebeFisService — ÖTV/ÖİV/konaklama vergisi icin
+    // otomatik muhasebe fisi engelleme testleri (gercek servis cagrisi,
+    // InMemory DbContext).
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_OtvIcerenSatisFaturasi_EngellenirVeHicKayitOlusmaz()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Alkollu icecek", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(
+            () => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        Assert.Contains(
+            "ÖTV, ÖİV veya konaklama vergisi içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır",
+            ex.Message);
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_OivIcerenSatisFaturasi_Engellenir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Oiv'li urun", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OivOrani = 10m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisFaturasi_Engellenir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Konaklama hizmeti", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m, KonaklamaVergisiOrani = 2m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_OtvIcerenAlisFaturasi_Engellenir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.AlisFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Alkollu icecek alimi", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisIadeFaturasi_Engellenir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisIadeFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Iade edilen konaklama", Miktar = 1, BirimFiyat = 800m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m, KonaklamaVergisiOrani = 2m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_OtvIcerenAlisIadeFaturasi_Engellenir()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.AlisIadeFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Iade edilen alkollu icecek", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m
+            }
+        ]);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisiOlusturAsync_EkVergiIcermeyenStandartSatisFaturasi_EngellenmezVeFisOlusur()
+    {
+        // Regresyon: guard sadece ek vergi ICEREN belgeleri engeller; standart KDV'li
+        // (ek vergisiz) belgelerin muhasebe fisi olusturma davranisi DEGISMEMELIDIR.
+        await using var dbContext = CreateInMemoryDbContext();
+        var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Standart oda ucreti", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+
+        await SeedCariMusteriKartAsync(dbContext, belge.CariKartId!.Value);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.GelirSatis, tesisId: 1);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.KDVHesaplanan, tesisId: 1);
+
+        var service = CreateMuhasebeFisService(dbContext);
+
+        var dto = await service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None);
+
+        Assert.NotNull(dto.MuhasebeFisId);
+        Assert.True(await dbContext.MuhasebeFisler.AnyAsync(x => x.KaynakId == belge.Id));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -487,6 +760,220 @@ public class SatisBelgesiHesaplamaTests
         GelirHesapPlaniId = 200,
         KdvHesapPlaniId = 300
     };
+
+    private static SatisBelgesiMuhasebeFisContext BuildAlisFisContext(
+        int cariHesapPlaniId, int kdvHesapPlaniId, int? stokHesapPlaniId = null, int? hizmetGiderHesapPlaniId = null) => new()
+    {
+        TesisId = 1,
+        MaliYil = 2026,
+        Donem = 1,
+        FisTarihi = new DateTime(2026, 1, 15),
+        FisNo = "FIS-1",
+        BelgeNo = "TEST-1",
+        CariHesapPlaniId = cariHesapPlaniId,
+        GelirHesapPlaniId = 0,
+        KdvHesapPlaniId = kdvHesapPlaniId,
+        StokHesapPlaniId = stokHesapPlaniId,
+        HizmetGiderHesapPlaniId = hizmetGiderHesapPlaniId
+    };
+
+    private static StysAppDbContext CreateInMemoryDbContext()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // SatisBelgesiMuhasebeFisService.BeginTransactionAsync kullanir; InMemory
+            // saglayici gercek transaction desteklemez ama bunu (varsayilan olarak hata
+            // firlatan) bir uyari olarak bildirir - servis gercek SQL Server'da
+            // transaction'a ihtiyac duydugu icin bu uyari burada bilinçli olarak yok sayilir.
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        return new StysAppDbContext(options);
+    }
+
+    private static IMapper CreateMapper()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.AddProfile<SatisBelgesiProfile>();
+        }, NullLoggerFactory.Instance);
+
+        return config.CreateMapper();
+    }
+
+    private static async Task<MuhasebeHesapPlani> SeedDetayHesapAsync(StysAppDbContext dbContext, string tamKod, int? tesisId = null)
+    {
+        var hesap = new MuhasebeHesapPlani
+        {
+            Kod = tamKod,
+            TamKod = tamKod,
+            Ad = $"Test Hesap {tamKod}",
+            HesapTipi = HesapTipi.DetayHesap,
+            AktifMi = true,
+            DetayHesapMi = true,
+            HareketGorebilirMi = true,
+            TesisId = tesisId
+        };
+
+        dbContext.MuhasebeHesapPlanlari.Add(hesap);
+        await dbContext.SaveChangesAsync();
+        return hesap;
+    }
+
+    private static async Task<SatisBelgesi> SeedMuhasebeOnaylanmisBelgeAsync(
+        StysAppDbContext dbContext,
+        SatisBelgesiTipi belgeTipi,
+        IEnumerable<CreateSatisBelgesiSatiriRequest> satirRequestleri)
+    {
+        var belge = BuildSatisBelgesi(satirRequestleri);
+        belge.BelgeTipi = belgeTipi;
+        belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
+
+        dbContext.SatisBelgeleri.Add(belge);
+        await dbContext.SaveChangesAsync();
+        return belge;
+    }
+
+    private static async Task SeedCariMusteriKartAsync(StysAppDbContext dbContext, int cariKartId)
+    {
+        // Sadece "EkVergiIcermeyenStandartSatisFaturasi_EngellenmezVeFisOlusur" regresyon
+        // testinde, gercek fis olusturma akisinin sonuna kadar gitmesi icin gereken minimum
+        // CariKart + hesap plani baglantisini kurar.
+        var hesap = await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.CariMusteri, tesisId: 1);
+        dbContext.CariKartlar.Add(new CariKart
+        {
+            Id = cariKartId,
+            CariTipi = CariKartTipleri.Musteri,
+            CariKodu = $"TEST-{cariKartId}",
+            UnvanAdSoyad = "Test Musteri",
+            AktifMi = true,
+            TesisId = 1,
+            MuhasebeHesapPlaniId = hesap.Id
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task AssertHicKayitOlusmadiAsync(StysAppDbContext dbContext, int belgeId)
+    {
+        Assert.False(await dbContext.MuhasebeFisler.AnyAsync(x => x.KaynakId == belgeId));
+        Assert.False(await dbContext.CariHareketler.AnyAsync(x => x.KaynakId == belgeId));
+        Assert.False(await dbContext.StokHareketleri.AnyAsync(x => x.KaynakId == belgeId));
+
+        var guncelBelge = await dbContext.SatisBelgeleri.FirstOrDefaultAsync(x => x.Id == belgeId);
+        Assert.NotNull(guncelBelge);
+        Assert.False(guncelBelge!.MuhasebeFisId.HasValue);
+    }
+
+    private static ISatisBelgesiMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var repository = new SatisBelgesiRepository(dbContext, mapper);
+
+        var stratejiler = new List<ISatisBelgesiMuhasebeFisStratejisi>
+        {
+            new SatisFaturasiMuhasebeFisStratejisi(),
+            new SatisIadeFaturasiMuhasebeFisStratejisi(dbContext),
+            new SatisTevkifatliFaturaMuhasebeFisStratejisi(new FakeTevkifatHesapEslemeService(hesapPlaniId: 999)),
+            new AlisFaturasiMuhasebeFisStratejisi(dbContext, new FakeTasinirKodMuhasebeHesapEslemeService()),
+            new AlisIadeFaturasiMuhasebeFisStratejisi(dbContext, new FakeTasinirKodMuhasebeHesapEslemeService()),
+            new AlisTevkifatliFaturaMuhasebeFisStratejisi(
+                dbContext, new FakeTasinirKodMuhasebeHesapEslemeService(), new FakeTevkifatHesapEslemeService(hesapPlaniId: 999))
+        };
+
+        return new SatisBelgesiMuhasebeFisService(
+            repository,
+            dbContext,
+            mapper,
+            new FakeMuhasebeDonemService(),
+            stratejiler,
+            NullLogger<SatisBelgesiMuhasebeFisService>.Instance);
+    }
+
+    private sealed class FakeMuhasebeDonemService : IMuhasebeDonemService
+    {
+        public Task<MuhasebeDonemDto?> GetAktifDonemAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
+            => Task.FromResult<MuhasebeDonemDto?>(new MuhasebeDonemDto
+            {
+                Id = 1,
+                TesisId = tesisId,
+                MaliYil = 2026,
+                DonemNo = 1,
+                BaslangicTarihi = new DateTime(2026, 1, 1),
+                BitisTarihi = new DateTime(2026, 1, 31),
+                KapaliMi = false
+            });
+
+        public Task DonemKapatAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task DonemAcAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+        public Task<IEnumerable<MuhasebeDonemDto>> GetAllAsync(Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<MuhasebeDonemDto?> GetByIdAsync(int id, Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<PagedResult<MuhasebeDonemDto>> GetPagedAsync(
+            PagedRequest request,
+            System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>>? predicate = null,
+            Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null,
+            Func<IQueryable<MuhasebeDonem>, IOrderedQueryable<MuhasebeDonem>>? orderBy = null)
+            => throw new NotImplementedException();
+
+        public Task<MuhasebeDonemDto> AddAsync(MuhasebeDonemDto dto) => throw new NotImplementedException();
+
+        public Task<MuhasebeDonemDto> UpdateAsync(MuhasebeDonemDto dto) => throw new NotImplementedException();
+
+        public Task DeleteAsync(int id) => throw new NotImplementedException();
+
+        public Task<IEnumerable<MuhasebeDonemDto>> WhereAsync(
+            System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>> predicate,
+            Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<bool> AnyAsync(
+            System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>> predicate,
+            Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null)
+            => throw new NotImplementedException();
+    }
+
+    private sealed class FakeTasinirKodMuhasebeHesapEslemeService : ITasinirKodMuhasebeHesapEslemeService
+    {
+        public Task<List<TasinirKodMuhasebeHesapEslemeDto>> GetByTasinirKodIdAsync(int tasinirKodId, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<TasinirKodMuhasebeHesapEslemeDto?> GetVarsayilanAsync(int tasinirKodId, string malzemeTipi, string hareketTipi, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<IEnumerable<TasinirKodMuhasebeHesapEslemeDto>> GetAllAsync(Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<TasinirKodMuhasebeHesapEslemeDto?> GetByIdAsync(int id, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<PagedResult<TasinirKodMuhasebeHesapEslemeDto>> GetPagedAsync(
+            PagedRequest request,
+            System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>>? predicate = null,
+            Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null,
+            Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IOrderedQueryable<TasinirKodMuhasebeHesapEsleme>>? orderBy = null)
+            => throw new NotImplementedException();
+
+        public Task<TasinirKodMuhasebeHesapEslemeDto> AddAsync(TasinirKodMuhasebeHesapEslemeDto dto) => throw new NotImplementedException();
+
+        public Task<TasinirKodMuhasebeHesapEslemeDto> UpdateAsync(TasinirKodMuhasebeHesapEslemeDto dto) => throw new NotImplementedException();
+
+        public Task DeleteAsync(int id) => throw new NotImplementedException();
+
+        public Task<IEnumerable<TasinirKodMuhasebeHesapEslemeDto>> WhereAsync(
+            System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>> predicate,
+            Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null)
+            => throw new NotImplementedException();
+
+        public Task<bool> AnyAsync(
+            System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>> predicate,
+            Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null)
+            => throw new NotImplementedException();
+    }
 
     private sealed class FakeTevkifatHesapEslemeService(int hesapPlaniId) : ITevkifatHesapEslemeService
     {

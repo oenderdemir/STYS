@@ -1,5 +1,3 @@
-using STYS.Muhasebe.SatisBelgeleri.Entities;
-
 namespace STYS.Muhasebe.SatisBelgeleri;
 
 /// <summary>
@@ -39,19 +37,4 @@ public static class SatisBelgesiTutarHesaplayici
     {
         return Yuvarla(matrah + kdvTutari - tevkifatTutari + otvTutari + oivTutari + konaklamaVergisiTutari);
     }
-
-    /// <summary>
-    /// Bir satırın ÖTV + ÖİV + konaklama vergisi toplamı ("KDV/tevkifat dışındaki diğer
-    /// vergiler"). Muhasebe fişi üretiminde, bu vergiler için ayrı bir hesap planı eşlemesi
-    /// TANIMLI OLMADIĞINDAN (bkz. SatisBelgesiMuhasebeFisContext), stratejiler bu tutarı
-    /// mevcut gelir/gider hesabına ekleyerek fişin Borç=Alacak dengesini korur - bu kalıcı
-    /// bir muhasebe tercihi değil, model bu vergiler için ayrı hesap tanımlamadığı sürece
-    /// uygulanan pragmatik bir köprüdür (bkz. görev sonuç raporu).
-    /// </summary>
-    public static decimal EkVergiTutari(SatisBelgesiSatiri satir) =>
-        satir.OtvTutari + satir.OivTutari + satir.KonaklamaVergisiTutari;
-
-    /// <summary>Bir belgenin aktif satırları için toplam ek vergi (ÖTV+ÖİV+konaklama vergisi) tutarı.</summary>
-    public static decimal HesaplaEkVergiToplami(IEnumerable<SatisBelgesiSatiri> satirlar) =>
-        Yuvarla(satirlar.Sum(EkVergiTutari));
 }

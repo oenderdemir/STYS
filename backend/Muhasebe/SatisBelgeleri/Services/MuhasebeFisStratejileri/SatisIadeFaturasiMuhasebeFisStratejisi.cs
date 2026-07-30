@@ -3,7 +3,6 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
-using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -38,22 +37,18 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
 
         var iadeHesabi = await ResolveHesapByAnaKodAsync(MuhasebeAnaHesapKodlari.SatisIade, belge.TesisId!.Value, cancellationToken);
 
-        // ÖTV/ÖİV/konaklama vergisi için ayrı bir hesap planı eşlemesi tanımlı DEĞİL (bkz.
-        // SatisBelgesiMuhasebeFisContext) - bu tutarlar, fişin Alacak (GenelToplam, artık bu
-        // vergileri de içeriyor) = Borç dengesini korumak için iade hesabına eklenir.
-        var ekVergiToplami = SatisBelgesiTutarHesaplayici.HesaplaEkVergiToplami(belge.Satirlar.Where(s => !s.IsDeleted));
-
+        // ÖTV/ÖİV/konaklama vergisi içeren belgeler için bu strateji hiç çağrılmaz —
+        // SatisBelgesiMuhasebeFisService, fiş/cari/stok hareketi oluşturulmadan önce bu
+        // belgeleri reddeder (bkz. SatisBelgesiMuhasebeFisService.MuhasebeFisiOlusturAsync).
         var satirlar = new List<MuhasebeFisSatiriTaslak>
         {
             new()
             {
                 MuhasebeHesapPlaniId = iadeHesabi.Id,
                 SiraNo = 1,
-                Borc = belge.ToplamMatrah + ekVergiToplami,
+                Borc = belge.ToplamMatrah,
                 Alacak = 0,
-                Aciklama = ekVergiToplami > 0
-                    ? $"Satış iade bedeli (ÖTV/ÖİV/konaklama vergisi dahil) - {belge.BelgeNo}"
-                    : $"Satış iade bedeli - {belge.BelgeNo}"
+                Aciklama = $"Satış iade bedeli - {belge.BelgeNo}"
             }
         };
 

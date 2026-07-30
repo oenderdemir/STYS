@@ -167,6 +167,22 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (aktifSatirlar.Count == 0)
                     throw new BaseException("Satış belgesinde aktif satır bulunamadı.", 400);
 
+                // ÖTV, ÖİV ve konaklama vergisi için mevcut domain modelinde güvenilir/açık
+                // bir muhasebe hesap eşlemesi (hesap planı alanı) TANIMLI DEĞİL (bkz.
+                // SatisBelgesiMuhasebeFisContext). Bu vergileri gelir/gider/stok hesabına
+                // "sadece fişi dengelemek için" eklemek muhasebesel olarak YANLIŞTIR (tahsil
+                // edilen ÖTV/ÖİV/konaklama vergisi satış geliri değildir). Bu yüzden bu
+                // vergilerden herhangi birini içeren belge için otomatik muhasebe fişi
+                // (ve ona bağlı cari/stok hareketi) üretimi tamamen ENGELLENİR - hiçbir
+                // fiş/cari/stok kaydı oluşturulmadan, transaction'da hiçbir yazım
+                // yapılmadan önce burada durdurulur.
+                if (aktifSatirlar.Any(s => s.OtvTutari > 0 || s.OivTutari > 0 || s.KonaklamaVergisiTutari > 0))
+                {
+                    throw new BaseException(
+                        "ÖTV, ÖİV veya konaklama vergisi içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır. Otomatik muhasebe fişi oluşturulamaz.",
+                        400);
+                }
+
                 if (belge.BelgeTipi.IsIadeBelgesi() &&
                     aktifSatirlar.Any(s => s.KdvUygulamaTipi == STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Tevkifatli))
                 {

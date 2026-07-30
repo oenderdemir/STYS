@@ -847,6 +847,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                     satir.KdvIstisnaTanimId.Value,
                     (int)satir.KdvUygulamaTipi,
                     belge.BelgeTarihi,
+                    ResolveKdvIslemYonu(belge.BelgeTipi),
                     cancellationToken);
             }
         }
@@ -1132,6 +1133,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 request.KdvIstisnaTanimId.Value,
                 request.KdvUygulamaTipi,
                 belge.BelgeTarihi,
+                ResolveKdvIslemYonu(belge.BelgeTipi),
                 cancellationToken);
         }
 
@@ -1185,10 +1187,30 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             throw new BaseException($"Depo seçili çalışma tesisiyle uyumlu değil: '{depo.Kod} — {depo.Ad}'", errorCode: 400);
     }
 
+    /// <summary>
+    /// Belgenin işlem yönünü (satış/alış) otoriter kaynak olan <see cref="SatisBelgesi.BelgeTipi"/>
+    /// üzerinden, mevcut <see cref="SatisBelgesiTipiExtensions"/> sınıflandırmasıyla belirler.
+    /// Bir belge tipi ne satış ne alış olarak sınıflandırılamıyorsa (yeni eklenen, sınıflandırılmamış
+    /// bir tip vb.) sessizce satış varsayılmaz — açık bir doğrulama hatası fırlatılır.
+    /// </summary>
+    private static KdvIslemYonu ResolveKdvIslemYonu(SatisBelgesiTipi belgeTipi)
+    {
+        if (belgeTipi.IsSatisBelgesi())
+            return KdvIslemYonu.Satis;
+
+        if (belgeTipi.IsAlisBelgesi())
+            return KdvIslemYonu.Alis;
+
+        throw new BaseException(
+            $"Belge tipi ({belgeTipi}) satış veya alış işlemi olarak sınıflandırılamadı; KDV istisna tanımı doğrulanamaz.",
+            errorCode: 400);
+    }
+
     private async Task ValidateKdvIstisnaTanimAsync(
         int kdvIstisnaTanimId,
         int kdvUygulamaTipi,
         DateTime belgeTarihi,
+        KdvIslemYonu islemYonu,
         CancellationToken cancellationToken)
     {
         var tanim = await _db.KdvIstisnaTanimlari
@@ -1209,9 +1231,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 $"Tanım: '{tanim.Kod} — {tanim.Ad}'",
                 errorCode: 400);
 
-        if (!tanim.SatisIslemlerindeKullanilirMi)
+        if (islemYonu == KdvIslemYonu.Satis && !tanim.SatisIslemlerindeKullanilirMi)
             throw new BaseException(
                 $"KDV istisna tanımı satış işlemlerinde kullanılamaz: '{tanim.Kod} — {tanim.Ad}'",
+                errorCode: 400);
+
+        if (islemYonu == KdvIslemYonu.Alis && !tanim.AlisIslemlerindeKullanilirMi)
+            throw new BaseException(
+                $"KDV istisna tanımı alış işlemlerinde kullanılamaz: '{tanim.Kod} — {tanim.Ad}'",
                 errorCode: 400);
 
         // Geçerlilik tarih aralığı

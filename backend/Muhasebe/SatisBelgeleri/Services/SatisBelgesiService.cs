@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AutoMapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -688,18 +689,13 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
             // tutarsızlıkta açık hata verilir.
             if (durumFaturaKesildiMi)
             {
-                if (belge.ResmiFaturaNo!.Length != 16 ||
-                    !belge.ResmiFaturaNo[..3].All(c => (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) ||
-                    !int.TryParse(belge.ResmiFaturaNo.Substring(3, 4), out var mevcutYil) ||
-                    !int.TryParse(belge.ResmiFaturaNo.Substring(7, 9), out var mevcutSiraNo))
+                if (!TryParseResmiFaturaNo(belge.ResmiFaturaNo!, out var mevcutSeriKodu, out var mevcutYil, out var mevcutSiraNo))
                 {
                     throw new BaseException(
                         $"Belgenin mevcut resmî fatura numarası ({belge.ResmiFaturaNo}) beklenen formatta değil; " +
                         $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                         errorCode: 500);
                 }
-
-                var mevcutSeriKodu = belge.ResmiFaturaNo[..3];
 
                 if (mevcutYil != belge.BelgeTarihi.Year)
                 {
@@ -891,6 +887,62 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
     {
         return ex.InnerException is SqlException sqlEx &&
                (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+    }
+
+    /// <summary>
+    /// {SeriKodu(3)}{MaliYil(4)}{SiraNo(9)} = 16 karakterlik resmî fatura numarası formatını KESİN
+    /// olarak doğrular. int.TryParse'a doğrudan güvenilmez - "+00000001", "-00000001", " 00000001"
+    /// gibi değerleri de (işaret/boşluk NumberStyles.Integer ile kabul edilebildiği için, veya
+    /// bazı kültürlerde Unicode rakamlar kabul edilebildiği için) sessizce geçerli sayabilir. Bu
+    /// yüzden her karakter ÖNCE tek tek ASCII 'A'-'Z'/'0'-'9' aralığında olduğu doğrulanır; ancak
+    /// bu doğrulamadan geçen, saf ASCII rakamlardan oluşan bir dilim üzerinde int.TryParse
+    /// (CultureInfo.InvariantCulture, NumberStyles.None ile) çağrılır - NumberStyles.None işaret,
+    /// boşluk, binlik ayıracı gibi hiçbir ek karaktere izin vermez.
+    /// </summary>
+    private static bool TryParseResmiFaturaNo(string resmiFaturaNo, out string seriKodu, out int maliYil, out int siraNo)
+    {
+        seriKodu = string.Empty;
+        maliYil = 0;
+        siraNo = 0;
+
+        if (resmiFaturaNo.Length != 16)
+            return false;
+
+        var seriKismi = resmiFaturaNo.AsSpan(0, 3);
+        var yilKismi = resmiFaturaNo.AsSpan(3, 4);
+        var siraKismi = resmiFaturaNo.AsSpan(7, 9);
+
+        foreach (var c in seriKismi)
+        {
+            if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')))
+                return false;
+        }
+
+        foreach (var c in yilKismi)
+        {
+            if (c < '0' || c > '9')
+                return false;
+        }
+
+        foreach (var c in siraKismi)
+        {
+            if (c < '0' || c > '9')
+                return false;
+        }
+
+        if (!int.TryParse(yilKismi, NumberStyles.None, CultureInfo.InvariantCulture, out maliYil))
+            return false;
+
+        if (!int.TryParse(siraKismi, NumberStyles.None, CultureInfo.InvariantCulture, out siraNo))
+            return false;
+
+        // Sıra numarası 1'den başlar (bkz. FaturaKesAsync: sayac.SonNumara + 1) - "000000000"
+        // hiçbir zaman üretilmemiş, dolayısıyla geçersiz bir değerdir.
+        if (siraNo is < 1 or > 999999999)
+            return false;
+
+        seriKodu = resmiFaturaNo[..3];
+        return true;
     }
 
     // ──────────────────────────────────────────────

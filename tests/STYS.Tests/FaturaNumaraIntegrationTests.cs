@@ -726,6 +726,74 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // ResmiFaturaNo kesin format doğrulaması (hardening turu — v2)
+    // int.TryParse'ın işaret/boşluk/Unicode-rakam gibi değerleri sessizce kabul edebilme riskine
+    // karşı: format artık her karakter tek tek ASCII aralığında doğrulandıktan SONRA, yalnızca
+    // NumberStyles.None + InvariantCulture ile ayrıştırılıyor (bkz. TryParseResmiFaturaNo).
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task FaturaKesAsync_NormalGecerliNumara_IdempotentDoner()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "FMT", sonNumara: 1);
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
+        belgeDb.ResmiFaturaNo = "FMT2026000000001";
+        belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var sonuc = await service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "FMT" });
+
+        Assert.Equal("FMT2026000000001", sonuc.ResmiFaturaNo);
+        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, sonuc.Durum);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "FMT");
+        Assert.Equal(1, sayacDb.SonNumara);
+    }
+
+    [Theory]
+    [InlineData("ABC2026+00000001")]
+    [InlineData("ABC2026-00000001")]
+    [InlineData("ABC2026 00000001")]
+    [InlineData("ABC2026000000000")]
+    [InlineData("ABC202600000000１")] // sondaki karakter ASCII '1' DEĞİL - tam genişlikli (fullwidth) Unicode rakam U+FF11
+    public async Task FaturaKesAsync_BozukResmiFaturaNo_ReddedilirVeHicbirSeyDegismez(string bozukNumara)
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SeedSayacAsync(dbContext, _kurumId, 2026, "ABC", sonNumara: 3);
+
+        var belge = await SeedOnaylanmisSatisFaturasiAsync(dbContext, new DateTime(2026, 3, 10));
+        var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
+        belgeDb.ResmiFaturaNo = bozukNumara;
+        belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.FaturaKesAsync(belge.Id!.Value, new FaturaKesRequest { SeriKodu = "ABC" }));
+        Assert.Equal(500, ex.ErrorCode);
+        Assert.Contains("beklenen formatta değil", ex.Message);
+
+        // Yeni, no-tracking bir DbContext ile belge/sayaç HİÇBİR ŞEYİN değişmediğini doğrula.
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
+        Assert.Equal(bozukNumara, belgeSonHal.ResmiFaturaNo);
+        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, belgeSonHal.Durum);
+        Assert.NotNull(belgeSonHal.FaturaKesimTarihi);
+
+        var sayacDb = await verifyContext.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .FirstAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "ABC");
+        Assert.Equal(3, sayacDb.SonNumara);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Eşzamanlılık — GERÇEK SQL Server, ayrı DbContext/servis örnekleri
     // ─────────────────────────────────────────────────────────────
 

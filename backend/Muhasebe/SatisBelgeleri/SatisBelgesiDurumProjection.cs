@@ -90,4 +90,17 @@ public static class SatisBelgesiDurumProjection
         belge.MuhasebeDurumu = muhasebe;
         belge.FaturalamaDurumu = faturalama;
     }
+
+    /// <summary>
+    /// ATOMİK durum geçişi yardımcısı: belge.Durum'u yeniDurum'a atar VE HEMEN ARDINDAN, belgenin
+    /// (olası şekilde bu çağrıdan ÖNCE değişmiş olabilecek) NİHAİ BelgeTipi'siyle birlikte üç
+    /// projeksiyon alanını yazar. SatisBelgesiService'teki TÜM üretim durum geçişleri, ayrı ayrı
+    /// "belge.Durum = ...; UygulaVeYaz(belge);" kalıbı yerine BU metodu kullanır - böylece Durum
+    /// atamasıyla projeksiyon güncellemesi ASLA birbirinden ayrı/unutulabilir iki adım olmaz.
+    /// </summary>
+    public static void DurumuAtaVeProjekteEt(SatisBelgesi belge, SatisBelgesiDurumu yeniDurum)
+    {
+        belge.Durum = yeniDurum;
+        UygulaVeYaz(belge);
+    }
 }

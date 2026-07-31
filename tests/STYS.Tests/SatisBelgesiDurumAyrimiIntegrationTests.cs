@@ -1,6 +1,11 @@
+using System.Reflection;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Infrastructure.EntityFramework.Migrations;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
@@ -125,6 +130,41 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
     private static async Task<SatisBelgesi> ReadNoTrackingAsync(StysAppDbContext dbContext, int id)
         => await dbContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == id);
 
+    /// <summary>
+    /// Ortak assertion yardımcısı: verilen (AsNoTracking okunmuş) belgenin saklanan üç projeksiyon
+    /// alanının, SatisBelgesiDurumProjection.Proje(belge.BelgeTipi, belge.Durum) ile TAZE olarak
+    /// yeniden hesaplanan sonuçla BİREBİR eşleştiğini doğrular - belgenin NİHAİ BelgeTipi/Durum
+    /// değerleriyle tutarlılığı kanıtlar (bkz. B/C bölümü - BelgeTipi değişiminde projection'ın
+    /// bayatlamadığının kanıtı).
+    /// </summary>
+    private static void AssertProjectionTutarli(SatisBelgesi belge)
+    {
+        var (beklenenTicari, beklenenMuhasebe, beklenenFaturalama) =
+            SatisBelgesiDurumProjection.Proje(belge.BelgeTipi, belge.Durum);
+
+        Assert.Equal(beklenenTicari, belge.TicariDurum);
+        Assert.Equal(beklenenMuhasebe, belge.MuhasebeDurumu);
+        Assert.Equal(beklenenFaturalama, belge.FaturalamaDurumu);
+    }
+
+    private CreateSatisBelgesiRequest BuildProformaRequest() => new()
+    {
+        BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+        BelgeTipi = SatisBelgesiTipi.Proforma,
+        TesisId = _tesisId,
+        CariKartId = _musteriKartId,
+        BelgeTarihi = new DateTime(2026, 3, 1),
+        MusteriAdSoyad = "Test Musteri " + _uniqueSuffix,
+        Satirlar =
+        [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Test satir", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]
+    };
+
     private CreateSatisBelgesiRequest BuildSatisFaturasiRequest() => new()
     {
         BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
@@ -162,43 +202,39 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         ]
     };
 
-    /// <summary>Migration'daki backfill UPDATE'iyle BİREBİR AYNI SQL - yalnızca verilen Id kümesiyle sınırlandırılmıştır (test izolasyonu için).</summary>
-    private static async Task BackfillAsync(StysAppDbContext dbContext, IEnumerable<int> ids)
+    /// <summary>
+    /// Backfill matrisini İKİNCİ KEZ (elle kopyalanarak) TANIMLAMAZ - bunun yerine gerçek
+    /// AddSeparatedSatisBelgesiStatuses migration'ının Up() metodunu GERÇEKTEN çalıştırıp ürettiği
+    /// MigrationOperation listesinden backfill SqlOperation'ının [Sql] metnini ÇIKARIR ve bu METNİ
+    /// OLDUĞU GİBİ (üretim migration'ıyla BİREBİR AYNI, gerçek nesneden okunmuş) çalıştırır. Bu
+    /// sayede test, üretim migration dosyasından BAĞIMSIZ ikinci bir eşleme tanımıyla değil,
+    /// migration'ın GERÇEK içeriğiyle doğrulanmış olur. Üretim SQL'i WHERE koşulu İÇERMEZ (tüm
+    /// tabloyu kapsar) - test izolasyonu için ayrıca bir kapsam daraltması YAPILMAZ; idempotent
+    /// olduğundan paylaşılan test DB'sindeki diğer satırları da (varsa) doğru şekilde günceller.
+    /// </summary>
+    private static async Task BackfillAsync(StysAppDbContext dbContext)
     {
-        var idListesi = string.Join(",", ids);
+        var migration = new AddSeparatedSatisBelgesiStatuses();
+        var migrationBuilder = new MigrationBuilder(activeProvider: null);
+        // Migration.Up(MigrationBuilder) `protected override`dır - üretim erişim düzeyi
+        // BİLİNÇLİ OLARAK değiştirilmez (migration dosyasına dokunulmaz); bunun yerine test
+        // burada reflection ile GERÇEK metodu çağırır.
+        var upMethod = typeof(AddSeparatedSatisBelgesiStatuses).GetMethod(
+            "Up", BindingFlags.NonPublic | BindingFlags.Instance, [typeof(MigrationBuilder)])
+            ?? throw new InvalidOperationException("AddSeparatedSatisBelgesiStatuses.Up metodu reflection ile bulunamadı.");
+        upMethod.Invoke(migration, [migrationBuilder]);
+
+        var sqlOperation = migrationBuilder.Operations
+            .OfType<SqlOperation>()
+            .Single(op => op.Sql.Contains("[SatisBelgeleri]", StringComparison.Ordinal) && op.Sql.Contains("UPDATE", StringComparison.Ordinal));
+
         var connection = dbContext.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
             await connection.OpenAsync();
         }
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"""
-            UPDATE [muhasebe].[SatisBelgeleri]
-            SET
-                [TicariDurum] = CASE [Durum]
-                    WHEN 1 THEN 1
-                    WHEN 7 THEN 3
-                    ELSE 2
-                END,
-                [MuhasebeDurumu] = CASE [Durum]
-                    WHEN 1 THEN 1
-                    WHEN 2 THEN 2
-                    WHEN 3 THEN 3
-                    WHEN 4 THEN 4
-                    WHEN 5 THEN 3
-                    WHEN 6 THEN 3
-                    WHEN 7 THEN 5
-                END,
-                [FaturalamaDurumu] = CASE
-                    WHEN [Durum] = 5 THEN 4
-                    WHEN [Durum] = 6 THEN 5
-                    WHEN [Durum] = 7 THEN 6
-                    WHEN [BelgeTipi] IN (2, 7) AND [Durum] = 3 THEN 3
-                    WHEN [BelgeTipi] IN (2, 7) THEN 2
-                    ELSE 1
-                END
-            WHERE [Id] IN ({idListesi})
-            """;
+        cmd.CommandText = sqlOperation.Sql;
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -334,7 +370,7 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         Assert.Null(oncesi.MuhasebeDurumu);
         Assert.Null(oncesi.FaturalamaDurumu);
 
-        await BackfillAsync(dbContext, [id]);
+        await BackfillAsync(dbContext);
 
         var sonrasi = await ReadNoTrackingAsync(dbContext, id);
         Assert.Equal(TicariBelgeDurumu.Hazir, sonrasi.TicariDurum);
@@ -350,7 +386,7 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var id = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, SatisBelgesiDurumu.Taslak, isDeleted: true, _musteriKartId);
 
-        await BackfillAsync(dbContext, [id]);
+        await BackfillAsync(dbContext);
 
         // IgnoreQueryFilters ZORUNLUDUR - satır IsDeleted=true olduğundan normal sorgu onu görmez.
         var sonrasi = await dbContext.SatisBelgeleri.IgnoreQueryFilters().AsNoTracking().FirstAsync(x => x.Id == id);
@@ -366,7 +402,7 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var id = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.IadeFaturasi, SatisBelgesiDurumu.Taslak, isDeleted: false);
 
-        await BackfillAsync(dbContext, [id]);
+        await BackfillAsync(dbContext);
 
         var sonrasi = await ReadNoTrackingAsync(dbContext, id);
         // BelgeTipi ASLA değiştirilmemeli - SatisIadeFaturasi veya AlisIadeFaturasi'ye TAHMİN EDİLEREK dönüştürülmez.
@@ -389,7 +425,7 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         var alisFaturaKesildiId = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.AlisFaturasi, SatisBelgesiDurumu.FaturaKesildi, isDeleted: false, _tedarikciKartId);
         var satisIadeMusteriyeGonderildiId = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.SatisIadeFaturasi, SatisBelgesiDurumu.MusteriyeGonderildi, isDeleted: false, _musteriKartId);
 
-        await BackfillAsync(dbContext, [alisFaturaKesildiId, satisIadeMusteriyeGonderildiId]);
+        await BackfillAsync(dbContext);
 
         var alisSonrasi = await ReadNoTrackingAsync(dbContext, alisFaturaKesildiId);
         Assert.Equal(SatisBelgesiTipi.AlisFaturasi, alisSonrasi.BelgeTipi);
@@ -566,5 +602,101 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id!.Value);
         Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
         Assert.Equal(TicariBelgeDurumu.Taslak, sonHal.TicariDurum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // C. UpdateAsync sırasında BelgeTipi değişimi — projeksiyon NİHAİ tip/durumla yeniden hesaplanmalı
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_TaslakSatisFaturasiProformayaCevrilirse_ProjeksiyonNihaiTipleYenidenHesaplanir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+
+        await service.UpdateAsync(created.Id!.Value, new UpdateSatisBelgesiRequest { BelgeTipi = SatisBelgesiTipi.Proforma });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+
+        Assert.Equal(SatisBelgesiTipi.Proforma, sonHal.BelgeTipi);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
+        Assert.Equal(TicariBelgeDurumu.Taslak, sonHal.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonHal.MuhasebeDurumu);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Uygulanamaz, sonHal.FaturalamaDurumu); // Proforma StysTarafindanDuzenlenirMi=false
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_TaslakProformaSatisFaturasinaCevrilirse_ProjeksiyonNihaiTipleYenidenHesaplanir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildProformaRequest());
+
+        await service.UpdateAsync(created.Id!.Value, new UpdateSatisBelgesiRequest { BelgeTipi = SatisBelgesiTipi.SatisFaturasi });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+
+        Assert.Equal(SatisBelgesiTipi.SatisFaturasi, sonHal.BelgeTipi);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
+        Assert.Equal(TicariBelgeDurumu.Taslak, sonHal.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonHal.MuhasebeDurumu);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Baslatilmadi, sonHal.FaturalamaDurumu); // SatisFaturasi StysTarafindanDuzenlenirMi=true
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_ReddedilmisSatisFaturasiAyniUpdateIcindeProformayaCevrilirse_ProjeksiyonNihaiTipleHesaplanir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
+        await service.ReddetAsync(created.Id.Value, "Test ret nedeni");
+
+        // Reddedildi->Taslak dönüşü VE BelgeTipi değişimi AYNI update isteğinde birlikte gönderilir -
+        // düzeltmeden ÖNCE, Reddedildi->Taslak dalındaki erken projeksiyon ESKİ BelgeTipi
+        // (SatisFaturasi) ile hesaplanıp KALIRDI (FaturalamaDurumu yanlışlıkla Baslatilmadi olurdu);
+        // artık UpdateAsync sonunda NİHAİ BelgeTipi (Proforma) ile YENİDEN hesaplanır.
+        var guncellenen = await service.UpdateAsync(created.Id.Value, new UpdateSatisBelgesiRequest { BelgeTipi = SatisBelgesiTipi.Proforma });
+
+        Assert.Equal(SatisBelgesiDurumu.Taslak, guncellenen.Durum);
+        Assert.Null(guncellenen.RedNedeni);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+
+        Assert.Equal(SatisBelgesiTipi.Proforma, sonHal.BelgeTipi);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
+        Assert.Null(sonHal.RedNedeni);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Uygulanamaz, sonHal.FaturalamaDurumu);
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_YalnizcaAciklamaGuncellenirse_BelgeTipiVeProjeksiyonDegismezKalir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+
+        await service.UpdateAsync(created.Id!.Value, new UpdateSatisBelgesiRequest { Aciklama = "Guncellendi" });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+
+        Assert.Equal(SatisBelgesiTipi.SatisFaturasi, sonHal.BelgeTipi);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
+        Assert.Equal(TicariBelgeDurumu.Taslak, sonHal.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonHal.MuhasebeDurumu);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Baslatilmadi, sonHal.FaturalamaDurumu);
+        AssertProjectionTutarli(sonHal);
     }
 }

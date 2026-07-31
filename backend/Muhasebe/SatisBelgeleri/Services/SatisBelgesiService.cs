@@ -483,12 +483,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 errorCode: 400);
         }
 
-        // Reddedildi → Taslak durumuna döndür
+        // Reddedildi → Taslak durumuna döndür. Bu noktada belge.BelgeTipi HENÜZ eski değerindedir
+        // (ApplyBelgeUpdatesAsync bu satırdan SONRA çalışır) - bu yüzden buradaki projeksiyon
+        // GEÇİCİ/erken bir değerdir; istekte BelgeTipi de değişirse aşağıda (ApplyBelgeUpdatesAsync
+        // sonrası, kaydetmeden hemen önce) NİHAİ BelgeTipi ile YENİDEN hesaplanıp üzerine yazılır.
         if (belge.Durum == SatisBelgesiDurumu.Reddedildi)
         {
-            belge.Durum = SatisBelgesiDurumu.Taslak;
             belge.RedNedeni = null;
-            SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.Taslak);
         }
 
         // Belge no değiştiyse duplicate kontrolü
@@ -534,6 +536,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         }
 
         HesaplaBelgeToplamlari(belge);
+
+        // Compatibility dual-write - NİHAİ değerlerle YENİDEN hesaplanır. ApplyBelgeUpdatesAsync
+        // BelgeTipi'ni değiştirmiş olabilir (Durum değişmese dahi) - yukarıdaki Reddedildi->Taslak
+        // dalındaki (varsa) erken/geçici projeksiyon, burada NİHAİ BelgeTipi+Durum ile ÜZERİNE
+        // YAZILARAK düzeltilir. Bu çağrı KOŞULSUZDUR - Durum bu istekte hiç değişmemiş olsa bile
+        // (yalnızca BelgeTipi değişmiş olabilir) çalışır.
+        SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+
         _satisBelgesiRepository.Update(belge);
         await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
         if (belge.CariKartId.HasValue)
@@ -630,9 +640,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // Kapsamlı ön-kontrol (satır, müşteri, KDV, toplam, kaynak duplicate)
             await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
 
-            belge.Durum = SatisBelgesiDurumu.MuhasebeOnayinda;
             belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
-            SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.MuhasebeOnayinda);
 
             await Repository.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -672,9 +681,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // Onay anında içerik tekrar doğrulanır (arada değişiklik olmadığından emin olmak için)
             await ValidateBelgeMuhasebeOnaylanabilir(belge, cancellationToken);
 
-            belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
             belge.MuhasebeOnayTarihi = DateTime.UtcNow;
-            SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.MuhasebeOnaylandi);
 
             await Repository.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -975,8 +983,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
             belge.ResmiFaturaNo = resmiFaturaNo;
             belge.FaturaKesimTarihi = DateTime.UtcNow;
-            belge.Durum = SatisBelgesiDurumu.FaturaKesildi;
-            SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.FaturaKesildi);
 
             try
             {
@@ -1119,9 +1126,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 errorCode: 400);
         }
 
-        belge.Durum = SatisBelgesiDurumu.Reddedildi;
         belge.RedNedeni = redNedeni.Trim();
-        SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+        SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.Reddedildi);
 
         await Repository.SaveChangesAsync(cancellationToken);
     }
@@ -1151,8 +1157,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             await IptalEtStokHareketleriAsync(belge, cancellationToken);
             await IptalEtCariHareketleriAsync(belge, cancellationToken);
 
-            belge.Durum = SatisBelgesiDurumu.IptalEdildi;
-            SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.IptalEdildi);
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

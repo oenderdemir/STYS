@@ -528,7 +528,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         {
             await Repository.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+        catch (DbUpdateException ex) when (IsKarsiTarafFaturaNoUniqueConflict(ex))
         {
             throw new BaseException(
                 "Bu karşı taraf fatura numarası, aynı kurum ve cari kart için eşzamanlı bir istekle az önce kaydedilmiş. Lütfen tekrar deneyin.",
@@ -960,6 +960,22 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
     {
         return ex.InnerException is SqlException sqlEx &&
                (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+    }
+
+    /// <summary>
+    /// IsUniqueConflict'in aksine, yalnızca BELİRLİ index'i (KurumId+CariKartId+KarsiTarafFaturaNo)
+    /// ihlal eden 2601/2627 hatalarını tanır - SQL Server bu hataların mesajına ihlal edilen
+    /// index'in adını gömer. Başka bir unique index (ör. BelgeNo, KaynakModul/KaynakTipi/KaynakId)
+    /// ihlal edilirse bu metot false döner ve orijinal exception, karşı taraf fatura numarası
+    /// mesajıyla MASKELENMEDEN olduğu gibi yukarı fırlatılmaya devam eder.
+    /// </summary>
+    private static bool IsKarsiTarafFaturaNoUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx &&
+               (sqlEx.Number == 2601 || sqlEx.Number == 2627) &&
+               sqlEx.Message.Contains(
+                   "IX_SatisBelgeleri_KurumId_CariKartId_KarsiTarafFaturaNo",
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1871,20 +1887,25 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 errorCode: 400);
         }
 
-        var trimmed = raw.Trim();
+        // Kontrol karakteri doğrulaması TRIM'DEN ÖNCE, HAM (raw) değer üzerinde yapılır. Aksi
+        // halde String.Trim() tab/satır sonu gibi Unicode boşluk sayılan kontrol karakterlerini
+        // (\t, \n, \r vb.) baştan/sondan SESSİZCE siler ve "\tTED-1" gibi bir değer, kontrol
+        // karakteri hiç yokmuş gibi kabul edilirdi. Yalnızca normal ASCII boşluk (' ') karakteri
+        // trim edilebilir - kontrol karakterleri konumdan (baş/orta/son) BAĞIMSIZ reddedilir.
+        if (raw.Any(char.IsControl))
+        {
+            throw new BaseException(
+                "Karşı taraf fatura numarası satır sonu, tab veya başka bir kontrol karakteri içeremez.",
+                errorCode: 400);
+        }
+
+        var trimmed = raw.Trim(' ');
 
         if (trimmed.Length == 0)
             throw new BaseException("Karşı taraf fatura numarası boş olamaz.", errorCode: 400);
 
         if (trimmed.Length > 50)
             throw new BaseException("Karşı taraf fatura numarası en fazla 50 karakter olabilir.", errorCode: 400);
-
-        if (trimmed.Any(char.IsControl))
-        {
-            throw new BaseException(
-                "Karşı taraf fatura numarası satır sonu, tab veya başka bir kontrol karakteri içeremez.",
-                errorCode: 400);
-        }
 
         return trimmed;
     }
@@ -2238,7 +2259,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         UpdateSatisBelgesiRequest request,
         CancellationToken cancellationToken)
     {
-        var belgeTipiDegisiyorMu = request.BelgeTipi.HasValue && request.BelgeTipi.Value != belge.BelgeTipi;
+        var eskiCariKartId = belge.CariKartId;
 
         if (!string.IsNullOrWhiteSpace(request.BelgeNo))
             belge.BelgeNo = request.BelgeNo;
@@ -2301,6 +2322,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 throw new BaseException("Bireysel müşteri için ad soyad zorunludur.", errorCode: 400);
         }
 
+        var cariKartIdDegisiyorMu = belge.CariKartId != eskiCariKartId;
+
         // ── Karşı taraf fatura numarası ──
         if (request.KarsiTarafFaturaNo is not null)
         {
@@ -2318,11 +2341,19 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 belge.KarsiTarafFaturaNo = normalized;
             }
         }
-        else if (belgeTipiDegisiyorMu && !string.IsNullOrWhiteSpace(belge.KarsiTarafFaturaNo))
+        else if (!string.IsNullOrWhiteSpace(belge.KarsiTarafFaturaNo))
         {
-            // BelgeTipi değişiyor ve KarsiTarafFaturaNo dokunulmadan taşınıyor - yeni tipe uygun
-            // değilse SESSİZCE temizlenmez, güncelleme AÇIKÇA reddedilir.
+            // KarsiTarafFaturaNo dokunulmadan taşınıyor - BelgeTipi değişmişse yeni tipe uygun
+            // değilse SESSİZCE temizlenmez, güncelleme AÇIKÇA reddedilir; CariKartId değişmişse
+            // duplicate anahtarı (KurumId+CariKartId+KarsiTarafFaturaNo) NİHAİ cari ile tekrar
+            // kontrol edilir - aksi halde yeni cari altında fark edilmeden bir çakışma oluşabilir.
             NormalizeKarsiTarafFaturaNo(belge.BelgeTipi, belge.KarsiTarafFaturaNo);
+
+            if (cariKartIdDegisiyorMu)
+            {
+                await ThrowIfKarsiTarafFaturaNoDuplicateAsync(
+                    belge.KurumId, belge.CariKartId, belge.KarsiTarafFaturaNo, excludeId: belge.Id, cancellationToken);
+            }
         }
 
         // ── İade edilen belge referansı ──
@@ -2339,15 +2370,16 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
         else if (request.IadeEdilenBelgeId.HasValue)
         {
-            await ValidateVeGetIadeEdilenBelgeAsync(
-                belge.BelgeTipi, request.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
-                selfId: belge.Id, cancellationToken);
             belge.IadeEdilenBelgeId = request.IadeEdilenBelgeId;
         }
-        else if (belgeTipiDegisiyorMu && belge.IadeEdilenBelgeId.HasValue)
+
+        // Belge üzerinde İadeEdilenBelgeId HÂLÂ varsa (yeni verildi, dokunulmadan taşındı, ya da
+        // BelgeTipi/KurumId/CariKartId/BelgeTarihi bu istekle değişmiş olabilir) - NİHAİ
+        // değerlerle HER ZAMAN yeniden doğrulanır. Yalnızca "IadeEdilenBelgeId yeni verildi" veya
+        // "BelgeTipi değişti" koşullarına bağlı kalınmaz - CariKartId/BelgeTarihi değişse bile
+        // (IadeEdilenBelgeId ve BelgeTipi dokunulmasa dahi) asıl belgeyle uyumsuzluk yakalanmalıdır.
+        if (belge.IadeEdilenBelgeId.HasValue)
         {
-            // BelgeTipi değişiyor ve IadeEdilenBelgeId dokunulmadan taşınıyor - yeni tipe uygun
-            // değilse (SatisIadeFaturasi/AlisIadeFaturasi dışına çıkıldıysa) reddedilir.
             await ValidateVeGetIadeEdilenBelgeAsync(
                 belge.BelgeTipi, belge.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
                 selfId: belge.Id, cancellationToken);

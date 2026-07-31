@@ -2627,11 +2627,19 @@ public class StysAppDbContext : DbContext
                 // olmalı, tab/satır sonu/diğer kontrol karakterleri (1-31 arası) içeremez.
                 // CHAR(1) kullanılır (CHAR(0) yerine) - SQL Server'da NUL karakteri LIKE
                 // desenlerinde string'i beklenmedik şekilde kesebilir.
+                //
+                // "=" ile trim eşitliği KONTROL ETMEK YETERSİZDİR: SQL Server char/nvarchar
+                // eşitlik karşılaştırmalarında ANSI padding kuralları uygulanır - sondaki
+                // boşluklar YOK SAYILIR, yani 'TED-1 ' = LTRIM(RTRIM('TED-1 ')) ifadesi ('TED-1 '
+                // = 'TED-1') YANLIŞLIKLA TRUE döner ve sondaki boşluklu bir değer constraint'i
+                // GEÇERDİ. Bunun yerine DATALENGTH (bayt uzunluğu, padding'den ETKİLENMEZ)
+                // karşılaştırması kullanılır - orijinal ile trim'lenmiş halin bayt uzunluğu
+                // FARKLIYSA, orijinal değerde baştaki/sondaki boşluk vardı demektir.
                 t.HasCheckConstraint(
                     "CK_SatisBelgeleri_KarsiTarafFaturaNo_Format",
                     "[KarsiTarafFaturaNo] IS NULL OR (" +
-                    "LEN([KarsiTarafFaturaNo]) > 0 " +
-                    "AND [KarsiTarafFaturaNo] = LTRIM(RTRIM([KarsiTarafFaturaNo])) " +
+                    "DATALENGTH([KarsiTarafFaturaNo]) > 0 " +
+                    "AND DATALENGTH([KarsiTarafFaturaNo]) = DATALENGTH(LTRIM(RTRIM([KarsiTarafFaturaNo]))) " +
                     "AND [KarsiTarafFaturaNo] COLLATE Latin1_General_BIN2 NOT LIKE '%[' + CHAR(1) + '-' + CHAR(31) + ']%')");
             });
 

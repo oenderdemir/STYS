@@ -139,6 +139,29 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
         await dbContext.Kurumlar.Where(x => x.Id == kurumId).ExecuteDeleteAsync();
     }
 
+    /// <summary>Yeni, no-tracking bir context ile belgeyi okur - "başlangıç" veya "sonuç" anlık görüntüsü almak için kullanılır.</summary>
+    private static async Task<SatisBelgesi> ReadNoTrackingAsync(StysAppDbContext dbContext, int id)
+        => await dbContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == id);
+
+    /// <summary>
+    /// Ret/değişmezlik testlerinde ortak kullanılan assertion: bir güncelleme reddedildiğinde (veya
+    /// yalnızca ilgisiz bir alan güncellendiğinde) belgenin KİLİT alanlarının HİÇBİRİNİN
+    /// değişmediğini doğrular. beklenen/guncel parametreleri her ikisi de AsNoTracking ile okunmuş
+    /// olmalıdır.
+    /// </summary>
+    private static void AssertBelgeDegismedi(SatisBelgesi beklenen, SatisBelgesi guncel)
+    {
+        Assert.Equal(beklenen.BelgeTipi, guncel.BelgeTipi);
+        Assert.Equal(beklenen.Durum, guncel.Durum);
+        Assert.Equal(beklenen.CariKartId, guncel.CariKartId);
+        Assert.Equal(beklenen.BelgeTarihi, guncel.BelgeTarihi);
+        Assert.Equal(beklenen.KarsiTarafFaturaNo, guncel.KarsiTarafFaturaNo);
+        Assert.Equal(beklenen.IadeEdilenBelgeId, guncel.IadeEdilenBelgeId);
+        Assert.Equal(beklenen.ResmiFaturaNo, guncel.ResmiFaturaNo);
+        Assert.Equal(beklenen.FaturaKesimTarihi, guncel.FaturaKesimTarihi);
+        Assert.Equal(beklenen.MuhasebeFisId, guncel.MuhasebeFisId);
+    }
+
     private async Task<SatisBelgesiDto> SeedOnaylanmisSatisFaturasiVeKesAsync(
         StysAppDbContext dbContext, DateTime belgeTarihi, string seriKodu, int? musteriKartId = null)
     {
@@ -761,12 +784,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var numara = $"TED-{Guid.NewGuid():N}"[..20];
 
-        var belge = await SeedOnaylanmisAlisFaturasiAsync(dbContext, new DateTime(2026, 3, 1), numara, fisOlustur: false);
-
-        // UpdateAsync yalnızca Taslak/Reddedildi durumundaki belgeleri güncelleyebilir - ama
-        // OlusturVeMuhasebeOnayla yerine sadece CreateAsync kullanıldığından bu belge zaten
-        // Taslak'ta kalmış olmalı (SeedOnaylanmisAlisFaturasiAsync onaya gönderiyor - Taslak
-        // DURUMUNDA olmayan bir belge güncellenemez). Bu yüzden ayrı bir Taslak belge kullanılır.
+        // UpdateAsync yalnızca Taslak/Reddedildi durumundaki belgeleri güncelleyebilir - bu yüzden
+        // doğrudan Taslak bir belge oluşturulur (gereksiz bir onaylı asıl fatura seed'i YOKTUR).
         var taslak = await service.CreateAsync(new CreateSatisBelgesiRequest
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
@@ -775,7 +794,7 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
             CariKartId = _tedarikciKartId,
             BelgeTarihi = new DateTime(2026, 3, 1),
             MusteriAdSoyad = "Tedarikci",
-            KarsiTarafFaturaNo = numara + "-TASLAK",
+            KarsiTarafFaturaNo = numara,
             Satirlar =
             [
                 new CreateSatisBelgesiSatiriRequest
@@ -786,8 +805,17 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
             ]
         });
 
+        var oncekiDb = await ReadNoTrackingAsync(dbContext, taslak.Id!.Value);
+
         var guncellenen = await service.UpdateAsync(taslak.Id!.Value, new UpdateSatisBelgesiRequest { Aciklama = "Yeni aciklama" });
-        Assert.Equal(numara + "-TASLAK", guncellenen.KarsiTarafFaturaNo);
+        Assert.Equal(numara, guncellenen.KarsiTarafFaturaNo);
+
+        // Yeni, no-tracking bir context ile: KarsiTarafFaturaNo VE CariKartId ikisi de korunmuş olmalı.
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonrakiDb = await ReadNoTrackingAsync(verifyContext, taslak.Id.Value);
+        Assert.Equal(numara, sonrakiDb.KarsiTarafFaturaNo);
+        Assert.Equal(oncekiDb.CariKartId, sonrakiDb.CariKartId);
+        Assert.Equal("Yeni aciklama", sonrakiDb.Aciklama);
     }
 
     [IntegrationFact]
@@ -1246,5 +1274,314 @@ GROUP BY i.is_unique, i.filter_definition";
         });
 
         Assert.Equal(numara, ikinci.KarsiTarafFaturaNo);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // A.1/A.2 - Kısmi güncelleme (yalnızca Aciklama): CariKartId ve
+    // KarsiTarafFaturaNo/IadeEdilenBelgeId korunur, referans nihai değerlerle
+    // yeniden doğrulanır.
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_AlisFaturasi_PartialUpdate_SadeceAciklama_CariKartIdVeKarsiTarafFaturaNoKorunur()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var numara = $"TED-{Guid.NewGuid():N}"[..20];
+
+        var taslak = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 1),
+            MusteriAdSoyad = "Tedarikci",
+            Aciklama = "Eski aciklama",
+            KarsiTarafFaturaNo = numara,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        var oncekiDb = await ReadNoTrackingAsync(dbContext, taslak.Id!.Value);
+
+        await service.UpdateAsync(taslak.Id.Value, new UpdateSatisBelgesiRequest { Aciklama = "Yeni aciklama" });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonrakiDb = await ReadNoTrackingAsync(verifyContext, taslak.Id.Value);
+
+        AssertBelgeDegismedi(oncekiDb, sonrakiDb);
+        Assert.Equal("Yeni aciklama", sonrakiDb.Aciklama);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_SatisIadeFaturasi_PartialUpdate_SadeceAciklama_CariKartIdVeIadeReferansiKorunur()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var asil = await SeedOnaylanmisSatisFaturasiVeKesAsync(dbContext, new DateTime(2026, 3, 1), "PUS");
+
+        var iade = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _musteriKartId,
+            BelgeTarihi = new DateTime(2026, 3, 5),
+            MusteriAdSoyad = "Musteri",
+            Aciklama = "Eski aciklama",
+            KarsiTarafFaturaNo = $"MUS-{Guid.NewGuid():N}"[..20],
+            IadeEdilenBelgeId = asil.Id,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        var oncekiDb = await ReadNoTrackingAsync(dbContext, iade.Id!.Value);
+
+        await service.UpdateAsync(iade.Id.Value, new UpdateSatisBelgesiRequest { Aciklama = "Yeni aciklama" });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonrakiDb = await ReadNoTrackingAsync(verifyContext, iade.Id.Value);
+
+        AssertBelgeDegismedi(oncekiDb, sonrakiDb);
+        Assert.Equal("Yeni aciklama", sonrakiDb.Aciklama);
+        Assert.Equal(asil.Id, sonrakiDb.IadeEdilenBelgeId);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_AlisIadeFaturasi_PartialUpdate_SadeceAciklama_CariKartIdVeIadeReferansiKorunur()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var asil = await SeedOnaylanmisAlisFaturasiAsync(dbContext, new DateTime(2026, 3, 1));
+
+        var iade = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisIadeFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 5),
+            MusteriAdSoyad = "Tedarikci",
+            Aciklama = "Eski aciklama",
+            IadeEdilenBelgeId = asil.Id,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        var oncekiDb = await ReadNoTrackingAsync(dbContext, iade.Id!.Value);
+
+        await service.UpdateAsync(iade.Id.Value, new UpdateSatisBelgesiRequest { Aciklama = "Yeni aciklama" });
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonrakiDb = await ReadNoTrackingAsync(verifyContext, iade.Id.Value);
+
+        AssertBelgeDegismedi(oncekiDb, sonrakiDb);
+        Assert.Equal("Yeni aciklama", sonrakiDb.Aciklama);
+        Assert.Equal(asil.Id, sonrakiDb.IadeEdilenBelgeId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // B. Kontrol karakteri normalizasyonu - IsNullOrWhiteSpace kısa devresinden
+    // SONRA değil, HER ZAMAN, ham değer üzerinde çalışmalı (\u0085 dahil).
+    // ─────────────────────────────────────────────────────────────
+
+    public static IEnumerable<object[]> KontrolKarakteriIcerenDegerler()
+    {
+        yield return new object[] { "\t" };
+        yield return new object[] { "\n" };
+        yield return new object[] { "\r" };
+        yield return new object[] { "\u007F" };
+        yield return new object[] { "\u0085" };
+        yield return new object[] { "\tTED-1" };
+        yield return new object[] { "TED-1\n" };
+    }
+
+    [IntegrationTheory]
+    [MemberData(nameof(KontrolKarakteriIcerenDegerler))]
+    public async Task CreateAsync_KontrolKarakteriIcerenDegerler_Reddedilir(string bozukDeger)
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 10),
+            MusteriAdSoyad = "Tedarikci",
+            KarsiTarafFaturaNo = bozukDeger,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        }));
+
+        Assert.Contains("kontrol karakteri", ex.Message);
+    }
+
+    [IntegrationTheory]
+    [MemberData(nameof(KontrolKarakteriIcerenDegerler))]
+    public async Task UpdateAsync_KontrolKarakteriIcerenDegerler_ReddedilirVeBelgeDegismezKalir(string bozukDeger)
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var numara = $"TED-{Guid.NewGuid():N}"[..20];
+
+        var taslak = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 1),
+            MusteriAdSoyad = "Tedarikci",
+            Aciklama = "Degismemeli",
+            KarsiTarafFaturaNo = numara,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        var oncekiDb = await ReadNoTrackingAsync(dbContext, taslak.Id!.Value);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.UpdateAsync(taslak.Id.Value, new UpdateSatisBelgesiRequest { KarsiTarafFaturaNo = bozukDeger }));
+        Assert.Contains("kontrol karakteri", ex.Message);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonrakiDb = await ReadNoTrackingAsync(verifyContext, taslak.Id.Value);
+
+        AssertBelgeDegismedi(oncekiDb, sonrakiDb);
+        Assert.Equal("Degismemeli", sonrakiDb.Aciklama);
+    }
+
+    [IntegrationFact]
+    public async Task CreateAsync_YalnizcaNormalBosluklardanOlusanDeger_NullKabulEdilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 10),
+            MusteriAdSoyad = "Tedarikci",
+            KarsiTarafFaturaNo = "   ",
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        Assert.Null(created.KarsiTarafFaturaNo);
+    }
+
+    [IntegrationFact]
+    public async Task CreateAsync_U0000IcerenDeger_UygulamaSeviyesindeReddedilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        // U+0000 icin SQL Server constraint seviyesinde guvenilir bir kontrol pratik degildir (LIKE
+        // desenlerinde NUL beklenmedik string kesilmesine yol acabilir - bkz. StysAppDbContext'teki
+        // yorum) - bu yuzden bu deger yalnizca UYGULAMA seviyesinde (char.IsControl('\0')==true)
+        // reddedildigi test edilir.
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 10),
+            MusteriAdSoyad = "Tedarikci",
+            KarsiTarafFaturaNo = "TED- -1",
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        }));
+
+        Assert.Contains("kontrol karakteri", ex.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // C. HardenKarsiTarafFaturaNoControlCharacters migration - genisletilmis
+    // CK_SatisBelgeleri_KarsiTarafFaturaNo_Format constraint'i, dogrudan SQL.
+    // ─────────────────────────────────────────────────────────────
+
+    public static IEnumerable<object[]> DbSeviyesindeReddedilenNCharKodlari()
+    {
+        yield return new object[] { 9 };
+        yield return new object[] { 10 };
+        yield return new object[] { 13 };
+        yield return new object[] { 31 };
+        yield return new object[] { 127 };
+        yield return new object[] { 133 };
+        yield return new object[] { 159 };
+    }
+
+    [IntegrationTheory]
+    [MemberData(nameof(DbSeviyesindeReddedilenNCharKodlari))]
+    public async Task Migration_HardenKarsiTarafFaturaNoControlCharacters_NCharDegerleriniReddeder(int nCharKodu)
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var connection = dbContext.Database.GetDbConnection();
+        await connection.OpenAsync();
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "INSERT INTO [muhasebe].[SatisBelgeleri] " +
+            "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, KarsiTarafFaturaNo) " +
+            "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 'TED-' + NCHAR(@nCharKodu) + '-1')";
+        cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
+        cmd.Parameters.Add(new SqlParameter("@belgeNo", $"CKC-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
+        cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));
+        cmd.Parameters.Add(new SqlParameter("@cariKartId", _tedarikciKartId));
+        cmd.Parameters.Add(new SqlParameter("@nCharKodu", nCharKodu));
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => cmd.ExecuteNonQueryAsync());
+        Assert.Contains("CK_SatisBelgeleri_KarsiTarafFaturaNo_Format", ex.Message);
     }
 }

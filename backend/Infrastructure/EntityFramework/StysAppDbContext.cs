@@ -2624,9 +2624,22 @@ public class StysAppDbContext : DbContext
                     "[IadeEdilenBelgeId] IS NULL OR [IadeEdilenBelgeId] <> [Id]");
 
                 // KarsiTarafFaturaNo: boş olamaz, baştaki/sondaki boşluklardan arındırılmış
-                // olmalı, tab/satır sonu/diğer kontrol karakterleri (1-31 arası) içeremez.
+                // olmalı, kontrol karakteri içeremez. Kapsanan aralıklar: C0 kontrolleri (1-31,
+                // tab/satır sonu/CR dahil), DEL (127), C1 kontrolleri (128-159, ör. 133=NEL).
                 // CHAR(1) kullanılır (CHAR(0) yerine) - SQL Server'da NUL karakteri LIKE
-                // desenlerinde string'i beklenmedik şekilde kesebilir.
+                // desenlerinde string'i beklenmedik şekilde kesebilir; U+0000 için DB seviyesinde
+                // güvenilir bir kontrol bu yüzden pratik değildir - bu durum yalnızca uygulama
+                // seviyesinde (char.IsControl, ki '\0' için de true döner) garanti edilir; bkz.
+                // görev sonuç raporu.
+                //
+                // 128-159 aralığı için CHAR() DEĞİL NCHAR() kullanılır: CHAR(n), n>127 için
+                // veritabanının VARCHAR kod sayfasına (code page) göre bir karakter döndürür - bu,
+                // n'nin Unicode kod noktasıyla AYNI OLMAK ZORUNDA DEĞİLDİR (ör. cp1252'de CHAR(133)
+                // "…" (U+2026) döner, U+0085 (NEL) DEĞİL). KarsiTarafFaturaNo NVARCHAR olduğundan ve
+                // NCHAR(133) gerçek Unicode U+0085 kod noktasını ürettiğinden, karşılaştırma CHAR ile
+                // yapılırsa bu aralıktaki gerçek kontrol karakterleri SESSİZCE KAÇAR (doğrulandı: ilk
+                // NCHAR tabanlı denemede CHAR(133)/CHAR(159) constraint'i tetiklemedi). 1-31 ve 127
+                // aralığı ASCII olduğundan (0-127 tüm kod sayfalarında aynı) CHAR() ile güvenlidir.
                 //
                 // "=" ile trim eşitliği KONTROL ETMEK YETERSİZDİR: SQL Server char/nvarchar
                 // eşitlik karşılaştırmalarında ANSI padding kuralları uygulanır - sondaki
@@ -2640,7 +2653,8 @@ public class StysAppDbContext : DbContext
                     "[KarsiTarafFaturaNo] IS NULL OR (" +
                     "DATALENGTH([KarsiTarafFaturaNo]) > 0 " +
                     "AND DATALENGTH([KarsiTarafFaturaNo]) = DATALENGTH(LTRIM(RTRIM([KarsiTarafFaturaNo]))) " +
-                    "AND [KarsiTarafFaturaNo] COLLATE Latin1_General_BIN2 NOT LIKE '%[' + CHAR(1) + '-' + CHAR(31) + ']%')");
+                    "AND [KarsiTarafFaturaNo] COLLATE Latin1_General_BIN2 NOT LIKE " +
+                    "'%[' + CHAR(1) + '-' + CHAR(31) + CHAR(127) + NCHAR(128) + '-' + NCHAR(159) + ']%')");
             });
 
             entity.Property(x => x.KurumId)

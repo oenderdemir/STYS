@@ -1869,9 +1869,44 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
     //  Private — Karşı Taraf Fatura Numarası / İade Edilen Belge Referansı (merkezi doğrulama)
     // ──────────────────────────────────────────────
 
-    /// <summary>raw null/whitespace ise null döner (opsiyonel alan); doluysa NormalizeKarsiTarafFaturaNo ile doğrulanır.</summary>
+    /// <summary>
+    /// raw null ise (alan hiç verilmemiş) null döner. Doluysa ÖNCE kontrol karakteri kontrolü
+    /// yapılır (bkz. ThrowIfKarsiTarafFaturaNoIcerirKontrolKarakteri) - string.IsNullOrWhiteSpace
+    /// KESİNLİKLE kullanılmaz, çünkü .NET'te char.IsWhiteSpace bazı kontrol karakterlerini de
+    /// (ör. U+0085 NEL, U+2028) whitespace sayar; bu yüzden "yalnızca whitespace ise null say" kısa
+    /// devresi IsNullOrWhiteSpace ile yapılsaydı, TEK BAŞINA bir U+0085 karakterinden oluşan bir
+    /// değer sessizce "boş/verilmemiş" sayılıp kontrol karakteri kontrolünü hiç görmeden geçerdi.
+    /// Yalnızca normal ASCII boşluktan (' ') oluşan bir değer, kontrol karakteri kontrolünden
+    /// GEÇTİKTEN SONRA, Create sırasında null (opsiyonel alan) kabul edilir.
+    /// </summary>
     private static string? NormalizeKarsiTarafFaturaNoOrNull(SatisBelgesiTipi belgeTipi, string? raw)
-        => string.IsNullOrWhiteSpace(raw) ? null : NormalizeKarsiTarafFaturaNo(belgeTipi, raw);
+    {
+        if (raw is null)
+            return null;
+
+        ThrowIfKarsiTarafFaturaNoIcerirKontrolKarakteri(raw);
+
+        if (raw.Trim(' ').Length == 0)
+            return null;
+
+        return NormalizeKarsiTarafFaturaNo(belgeTipi, raw);
+    }
+
+    /// <summary>
+    /// Kontrol karakteri doğrulaması: HAM (raw) değer üzerinde, herhangi bir boş/whitespace kısa
+    /// devresinden (string.IsNullOrWhiteSpace, Trim() vb.) ÖNCE çağrılmalıdır - aksi halde bazı
+    /// kontrol karakterleri (ör. U+0085 NEL) .NET'in whitespace sınıflandırmasına takılıp
+    /// SESSİZCE "boş" sayılabilir. Konumdan (baş/orta/son) BAĞIMSIZ olarak reddeder.
+    /// </summary>
+    private static void ThrowIfKarsiTarafFaturaNoIcerirKontrolKarakteri(string raw)
+    {
+        if (raw.Any(char.IsControl))
+        {
+            throw new BaseException(
+                "Karşı taraf fatura numarası satır sonu, tab veya başka bir kontrol karakteri içeremez.",
+                errorCode: 400);
+        }
+    }
 
     /// <summary>
     /// Karşı taraf fatura numarasını (yalnızca AlisFaturasi/SatisIadeFaturasi için geçerli) trim
@@ -1892,12 +1927,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         // (\t, \n, \r vb.) baştan/sondan SESSİZCE siler ve "\tTED-1" gibi bir değer, kontrol
         // karakteri hiç yokmuş gibi kabul edilirdi. Yalnızca normal ASCII boşluk (' ') karakteri
         // trim edilebilir - kontrol karakterleri konumdan (baş/orta/son) BAĞIMSIZ reddedilir.
-        if (raw.Any(char.IsControl))
-        {
-            throw new BaseException(
-                "Karşı taraf fatura numarası satır sonu, tab veya başka bir kontrol karakteri içeremez.",
-                errorCode: 400);
-        }
+        ThrowIfKarsiTarafFaturaNoIcerirKontrolKarakteri(raw);
 
         var trimmed = raw.Trim(' ');
 
@@ -2270,7 +2300,12 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         if (request.TesisId.HasValue)
             belge.TesisId = request.TesisId;
 
-        belge.CariKartId = request.CariKartId;
+        // Diğer nullable alanlarla AYNI "yalnızca verilmişse uygula" yarı-kısmi güncelleme
+        // semantiği: request.CariKartId null ise mevcut CariKartId KORUNUR. Bu görev kapsamında
+        // CariKartId'yi AÇIKÇA temizlemek için ayrı bir semantik (ör. bir "kaldır" bayrağı)
+        // EKLENMEZ - CariKartId zorunlu bir ilişkidir ve iş akışlarında temizlenmesi beklenmez.
+        if (request.CariKartId.HasValue)
+            belge.CariKartId = request.CariKartId;
 
         if (request.BelgeTarihi.HasValue)
             belge.BelgeTarihi = request.BelgeTarihi.Value;
@@ -2327,10 +2362,17 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         // ── Karşı taraf fatura numarası ──
         if (request.KarsiTarafFaturaNo is not null)
         {
-            var trimmed = request.KarsiTarafFaturaNo.Trim();
+            // Kontrol karakteri kontrolü, "boş mu/temizleme talebi mi" kısa devresinden ÖNCE, HAM
+            // değer üzerinde çalışır - string.IsNullOrWhiteSpace/Trim() (parametresiz) KULLANILMAZ,
+            // çünkü bazı kontrol karakterleri (ör. U+0085 NEL) .NET'te whitespace sayılır ve
+            // yalnızca bu karakterden oluşan bir değer, kontrol karakteri hiç yokmuş gibi sessizce
+            // "temizleme talebi" sayılabilirdi. Yalnızca normal ASCII boşluk (' ') temizlenebilir.
+            ThrowIfKarsiTarafFaturaNoIcerirKontrolKarakteri(request.KarsiTarafFaturaNo);
+
+            var trimmed = request.KarsiTarafFaturaNo.Trim(' ');
             if (trimmed.Length == 0)
             {
-                // Boş/whitespace = açıkça temizle.
+                // Yalnızca normal ASCII boşluklardan oluşuyor = Update sırasında AÇIKÇA temizle.
                 belge.KarsiTarafFaturaNo = null;
             }
             else

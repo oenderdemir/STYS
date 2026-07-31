@@ -82,25 +82,16 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     ];
 
     /// <summary>
-    /// Güncellenebilirlik ARTIK OTORİTER yeni alanlardan belirlenir (bkz. görev A/C.1) - eski
-    /// Durum HashSet-containment kalıbı YERİNE, geçerli iki giriş kombinasyonundan (Taslak
-    /// durumunda olma YA DA muhasebece reddedilmiş olma) biri sağlanmalıdır.
+    /// Güncellenebilirlik/silinebilirlik/onaya-gönderilebilirlik/iptal-edilebilirlik kararları
+    /// ARTIK ortak, saf TicariBelgeIslemYetkisi policy'sinden alınır (bkz. görev A/C.1-C.3/C.7) -
+    /// bu kurallar SatisBelgesiService VE TicariBelgeService (operasyon uygulama katmanı) içinde
+    /// AYRI AYRI yeniden uygulanmaz.
     /// </summary>
     private static bool BelgeGuncellenebilirMi(SatisBelgesi belge)
-        => belge.TicariDurum == TicariBelgeDurumu.Taslak
-           || belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Reddedildi;
+        => TicariBelgeIslemYetkisi.GuncellenebilirMi(belge.TicariDurum, belge.MuhasebeDurumu);
 
-    /// <summary>
-    /// Silinebilirlik ARTIK OTORİTER yeni alanlardan belirlenir (bkz. görev C.2) - yalnızca
-    /// GERÇEK taslak kombinasyonu (TicariDurum=Taslak + MuhasebeDurumu=Bekliyor +
-    /// FaturalamaDurumu=Baslatilmadi/Uygulanamaz) silinebilir; salt TicariDurum=Taslak YETERLİ
-    /// DEĞİLDİR (spec'e göre üç alanın TAMAMI taslak kombinasyonunu göstermelidir).
-    /// </summary>
     private static bool BelgeSilinebilirMi(SatisBelgesi belge)
-        => belge.TicariDurum == TicariBelgeDurumu.Taslak
-           && belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Bekliyor
-           && (belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Baslatilmadi
-               || belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Uygulanamaz);
+        => TicariBelgeIslemYetkisi.SilinebilirMi(belge.TicariDurum, belge.MuhasebeDurumu, belge.FaturalamaDurumu);
 
     public SatisBelgesiService(
         ISatisBelgesiRepository satisBelgesiRepository,
@@ -644,8 +635,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
 
-            // OTORİTER giriş kontrolü (bkz. C.3): TicariDurum=Taslak VE MuhasebeDurumu=Bekliyor.
-            if (belge.TicariDurum != TicariBelgeDurumu.Taslak || belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Bekliyor)
+            // OTORİTER giriş kontrolü (bkz. C.3, TicariBelgeIslemYetkisi.MuhasebeOnayinaGonderilebilirMi).
+            if (!TicariBelgeIslemYetkisi.MuhasebeOnayinaGonderilebilirMi(belge.TicariDurum, belge.MuhasebeDurumu))
             {
                 throw new BaseException(
                     $"Sadece Taslak durumundaki belgeler muhasebe onayına gönderilebilir. Mevcut durum: {belge.Durum}",

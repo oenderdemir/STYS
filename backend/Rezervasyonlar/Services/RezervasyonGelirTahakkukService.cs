@@ -1,14 +1,16 @@
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
-using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
+using STYS.TicariBelgeler.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
@@ -19,21 +21,24 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
     private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IRezervasyonSatisBelgesiService _rezervasyonSatisBelgesiService;
-    private readonly ISatisBelgesiService _satisBelgesiService;
+    private readonly ITicariBelgeService _ticariBelgeService;
     private readonly ICariHareketKapamaService _cariHareketKapamaService;
+    private readonly IMapper _mapper;
 
     public RezervasyonGelirTahakkukService(
         StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
         IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService,
-        ISatisBelgesiService satisBelgesiService,
-        ICariHareketKapamaService cariHareketKapamaService)
+        ITicariBelgeService ticariBelgeService,
+        ICariHareketKapamaService cariHareketKapamaService,
+        IMapper mapper)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _rezervasyonSatisBelgesiService = rezervasyonSatisBelgesiService;
-        _satisBelgesiService = satisBelgesiService;
+        _ticariBelgeService = ticariBelgeService;
         _cariHareketKapamaService = cariHareketKapamaService;
+        _mapper = mapper;
     }
 
     // ──────────────────────────────────────────────
@@ -45,9 +50,12 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
         var rezervasyon = await GetScopedRezervasyonAsync(rezervasyonId, cancellationToken);
 
         // Katman 1 — idempotency: belge zaten varsa yenisini yaratma, mevcut olani don.
+        // ISatisBelgesiService yerine ITicariBelgeService kullanilir (bkz. gorev H); GEÇİCİ
+        // compatibility mapping ile mevcut SatisBelgesiDto sözleşmesi korunur.
         if (rezervasyon.SatisBelgesiId.HasValue)
         {
-            return await _satisBelgesiService.GetByIdAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
+            var mevcut = await _ticariBelgeService.GetByIdAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
+            return _mapper.Map<SatisBelgesiDto>(mevcut);
         }
 
         // Katman 2 — RezervasyonSatisBelgesiService.SatisBelgesiTaslagiOlusturAsync zaten
@@ -191,7 +199,10 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
         }
 
         ozet.SatisBelgesiNo = belge.BelgeNo;
-        ozet.SatisBelgesiDurumu = belge.Durum.ToString();
+        // Legacy SatisBelgesiDurumu yerine üç otoriter alandan türetilen operasyonel durum
+        // açıklaması kullanılır (bkz. görev H, TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi).
+        ozet.SatisBelgesiDurumu = TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi(
+            belge.TicariDurum, belge.MuhasebeDurumu, belge.FaturalamaDurumu);
         ozet.GenelToplam = belge.GenelToplam;
         ozet.MuhasebeFisId = belge.MuhasebeFisId;
 

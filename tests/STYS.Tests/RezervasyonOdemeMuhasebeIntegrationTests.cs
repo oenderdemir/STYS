@@ -37,6 +37,8 @@ using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
 using STYS.Rezervasyonlar.Services;
+using STYS.TicariBelgeler.Mapping;
+using STYS.TicariBelgeler.Services;
 using STYS.Kurumlar.Entities;
 using STYS.Iller.Entities;
 using STYS.Tesisler.Entities;
@@ -1139,6 +1141,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             cfg.AddProfile<MuhasebeDonemProfile>();
             cfg.AddProfile<SatisBelgesiProfile>();
             cfg.AddProfile<MuhasebeFisProfile>();
+            cfg.AddProfile<TicariBelgeMappingProfile>();
         }, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
         return config.CreateMapper();
@@ -1256,13 +1259,22 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SatisBelgesiTaslakOlusturmaService>.Instance);
     }
 
+    private static ITicariBelgeService CreateTicariBelgeService(StysAppDbContext dbContext)
+    {
+        return new TicariBelgeService(
+            CreateSatisBelgesiService(dbContext),
+            CreateSatisBelgesiTaslakOlusturmaService(dbContext),
+            CreateMapper());
+    }
+
     private static IRezervasyonSatisBelgesiService CreateRezervasyonSatisBelgesiService(StysAppDbContext dbContext)
     {
         return new RezervasyonSatisBelgesiService(
             dbContext,
             new FakeUserAccessScopeService(),
-            CreateSatisBelgesiTaslakOlusturmaService(dbContext),
+            CreateTicariBelgeService(dbContext),
             new RezervasyonCariKartResolver(dbContext),
+            CreateMapper(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<RezervasyonSatisBelgesiService>.Instance);
     }
 
@@ -1272,8 +1284,9 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             dbContext,
             new FakeUserAccessScopeService(),
             CreateRezervasyonSatisBelgesiService(dbContext),
-            CreateSatisBelgesiService(dbContext),
-            CreateCariHareketKapamaService(dbContext));
+            CreateTicariBelgeService(dbContext),
+            CreateCariHareketKapamaService(dbContext),
+            CreateMapper());
     }
 
     private static RezervasyonService CreateRezervasyonService(StysAppDbContext dbContext)

@@ -484,6 +484,17 @@ public static class StructurePermissions
         public const string Manage = "MuhasebeSatisBelgeleriYonetimi.Manage";
     }
 
+    /// <summary>
+    /// Operasyon modüllerinin (resepsiyon, rezervasyon, restoran, kamp vb.) TicariBelge uygulama
+    /// katmanı (ui/ticari-belgeler) için ayrı yetki - MuhasebeSatisBelgeleriYonetimi'nden
+    /// BAĞIMSIZDIR, muhasebe onayı/ret/fiş/fatura kesme işlemlerini KAPSAMAZ.
+    /// </summary>
+    public static class TicariBelgeYonetimi
+    {
+        public const string View = "TicariBelgeYonetimi.View";
+        public const string Manage = "TicariBelgeYonetimi.Manage";
+    }
+
     public static class MuhasebeAlisBelgeleriYonetimi
     {
         public const string Menu = "MuhasebeAlisBelgeleriYonetimi.Menu";

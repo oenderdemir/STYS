@@ -1,3 +1,4 @@
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
@@ -5,26 +6,30 @@ using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
+using STYS.TicariBelgeler.Dtos;
+using STYS.TicariBelgeler.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Rezervasyonlar.Services;
 
 /// <summary>
 /// Rezervasyon check-out verisinden ortak satış belgesi taslağı oluşturma servisi.
-/// Otel modülü doğrudan SatisBelgesi entity'si oluşturmaz;
-/// bunun yerine ISatisBelgesiTaslakOlusturmaService üzerinden fatura altyapısına
-/// rezervasyon verisini iletir.
+/// Otel modülü doğrudan SatisBelgesi entity'si oluşturmaz VE muhasebe servislerini
+/// (ISatisBelgesiTaslakOlusturmaService) doğrudan inject ETMEZ; bunun yerine operasyon uygulama
+/// sınırı olan ITicariBelgeService üzerinden fatura altyapısına rezervasyon verisini iletir (bkz.
+/// backend/TicariBelgeler). Dönüş tipi (SatisBelgesiDto), mevcut API JSON sözleşmesini korumak
+/// için TicariBelgeMappingProfile'daki geçici compatibility mapping ile üretilir.
 /// </summary>
 public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
 {
     private readonly Infrastructure.EntityFramework.StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
-    private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
+    private readonly ITicariBelgeService _ticariBelgeService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
+    private readonly IMapper _mapper;
     private readonly ILogger<RezervasyonSatisBelgesiService> _logger;
 
     private const string KaynakTipiRezervasyonCheckout = "RezervasyonCheckout";
@@ -38,14 +43,16 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     public RezervasyonSatisBelgesiService(
         Infrastructure.EntityFramework.StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
-        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        ITicariBelgeService ticariBelgeService,
         IRezervasyonCariKartResolver cariKartResolver,
+        IMapper mapper,
         ILogger<RezervasyonSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
-        _taslakOlusturmaService = taslakOlusturmaService;
+        _ticariBelgeService = ticariBelgeService;
         _cariKartResolver = cariKartResolver;
+        _mapper = mapper;
         _logger = logger;
     }
 
@@ -105,7 +112,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
             : rezervasyon.MisafirTelefon;
 
         // 10. Taslak request oluştur
-        var taslakRequest = new SatisBelgesiTaslakOlusturRequest
+        var taslakRequest = new TicariBelgeTaslakOlusturRequest
         {
             KaynakModul = SatisKaynakModulu.Otel,
             KaynakTipi = KaynakTipiRezervasyonCheckout,
@@ -127,12 +134,17 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
             Satirlar = satirlar
         };
 
-        // 11. ISatisBelgesiTaslakOlusturmaService'e ilet
+        // 11. ITicariBelgeService'e ilet — operasyon üretim kodu artık muhasebe servislerini
+        // (ISatisBelgesiTaslakOlusturmaService) DOĞRUDAN inject ETMEZ (bkz. görev H/I).
         _logger.LogInformation(
             "Rezervasyon #{RezervasyonId} için satış belgesi taslağı oluşturuluyor. Gece sayısı: {GeceSayisi}, Toplam ücret: {ToplamUcret}, Kurumsal: {KurumsalMi}",
             rezervasyonId, geceSayisi, rezervasyon.ToplamUcret, musteriBilgi.kurumsalMi);
 
-        var result = await _taslakOlusturmaService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
+        var ticariBelge = await _ticariBelgeService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
+
+        // GEÇİCİ compatibility mapping — mevcut API JSON sözleşmesi (SatisBelgesiDto) korunur,
+        // bkz. TicariBelgeMappingProfile'daki ilgili açıklama.
+        var result = _mapper.Map<SatisBelgesiDto>(ticariBelge);
 
         _logger.LogInformation(
             "Rezervasyon #{RezervasyonId} için satış belgesi taslağı oluşturuldu. BelgeId: {BelgeId}, BelgeNo: {BelgeNo}",
@@ -202,7 +214,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     //  Private — Satış satırlarını oluşturma (KDV override desteğiyle)
     // ──────────────────────────────────────────────
 
-    private async Task<List<SatisBelgesiTaslakSatirRequest>> BuildSatirlarAsync(
+    private async Task<List<TicariBelgeTaslakSatirRequest>> BuildSatirlarAsync(
         Rezervasyon rezervasyon,
         int geceSayisi,
         RezervasyonSatisBelgesiTaslakRequest request,
@@ -245,7 +257,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
         var toplamDagitilan = birimFiyat * geceSayisi;
         var fark = rezervasyon.ToplamUcret - toplamDagitilan;
 
-        var satirlar = new List<SatisBelgesiTaslakSatirRequest>(geceSayisi);
+        var satirlar = new List<TicariBelgeTaslakSatirRequest>(geceSayisi);
         for (var i = 0; i < geceSayisi; i++)
         {
             var geceTarihi = rezervasyon.GirisTarihi.Date.AddDays(i);
@@ -257,7 +269,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                 satirBirimFiyat += fark;
             }
 
-            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            satirlar.Add(new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.Konaklama,
                 Aciklama = $"Konaklama — {geceTarihi:dd.MM.yyyy}",
@@ -280,7 +292,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
 
         foreach (var ekHizmet in ekHizmetler)
         {
-            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            satirlar.Add(new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
                 Aciklama = $"Ek hizmet — {ekHizmet.TarifeAdiSnapshot} ({ekHizmet.HizmetTarihi:dd.MM.yyyy})",
@@ -312,7 +324,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                 continue;
             }
 
-            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            satirlar.Add(new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.YiyecekIcecek,
                 Aciklama = restoranOdeme.Aciklama is { Length: > 0 }

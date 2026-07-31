@@ -30,6 +30,7 @@ using STYS.Muhasebe.KdvRaporlari.Services;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
+using STYS.TicariBelgeler.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.Dashboard.Services;
 using STYS.Muhasebe.DonemKapanis.Services;
@@ -196,6 +197,7 @@ builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazi
 builder.Services.AddScoped<IKdvRaporService, KdvRaporService>();
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
 builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
+builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();
 builder.Services.AddScoped<IRestoranSatisBelgesiService, RestoranSatisBelgesiService>();
 builder.Services.AddScoped<IKampSatisBelgesiService, KampSatisBelgesiService>();

@@ -1021,9 +1021,9 @@ WHERE TABLE_SCHEMA = 'muhasebe' AND TABLE_NAME = 'SatisBelgeleri' AND COLUMN_NAM
         {
             cmd.CommandText = $@"
 INSERT INTO [muhasebe].[SatisBelgeleri]
-    (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, KarsiTarafFaturaNo)
+    (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu, KarsiTarafFaturaNo)
 VALUES
-    ({_kurumId}, 'CKTEST-{_uniqueSuffix}', 2, 0, 1, {_tesisId}, '2026-01-01', 0, 100, 20, 120, 0, 'YANLIS');";
+    ({_kurumId}, 'CKTEST-{_uniqueSuffix}', 2, 0, 1, {_tesisId}, '2026-01-01', 0, 100, 20, 120, 0, 1, 1, 2, 'YANLIS');";
             var ex = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() => cmd.ExecuteNonQueryAsync());
             Assert.Contains("CK_SatisBelgeleri_KarsiTarafFaturaNo_BelgeTipi", ex.Message);
         }
@@ -1034,9 +1034,9 @@ VALUES
         {
             cmd.CommandText = $@"
 INSERT INTO [muhasebe].[SatisBelgeleri]
-    (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, IadeEdilenBelgeId)
+    (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu, IadeEdilenBelgeId)
 VALUES
-    ({_kurumId}, 'CKTEST2-{_uniqueSuffix}', 5, 0, 1, {_tesisId}, '2026-01-01', 0, 100, 20, 120, 0, 999999);";
+    ({_kurumId}, 'CKTEST2-{_uniqueSuffix}', 5, 0, 1, {_tesisId}, '2026-01-01', 0, 100, 20, 120, 0, 1, 1, 2, 999999);";
             var ex = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() => cmd.ExecuteNonQueryAsync());
             Assert.Contains("CK_SatisBelgeleri_IadeEdilenBelgeId_BelgeTipi", ex.Message);
         }

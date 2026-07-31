@@ -839,7 +839,11 @@ public class SatisBelgesiHesaplamaTests
         var belge = BuildSatisBelgesi(satirRequestleri);
         belge.KurumId = 1;
         belge.BelgeTipi = belgeTipi;
-        belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge,
+            TicariBelgeDurumu.Hazir,
+            TicariBelgeMuhasebeDurumu.Onaylandi,
+            SatisBelgesiDurumProjection.ProjeOnaylandiFaturalamaDurumu(belgeTipi));
 
         dbContext.SatisBelgeleri.Add(belge);
         await dbContext.SaveChangesAsync();

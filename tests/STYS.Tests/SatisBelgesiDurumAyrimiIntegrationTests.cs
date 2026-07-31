@@ -1,10 +1,6 @@
-using System.Reflection;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using STYS.Infrastructure.EntityFramework;
-using STYS.Infrastructure.EntityFramework.Migrations;
 using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
@@ -21,11 +17,14 @@ using Xunit;
 namespace STYS.Tests;
 
 /// <summary>
-/// "Expand ve compatibility projection" aşamasının (SatisBelgesiDurumProjection + AddSeparatedSatisBelgesiStatuses
-/// migration'ı + SatisBelgesiService'teki dual-write) GERÇEK SQL Server üzerinde doğrulandığı
-/// entegrasyon testleri. Bu turda SatisBelgesiDurumu HÂLÂ otoriter karar kaynağıdır - testler bunu
-/// (mevcut kabul/ret davranışının değişmediğini) de doğrular; üç yeni alan yalnızca BİRLİKTE
-/// yazılan, henüz okunmayan projeksiyon alanlarıdır.
+/// Durum ayrıştırmasının OTORİTE TERSİNE ÇEVRİLMİŞ aşamasının (SatisBelgesiDurumProjection.
+/// OtoriterDurumlariAta + MakeSeparatedSatisBelgesiStatusesAuthoritative migration'ı) GERÇEK SQL
+/// Server üzerinde doğrulandığı entegrasyon testleri. Bu turdan itibaren TicariDurum/MuhasebeDurumu/
+/// FaturalamaDurumu OTORİTERDİR ve non-nullable'dır; eski SatisBelgesiDurumu Durum alanı yalnızca
+/// bu üç alandan türetilen bir geriye uyumluluk projeksiyonudur. Testler hem üretim karar
+/// mekanizmasının ARTIK yeni alanları kullandığını (legacy Durum kasıtlı olarak bozulsa bile doğru
+/// karar verildiğini), hem de legacy Durum'un HER geçişte doğru şekilde yeniden senkronlandığını
+/// kanıtlar.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
@@ -203,67 +202,23 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
     };
 
     /// <summary>
-    /// Backfill matrisini İKİNCİ KEZ (elle kopyalanarak) TANIMLAMAZ - bunun yerine gerçek
-    /// AddSeparatedSatisBelgesiStatuses migration'ının Up() metodunu GERÇEKTEN çalıştırıp ürettiği
-    /// MigrationOperation listesinden backfill SqlOperation'ının [Sql] metnini ÇIKARIR ve bu METNİ
-    /// OLDUĞU GİBİ (üretim migration'ıyla BİREBİR AYNI, gerçek nesneden okunmuş) çalıştırır. Bu
-    /// sayede test, üretim migration dosyasından BAĞIMSIZ ikinci bir eşleme tanımıyla değil,
-    /// migration'ın GERÇEK içeriğiyle doğrulanmış olur. Üretim SQL'i WHERE koşulu İÇERMEZ (tüm
-    /// tabloyu kapsar) - test izolasyonu için ayrıca bir kapsam daraltması YAPILMAZ; idempotent
-    /// olduğundan paylaşılan test DB'sindeki diğer satırları da (varsa) doğru şekilde günceller.
+    /// Servisi/OtoriterDurumlariAta'yı BAYPAS EDEREK, doğrudan SQL ile bir belgenin ESKİ
+    /// (geriye uyumluluk) Durum alanını, üç OTORİTER alana DOKUNMADAN bozar - "legacy Durum yanlış/
+    /// tutarsız olsa bile üretim kararının yeni alanlardan verildiğinin" kanıtı için kullanılır
+    /// (bkz. F bölümü). Üç otoriter alan kasıtlı olarak DEĞİŞTİRİLMEZ.
     /// </summary>
-    private static async Task BackfillAsync(StysAppDbContext dbContext)
+    private static async Task SetLegacyDurumDirectlyAsync(StysAppDbContext dbContext, int id, SatisBelgesiDurumu yanlisDurum)
     {
-        var migration = new AddSeparatedSatisBelgesiStatuses();
-        var migrationBuilder = new MigrationBuilder(activeProvider: null);
-        // Migration.Up(MigrationBuilder) `protected override`dır - üretim erişim düzeyi
-        // BİLİNÇLİ OLARAK değiştirilmez (migration dosyasına dokunulmaz); bunun yerine test
-        // burada reflection ile GERÇEK metodu çağırır.
-        var upMethod = typeof(AddSeparatedSatisBelgesiStatuses).GetMethod(
-            "Up", BindingFlags.NonPublic | BindingFlags.Instance, [typeof(MigrationBuilder)])
-            ?? throw new InvalidOperationException("AddSeparatedSatisBelgesiStatuses.Up metodu reflection ile bulunamadı.");
-        upMethod.Invoke(migration, [migrationBuilder]);
-
-        var sqlOperation = migrationBuilder.Operations
-            .OfType<SqlOperation>()
-            .Single(op => op.Sql.Contains("[SatisBelgeleri]", StringComparison.Ordinal) && op.Sql.Contains("UPDATE", StringComparison.Ordinal));
-
         var connection = dbContext.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
             await connection.OpenAsync();
         }
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = sqlOperation.Sql;
+        cmd.CommandText = "UPDATE [muhasebe].[SatisBelgeleri] SET [Durum] = @durum WHERE [Id] = @id";
+        cmd.Parameters.Add(new SqlParameter("@durum", (int)yanlisDurum));
+        cmd.Parameters.Add(new SqlParameter("@id", id));
         await cmd.ExecuteNonQueryAsync();
-    }
-
-    /// <summary>Servisi/dual-write'ı BAYPAS ederek doğrudan SQL ile bir SatisBelgesi satırı ekler - "pre-migration" (yeni alanlar NULL) legacy veriyi simüle eder.</summary>
-    private async Task<int> InsertLegacyRowAsync(
-        StysAppDbContext dbContext, SatisBelgesiTipi belgeTipi, SatisBelgesiDurumu durum, bool isDeleted, int? cariKartId = null)
-    {
-        var connection = dbContext.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync();
-        }
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO [muhasebe].[SatisBelgeleri]
-                (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted)
-            OUTPUT INSERTED.Id
-            VALUES (@kurumId, @belgeNo, @belgeTipi, @durum, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, @isDeleted)
-            """;
-        cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
-        cmd.Parameters.Add(new SqlParameter("@belgeNo", $"LGC-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
-        cmd.Parameters.Add(new SqlParameter("@belgeTipi", (int)belgeTipi));
-        cmd.Parameters.Add(new SqlParameter("@durum", (int)durum));
-        cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));
-        cmd.Parameters.Add(new SqlParameter("@cariKartId", (object?)cariKartId ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@isDeleted", isDeleted));
-
-        var id = (int)(await cmd.ExecuteScalarAsync())!;
-        return id;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -271,7 +226,7 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
 
     [IntegrationFact]
-    public async Task Migration_YeniUcKolonNullableOlarakTanimlanmis()
+    public async Task Migration_UcKolonNonNullOlarakTanimlanmis()
     {
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var connection = dbContext.Database.GetDbConnection();
@@ -295,9 +250,37 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         }
 
         Assert.Equal(3, nullableByColumn.Count);
-        Assert.Equal("YES", nullableByColumn["TicariDurum"]);
-        Assert.Equal("YES", nullableByColumn["MuhasebeDurumu"]);
-        Assert.Equal("YES", nullableByColumn["FaturalamaDurumu"]);
+        Assert.Equal("NO", nullableByColumn["TicariDurum"]);
+        Assert.Equal("NO", nullableByColumn["MuhasebeDurumu"]);
+        Assert.Equal("NO", nullableByColumn["FaturalamaDurumu"]);
+    }
+
+    [IntegrationTheory]
+    [InlineData("TicariDurum")]
+    [InlineData("MuhasebeDurumu")]
+    [InlineData("FaturalamaDurumu")]
+    public async Task Migration_UcKolonDogrudanSqlIleNullDegerKabulEtmez(string kolonAdi)
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var connection = dbContext.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync();
+        }
+        await using var cmd = connection.CreateCommand();
+        var ticariDeger = kolonAdi == "TicariDurum" ? "NULL" : "1";
+        var muhasebeDeger = kolonAdi == "MuhasebeDurumu" ? "NULL" : "1";
+        var faturalamaDeger = kolonAdi == "FaturalamaDurumu" ? "NULL" : "2";
+        cmd.CommandText = $"""
+            INSERT INTO [muhasebe].[SatisBelgeleri]
+                (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu)
+            VALUES (@kurumId, @belgeNo, 2, 1, 1, @tesisId, '2026-01-01', 0, 100, 20, 120, 0, {ticariDeger}, {muhasebeDeger}, {faturalamaDeger})
+            """;
+        cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
+        cmd.Parameters.Add(new SqlParameter("@belgeNo", $"NUL-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
+        cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));
+
+        await Assert.ThrowsAsync<SqlException>(() => cmd.ExecuteNonQueryAsync());
     }
 
     [IntegrationTheory]
@@ -313,10 +296,16 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
             await connection.OpenAsync();
         }
         await using var cmd = connection.CreateCommand();
+        // Üç kolon ARTIK NOT NULL olduğundan, test edilen kolon dışındaki İKİSİ de GEÇERLİ bir
+        // değerle doldurulmalı - aksi halde INSERT, hedeflenen CHECK constraint'ten ÖNCE bir NOT
+        // NULL ihlaliyle reddedilir ve test yanlış nedenle "geçer" gibi görünür.
+        var ticariDeger = kolonAdi == "TicariDurum" ? "99" : "1";
+        var muhasebeDeger = kolonAdi == "MuhasebeDurumu" ? "99" : "1";
+        var faturalamaDeger = kolonAdi == "FaturalamaDurumu" ? "99" : "2";
         cmd.CommandText = $"""
             INSERT INTO [muhasebe].[SatisBelgeleri]
-                (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, [{kolonAdi}])
-            VALUES (@kurumId, @belgeNo, 2, 1, 1, @tesisId, '2026-01-01', 0, 100, 20, 120, 0, 99)
+                (KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu)
+            VALUES (@kurumId, @belgeNo, 2, 1, 1, @tesisId, '2026-01-01', 0, 100, 20, 120, 0, {ticariDeger}, {muhasebeDeger}, {faturalamaDeger})
             """;
         cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
         cmd.Parameters.Add(new SqlParameter("@belgeNo", $"CKX-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
@@ -356,86 +345,47 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Migration testleri — backfill (aktif + soft-delete + legacy tip + öncelik)
+    // Migration testi — kuruma ait TÜM kayıtlar (soft-delete dahil) projeksiyonla tutarlı
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// MakeSeparatedSatisBelgesiStatusesAuthoritative migration'ının artık NOT NULL zorunlu kıldığı
+    /// şemada, "nullable legacy satır" senaryosu doğrudan SQL ile ARTIK üretilemez (bkz.
+    /// Migration_UcKolonDogrudanSqlIleNullDegerKabulEtmez) - bu yüzden backfill'in doğruluğu, HER
+    /// yazım yolunun (servis üzerinden OtoriterDurumlariAta VEYA soft-delete) ürettiği nihai
+    /// durumun, eski (BelgeTipi+Durum) çiftinden YENİDEN hesaplanan projeksiyonla HER ZAMAN tutarlı
+    /// kaldığının kanıtlanmasıyla doğrulanır - bu, ProjeLegacyDurum'un OtoriterDurumlariAta'nın tam
+    /// tersi (matematiksel olarak tutarlı) bir işlem olduğunu, dolayısıyla backfill migration'ının
+    /// (Proje formülüyle) ürettiği satırların, servisin (OtoriterDurumlariAta ile) ürettiği
+    /// satırlarla AYNI biçimde okunabildiğini kanıtlar.
+    /// </summary>
     [IntegrationFact]
-    public async Task Migration_Backfill_AktifKayitDogruDolduruluyor()
+    public async Task Migration_KurumaAitTumSatisBelgeleriProjectionIleTutarliVeSoftDeleteKapsanir()
     {
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var id = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, SatisBelgesiDurumu.MuhasebeOnaylandi, isDeleted: false, _musteriKartId);
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
 
-        var oncesi = await ReadNoTrackingAsync(dbContext, id);
-        Assert.Null(oncesi.TicariDurum);
-        Assert.Null(oncesi.MuhasebeDurumu);
-        Assert.Null(oncesi.FaturalamaDurumu);
+        var taslak = await service.CreateAsync(BuildSatisFaturasiRequest());
+        var reddedilen = await service.CreateAsync(BuildAlisFaturasiRequest());
+        await service.MuhasebeOnayinaGonderAsync(reddedilen.Id!.Value);
+        await service.ReddetAsync(reddedilen.Id.Value, "Test ret nedeni");
+        var silinecek = await service.CreateAsync(BuildSatisFaturasiRequest());
+        await service.DeleteAsync(silinecek.Id!.Value);
 
-        await BackfillAsync(dbContext);
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var tumKayitlar = await verifyContext.SatisBelgeleri.IgnoreQueryFilters()
+            .Where(x => x.KurumId == _kurumId)
+            .AsNoTracking()
+            .ToListAsync();
 
-        var sonrasi = await ReadNoTrackingAsync(dbContext, id);
-        Assert.Equal(TicariBelgeDurumu.Hazir, sonrasi.TicariDurum);
-        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, sonrasi.MuhasebeDurumu);
-        Assert.Equal(TicariBelgeFaturalamaDurumu.KesimBekliyor, sonrasi.FaturalamaDurumu);
-        Assert.Equal(SatisBelgesiTipi.SatisFaturasi, sonrasi.BelgeTipi);
-        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, sonrasi.Durum);
-    }
-
-    [IntegrationFact]
-    public async Task Migration_Backfill_SoftDeleteEdilmisKayitDaBackfillEdilir()
-    {
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var id = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, SatisBelgesiDurumu.Taslak, isDeleted: true, _musteriKartId);
-
-        await BackfillAsync(dbContext);
-
-        // IgnoreQueryFilters ZORUNLUDUR - satır IsDeleted=true olduğundan normal sorgu onu görmez.
-        var sonrasi = await dbContext.SatisBelgeleri.IgnoreQueryFilters().AsNoTracking().FirstAsync(x => x.Id == id);
-        Assert.True(sonrasi.IsDeleted);
-        Assert.Equal(TicariBelgeDurumu.Taslak, sonrasi.TicariDurum);
-        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonrasi.MuhasebeDurumu);
-        Assert.Equal(TicariBelgeFaturalamaDurumu.Baslatilmadi, sonrasi.FaturalamaDurumu);
-    }
-
-    [IntegrationFact]
-    public async Task Migration_Backfill_LegacyIadeFaturasiTipiDegismezVeUygulanamazOlur()
-    {
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var id = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.IadeFaturasi, SatisBelgesiDurumu.Taslak, isDeleted: false);
-
-        await BackfillAsync(dbContext);
-
-        var sonrasi = await ReadNoTrackingAsync(dbContext, id);
-        // BelgeTipi ASLA değiştirilmemeli - SatisIadeFaturasi veya AlisIadeFaturasi'ye TAHMİN EDİLEREK dönüştürülmez.
-        Assert.Equal(SatisBelgesiTipi.IadeFaturasi, sonrasi.BelgeTipi);
-        Assert.Equal(SatisBelgesiDurumu.Taslak, sonrasi.Durum);
-        Assert.Equal(TicariBelgeFaturalamaDurumu.Uygulanamaz, sonrasi.FaturalamaDurumu);
-        Assert.Equal(TicariBelgeDurumu.Taslak, sonrasi.TicariDurum);
-        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonrasi.MuhasebeDurumu);
-    }
-
-    [IntegrationFact]
-    public async Task Migration_Backfill_FaturaKesildiVeMusteriyeGonderildiGecmisiBelgeTipindenBagimsizKorunur()
-    {
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-
-        // AlisFaturasi normal uygulama akışında ASLA FaturaKesildi'ye ulaşamaz (bkz.
-        // OtomatikResmiNumaraUretilebilirMi), ama VERİ olarak (anomalik/tarihsel) böyle bir satır
-        // bulunsa dahi backfill'in FaturalamaDurumu geçmişini (belge tipinden bağımsız) KORUMASI
-        // gerekir - bu bilinçli olarak "olması beklenmeyen ama korunması gereken" bir senaryodur.
-        var alisFaturaKesildiId = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.AlisFaturasi, SatisBelgesiDurumu.FaturaKesildi, isDeleted: false, _tedarikciKartId);
-        var satisIadeMusteriyeGonderildiId = await InsertLegacyRowAsync(dbContext, SatisBelgesiTipi.SatisIadeFaturasi, SatisBelgesiDurumu.MusteriyeGonderildi, isDeleted: false, _musteriKartId);
-
-        await BackfillAsync(dbContext);
-
-        var alisSonrasi = await ReadNoTrackingAsync(dbContext, alisFaturaKesildiId);
-        Assert.Equal(SatisBelgesiTipi.AlisFaturasi, alisSonrasi.BelgeTipi);
-        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, alisSonrasi.Durum);
-        Assert.Equal(TicariBelgeFaturalamaDurumu.Kesildi, alisSonrasi.FaturalamaDurumu);
-
-        var satisIadeSonrasi = await ReadNoTrackingAsync(dbContext, satisIadeMusteriyeGonderildiId);
-        Assert.Equal(SatisBelgesiTipi.SatisIadeFaturasi, satisIadeSonrasi.BelgeTipi);
-        Assert.Equal(SatisBelgesiDurumu.MusteriyeGonderildi, satisIadeSonrasi.Durum);
-        Assert.Equal(TicariBelgeFaturalamaDurumu.MusteriyeGonderildi, satisIadeSonrasi.FaturalamaDurumu);
+        Assert.True(tumKayitlar.Count >= 3);
+        var silinenKayit = Assert.Single(tumKayitlar, x => x.Id == silinecek.Id!.Value);
+        Assert.True(silinenKayit.IsDeleted);
+        foreach (var belge in tumKayitlar)
+        {
+            AssertProjectionTutarli(belge);
+        }
+        _ = taslak;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -698,5 +648,134 @@ public class SatisBelgesiDurumAyrimiIntegrationTests : IAsyncLifetime
         Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, sonHal.MuhasebeDurumu);
         Assert.Equal(TicariBelgeFaturalamaDurumu.Baslatilmadi, sonHal.FaturalamaDurumu);
         AssertProjectionTutarli(sonHal);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // F. Otorite kanıtı — legacy Durum bilerek bozulur, üretim kararının YİNE DE otoriter üç
+    // alandan verildiği ve legacy Durum'un HER geçişte doğru yeniden senkronlandığı kanıtlanır.
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_LegacyDurumYanlislikleIptalEdildiOlsaBileYeniAlanlaraGoreKararVerirVeDurumuYenidenSenkronlar()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+
+        await using (var corruptCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            await SetLegacyDurumDirectlyAsync(corruptCtx, created.Id!.Value, SatisBelgesiDurumu.IptalEdildi);
+        }
+
+        // Legacy Durum yanlışlıkla IptalEdildi görünüyor, ama gerçek TicariDurum hâlâ Taslak
+        // olduğundan güncelleme KABUL edilmeli - karar legacy Durum'a DEĞİL yeni alanlara bakar.
+        var guncellenen = await service.UpdateAsync(created.Id!.Value, new UpdateSatisBelgesiRequest { Aciklama = "Guncellendi" });
+        Assert.Equal("Guncellendi", guncellenen.Aciklama);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+        Assert.Equal(TicariBelgeDurumu.Taslak, sonHal.TicariDurum);
+        // UpdateAsync sonunda OtoriterDurumlariAta legacy Durum'u DOĞRU şekilde yeniden hesaplar -
+        // artık yanlış IptalEdildi DEĞİL, gerçek duruma (Taslak) karşılık gelen değerdir.
+        Assert.Equal(SatisBelgesiDurumu.Taslak, sonHal.Durum);
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task MuhasebeOnayinaGonderAsync_LegacyDurumYanlislikleFaturaKesildiOlsaBileYeniAlanlaraGoreKararVerir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+
+        await using (var corruptCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            await SetLegacyDurumDirectlyAsync(corruptCtx, created.Id!.Value, SatisBelgesiDurumu.FaturaKesildi);
+        }
+
+        // Legacy Durum yanlışlıkla FaturaKesildi görünüyor, ama gerçek TicariDurum=Taslak/
+        // MuhasebeDurumu=Bekliyor olduğundan onaya gönderme KABUL edilmeli.
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, sonHal.MuhasebeDurumu);
+        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnayinda, sonHal.Durum);
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_LegacyDurumYanlislikleTaslakGorunseDeYeniAlanlarHazirOnaydaIseReddedilirAmaOnaylanabilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value); // TicariDurum=Hazir, MuhasebeDurumu=Onayda
+
+        await using (var corruptCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            await SetLegacyDurumDirectlyAsync(corruptCtx, created.Id.Value, SatisBelgesiDurumu.Taslak);
+        }
+
+        // Legacy Durum yanlışlıkla Taslak görünüyor, ama gerçek TicariDurum=Hazir/MuhasebeDurumu=
+        // Onayda olduğundan güncelleme REDDEDİLMELİDİR (legacy Durum'un "Taslak gibi görünmesine"
+        // RAĞMEN).
+        await Assert.ThrowsAsync<BaseException>(() =>
+            service.UpdateAsync(created.Id.Value, new UpdateSatisBelgesiRequest { Aciklama = "X" }));
+
+        // Ama onaylama KABUL edilmelidir - MuhasebeDurumu gerçekten Onayda'dır.
+        await service.MuhasebeOnaylaAsync(created.Id.Value);
+
+        await using var verifyContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var sonHal = await ReadNoTrackingAsync(verifyContext, created.Id.Value);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, sonHal.MuhasebeDurumu);
+        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, sonHal.Durum);
+        AssertProjectionTutarli(sonHal);
+    }
+
+    [IntegrationFact]
+    public async Task MuhasebeFisiOlusturAsync_LegacyDurumYanlislikleTaslakOlsaBileMuhasebeDurumunaGoreKabulEder()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest());
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
+        await service.MuhasebeOnaylaAsync(created.Id.Value); // MuhasebeDurumu=Onaylandi (gerçek)
+
+        await using (var corruptCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            await SetLegacyDurumDirectlyAsync(corruptCtx, created.Id.Value, SatisBelgesiDurumu.Taslak);
+        }
+
+        // MuhasebeDurumu gerçekten Onaylandi olduğundan fiş üretimi BAŞARILI olmalı - legacy
+        // Durum'un yanlışlıkla Taslak görünmesine RAĞMEN.
+        var dto = await fisService.MuhasebeFisiOlusturAsync(created.Id.Value);
+        Assert.NotNull(dto.MuhasebeFisId);
+    }
+
+    [IntegrationFact]
+    public async Task MuhasebeFisiOlusturAsync_LegacyDurumIyiGorunseDeMuhasebeDurumuYanlisIseReddedilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+
+        var created = await service.CreateAsync(BuildSatisFaturasiRequest()); // MuhasebeDurumu=Bekliyor (gerçek)
+
+        await using (var corruptCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            await SetLegacyDurumDirectlyAsync(corruptCtx, created.Id!.Value, SatisBelgesiDurumu.MuhasebeOnaylandi);
+        }
+
+        // MuhasebeDurumu gerçekten Bekliyor olduğundan fiş üretimi REDDEDİLMELİDİR - legacy
+        // Durum'un yanlışlıkla "onaylanmış gibi" görünmesine RAĞMEN.
+        await Assert.ThrowsAsync<BaseException>(() => fisService.MuhasebeFisiOlusturAsync(created.Id.Value));
     }
 }

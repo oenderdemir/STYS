@@ -9,13 +9,14 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public int KurumId { get; set; }
     public string BelgeNo { get; set; } = string.Empty;
     public SatisBelgesiTipi BelgeTipi { get; set; }
+    /// <summary>GERİYE UYUMLULUK ALANI — ARTIK OTORİTER DEĞİLDİR; üç ayrıştırılmış alandan türetilen bir compatibility projection'ıdır (bkz. SatisBelgesiDurumProjection).</summary>
     public SatisBelgesiDurumu Durum { get; set; }
-    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
-    public TicariBelgeDurumu? TicariDurum { get; set; }
-    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
-    public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
-    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
-    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
+    /// <summary>OTORİTER ticari (hazırlık) durumu — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeDurumu TicariDurum { get; set; }
+    /// <summary>OTORİTER muhasebeleştirme durumu — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeMuhasebeDurumu MuhasebeDurumu { get; set; }
+    /// <summary>OTORİTER faturalama/gönderim durumu — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeFaturalamaDurumu FaturalamaDurumu { get; set; }
     public SatisKaynakModulu KaynakModul { get; set; }
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }

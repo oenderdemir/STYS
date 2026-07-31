@@ -88,7 +88,10 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.IsDeleted)
             throw new BaseException("Satış belgesi silinmiş.", 400);
 
-        if (belgeOnOkuma.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+        // OTORİTER: eski Durum yerine MuhasebeDurumu üzerinden karar verilir (bkz. C.9) -
+        // MuhasebeDurumu=Onaylandi ise eski Durum tutarsız olsa bile bu yeterlidir; değilse eski
+        // Durum uygun görünse dahi reddedilir.
+        if (belgeOnOkuma.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi)
             throw new BaseException(
                 $"Satış belgesi 'MuhasebeOnaylandı' durumunda değil. Mevcut durum: {belgeOnOkuma.Durum}",
                 400);
@@ -162,8 +165,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (belge is null)
                     throw new BaseException("Satış belgesi bulunamadı.", 404);
 
-                // Transaction içinde duplicate kontrol (race condition önlemi)
-                if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+                // Transaction içinde duplicate kontrol (race condition önlemi) - OTORİTER: MuhasebeDurumu (bkz. C.9).
+                if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi)
                     throw new BaseException(
                         $"Satış belgesi 'MuhasebeOnaylandı' durumunda değil. Mevcut durum: {belge.Durum}",
                         400);

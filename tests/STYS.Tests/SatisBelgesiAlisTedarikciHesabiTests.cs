@@ -10,6 +10,7 @@ using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -544,7 +545,11 @@ public class SatisBelgesiAlisTedarikciHesabiTests
         belge.KurumId = 1;
         belge.BelgeTipi = belgeTipi;
         belge.CariKartId = cariKartId;
-        belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge,
+            TicariBelgeDurumu.Hazir,
+            TicariBelgeMuhasebeDurumu.Onaylandi,
+            SatisBelgesiDurumProjection.ProjeOnaylandiFaturalamaDurumu(belgeTipi));
 
         dbContext.SatisBelgeleri.Add(belge);
         await dbContext.SaveChangesAsync();

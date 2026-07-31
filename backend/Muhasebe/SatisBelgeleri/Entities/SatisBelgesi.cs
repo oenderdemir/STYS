@@ -17,20 +17,28 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
     public string BelgeNo { get; set; } = string.Empty;
 
     public SatisBelgesiTipi BelgeTipi { get; set; } = SatisBelgesiTipi.FaturaTaslagi;
+
+    /// <summary>
+    /// GERİYE UYUMLULUK ALANI — ARTIK OTORİTER DEĞİLDİR. Üç ayrıştırılmış alanın (TicariDurum,
+    /// MuhasebeDurumu, FaturalamaDurumu) SatisBelgesiDurumProjection.OtoriterDurumlariAta
+    /// tarafından türetilen bir compatibility projection'ıdır. Yalnızca mevcut API çıktısı, geriye
+    /// uyumlu Durum filtresi, loglama/görüntüleme, migration ve eski veri uyumluluğu amacıyla
+    /// OKUNABİLİR - hiçbir üretim iş kuralı/kabul-ret kararı/durum geçişi bunu otoriter kaynak
+    /// olarak KULLANMAMALIDIR.
+    /// </summary>
     public SatisBelgesiDurumu Durum { get; set; } = SatisBelgesiDurumu.Taslak;
 
     /// <summary>
-    /// AYRIŞTIRILMIŞ ticari (hazırlık) durumu - bkz. SatisBelgesiDurumProjection ve
-    /// TicariBelgeDurumu doc'u. Bu "expand/compatibility projection" aşamasında HENÜZ otoriter
-    /// DEĞİLDİR; yalnızca Durum'dan türetilerek BİRLİKTE yazılır, hiçbir karar kontrolü bunu okumaz.
+    /// OTORİTER ticari (hazırlık) durumu - bkz. SatisBelgesiDurumProjection ve TicariBelgeDurumu
+    /// doc'u. SatisBelgesiService.OtoriterDurumlariAta üzerinden atanır.
     /// </summary>
-    public TicariBelgeDurumu? TicariDurum { get; set; }
+    public TicariBelgeDurumu TicariDurum { get; set; } = TicariBelgeDurumu.Taslak;
 
-    /// <summary>AYRIŞTIRILMIŞ muhasebeleştirme durumu - bkz. SatisBelgesiDurumProjection. Bu aşamada HENÜZ otoriter DEĞİLDİR.</summary>
-    public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
+    /// <summary>OTORİTER muhasebeleştirme durumu - bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeMuhasebeDurumu MuhasebeDurumu { get; set; } = TicariBelgeMuhasebeDurumu.Bekliyor;
 
-    /// <summary>AYRIŞTIRILMIŞ faturalama/gönderim durumu - bkz. SatisBelgesiDurumProjection. Bu aşamada HENÜZ otoriter DEĞİLDİR.</summary>
-    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
+    /// <summary>OTORİTER faturalama/gönderim durumu - bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeFaturalamaDurumu FaturalamaDurumu { get; set; } = TicariBelgeFaturalamaDurumu.Uygulanamaz;
 
     public SatisKaynakModulu KaynakModul { get; set; } = SatisKaynakModulu.Manuel;
     public string? KaynakTipi { get; set; }

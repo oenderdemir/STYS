@@ -322,8 +322,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = "INSERT INTO [muhasebe].[SatisBelgeleri] " +
-            "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, KarsiTarafFaturaNo) " +
-            "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, @karsiTarafFaturaNo)";
+            "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu, KarsiTarafFaturaNo) " +
+            "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 1, 1, 2, @karsiTarafFaturaNo)";
         cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
         cmd.Parameters.Add(new SqlParameter("@belgeNo", $"CKB-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
         cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));
@@ -345,8 +345,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
         await using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = "INSERT INTO [muhasebe].[SatisBelgeleri] " +
-                "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, KarsiTarafFaturaNo) " +
-                "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 'TED-GECERLI')";
+                "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu, KarsiTarafFaturaNo) " +
+                "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 1, 1, 2, 'TED-GECERLI')";
             cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
             cmd.Parameters.Add(new SqlParameter("@belgeNo", belgeNo));
             cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));
@@ -1582,8 +1582,8 @@ GROUP BY i.is_unique, i.filter_definition";
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = "INSERT INTO [muhasebe].[SatisBelgeleri] " +
-            "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, KarsiTarafFaturaNo) " +
-            "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 'TED-' + NCHAR(@nCharKodu) + '-1')";
+            "(KurumId, BelgeNo, BelgeTipi, Durum, KaynakModul, TesisId, CariKartId, BelgeTarihi, KurumsalMi, ToplamMatrah, ToplamKdv, GenelToplam, IsDeleted, TicariDurum, MuhasebeDurumu, FaturalamaDurumu, KarsiTarafFaturaNo) " +
+            "VALUES (@kurumId, @belgeNo, 5, 0, 1, @tesisId, @cariKartId, '2026-01-01', 0, 100, 20, 120, 0, 1, 1, 2, 'TED-' + NCHAR(@nCharKodu) + '-1')";
         cmd.Parameters.Add(new SqlParameter("@kurumId", _kurumId));
         cmd.Parameters.Add(new SqlParameter("@belgeNo", $"CKC-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40]));
         cmd.Parameters.Add(new SqlParameter("@tesisId", _tesisId));

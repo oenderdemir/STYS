@@ -12,6 +12,7 @@ using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -126,7 +127,6 @@ public class SatisBelgesiAlisTedarikciHesabiTransactionSnapshotIntegrationTests
                 KurumId = kurum.Id,
                 BelgeNo = $"BLG-{uniqueSuffix}",
                 BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
-                Durum = SatisBelgesiDurumu.MuhasebeOnaylandi,
                 TesisId = tesis.Id,
                 CariKartId = tedarikci1.Id,
                 BelgeTarihi = new DateTime(2026, 1, 15)
@@ -141,6 +141,11 @@ public class SatisBelgesiAlisTedarikciHesabiTransactionSnapshotIntegrationTests
                 KdvOrani = 20m
             }));
             InvokeHesaplaBelgeToplamlari(belge);
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Hazir,
+                TicariBelgeMuhasebeDurumu.Onaylandi,
+                SatisBelgesiDurumProjection.ProjeOnaylandiFaturalamaDurumu(belge.BelgeTipi));
             seedContext.SatisBelgeleri.Add(belge);
             await seedContext.SaveChangesAsync();
             var belgeId = belge.Id;

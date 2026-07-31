@@ -66,35 +66,41 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         (10, 10)
     ];
 
-    /// <summary>Satır güncellenebilir durumlar.</summary>
-    private static readonly HashSet<int> GuncellenebilirDurumlar =
+    /// <summary>
+    /// İade satırlarının kümülatif miktar toplamına DAHİL EDİLEN OTORİTER muhasebe durumları
+    /// (bkz. ValidateIadeSatirlariAsync). Bekliyor (Taslak) durumundaki belgeler henüz onay
+    /// sürecinden geçmediğinden birbirini gereksiz yere kilitlemez/toplama katılmaz - bir belge en
+    /// az MuhasebeDurumu=Onayda durumuna (yani ValidateBelgeOnayaGonderilebilir'den geçmiş)
+    /// ulaşmadan başka bir iade belgesinin kotasını TÜKETMEZ. Reddedildi ve IptalEdildi (ve
+    /// soft-delete edilmiş belgeler, ayrıca kontrol edilir) kapsam dışıdır - artık geçerli bir
+    /// iade talebini temsil etmezler.
+    /// </summary>
+    private static readonly HashSet<TicariBelgeMuhasebeDurumu> IadeKumulatifSayilanMuhasebeDurumlari =
     [
-        (int)SatisBelgesiDurumu.Taslak,
-        (int)SatisBelgesiDurumu.Reddedildi
-    ];
-
-    /// <summary>Silinebilir durumlar.</summary>
-    private static readonly HashSet<int> SilinebilirDurumlar =
-    [
-        (int)SatisBelgesiDurumu.Taslak
+        TicariBelgeMuhasebeDurumu.Onayda,
+        TicariBelgeMuhasebeDurumu.Onaylandi
     ];
 
     /// <summary>
-    /// İade satırlarının kümülatif miktar toplamına DAHİL EDİLEN belge durumları (bkz.
-    /// ValidateIadeSatirlariAsync). Taslak ve Reddedildi belgeler henüz onay sürecinden
-    /// geçmediğinden birbirini gereksiz yere kilitlemez/toplama katılmaz - bir belge en az
-    /// MuhasebeOnayinda durumuna (yani ValidateBelgeOnayaGonderilebilir'den geçmiş) ulaşmadan
-    /// başka bir iade belgesinin kotasını TÜKETMEZ. İptalEdildi ve soft-delete edilmiş belgeler
-    /// (IsDeleted=true, ayrıca kontrol edilir) de kapsam dışıdır - artık geçerli bir iade talebini
-    /// temsil etmezler.
+    /// Güncellenebilirlik ARTIK OTORİTER yeni alanlardan belirlenir (bkz. görev A/C.1) - eski
+    /// Durum HashSet-containment kalıbı YERİNE, geçerli iki giriş kombinasyonundan (Taslak
+    /// durumunda olma YA DA muhasebece reddedilmiş olma) biri sağlanmalıdır.
     /// </summary>
-    private static readonly HashSet<SatisBelgesiDurumu> IadeKumulatifSayilanDurumlar =
-    [
-        SatisBelgesiDurumu.MuhasebeOnayinda,
-        SatisBelgesiDurumu.MuhasebeOnaylandi,
-        SatisBelgesiDurumu.FaturaKesildi,
-        SatisBelgesiDurumu.MusteriyeGonderildi
-    ];
+    private static bool BelgeGuncellenebilirMi(SatisBelgesi belge)
+        => belge.TicariDurum == TicariBelgeDurumu.Taslak
+           || belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Reddedildi;
+
+    /// <summary>
+    /// Silinebilirlik ARTIK OTORİTER yeni alanlardan belirlenir (bkz. görev C.2) - yalnızca
+    /// GERÇEK taslak kombinasyonu (TicariDurum=Taslak + MuhasebeDurumu=Bekliyor +
+    /// FaturalamaDurumu=Baslatilmadi/Uygulanamaz) silinebilir; salt TicariDurum=Taslak YETERLİ
+    /// DEĞİLDİR (spec'e göre üç alanın TAMAMI taslak kombinasyonunu göstermelidir).
+    /// </summary>
+    private static bool BelgeSilinebilirMi(SatisBelgesi belge)
+        => belge.TicariDurum == TicariBelgeDurumu.Taslak
+           && belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Bekliyor
+           && (belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Baslatilmadi
+               || belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Uygulanamaz);
 
     public SatisBelgesiService(
         ISatisBelgesiRepository satisBelgesiRepository,
@@ -388,7 +394,6 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             KurumId = kurumId,
             BelgeNo = belgeNo,
             BelgeTipi = request.BelgeTipi,
-            Durum = SatisBelgesiDurumu.Taslak,
             KaynakModul = request.KaynakModul,
             KaynakTipi = request.KaynakTipi,
             KaynakId = request.KaynakId,
@@ -410,10 +415,13 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             IadeEdilenBelgeId = request.IadeEdilenBelgeId
         };
 
-        // Compatibility dual-write (bkz. SatisBelgesiDurumProjection) - üç yeni alan Durum'dan
-        // türetilerek BİRLİKTE yazılır; bu turda henüz otoriter DEĞİLDİR, hiçbir karar kontrolü
-        // bunları okumaz.
-        SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+        // Otoriter durum ataması (bkz. SatisBelgesiDurumProjection.OtoriterDurumlariAta) - üç
+        // yeni alan burada OLUŞTURULUR; eski Durum bu üçünden TÜRETİLİR (geriye uyumluluk).
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge,
+            TicariBelgeDurumu.Taslak,
+            TicariBelgeMuhasebeDurumu.Bekliyor,
+            SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
 
         // 4. Satırları oluştur ve KDV hesapla
         foreach (var satirRequest in request.Satirlar ?? [])
@@ -474,8 +482,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "güncelleme", cancellationToken);
 
-        // Durum kontrolü
-        if (!GuncellenebilirDurumlar.Contains((int)belge.Durum))
+        // Durum kontrolü — OTORİTER: TicariDurum=Taslak YA DA MuhasebeDurumu=Reddedildi (bkz. C.1).
+        if (!BelgeGuncellenebilirMi(belge))
         {
             throw new BaseException(
                 $"'{belge.Durum}' durumundaki bir satış belgesi güncellenemez. " +
@@ -483,14 +491,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 errorCode: 400);
         }
 
-        // Reddedildi → Taslak durumuna döndür. Bu noktada belge.BelgeTipi HENÜZ eski değerindedir
-        // (ApplyBelgeUpdatesAsync bu satırdan SONRA çalışır) - bu yüzden buradaki projeksiyon
-        // GEÇİCİ/erken bir değerdir; istekte BelgeTipi de değişirse aşağıda (ApplyBelgeUpdatesAsync
-        // sonrası, kaydetmeden hemen önce) NİHAİ BelgeTipi ile YENİDEN hesaplanıp üzerine yazılır.
-        if (belge.Durum == SatisBelgesiDurumu.Reddedildi)
+        // Reddedildi → Taslak durumuna döndürülecekse RedNedeni temizlenir - GERÇEK OTORİTER durum
+        // ataması (TicariDurum/MuhasebeDurumu/FaturalamaDurumu + türetilen legacy Durum) burada
+        // YAPILMAZ, aşağıda (ApplyBelgeUpdatesAsync sonrası, kaydetmeden hemen önce) NİHAİ BelgeTipi
+        // ile TEK SEFERDE yapılır - iki giriş yolu (Taslak'ta kalma / Reddedildi'den dönme) HER
+        // ZAMAN aynı (Taslak, Bekliyor, ...) hedef kombinasyonunda birleştiğinden erken/geçici bir
+        // hesaplamaya gerek YOKTUR.
+        if (belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Reddedildi)
         {
             belge.RedNedeni = null;
-            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.Taslak);
         }
 
         // Belge no değiştiyse duplicate kontrolü
@@ -537,12 +546,16 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         HesaplaBelgeToplamlari(belge);
 
-        // Compatibility dual-write - NİHAİ değerlerle YENİDEN hesaplanır. ApplyBelgeUpdatesAsync
-        // BelgeTipi'ni değiştirmiş olabilir (Durum değişmese dahi) - yukarıdaki Reddedildi->Taslak
-        // dalındaki (varsa) erken/geçici projeksiyon, burada NİHAİ BelgeTipi+Durum ile ÜZERİNE
-        // YAZILARAK düzeltilir. Bu çağrı KOŞULSUZDUR - Durum bu istekte hiç değişmemiş olsa bile
-        // (yalnızca BelgeTipi değişmiş olabilir) çalışır.
-        SatisBelgesiDurumProjection.UygulaVeYaz(belge);
+        // OTORİTER durum ataması - UpdateAsync'in GEÇERLİ giriş kombinasyonlarının (TicariDurum=
+        // Taslak YA DA MuhasebeDurumu=Reddedildi - bkz. BelgeGuncellenebilirMi) HER İKİSİ de bu
+        // metodun sonunda AYNI (Taslak, Bekliyor, ...) hedef kombinasyonuna ulaşır - bu yüzden
+        // koşulsuz TEK bir atama yeterlidir. FaturalamaDurumu, ApplyBelgeUpdatesAsync'in olası
+        // şekilde değiştirmiş olabileceği NİHAİ BelgeTipi ile hesaplanır (bkz. görev D).
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge,
+            TicariBelgeDurumu.Taslak,
+            TicariBelgeMuhasebeDurumu.Bekliyor,
+            SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
 
         _satisBelgesiRepository.Update(belge);
         await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
@@ -587,7 +600,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "silme", cancellationToken);
 
-        if (!SilinebilirDurumlar.Contains((int)belge.Durum))
+        // OTORİTER: yalnızca GERÇEK taslak kombinasyonu silinebilir (bkz. BelgeSilinebilirMi / C.2).
+        if (!BelgeSilinebilirMi(belge))
         {
             throw new BaseException(
                 $"'{belge.Durum}' durumundaki bir satış belgesi silinemez. " +
@@ -630,7 +644,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
 
-            if (belge.Durum != SatisBelgesiDurumu.Taslak)
+            // OTORİTER giriş kontrolü (bkz. C.3): TicariDurum=Taslak VE MuhasebeDurumu=Bekliyor.
+            if (belge.TicariDurum != TicariBelgeDurumu.Taslak || belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Bekliyor)
             {
                 throw new BaseException(
                     $"Sadece Taslak durumundaki belgeler muhasebe onayına gönderilebilir. Mevcut durum: {belge.Durum}",
@@ -641,7 +656,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
 
             belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
-            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.MuhasebeOnayinda);
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Hazir,
+                TicariBelgeMuhasebeDurumu.Onayda,
+                SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
 
             await Repository.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -671,7 +690,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
 
-            if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
+            // OTORİTER giriş kontrolü (bkz. C.4): MuhasebeDurumu=Onayda.
+            if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onayda)
             {
                 throw new BaseException(
                     $"Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir. Mevcut durum: {belge.Durum}",
@@ -682,7 +702,13 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             await ValidateBelgeMuhasebeOnaylanabilir(belge, cancellationToken);
 
             belge.MuhasebeOnayTarihi = DateTime.UtcNow;
-            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.MuhasebeOnaylandi);
+            // STYS tarafından düzenlenen SatisFaturasi/AlisIadeFaturasi -> KesimBekliyor; diğer
+            // belge tiplerinde -> Uygulanamaz (bkz. C.4).
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Hazir,
+                TicariBelgeMuhasebeDurumu.Onaylandi,
+                SatisBelgesiDurumProjection.ProjeOnaylandiFaturalamaDurumu(belge.BelgeTipi));
 
             await Repository.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -776,32 +802,34 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
             }
 
             // ── Değişmezlik/tutarlılık invariantları (kilitli okuma sonrası, sayaç/yazımdan ÖNCE) ──
-            // ResmiFaturaNo ve Durum=FaturaKesildi HER ZAMAN BİRLİKTE bulunmalıdır; biri diğeri
-            // olmadan asla "sessizce devam edilerek" kabul edilmez - ikisi arasında bir
-            // tutarsızlık varsa (ör. elle veri düzeltmesi, eksik migration, vb.) açık bir hata
-            // verilir ve mevcut numara/durum ASLA üzerine yazılmaz.
+            // ResmiFaturaNo ve FaturalamaDurumu=Kesildi (OTORİTER alan - eski Durum=FaturaKesildi
+            // ARTIK yalnızca BUNDAN türetilir) HER ZAMAN BİRLİKTE bulunmalıdır; biri diğeri olmadan
+            // asla "sessizce devam edilerek" kabul edilmez - ikisi arasında bir tutarsızlık varsa
+            // (ör. elle veri düzeltmesi, eksik migration, vb.) açık bir hata verilir ve mevcut
+            // numara/durum ASLA üzerine yazılmaz.
             var resmiNumaraDoluMu = !string.IsNullOrWhiteSpace(belge.ResmiFaturaNo);
-            var durumFaturaKesildiMi = belge.Durum == SatisBelgesiDurumu.FaturaKesildi;
+            var faturalamaKesildiMi = belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Kesildi;
 
-            if (resmiNumaraDoluMu && !durumFaturaKesildiMi)
+            if (resmiNumaraDoluMu && !faturalamaKesildiMi)
             {
                 throw new BaseException(
-                    $"Belgede resmî fatura numarası ({belge.ResmiFaturaNo}) var ancak durum 'FaturaKesildi' değil (Durum: {belge.Durum}); " +
+                    $"Belgede resmî fatura numarası ({belge.ResmiFaturaNo}) var ancak FaturalamaDurumu 'Kesildi' değil " +
+                    $"(FaturalamaDurumu: {belge.FaturalamaDurumu}, legacy Durum: {belge.Durum}); " +
                     $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                     errorCode: 500);
             }
 
-            if (durumFaturaKesildiMi && !resmiNumaraDoluMu)
+            if (faturalamaKesildiMi && !resmiNumaraDoluMu)
             {
                 throw new BaseException(
-                    $"Belge 'FaturaKesildi' durumunda ancak resmî fatura numarası bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    $"Belge FaturalamaDurumu 'Kesildi' ancak resmî fatura numarası bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                     errorCode: 500);
             }
 
-            if (durumFaturaKesildiMi && !belge.FaturaKesimTarihi.HasValue)
+            if (faturalamaKesildiMi && !belge.FaturaKesimTarihi.HasValue)
             {
                 throw new BaseException(
-                    $"Belge 'FaturaKesildi' durumunda ancak fatura kesim tarihi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    $"Belge FaturalamaDurumu 'Kesildi' ancak fatura kesim tarihi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                     errorCode: 500);
             }
 
@@ -809,7 +837,7 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
             // döndürülür — ama önce mevcut numaranın gerçekten tutarlı olduğu (format, yıl,
             // seri, çakışma, sayaç durumu) doğrulanır; sessizce devam edilmez, herhangi bir
             // tutarsızlıkta açık hata verilir.
-            if (durumFaturaKesildiMi)
+            if (faturalamaKesildiMi)
             {
                 if (!TryParseResmiFaturaNo(belge.ResmiFaturaNo!, out var mevcutSeriKodu, out var mevcutYil, out var mevcutSiraNo))
                 {
@@ -869,7 +897,12 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                 return Mapper.Map<SatisBelgesiDto>(belge);
             }
 
-            if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+            // OTORİTER giriş kontrolü (bkz. C.6): TicariDurum=Hazir + MuhasebeDurumu=Onaylandi +
+            // FaturalamaDurumu=KesimBekliyor - yalnızca "Onaylandi" YETERLİ DEĞİLDİR, belge zaten
+            // KesimBekliyor aşamasında (henüz Kesildi/MusteriyeGonderildi'ye geçmemiş) olmalıdır.
+            if (belge.TicariDurum != TicariBelgeDurumu.Hazir
+                || belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi
+                || belge.FaturalamaDurumu != TicariBelgeFaturalamaDurumu.KesimBekliyor)
             {
                 throw new BaseException(
                     $"Yalnızca 'MuhasebeOnaylandı' durumundaki belgeler için fatura kesilebilir. Mevcut durum: {belge.Durum}",
@@ -983,7 +1016,11 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
             belge.ResmiFaturaNo = resmiFaturaNo;
             belge.FaturaKesimTarihi = DateTime.UtcNow;
-            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.FaturaKesildi);
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Hazir,
+                TicariBelgeMuhasebeDurumu.Onaylandi,
+                TicariBelgeFaturalamaDurumu.Kesildi);
 
             try
             {
@@ -1119,7 +1156,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
         await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "reddetme", cancellationToken);
 
-        if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
+        // OTORİTER giriş kontrolü (bkz. C.5): MuhasebeDurumu=Onayda.
+        if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onayda)
         {
             throw new BaseException(
                 $"Sadece Muhasebe Onayında durumundaki belgeler reddedilebilir. Mevcut durum: {belge.Durum}",
@@ -1127,7 +1165,11 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
 
         belge.RedNedeni = redNedeni.Trim();
-        SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.Reddedildi);
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge,
+            TicariBelgeDurumu.Hazir,
+            TicariBelgeMuhasebeDurumu.Reddedildi,
+            SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
 
         await Repository.SaveChangesAsync(cancellationToken);
     }
@@ -1157,7 +1199,12 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             await IptalEtStokHareketleriAsync(belge, cancellationToken);
             await IptalEtCariHareketleriAsync(belge, cancellationToken);
 
-            SatisBelgesiDurumProjection.DurumuAtaVeProjekteEt(belge, SatisBelgesiDurumu.IptalEdildi);
+            // İptalde ÜÇ otoriter alan da IptalEdildi olur (bkz. C.7).
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.IptalEdildi,
+                TicariBelgeMuhasebeDurumu.IptalEdildi,
+                TicariBelgeFaturalamaDurumu.IptalEdildi);
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -1185,13 +1232,16 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
     private async Task ValidateTicariBelgeIptalAsync(SatisBelgesi belge, CancellationToken cancellationToken)
     {
-        if (belge.Durum == SatisBelgesiDurumu.IptalEdildi)
+        // OTORİTER (bkz. görev A/C.7): TicariDurum=IptalEdildi zaten iptal edilmiş demektir.
+        if (belge.TicariDurum == TicariBelgeDurumu.IptalEdildi)
         {
             throw new BaseException("Belge zaten iptal edilmiş.", 400);
         }
 
-        if (belge.Durum == SatisBelgesiDurumu.FaturaKesildi ||
-            belge.Durum == SatisBelgesiDurumu.MusteriyeGonderildi)
+        // OTORİTER: FaturalamaDurumu=Kesildi/MusteriyeGonderildi olan belgeler iptal edilemez -
+        // mevcut izin kapsamı GENİŞLETİLMEZ, yalnızca karar kaynağı değişir.
+        if (belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Kesildi ||
+            belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.MusteriyeGonderildi)
         {
             throw new BaseException(
                 $"'{belge.Durum}' durumundaki bir belge iptal edilemez. " +
@@ -2113,7 +2163,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
         if (belgeTipi == SatisBelgesiTipi.SatisIadeFaturasi)
         {
-            if (asilBelge.Durum != SatisBelgesiDurumu.FaturaKesildi)
+            // OTORİTER: eski Durum=FaturaKesildi karşılığı FaturalamaDurumu=Kesildi'dir.
+            if (asilBelge.FaturalamaDurumu != TicariBelgeFaturalamaDurumu.Kesildi)
             {
                 throw new BaseException(
                     $"İade edilen satış faturası 'FaturaKesildi' durumunda olmalıdır. (Mevcut durum: {asilBelge.Durum})",
@@ -2130,8 +2181,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         {
             // AlisFaturasi hiçbir zaman FaturaKesAsync ile FaturaKesildi durumuna geçemez (bkz.
             // OtomatikResmiNumaraUretilebilirMi) - bu yüzden "en az MuhasebeOnaylandı" pratikte
-            // yalnızca MuhasebeOnaylandi durumuyla karşılanabilir.
-            if (asilBelge.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+            // yalnızca MuhasebeOnaylandi (OTORİTER: MuhasebeDurumu=Onaylandi) durumuyla karşılanabilir.
+            if (asilBelge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi)
             {
                 throw new BaseException(
                     $"İade edilen alış faturası en az 'MuhasebeOnaylandı' durumunda olmalıdır. (Mevcut durum: {asilBelge.Durum})",
@@ -2687,8 +2738,8 @@ WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
         // kilitliKumulatifKontrol=false ise (Create/Update, kilitsiz) yalnızca BU belgenin kendi
         // toplamı kaynak miktarı aşıyor mu kontrol edilir - "tek belgenin kendi başına asıl
         // miktarı aşması" erken reddi budur. kilitliKumulatifKontrol=true ise (onay aşaması,
-        // kilitli) DİĞER geçerli (IadeKumulatifSayilanDurumlar) belgelerin toplamı da eklenir -
-        // NİHAİ, kümülatif ve eşzamanlılığa güvenli kontrol budur.
+        // kilitli) DİĞER geçerli (IadeKumulatifSayilanMuhasebeDurumlari) belgelerin toplamı da
+        // eklenir - NİHAİ, kümülatif ve eşzamanlılığa güvenli kontrol budur.
         var buBelgeninKendiToplamlari = parsed
             .GroupBy(x => x.KaynakSatirId)
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Satir.Miktar));
@@ -2711,11 +2762,16 @@ WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
                 // kümülatif toplamdan ASLA düşürülmez.
                 //
                 // Bu sorguya gömülen TÜM değerler (kaynakSatirId, belge.Id, belge.IadeEdilenBelgeId,
-                // BelgeTipi, Durum listesi) sıkı tipli INT/ENUM değerleridir - hiçbiri kullanıcıdan
-                // gelen serbest metin DEĞİLDİR; bu yüzden FromSqlRaw ile doğrudan gömülmeleri SQL
-                // enjeksiyonuna açık DEĞİLDİR (FromSqlInterpolated'in IN (...) listesi gibi çoklu
-                // değerleri TEK bir parametreye bağlayıp bozacağı için burada tercih edilmemiştir).
-                var durumListesi = string.Join(",", IadeKumulatifSayilanDurumlar.Select(d => (int)d));
+                // BelgeTipi, MuhasebeDurumu listesi) sıkı tipli INT/ENUM değerleridir - hiçbiri
+                // kullanıcıdan gelen serbest metin DEĞİLDİR; bu yüzden FromSqlRaw ile doğrudan
+                // gömülmeleri SQL enjeksiyonuna açık DEĞİLDİR (FromSqlInterpolated'in IN (...)
+                // listesi gibi çoklu değerleri TEK bir parametreye bağlayıp bozacağı için burada
+                // tercih edilmemiştir).
+                //
+                // OTORİTER: filtre artık eski Durum yerine MuhasebeDurumu üzerinden yapılır (bkz.
+                // C.8) - yalnızca Onayda/Onaylandi dahil edilir; Bekliyor, Reddedildi, IptalEdildi
+                // HARİÇ tutulur.
+                var durumListesi = string.Join(",", IadeKumulatifSayilanMuhasebeDurumlari.Select(d => (int)d));
                 var sql = $"""
                     SELECT ssb.* FROM [muhasebe].[SatisBelgesiSatirlari] ssb
                     INNER JOIN [muhasebe].[SatisBelgeleri] sb ON sb.[Id] = ssb.[SatisBelgesiId]
@@ -2725,7 +2781,7 @@ WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
                       AND sb.[IsDeleted] = 0
                       AND sb.[IadeEdilenBelgeId] = {belge.IadeEdilenBelgeId!.Value}
                       AND sb.[BelgeTipi] = {(int)belge.BelgeTipi}
-                      AND sb.[Durum] IN ({durumListesi})
+                      AND sb.[MuhasebeDurumu] IN ({durumListesi})
                     """;
 
                 var digerSatirlar = await _db.SatisBelgesiSatirlari

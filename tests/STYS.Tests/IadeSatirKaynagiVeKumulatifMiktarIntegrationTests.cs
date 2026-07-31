@@ -5,6 +5,7 @@ using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -900,6 +901,9 @@ public class IadeSatirKaynagiVeKumulatifMiktarIntegrationTests : IAsyncLifetime
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
             BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi,
             Durum = SatisBelgesiDurumu.MuhasebeOnaylandi,
+            TicariDurum = TicariBelgeDurumu.Hazir,
+            MuhasebeDurumu = TicariBelgeMuhasebeDurumu.Onaylandi,
+            FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Uygulanamaz,
             TesisId = _tesisId,
             CariKartId = _musteriKartId,
             BelgeTarihi = new DateTime(2026, 3, 5),

@@ -1,4 +1,5 @@
 using STYS.Muhasebe.SatisBelgeleri;
+using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using Xunit;
 
@@ -115,5 +116,108 @@ public class SatisBelgesiDurumProjectionTests
         Assert.Equal(TicariBelgeDurumu.Hazir, ticari);
         Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, muhasebe);
         Assert.Equal(TicariBelgeFaturalamaDurumu.KesimBekliyor, faturalama);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ProjeLegacyDurum — OTORİTER "yeni → eski" yön. Görev tanımındaki TÜM (7) geçerli kombinasyon
+    // (FaturalamaDurumu'nun Baslatilmadi/Uygulanamaz ve KesimBekliyor/Uygulanamaz ikili kabul
+    // ettiği kollar dahil, toplam 11 kabul edilen üçlü) + fail-closed exception.
+    // ─────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(TicariBelgeDurumu.Taslak, TicariBelgeMuhasebeDurumu.Bekliyor, TicariBelgeFaturalamaDurumu.Baslatilmadi, SatisBelgesiDurumu.Taslak)]
+    [InlineData(TicariBelgeDurumu.Taslak, TicariBelgeMuhasebeDurumu.Bekliyor, TicariBelgeFaturalamaDurumu.Uygulanamaz, SatisBelgesiDurumu.Taslak)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onayda, TicariBelgeFaturalamaDurumu.Baslatilmadi, SatisBelgesiDurumu.MuhasebeOnayinda)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onayda, TicariBelgeFaturalamaDurumu.Uygulanamaz, SatisBelgesiDurumu.MuhasebeOnayinda)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.KesimBekliyor, SatisBelgesiDurumu.MuhasebeOnaylandi)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.Uygulanamaz, SatisBelgesiDurumu.MuhasebeOnaylandi)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Reddedildi, TicariBelgeFaturalamaDurumu.Baslatilmadi, SatisBelgesiDurumu.Reddedildi)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Reddedildi, TicariBelgeFaturalamaDurumu.Uygulanamaz, SatisBelgesiDurumu.Reddedildi)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.Kesildi, SatisBelgesiDurumu.FaturaKesildi)]
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.MusteriyeGonderildi, SatisBelgesiDurumu.MusteriyeGonderildi)]
+    [InlineData(TicariBelgeDurumu.IptalEdildi, TicariBelgeMuhasebeDurumu.IptalEdildi, TicariBelgeFaturalamaDurumu.IptalEdildi, SatisBelgesiDurumu.IptalEdildi)]
+    public void ProjeLegacyDurum_GecerliTumKombinasyonlarDogruEslenir(
+        TicariBelgeDurumu ticari, TicariBelgeMuhasebeDurumu muhasebe, TicariBelgeFaturalamaDurumu faturalama, SatisBelgesiDurumu beklenen)
+    {
+        Assert.Equal(beklenen, SatisBelgesiDurumProjection.ProjeLegacyDurum(ticari, muhasebe, faturalama));
+    }
+
+    [Theory]
+    [InlineData(TicariBelgeDurumu.Taslak, TicariBelgeMuhasebeDurumu.Onayda, TicariBelgeFaturalamaDurumu.Baslatilmadi)] // Taslak asla Onayda ile bir arada olamaz
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Bekliyor, TicariBelgeFaturalamaDurumu.Uygulanamaz)] // Hazir + Bekliyor tanımsız
+    [InlineData(TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.Baslatilmadi)] // Onaylandi + Baslatilmadi tanımsız (KesimBekliyor/Uygulanamaz olmalı)
+    [InlineData(TicariBelgeDurumu.IptalEdildi, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.IptalEdildi)] // IptalEdildi kısmi/çelişkili
+    public void ProjeLegacyDurum_TanimsizVeyaCelisikKombinasyon_FailClosedFirlatir(
+        TicariBelgeDurumu ticari, TicariBelgeMuhasebeDurumu muhasebe, TicariBelgeFaturalamaDurumu faturalama)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => SatisBelgesiDurumProjection.ProjeLegacyDurum(ticari, muhasebe, faturalama));
+        Assert.Contains("Tanımsız veya çelişkili", ex.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // OtoriterDurumlariAta — ÜRETİMİN kullandığı tek atomik yazım yardımcısı
+    // ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void OtoriterDurumlariAta_GecerliKombinasyondaDortAlaniBirlikteAtar()
+    {
+        var belge = new SatisBelgesi();
+
+        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge, TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Onaylandi, TicariBelgeFaturalamaDurumu.Kesildi);
+
+        Assert.Equal(TicariBelgeDurumu.Hazir, belge.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, belge.MuhasebeDurumu);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Kesildi, belge.FaturalamaDurumu);
+        Assert.Equal(SatisBelgesiDurumu.FaturaKesildi, belge.Durum);
+    }
+
+    [Fact]
+    public void OtoriterDurumlariAta_GecersizKombinasyondaHicbirAlanaDokunmadanFirlatir()
+    {
+        var belge = new SatisBelgesi
+        {
+            TicariDurum = TicariBelgeDurumu.Taslak,
+            MuhasebeDurumu = TicariBelgeMuhasebeDurumu.Bekliyor,
+            FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Baslatilmadi,
+            Durum = SatisBelgesiDurumu.Taslak
+        };
+
+        Assert.Throws<InvalidOperationException>(() => SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+            belge, TicariBelgeDurumu.Hazir, TicariBelgeMuhasebeDurumu.Bekliyor, TicariBelgeFaturalamaDurumu.Uygulanamaz));
+
+        // Geçersiz kombinasyon ÖNCE doğrulanır (legacy Durum hesaplanırken) - dört alandan
+        // HİÇBİRİ kısmen/yarım atanmış olarak KALMAMALIDIR.
+        Assert.Equal(TicariBelgeDurumu.Taslak, belge.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, belge.MuhasebeDurumu);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.Baslatilmadi, belge.FaturalamaDurumu);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, belge.Durum);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ProjeBaslangicFaturalamaDurumu / ProjeOnaylandiFaturalamaDurumu — belge tipine göre
+    // ─────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(SatisBelgesiTipi.SatisFaturasi, TicariBelgeFaturalamaDurumu.Baslatilmadi)]
+    [InlineData(SatisBelgesiTipi.AlisIadeFaturasi, TicariBelgeFaturalamaDurumu.Baslatilmadi)]
+    [InlineData(SatisBelgesiTipi.AlisFaturasi, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    [InlineData(SatisBelgesiTipi.SatisIadeFaturasi, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    [InlineData(SatisBelgesiTipi.Proforma, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    public void ProjeBaslangicFaturalamaDurumu_BelgeTipineGoreDogruDoner(SatisBelgesiTipi belgeTipi, TicariBelgeFaturalamaDurumu beklenen)
+    {
+        Assert.Equal(beklenen, SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belgeTipi));
+    }
+
+    [Theory]
+    [InlineData(SatisBelgesiTipi.SatisFaturasi, TicariBelgeFaturalamaDurumu.KesimBekliyor)]
+    [InlineData(SatisBelgesiTipi.AlisIadeFaturasi, TicariBelgeFaturalamaDurumu.KesimBekliyor)]
+    [InlineData(SatisBelgesiTipi.AlisFaturasi, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    [InlineData(SatisBelgesiTipi.SatisIadeFaturasi, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    [InlineData(SatisBelgesiTipi.Proforma, TicariBelgeFaturalamaDurumu.Uygulanamaz)]
+    public void ProjeOnaylandiFaturalamaDurumu_BelgeTipineGoreDogruDoner(SatisBelgesiTipi belgeTipi, TicariBelgeFaturalamaDurumu beklenen)
+    {
+        Assert.Equal(beklenen, SatisBelgesiDurumProjection.ProjeOnaylandiFaturalamaDurumu(belgeTipi));
     }
 }

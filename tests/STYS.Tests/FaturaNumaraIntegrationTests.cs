@@ -704,6 +704,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
         belgeDb.ResmiFaturaNo = "XYZ2026000000001";
         belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi;
         // FaturaKesimTarihi BİLEREK boş bırakıldı.
         await dbContext.SaveChangesAsync();
 
@@ -724,6 +725,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
         belgeDb.ResmiFaturaNo = "LOW2026000000005";
         belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi;
         belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
@@ -1088,6 +1090,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
         belgeDb.ResmiFaturaNo = "FMT2026000000001";
         belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi;
         belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
@@ -1132,6 +1135,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         var belgeDb = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == belge.Id);
         belgeDb.ResmiFaturaNo = bozukNumara;
         belgeDb.Durum = SatisBelgesiDurumu.FaturaKesildi;
+        belgeDb.FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi;
         belgeDb.FaturaKesimTarihi = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 

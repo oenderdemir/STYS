@@ -2550,6 +2550,17 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
         // 1. KaynakSatirId her iade satırında ZORUNLUDUR ve pozitif bir tam sayı olarak
         // ayrıştırılabilir olmalıdır (NumberStyles.None: işaret/boşluk/binlik ayıracı YOK).
+        //
+        // Kanonikleştirme: ayrıştırılan değer, satıra HER ZAMAN kaynakSatirId.ToString(InvariantCulture)
+        // (baştaki sıfırlar/farklı biçimler olmadan) olarak GERİ YAZILIR - "00123" ve "123" AYNI
+        // kaynak satırı gösterse de, aşağıdaki kümülatif sorgu (x.KaynakSatirId == ...) SAF METİN
+        // eşitliği kullanır; satır DB'ye kanonik olmayan bir biçimde yazılırsa, o kaynak satıra
+        // yapılan BAŞKA bir iadenin metinsel eşleşmesi SESSİZCE KAÇAR ve kümülatif sınır delinebilir.
+        // Bu satır, bu metodun HER çağrıldığı yerde (Create, satırlı Update, onay akışları) çalıştığı
+        // için önceden (bu düzeltmeden ÖNCE) kanonik olmayan biçimde kaydedilmiş satırlar da, bu
+        // metodun bir sonraki çalışmasında (ör. bir sonraki onay adımında) kendiliğinden düzelir;
+        // geçmişte zaten var olan kayıtlar için AYRICA bir migration ile geriye dönük düzeltilir
+        // (bkz. HardenIadeSatirKaynagiCanonicalFormat migration'ı).
         var parsed = new List<(SatisBelgesiSatiri Satir, int KaynakSatirId)>();
         foreach (var satir in aktifSatirlar)
         {
@@ -2562,6 +2573,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                     errorCode: 400);
             }
 
+            satir.KaynakSatirId = kaynakSatirId.ToString(CultureInfo.InvariantCulture);
             parsed.Add((satir, kaynakSatirId));
         }
 
@@ -2672,18 +2684,40 @@ WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
 
             if (kilitliKumulatifKontrol)
             {
-                var kaynakSatirIdMetni = kaynakSatirId.ToString(CultureInfo.InvariantCulture);
+                // SAF METİN eşitliği (x.KaynakSatirId == kaynakSatirId.ToString(...)) KULLANILMAZ:
+                // bu belgenin kendi satırları yukarıda kanonik biçime (baştaki sıfırlar OLMADAN)
+                // yazılmış olsa da, DİĞER belgelerin satırları - ör. bu düzeltmeden ÖNCE oluşturulmuş
+                // ve migration'ın (HardenIadeSatirKaynagiCanonicalFormat) kapsamadığı, veya doğrudan
+                // veri aktarımıyla eklenmiş - kanonik OLMAYAN bir biçimde ("00123" gibi) kalmış
+                // olabilir. "123" ve "00123" AYNI kaynak satırı gösterir; TRY_CAST(...) = @kaynakSatirId
+                // ile SAYISAL eşitlik kullanılarak bu farklı gösterimler GÜVENİLİR şekilde aynı kaynak
+                // satır olarak sayılır - metinsel eşitliğin gözden kaçırabileceği önceki bir iade,
+                // kümülatif toplamdan ASLA düşürülmez.
+                //
+                // Bu sorguya gömülen TÜM değerler (kaynakSatirId, belge.Id, belge.IadeEdilenBelgeId,
+                // BelgeTipi, Durum listesi) sıkı tipli INT/ENUM değerleridir - hiçbiri kullanıcıdan
+                // gelen serbest metin DEĞİLDİR; bu yüzden FromSqlRaw ile doğrudan gömülmeleri SQL
+                // enjeksiyonuna açık DEĞİLDİR (FromSqlInterpolated'in IN (...) listesi gibi çoklu
+                // değerleri TEK bir parametreye bağlayıp bozacağı için burada tercih edilmemiştir).
+                var durumListesi = string.Join(",", IadeKumulatifSayilanDurumlar.Select(d => (int)d));
+                var sql = $"""
+                    SELECT ssb.* FROM [muhasebe].[SatisBelgesiSatirlari] ssb
+                    INNER JOIN [muhasebe].[SatisBelgeleri] sb ON sb.[Id] = ssb.[SatisBelgesiId]
+                    WHERE ssb.[IsDeleted] = 0
+                      AND TRY_CAST(ssb.[KaynakSatirId] AS BIGINT) = {kaynakSatirId}
+                      AND sb.[Id] <> {belge.Id}
+                      AND sb.[IsDeleted] = 0
+                      AND sb.[IadeEdilenBelgeId] = {belge.IadeEdilenBelgeId!.Value}
+                      AND sb.[BelgeTipi] = {(int)belge.BelgeTipi}
+                      AND sb.[Durum] IN ({durumListesi})
+                    """;
 
-                digerBelgelerToplami = await _db.SatisBelgesiSatirlari
-                    .Where(x =>
-                        !x.IsDeleted &&
-                        x.KaynakSatirId == kaynakSatirIdMetni &&
-                        x.SatisBelgesi.Id != belge.Id &&
-                        !x.SatisBelgesi.IsDeleted &&
-                        x.SatisBelgesi.IadeEdilenBelgeId == belge.IadeEdilenBelgeId &&
-                        x.SatisBelgesi.BelgeTipi == belge.BelgeTipi &&
-                        IadeKumulatifSayilanDurumlar.Contains(x.SatisBelgesi.Durum))
-                    .SumAsync(x => (decimal?)x.Miktar, cancellationToken) ?? 0m;
+                var digerSatirlar = await _db.SatisBelgesiSatirlari
+                    .FromSqlRaw(sql)
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken);
+
+                digerBelgelerToplami = digerSatirlar.Sum(x => x.Miktar);
             }
 
             var toplamIadeMiktari = digerBelgelerToplami + buBelgeninToplami;

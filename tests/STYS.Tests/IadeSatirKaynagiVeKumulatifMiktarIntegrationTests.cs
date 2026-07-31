@@ -17,7 +17,7 @@ namespace STYS.Tests;
 /// <summary>
 /// İade satırlarının kaynak satıra (KaynakSatirId) bağlantısını ve kümülatif iade miktarının
 /// asıl satır miktarını aşmadığını doğrulayan GERÇEK SQL Server entegrasyon testleri
-/// (SatisBelgesiService.ValidateIadeSatirlariAsync). Başlangıç commit'i: 2ec929f.
+/// (SatisBelgesiService.ValidateIadeSatirlariAsync).
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
@@ -781,5 +781,171 @@ public class IadeSatirKaynagiVeKumulatifMiktarIntegrationTests : IAsyncLifetime
             _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 4m, kdvOrani: 10m)));
 
         Assert.Contains("birebir eşleşmelidir", ex.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Soft-delete edilmiş önceki iadenin toplam davranışı — İPTALDEN AYRI, bağımsız test
+    // (bkz. SatisIadeFaturasi_IptalEdilmisOncekiIade_KumulatifToplamaDahilDegil - soft-delete
+    // davranışı o testten VARSAYILMAZ, burada ayrıca doğrulanır).
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task SatisIadeFaturasi_SoftDeleteEdilmisOncekiIade_KumulatifToplamaDahilDegil()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, miktar) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "SD1", miktar: 10m);
+
+        // 1. iade geçerli (MuhasebeOnaylandi) bir duruma getirilir, ardından SOFT-DELETE edilir
+        // (İPTAL EDİLMEZ - Durum kasten MuhasebeOnaylandi olarak KALIR, yalnızca IsDeleted=true
+        // yapılır). Bu, iptal ile soft-delete'in AYRI/bağımsız iki koşul olduğunu kanıtlar.
+        var iade1 = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 8m));
+        await service.MuhasebeOnayinaGonderAsync(iade1.Id!.Value);
+        await service.MuhasebeOnaylaAsync(iade1.Id.Value);
+
+        var iade1Db = await dbContext.SatisBelgeleri.FirstAsync(x => x.Id == iade1.Id);
+        iade1Db.IsDeleted = true;
+        await dbContext.SaveChangesAsync();
+
+        // 2. iade, soft-delete edilmiş 1. iadeyle birlikte toplansaydı (8+8=16>10) reddedilirdi;
+        // soft-delete edilmiş iade toplama DAHİL EDİLMEDİĞİNDEN (yalnızca 8<=10) BAŞARILI olmalıdır.
+        var iade2 = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id.Value, _uniqueSuffix, new DateTime(2026, 3, 6), satirId, miktar: 8m));
+        await service.MuhasebeOnayinaGonderAsync(iade2.Id!.Value);
+        await service.MuhasebeOnaylaAsync(iade2.Id.Value);
+
+        var iade2SonHal = await ReadNoTrackingAsync(dbContext, iade2.Id.Value);
+        Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, iade2SonHal.Durum);
+        _ = miktar;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Kanonik KaynakSatirId biçimi — "00123" vb. baştaki sıfırlı gösterimler
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task SatisIadeFaturasi_KaynakSatirIdBastaSifirlarla_KanonikBicimdeSaklanir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, _) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "CN1", miktar: 10m);
+
+        var request = BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 4m);
+        // Kaynak satır kimliğini KASTEN baştaki sıfırlarla gönder ("00123" biçimi).
+        request.Satirlar[0].KaynakSatirId = "00" + satirId;
+
+        var iade = await service.CreateAsync(request);
+
+        var sonHal = await ReadNoTrackingAsync(dbContext, iade.Id!.Value);
+        Assert.Equal(satirId.ToString(), sonHal.Satirlar.Single(x => !x.IsDeleted).KaynakSatirId);
+    }
+
+    [IntegrationFact]
+    public async Task SatisIadeFaturasi_FarkliSayisalGosterimler_KumulatifSiniriBirlikteAsamaz()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, miktar) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "CN2", miktar: 10m);
+
+        // 1. iade, KaynakSatirId "00123" (baştaki sıfırlı) biçiminde GÖNDERİLİR - kanonik biçime
+        // ("123") ÇEVRİLEREK kaydedilir (bkz. yukarıdaki test) ve onaylanır (6 <= 10).
+        var request1 = BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 6m);
+        request1.Satirlar[0].KaynakSatirId = "00" + satirId;
+        var iade1 = await service.CreateAsync(request1);
+        await service.MuhasebeOnayinaGonderAsync(iade1.Id!.Value);
+        await service.MuhasebeOnaylaAsync(iade1.Id.Value);
+
+        // 2. iade, AYNI kaynak satırı DÜZ ("123") biçiminde gösterir - TEK BAŞINA geçerli (6<=10),
+        // ama 1. iade ile KÜMÜLATİF toplam (6+6=12>10) asıl miktarı aşar. Düzeltmeden ÖNCE, 1.
+        // iadenin "00123" olarak saklanması nedeniyle metinsel eşitlik sorgusu bu satırı
+        // GÖREMEZDİ ve bu istek YANLIŞLIKLA başarılı olurdu - artık reddedilmelidir.
+        var request2 = BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id.Value, _uniqueSuffix, new DateTime(2026, 3, 6), satirId, miktar: 6m);
+        var iade2 = await service.CreateAsync(request2);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeOnayinaGonderAsync(iade2.Id!.Value));
+        Assert.Contains("toplam iade miktarı", ex.Message);
+
+        var iade2SonHal = await ReadNoTrackingAsync(dbContext, iade2.Id!.Value);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, iade2SonHal.Durum);
+        _ = miktar;
+    }
+
+    [IntegrationFact]
+    public async Task SatisIadeFaturasi_DogrudanSeedEdilmisKanonikOlmayanOncekiIade_KumulatifToplamaDahilEdilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, miktar) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "CN3", miktar: 10m);
+
+        // Uygulama servisini (ve dolayısıyla ValidateIadeSatirlariAsync'in kanonikleştirmesini)
+        // BAYPAS EDEREK, doğrudan DbContext üzerinden, kanonik OLMAYAN ("00" + satirId) bir
+        // KaynakSatirId ile ZATEN MuhasebeOnaylandi durumunda olan bir "eski" iade satırı seed
+        // edilir - bu, düzeltmeden ÖNCE veya harici bir veri aktarımıyla oluşmuş kanonik olmayan
+        // bir kaydı temsil eder.
+        var eskiIade = new SatisBelgesi
+        {
+            KurumId = _kurumId,
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi,
+            Durum = SatisBelgesiDurumu.MuhasebeOnaylandi,
+            TesisId = _tesisId,
+            CariKartId = _musteriKartId,
+            BelgeTarihi = new DateTime(2026, 3, 5),
+            MusteriAdSoyad = "Musteri " + _uniqueSuffix,
+            KurumsalMi = false,
+            IadeEdilenBelgeId = asil.Id,
+            ToplamMatrah = 800m,
+            ToplamKdv = 160m,
+            GenelToplam = 960m,
+            Satirlar =
+            [
+                new SatisBelgesiSatiri
+                {
+                    SiraNo = 1,
+                    Aciklama = "Kanonik olmayan eski iade satiri",
+                    Birim = "Adet",
+                    Miktar = 8m,
+                    BirimFiyat = 100m,
+                    KdvUygulamaTipi = KdvUygulamaTipi.Kdvli,
+                    KdvOrani = 20m,
+                    KdvTutari = 160m,
+                    Matrah = 800m,
+                    SatirToplami = 960m,
+                    KaynakSatirId = "00" + satirId
+                }
+            ]
+        };
+        dbContext.SatisBelgeleri.Add(eskiIade);
+        await dbContext.SaveChangesAsync();
+
+        var eskiIadeDbSatir = await dbContext.SatisBelgesiSatirlari.AsNoTracking()
+            .FirstAsync(x => x.SatisBelgesiId == eskiIade.Id);
+        Assert.Equal("00" + satirId, eskiIadeDbSatir.KaynakSatirId); // seed'in kanonik OLMADIĞI doğrulanır.
+
+        // Yeni iade, AYNI kaynak satırı kanonik ("123") biçimde gösterir - TEK BAŞINA geçerli
+        // (8<=10), ama eski (kanonik olmayan, doğrudan seed edilmiş) iadeyle KÜMÜLATİF toplam
+        // (8+8=16>10) asıl miktarı aşar - sorgu SAYISAL eşitlik kullandığından eski kayıt
+        // GÖRÜLÜR ve istek reddedilir.
+        var yeniIade = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 6), satirId, miktar: 8m));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeOnayinaGonderAsync(yeniIade.Id!.Value));
+        Assert.Contains("toplam iade miktarı", ex.Message);
+
+        var yeniIadeSonHal = await ReadNoTrackingAsync(dbContext, yeniIade.Id!.Value);
+        Assert.Equal(SatisBelgesiDurumu.Taslak, yeniIadeSonHal.Durum);
+        _ = miktar;
     }
 }

@@ -200,7 +200,8 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
                     new CreateSatisBelgesiSatiriRequest
                     {
                         SiraNo = 1, Aciklama = "Ek vergili iade satiri", Miktar = 1, BirimFiyat = 1000m,
-                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, KonaklamaVergisiOrani = 2m
+                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, KonaklamaVergisiOrani = 2m,
+                        KaynakSatirId = asilKesildi.Satirlar[0].Id!.Value.ToString()
                     }
                 ]
             });
@@ -299,7 +300,8 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
                     new CreateSatisBelgesiSatiriRequest
                     {
                         SiraNo = 1, Aciklama = "Ek vergili iade satiri", Miktar = 1, BirimFiyat = 500m,
-                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m
+                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m, OtvOrani = 25m,
+                        KaynakSatirId = asilCreated.Satirlar[0].Id!.Value.ToString()
                     }
                 ]
             });

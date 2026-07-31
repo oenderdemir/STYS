@@ -135,7 +135,7 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
     }
 
     private async Task<SatisBelgesiDto> SeedOnaylanmisSatisFaturasiVeKesAsync(
-        StysAppDbContext dbContext, DateTime belgeTarihi, string seriKodu, int? musteriKartId = null)
+        StysAppDbContext dbContext, DateTime belgeTarihi, string seriKodu, int? musteriKartId = null, decimal miktar = 1m)
     {
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
@@ -153,7 +153,7 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
             [
                 new CreateSatisBelgesiSatiriRequest
                 {
-                    SiraNo = 1, Aciklama = "Test satir", Miktar = 1, BirimFiyat = 1000m,
+                    SiraNo = 1, Aciklama = "Test satir", Miktar = miktar, BirimFiyat = 1000m,
                     KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
                 }
             ]
@@ -448,7 +448,8 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -482,7 +483,11 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    // IadeEdilenBelgeId bu testte KASTEN verilmiyor - KaynakSatirId'nin biçim/varlık
+                    // kontrolü (ValidateIadeSatirlariAsync) yine de geçmelidir; sahiplik/miktar
+                    // kontrolleri asıl fatura seçilene kadar ERTELENİR.
+                    KaynakSatirId = "1"
                 }
             ]
         });
@@ -657,7 +662,8 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = "1"
                 }
             ]
         });
@@ -697,7 +703,8 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -746,7 +753,8 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -802,7 +810,8 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -836,7 +845,11 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
 
-        var asil = await SeedOnaylanmisSatisFaturasiVeKesAsync(dbContext, new DateTime(2026, 3, 1), "MLT");
+        // Asıl satır miktarı 2 - iki kısmi iade (1+1) TOPLAMDA asıl miktara tam eşit olacak
+        // şekilde kurulur (bkz. SatisBelgesiService.ValidateIadeSatirlariAsync - kümülatif
+        // miktar sınırı artık uygulanır, ayrıntı için görev sonuç raporuna bakınız).
+        var asil = await SeedOnaylanmisSatisFaturasiVeKesAsync(dbContext, new DateTime(2026, 3, 1), "MLT", miktar: 2m);
+        var asilSatirId = asil.Satirlar[0].Id!.Value;
 
         async Task<SatisBelgesiDto> IadeOlusturAsync()
         {
@@ -854,12 +867,14 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
                 [
                     new CreateSatisBelgesiSatiriRequest
                     {
-                        SiraNo = 1, Aciklama = "Kismi iade", Miktar = 1, BirimFiyat = 200m,
-                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                        SiraNo = 1, Aciklama = "Kismi iade", Miktar = 1, BirimFiyat = 1000m,
+                        KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                        KaynakSatirId = asilSatirId.ToString()
                     }
                 ]
             });
             await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
+            await service.MuhasebeOnaylaAsync(created.Id!.Value);
             return created;
         }
 
@@ -872,8 +887,6 @@ public class FaturaReferansIntegrationTests : IAsyncLifetime
         var iadeSayisi = await verifyContext.SatisBelgeleri.AsNoTracking()
             .CountAsync(x => x.IadeEdilenBelgeId == asil.Id);
         Assert.Equal(2, iadeSayisi);
-        // NOT: Bu aşamada iade edilen TOPLAM tutar/miktar sınırı UYGULANMAMAKTADIR - bkz. görev
-        // sonuç raporu (kapsam dışı bırakıldı).
     }
 
     // ─────────────────────────────────────────────────────────────

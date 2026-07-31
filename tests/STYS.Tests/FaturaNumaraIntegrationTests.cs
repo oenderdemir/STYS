@@ -194,6 +194,11 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         await service.MuhasebeOnaylaAsync(asilCreated.Id!.Value);
         await fisService.MuhasebeFisiOlusturAsync(asilCreated.Id.Value);
 
+        // KaynakSatirId artık iade satırlarında ZORUNLUDUR (bkz. SatisBelgesiService.
+        // ValidateIadeSatirlariAsync) - asıl faturanın satır Id'sine işaret eder. Miktar/
+        // BirimFiyat/KdvOrani asıl satırla BİREBİR aynı tutulur (1/500/20 - tam iade).
+        var asilSatirId = asilCreated.Satirlar[0].Id!.Value;
+
         var request = new CreateSatisBelgesiRequest
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
@@ -212,7 +217,8 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
                     Miktar = 1,
                     BirimFiyat = 500m,
                     KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
-                    KdvOrani = 20m
+                    KdvOrani = 20m,
+                    KaynakSatirId = asilSatirId.ToString()
                 }
             ]
         };
@@ -498,7 +504,11 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Test", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    // İade tipi belgelerde KaynakSatirId ZORUNLUDUR (bkz. ValidateIadeSatirlariAsync)
+                    // - IadeEdilenBelgeId bu testte hiç verilmediğinden sahiplik/miktar kontrolleri
+                    // hiç çalışmaz, yalnızca biçim/varlık kontrolünü geçecek herhangi bir değer yeterlidir.
+                    KaynakSatirId = belgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi ? "1" : null
                 }
             ]
         });
@@ -981,7 +991,8 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asilCreated.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });

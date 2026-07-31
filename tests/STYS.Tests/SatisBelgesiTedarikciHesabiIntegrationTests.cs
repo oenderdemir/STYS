@@ -152,7 +152,8 @@ public class SatisBelgesiTedarikciHesabiIntegrationTests : IAsyncLifetime
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Iade edilen hizmet", Miktar = 1, BirimFiyat = 500m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                KaynakSatirId = asilOnaylanmis.Satirlar[0].Id!.Value.ToString()
             }
         ], iadeEdilenBelgeId: asilOnaylanmis.Id);
 

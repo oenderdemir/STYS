@@ -79,6 +79,23 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         (int)SatisBelgesiDurumu.Taslak
     ];
 
+    /// <summary>
+    /// İade satırlarının kümülatif miktar toplamına DAHİL EDİLEN belge durumları (bkz.
+    /// ValidateIadeSatirlariAsync). Taslak ve Reddedildi belgeler henüz onay sürecinden
+    /// geçmediğinden birbirini gereksiz yere kilitlemez/toplama katılmaz - bir belge en az
+    /// MuhasebeOnayinda durumuna (yani ValidateBelgeOnayaGonderilebilir'den geçmiş) ulaşmadan
+    /// başka bir iade belgesinin kotasını TÜKETMEZ. İptalEdildi ve soft-delete edilmiş belgeler
+    /// (IsDeleted=true, ayrıca kontrol edilir) de kapsam dışıdır - artık geçerli bir iade talebini
+    /// temsil etmezler.
+    /// </summary>
+    private static readonly HashSet<SatisBelgesiDurumu> IadeKumulatifSayilanDurumlar =
+    [
+        SatisBelgesiDurumu.MuhasebeOnayinda,
+        SatisBelgesiDurumu.MuhasebeOnaylandi,
+        SatisBelgesiDurumu.FaturaKesildi,
+        SatisBelgesiDurumu.MusteriyeGonderildi
+    ];
+
     public SatisBelgesiService(
         ISatisBelgesiRepository satisBelgesiRepository,
         StysAppDbContext db,
@@ -401,6 +418,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             belge.Satirlar.Add(satir);
         }
 
+        // 4b. İade satırı kaynak bağlantısı/miktar — kilitsiz, yalnızca BU belgenin kendi
+        // satırları için erken kontrol (bkz. ValidateIadeSatirlariAsync). Diğer belgelerle
+        // kümülatif/kilitli nihai kontrol en geç muhasebe onayına gönderme aşamasında yapılır.
+        await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
+
         // 5. Belge toplamlarını hesapla
         HesaplaBelgeToplamlari(belge);
 
@@ -575,27 +597,44 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     public async Task MuhasebeOnayinaGonderAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted,
-            q => q.Include(x => x.Satirlar))
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
-
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
-
-        if (belge.Durum != SatisBelgesiDurumu.Taslak)
+        // İade belgelerinde kaynak satırların kümülatif miktar sınırının eşzamanlılığa güvenli
+        // şekilde doğrulanabilmesi için (bkz. ValidateIadeSatirlariAsync,
+        // ValidateKarsiTarafVeIadeAlanlariAsync üzerinden çağrılır) TÜM metot gövdesi tek bir
+        // transaction içinde çalışır - WITH (UPDLOCK, ROWLOCK, HOLDLOCK) ile alınan kaynak satır
+        // kilidi ancak bu transaction commit/rollback olana kadar tutulursa anlamlıdır. Normal
+        // (iade olmayan) belgeler için davranış değişmez - yalnızca önceden zaten örtük olan
+        // transaction artık AÇIK/uzun ömürlüdür.
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException(
-                $"Sadece Taslak durumundaki belgeler muhasebe onayına gönderilebilir. Mevcut durum: {belge.Durum}",
-                errorCode: 400);
+            var belge = await Repository.FirstOrDefaultAsync(
+                x => x.Id == id && !x.IsDeleted,
+                q => q.Include(x => x.Satirlar))
+                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+            await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
+
+            if (belge.Durum != SatisBelgesiDurumu.Taslak)
+            {
+                throw new BaseException(
+                    $"Sadece Taslak durumundaki belgeler muhasebe onayına gönderilebilir. Mevcut durum: {belge.Durum}",
+                    errorCode: 400);
+            }
+
+            // Kapsamlı ön-kontrol (satır, müşteri, KDV, toplam, kaynak duplicate)
+            await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
+
+            belge.Durum = SatisBelgesiDurumu.MuhasebeOnayinda;
+            belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
+
+            await Repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
-
-        // Kapsamlı ön-kontrol (satır, müşteri, KDV, toplam, kaynak duplicate)
-        await ValidateBelgeOnayaGonderilebilir(belge, cancellationToken);
-
-        belge.Durum = SatisBelgesiDurumu.MuhasebeOnayinda;
-        belge.MuhasebeOnayinaGonderilmeTarihi = DateTime.UtcNow;
-
-        await Repository.SaveChangesAsync(cancellationToken);
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -604,41 +643,53 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     public async Task MuhasebeOnaylaAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted,
-            q => q.Include(x => x.Satirlar))
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
-
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
-
-        if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
+        // Bkz. MuhasebeOnayinaGonderAsync'teki açıklama - aynı gerekçeyle TÜM metot gövdesi tek
+        // bir transaction içinde çalışır.
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException(
-                $"Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir. Mevcut durum: {belge.Durum}",
-                errorCode: 400);
+            var belge = await Repository.FirstOrDefaultAsync(
+                x => x.Id == id && !x.IsDeleted,
+                q => q.Include(x => x.Satirlar))
+                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+
+            await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
+
+            if (belge.Durum != SatisBelgesiDurumu.MuhasebeOnayinda)
+            {
+                throw new BaseException(
+                    $"Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir. Mevcut durum: {belge.Durum}",
+                    errorCode: 400);
+            }
+
+            // Onay anında içerik tekrar doğrulanır (arada değişiklik olmadığından emin olmak için)
+            await ValidateBelgeMuhasebeOnaylanabilir(belge, cancellationToken);
+
+            belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
+            belge.MuhasebeOnayTarihi = DateTime.UtcNow;
+
+            await Repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            _domainLogger.Completed("Accounting.SalesDocument.Create.Completed", new
+            {
+                BelgeId = belge.Id,
+                BelgeNo = belge.BelgeNo,
+                BelgeTipi = belge.BelgeTipi,
+                KaynakTipi = belge.KaynakTipi,
+                KaynakId = belge.KaynakId,
+                TesisId = belge.TesisId,
+                GenelToplam = belge.GenelToplam,
+                ToplamKdv = belge.ToplamKdv,
+                YeniDurum = belge.Durum.ToString(),
+                BusinessResult = "MuhasebeOnaylandi"
+            });
         }
-
-        // Onay anında içerik tekrar doğrulanır (arada değişiklik olmadığından emin olmak için)
-        await ValidateBelgeMuhasebeOnaylanabilir(belge, cancellationToken);
-
-        belge.Durum = SatisBelgesiDurumu.MuhasebeOnaylandi;
-        belge.MuhasebeOnayTarihi = DateTime.UtcNow;
-
-        await Repository.SaveChangesAsync(cancellationToken);
-
-        _domainLogger.Completed("Accounting.SalesDocument.Create.Completed", new
+        catch
         {
-            BelgeId = belge.Id,
-            BelgeNo = belge.BelgeNo,
-            BelgeTipi = belge.BelgeTipi,
-            KaynakTipi = belge.KaynakTipi,
-            KaynakId = belge.KaynakId,
-            TesisId = belge.TesisId,
-            GenelToplam = belge.GenelToplam,
-            ToplamKdv = belge.ToplamKdv,
-            YeniDurum = belge.Durum.ToString(),
-            BusinessResult = "MuhasebeOnaylandi"
-        });
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -1414,6 +1465,13 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             await ValidateVeGetIadeEdilenBelgeAsync(
                 belge.BelgeTipi, belge.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
                 selfId: belge.Id, cancellationToken);
+
+            // Kaynak satır bağlantısı ve KÜMÜLATİF miktar sınırı — bu noktada IadeEdilenBelgeId
+            // zaten zorunlu kılınmış ve doğrulanmıştır. Bu metot (ValidateBelgeOnayaGonderilebilir
+            // üzerinden) YALNIZCA MuhasebeOnayinaGonderAsync/MuhasebeOnaylaAsync tarafından, HER
+            // ZAMAN açık bir transaction içinde çağrılır - bkz. o metotların gövdesi - bu yüzden
+            // kilitliKumulatifKontrol=true burada GÜVENLİDİR.
+            await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: true, cancellationToken);
         }
     }
 
@@ -2446,6 +2504,197 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             await ValidateSatirRequestAsync(satirRequest, belge, cancellationToken);
             var satir = CreateSatirFromRequest(satirRequest);
             belge.Satirlar.Add(satir);
+        }
+
+        // Bkz. CreateAsync'teki eşdeğer çağrı — Create ve Update AYNI merkezi doğrulama
+        // metodunu kullanır, dağınık/farklılaşabilecek kopya kurallar OLUŞTURULMAZ.
+        await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
+    }
+
+    // ──────────────────────────────────────────────
+    //  Private — İade Satırı Kaynak Bağlantısı ve Kümülatif Miktar
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// İade satırlarının (SatisIadeFaturasi/AlisIadeFaturasi) kaynak satır bağlantısını,
+    /// finansal alan tutarlılığını ve miktar sınırlarını doğrular. NİHAİ belge ve satır
+    /// değerleriyle çalışan MERKEZİ metottur — Create/Update (kilitsiz, yalnızca bu belgenin
+    /// kendi satırları için erken kontrol) ve muhasebe onayına gönderme/onaylama (kilitli,
+    /// diğer belgelerle birlikte kümülatif nihai kontrol) AYNI bu metodu çağırır; dağınık,
+    /// birbirinden farklılaşabilecek kopya kurallar OLUŞTURULMAZ.
+    ///
+    /// Normal SatisFaturasi/AlisFaturasi belgelerinde (belge.BelgeTipi iade tipi değilse) hiçbir
+    /// şey yapmadan döner — bu belgelerde KaynakSatirId hâlâ diğer modüllerin (Kamp, Restoran,
+    /// Rezervasyon) kullandığı serbest biçimli harici kaynak kimliği olarak KALIR, davranışı
+    /// DEĞİŞTİRİLMEZ.
+    ///
+    /// belge.IadeEdilenBelgeId henüz seçilmemişse (Taslak aşamasında KarsiTarafFaturaNo/
+    /// IadeEdilenBelgeId gibi geriye uyumlu olarak ertelenebilir — bkz. NormalizeKarsiTarafFaturaNoOrNull)
+    /// yalnızca KaynakSatirId'nin VAR OLDUĞU ve ayrıştırılabilir olduğu kontrol edilir; asıl
+    /// fatura henüz bilinmediğinden sahiplik/mali alan/miktar kontrolleri ERTELENİR — onay
+    /// aşamasında IadeEdilenBelgeId zaten zorunlu kılındığından (bkz.
+    /// ValidateKarsiTarafVeIadeAlanlariAsync, bu metottan ÖNCE çalışır) o noktada MUTLAKA ve TAM
+    /// olarak tekrar çalışır; hiçbir satır bu kontrolden kaçarak onaylanamaz.
+    /// </summary>
+    private async Task ValidateIadeSatirlariAsync(
+        SatisBelgesi belge,
+        bool kilitliKumulatifKontrol,
+        CancellationToken cancellationToken)
+    {
+        if (belge.BelgeTipi is not (SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi))
+            return;
+
+        var aktifSatirlar = belge.Satirlar.Where(s => !s.IsDeleted).ToList();
+        if (aktifSatirlar.Count == 0)
+            return;
+
+        // 1. KaynakSatirId her iade satırında ZORUNLUDUR ve pozitif bir tam sayı olarak
+        // ayrıştırılabilir olmalıdır (NumberStyles.None: işaret/boşluk/binlik ayıracı YOK).
+        var parsed = new List<(SatisBelgesiSatiri Satir, int KaynakSatirId)>();
+        foreach (var satir in aktifSatirlar)
+        {
+            if (string.IsNullOrWhiteSpace(satir.KaynakSatirId) ||
+                !int.TryParse(satir.KaynakSatirId, NumberStyles.None, CultureInfo.InvariantCulture, out var kaynakSatirId) ||
+                kaynakSatirId <= 0)
+            {
+                throw new BaseException(
+                    $"İade satırlarında kaynak satır referansı (KaynakSatirId) zorunludur. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+            }
+
+            parsed.Add((satir, kaynakSatirId));
+        }
+
+        if (!belge.IadeEdilenBelgeId.HasValue)
+            return;
+
+        var kaynakSatirIdler = parsed.Select(x => x.KaynakSatirId).Distinct().OrderBy(x => x).ToList();
+
+        if (kilitliKumulatifKontrol)
+        {
+            // Eşzamanlılık: her kaynak satır, SABİT (artan Id) sırayla WITH (UPDLOCK, ROWLOCK,
+            // HOLDLOCK) kilitlenir - çağıran (MuhasebeOnayinaGonderAsync/MuhasebeOnaylaAsync) bu
+            // metodu her zaman açık bir transaction içinde çağırır, bu yüzden kilit COMMIT/ROLLBACK
+            // olana kadar TUTULUR. Aynı kaynak satıra eşzamanlı onaya gönderilen/onaylanan iki
+            // farklı iade belgesi bu satırda birbirini bekler; ikincisi, birincinin transaction'ı
+            // sonuçlanınca (commit ile) NİHAİ/güncel toplamı görür - yalnızca "önce oku sonra yaz"
+            // (uygulama seviyesi, kilitsiz) kontrolüyle YETİNİLMEZ. Sabit artan sıra, iki
+            // transaction'ın farklı sırayla kilit almasından doğabilecek deadlock'ları önler.
+            foreach (var kaynakSatirId in kaynakSatirIdler)
+            {
+                await _db.SatisBelgesiSatirlari
+                    .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[SatisBelgesiSatirlari] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken);
+            }
+        }
+
+        var kaynakSatirlar = await _db.SatisBelgesiSatirlari
+            .AsNoTracking()
+            .Where(x => kaynakSatirIdler.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        foreach (var kaynakSatirId in kaynakSatirIdler)
+        {
+            if (!kaynakSatirlar.ContainsKey(kaynakSatirId))
+            {
+                throw new BaseException(
+                    $"Kaynak satır bulunamadı veya silinmiş. (KaynakSatirId: {kaynakSatirId})",
+                    errorCode: 400);
+            }
+        }
+
+        foreach (var (satir, kaynakSatirId) in parsed)
+        {
+            var kaynakSatir = kaynakSatirlar[kaynakSatirId];
+
+            // 2. Sahiplik: kaynak satır, SEÇİLEN asıl faturaya (belge.IadeEdilenBelgeId) ait
+            // olmalıdır - başka bir faturaya (hatta başka geçerli bir asıl faturaya) ait bir satır
+            // KABUL EDİLMEZ. Kaynak satırın kendisi silinmemiş olduğundan (yukarıdaki sözlükte
+            // bulunduğundan) ve global sorgu filtresi zaten IsDeleted=0 uyguladığından, burada
+            // ayrıca bir kurum kontrolüne gerek YOKTUR - IadeEdilenBelgeId'nin kendisi zaten
+            // ValidateVeGetIadeEdilenBelgeAsync ile aynı kuruma ait olduğu doğrulanmış bir belgedir.
+            if (kaynakSatir.SatisBelgesiId != belge.IadeEdilenBelgeId.Value)
+            {
+                throw new BaseException(
+                    $"Kaynak satır, seçilen iade edilen belgeye ait değil. (SıraNo: {satir.SiraNo}, KaynakSatirId: {kaynakSatirId})",
+                    errorCode: 400);
+            }
+
+            // 3. Finansal alan tutarlılığı: iade satırı kaynak satırın birim fiyatını, indirim
+            // oranını, KDV uygulama tipi/oranını ve tevkifat oranını BİREBİR yansıtmalıdır -
+            // yalnızca Miktar farklı olabilir. Bu, paralel bir tutar hesaplayıcı OLUŞTURMADAN
+            // (SatisBelgesiTutarHesaplayici tek hesaplama noktası olarak KALIR), iade üzerinden
+            // asıl faturada bulunmayan veya asıl birim değerini aşan bir mali değer üretilmesini
+            // yapısal olarak engeller - toplam mali maruziyet, aşağıdaki miktar sınırıyla birlikte
+            // kaynak satırın kendi SatirToplami'nı ASLA aşamaz.
+            //
+            // ÖTV/ÖİV/konaklama vergisi oranları BİLİNÇLİ OLARAK bu eşleşme kontrolüne DAHİL
+            // EDİLMEMİŞTİR (kapsam kararı, bkz. görev sonuç raporu): SatisBelgesiEkVergiEngelIntegrationTests
+            // ile kanıtlandığı üzere, bu üç alandan herhangi biri > 0 olan HERHANGİ bir belge
+            // (iade dahil), tipi ne olursa olsun, SatisBelgesiMuhasebeFisService.
+            // MuhasebeFisiOlusturAsync tarafından ZATEN koşulsuz reddedilir (hesap eşlemesi
+            // tanımlanmamıştır) - böyle bir belge hiçbir zaman gerçek bir muhasebe fişine/mali
+            // etkiye dönüşemez, dolayısıyla bu alanlardaki bir kaynak/iade uyumsuzluğu gerçek bir
+            // mali risk oluşturmaz. Bu üç alanı da zorunlu eşleşmeye dahil etmek, kapsamı
+            // gerektiğinden fazla büyütür ve mevcut ek-vergi-engeli testleriyle ÇAKIŞIR.
+            if (satir.BirimFiyat != kaynakSatir.BirimFiyat ||
+                satir.IndirimOrani != kaynakSatir.IndirimOrani ||
+                satir.KdvUygulamaTipi != kaynakSatir.KdvUygulamaTipi ||
+                satir.KdvOrani != kaynakSatir.KdvOrani ||
+                satir.TevkifatPay != kaynakSatir.TevkifatPay ||
+                satir.TevkifatPayda != kaynakSatir.TevkifatPayda)
+            {
+                throw new BaseException(
+                    "İade satırının birim fiyatı, indirim oranı, KDV uygulama tipi/oranı ve tevkifat " +
+                    $"oranı kaynak satırla birebir eşleşmelidir. (SıraNo: {satir.SiraNo})",
+                    errorCode: 400);
+            }
+        }
+
+        // 4. Miktar sınırı: bu belgenin KENDİ satırlarının kaynak satır bazında toplamı (aynı
+        // kaynak satıra birden fazla satırla iade TEORİK olarak mümkündür) hesaplanır.
+        // kilitliKumulatifKontrol=false ise (Create/Update, kilitsiz) yalnızca BU belgenin kendi
+        // toplamı kaynak miktarı aşıyor mu kontrol edilir - "tek belgenin kendi başına asıl
+        // miktarı aşması" erken reddi budur. kilitliKumulatifKontrol=true ise (onay aşaması,
+        // kilitli) DİĞER geçerli (IadeKumulatifSayilanDurumlar) belgelerin toplamı da eklenir -
+        // NİHAİ, kümülatif ve eşzamanlılığa güvenli kontrol budur.
+        var buBelgeninKendiToplamlari = parsed
+            .GroupBy(x => x.KaynakSatirId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Satir.Miktar));
+
+        foreach (var (kaynakSatirId, buBelgeninToplami) in buBelgeninKendiToplamlari)
+        {
+            var kaynakSatir = kaynakSatirlar[kaynakSatirId];
+            var digerBelgelerToplami = 0m;
+
+            if (kilitliKumulatifKontrol)
+            {
+                var kaynakSatirIdMetni = kaynakSatirId.ToString(CultureInfo.InvariantCulture);
+
+                digerBelgelerToplami = await _db.SatisBelgesiSatirlari
+                    .Where(x =>
+                        !x.IsDeleted &&
+                        x.KaynakSatirId == kaynakSatirIdMetni &&
+                        x.SatisBelgesi.Id != belge.Id &&
+                        !x.SatisBelgesi.IsDeleted &&
+                        x.SatisBelgesi.IadeEdilenBelgeId == belge.IadeEdilenBelgeId &&
+                        x.SatisBelgesi.BelgeTipi == belge.BelgeTipi &&
+                        IadeKumulatifSayilanDurumlar.Contains(x.SatisBelgesi.Durum))
+                    .SumAsync(x => (decimal?)x.Miktar, cancellationToken) ?? 0m;
+            }
+
+            var toplamIadeMiktari = digerBelgelerToplami + buBelgeninToplami;
+
+            if (toplamIadeMiktari > kaynakSatir.Miktar)
+            {
+                throw new BaseException(
+                    $"Kaynak satırın toplam iade miktarı ({toplamIadeMiktari}) asıl satır miktarını " +
+                    $"({kaynakSatir.Miktar}) aşamaz. (KaynakSatirId: {kaynakSatirId})",
+                    errorCode: 400);
+            }
         }
     }
 }

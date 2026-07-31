@@ -234,7 +234,8 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Iade edilen konaklama", Miktar = 1, BirimFiyat = 800m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m,
+                KaynakSatirId = asilFaturaKesildi.Satirlar[0].Id!.Value.ToString()
             }
         ]);
         request.KarsiTarafFaturaNo = $"MUS-{Guid.NewGuid():N}"[..20];
@@ -278,7 +279,8 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Iade edilen hizmet", Miktar = 1, BirimFiyat = 500m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                KaynakSatirId = asilOnaylanmis.Satirlar[0].Id!.Value.ToString()
             }
         ]);
         request.IadeEdilenBelgeId = asilOnaylanmis.Id;

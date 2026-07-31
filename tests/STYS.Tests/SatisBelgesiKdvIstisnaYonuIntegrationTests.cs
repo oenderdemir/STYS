@@ -145,7 +145,11 @@ public class SatisBelgesiKdvIstisnaYonuIntegrationTests : IAsyncLifetime
                     Miktar = 1,
                     BirimFiyat = 500m,
                     KdvUygulamaTipi = (int)KdvUygulamaTipi.TamIstisna,
-                    KdvIstisnaTanimId = tanimId
+                    KdvIstisnaTanimId = tanimId,
+                    // İade tipi belgelerde KaynakSatirId ZORUNLUDUR (bkz. ValidateIadeSatirlariAsync)
+                    // - bu test IadeEdilenBelgeId hiç vermediğinden sahiplik/miktar kontrolleri
+                    // çalışmaz, yalnızca biçim/varlık kontrolünü geçecek herhangi bir değer yeterlidir.
+                    KaynakSatirId = belgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi ? "1" : null
                 }
             ]
         };

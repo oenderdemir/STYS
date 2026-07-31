@@ -507,7 +507,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -545,7 +546,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -589,7 +591,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -634,7 +637,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -870,7 +874,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -1086,7 +1091,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = "1"
                 }
             ]
         });
@@ -1181,7 +1187,8 @@ public class KarsiTarafFaturaNoHardeningIntegrationTests : IAsyncLifetime
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -1344,7 +1351,8 @@ GROUP BY i.is_unique, i.filter_definition";
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 1000m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });
@@ -1384,7 +1392,8 @@ GROUP BY i.is_unique, i.filter_definition";
                 new CreateSatisBelgesiSatiriRequest
                 {
                     SiraNo = 1, Aciklama = "Iade", Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m,
+                    KaynakSatirId = asil.Satirlar[0].Id!.Value.ToString()
                 }
             ]
         });

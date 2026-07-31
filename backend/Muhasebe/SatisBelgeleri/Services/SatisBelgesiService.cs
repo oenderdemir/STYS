@@ -598,15 +598,20 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     // ──────────────────────────────────────────────
 
     /// <summary>
-    /// Standart satış faturasına, kurum + mali yıl + seri bazlı, eşzamanlılığa güvenli bir
-    /// resmî fatura numarası atar ve belgeyi FaturaKesildi durumuna geçirir.
+    /// STYS tarafından düzenlenen giden belgelere (SatisFaturasi, AlisIadeFaturasi), kurum +
+    /// mali yıl + seri bazlı, eşzamanlılığa güvenli bir resmî fatura numarası atar ve belgeyi
+    /// FaturaKesildi durumuna geçirir. Sıra numarası bu iki belge tipi arasında PAYLAŞILIR
+    /// (aynı sayaç anahtarı: KurumId+MaliYil+SeriKodu, BelgeTipi anahtara dahil DEĞİLDİR) - aynı
+    /// seri seçilirse resmî numara STYS'nin bu seride düzenlediği TÜM giden belgeler arasında
+    /// benzersiz ve ardışık ilerler.
     ///
-    /// İLK SÜRÜM KAPSAMI: yalnızca SatisBelgesiTipi.SatisFaturasi için otomatik numara üretilir.
-    /// AlisFaturasi, Proforma ve FaturaTaslagi için bu metot reddeder — alış faturasında
-    /// tedarikçinin düzenlediği harici fatura numarası ile STYS'nin ürettiği bu numara
-    /// KARIŞTIRILMAMALIDIR. SatisIadeFaturasi/AlisIadeFaturasi/IadeFaturasi için numara yönü
-    /// (iade faturasının kendi resmî numarası mı, orijinal faturanınki mi referans alınacak)
-    /// bu iş kapsamında TAHMİN EDİLEREK açılmamıştır — bkz. görev sonuç raporu.
+    /// Yön sınıflandırması <see cref="SatisBelgesiTipiExtensions.OtomatikResmiNumaraUretilebilirMi"/>
+    /// üzerinden MERKEZİ olarak yapılır (ön kontrol ve kilitli kontrol AYNI metodu kullanır - iki
+    /// ayrı hard-coded liste zamanla farklılaşamaz). AlisFaturasi ve SatisIadeFaturasi karşı taraf
+    /// tarafından düzenlenen GELEN belgelerdir; bu metot bunları reddeder - tedarikçinin/müşterinin
+    /// kendi harici fatura numarası ile STYS'nin ürettiği bu numara KARIŞTIRILMAMALIDIR. Legacy
+    /// IadeFaturasi hangi yönü temsil ettiği belirsiz olduğundan TAHMİN EDİLEREK açılmamıştır -
+    /// bkz. görev sonuç raporu.
     /// </summary>
     public async Task<SatisBelgesiDto> FaturaKesAsync(
         int id,
@@ -625,10 +630,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (belgeOnOkuma.IsDeleted)
             throw new BaseException("Satış belgesi silinmiş.", errorCode: 400);
 
-        if (belgeOnOkuma.BelgeTipi != SatisBelgesiTipi.SatisFaturasi)
+        if (!belgeOnOkuma.BelgeTipi.OtomatikResmiNumaraUretilebilirMi())
         {
             throw new BaseException(
-                "Otomatik resmî fatura numarası yalnızca standart satış faturaları (SatisFaturasi) için üretilebilir.",
+                "Otomatik resmî fatura numarası yalnızca STYS tarafından düzenlenen giden belgeler " +
+                "(SatisFaturasi, AlisIadeFaturasi) için üretilebilir.",
                 errorCode: 400);
         }
 
@@ -646,10 +652,11 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                 .FirstOrDefaultAsync(cancellationToken)
                 ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-            if (belge.BelgeTipi != SatisBelgesiTipi.SatisFaturasi)
+            if (!belge.BelgeTipi.OtomatikResmiNumaraUretilebilirMi())
             {
                 throw new BaseException(
-                    "Otomatik resmî fatura numarası yalnızca standart satış faturaları (SatisFaturasi) için üretilebilir.",
+                    "Otomatik resmî fatura numarası yalnızca STYS tarafından düzenlenen giden belgeler " +
+                    "(SatisFaturasi, AlisIadeFaturasi) için üretilebilir.",
                     errorCode: 400);
             }
 

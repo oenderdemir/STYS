@@ -51,6 +51,25 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
     public string? ResmiFaturaNo { get; set; }
     public string? EBelgeUuid { get; set; }
 
+    /// <summary>
+    /// Karşı tarafın (tedarikçi/müşteri) kendi düzenlediği fatura üzerindeki numara. Yalnızca
+    /// AlisFaturasi ve SatisIadeFaturasi (gelen belgeler) için kullanılabilir — ResmiFaturaNo'nun
+    /// (STYS'nin kendi ürettiği numara) yerine GEÇMEZ. Bkz. SatisBelgesiTipiExtensions ve
+    /// SatisBelgesiService'teki merkezi doğrulama yardımcıları.
+    /// </summary>
+    public string? KarsiTarafFaturaNo { get; set; }
+
+    /// <summary>
+    /// İade faturasının (SatisIadeFaturasi/AlisIadeFaturasi) iade ettiği asıl faturaya (sırasıyla
+    /// SatisFaturasi/AlisFaturasi) referansı. FK ilişkisi otoriter kaynaktır — asıl faturanın
+    /// numarası/tarihi buraya KOPYALANMAZ.
+    /// </summary>
+    public int? IadeEdilenBelgeId { get; set; }
+    public SatisBelgesi? IadeEdilenBelge { get; set; }
+
+    /// <summary>Bu asıl faturayı iade eden belgeler (ters navigation) — aynı asıl faturaya birden fazla kısmi iade bağlanabilir.</summary>
+    public ICollection<SatisBelgesi> IadeBelgeleri { get; set; } = new List<SatisBelgesi>();
+
     public DateTime? MuhasebeOnayinaGonderilmeTarihi { get; set; }
     public DateTime? MuhasebeOnayTarihi { get; set; }
     public DateTime? FaturaKesimTarihi { get; set; }

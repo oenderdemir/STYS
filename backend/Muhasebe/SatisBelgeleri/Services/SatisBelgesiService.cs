@@ -197,7 +197,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         q => q.Include(x => x.Satirlar);
 
     private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlarVeCariKart =>
-        q => q.Include(x => x.Satirlar).Include(x => x.CariKart);
+        q => q.Include(x => x.Satirlar).Include(x => x.CariKart).Include(x => x.IadeEdilenBelge);
 
     // ──────────────────────────────────────────────
     //  GetByIdAsync (ISatisBelgesiService) — nullable olmayan dönüş
@@ -247,6 +247,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             .AsNoTracking()
             .Include(x => x.Satirlar)
             .Include(x => x.CariKart)
+            .Include(x => x.IadeEdilenBelge)
             .Where(x => !x.IsDeleted);
 
         if (filter.TesisId.HasValue)
@@ -280,6 +281,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         if (filter.BitisTarihi.HasValue)
             query = query.Where(x => x.BelgeTarihi <= filter.BitisTarihi.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.KarsiTarafFaturaNo))
+        {
+            var normalizedFilter = filter.KarsiTarafFaturaNo.Trim();
+            query = query.Where(x => x.KarsiTarafFaturaNo != null && x.KarsiTarafFaturaNo.Contains(normalizedFilter));
+        }
+
+        if (filter.IadeEdilenBelgeId.HasValue)
+            query = query.Where(x => x.IadeEdilenBelgeId == filter.IadeEdilenBelgeId.Value);
 
         var belgeler = await query
             .OrderByDescending(x => x.BelgeTarihi)
@@ -336,6 +346,22 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         // 1. Validasyonlar
         await ValidateCreateRequestAsync(request, cancellationToken);
 
+        // 1b. Karşı taraf fatura numarası / iade edilen belge referansı — TASLAK aşamasında
+        // henüz verilmeyebilir (geriye uyumluluk), ama VERİLDİYSE hemen tam olarak doğrulanır.
+        var karsiTarafFaturaNo = NormalizeKarsiTarafFaturaNoOrNull(request.BelgeTipi, request.KarsiTarafFaturaNo);
+        if (karsiTarafFaturaNo is not null)
+        {
+            await ThrowIfKarsiTarafFaturaNoDuplicateAsync(
+                kurumId, request.CariKartId, karsiTarafFaturaNo, excludeId: null, cancellationToken);
+        }
+
+        if (request.IadeEdilenBelgeId.HasValue)
+        {
+            await ValidateVeGetIadeEdilenBelgeAsync(
+                request.BelgeTipi, request.IadeEdilenBelgeId, kurumId, request.CariKartId, request.BelgeTarihi,
+                selfId: null, cancellationToken);
+        }
+
         // 2. Belge no üret (isteğe bağlı override)
         var belgeNo = request.BelgeNo ?? await GenerateBelgeNoAsync(request.BelgeTarihi, cancellationToken);
 
@@ -362,7 +388,9 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             MusteriEposta = request.MusteriEposta,
             MusteriTelefon = request.MusteriTelefon,
             KurumsalMi = request.KurumsalMi,
-            Aciklama = request.Aciklama
+            Aciklama = request.Aciklama,
+            KarsiTarafFaturaNo = karsiTarafFaturaNo,
+            IadeEdilenBelgeId = request.IadeEdilenBelgeId
         };
 
         // 4. Satırları oluştur ve KDV hesapla
@@ -377,7 +405,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         HesaplaBelgeToplamlari(belge);
 
         await Repository.AddAsync(belge);
-        await Repository.SaveChangesAsync(cancellationToken);
+        await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
         if (belge.CariKartId.HasValue)
         {
             await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
@@ -479,13 +507,33 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         HesaplaBelgeToplamlari(belge);
         _satisBelgesiRepository.Update(belge);
-        await Repository.SaveChangesAsync(cancellationToken);
+        await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
         if (belge.CariKartId.HasValue)
         {
             await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
         }
 
         return Mapper.Map<SatisBelgesiDto>(belge);
+    }
+
+    /// <summary>
+    /// KurumId+CariKartId+KarsiTarafFaturaNo tekilliği için uygulama seviyesi kontrol
+    /// (ThrowIfKarsiTarafFaturaNoDuplicateAsync) yarış koşuluna karşı yeterli DEĞİLDİR - gerçek
+    /// güvence DB unique index'idir. Bu yardımcı, o index'in SaveChanges sırasında tetiklediği ham
+    /// SQL Server 2601/2627 hatasını, kullanıcıya anlaşılır bir conflict/duplicate hatasına çevirir.
+    /// </summary>
+    private async Task SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+        {
+            throw new BaseException(
+                "Bu karşı taraf fatura numarası, aynı kurum ve cari kart için eşzamanlı bir istekle az önce kaydedilmiş. Lütfen tekrar deneyin.",
+                errorCode: 409);
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -808,6 +856,24 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                 throw new BaseException(
                     "Belgenin tesis ve kurum bilgileri tutarsız; fatura kesilemez.",
                     errorCode: 500);
+            }
+
+            // AlisIadeFaturasi için: numara üretilmeden ÖNCE iade edilen asıl AlisFaturasi'nin
+            // (ve bağlı muhasebe fişinin) HÂLÂ geçerli olduğu yeniden doğrulanır - aynı merkezi
+            // yardımcı (ValidateVeGetIadeEdilenBelgeAsync) kullanılır. Doğrulama başarısızsa bu
+            // noktada sayaç HENÜZ hiç sorgulanmamış/kilitlenmemiştir.
+            if (belge.BelgeTipi == SatisBelgesiTipi.AlisIadeFaturasi)
+            {
+                if (!belge.IadeEdilenBelgeId.HasValue)
+                {
+                    throw new BaseException(
+                        "Alış iade faturasında iade edilen belge referansı bulunamadı; fatura kesilemez.",
+                        errorCode: 400);
+                }
+
+                await ValidateVeGetIadeEdilenBelgeAsync(
+                    belge.BelgeTipi, belge.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
+                    selfId: belge.Id, cancellationToken);
             }
 
             var maliYil = belge.BelgeTarihi.Year;
@@ -1278,6 +1344,61 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 excludeId: belge.Id,
                 cancellationToken: cancellationToken);
         }
+
+        // 12. Karşı taraf fatura numarası / iade edilen belge referansı zorunluluk + yeniden
+        // doğrulama - bu metot hem MuhasebeOnayinaGonderAsync hem MuhasebeOnaylaAsync tarafından
+        // (ValidateBelgeMuhasebeOnaylanabilir üzerinden) çağrıldığından, onaya gönderme ile
+        // onaylama ARASINDA asıl belgenin iptal edilmesi/bozulması SESSİZCE kabul edilmez.
+        await ValidateKarsiTarafVeIadeAlanlariAsync(belge, cancellationToken);
+    }
+
+    /// <summary>
+    /// Karşı taraf fatura numarası ve iade edilen belge referansı için onay-aşaması zorunluluk
+    /// kontrolleri: gelen belgelerde (AlisFaturasi/SatisIadeFaturasi) KarsiTarafFaturaNo zorunlu,
+    /// giden belgelerde (SatisFaturasi/AlisIadeFaturasi) bulunamaz; iade belgelerinde
+    /// (SatisIadeFaturasi/AlisIadeFaturasi) IadeEdilenBelgeId zorunlu ve MERKEZİ yardımcı ile
+    /// (ValidateVeGetIadeEdilenBelgeAsync) yeniden doğrulanır, iade olmayan belgelerde bulunamaz.
+    /// </summary>
+    private async Task ValidateKarsiTarafVeIadeAlanlariAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
+        var gidenBelgeMi = belge.BelgeTipi.StysTarafindanDuzenlenirMi();
+        var gelenBelgeMi = belge.BelgeTipi.KarsiTarafTarafindanDuzenlenirMi();
+        var iadeBelgeMi = belge.BelgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi;
+
+        if (gidenBelgeMi && !string.IsNullOrWhiteSpace(belge.KarsiTarafFaturaNo))
+        {
+            throw new BaseException(
+                "STYS tarafından düzenlenen giden belgelerde karşı taraf fatura numarası bulunamaz.",
+                errorCode: 400);
+        }
+
+        if (gelenBelgeMi && string.IsNullOrWhiteSpace(belge.KarsiTarafFaturaNo))
+        {
+            throw new BaseException(
+                "Karşı taraf tarafından düzenlenen belgeler için karşı taraf fatura numarası zorunludur.",
+                errorCode: 400);
+        }
+
+        if (!iadeBelgeMi && belge.IadeEdilenBelgeId.HasValue)
+        {
+            throw new BaseException(
+                "İade faturası olmayan belgelerde iade edilen belge referansı bulunamaz.",
+                errorCode: 400);
+        }
+
+        if (iadeBelgeMi)
+        {
+            if (!belge.IadeEdilenBelgeId.HasValue)
+            {
+                throw new BaseException(
+                    "İade faturaları için iade edilen belge referansı zorunludur.",
+                    errorCode: 400);
+            }
+
+            await ValidateVeGetIadeEdilenBelgeAsync(
+                belge.BelgeTipi, belge.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
+                selfId: belge.Id, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -1728,6 +1849,214 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
     }
 
+    // ──────────────────────────────────────────────
+    //  Private — Karşı Taraf Fatura Numarası / İade Edilen Belge Referansı (merkezi doğrulama)
+    // ──────────────────────────────────────────────
+
+    /// <summary>raw null/whitespace ise null döner (opsiyonel alan); doluysa NormalizeKarsiTarafFaturaNo ile doğrulanır.</summary>
+    private static string? NormalizeKarsiTarafFaturaNoOrNull(SatisBelgesiTipi belgeTipi, string? raw)
+        => string.IsNullOrWhiteSpace(raw) ? null : NormalizeKarsiTarafFaturaNo(belgeTipi, raw);
+
+    /// <summary>
+    /// Karşı taraf fatura numarasını (yalnızca AlisFaturasi/SatisIadeFaturasi için geçerli) trim
+    /// eder ve doğrular: 1..50 karakter, kontrol karakteri (satır sonu, tab dahil) içermez. Yazılış
+    /// biçimi (büyük/küçük harf vb.) GEREKSİZ YERE DEĞİŞTİRİLMEZ - yalnızca baş/son boşluk temizlenir.
+    /// </summary>
+    private static string NormalizeKarsiTarafFaturaNo(SatisBelgesiTipi belgeTipi, string raw)
+    {
+        if (belgeTipi != SatisBelgesiTipi.AlisFaturasi && belgeTipi != SatisBelgesiTipi.SatisIadeFaturasi)
+        {
+            throw new BaseException(
+                "Karşı taraf fatura numarası yalnızca alış faturası veya satış iade faturası için kullanılabilir.",
+                errorCode: 400);
+        }
+
+        var trimmed = raw.Trim();
+
+        if (trimmed.Length == 0)
+            throw new BaseException("Karşı taraf fatura numarası boş olamaz.", errorCode: 400);
+
+        if (trimmed.Length > 50)
+            throw new BaseException("Karşı taraf fatura numarası en fazla 50 karakter olabilir.", errorCode: 400);
+
+        if (trimmed.Any(char.IsControl))
+        {
+            throw new BaseException(
+                "Karşı taraf fatura numarası satır sonu, tab veya başka bir kontrol karakteri içeremez.",
+                errorCode: 400);
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Tekillik anahtarı KurumId+CariKartId+KarsiTarafFaturaNo'dur (global unique DEĞİLDİR - bkz.
+    /// görev raporu). Bu, gerçek yarış koşuluna karşı OTORİTER güvence olan DB unique index'inden
+    /// ÖNCE, kullanıcıya anlaşılır bir erken ret sağlayan uygulama seviyesi kontroldür.
+    /// </summary>
+    private async Task ThrowIfKarsiTarafFaturaNoDuplicateAsync(
+        int kurumId, int? cariKartId, string karsiTarafFaturaNo, int? excludeId, CancellationToken cancellationToken)
+    {
+        var query = _db.SatisBelgeleri.Where(x =>
+            !x.IsDeleted &&
+            x.KurumId == kurumId &&
+            x.CariKartId == cariKartId &&
+            x.KarsiTarafFaturaNo == karsiTarafFaturaNo);
+
+        if (excludeId.HasValue)
+            query = query.Where(x => x.Id != excludeId.Value);
+
+        if (await query.AnyAsync(cancellationToken))
+        {
+            throw new BaseException(
+                $"'{karsiTarafFaturaNo}' numaralı belge bu cari kart için zaten kayıtlı.",
+                errorCode: 409);
+        }
+    }
+
+    /// <summary>
+    /// İade edilen belge referansını (SatisIadeFaturasi -> SatisFaturasi, AlisIadeFaturasi ->
+    /// AlisFaturasi) MERKEZİ ve tam olarak doğrular: yön uygunluğu, kendine referans, kurum/cari
+    /// eşleşmesi, tarih sıralaması, asıl belgenin durumu ve bağlı muhasebe fişinin geçerliliği.
+    /// iadeEdilenBelgeId null ise hiçbir şey yapmadan null döner (opsiyonel alan). Hem Create/Update
+    /// sırasında (verildiyse) hem MuhasebeOnayina* akışlarında hem FaturaKesAsync'te (AlisIadeFaturasi
+    /// için) AYNI bu metot çağrılır - dağınık, birbirinden farklılaşabilecek kontroller OLUŞTURULMAZ.
+    /// </summary>
+    private async Task<SatisBelgesi?> ValidateVeGetIadeEdilenBelgeAsync(
+        SatisBelgesiTipi belgeTipi,
+        int? iadeEdilenBelgeId,
+        int kurumId,
+        int? cariKartId,
+        DateTime belgeTarihi,
+        int? selfId,
+        CancellationToken cancellationToken)
+    {
+        if (!iadeEdilenBelgeId.HasValue)
+            return null;
+
+        if (belgeTipi != SatisBelgesiTipi.SatisIadeFaturasi && belgeTipi != SatisBelgesiTipi.AlisIadeFaturasi)
+        {
+            throw new BaseException(
+                "İade edilen belge referansı yalnızca satış iade faturası veya alış iade faturası için kullanılabilir.",
+                errorCode: 400);
+        }
+
+        if (selfId.HasValue && iadeEdilenBelgeId.Value == selfId.Value)
+            throw new BaseException("Belge kendisini iade edilen belge olarak gösteremez.", errorCode: 400);
+
+        // Doğrudan _db üzerinden (repository değil) - SuperAdmin için bile aşağıda AÇIKÇA kurum
+        // eşitliği kontrol edilir; global sorgu filtresine güvenilmez.
+        var asilBelge = await _db.SatisBelgeleri
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == iadeEdilenBelgeId.Value, cancellationToken)
+            ?? throw new BaseException($"İade edilen belge bulunamadı. (Id: {iadeEdilenBelgeId})", errorCode: 404);
+
+        if (asilBelge.IsDeleted)
+            throw new BaseException("İade edilen belge silinmiş.", errorCode: 400);
+
+        // Tenant güvenliği: SuperAdmin dahil, KurumId eşitliği HER ZAMAN zorunludur - başka
+        // kurumun belgesi "uygun asıl belge" olarak ASLA kabul edilmez.
+        if (asilBelge.KurumId != kurumId)
+            throw new BaseException($"İade edilen belge bulunamadı. (Id: {iadeEdilenBelgeId})", errorCode: 404);
+
+        var beklenenAsilTip = belgeTipi == SatisBelgesiTipi.SatisIadeFaturasi
+            ? SatisBelgesiTipi.SatisFaturasi
+            : SatisBelgesiTipi.AlisFaturasi;
+
+        if (asilBelge.BelgeTipi != beklenenAsilTip)
+        {
+            throw new BaseException(
+                $"İade edilen belge '{beklenenAsilTip}' tipinde olmalıdır. (Mevcut tip: {asilBelge.BelgeTipi})",
+                errorCode: 400);
+        }
+
+        // Karşı taraf karışıklığını engelle: serbest metin (müşteri unvanı vb.) DEĞİL, yalnızca
+        // CariKartId eşleşmesine bakılır.
+        if (!cariKartId.HasValue || !asilBelge.CariKartId.HasValue || cariKartId.Value != asilBelge.CariKartId.Value)
+        {
+            throw new BaseException(
+                "İade edilen belgenin cari kartı, iade faturasınınkiyle eşleşmiyor.",
+                errorCode: 400);
+        }
+
+        if (belgeTarihi < asilBelge.BelgeTarihi)
+        {
+            throw new BaseException(
+                "İade faturasının tarihi, iade edilen asıl faturanın tarihinden eski olamaz.",
+                errorCode: 400);
+        }
+
+        if (belgeTipi == SatisBelgesiTipi.SatisIadeFaturasi)
+        {
+            if (asilBelge.Durum != SatisBelgesiDurumu.FaturaKesildi)
+            {
+                throw new BaseException(
+                    $"İade edilen satış faturası 'FaturaKesildi' durumunda olmalıdır. (Mevcut durum: {asilBelge.Durum})",
+                    errorCode: 400);
+            }
+
+            if (string.IsNullOrWhiteSpace(asilBelge.ResmiFaturaNo))
+                throw new BaseException("İade edilen satış faturasında geçerli bir resmî fatura numarası bulunamadı.", errorCode: 400);
+
+            if (!asilBelge.FaturaKesimTarihi.HasValue)
+                throw new BaseException("İade edilen satış faturasında fatura kesim tarihi bulunamadı.", errorCode: 400);
+        }
+        else
+        {
+            // AlisFaturasi hiçbir zaman FaturaKesAsync ile FaturaKesildi durumuna geçemez (bkz.
+            // OtomatikResmiNumaraUretilebilirMi) - bu yüzden "en az MuhasebeOnaylandı" pratikte
+            // yalnızca MuhasebeOnaylandi durumuyla karşılanabilir.
+            if (asilBelge.Durum != SatisBelgesiDurumu.MuhasebeOnaylandi)
+            {
+                throw new BaseException(
+                    $"İade edilen alış faturası en az 'MuhasebeOnaylandı' durumunda olmalıdır. (Mevcut durum: {asilBelge.Durum})",
+                    errorCode: 400);
+            }
+
+            if (string.IsNullOrWhiteSpace(asilBelge.KarsiTarafFaturaNo))
+                throw new BaseException("İade edilen alış faturasında tedarikçi fatura numarası bulunamadı.", errorCode: 400);
+        }
+
+        if (!asilBelge.MuhasebeFisId.HasValue)
+            throw new BaseException("İade edilen belgeye bağlı muhasebe fişi bulunamadı.", errorCode: 400);
+
+        var asilFis = await _db.MuhasebeFisler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == asilBelge.MuhasebeFisId.Value, cancellationToken)
+            ?? throw new BaseException("İade edilen belgeye bağlı muhasebe fişi bulunamadı.", errorCode: 400);
+
+        ValidateMuhasebeFisDurumu(asilFis);
+
+        return asilBelge;
+    }
+
+    /// <summary>
+    /// Muhasebe fişi durum matrisini MERKEZİ olarak doğrular: Taslak/Onaylı geçerli; İptal, Ters
+    /// Kayıt ve bilinmeyen herhangi bir durum reddedilir. FaturaKesAsync ve
+    /// ValidateVeGetIadeEdilenBelgeAsync AYNI bu metodu kullanır.
+    /// </summary>
+    private static void ValidateMuhasebeFisDurumu(MuhasebeFis fis)
+    {
+        if (fis.IsDeleted)
+            throw new BaseException("Bağlı muhasebe fişi silinmiş.", errorCode: 400);
+
+        switch (fis.Durum)
+        {
+            case MuhasebeFisDurumlari.Taslak:
+            case MuhasebeFisDurumlari.Onayli:
+                return;
+
+            case MuhasebeFisDurumlari.Iptal:
+                throw new BaseException("Bağlı muhasebe fişi iptal edilmiş.", errorCode: 400);
+
+            case MuhasebeFisDurumlari.TersKayit:
+                throw new BaseException("Bağlı muhasebe fişi bir ters kayıt fişidir.", errorCode: 400);
+
+            default:
+                throw new BaseException($"Bağlı muhasebe fişi bilinmeyen bir durumda ({fis.Durum}).", errorCode: 400);
+        }
+    }
+
     private async Task<int?> ResolveWriteTesisIdAsync(
         int? requestedTesisId,
         CancellationToken cancellationToken,
@@ -1909,6 +2238,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         UpdateSatisBelgesiRequest request,
         CancellationToken cancellationToken)
     {
+        var belgeTipiDegisiyorMu = request.BelgeTipi.HasValue && request.BelgeTipi.Value != belge.BelgeTipi;
+
         if (!string.IsNullOrWhiteSpace(request.BelgeNo))
             belge.BelgeNo = request.BelgeNo;
 
@@ -1969,7 +2300,58 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             if (string.IsNullOrWhiteSpace(belge.MusteriAdSoyad))
                 throw new BaseException("Bireysel müşteri için ad soyad zorunludur.", errorCode: 400);
         }
-        _ = cancellationToken;
+
+        // ── Karşı taraf fatura numarası ──
+        if (request.KarsiTarafFaturaNo is not null)
+        {
+            var trimmed = request.KarsiTarafFaturaNo.Trim();
+            if (trimmed.Length == 0)
+            {
+                // Boş/whitespace = açıkça temizle.
+                belge.KarsiTarafFaturaNo = null;
+            }
+            else
+            {
+                var normalized = NormalizeKarsiTarafFaturaNo(belge.BelgeTipi, request.KarsiTarafFaturaNo);
+                await ThrowIfKarsiTarafFaturaNoDuplicateAsync(
+                    belge.KurumId, belge.CariKartId, normalized, excludeId: belge.Id, cancellationToken);
+                belge.KarsiTarafFaturaNo = normalized;
+            }
+        }
+        else if (belgeTipiDegisiyorMu && !string.IsNullOrWhiteSpace(belge.KarsiTarafFaturaNo))
+        {
+            // BelgeTipi değişiyor ve KarsiTarafFaturaNo dokunulmadan taşınıyor - yeni tipe uygun
+            // değilse SESSİZCE temizlenmez, güncelleme AÇIKÇA reddedilir.
+            NormalizeKarsiTarafFaturaNo(belge.BelgeTipi, belge.KarsiTarafFaturaNo);
+        }
+
+        // ── İade edilen belge referansı ──
+        if (request.IadeEdilenBelgeId.HasValue && request.IadeEdilenBelgeReferansiKaldir)
+        {
+            throw new BaseException(
+                "IadeEdilenBelgeId ve IadeEdilenBelgeReferansiKaldir birlikte gönderilemez.",
+                errorCode: 400);
+        }
+
+        if (request.IadeEdilenBelgeReferansiKaldir)
+        {
+            belge.IadeEdilenBelgeId = null;
+        }
+        else if (request.IadeEdilenBelgeId.HasValue)
+        {
+            await ValidateVeGetIadeEdilenBelgeAsync(
+                belge.BelgeTipi, request.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
+                selfId: belge.Id, cancellationToken);
+            belge.IadeEdilenBelgeId = request.IadeEdilenBelgeId;
+        }
+        else if (belgeTipiDegisiyorMu && belge.IadeEdilenBelgeId.HasValue)
+        {
+            // BelgeTipi değişiyor ve IadeEdilenBelgeId dokunulmadan taşınıyor - yeni tipe uygun
+            // değilse (SatisIadeFaturasi/AlisIadeFaturasi dışına çıkıldıysa) reddedilir.
+            await ValidateVeGetIadeEdilenBelgeAsync(
+                belge.BelgeTipi, belge.IadeEdilenBelgeId, belge.KurumId, belge.CariKartId, belge.BelgeTarihi,
+                selfId: belge.Id, cancellationToken);
+        }
     }
 
     private async Task UpdateSatirlarAsync(

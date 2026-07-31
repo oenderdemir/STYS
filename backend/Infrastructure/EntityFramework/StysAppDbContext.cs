@@ -2604,10 +2604,42 @@ public class StysAppDbContext : DbContext
 
         modelBuilder.Entity<SatisBelgesi>(entity =>
         {
-            entity.ToTable("SatisBelgeleri", muhasebeSchema);
+            entity.ToTable("SatisBelgeleri", muhasebeSchema, t =>
+            {
+                // BelgeTipi sayısal değerleri: FaturaTaslagi=1, SatisFaturasi=2, IadeFaturasi=3,
+                // Proforma=4, AlisFaturasi=5, SatisIadeFaturasi=6, AlisIadeFaturasi=7.
+                // KarsiTarafFaturaNo yalnızca AlisFaturasi(5)/SatisIadeFaturasi(6) - gelen belgeler.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_KarsiTarafFaturaNo_BelgeTipi",
+                    "[KarsiTarafFaturaNo] IS NULL OR [BelgeTipi] IN (5, 6)");
+
+                // IadeEdilenBelgeId yalnızca SatisIadeFaturasi(6)/AlisIadeFaturasi(7) - iade belgeleri.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_IadeEdilenBelgeId_BelgeTipi",
+                    "[IadeEdilenBelgeId] IS NULL OR [BelgeTipi] IN (6, 7)");
+
+                // Belge kendisini iade edilen belge olarak gösteremez.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_IadeEdilenBelgeId_NotSelf",
+                    "[IadeEdilenBelgeId] IS NULL OR [IadeEdilenBelgeId] <> [Id]");
+
+                // KarsiTarafFaturaNo: boş olamaz, baştaki/sondaki boşluklardan arındırılmış
+                // olmalı, tab/satır sonu/diğer kontrol karakterleri (1-31 arası) içeremez.
+                // CHAR(1) kullanılır (CHAR(0) yerine) - SQL Server'da NUL karakteri LIKE
+                // desenlerinde string'i beklenmedik şekilde kesebilir.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_KarsiTarafFaturaNo_Format",
+                    "[KarsiTarafFaturaNo] IS NULL OR (" +
+                    "LEN([KarsiTarafFaturaNo]) > 0 " +
+                    "AND [KarsiTarafFaturaNo] = LTRIM(RTRIM([KarsiTarafFaturaNo])) " +
+                    "AND [KarsiTarafFaturaNo] COLLATE Latin1_General_BIN2 NOT LIKE '%[' + CHAR(1) + '-' + CHAR(31) + ']%')");
+            });
 
             entity.Property(x => x.KurumId)
                 .IsRequired();
+
+            entity.Property(x => x.KarsiTarafFaturaNo)
+                .HasMaxLength(50);
 
             entity.Property(x => x.BelgeNo)
                 .HasMaxLength(50)
@@ -2700,6 +2732,18 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.KurumId, x.ResmiFaturaNo })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [ResmiFaturaNo] IS NOT NULL");
+
+            // Karşı taraf fatura numarası GLOBAL benzersiz değildir - tekillik anahtarı
+            // KurumId + CariKartId + KarsiTarafFaturaNo'dur. Filtre yalnızca aktif, dolu ve
+            // gelen belge tiplerini (AlisFaturasi=5, SatisIadeFaturasi=6) kapsar.
+            entity.HasIndex(x => new { x.KurumId, x.CariKartId, x.KarsiTarafFaturaNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KarsiTarafFaturaNo] IS NOT NULL AND [BelgeTipi] IN (5, 6)");
+
+            entity.HasOne(x => x.IadeEdilenBelge)
+                .WithMany(x => x.IadeBelgeleri)
+                .HasForeignKey(x => x.IadeEdilenBelgeId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<Kurum>()
                 .WithMany()

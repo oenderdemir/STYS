@@ -39,6 +39,14 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public string? RedNedeni { get; set; }
     public string? ResmiFaturaNo { get; set; }
     public string? EBelgeUuid { get; set; }
+    public string? KarsiTarafFaturaNo { get; set; }
+    public int? IadeEdilenBelgeId { get; set; }
+    /// <summary>Salt okunur — iade edilen asıl belgenin BelgeNo'su (varsa).</summary>
+    public string? IadeEdilenBelgeNo { get; set; }
+    /// <summary>Salt okunur — asıl belge SatisFaturasi ise ResmiFaturaNo, AlisFaturasi ise KarsiTarafFaturaNo.</summary>
+    public string? IadeEdilenFaturaNo { get; set; }
+    public DateTime? IadeEdilenBelgeTarihi { get; set; }
+    public SatisBelgesiTipi? IadeEdilenBelgeTipi { get; set; }
     public DateTime? MuhasebeOnayinaGonderilmeTarihi { get; set; }
     public DateTime? MuhasebeOnayTarihi { get; set; }
     public DateTime? FaturaKesimTarihi { get; set; }
@@ -103,6 +111,10 @@ public class CreateSatisBelgesiRequest
     public bool KurumsalMi { get; set; }
     public string? Aciklama { get; set; }
     public string? BelgeNo { get; set; }
+    /// <summary>Yalnızca AlisFaturasi/SatisIadeFaturasi için kullanılabilir. Bkz. SatisBelgesi.KarsiTarafFaturaNo.</summary>
+    public string? KarsiTarafFaturaNo { get; set; }
+    /// <summary>Yalnızca SatisIadeFaturasi/AlisIadeFaturasi için kullanılabilir. Bkz. SatisBelgesi.IadeEdilenBelgeId.</summary>
+    public int? IadeEdilenBelgeId { get; set; }
     public List<CreateSatisBelgesiSatiriRequest> Satirlar { get; set; } = [];
 }
 
@@ -150,6 +162,16 @@ public class UpdateSatisBelgesiRequest
     public string? MusteriTelefon { get; set; }
     public bool? KurumsalMi { get; set; }
     public string? Aciklama { get; set; }
+    /// <summary>
+    /// Null ise mevcut değer değişmez. Trim sonrası boş/whitespace ise değer AÇIKÇA temizlenir
+    /// (null yapılır). Dolu bir değer, güncel (veya bu istekle değişen) BelgeTipi'ye uygun
+    /// olmalıdır - aksi halde güncelleme reddedilir.
+    /// </summary>
+    public string? KarsiTarafFaturaNo { get; set; }
+    /// <summary>Verilirse ilişki güncellenir. Kaldırmak için IadeEdilenBelgeReferansiKaldir kullanılmalıdır.</summary>
+    public int? IadeEdilenBelgeId { get; set; }
+    /// <summary>true ise mevcut IadeEdilenBelgeId referansı kaldırılır. IadeEdilenBelgeId ile birlikte gönderilemez.</summary>
+    public bool IadeEdilenBelgeReferansiKaldir { get; set; }
     public List<CreateSatisBelgesiSatiriRequest>? Satirlar { get; set; }
 }
 
@@ -205,6 +227,8 @@ public class SatisBelgesiFilterDto
     public string? Musteri { get; set; }
     public DateTime? BaslangicTarihi { get; set; }
     public DateTime? BitisTarihi { get; set; }
+    public string? KarsiTarafFaturaNo { get; set; }
+    public int? IadeEdilenBelgeId { get; set; }
 }
 
 public class SatisBelgesiKaynakDto

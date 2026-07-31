@@ -27,12 +27,15 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
 
     public static IEnumerable<object[]> EkVergiliBelgeSenaryolari()
     {
-        // (belgeTipi, hangi ek verginin > 0 olacağı) — satış/alış ve fatura/iade kombinasyonlarının
-        // hepsini, farklı vergi türleriyle (ÖTV/ÖİV/konaklama) birlikte kapsayacak şekilde seçildi.
+        // (belgeTipi, hangi ek verginin > 0 olacağı) — ek vergi engellemesi satır bazlıdır
+        // (belge tipinden BAĞIMSIZ), bu yüzden SatisFaturasi+AlisFaturasi kapsaması yeterlidir.
+        // SatisIadeFaturasi/AlisIadeFaturasi bu sürümden itibaren onay aşamasında geçerli bir
+        // KarsiTarafFaturaNo/IadeEdilenBelgeId (gerçek, muhasebe onaylı bir asıl fatura zinciri)
+        // gerektirdiğinden - bu testin BİLEREK Kurum/Il/Tesis seed ETMEYEN, minimal tasarımıyla
+        // (bkz. sınıf açıklaması) çelişir; bu iki tip buradan çıkarıldı, kapsamları FaturaNumara/
+        // FaturaReferans entegrasyon testlerinde ayrıca doğrulanıyor.
         yield return [SatisBelgesiTipi.SatisFaturasi, "Otv"];
         yield return [SatisBelgesiTipi.AlisFaturasi, "Oiv"];
-        yield return [SatisBelgesiTipi.SatisIadeFaturasi, "Konaklama"];
-        yield return [SatisBelgesiTipi.AlisIadeFaturasi, "Otv"];
     }
 
     [IntegrationTheory]
@@ -75,6 +78,8 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
             TesisId = 1,
             BelgeTarihi = new DateTime(2026, 1, 15),
             MusteriAdSoyad = "Test Musteri " + uniqueSuffix,
+            // AlisFaturasi (gelen belge) onay aşamasında artık KarsiTarafFaturaNo zorunlu tutar.
+            KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? $"TED-{uniqueSuffix}" : null,
             Satirlar = [satirRequest]
         };
 

@@ -96,6 +96,9 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
         }
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        // Bu sınıftaki iade testi FaturaKesAsync için kurum bazlı bir sayaç seed ediyor - paylaşılan
+        // CleanupAsync bu tabloyu bilmediğinden, Kurum silinmeden ÖNCE burada elle temizlenir.
+        await dbContext.KurumFaturaNumaraSayaclari.Where(x => x.KurumId == _kurumId).ExecuteDeleteAsync();
         await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
     }
 
@@ -131,7 +134,7 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
     [IntegrationFact]
     public async Task StandartAlisFaturasi_FisOlusurVeDengeliKalir()
     {
-        var request = YeniBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikciCariKartId, [
+        var request = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikciCariKartId, [
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Hizmet alimi", Miktar = 1, BirimFiyat = 1000m,
@@ -180,7 +183,7 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
     [IntegrationFact]
     public async Task AlisTevkifatliFatura_FisOlusurVeDengeliKalir()
     {
-        var request = YeniBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikciCariKartId, [
+        var request = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikciCariKartId, [
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Tevkifatli hizmet alimi", Miktar = 1, BirimFiyat = 1000m,
@@ -204,6 +207,29 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
     [IntegrationFact]
     public async Task SatisIadeFaturasi_GercekIadeStratejisiyleFisOlusurVeDengeliKalir()
     {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
+
+        // SatisIadeFaturasi artık geçerli bir IadeEdilenBelgeId (FaturaKesildi durumunda, aynı
+        // müşteriye ait bir SatisFaturasi) gerektirir.
+        var asilRequest = YeniBelgeRequest(SatisBelgesiTipi.SatisFaturasi, _musteriCariKartId, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Asil konaklama", Miktar = 1, BirimFiyat = 800m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m
+            }
+        ]);
+        var asilOnaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, asilRequest);
+        await fisService.MuhasebeFisiOlusturAsync(asilOnaylanmis.Id!.Value, CancellationToken.None);
+
+        dbContext.KurumFaturaNumaraSayaclari.Add(new STYS.Muhasebe.SatisBelgeleri.Entities.KurumFaturaNumaraSayaci
+        {
+            KurumId = _kurumId, MaliYil = 2026, SeriKodu = "DGE", SonNumara = 0, AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var asilFaturaKesildi = await satisService.FaturaKesAsync(asilOnaylanmis.Id!.Value, new FaturaKesRequest { SeriKodu = "DGE" });
+
         var request = YeniBelgeRequest(SatisBelgesiTipi.SatisIadeFaturasi, _musteriCariKartId, [
             new CreateSatisBelgesiSatiriRequest
             {
@@ -211,12 +237,11 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
                 KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 10m
             }
         ]);
+        request.KarsiTarafFaturaNo = $"MUS-{Guid.NewGuid():N}"[..20];
+        request.IadeEdilenBelgeId = asilFaturaKesildi.Id;
 
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var onaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, request);
 
-        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
         var dto = await fisService.MuhasebeFisiOlusturAsync(onaylanmis.Id!.Value, CancellationToken.None);
 
         await AssertFisDengeliVeTutarliAsync(dbContext, onaylanmis.Id.Value, dto.MuhasebeFisId);
@@ -233,6 +258,22 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
     [IntegrationFact]
     public async Task AlisIadeFaturasi_GercekIadeStratejisiyleFisOlusurVeDengeliKalir()
     {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
+
+        // AlisIadeFaturasi artık geçerli bir IadeEdilenBelgeId (muhasebe onaylı, aynı tedarikçiye
+        // ait bir AlisFaturasi) gerektirir.
+        var asilRequest = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikciCariKartId, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Asil hizmet alimi", Miktar = 1, BirimFiyat = 500m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+        var asilOnaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, asilRequest);
+        await fisService.MuhasebeFisiOlusturAsync(asilOnaylanmis.Id!.Value, CancellationToken.None);
+
         var request = YeniBelgeRequest(SatisBelgesiTipi.AlisIadeFaturasi, _tedarikciCariKartId, [
             new CreateSatisBelgesiSatiriRequest
             {
@@ -240,12 +281,10 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
                 KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
             }
         ]);
+        request.IadeEdilenBelgeId = asilOnaylanmis.Id;
 
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var onaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, request);
 
-        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
         var dto = await fisService.MuhasebeFisiOlusturAsync(onaylanmis.Id!.Value, CancellationToken.None);
 
         await AssertFisDengeliVeTutarliAsync(dbContext, onaylanmis.Id.Value, dto.MuhasebeFisId);
@@ -397,6 +436,16 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
         BelgeTarihi = belgeTarihi ?? new DateTime(2026, 1, 15),
         Satirlar = satirlar
     };
+
+    /// <summary>AlisFaturasi (gelen belge) için KarsiTarafFaturaNo'yu otomatik doldurarak YeniBelgeRequest'i sarmalar - onay aşamasında artık zorunludur.</summary>
+    private CreateSatisBelgesiRequest YeniAlisBelgeRequest(
+        SatisBelgesiTipi belgeTipi, int cariKartId, List<CreateSatisBelgesiSatiriRequest> satirlar, DateTime? belgeTarihi = null)
+    {
+        var request = YeniBelgeRequest(belgeTipi, cariKartId, satirlar, belgeTarihi);
+        if (belgeTipi == SatisBelgesiTipi.AlisFaturasi)
+            request.KarsiTarafFaturaNo = $"TED-{Guid.NewGuid():N}"[..20];
+        return request;
+    }
 
     private static async Task<CariHareket> ReadCariHareketAsync(StysAppDbContext dbContext, int belgeId)
         => await dbContext.CariHareketler.AsNoTracking().FirstAsync(x => x.KaynakId == belgeId);

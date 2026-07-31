@@ -163,15 +163,46 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         StysAppDbContext dbContext, DateTime belgeTarihi, int? tesisId = null, int? tedarikciKartId = null)
     {
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+
+        var effectiveTesisId = tesisId ?? _tesisId;
+        var effectiveTedarikciKartId = tedarikciKartId ?? _tedarikciKartId;
+
+        // AlisIadeFaturasi artık geçerli bir IadeEdilenBelgeId (muhasebe onaylı, aynı kurum/cari
+        // kartı paylaşan bir AlisFaturasi) gerektirir - önce asıl faturayı oluştur.
+        var asilRequest = new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = effectiveTesisId,
+            CariKartId = effectiveTedarikciKartId,
+            BelgeTarihi = belgeTarihi,
+            MusteriAdSoyad = "Test Tedarikci " + _uniqueSuffix,
+            KarsiTarafFaturaNo = $"TED-{Guid.NewGuid():N}"[..20],
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Asil alis satiri", Miktar = 1, BirimFiyat = 500m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        };
+        var asilCreated = await service.CreateAsync(asilRequest);
+        await service.MuhasebeOnayinaGonderAsync(asilCreated.Id!.Value);
+        await service.MuhasebeOnaylaAsync(asilCreated.Id!.Value);
+        await fisService.MuhasebeFisiOlusturAsync(asilCreated.Id.Value);
 
         var request = new CreateSatisBelgesiRequest
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
             BelgeTipi = SatisBelgesiTipi.AlisIadeFaturasi,
-            TesisId = tesisId ?? _tesisId,
-            CariKartId = tedarikciKartId ?? _tedarikciKartId,
+            TesisId = effectiveTesisId,
+            CariKartId = effectiveTedarikciKartId,
             BelgeTarihi = belgeTarihi,
             MusteriAdSoyad = "Test Tedarikci " + _uniqueSuffix,
+            IadeEdilenBelgeId = asilCreated.Id,
             Satirlar =
             [
                 new CreateSatisBelgesiSatiriRequest
@@ -190,8 +221,6 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
         await service.MuhasebeOnaylaAsync(created.Id!.Value);
 
-        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
-        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
         return await fisService.MuhasebeFisiOlusturAsync(created.Id.Value);
     }
 
@@ -913,6 +942,30 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
     {
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+
+        var asilCreated = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.AlisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _tedarikciKartId,
+            BelgeTarihi = new DateTime(2026, 3, 10),
+            MusteriAdSoyad = "Tedarikci",
+            KarsiTarafFaturaNo = $"TED-{Guid.NewGuid():N}"[..20],
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Asil alis", Miktar = 1, BirimFiyat = 500m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+        await service.MuhasebeOnayinaGonderAsync(asilCreated.Id!.Value);
+        await service.MuhasebeOnaylaAsync(asilCreated.Id!.Value);
+        await fisService.MuhasebeFisiOlusturAsync(asilCreated.Id.Value);
 
         var created = await service.CreateAsync(new CreateSatisBelgesiRequest
         {
@@ -922,6 +975,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
             CariKartId = _tedarikciKartId,
             BelgeTarihi = new DateTime(2026, 3, 10),
             MusteriAdSoyad = "Tedarikci",
+            IadeEdilenBelgeId = asilCreated.Id,
             Satirlar =
             [
                 new CreateSatisBelgesiSatiriRequest
@@ -933,7 +987,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         });
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value);
         await service.MuhasebeOnaylaAsync(created.Id!.Value);
-        // MuhasebeFisiOlusturAsync bilerek çağrılmadı.
+        // MuhasebeFisiOlusturAsync (iade belgesi için) bilerek çağrılmadı.
 
         var ex = await Assert.ThrowsAsync<BaseException>(() =>
             service.FaturaKesAsync(created.Id!.Value, new FaturaKesRequest { SeriKodu = "ABC" }));

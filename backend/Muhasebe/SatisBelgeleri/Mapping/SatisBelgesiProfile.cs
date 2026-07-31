@@ -3,6 +3,7 @@ using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
+using STYS.Muhasebe.SatisBelgeleri.Enums;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Mapping;
 
@@ -24,7 +25,19 @@ public class SatisBelgesiProfile : Profile
             .ForMember(dest => dest.ToplamTevkifatTutari, opt => opt.MapFrom(src =>
                 src.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.TevkifatTutari)))
             .ForMember(dest => dest.ToplamNetKdv, opt => opt.MapFrom(src =>
-                src.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.KdvTutari - s.TevkifatTutari)));
+                src.Satirlar.Where(s => !s.IsDeleted).Sum(s => s.KdvTutari - s.TevkifatTutari)))
+            .ForMember(dest => dest.IadeEdilenBelgeNo, opt => opt.MapFrom(src =>
+                src.IadeEdilenBelge != null ? src.IadeEdilenBelge.BelgeNo : null))
+            .ForMember(dest => dest.IadeEdilenFaturaNo, opt => opt.MapFrom(src =>
+                src.IadeEdilenBelge != null
+                    ? (src.IadeEdilenBelge.BelgeTipi == SatisBelgesiTipi.SatisFaturasi
+                        ? src.IadeEdilenBelge.ResmiFaturaNo
+                        : src.IadeEdilenBelge.KarsiTarafFaturaNo)
+                    : null))
+            .ForMember(dest => dest.IadeEdilenBelgeTarihi, opt => opt.MapFrom(src =>
+                src.IadeEdilenBelge != null ? (DateTime?)src.IadeEdilenBelge.BelgeTarihi : null))
+            .ForMember(dest => dest.IadeEdilenBelgeTipi, opt => opt.MapFrom(src =>
+                src.IadeEdilenBelge != null ? (SatisBelgesiTipi?)src.IadeEdilenBelge.BelgeTipi : null));
 
         CreateMap<SatisBelgesiDto, SatisBelgesi>()
             .ForMember(dest => dest.Satirlar, opt => opt.Ignore())

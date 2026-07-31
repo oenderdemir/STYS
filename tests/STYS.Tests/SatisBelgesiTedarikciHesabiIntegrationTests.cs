@@ -132,19 +132,32 @@ public class SatisBelgesiTedarikciHesabiIntegrationTests : IAsyncLifetime
     [IntegrationFact]
     public async Task AlisIadeFaturasi_IkinciTedarikciSeciliyken_TedarikciHesabiVeCariKartIdIkinciTedarikciyiGosterir()
     {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
+
+        // AlisIadeFaturasi artık geçerli bir IadeEdilenBelgeId (aynı tedarikçiye ait, muhasebe
+        // onaylı ve geçerli fişli bir AlisFaturasi) gerektirir - önce asıl faturayı oluştur.
+        var asilRequest = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisFaturasi, _tedarikci2Id, [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Asil alis", Miktar = 1, BirimFiyat = 500m,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+        var asilOnaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, asilRequest);
+        await fisService.MuhasebeFisiOlusturAsync(asilOnaylanmis.Id!.Value, CancellationToken.None);
+
         var request = YeniAlisBelgeRequest(SatisBelgesiTipi.AlisIadeFaturasi, _tedarikci2Id, [
             new CreateSatisBelgesiSatiriRequest
             {
                 SiraNo = 1, Aciklama = "Iade edilen hizmet", Miktar = 1, BirimFiyat = 500m,
                 KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
             }
-        ]);
+        ], iadeEdilenBelgeId: asilOnaylanmis.Id);
 
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
         var onaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, request);
 
-        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
         var dto = await fisService.MuhasebeFisiOlusturAsync(onaylanmis.Id!.Value, CancellationToken.None);
 
         await AssertIkinciTedarikciKullanildiAsync(dbContext, onaylanmis.Id!.Value, dto.MuhasebeFisId);
@@ -204,13 +217,19 @@ public class SatisBelgesiTedarikciHesabiIntegrationTests : IAsyncLifetime
     // ─────────────────────────────────────────────────────────────
 
     private CreateSatisBelgesiRequest YeniAlisBelgeRequest(
-        SatisBelgesiTipi belgeTipi, int cariKartId, List<CreateSatisBelgesiSatiriRequest> satirlar) => new()
+        SatisBelgesiTipi belgeTipi, int cariKartId, List<CreateSatisBelgesiSatiriRequest> satirlar,
+        int? iadeEdilenBelgeId = null) => new()
     {
         BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
         BelgeTipi = belgeTipi,
         TesisId = _tesisId,
         CariKartId = cariKartId,
         BelgeTarihi = new DateTime(2026, 1, 15),
+        // AlisFaturasi (gelen belge) artık onay aşamasında KarsiTarafFaturaNo zorunlu tutar.
+        KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi
+            ? $"TED-{Guid.NewGuid():N}"[..20]
+            : null,
+        IadeEdilenBelgeId = iadeEdilenBelgeId,
         Satirlar = satirlar
     };
 

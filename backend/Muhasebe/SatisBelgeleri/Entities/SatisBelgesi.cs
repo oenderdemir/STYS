@@ -19,6 +19,19 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
     public SatisBelgesiTipi BelgeTipi { get; set; } = SatisBelgesiTipi.FaturaTaslagi;
     public SatisBelgesiDurumu Durum { get; set; } = SatisBelgesiDurumu.Taslak;
 
+    /// <summary>
+    /// AYRIŞTIRILMIŞ ticari (hazırlık) durumu - bkz. SatisBelgesiDurumProjection ve
+    /// TicariBelgeDurumu doc'u. Bu "expand/compatibility projection" aşamasında HENÜZ otoriter
+    /// DEĞİLDİR; yalnızca Durum'dan türetilerek BİRLİKTE yazılır, hiçbir karar kontrolü bunu okumaz.
+    /// </summary>
+    public TicariBelgeDurumu? TicariDurum { get; set; }
+
+    /// <summary>AYRIŞTIRILMIŞ muhasebeleştirme durumu - bkz. SatisBelgesiDurumProjection. Bu aşamada HENÜZ otoriter DEĞİLDİR.</summary>
+    public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
+
+    /// <summary>AYRIŞTIRILMIŞ faturalama/gönderim durumu - bkz. SatisBelgesiDurumProjection. Bu aşamada HENÜZ otoriter DEĞİLDİR.</summary>
+    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
+
     public SatisKaynakModulu KaynakModul { get; set; } = SatisKaynakModulu.Manuel;
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }

@@ -2655,6 +2655,25 @@ public class StysAppDbContext : DbContext
                     "AND DATALENGTH([KarsiTarafFaturaNo]) = DATALENGTH(LTRIM(RTRIM([KarsiTarafFaturaNo]))) " +
                     "AND [KarsiTarafFaturaNo] COLLATE Latin1_General_BIN2 NOT LIKE " +
                     "'%[' + CHAR(1) + '-' + CHAR(31) + CHAR(127) + NCHAR(128) + '-' + NCHAR(159) + ']%')");
+
+                // AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanları (bkz.
+                // SatisBelgesiDurumProjection) - nullable kalırlar (bu turda expand/compatibility
+                // aşaması), ancak DOLU iseler yalnızca ilgili enum'un tanımlı değerlerini
+                // taşıyabilirler. TicariBelgeDurumu: Taslak=1, Hazir=2, IptalEdildi=3.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_TicariDurum",
+                    "[TicariDurum] IS NULL OR [TicariDurum] IN (1, 2, 3)");
+
+                // TicariBelgeMuhasebeDurumu: Bekliyor=1, Onayda=2, Onaylandi=3, Reddedildi=4, IptalEdildi=5.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_MuhasebeDurumu",
+                    "[MuhasebeDurumu] IS NULL OR [MuhasebeDurumu] IN (1, 2, 3, 4, 5)");
+
+                // TicariBelgeFaturalamaDurumu: Uygulanamaz=1, Baslatilmadi=2, KesimBekliyor=3,
+                // Kesildi=4, MusteriyeGonderildi=5, IptalEdildi=6.
+                t.HasCheckConstraint(
+                    "CK_SatisBelgeleri_FaturalamaDurumu",
+                    "[FaturalamaDurumu] IS NULL OR [FaturalamaDurumu] IN (1, 2, 3, 4, 5, 6)");
             });
 
             entity.Property(x => x.KurumId)

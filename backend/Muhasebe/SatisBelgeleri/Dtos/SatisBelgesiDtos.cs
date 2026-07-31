@@ -10,6 +10,12 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public string BelgeNo { get; set; } = string.Empty;
     public SatisBelgesiTipi BelgeTipi { get; set; }
     public SatisBelgesiDurumu Durum { get; set; }
+    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeDurumu? TicariDurum { get; set; }
+    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
+    /// <summary>AYRIŞTIRILMIŞ, HENÜZ OTORİTER OLMAYAN projeksiyon alanı — bkz. SatisBelgesiDurumProjection.</summary>
+    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
     public SatisKaynakModulu KaynakModul { get; set; }
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }

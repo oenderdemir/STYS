@@ -861,6 +861,7 @@ public class FaturaNumaraIntegrationTests : IAsyncLifetime
         var belgeSonHal = await verifyContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == belge.Id);
         Assert.Equal(SatisBelgesiDurumu.MuhasebeOnaylandi, belgeSonHal.Durum);
         Assert.Null(belgeSonHal.ResmiFaturaNo);
+        Assert.Null(belgeSonHal.FaturaKesimTarihi);
     }
 
     [IntegrationFact]

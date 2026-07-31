@@ -74,6 +74,20 @@ public class FaturaBelgeYonuTests
     }
 
     [Fact]
+    public void BilinmeyenEnumDegeri_HicbirYonSiniflandirmasindaTrueDegildir_FailClosed()
+    {
+        // Enum'da tanımlı OLMAYAN bir değer (ör. gelecekte eklenip yön sınıflandırmasına henüz
+        // dahil edilmemiş bir SatisBelgesiTipi, veya bozuk/legacy veriden gelen geçersiz bir int) -
+        // hiçbir switch/is-or ifadesine uymadığından üç metot da fail-closed olarak false
+        // dönmelidir; sessizce SatisFaturasi/giden belge VARSAYILMAZ.
+        var bilinmeyen = (SatisBelgesiTipi)int.MaxValue;
+
+        Assert.False(bilinmeyen.StysTarafindanDuzenlenirMi());
+        Assert.False(bilinmeyen.KarsiTarafTarafindanDuzenlenirMi());
+        Assert.False(bilinmeyen.OtomatikResmiNumaraUretilebilirMi());
+    }
+
+    [Fact]
     public void IsSatisBelgesi_MevcutDavranisDegismedi()
     {
         Assert.True(SatisBelgesiTipi.FaturaTaslagi.IsSatisBelgesi());

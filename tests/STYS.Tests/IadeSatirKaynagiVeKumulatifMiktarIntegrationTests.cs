@@ -538,6 +538,64 @@ public class IadeSatirKaynagiVeKumulatifMiktarIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // 10b. Satirlar alanı AÇIKÇA (null DEĞİL) ama BOŞ gönderilirse 400 (bkz. görev 4a)
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_SatirlarAlaniAcikcaBosGonderilirse_400Doner()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, _) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "K10B", miktar: 10m);
+
+        var iade = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 4m));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(
+            iade.Id!.Value, new UpdateSatisBelgesiRequest { Aciklama = "Deneme", Satirlar = [] }));
+
+        Assert.Equal(400, ex.ErrorCode);
+
+        // Satırlar/bağlantı DOKUNULMADAN kalmış olmalı - reddedilen istek hiçbir yan etki bırakmaz.
+        var sonHal = await ReadNoTrackingAsync(dbContext, iade.Id!.Value);
+        var aktifSatir = Assert.Single(sonHal.Satirlar, x => !x.IsDeleted);
+        Assert.Equal(satirId.ToString(), aktifSatir.KaynakSatirId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 10c. IadeEdilenBelgeId değişir, Satirlar gönderilmezse: mevcut (dokunulmamış) satırların
+    // YENİ kaynağa ait olduğu HER ZAMAN yeniden doğrulanır (bkz. görev 4b) - eski kaynağın
+    // satırlarıyla yeni bir kaynak referansının BİRLİKTE kaydedilmesi mümkün OLMAMALIDIR.
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_IadeEdilenBelgeIdDegisirSatirlarGonderilmezse_EskiKaynakSatirYeniBelgeyeAitDegilseReddedilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        // İki AYRI, ikisi de GEÇERLİ (FaturaKesildi) asıl fatura.
+        var (asilA, satirIdA, _) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "K10CA", miktar: 10m);
+        var (asilB, _, _) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "K10CB", miktar: 10m);
+
+        // İade, asilA'nın satirIdA'sına bağlı olarak oluşturulur.
+        var iade = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asilA.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirIdA, miktar: 4m));
+
+        // Yalnızca IadeEdilenBelgeId asilB'ye DEĞİŞTİRİLİR - Satirlar HİÇ gönderilmez (null); eski
+        // satır (satirIdA, asilA'ya ait) SESSİZCE asilB ile birlikte kalabilseydi bu bir veri
+        // tutarsızlığı olurdu - reddedilmelidir.
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(
+            iade.Id!.Value, new UpdateSatisBelgesiRequest { IadeEdilenBelgeId = asilB.Id!.Value }));
+
+        Assert.Contains("iade edilen belgeye ait değil", ex.Message);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 11. Eşzamanlılık: iki eşzamanlı onaydan yalnızca sınırı aşmayan başarılı olmalı
     // ─────────────────────────────────────────────────────────────
 

@@ -102,6 +102,19 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
      * varken ENGELLENİR (bkz. görev 1-3/onSaveClick). */
     kaynakSatirHataMesaji: string | null = null;
 
+    /** Kaynak satır lookup isteği DEVAM EDERKEN true - bu sırada Kaydet devre dışı bırakılır
+     * (bkz. görev 1). Yalnızca başarılı sonuç, hata VEYA referans kaldırma ile false'a döner;
+     * kullanıcının aynı anda başka bir kaynak seçmesi tek başına loading'i KAPATMAZ (yeni istek
+     * kendi sonuçlanana kadar loading true kalmaya devam eder). */
+    kaynakSatirlarYukleniyor = false;
+
+    /** Eski/asenkron kaynak satır isteklerinin sonucunun, kullanıcı bu arada BAŞKA bir kaynak
+     * seçmiş/referansı kaldırmışsa sessizce UYGULANMAMASI için kullanılan monoton sayaç (request
+     * token) - hem mevcut belge açılışındaki hem de yeni kaynak seçimindeki lookup AYNI sayacı
+     * kullanır (bkz. görev 2). Her yeni istek başlatılırken artırılır; yanıt geldiğinde sayaç hâlâ
+     * AYNIYSA uygulanır, DEĞİŞMİŞSE (daha yeni bir istek başlamış demektir) sessizce YOK SAYILIR. */
+    private kaynakSatirRequestToken = 0;
+
     private oncekiBelgeTipi: SatisBelgesiTipi | null | undefined = undefined;
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -109,6 +122,11 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             this.oncekiBelgeTipi = this.formData.belgeTipi;
             this.kdvIstisnaCache.clear();
             this.kaynakSatirHataMesaji = null;
+            // Dialog (yeniden) açılıyor - önceki belgeye ait, artık ALAKASIZ bir bekleyen kaynak
+            // isteği varsa geçersiz kılınır (bkz. token doc'u); bu belge için gerekiyorsa aşağıdaki
+            // loader zaten kendi token'ını alıp loading'i yeniden başlatacaktır.
+            this.kaynakSatirRequestToken++;
+            this.kaynakSatirlarYukleniyor = false;
             this.loadCariKartlar();
             this.resolveIadeEdilenBelgeGosterim();
             if (this.formData.iadeEdilenBelgeId) {
@@ -400,6 +418,11 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
         if (belge) {
             this.loadKaynakSatirlarForYeniSecim(belge.id);
+        } else {
+            // Referans autocomplete üzerinden (Kaldır butonu OLMADAN) temizlendi - bekleyen bir
+            // kaynak isteği varsa geçersiz kılınır (bkz. token doc'u) ve loading kapanır.
+            this.kaynakSatirRequestToken++;
+            this.kaynakSatirlarYukleniyor = false;
         }
     }
 
@@ -407,6 +430,10 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         this.iadeEdilenBelgeGosterim = null;
         this.kaynakSatirlar = [];
         this.kaynakSatirHataMesaji = null;
+        // Bekleyen (eskimiş olacak) bir kaynak satır isteği varsa geçersiz kılınır - yanıtı
+        // geldiğinde artık hiçbir şeyi etkilemeyecektir (bkz. token doc'u).
+        this.kaynakSatirRequestToken++;
+        this.kaynakSatirlarYukleniyor = false;
         if (this.formData) {
             this.formData.iadeEdilenBelgeId = null;
             this.formData.iadeEdilenBelgeReferansiKaldir = true;
@@ -422,21 +449,25 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
      * gönderilmesine izin VERİLMEZ: satırlar zaten boş bırakılmıştır (onIadeEdilenBelgeSecildi'nin
      * hemen-temizleme adımı), burada yalnızca açık bir hata mesajı eklenip Kaydet devre dışı
      * bırakılır (bkz. görev 3). Yanıt, kullanıcının bu arada BAŞKA bir kaynak seçmiş/referansı
-     * kaldırmış olabileceği ihtimaline karşı geçerliliğini (formData.iadeEdilenBelgeId hâlâ AYNI
-     * kaynakBelgeId mi) kontrol eder - eskimiş (stale) bir yanıt sessizce UYGULANMAZ. */
+     * kaldırmış olabileceği ihtimaline karşı geçerliliğini bir request token ile kontrol eder -
+     * eskimiş (stale) bir yanıt sessizce UYGULANMAZ (bkz. görev 2). */
     private loadKaynakSatirlarForYeniSecim(kaynakBelgeId: number): void {
+        const token = ++this.kaynakSatirRequestToken;
+        this.kaynakSatirlarYukleniyor = true;
         this.ticariBelgeService.getKaynakSatirlar(kaynakBelgeId, this.belgeId).subscribe({
             next: satirlar => {
-                if (this.formData?.iadeEdilenBelgeId !== kaynakBelgeId) {
+                if (token !== this.kaynakSatirRequestToken) {
                     return;
                 }
+                this.kaynakSatirlarYukleniyor = false;
                 this.kaynakSatirlar = satirlar;
                 this.remapSatirlarFromKaynak(satirlar);
             },
             error: () => {
-                if (this.formData?.iadeEdilenBelgeId !== kaynakBelgeId) {
+                if (token !== this.kaynakSatirRequestToken) {
                     return;
                 }
+                this.kaynakSatirlarYukleniyor = false;
                 this.kaynakSatirlar = [];
                 this.formData!.satirlar = [];
                 this.kaynakSatirHataMesaji =
@@ -448,14 +479,27 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     /** Dialog, MEVCUT (zaten kayıtlı) bir iade belgesi için AÇILDIĞINDA çağrılır - kaynak lookup
      * YALNIZCA kalan miktar ve kilitli mali alan DOĞRULAMASI için yüklenir; kayıtlı satırlar
      * (miktar/açıklama/eşleşme) KORUNUR, sessizce yeniden oluşturulmaz/üzerine yazılmaz VE
-     * kaynakta bulunup mevcut iadede bulunmayan satırlar forma OTOMATİK EKLENMEZ (bkz. görev 1). */
+     * kaynakta bulunup mevcut iadede bulunmayan satırlar forma OTOMATİK EKLENMEZ (bkz. görev 1).
+     * AYNI request-token mekanizmasını kullanır (bkz. görev 2) - dialog'un bu istek devam ederken
+     * kullanıcı tarafından farklı bir kaynak seçilmesi/referansın kaldırılması durumunda eskimiş
+     * yanıt sessizce yok sayılır. */
     private loadKaynakSatirlarForMevcutBelge(kaynakBelgeId: number): void {
+        const token = ++this.kaynakSatirRequestToken;
+        this.kaynakSatirlarYukleniyor = true;
         this.ticariBelgeService.getKaynakSatirlar(kaynakBelgeId, this.belgeId).subscribe({
             next: satirlar => {
+                if (token !== this.kaynakSatirRequestToken) {
+                    return;
+                }
+                this.kaynakSatirlarYukleniyor = false;
                 this.kaynakSatirlar = satirlar;
                 this.dogrulaKayitliSatirlarKaynaklaUyumluMu(satirlar);
             },
             error: () => {
+                if (token !== this.kaynakSatirRequestToken) {
+                    return;
+                }
+                this.kaynakSatirlarYukleniyor = false;
                 this.kaynakSatirlar = [];
                 this.kaynakSatirHataMesaji =
                     'Kaynak belge satırları yüklenemedi. Kaydetmeden önce sayfayı yeniden açıp tekrar deneyin.';
@@ -522,11 +566,25 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
     /** İade satırlarını seçilen kaynağın satırlarıyla SIFIRDAN, AÇIKÇA yeniden eşler - her satırın
      * mali alanları kaynaktan gelir ve frontend'de başka bir değere DÖNÜŞMEZ; kullanıcı yalnızca
-     * miktar/açıklama değiştirebilir (bkz. görev F). Yalnızca YENİ kaynak seçiminde çağrılır. */
+     * miktar/açıklama değiştirebilir (bkz. görev F). Yalnızca YENİ kaynak seçiminde çağrılır.
+     * Yalnızca İADE EDİLEBİLİR KALAN MİKTARI > 0 olan kaynak satırları satıra dönüştürülür (bkz.
+     * görev 3) - kalan miktarı tükenmiş bir kaynak satırı seçilemeyecek/iade edilemeyecek bir
+     * satır olarak forma eklenmez. Hiç uygun (kalan miktarı > 0) satır kalmamışsa, kullanıcıya
+     * açık bir hata gösterilir ve kaydetme (mevcut kaynakSatirHataMesaji mekanizmasıyla) engellenir. */
     private remapSatirlarFromKaynak(kaynakSatirlar: TicariBelgeKaynakSatirDto[]): void {
         if (!this.formData) return;
-        this.formData.satirlar = kaynakSatirlar.map((k, index) => {
-            const satir = this.kaynakSatirdanSatirOlustur(k, k.iadeEdilebilirKalanMiktar > 0 ? Math.min(1, k.iadeEdilebilirKalanMiktar) : 0);
+
+        const uygunKaynakSatirlar = kaynakSatirlar.filter(k => k.iadeEdilebilirKalanMiktar > 0);
+
+        if (uygunKaynakSatirlar.length === 0) {
+            this.formData.satirlar = [];
+            this.kaynakSatirHataMesaji =
+                'Seçilen kaynak belgede iade edilebilir miktarı kalan hiçbir satır bulunmuyor - bu kaynak seçilemez.';
+            return;
+        }
+
+        this.formData.satirlar = uygunKaynakSatirlar.map((k, index) => {
+            const satir = this.kaynakSatirdanSatirOlustur(k, Math.min(1, k.iadeEdilebilirKalanMiktar));
             satir.siraNo = index + 1;
             return satir;
         });
@@ -600,6 +658,14 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     }
 
     onSaveClick(): void {
+        if (this.kaynakSatirlarYukleniyor) {
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Bekleyin',
+                detail: 'Kaynak belge satırları yükleniyor, lütfen bekleyin.'
+            });
+            return;
+        }
         if (this.kaynakSatirHataMesaji) {
             this.messageService.add({ severity: 'error', summary: 'Kaydedilemedi', detail: this.kaynakSatirHataMesaji });
             return;

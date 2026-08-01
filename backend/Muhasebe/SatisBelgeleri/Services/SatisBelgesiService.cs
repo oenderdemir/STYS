@@ -529,6 +529,18 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             ApplyCariSnapshotToUpdateRequest(request, cari);
         }
 
+        // Satirlar alanı AÇIKÇA (null DEĞİL) gönderilmiş ama BOŞSA reddedilir - bu, "satırları
+        // dokunmadan bırak" (null) ile "tüm satırları sil" (client'ın muhtemelen KASTETMEDİĞİ,
+        // ör. bir önceki adımda satırların yanlışlıkla boşaltıldığı) durumlarını AYIRT eder; Update
+        // uç noktası satır SİLME için tasarlanmamıştır (bkz. görev 4a).
+        if (request.Satirlar is { Count: 0 })
+        {
+            throw new BaseException(
+                "Satirlar alanı gönderildiyse en az bir satır içermelidir; satırları değiştirmeden " +
+                "bırakmak için bu alanı hiç göndermeyin (null).",
+                errorCode: 400);
+        }
+
         // Ana alanları güncelle
         await ApplyBelgeUpdatesAsync(belge, request, cancellationToken);
 
@@ -537,6 +549,13 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         {
             await UpdateSatirlarAsync(belge, request.Satirlar, cancellationToken);
         }
+
+        // İade satırlarının kaynak bağlantısı HER ZAMAN yeniden doğrulanır - satırlar bu istekte
+        // GÖNDERİLMEMİŞ olsa (dokunulmadan taşınsa) bile, IadeEdilenBelgeId bu istekle DEĞİŞMİŞ
+        // olabilir (bkz. ApplyBelgeUpdatesAsync); bu durumda mevcut (değişmemiş) satırların
+        // KaynakSatirId'lerinin YENİ IadeEdilenBelgeId'ye ait olup olmadığı buradan geçerken
+        // yakalanır (bkz. görev 4b) - normal SatisFaturasi/AlisFaturasi için bu çağrı no-op'tur.
+        await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
 
         HesaplaBelgeToplamlari(belge);
 
@@ -2569,9 +2588,9 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             belge.Satirlar.Add(satir);
         }
 
-        // Bkz. CreateAsync'teki eşdeğer çağrı — Create ve Update AYNI merkezi doğrulama
-        // metodunu kullanır, dağınık/farklılaşabilecek kopya kurallar OLUŞTURULMAZ.
-        await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
+        // ValidateIadeSatirlariAsync burada AYRICA çağrılmaz - UpdateAsync, satırlar gönderilsin
+        // ya da gönderilmesin HER durumda bu doğrulamayı TEK SEFERDE (bu metottan hemen sonra)
+        // çalıştırır (bkz. görev 4b) - dağınık/farklılaşabilecek kopya çağrılar OLUŞTURULMAZ.
     }
 
     // ──────────────────────────────────────────────

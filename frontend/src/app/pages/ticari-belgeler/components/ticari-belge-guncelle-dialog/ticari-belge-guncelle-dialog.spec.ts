@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { TicariBelgeGuncelleDialogComponent } from './ticari-belge-guncelle-dialog';
 import { TicariBelgeService } from '../../ticari-belge.service';
@@ -249,6 +249,114 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         expect(component.formData!.satirlar).toEqual([]);
         expect(component.formData!.iadeEdilenBelgeId).toBe(77);
         expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('kaynak satirlar yuklenirken (loading) Kaydet engellenir; yanit gelince loading kapanir', () => {
+        const subject = new Subject<TicariBelgeKaynakSatirDto[]>();
+        serviceSpy.getKaynakSatirlar.and.returnValue(subject.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [] });
+
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'ASIL-2', belgeTarihi: '2026-03-02' });
+
+        expect(component.kaynakSatirlarYukleniyor).toBeTrue();
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+
+        subject.next([ornekKaynakSatir({ id: 77, iadeEdilebilirKalanMiktar: 5 })]);
+        subject.complete();
+
+        expect(component.kaynakSatirlarYukleniyor).toBeFalse();
+    });
+
+    it('eski (stale) kaynak istegi sonucu, kullanici bu arada baska bir kaynak sectiyse uygulanmaz', () => {
+        const subjectA = new Subject<TicariBelgeKaynakSatirDto[]>();
+        const subjectB = new Subject<TicariBelgeKaynakSatirDto[]>();
+        serviceSpy.getKaynakSatirlar.and.returnValues(subjectA.asObservable(), subjectB.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [] });
+
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'A', belgeTarihi: '2026-03-01' });
+        component.onIadeEdilenBelgeSecildi({ id: 88, belgeNo: 'B', belgeTarihi: '2026-03-02' });
+
+        // Eski (A) istegin yaniti simdi (gec) gelir - STALE, sessizce yok sayilmali.
+        subjectA.next([ornekKaynakSatir({ id: 10, aciklama: 'A kaynak satiri', iadeEdilebilirKalanMiktar: 5 })]);
+
+        expect(component.formData!.satirlar!.some(s => s.aciklama === 'A kaynak satiri')).toBeFalse();
+        // B'nin istegi hala bekliyor - loading hala acik olmali.
+        expect(component.kaynakSatirlarYukleniyor).toBeTrue();
+
+        // Guncel (B) istegin yaniti gelir - UYGULANMALI.
+        subjectB.next([ornekKaynakSatir({ id: 20, aciklama: 'B kaynak satiri', iadeEdilebilirKalanMiktar: 5 })]);
+
+        expect(component.formData!.satirlar!.some(s => s.aciklama === 'B kaynak satiri')).toBeTrue();
+        expect(component.formData!.iadeEdilenBelgeId).toBe(88);
+        expect(component.kaynakSatirlarYukleniyor).toBeFalse();
+    });
+
+    it('eski (stale) mevcut-belge-acilisi lookup yaniti, kullanici bu arada farkli kaynak sectiyse uygulanmaz', () => {
+        const subjectAcilis = new Subject<TicariBelgeKaynakSatirDto[]>();
+        const subjectYeniSecim = new Subject<TicariBelgeKaynakSatirDto[]>();
+        serviceSpy.getKaynakSatirlar.and.returnValues(subjectAcilis.asObservable(), subjectYeniSecim.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData();
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        // Dialog acilis lookup'i HENUZ cozulmeden kullanici FARKLI bir kaynak secer.
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'YENI', belgeTarihi: '2026-03-02' });
+
+        // Acilis istegi (eski/stale) simdi cozulur - artik gecerli olmayan bir hata mesaji
+        // birakmamali (kaynakSatirHataMesaji uygulanmaz).
+        subjectAcilis.error(new Error('eski istek hatasi'));
+        expect(component.kaynakSatirHataMesaji).toBeNull();
+
+        subjectYeniSecim.next([ornekKaynakSatir({ id: 20, aciklama: 'Yeni kaynak', iadeEdilebilirKalanMiktar: 5 })]);
+        expect(component.formData!.satirlar!.some(s => s.aciklama === 'Yeni kaynak')).toBeTrue();
+    });
+
+    it('yeni kaynak eslemesinde iadeEdilebilirKalanMiktar=0 olan satirlar haric tutulur, digerleri dahil edilir', () => {
+        serviceSpy.getKaynakSatirlar.and.returnValue(
+            of([
+                ornekKaynakSatir({ id: 30, aciklama: 'Tukenmis', iadeEdilebilirKalanMiktar: 0 }),
+                ornekKaynakSatir({ id: 31, aciklama: 'Kalan var', iadeEdilebilirKalanMiktar: 3 })
+            ])
+        );
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [] });
+
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'ASIL-4', belgeTarihi: '2026-03-04' });
+
+        const satirlar = component.formData!.satirlar!;
+        expect(satirlar.length).toBe(1);
+        expect(satirlar[0].kaynakSatirId).toBe('31');
+        expect(component.kaynakSatirHataMesaji).toBeNull();
+    });
+
+    it('yeni kaynakta iadeEdilebilirKalanMiktar>0 hicbir satir yoksa acik hata gosterilir ve kaydetme engellenir', () => {
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 30, iadeEdilebilirKalanMiktar: 0 })]));
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [] });
+
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'ASIL-5', belgeTarihi: '2026-03-05' });
+
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.kaynakSatirHataMesaji).toContain('iade edilebilir');
 
         const saveEmitSpy = spyOn(component.save, 'emit');
         component.onSaveClick();

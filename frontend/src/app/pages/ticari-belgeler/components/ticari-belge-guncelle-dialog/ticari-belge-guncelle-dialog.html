@@ -152,6 +152,9 @@
                     }
                 </div>
 
+                @if (kaynakSatirlarYukleniyor) {
+                    <div class="p-message p-message-info p-3 mb-3">Kaynak belge satırları yükleniyor...</div>
+                }
                 @if (kaynakSatirHataMesaji) {
                     <div class="p-message p-message-error p-3 mb-3">{{ kaynakSatirHataMesaji }}</div>
                 }
@@ -236,6 +239,6 @@
 
     <ng-template pTemplate="footer">
         <p-button label="Vazgeç" severity="secondary" [text]="true" (onClick)="onHide()"></p-button>
-        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!!kaynakSatirHataMesaji" (onClick)="onSaveClick()"></p-button>
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!!kaynakSatirHataMesaji || kaynakSatirlarYukleniyor" (onClick)="onSaveClick()"></p-button>
     </ng-template>
 </p-dialog>

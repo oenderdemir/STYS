@@ -7,6 +7,7 @@ import {
     KdvUygulamaTipi,
     SatisBelgesiSatirTipi,
     SatisBelgesiTipi,
+    TicariBelgeDetayDto,
     TicariBelgeGuncelleRequest,
     TicariBelgeGuncelleSatirRequest,
     TicariBelgeIadeAdayiDto,
@@ -361,5 +362,77 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         const saveEmitSpy = spyOn(component.save, 'emit');
         component.onSaveClick();
         expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('arama metni yazarken (searchIadeEdilenBelge) satirlar/referans degismez, yalnizca oneriler guncellenir', () => {
+        serviceSpy.getIadeAdaylari.and.returnValue(of([{ id: 77, belgeNo: 'ASIL-2', belgeTarihi: '2026-03-02' }]));
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })] });
+
+        // Kullanicinin arama kutusuna YAZDIGI her karakter (onSelect DEGIL, completeMethod) yalnizca
+        // searchIadeEdilenBelge'yi tetikler - bu, GERCEK bir secim DEGILDIR.
+        component.searchIadeEdilenBelge({ query: 'ASIL' });
+
+        expect(component.iadeEdilenBelgeSuggestions.length).toBe(1);
+        expect(component.formData!.satirlar!.length).toBe(1);
+        expect(component.formData!.satirlar![0].kaynakSatirId).toBe('10');
+        expect(component.formData!.iadeEdilenBelgeId).toBe(50);
+        expect(serviceSpy.getKaynakSatirlar).not.toHaveBeenCalled();
+    });
+
+    it('resolveIadeEdilenBelgeGosterim gec gelen (stale) yaniti, kullanici bu arada baska kaynak sectiyse uygulanmaz', () => {
+        const acilisGetById = new Subject<TicariBelgeDetayDto>();
+        serviceSpy.getById.and.returnValue(acilisGetById.asObservable());
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 20, iadeEdilebilirKalanMiktar: 5 })]));
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ iadeEdilenBelgeId: 50 });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        // Acilis gosterim lookup'i (getById(50)) HENUZ cozulmeden kullanici FARKLI bir kaynak secer.
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'YENI', belgeTarihi: '2026-03-02' });
+
+        // Eski (50) getById yaniti simdi (gec) gelir - STALE, gosterimi eski belgeye GERI DONDURMEMELI.
+        acilisGetById.next({ id: 50, belgeNo: 'ESKI-BELGE', belgeTarihi: '2026-02-01' } as TicariBelgeDetayDto);
+
+        expect(component.iadeEdilenBelgeGosterim?.id).toBe(77);
+        expect(component.iadeEdilenBelgeGosterim?.belgeNo).toBe('YENI');
+    });
+
+    it('referansi kaldir: iadeEdilenBelgeId null olur, referansiKaldir true olur, satirlar bos gonderilir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })] });
+
+        component.clearIadeEdilenBelgeReferansi();
+
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.formData!.iadeEdilenBelgeReferansiKaldir).toBeTrue();
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.iadeEdilenBelgeGosterim).toBeNull();
+    });
+
+    it('referans kaldirildiktan sonra bekleyen (stale) bir kaynak satir yaniti sessizce yok sayilir', () => {
+        const subject = new Subject<TicariBelgeKaynakSatirDto[]>();
+        serviceSpy.getKaynakSatirlar.and.returnValue(subject.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ satirlar: [] });
+
+        component.onIadeEdilenBelgeSecildi({ id: 77, belgeNo: 'ASIL-2', belgeTarihi: '2026-03-02' });
+        component.clearIadeEdilenBelgeReferansi();
+
+        // Kaldirmadan ONCE baslatilan kaynak satir istegi simdi (gec) sonuclanir - eski
+        // KaynakSatirId'ler ARTIK kaldirilmis referansla birlikte SESSIZCE geri GELMEMELI.
+        subject.next([ornekKaynakSatir({ id: 20, aciklama: 'Gec gelen kaynak', iadeEdilebilirKalanMiktar: 5 })]);
+
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.kaynakSatirlarYukleniyor).toBeFalse();
     });
 });

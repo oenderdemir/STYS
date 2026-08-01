@@ -596,6 +596,82 @@ public class IadeSatirKaynagiVeKumulatifMiktarIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
+    // 10d. Referans kaldırma + Satirlar=[] BİRLİKTE gönderilirse ATOMİK olarak kabul edilir:
+    // referans kaldırılır VE mevcut satırlar soft-delete edilir (bkz. görev 2).
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task UpdateAsync_ReferansKaldirVeSatirlarBosGonderilirse_ReferansKaldirilirVeSatirlarSoftDeleteEdilir()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        var (asil, satirId, _) = await SeedOnaylanmisSatisFaturasiVeKesAsync(
+            dbContext, _kurumId, _tesisId, _musteriKartId, _uniqueSuffix, new DateTime(2026, 3, 1), "K10D", miktar: 10m);
+
+        var iade = await service.CreateAsync(BuildSatisIadeRequest(
+            _tesisId, _musteriKartId, asil.Id!.Value, _uniqueSuffix, new DateTime(2026, 3, 5), satirId, miktar: 4m));
+
+        var guncellenen = await service.UpdateAsync(iade.Id!.Value, new UpdateSatisBelgesiRequest
+        {
+            IadeEdilenBelgeReferansiKaldir = true,
+            Satirlar = []
+        });
+
+        Assert.Null(guncellenen.IadeEdilenBelgeId);
+
+        var sonHal = await ReadNoTrackingAsync(dbContext, iade.Id.Value);
+        Assert.Null(sonHal.IadeEdilenBelgeId);
+        Assert.DoesNotContain(sonHal.Satirlar, x => !x.IsDeleted);
+        // Eski satır SOFT-DELETE edilmiş olarak (KaynakSatirId'siyle birlikte) hâlâ DB'de durur -
+        // fiziksel olarak silinmez, ama artık AKTİF (geçerli) bir referans TAŞIMAZ.
+        var eskiSatir = Assert.Single(sonHal.Satirlar);
+        Assert.True(eskiSatir.IsDeleted);
+        Assert.Equal(satirId.ToString(), eskiSatir.KaynakSatirId);
+    }
+
+    [IntegrationFact]
+    public async Task UpdateAsync_ReferansYokkenReferansKaldirBayragiIleSatirlarBosGonderilirse_400Doner()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        // Normal (iade OLMAYAN, dolayısıyla zaten IadeEdilenBelgeId'si null olan) bir belge.
+        var created = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _musteriKartId,
+            BelgeTarihi = new DateTime(2026, 3, 1),
+            MusteriAdSoyad = "Musteri",
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1, Aciklama = "Test", Miktar = 5m, BirimFiyat = 100m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+                }
+            ]
+        });
+
+        // IadeEdilenBelgeReferansiKaldir=true bayrağı ANLAMSIZDIR (kaldırılacak bir referans YOK) -
+        // bu istismar/kaçış yolu olarak KULLANILAMAZ; Satirlar=[] genel kuralına göre 400 döner,
+        // belgenin GERÇEK satırları SESSİZCE silinmez.
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(created.Id!.Value, new UpdateSatisBelgesiRequest
+        {
+            IadeEdilenBelgeReferansiKaldir = true,
+            Satirlar = []
+        }));
+
+        Assert.Equal(400, ex.ErrorCode);
+
+        var sonHal = await ReadNoTrackingAsync(dbContext, created.Id!.Value);
+        var aktifSatir = Assert.Single(sonHal.Satirlar, x => !x.IsDeleted);
+        Assert.Equal("Test", aktifSatir.Aciklama);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 11. Eşzamanlılık: iki eşzamanlı onaydan yalnızca sınırı aşmayan başarılı olmalı
     // ─────────────────────────────────────────────────────────────
 

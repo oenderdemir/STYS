@@ -529,11 +529,25 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             ApplyCariSnapshotToUpdateRequest(request, cari);
         }
 
-        // Satirlar alanı AÇIKÇA (null DEĞİL) gönderilmiş ama BOŞSA reddedilir - bu, "satırları
-        // dokunmadan bırak" (null) ile "tüm satırları sil" (client'ın muhtemelen KASTETMEDİĞİ,
-        // ör. bir önceki adımda satırların yanlışlıkla boşaltıldığı) durumlarını AYIRT eder; Update
-        // uç noktası satır SİLME için tasarlanmamıştır (bkz. görev 4a).
-        if (request.Satirlar is { Count: 0 })
+        // İADE REFERANSI KALDIRMA + SATIRLARI TEMİZLEME — TEK, ATOMİK İSTİSNA (bkz. görev 2):
+        // istemci AÇIKÇA IadeEdilenBelgeReferansiKaldir=true VE Satirlar=[] gönderiyorsa (ve
+        // belgenin GERÇEKTEN kaldırılacak bir referansı VARSA), bu "referansı kaldır ve artık
+        // kaynaksız kalacak mevcut satırları da temizle" isteği olarak kabul edilir - genel
+        // "Satirlar=[] her zaman 400" kuralının TEK istisnasıdır. Belgenin kaldırılacak bir
+        // referansı YOKSA (zaten null'sa) bu bayrak kombinasyonu anlamsızdır ve normal kural
+        // (400) uygulanmaya devam eder - böylece bu istisna, ilgisiz bir belgenin satırlarını
+        // "referans kaldırma" bahanesiyle toplu silmek için istismar edilemez.
+        var referansKaldirVeSatirlariTemizle =
+            request.IadeEdilenBelgeReferansiKaldir
+            && belge.IadeEdilenBelgeId.HasValue
+            && request.Satirlar is { Count: 0 };
+
+        // Satirlar alanı AÇIKÇA (null DEĞİL) gönderilmiş ama BOŞSA - yukarıdaki TEK istisna
+        // dışında - reddedilir. Bu, "satırları dokunmadan bırak" (null) ile "tüm satırları sil"
+        // (client'ın muhtemelen KASTETMEDİĞİ, ör. bir önceki adımda satırların yanlışlıkla
+        // boşaltıldığı) durumlarını AYIRT eder; Update uç noktası (bu tek istisna hariç) satır
+        // SİLME için tasarlanmamıştır (bkz. görev 4a).
+        if (request.Satirlar is { Count: 0 } && !referansKaldirVeSatirlariTemizle)
         {
             throw new BaseException(
                 "Satirlar alanı gönderildiyse en az bir satır içermelidir; satırları değiştirmeden " +
@@ -548,6 +562,17 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         if (request.Satirlar is { Count: > 0 })
         {
             await UpdateSatirlarAsync(belge, request.Satirlar, cancellationToken);
+        }
+        else if (referansKaldirVeSatirlariTemizle)
+        {
+            // Referans kaldırıldı (ApplyBelgeUpdatesAsync belge.IadeEdilenBelgeId'yi zaten null
+            // yaptı) - mevcut TÜM satırlar soft-delete edilir, böylece eski KaynakSatirId'ler
+            // hiçbir AKTİF satırda kalmaz (bkz. görev 2).
+            foreach (var mevcutSatir in belge.Satirlar)
+            {
+                mevcutSatir.IsDeleted = true;
+            }
+            belge.Satirlar.Clear();
         }
 
         // İade satırlarının kaynak bağlantısı HER ZAMAN yeniden doğrulanır - satırlar bu istekte

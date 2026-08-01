@@ -360,6 +360,12 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
     // ── İade edilen belge referansı ──
 
+    /** Dialog açılırken, mevcut iadeEdilenBelgeId için GÖSTERİM amaçlı (belgeNo/belgeTarihi)
+     * bilgiyi getirir. Bu istek DEVAM EDERKEN kullanıcı BAŞKA bir kaynak seçmiş veya referansı
+     * kaldırmış olabilir - bu durumda geç gelen yanıt, formData.iadeEdilenBelgeId'nin isteğin
+     * başlatıldığı id ile HÂLÂ AYNI olup olmadığı kontrol edilerek sessizce YOK SAYILIR (bkz.
+     * görev 3) - aksi halde stale yanıt, ekranda artık geçerli olmayan bir belgenin gösterimini
+     * yeni seçimin ÜZERİNE yazabilirdi. */
     private resolveIadeEdilenBelgeGosterim(): void {
         const id = this.formData?.iadeEdilenBelgeId;
         if (!id) {
@@ -367,8 +373,18 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             return;
         }
         this.ticariBelgeService.getById(id).subscribe({
-            next: belge => (this.iadeEdilenBelgeGosterim = { id: belge.id, belgeNo: belge.belgeNo, belgeTarihi: belge.belgeTarihi }),
-            error: () => (this.iadeEdilenBelgeGosterim = null)
+            next: belge => {
+                if (this.formData?.iadeEdilenBelgeId !== id) {
+                    return;
+                }
+                this.iadeEdilenBelgeGosterim = { id: belge.id, belgeNo: belge.belgeNo, belgeTarihi: belge.belgeTarihi };
+            },
+            error: () => {
+                if (this.formData?.iadeEdilenBelgeId !== id) {
+                    return;
+                }
+                this.iadeEdilenBelgeGosterim = null;
+            }
         });
     }
 
@@ -399,31 +415,33 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             });
     }
 
-    /** Kullanıcı FARKLI bir iade kaynağı seçtiğinde: eski satırlar HEMEN (istek sonucunu
+    /** Yalnızca AutoComplete'in GERÇEK seçim olayında (p-autoComplete (onSelect), bkz. şablon)
+     * çağrılır - kullanıcının arama kutusuna YAZDIĞI serbest metin (ngModelChange/her tuş
+     * vuruşu) burayı ASLA tetiklemez (bkz. görev 1). Bu ayrım kritiktir: (ngModelChange) bir
+     * STRING ile de tetiklenebildiğinden, önceki bir hatalı sürümde yazılan arama metni
+     * `belge.id`'yi `undefined` yaparak satırları sessizce temizliyor ve kaynak satır servisine
+     * `undefined` id'li geçersiz bir istek gönderiyordu - (onSelect) yalnızca listeden GERÇEKTEN
+     * seçilen bir TicariBelgeIadeAdayiDto nesnesiyle tetiklenir, bu yüzden `belge` burada asla
+     * null/undefined ya da bir string olamaz.
+     *
+     * Kullanıcı FARKLI bir iade kaynağı seçtiğinde: eski satırlar HEMEN (istek sonucunu
      * BEKLEMEDEN) temizlenir - kaynak satır isteği başarısız olursa dahi eski KaynakSatirId'lerin
-     * yeni referansla BİRLİKTE gönderilmesi asla mümkün olmaz (bkz. görev 3). Satırlar seçilen
-     * YENİ kaynağın satırlarıyla SIFIRDAN, AÇIKÇA yeniden eşlenir (bkz. görev F/1). Bu, yalnızca
-     * kullanıcının burada bilinçli bir seçim yaptığı yoldur - dialog mevcut bir belgeyi AÇARKEN bu
-     * yol ASLA çağrılmaz (bkz. ngOnChanges/loadKaynakSatirlarForMevcutBelge). */
-    onIadeEdilenBelgeSecildi(belge: TicariBelgeIadeAdayiDto | null): void {
-        this.iadeEdilenBelgeGosterim = belge ? { id: belge.id, belgeNo: belge.belgeNo, belgeTarihi: belge.belgeTarihi } : null;
+     * yeni referansla BİRLİKTE gönderilmesi asla mümkün olmaz (bkz. görev 3 - önceki tur). Satırlar
+     * seçilen YENİ kaynağın satırlarıyla SIFIRDAN, AÇIKÇA yeniden eşlenir (bkz. görev F/1). Bu,
+     * yalnızca kullanıcının burada bilinçli bir seçim yaptığı yoldur - dialog mevcut bir belgeyi
+     * AÇARKEN bu yol ASLA çağrılmaz (bkz. ngOnChanges/loadKaynakSatirlarForMevcutBelge). */
+    onIadeEdilenBelgeSecildi(belge: TicariBelgeIadeAdayiDto): void {
+        this.iadeEdilenBelgeGosterim = { id: belge.id, belgeNo: belge.belgeNo, belgeTarihi: belge.belgeTarihi };
         if (!this.formData) return;
 
-        this.formData.iadeEdilenBelgeId = belge?.id ?? null;
+        this.formData.iadeEdilenBelgeId = belge.id;
         this.formData.iadeEdilenBelgeReferansiKaldir = false;
         this.kaynakSatirHataMesaji = null;
         this.kaynakSatirlar = [];
-        // Eski satırlar İSTEK SONUCUNU BEKLEMEDEN, HEMEN temizlenir (bkz. görev 3 doc'u).
+        // Eski satırlar İSTEK SONUCUNU BEKLEMEDEN, HEMEN temizlenir (bkz. görev 3 doc'u - önceki tur).
         this.formData.satirlar = [];
 
-        if (belge) {
-            this.loadKaynakSatirlarForYeniSecim(belge.id);
-        } else {
-            // Referans autocomplete üzerinden (Kaldır butonu OLMADAN) temizlendi - bekleyen bir
-            // kaynak isteği varsa geçersiz kılınır (bkz. token doc'u) ve loading kapanır.
-            this.kaynakSatirRequestToken++;
-            this.kaynakSatirlarYukleniyor = false;
-        }
+        this.loadKaynakSatirlarForYeniSecim(belge.id);
     }
 
     clearIadeEdilenBelgeReferansi(): void {

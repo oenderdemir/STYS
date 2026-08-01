@@ -263,6 +263,12 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (strateji is null)
                     throw new BaseException("Bu belge tipi için muhasebe fişi üretimi desteklenmiyor.", 400);
 
+                // ToplamKdv=0 olan belgeler (ör. tam istisna) için KDV hesabı ARANMAZ ve
+                // zorunlu tutulmaz - aksi halde KDV hesabı hiç tanımlanmamış/eşlenmemiş bir
+                // tesiste, hiç KDV içermeyen bir belge için bile fiş oluşturma yersiz şekilde
+                // reddedilirdi (bkz. görev 4.1).
+                var kdvGerekli = belge.ToplamKdv > 0;
+
                 // NOT: fisContext, ozellikle CariKartId dahil, HER ZAMAN transaction icinde
                 // yeniden okunan `belge`den (belgeOnOkuma'dan DEGIL) turetilir - aksi halde
                 // iki okuma arasinda tedarikci/musteri degismisse, muhasebe fisi satiri ile
@@ -277,6 +283,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         belge.BelgeTarihi,
                         belge.BelgeNo,
                         belge.CariKartId,
+                        kdvGerekli,
                         cancellationToken),
                     _ => await BuildSatisFisContextAsync(
                         belge.TesisId!.Value,
@@ -285,6 +292,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         belge.BelgeTarihi,
                         belge.BelgeNo,
                         belge.CariKartId,
+                        kdvGerekli,
                         cancellationToken)
                 };
 
@@ -529,25 +537,28 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         DateTime fisTarihi,
         string belgeNo,
         int? cariKartId,
+        bool kdvGerekli,
         CancellationToken cancellationToken)
     {
         // Borç/alacak cari satırı, belgenin kendi müşterisinin (SatisBelgesi.CariKartId)
         // hesap planı kaydına yazılmalıdır — tesisteki "CariMusteri" ana kodu altındaki
         // rastgele/ilk detay hesaba değil (aksi halde fatura tamamen farklı bir müşterinin
-        // cari hesabına borç kaydedilmiş olur).
+        // cari hesabına borç kaydedilmiş olur). Alış tarafıyla TUTARLI olması için (bkz. görev
+        // 4.3) cari aktifliği, tesis uyumu ve müşteri/kurumsal müşteri tipi de burada, transaction
+        // içindeki GÜNCEL kayıt üzerinden doğrulanır - artık satış tarafına özel gevşetilmiş bir
+        // davranış YOKTUR.
         var cariHesabi = await GetCariMuhasebeHesabiAsync(
             cariKartId,
             tesisId,
             "Satış belgesinde cari kart tanımlı değil. Muhasebe fişi oluşturulamaz.",
-            gecerliCariTipleri: null,
-            yanlisTipHatasi: null,
-            // Satış tarafının MEVCUT davranışı: yalnızca cari kartın var olduğu ve hesap
-            // planı bağlantısı olduğu kontrol edilir; AktifMi/TesisId eşleşmesi burada
-            // (bu görevin kapsamı dışında olduğu için) EKLENMEZ.
-            tamCariDogrulamasiUygula: false,
+            gecerliCariTipleri: [CariKartTipleri.Musteri, CariKartTipleri.KurumsalMusteri],
+            yanlisTipHatasi: "Satış belgelerinde müşteri tipli cari kart seçilmelidir.",
+            tamCariDogrulamasiUygula: true,
             cancellationToken);
         var gelir = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.GelirSatis, tesisId, cancellationToken);
-        var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken);
+        var kdv = kdvGerekli
+            ? await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken)
+            : null;
 
         return new SatisBelgesiMuhasebeFisContext
         {
@@ -560,7 +571,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             CariHesapPlaniId = cariHesabi.Id,
             CariKartId = cariKartId,
             GelirHesapPlaniId = gelir.Id,
-            KdvHesapPlaniId = kdv.Id
+            KdvHesapPlaniId = kdv?.Id
         };
     }
 
@@ -646,6 +657,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         DateTime fisTarihi,
         string belgeNo,
         int? cariKartId,
+        bool kdvGerekli,
         CancellationToken cancellationToken)
     {
         // Borç/alacak cari satırı, belgenin kendi tedarikçisinin (SatisBelgesi.CariKartId)
@@ -667,7 +679,9 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             cancellationToken,
             MuhasebeAnaHesapKodlari.GiderHizmetMaliyet,
             MuhasebeAnaHesapKodlari.GiderGenelYonetim);
-        var kdv = await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVIndirilecek, false, cancellationToken);
+        var kdv = kdvGerekli
+            ? await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVIndirilecek, false, cancellationToken)
+            : null;
 
         return new SatisBelgesiMuhasebeFisContext
         {
@@ -680,7 +694,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             CariHesapPlaniId = cari.Id,
             CariKartId = cariKartId,
             GelirHesapPlaniId = 0,
-            KdvHesapPlaniId = kdv.Id,
+            KdvHesapPlaniId = kdv?.Id,
             StokHesapPlaniId = stok.Id,
             HizmetGiderHesapPlaniId = hizmet.Id
         };
@@ -1263,14 +1277,19 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         {
             var hesapId = satisMi ? esleme.SatisKdvHesapId : esleme.AlisKdvHesapId;
 
-            // Eşlemedeki KDV hesabını doğrula: aktif, hareket görebilir, detay hesap
+            // Eşlemedeki KDV hesabını doğrula: aktif, hareket görebilir, detay hesap VE
+            // (bkz. görev 4.2) yalnızca AYNI tesise ait veya GLOBAL (TesisId=null) bir hesap
+            // kullanılabilir - eşleme global olsa bile, işaret ettiği hesap BAŞKA bir tesise
+            // özelse bu fişte KULLANILMAZ (aksi halde başka bir tesisin 391/191 hesabına
+            // yanlışlıkla yazılabilirdi); bu durumda aşağıdaki fallback'lere düşülür.
             var eslemeHesap = await _dbContext.MuhasebeHesapPlanlari
                 .AsNoTracking()
                 .Where(x => x.Id == hesapId
                             && !x.IsDeleted
                             && x.AktifMi
                             && x.HareketGorebilirMi
-                            && x.DetayHesapMi)
+                            && x.DetayHesapMi
+                            && (x.TesisId == tesisId || x.TesisId == null))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (eslemeHesap is not null)

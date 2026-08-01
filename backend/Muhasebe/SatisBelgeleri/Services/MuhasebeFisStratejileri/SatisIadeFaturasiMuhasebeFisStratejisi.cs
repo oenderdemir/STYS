@@ -32,7 +32,10 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
         if (belge.Satirlar.Count == 0)
             throw new BaseException("Satış iade belgesinde aktif satır bulunamadı.", 400);
 
-        if (!context.KdvHesapPlaniId.HasValue)
+        // KDV hesabı yalnızca belgede GERÇEKTEN KDV varsa (ToplamKdv>0) zorunludur - ToplamKdv=0
+        // olan (ör. tam istisna) bir iade belgesi için KDV hesabı yokluğu fiş oluşturmayı
+        // ENGELLEMEMELİDİR (bkz. görev 4.1).
+        if (belge.ToplamKdv > 0 && !context.KdvHesapPlaniId.HasValue)
             throw new BaseException("Satış iade faturası için 391 Hesaplanan KDV hesabı bulunamadı.", 400);
 
         var iadeHesabi = await ResolveHesapByAnaKodAsync(MuhasebeAnaHesapKodlari.SatisIade, belge.TesisId!.Value, cancellationToken);
@@ -58,7 +61,7 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
         {
             satirlar.Add(new MuhasebeFisSatiriTaslak
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
+                MuhasebeHesapPlaniId = context.KdvHesapPlaniId!.Value,
                 SiraNo = siraNo++,
                 Borc = belge.ToplamKdv,
                 Alacak = 0,

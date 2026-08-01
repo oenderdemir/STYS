@@ -528,18 +528,42 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 cancellationToken);
             ApplyCariSnapshotToUpdateRequest(request, cari);
         }
+        else if ((request.BelgeTipi.HasValue || request.TesisId.HasValue) && belge.CariKartId.HasValue)
+        {
+            // CariKartId bu istekte YENİDEN gönderilmemiş olsa bile, belge YÖNÜ (BelgeTipi) veya
+            // TESİSİ değişiyorsa mevcut cari NİHAİ değerlerle yeniden doğrulanır (bkz. görev 4) -
+            // aksi halde ör. bir tedarikçi carisi belge satış yönüne çevrilirken sessizce asılı
+            // kalabilir, ya da cari başka bir tesise ait olduğu halde fark edilmeyebilirdi.
+            // Uyumsuzsa güncelleme AÇIKÇA reddedilir (sessizce temizlenmez/değiştirilmez).
+            var mevcutCari = await ResolveAndValidateCariKartAsync(
+                belge.CariKartId.Value,
+                request.TesisId,
+                request.BelgeTipi ?? belge.BelgeTipi,
+                cancellationToken);
+            ApplyCariSnapshotToUpdateRequest(request, mevcutCari);
+        }
 
-        // İADE REFERANSI KALDIRMA + SATIRLARI TEMİZLEME — TEK, ATOMİK İSTİSNA (bkz. görev 2):
-        // istemci AÇIKÇA IadeEdilenBelgeReferansiKaldir=true VE Satirlar=[] gönderiyorsa (ve
-        // belgenin GERÇEKTEN kaldırılacak bir referansı VARSA), bu "referansı kaldır ve artık
-        // kaynaksız kalacak mevcut satırları da temizle" isteği olarak kabul edilir - genel
-        // "Satirlar=[] her zaman 400" kuralının TEK istisnasıdır. Belgenin kaldırılacak bir
-        // referansı YOKSA (zaten null'sa) bu bayrak kombinasyonu anlamsızdır ve normal kural
-        // (400) uygulanmaya devam eder - böylece bu istisna, ilgisiz bir belgenin satırlarını
-        // "referans kaldırma" bahanesiyle toplu silmek için istismar edilemez.
+        // NİHAİ belge tipi - ApplyBelgeUpdatesAsync HENÜZ çalışmadığından belge.BelgeTipi burada
+        // hâlâ ESKİ değeri taşır; request.BelgeTipi verilmişse o, verilmemişse mevcut değer NİHAİ
+        // tiptir (ApplyBelgeUpdatesAsync'in belge.BelgeTipi'yi ayarlarken kullandığı AYNI kural).
+        var nihaiBelgeTipi = request.BelgeTipi ?? belge.BelgeTipi;
+        var nihaiBelgeIadeTipiMi = nihaiBelgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi;
+
+        // İADE REFERANSI KALDIRMA + SATIRLARI TEMİZLEME — TEK, ATOMİK İSTİSNA (bkz. görev 2/3):
+        // istemci AÇIKÇA IadeEdilenBelgeReferansiKaldir=true VE Satirlar=[] gönderiyorsa (belgenin
+        // GERÇEKTEN kaldırılacak bir referansı varken VE NİHAİ belge tipi HÂLÂ bir iade tipiyse),
+        // bu "referansı kaldır ve artık kaynaksız kalacak mevcut satırları da temizle" isteği
+        // olarak kabul edilir - genel "Satirlar=[] her zaman 400" kuralının TEK istisnasıdır.
+        // Belgenin kaldırılacak bir referansı YOKSA (zaten null'sa) YA DA bu istekle NİHAİ tip
+        // artık iade tipi DEĞİLSE (iadeden normale geçiş) bu istisna UYGULANMAZ - normal kural
+        // (400) geçerli kalır; aksi halde bu istisna, boş satırlı bir NORMAL belge oluşturmak
+        // için istismar edilebilirdi (bkz. görev 3). İadeden normale geçişte satırlar zaten BOŞ
+        // DEĞİL (istemci kaynak satırları normal satıra dönüştürüp gönderir), bu yüzden bu
+        // kısıtlama meşru "normalden iadeye" senaryosunu ENGELLEMEZ.
         var referansKaldirVeSatirlariTemizle =
             request.IadeEdilenBelgeReferansiKaldir
             && belge.IadeEdilenBelgeId.HasValue
+            && nihaiBelgeIadeTipiMi
             && request.Satirlar is { Count: 0 };
 
         // Satirlar alanı AÇIKÇA (null DEĞİL) gönderilmiş ama BOŞSA - yukarıdaki TEK istisna

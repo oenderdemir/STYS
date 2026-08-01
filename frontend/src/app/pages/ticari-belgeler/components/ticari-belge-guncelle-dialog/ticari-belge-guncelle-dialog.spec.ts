@@ -435,4 +435,105 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         expect(component.formData!.iadeEdilenBelgeId).toBeNull();
         expect(component.kaynakSatirlarYukleniyor).toBeFalse();
     });
+
+    it('belgeIadeTipiMi yalnizca gercek iade belge tiplerinde true doner (bkz. gorev 1)', () => {
+        const component = createComponent();
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi });
+        expect(component.belgeIadeTipiMi()).toBeTrue();
+
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.AlisIadeFaturasi });
+        expect(component.belgeIadeTipiMi()).toBeTrue();
+
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisFaturasi });
+        expect(component.belgeIadeTipiMi()).toBeFalse();
+
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.AlisFaturasi });
+        expect(component.belgeIadeTipiMi()).toBeFalse();
+    });
+
+    it('normalden iadeye gecince eski satirlar temizlenir ve kaynak secilmeden kaydetme engellenir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            iadeEdilenBelgeId: null,
+            satirlar: [{ ...ornekIadeSatiri({ kaynakSatirId: null }), satirTipi: SatisBelgesiSatirTipi.Urun }]
+        });
+        // oncekiBelgeTipi'yi (SatisFaturasi olarak) senkronize etmek icin ilk acilis tetiklenir.
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.SatisIadeFaturasi);
+
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.kaynakSatirHataMesaji).toContain('kaynak');
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('iadeden normale gecince kaynak satirlari KaynakSatirId kaldirilarak normal satir olarak tasinir', () => {
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10', miktar: 4, aciklama: 'Iade satiri' })]
+        });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.SatisFaturasi);
+
+        const satirlar = component.formData!.satirlar!;
+        expect(satirlar.length).toBe(1);
+        expect(satirlar[0].kaynakSatirId).toBeNull();
+        // Mali alanlar/miktar/aciklama KORUNUR - yalnizca KaynakSatirId kaldirilir.
+        expect(satirlar[0].miktar).toBe(4);
+        expect(satirlar[0].aciklama).toBe('Iade satiri');
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.formData!.iadeEdilenBelgeReferansiKaldir).toBeTrue();
+        expect(component.iadeEdilenBelgeGosterim).toBeNull();
+        expect(component.kaynakSatirHataMesaji).toBeNull();
+    });
+
+    it('normal bir belge hicbir satir icermeden kaydedilemez', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisFaturasi, iadeEdilenBelgeId: null, satirlar: [] });
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('normalden iadeye gecip sonra kaynak secilince kaydetme engeli kalkar', () => {
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 60, iadeEdilebilirKalanMiktar: 5 })]));
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            iadeEdilenBelgeId: null,
+            satirlar: [{ ...ornekIadeSatiri({ kaynakSatirId: null }), satirTipi: SatisBelgesiSatirTipi.Urun }]
+        });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.SatisIadeFaturasi);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        component.onIadeEdilenBelgeSecildi({ id: 60, belgeNo: 'ASIL-6', belgeTarihi: '2026-03-06' });
+
+        expect(component.kaynakSatirHataMesaji).toBeNull();
+        expect(component.formData!.satirlar!.length).toBe(1);
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).toHaveBeenCalledTimes(1);
+    });
 });

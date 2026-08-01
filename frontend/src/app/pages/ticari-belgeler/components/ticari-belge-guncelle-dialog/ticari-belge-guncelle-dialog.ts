@@ -169,12 +169,22 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
     // ── Belge tipi (yön) değişimi ──
 
+    /** Şablonda İade Edilen Belge Referansı alanının yalnızca gerçek iade belge tiplerinde
+     * (SatisIadeFaturasi/AlisIadeFaturasi) gösterilmesi için kullanılır (bkz. görev 1). */
+    belgeIadeTipiMi(): boolean {
+        return isIadeBelgeTipi(this.formData?.belgeTipi);
+    }
+
     /** Belge tipi alış/satış yönleri arasında değiştirilirse: mevcut cari yeni yöne uygun
-     * değilse temizlenir, lookup yeniden yüklenir ve kullanıcıya uyarı gösterilir (bkz. görev D). */
+     * değilse temizlenir, lookup yeniden yüklenir ve kullanıcıya uyarı gösterilir (bkz. görev D).
+     * Belge tipi iade ↔ normal arasında değiştirilirse eski referans/KaynakSatirId'ler SESSİZCE
+     * taşınmaz - bkz. iadeNormalGecisiniIsle (görev 2). */
     onBelgeTipiChange(value: SatisBelgesiTipi): void {
         if (!this.formData) return;
         const oncekiAlisMi = isAlisBelgeTipi(this.oncekiBelgeTipi);
         const yeniAlisMi = isAlisBelgeTipi(value);
+        const oncekiIadeMi = isIadeBelgeTipi(this.oncekiBelgeTipi);
+        const yeniIadeMi = isIadeBelgeTipi(value);
         this.formData.belgeTipi = value;
         this.oncekiBelgeTipi = value;
 
@@ -194,11 +204,44 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             this.loadCariKartlar();
         }
 
+        if (oncekiIadeMi !== yeniIadeMi) {
+            this.iadeNormalGecisiniIsle(yeniIadeMi);
+        }
+
         this.kdvIstisnaCache.clear();
     }
 
     private cariYeniYonaUygunMu(cari: TicariBelgeCariKartLookupDto, belgeTipi: SatisBelgesiTipi): boolean {
         return isAlisBelgeTipi(belgeTipi) ? cari.cariTipi === 'Tedarikci' : cari.cariTipi !== 'Tedarikci';
+    }
+
+    /** Belge tipi iade ↔ normal arasında değiştiğinde eski referans ve KaynakSatirId değerlerinin
+     * SESSİZCE taşınmasını engeller (bkz. görev 2):
+     * - Normalden iadeye: eski (kaynaksız) satırlar bir iade kaynağını temsil EDEMEZ, bu yüzden
+     *   temizlenir; kullanıcı YENİ bir kaynak seçene kadar kaydetme (kaynakSatirHataMesaji ile)
+     *   engellenir.
+     * - İadeden normale: kaynak satırları KaynakSatirId'leri KALDIRILARAK serbest, normal satırlar
+     *   olarak taşınır (mali alanlar/miktar/açıklama korunur, artık düzenlenebilirler); iade
+     *   referansı (varsa) açıkça kaldırılır.
+     * Her iki yönde de bekleyen bir kaynak satır isteği geçersiz kılınır (request token). */
+    private iadeNormalGecisiniIsle(yeniIadeMi: boolean): void {
+        if (!this.formData) return;
+
+        this.kaynakSatirRequestToken++;
+        this.kaynakSatirlarYukleniyor = false;
+        this.kaynakSatirlar = [];
+
+        if (yeniIadeMi) {
+            this.formData.satirlar = [];
+            this.kaynakSatirHataMesaji = 'İade faturası için önce bir kaynak (iade edilen) belge seçmelisiniz.';
+        } else {
+            this.formData.satirlar = (this.formData.satirlar ?? []).map(satir => ({ ...satir, kaynakSatirId: null }));
+            this.formData.iadeEdilenBelgeId = null;
+            this.formData.iadeEdilenBelgeReferansiKaldir = true;
+            this.iadeEdilenBelgeGosterim = null;
+            this.kaynakSatirHataMesaji =
+                this.formData.satirlar.length === 0 ? 'Normal bir belge en az bir satır içermelidir.' : null;
+        }
     }
 
     // ── Cari kart ──
@@ -686,6 +729,17 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         }
         if (this.kaynakSatirHataMesaji) {
             this.messageService.add({ severity: 'error', summary: 'Kaydedilemedi', detail: this.kaynakSatirHataMesaji });
+            return;
+        }
+        // Normal (iade OLMAYAN) bir belge en az bir geçerli satır olmadan kaydedilemez (bkz.
+        // görev 2) - iade belgeler için bu zaten remapSatirlarFromKaynak/kaynakSatirHataMesaji
+        // mekanizmasıyla ayrıca engellenir.
+        if (!this.belgeIadeTipiMi() && (this.formData?.satirlar?.length ?? 0) === 0) {
+            this.messageService.add({
+                severity: 'error',
+                summary: 'Kaydedilemedi',
+                detail: 'Normal bir belge en az bir satır içermelidir.'
+            });
             return;
         }
         this.save.emit();

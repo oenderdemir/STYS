@@ -112,6 +112,7 @@
                 <input id="karsiTarafFaturaNo" pInputText [(ngModel)]="formData.karsiTarafFaturaNo" />
             </div>
 
+            @if (belgeIadeTipiMi()) {
             <div class="field col-12">
                 <label>İade Edilen Belge Referansı</label>
                 @if (iadeEdilenBelgeGosterim && !formData.iadeEdilenBelgeReferansiKaldir) {
@@ -144,11 +145,12 @@
                     </div>
                 }
             </div>
+            }
 
             <div class="field col-12">
                 <div class="flex align-items-center justify-content-between mb-2">
                     <label class="font-semibold">Satırlar</label>
-                    @if (!formData.iadeEdilenBelgeId) {
+                    @if (!belgeIadeTipiMi()) {
                         <p-button label="Satır Ekle" icon="pi pi-plus" size="small" [text]="true" (onClick)="addSatir()"></p-button>
                     }
                 </div>

@@ -115,6 +115,15 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
      * AYNIYSA uygulanır, DEĞİŞMİŞSE (daha yeni bir istek başlamış demektir) sessizce YOK SAYILIR. */
     private kaynakSatirRequestToken = 0;
 
+    /** Cari kart lookup isteklerinin AYNI request-token yaklaşımı - belge tipi/tesis hızlı ardışık
+     * değiştirildiğinde eski bir isteğin yeni listenin ÜZERİNE yazmasını engeller (bkz. görev 2). */
+    private cariKartRequestToken = 0;
+
+    /** İade adayı arama isteklerinin AYNI request-token yaklaşımı - eski (stale) bir arama
+     * yanıtının, kullanıcı bu arada belge tipi/cari/belge tarihini değiştirdikten SONRA gelip
+     * artık geçersiz önerileri göstermesini engeller (bkz. görev 3). */
+    private iadeAdayiRequestToken = 0;
+
     private oncekiBelgeTipi: SatisBelgesiTipi | null | undefined = undefined;
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -149,12 +158,27 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         return this.formData?.belgeTarihi ? new Date(this.formData.belgeTarihi) : null;
     }
 
+    /** Belge tarihi değiştiğinde: KDV istisna önbelleği geçersiz kılınır; eski (artık ilgisiz)
+     * iade adayı önerileri temizlenir ve bekleyen bir arama isteği geçersiz kılınır (bkz. görev
+     * 3). Bir iade referansı ZATEN seçiliyse, o referans yeni belge tarihine göre artık geçerli
+     * olmayabilir (ör. asıl belge artık iade tarihinden SONRA kalmış olabilir) - güvenli tarafta
+     * kalınıp referans+kaynak satırlar birlikte temizlenir, yeni bir kaynak seçilmeden kaydetme
+     * engellenir. */
     onBelgeTarihiChange(value: Date | null): void {
-        if (this.formData) {
-            this.formData.belgeTarihi = value ? toLocalDateString(value) : null;
-        }
-        // Belge tarihi, KDV istisna geçerlilik penceresini etkiler - önbellek artık GEÇERSİZDİR.
+        if (!this.formData) return;
+        const yeniTarih = value ? toLocalDateString(value) : null;
+        const tarihDegisti = this.formData.belgeTarihi !== yeniTarih;
+        this.formData.belgeTarihi = yeniTarih;
         this.kdvIstisnaCache.clear();
+
+        if (tarihDegisti) {
+            this.invalidateIadeAdayiAramasi();
+            if (this.belgeIadeTipiMi() && this.formData.iadeEdilenBelgeId) {
+                this.iadeReferansiVeKaynagiTemizle(
+                    'Belge tarihi değişti - mevcut iade kaynağı artık geçerli olmayabilir, lütfen yeniden seçin.'
+                );
+            }
+        }
     }
 
     vadeTarihiValue(): Date | null {
@@ -193,8 +217,15 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
         const yonDegisti = oncekiAlisMi !== yeniAlisMi;
         if (yonDegisti) {
-            const cariUyumsuz = this.selectedCari
-                ? !this.cariYeniYonaUygunMu(this.selectedCari, value)
+            // selectedCari, cari kart lookup'ı ASENKRON tamamlanana kadar HENÜZ yüklenmemiş
+            // olabilir - bu durumda mevcut CariKartId'nin yeni yöne uygunluğu KANITLANAMAZ; kanıt
+            // yoksa güvenli tarafta kalınıp cari HER HALÜKARDA temizlenir (bkz. görev 2). selectedCari
+            // zaten yüklenmişse gerçek uygunluk kontrolü kullanılır (gereksiz temizlik yapılmaz).
+            const cariBilgisiYuklendiMi = !!this.selectedCari;
+            const cariUyumsuz = this.formData.cariKartId
+                ? cariBilgisiYuklendiMi
+                    ? !this.cariYeniYonaUygunMu(this.selectedCari!, value)
+                    : true
                 : false;
             if (cariUyumsuz) {
                 this.cariyiTemizle();
@@ -213,7 +244,16 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             this.iadeYonuGecisiniIsle();
         }
 
+        this.invalidateIadeAdayiAramasi();
         this.kdvIstisnaCache.clear();
+    }
+
+    /** Eski (artık ilgisiz) iade adayı önerilerinin temizlenmesi ve bekleyen bir arama isteğinin
+     * geçersiz kılınması için ortak yardımcı - belge tipi/cari/belge tarihi değiştiğinde çağrılır
+     * (bkz. görev 3). */
+    private invalidateIadeAdayiAramasi(): void {
+        this.iadeAdayiRequestToken++;
+        this.iadeEdilenBelgeSuggestions = [];
     }
 
     private cariYeniYonaUygunMu(cari: TicariBelgeCariKartLookupDto, belgeTipi: SatisBelgesiTipi): boolean {
@@ -255,6 +295,17 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
      * seçilmesini de zorunlu kılar - kaydetme, kullanıcı YENİ bir kaynak seçene kadar
      * (kaynakSatirHataMesaji ile) engellenir. Bekleyen eski bir kaynak satır isteği geçersiz kılınır. */
     private iadeYonuGecisiniIsle(): void {
+        this.iadeReferansiVeKaynagiTemizle(
+            'Belge yönü değişti - yeni yöne uygun bir cari ve kaynak (iade edilen) belge seçmeden kaydedemezsiniz.'
+        );
+    }
+
+    /** İade referansı, KaynakSatirId'ler ve kaynak satırlar BİRLİKTE temizlenir; kullanıcı YENİ
+     * bir kaynak seçene kadar (kaynakSatirHataMesaji ile) kaydetme engellenir. Mevcut referansın
+     * artık NİHAİ değerlere (belge yönü/cari/belge tarihi) uygun olmayabileceği HER durumda
+     * çağrılır - bkz. iadeYonuGecisiniIsle/onCariKartSecildi/onBelgeTarihiChange (görev 2/3).
+     * Bekleyen eski bir kaynak satır isteği geçersiz kılınır (request token). */
+    private iadeReferansiVeKaynagiTemizle(mesaj: string): void {
         if (!this.formData) return;
 
         this.kaynakSatirRequestToken++;
@@ -264,15 +315,18 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         this.formData.iadeEdilenBelgeId = null;
         this.formData.iadeEdilenBelgeReferansiKaldir = true;
         this.iadeEdilenBelgeGosterim = null;
-        this.kaynakSatirHataMesaji =
-            'Belge yönü değişti - yeni yöne uygun bir cari ve kaynak (iade edilen) belge seçmeden kaydedemezsiniz.';
+        this.kaynakSatirHataMesaji = mesaj;
     }
 
     // ── Cari kart ──
 
+    /** Cari kart lookup'ı bir request-token ile korunur - belge tipi/tesis hızlı ardışık
+     * değiştirildiğinde eski (stale) bir isteğin yanıtı, yeni belge tipinin listesinin ÜZERİNE
+     * SESSİZCE yazamaz (bkz. görev 2). */
     private loadCariKartlar(): void {
         const tesisId = this.formData?.tesisId ?? null;
         const belgeTipi = this.formData?.belgeTipi ?? null;
+        const token = ++this.cariKartRequestToken;
         if (!tesisId || !belgeTipi) {
             this.cariKartlar = [];
             this.filteredCariKartlar = [];
@@ -280,11 +334,17 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         }
         this.ticariBelgeService.getCariKartLookup(tesisId, belgeTipi).subscribe({
             next: list => {
+                if (token !== this.cariKartRequestToken) {
+                    return;
+                }
                 this.cariKartlar = list;
                 this.filteredCariKartlar = [...this.cariKartlar];
                 this.selectedCari = this.cariKartlar.find(c => c.id === this.formData?.cariKartId) ?? null;
             },
             error: () => {
+                if (token !== this.cariKartRequestToken) {
+                    return;
+                }
                 this.cariKartlar = [];
                 this.filteredCariKartlar = [];
             }
@@ -303,27 +363,45 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
               );
     }
 
-    /** Cari seçildiğinde yalnızca cariKartId DEĞİL, mevcut satış belgesi ekranıyla uyumlu şekilde
-     * tüm müşteri snapshot alanları da doldurulur (bkz. görev D). */
+    /** Yalnızca AutoComplete'in GERÇEK seçim ((onSelect)) ve temizleme ((onClear)) olaylarında
+     * çağrılır (bkz. şablon/görev 1) - kullanıcının arama kutusuna YAZDIĞI serbest metin
+     * (ngModelChange) burayı ASLA tetiklemez; aksi halde yazılan metin bir STRING olarak buraya
+     * gelip cariKartId'yi ve müşteri snapshot alanlarını (unvan/ad-soyad/vergi no vb.) sessizce
+     * BOZARDI. Cari seçildiğinde yalnızca cariKartId DEĞİL, mevcut satış belgesi ekranıyla uyumlu
+     * şekilde tüm müşteri snapshot alanları da doldurulur (bkz. görev D). Cari GERÇEKTEN
+     * değiştiyse (eski cariKartId'den farklıysa): eski (artık ilgisiz) iade adayı önerileri
+     * temizlenir; bir iade referansı ZATEN seçiliyse bu referans yeni cari ile artık uyumlu
+     * olmayabileceğinden referans+kaynak satırlar birlikte temizlenip yeniden seçim zorunlu
+     * kılınır (bkz. görev 3). */
     onCariKartSecildi(cari: TicariBelgeCariKartLookupDto | null): void {
         this.selectedCari = cari;
         if (!this.formData) return;
 
+        const cariDegisti = this.formData.cariKartId !== (cari?.id ?? null);
+
         if (!cari) {
             this.cariyiTemizle();
-            return;
+        } else {
+            this.formData.cariKartId = cari.id;
+            this.formData.kurumsalMi = cari.kurumsalMi;
+            this.formData.musteriUnvan = cari.kurumsalMi ? cari.unvanAdSoyad : null;
+            this.formData.musteriAdSoyad = cari.kurumsalMi ? null : cari.unvanAdSoyad;
+            this.formData.musteriVergiNo = cari.kurumsalMi ? (cari.vergiNoTckn ?? null) : null;
+            this.formData.musteriTcKimlikNo = cari.kurumsalMi ? null : (cari.vergiNoTckn ?? null);
+            this.formData.musteriVergiDairesi = cari.vergiDairesi ?? null;
+            this.formData.musteriAdres = cari.adres ?? null;
+            this.formData.musteriEposta = cari.eposta ?? null;
+            this.formData.musteriTelefon = cari.telefon ?? null;
         }
 
-        this.formData.cariKartId = cari.id;
-        this.formData.kurumsalMi = cari.kurumsalMi;
-        this.formData.musteriUnvan = cari.kurumsalMi ? cari.unvanAdSoyad : null;
-        this.formData.musteriAdSoyad = cari.kurumsalMi ? null : cari.unvanAdSoyad;
-        this.formData.musteriVergiNo = cari.kurumsalMi ? (cari.vergiNoTckn ?? null) : null;
-        this.formData.musteriTcKimlikNo = cari.kurumsalMi ? null : (cari.vergiNoTckn ?? null);
-        this.formData.musteriVergiDairesi = cari.vergiDairesi ?? null;
-        this.formData.musteriAdres = cari.adres ?? null;
-        this.formData.musteriEposta = cari.eposta ?? null;
-        this.formData.musteriTelefon = cari.telefon ?? null;
+        if (cariDegisti) {
+            this.invalidateIadeAdayiAramasi();
+            if (this.belgeIadeTipiMi() && this.formData.iadeEdilenBelgeId) {
+                this.iadeReferansiVeKaynagiTemizle(
+                    'Cari değişti - mevcut iade kaynağı artık geçerli olmayabilir, lütfen yeniden seçin.'
+                );
+            }
+        }
     }
 
     /** Cari seçimi temizlendiğinde eski cari kimliğiyle yeni/eskimiş müşteri snapshot'ının
@@ -456,12 +534,16 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     }
 
     /** İade adayı araması, yeni sınırlandırılmış/sunucu-taraflı iade-adaylari uç noktasını kullanır
-     * (bkz. görev E) - genel TicariBelge filter endpointi autocomplete olarak KULLANILMAZ. */
+     * (bkz. görev E) - genel TicariBelge filter endpointi autocomplete olarak KULLANILMAZ. Bir
+     * request-token ile korunur: kullanıcı hızlıca yazmaya devam ederse veya bu arada belge tipi/
+     * cari/belge tarihini değiştirirse, eski (stale) bir aramanın GEÇ gelen yanıtı artık güncel
+     * olmayan önerileri SESSİZCE göstermez (bkz. görev 3). */
     searchIadeEdilenBelge(event: { query: string }): void {
         const tesisId = this.formData?.tesisId;
         const cariKartId = this.formData?.cariKartId;
         const belgeTipi = this.formData?.belgeTipi;
         const belgeTarihi = this.formData?.belgeTarihi;
+        const token = ++this.iadeAdayiRequestToken;
         if (!tesisId || !cariKartId || !belgeTipi || !belgeTarihi || !isIadeBelgeTipi(belgeTipi)) {
             this.iadeEdilenBelgeSuggestions = [];
             return;
@@ -477,8 +559,18 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
                 belgeNoArama: event.query || null
             })
             .subscribe({
-                next: list => (this.iadeEdilenBelgeSuggestions = list),
-                error: () => (this.iadeEdilenBelgeSuggestions = [])
+                next: list => {
+                    if (token !== this.iadeAdayiRequestToken) {
+                        return;
+                    }
+                    this.iadeEdilenBelgeSuggestions = list;
+                },
+                error: () => {
+                    if (token !== this.iadeAdayiRequestToken) {
+                        return;
+                    }
+                    this.iadeEdilenBelgeSuggestions = [];
+                }
             });
     }
 

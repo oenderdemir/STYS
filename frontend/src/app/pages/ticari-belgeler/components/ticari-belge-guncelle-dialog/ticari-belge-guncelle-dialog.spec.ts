@@ -7,6 +7,7 @@ import {
     KdvUygulamaTipi,
     SatisBelgesiSatirTipi,
     SatisBelgesiTipi,
+    TicariBelgeCariKartLookupDto,
     TicariBelgeDetayDto,
     TicariBelgeGuncelleRequest,
     TicariBelgeGuncelleSatirRequest,
@@ -80,6 +81,22 @@ function ornekKaynakSatir(overrides?: Partial<TicariBelgeKaynakSatirDto>): Ticar
         kdvIstisnaTanimId: null,
         tevkifatPay: null,
         tevkifatPayda: null,
+        ...overrides
+    };
+}
+
+function ornekCariKart(overrides?: Partial<TicariBelgeCariKartLookupDto>): TicariBelgeCariKartLookupDto {
+    return {
+        id: 5,
+        cariKodu: 'MUS-5',
+        cariTipi: 'Musteri',
+        unvanAdSoyad: 'Gercek Musteri',
+        vergiNoTckn: '11111111111',
+        vergiDairesi: 'Merkez',
+        adres: 'Adres',
+        eposta: 'musteri@ornek.com',
+        telefon: '5551112233',
+        kurumsalMi: false,
         ...overrides
     };
 }
@@ -642,5 +659,183 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         const saveEmitSpy = spyOn(component.save, 'emit');
         component.onSaveClick();
         expect(saveEmitSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('yazi yazma (filterCari/completeMethod) cariKartId veya musteri snapshot alanlarini DEGISTIRMEZ', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ cariKartId: 5, musteriAdSoyad: 'Gercek Musteri' });
+        component.cariKartlar = [ornekCariKart()];
+
+        // Kullanicinin arama kutusuna yazdigi metin yalnizca filterCari'yi (oneri listesini)
+        // tetikler - onCariKartSecildi'yi ASLA cagirmamalidir (bkz. gorev 1).
+        component.filterCari({ query: 'gercek' });
+
+        expect(component.formData!.cariKartId).toBe(5);
+        expect(component.formData!.musteriAdSoyad).toBe('Gercek Musteri');
+        expect(component.filteredCariKartlar.length).toBe(1);
+    });
+
+    it('cari onClear (temizleme) ile secim gercekten temizlenir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ cariKartId: 5, musteriAdSoyad: 'Gercek Musteri' });
+        component.selectedCari = ornekCariKart();
+
+        component.onCariKartSecildi(null);
+
+        expect(component.formData!.cariKartId).toBeNull();
+        expect(component.formData!.musteriAdSoyad).toBeNull();
+        expect(component.selectedCari).toBeNull();
+    });
+
+    it('selectedCari henuz yuklenmemisken (asenkron lookup surerken) belge yonu degisirse mevcut cari yine de temizlenir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        // Cari lookup HENUZ cozulmemis - selectedCari hala null, ama formData.cariKartId
+        // GERCEK (kayitli) bir cariyi gosteriyor.
+        serviceSpy.getCariKartLookup.and.returnValue({ subscribe: () => undefined } as never);
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.AlisFaturasi,
+            cariKartId: 7,
+            musteriAdSoyad: 'Tedarikci Cari',
+            iadeEdilenBelgeId: null,
+            satirlar: []
+        });
+        // oncekiBelgeTipi'yi (AlisFaturasi olarak) senkronize etmek icin ilk acilis tetiklenir -
+        // cari lookup yaniti HENUZ gelmedigi icin selectedCari null KALIR.
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        expect(component.selectedCari).toBeNull();
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.SatisFaturasi);
+
+        // selectedCari yuklenmedigi (uygunluk KANITLANAMADIGI) icin GUVENLI tarafta kalinip
+        // cari HER HALUKARDA temizlenir (bkz. gorev 2).
+        expect(component.formData!.cariKartId).toBeNull();
+        expect(component.formData!.musteriAdSoyad).toBeNull();
+    });
+
+    it('cari kart lookup stale yaniti yeni belge tipinin listesini EZMEZ', () => {
+        const subjectEski = new Subject<TicariBelgeCariKartLookupDto[]>();
+        const subjectYeni = new Subject<TicariBelgeCariKartLookupDto[]>();
+        serviceSpy.getCariKartLookup.and.returnValues(subjectEski.asObservable(), subjectYeni.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            cariKartId: null,
+            iadeEdilenBelgeId: null,
+            satirlar: []
+        });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS); // ESKI (1.) istek baslar
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.AlisFaturasi); // YENI (2.) istek baslar
+
+        // YENI istek ONCE cozulur.
+        const yeniListe = [ornekCariKart({ id: 20, cariTipi: 'Tedarikci', unvanAdSoyad: 'Yeni Tedarikci' })];
+        subjectYeni.next(yeniListe);
+
+        // ESKI istek DAHA SONRA (gec) cozulur - YENI listenin UZERINE YAZMAMALI.
+        const eskiListe = [ornekCariKart({ id: 5, cariTipi: 'Musteri', unvanAdSoyad: 'Eski Musteri' })];
+        subjectEski.next(eskiListe);
+
+        expect(component.cariKartlar).toEqual(yeniListe);
+    });
+
+    it('iade adayi arama stale yaniti eski sorgunun sonucunu gostermez', () => {
+        const subjectEski = new Subject<TicariBelgeIadeAdayiDto[]>();
+        const subjectYeni = new Subject<TicariBelgeIadeAdayiDto[]>();
+        serviceSpy.getIadeAdaylari.and.returnValues(subjectEski.asObservable(), subjectYeni.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi, cariKartId: 5, iadeEdilenBelgeId: null });
+
+        component.searchIadeEdilenBelge({ query: 'ABC' }); // ESKI (1.) arama
+        component.searchIadeEdilenBelge({ query: 'ABCD' }); // YENI (2.) arama
+
+        const yeniSonuc = [{ id: 91, belgeNo: 'YENI-91', belgeTarihi: '2026-04-01' }];
+        subjectYeni.next(yeniSonuc);
+
+        const eskiSonuc = [{ id: 90, belgeNo: 'ESKI-90', belgeTarihi: '2026-03-01' }];
+        subjectEski.next(eskiSonuc); // gec gelen ESKI yanit - YOK SAYILMALI
+
+        expect(component.iadeEdilenBelgeSuggestions).toEqual(yeniSonuc);
+    });
+
+    it('belge tarihi degisince eski iade adayi onerileri temizlenir ve mevcut referans+kaynak satirlar birlikte silinir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        component.iadeEdilenBelgeSuggestions = [{ id: 77, belgeNo: 'ESKI-ONERI', belgeTarihi: '2026-03-01' }];
+
+        component.onBelgeTarihiChange(new Date(2026, 2, 20));
+
+        expect(component.iadeEdilenBelgeSuggestions).toEqual([]);
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.kaynakSatirlar).toEqual([]);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('cari degisince eski iade adayi onerileri temizlenir ve mevcut referans+kaynak satirlar birlikte silinir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            cariKartId: 5,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        component.iadeEdilenBelgeSuggestions = [{ id: 77, belgeNo: 'ESKI-ONERI', belgeTarihi: '2026-03-01' }];
+
+        component.onCariKartSecildi(ornekCariKart({ id: 8, unvanAdSoyad: 'Baska Musteri' }));
+
+        expect(component.iadeEdilenBelgeSuggestions).toEqual([]);
+        expect(component.formData!.cariKartId).toBe(8);
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.kaynakSatirlar).toEqual([]);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('ayni cari tekrar secilirse (gercek degisiklik yoksa) mevcut iade referansina dokunulmaz', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            cariKartId: 5,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onCariKartSecildi(ornekCariKart({ id: 5 }));
+
+        expect(component.formData!.iadeEdilenBelgeId).toBe(50);
+        expect(component.formData!.satirlar!.length).toBe(1);
     });
 });

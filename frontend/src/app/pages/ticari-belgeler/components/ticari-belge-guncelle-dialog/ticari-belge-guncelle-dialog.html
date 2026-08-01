@@ -42,12 +42,15 @@
                     styleClass="w-full"
                     inputStyleClass="w-full"
                     [ngModel]="selectedCari"
-                    (ngModelChange)="onCariKartSecildi($event)"
+                    [forceSelection]="true"
+                    (onSelect)="onCariKartSecildi($event.value)"
+                    (onClear)="onCariKartSecildi(null)"
                     [suggestions]="filteredCariKartlar"
                     (completeMethod)="filterCari($event)"
                     [showEmptyMessage]="true"
                     emptyMessage="Cari kart bulunamadı"
                     [dropdown]="true"
+                    [showClear]="true"
                     [minLength]="0"
                     placeholder="Cari kart seçiniz (unvan, vergi no veya kod ile arayın)...">
                     <ng-template let-cari pTemplate="item">

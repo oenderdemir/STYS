@@ -1,4 +1,5 @@
 using AutoMapper;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
@@ -37,7 +38,24 @@ public class SatisBelgesiProfile : Profile
             .ForMember(dest => dest.IadeEdilenBelgeTarihi, opt => opt.MapFrom(src =>
                 src.IadeEdilenBelge != null ? (DateTime?)src.IadeEdilenBelge.BelgeTarihi : null))
             .ForMember(dest => dest.IadeEdilenBelgeTipi, opt => opt.MapFrom(src =>
-                src.IadeEdilenBelge != null ? (SatisBelgesiTipi?)src.IadeEdilenBelge.BelgeTipi : null));
+                src.IadeEdilenBelge != null ? (SatisBelgesiTipi?)src.IadeEdilenBelge.BelgeTipi : null))
+            // ── İşlem yetenekleri — TEK merkezi kaynaktan (TicariBelgeIslemYetkisi) türetilir,
+            // legacy Durum ASLA kullanılmaz (bkz. görev 2). Her mapping çağrısında (GetByIdAsync,
+            // FilterAsync, Create/Update sonrası dönüş) OTOMATİK olarak hesaplanır. ──
+            .ForMember(dest => dest.GuncellenebilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.GuncellenebilirMi(src.TicariDurum, src.MuhasebeDurumu)))
+            .ForMember(dest => dest.SilinebilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.SilinebilirMi(src.TicariDurum, src.MuhasebeDurumu, src.FaturalamaDurumu)))
+            .ForMember(dest => dest.MuhasebeOnayinaGonderilebilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.MuhasebeOnayinaGonderilebilirMi(src.TicariDurum, src.MuhasebeDurumu)))
+            .ForMember(dest => dest.MuhasebeOnaylanabilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.MuhasebeOnaylanabilirMi(src.TicariDurum, src.MuhasebeDurumu)))
+            .ForMember(dest => dest.ReddedilebilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.ReddedilebilirMi(src.TicariDurum, src.MuhasebeDurumu)))
+            .ForMember(dest => dest.IptalEdilebilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.IptalEdilebilirMi(src.TicariDurum, src.FaturalamaDurumu)))
+            .ForMember(dest => dest.MuhasebeFisiOlusturulabilirMi, opt => opt.MapFrom(src =>
+                TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(src.MuhasebeDurumu, src.MuhasebeFisId, src.BelgeTipi)));
 
         CreateMap<SatisBelgesiDto, SatisBelgesi>()
             .ForMember(dest => dest.Satirlar, opt => opt.Ignore())

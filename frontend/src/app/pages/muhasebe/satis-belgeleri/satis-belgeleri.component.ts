@@ -724,8 +724,8 @@ export class SatisBelgeleriComponent implements OnInit {
     }
 
     openEditDialog(belge: SatisBelgesiDto): void {
-        if (belge.durum !== SatisBelgesiDurumu.Taslak && belge.durum !== SatisBelgesiDurumu.Reddedildi) {
-            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Sadece Taslak veya Reddedildi durumundaki belgeler düzenlenebilir.' });
+        if (!belge.guncellenebilirMi) {
+            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: 'Bu belge şu anda düzenlenemez.' });
             return;
         }
         this.isEditing.set(true);
@@ -1468,56 +1468,36 @@ export class SatisBelgeleriComponent implements OnInit {
         }
     }
 
-    // ── Faz 66: Bağlı muhasebe fişi olan belgelerde tüm mutasyon aksiyonları engellenir ──
+    // ── İşlem yetenekleri — backend TicariBelgeIslemYetkisi'nden türetilen otoriter alanlar
+    // (guncellenebilirMi vb.) doğrudan kullanılır; legacy Durum'a göre kural burada YENİDEN
+    // ÜRETİLMEZ. Endpoint doğrulamaları otoriter kalır, bu alanlar yalnızca UI görünürlüğü içindir. ──
 
     canEdit(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
-        return belge.durum === SatisBelgesiDurumu.Taslak || belge.durum === SatisBelgesiDurumu.Reddedildi;
+        return belge.guncellenebilirMi;
     }
 
     canDelete(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
-        return belge.durum === SatisBelgesiDurumu.Taslak;
+        return belge.silinebilirMi;
     }
 
     canGonder(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
-        return belge.durum === SatisBelgesiDurumu.Taslak;
+        return belge.muhasebeOnayinaGonderilebilirMi;
     }
 
     canOnayla(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
-        return belge.durum === SatisBelgesiDurumu.MuhasebeOnayinda;
+        return belge.muhasebeOnaylanabilirMi;
     }
 
     canReddet(belge: SatisBelgesiDto): boolean {
-        if (belge.muhasebeFisId) return false;
-        return belge.durum === SatisBelgesiDurumu.MuhasebeOnayinda;
+        return belge.reddedilebilirMi;
     }
 
     canIptal(belge: SatisBelgesiDto): boolean {
-        return belge.durum !== SatisBelgesiDurumu.IptalEdildi &&
-            belge.durum !== SatisBelgesiDurumu.FaturaKesildi &&
-            belge.durum !== SatisBelgesiDurumu.MusteriyeGonderildi;
+        return belge.iptalEdilebilirMi;
     }
 
     canFisOlustur(belge: SatisBelgesiDto): boolean {
-        if (
-            belge.durum !== SatisBelgesiDurumu.MuhasebeOnaylandi ||
-            belge.muhasebeFisId ||
-            belge.belgeTipi === SatisBelgesiTipi.Proforma ||
-            belge.belgeTipi === SatisBelgesiTipi.IadeFaturasi
-        ) {
-            return false;
-        }
-
-        if (this.isAlisMode()) {
-            return belge.belgeTipi === SatisBelgesiTipi.AlisFaturasi || belge.belgeTipi === SatisBelgesiTipi.AlisIadeFaturasi;
-        }
-
-        return belge.belgeTipi === SatisBelgesiTipi.SatisFaturasi ||
-            belge.belgeTipi === SatisBelgesiTipi.FaturaTaslagi ||
-            belge.belgeTipi === SatisBelgesiTipi.SatisIadeFaturasi;
+        return belge.muhasebeFisiOlusturulabilirMi;
     }
 
     hasMuhasebeFisi(belge: SatisBelgesiDto): boolean {
@@ -1533,18 +1513,10 @@ export class SatisBelgeleriComponent implements OnInit {
 
     muhasebeFisiOlustur(belge: SatisBelgesiDto): void {
         if (!this.canFisOlustur(belge)) {
-            const detail = this.isAlisMode()
-                ? (belge.belgeTipi === SatisBelgesiTipi.Proforma
-                    ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
-                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.')
-                : (belge.belgeTipi === SatisBelgesiTipi.Proforma
-                    ? 'Proforma belgeler için muhasebe fişi oluşturulamaz.'
-                    : 'İade faturaları için muhasebe fişi oluşturma henüz desteklenmiyor.');
-
             this.messageService.add({
                 severity: 'warn',
                 summary: 'İşlem Desteklenmiyor',
-                detail
+                detail: 'Bu belge için muhasebe fişi oluşturulamaz.'
             });
             return;
         }

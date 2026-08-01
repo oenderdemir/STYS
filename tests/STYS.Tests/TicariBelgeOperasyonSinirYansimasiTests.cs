@@ -2,9 +2,11 @@ using System.Reflection;
 using KampServiceNs = STYS.Kamp.Services;
 using RestoranServiceNs = STYS.RestoranYonetimi.Services;
 using RezervasyonServiceNs = STYS.Rezervasyonlar.Services;
+using STYS.Muhasebe.SatisBelgeleri.Controllers;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Rezervasyonlar.Dto;
 using STYS.TicariBelgeler.Controllers;
+using STYS.TicariBelgeler.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using Xunit;
 
@@ -91,5 +93,63 @@ public class TicariBelgeOperasyonSinirYansimasiTests
         {
             Assert.DoesNotContain(yasakli, parametreTipleri);
         }
+    }
+
+    // ──────────────────────────────────────────────
+    //  Muhasebe onay akışı sınırı (bu tur — görev 4): ui/ticari-belgeler operasyonel sınırına
+    //  muhasebe onaylama/ret/fiş oluşturma endpoint'i EKLENMEMELİ; bu mutasyonlar yalnızca
+    //  ui/muhasebe/satis-belgeleri (SatisBelgeleriController), MuhasebeSatisBelgeleriYonetimi
+    //  yetkisiyle korunarak kalmalıdır.
+    // ──────────────────────────────────────────────
+
+    private static readonly string[] MuhasebeMutasyonMetotAdlari =
+    [
+        "MuhasebeOnayla", "MuhasebeOnaylaAsync",
+        "Reddet", "ReddetAsync",
+        "MuhasebeFisiOlustur", "MuhasebeFisiOlusturAsync",
+        "FaturaKes", "FaturaKesAsync"
+    ];
+
+    [Fact]
+    public void ITicariBelgeService_MuhasebeMutasyonMetotlariniIcermez()
+    {
+        var arayuzMetotlari = typeof(ITicariBelgeService).GetMethods().Select(m => m.Name).ToHashSet();
+
+        foreach (var yasakli in MuhasebeMutasyonMetotAdlari)
+        {
+            Assert.DoesNotContain(yasakli, arayuzMetotlari);
+        }
+    }
+
+    [Fact]
+    public void TicariBelgelerController_MuhasebeMutasyonEndpointleriniIcermez()
+    {
+        var controllerMetotlari = typeof(TicariBelgelerController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(m => m.Name)
+            .ToHashSet();
+
+        foreach (var yasakli in MuhasebeMutasyonMetotAdlari)
+        {
+            Assert.DoesNotContain(yasakli, controllerMetotlari);
+        }
+    }
+
+    [Theory]
+    [InlineData(nameof(SatisBelgeleriController.MuhasebeOnayla))]
+    [InlineData(nameof(SatisBelgeleriController.Reddet))]
+    [InlineData(nameof(SatisBelgeleriController.MuhasebeFisiOlustur))]
+    [InlineData(nameof(SatisBelgeleriController.FaturaKes))]
+    public void SatisBelgeleriController_MuhasebeMutasyonEndpointleri_YalnizcaMuhasebeSatisBelgeleriYonetimiManageKullanir(
+        string metotAdi)
+    {
+        var metot = typeof(SatisBelgeleriController).GetMethod(metotAdi, BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException($"Metot bulunamadi: {metotAdi}");
+
+        var permissionAttrs = metot.GetCustomAttributes<PermissionAttribute>().ToList();
+        Assert.Single(permissionAttrs);
+
+        var permissions = (string[])PermissionsField.GetValue(permissionAttrs[0])!;
+        Assert.Equal([StructurePermissions.MuhasebeSatisBelgeleriYonetimi.Manage], permissions);
     }
 }

@@ -15,6 +15,33 @@ export enum SatisBelgesiDurumu {
     IptalEdildi = 7
 }
 
+// ── Otoriter durum alanları (backend STYS.Muhasebe.SatisBelgeleri.Enums ile birebir) ──
+// İşlem kararları (buton görünürlüğü vb.) İÇİN yalnızca bu üç alan + MuhasebeFisId kullanılır;
+// legacy SatisBelgesiDurumu yalnızca geriye dönük görüntüleme amaçlıdır, karar üretmez.
+
+export enum TicariBelgeDurumu {
+    Taslak = 1,
+    Hazir = 2,
+    IptalEdildi = 3
+}
+
+export enum TicariBelgeMuhasebeDurumu {
+    Bekliyor = 1,
+    Onayda = 2,
+    Onaylandi = 3,
+    Reddedildi = 4,
+    IptalEdildi = 5
+}
+
+export enum TicariBelgeFaturalamaDurumu {
+    Uygulanamaz = 1,
+    Baslatilmadi = 2,
+    KesimBekliyor = 3,
+    Kesildi = 4,
+    MusteriyeGonderildi = 5,
+    IptalEdildi = 6
+}
+
 export enum SatisBelgesiTipi {
     FaturaTaslagi = 1,
     SatisFaturasi = 2,
@@ -172,7 +199,14 @@ export interface SatisBelgesiDto {
     id: number;
     belgeNo: string;
     belgeTipi: SatisBelgesiTipi;
+    /// Geriye uyumluluk alanı — ARTIK OTORİTER DEĞİLDİR, işlem kararları için kullanılmaz.
     durum: SatisBelgesiDurumu;
+    /// Otoriter ticari (hazırlık) durumu.
+    ticariDurum: TicariBelgeDurumu;
+    /// Otoriter muhasebeleştirme durumu.
+    muhasebeDurumu: TicariBelgeMuhasebeDurumu;
+    /// Otoriter faturalama/gönderim durumu.
+    faturalamaDurumu: TicariBelgeFaturalamaDurumu;
     kaynakModul: SatisKaynakModulu;
     kaynakTipi?: string | null;
     kaynakId?: string | null;
@@ -209,6 +243,17 @@ export interface SatisBelgesiDto {
     muhasebeFisId?: number | null;
     muhasebeFisOlusturmaTarihi?: string | null;
     satirlar: SatisBelgesiSatiriDto[];
+
+    // ── İşlem yetenekleri — backend TicariBelgeIslemYetkisi'nden türetilir. Frontend BU
+    // alanları DOĞRUDAN kullanır, kuralları yeniden üretmez. Endpoint doğrulamaları otoriterdir;
+    // bu alanlar yalnızca buton görünürlüğü içindir. ──
+    guncellenebilirMi: boolean;
+    silinebilirMi: boolean;
+    muhasebeOnayinaGonderilebilirMi: boolean;
+    muhasebeOnaylanabilirMi: boolean;
+    reddedilebilirMi: boolean;
+    iptalEdilebilirMi: boolean;
+    muhasebeFisiOlusturulabilirMi: boolean;
 }
 
 export interface CreateSatisBelgesiSatiriRequest {

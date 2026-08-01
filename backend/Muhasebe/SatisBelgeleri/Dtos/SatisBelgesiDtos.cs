@@ -61,6 +61,17 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public int? MuhasebeFisId { get; set; }
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
     public List<SatisBelgesiSatiriDto> Satirlar { get; set; } = [];
+
+    // ── İşlem yetenekleri — TicariBelgeIslemYetkisi'nden türetilir, frontend legacy Durum'u
+    // yorumlamaz/kuralları tekrar üretmez; bu alanlar salt UI görünürlüğü içindir, endpoint
+    // doğrulamaları HER ZAMAN otoriter kalır (bkz. SatisBelgesiProfile). ──
+    public bool GuncellenebilirMi { get; set; }
+    public bool SilinebilirMi { get; set; }
+    public bool MuhasebeOnayinaGonderilebilirMi { get; set; }
+    public bool MuhasebeOnaylanabilirMi { get; set; }
+    public bool ReddedilebilirMi { get; set; }
+    public bool IptalEdilebilirMi { get; set; }
+    public bool MuhasebeFisiOlusturulabilirMi { get; set; }
 }
 
 public class SatisBelgesiSatiriDto : BaseRdbmsDto<int>

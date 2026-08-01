@@ -46,6 +46,30 @@ public static class TicariBelgeIslemYetkisi
            && faturalamaDurumu != TicariBelgeFaturalamaDurumu.Kesildi
            && faturalamaDurumu != TicariBelgeFaturalamaDurumu.MusteriyeGonderildi;
 
+    /// <summary>Yalnızca MuhasebeDurumu=Onayda olan (ve iptal edilmemiş) bir belge muhasebece onaylanabilir.</summary>
+    public static bool MuhasebeOnaylanabilirMi(TicariBelgeDurumu ticariDurum, TicariBelgeMuhasebeDurumu muhasebeDurumu)
+        => ticariDurum != TicariBelgeDurumu.IptalEdildi
+           && muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onayda;
+
+    /// <summary>Yalnızca MuhasebeDurumu=Onayda olan (ve iptal edilmemiş) bir belge reddedilebilir.</summary>
+    public static bool ReddedilebilirMi(TicariBelgeDurumu ticariDurum, TicariBelgeMuhasebeDurumu muhasebeDurumu)
+        => ticariDurum != TicariBelgeDurumu.IptalEdildi
+           && muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onayda;
+
+    /// <summary>
+    /// Muhasebe fişi YALNIZCA MuhasebeDurumu=Onaylandi VE henüz bağlı bir MuhasebeFisId yokken
+    /// oluşturulabilir. FaturaTaslagi, Proforma ve legacy IadeFaturasi için (bu belge tiplerinde
+    /// fiş oluşturma akışı desteklenmediği için) HER ZAMAN false döner — desteklenen SatisFaturasi,
+    /// AlisFaturasi, SatisIadeFaturasi ve AlisIadeFaturasi için diğer koşullar sağlanınca true döner.
+    /// </summary>
+    public static bool MuhasebeFisiOlusturulabilirMi(
+        TicariBelgeMuhasebeDurumu muhasebeDurumu, int? muhasebeFisId, SatisBelgesiTipi belgeTipi)
+        => muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onaylandi
+           && !muhasebeFisId.HasValue
+           && belgeTipi != SatisBelgesiTipi.FaturaTaslagi
+           && belgeTipi != SatisBelgesiTipi.Proforma
+           && belgeTipi != SatisBelgesiTipi.IadeFaturasi;
+
     /// <summary>
     /// Üç otoriter durumdan operasyon personeline gösterilecek KISA, insan-okur bir Türkçe durum
     /// açıklaması üretir. Legacy SatisBelgesiDurumu'nun yerine kullanılmak üzere tasarlanmıştır

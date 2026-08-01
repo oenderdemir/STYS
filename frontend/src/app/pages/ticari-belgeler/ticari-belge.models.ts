@@ -411,6 +411,68 @@ export function belgeToGuncelleRequest(belge: TicariBelgeDetayDto): TicariBelgeG
     };
 }
 
+// ── Operasyonel lookup modelleri (bkz. görev A/C) ──
+// Muhasebe/yönetim modüllerinin (CariKartlar, KdvIstisnaTanimlari, TesisYonetimi) DTO'larına
+// BAĞIMLI DEĞİLDİR - yalnızca TicariBelgeYonetimi.View yetkisiyle erişilen, minimal, operasyonel
+// lookup uç noktalarının (ui/ticari-belgeler/lookups/*) sözleşmesini yansıtır.
+
+export interface TicariBelgeTesisLookupDto {
+    id: number;
+    ad: string;
+}
+
+export interface TicariBelgeCariKartLookupDto {
+    id: number;
+    cariKodu: string;
+    cariTipi: string;
+    unvanAdSoyad: string;
+    vergiNoTckn?: string | null;
+    vergiDairesi?: string | null;
+    adres?: string | null;
+    eposta?: string | null;
+    telefon?: string | null;
+    kurumsalMi: boolean;
+}
+
+export interface TicariBelgeKdvIstisnaLookupDto {
+    id: number;
+    kod: string;
+    ad: string;
+    uygulamaTipi: KdvUygulamaTipi;
+}
+
+export interface TicariBelgeIadeAdayiFilterDto {
+    mevcutBelgeId?: number | null;
+    tesisId: number;
+    belgeTipi: SatisBelgesiTipi;
+    cariKartId: number;
+    belgeTarihi: string;
+    belgeNoArama?: string | null;
+}
+
+export interface TicariBelgeIadeAdayiDto {
+    id: number;
+    belgeNo: string;
+    belgeTarihi: string;
+    resmiFaturaNo?: string | null;
+    karsiTarafFaturaNo?: string | null;
+}
+
+export interface TicariBelgeKaynakSatirDto {
+    id: number;
+    aciklama: string;
+    birim: string;
+    miktar: number;
+    iadeEdilebilirKalanMiktar: number;
+    birimFiyat: number;
+    indirimOrani: number;
+    kdvUygulamaTipi: KdvUygulamaTipi;
+    kdvOrani: number;
+    kdvIstisnaTanimId?: number | null;
+    tevkifatPay?: number | null;
+    tevkifatPayda?: number | null;
+}
+
 export function getMusteriDisplayName(belge: TicariBelgeDto): string {
     if (belge.kurumsalMi) {
         return belge.musteriUnvan ?? belge.musteriAdSoyad ?? '-';

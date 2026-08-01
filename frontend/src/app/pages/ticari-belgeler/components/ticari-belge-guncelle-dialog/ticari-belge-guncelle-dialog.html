@@ -14,7 +14,8 @@
                     [options]="belgeTipiSecenekleri"
                     optionLabel="label"
                     optionValue="value"
-                    [(ngModel)]="formData.belgeTipi"
+                    [ngModel]="formData.belgeTipi"
+                    (ngModelChange)="onBelgeTipiChange($event)"
                     placeholder="Belge tipi seçin"></p-select>
             </div>
             <div class="field col-12 md:col-4">
@@ -146,7 +147,9 @@
             <div class="field col-12">
                 <div class="flex align-items-center justify-content-between mb-2">
                     <label class="font-semibold">Satırlar</label>
-                    <p-button label="Satır Ekle" icon="pi pi-plus" size="small" [text]="true" (onClick)="addSatir()"></p-button>
+                    @if (!formData.iadeEdilenBelgeId) {
+                        <p-button label="Satır Ekle" icon="pi pi-plus" size="small" [text]="true" (onClick)="addSatir()"></p-button>
+                    }
                 </div>
 
                 @for (satir of formData.satirlar ?? []; track trackBySatirIndex($index); let i = $index) {
@@ -154,7 +157,7 @@
                         <div class="grid formgrid p-fluid">
                             <div class="field col-12 md:col-3">
                                 <label>Satır Tipi</label>
-                                <p-select [options]="satirTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="satir.satirTipi"></p-select>
+                                <p-select [options]="satirTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="satir.satirTipi" [disabled]="satirKaynagaKilitliMi(satir)"></p-select>
                             </div>
                             <div class="field col-12 md:col-5">
                                 <label>Açıklama</label>
@@ -163,10 +166,13 @@
                             <div class="field col-12 md:col-2">
                                 <label>Miktar</label>
                                 <p-inputNumber [(ngModel)]="satir.miktar" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                                @if (kaynakSatirIadeEdilebilirKalanMiktar(satir) !== null) {
+                                    <small class="text-color-secondary">Kalan iade edilebilir: {{ kaynakSatirIadeEdilebilirKalanMiktar(satir) }}</small>
+                                }
                             </div>
                             <div class="field col-12 md:col-2">
                                 <label>Birim Fiyat</label>
-                                <p-inputNumber [(ngModel)]="satir.birimFiyat" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2"></p-inputNumber>
+                                <p-inputNumber [(ngModel)]="satir.birimFiyat" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2" [readonly]="satirKaynagaKilitliMi(satir)"></p-inputNumber>
                             </div>
 
                             <div class="field col-12 md:col-3">
@@ -176,11 +182,12 @@
                                     optionLabel="label"
                                     optionValue="value"
                                     [ngModel]="satir.kdvUygulamaTipi"
+                                    [disabled]="satirKaynagaKilitliMi(satir)"
                                     (ngModelChange)="onSatirKdvTipiChange(satir, $event)"></p-select>
                             </div>
                             <div class="field col-12 md:col-2">
                                 <label>KDV Oranı</label>
-                                <p-inputNumber [(ngModel)]="satir.kdvOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                                <p-inputNumber [(ngModel)]="satir.kdvOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2" [readonly]="satirKaynagaKilitliMi(satir)"></p-inputNumber>
                             </div>
                             @if (getKdvIstisnaSecenekleri(satir).length > 0 || satir.kdvIstisnaTanimId) {
                                 <div class="field col-12 md:col-3">
@@ -190,6 +197,7 @@
                                         optionLabel="label"
                                         optionValue="value"
                                         [(ngModel)]="satir.kdvIstisnaTanimId"
+                                        [disabled]="satirKaynagaKilitliMi(satir)"
                                         [filter]="true"
                                         [showClear]="true"
                                         placeholder="İstisna tanımı seçiniz"></p-select>
@@ -198,21 +206,23 @@
                             @if (isTevkifatli(satir)) {
                                 <div class="field col-12 md:col-2">
                                     <label>Tevkifat Pay</label>
-                                    <p-inputNumber [(ngModel)]="satir.tevkifatPay" [useGrouping]="false"></p-inputNumber>
+                                    <p-inputNumber [(ngModel)]="satir.tevkifatPay" [useGrouping]="false" [readonly]="satirKaynagaKilitliMi(satir)"></p-inputNumber>
                                 </div>
                                 <div class="field col-12 md:col-2">
                                     <label>Tevkifat Payda</label>
-                                    <p-inputNumber [(ngModel)]="satir.tevkifatPayda" [useGrouping]="false"></p-inputNumber>
+                                    <p-inputNumber [(ngModel)]="satir.tevkifatPayda" [useGrouping]="false" [readonly]="satirKaynagaKilitliMi(satir)"></p-inputNumber>
                                 </div>
                             }
                             <div class="field col-12 md:col-2">
                                 <label>İndirim Oranı</label>
-                                <p-inputNumber [(ngModel)]="satir.indirimOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                                <p-inputNumber [(ngModel)]="satir.indirimOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2" [readonly]="satirKaynagaKilitliMi(satir)"></p-inputNumber>
                             </div>
 
-                            <div class="field col-12 flex justify-content-end">
-                                <p-button label="Satırı Sil" icon="pi pi-trash" size="small" severity="danger" [text]="true" (onClick)="removeSatir(i)"></p-button>
-                            </div>
+                            @if (!satirKaynagaKilitliMi(satir)) {
+                                <div class="field col-12 flex justify-content-end">
+                                    <p-button label="Satırı Sil" icon="pi pi-trash" size="small" severity="danger" [text]="true" (onClick)="removeSatir(i)"></p-button>
+                                </div>
+                            }
                         </div>
                     </div>
                 }

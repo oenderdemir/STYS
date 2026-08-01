@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.TicariBelgeler.Dtos;
 using STYS.TicariBelgeler.Services;
 using TOD.Platform.AspNetCore.Authorization;
@@ -16,10 +17,12 @@ namespace STYS.TicariBelgeler.Controllers;
 public class TicariBelgelerController : UIController
 {
     private readonly ITicariBelgeService _service;
+    private readonly ITicariBelgeLookupService _lookupService;
 
-    public TicariBelgelerController(ITicariBelgeService service)
+    public TicariBelgelerController(ITicariBelgeService service, ITicariBelgeLookupService lookupService)
     {
         _service = service;
+        _lookupService = lookupService;
     }
 
     [HttpGet("{id:int}")]
@@ -83,5 +86,54 @@ public class TicariBelgelerController : UIController
     {
         await _service.IptalEtAsync(id, cancellationToken);
         return Ok();
+    }
+
+    // ──────────────────────────────────────────────
+    //  Operasyonel lookup sınırı (bkz. görev A) — yalnızca TicariBelgeYonetimi.View gerektirir,
+    //  TesisYonetimi/CariKartYonetimi/MuhasebeKdvIstisnaTanimlariYonetimi İSTEMEZ.
+    // ──────────────────────────────────────────────
+
+    [HttpGet("lookups/tesisler")]
+    [Permission(StructurePermissions.TicariBelgeYonetimi.View)]
+    public async Task<IActionResult> GetTesisLookup(CancellationToken cancellationToken)
+    {
+        var result = await _lookupService.GetTesislerAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("lookups/cari-kartlar")]
+    [Permission(StructurePermissions.TicariBelgeYonetimi.View)]
+    public async Task<IActionResult> GetCariKartLookup(
+        [FromQuery] int tesisId, [FromQuery] SatisBelgesiTipi belgeTipi, CancellationToken cancellationToken)
+    {
+        var result = await _lookupService.GetCariKartlarAsync(tesisId, belgeTipi, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("lookups/kdv-istisnalari")]
+    [Permission(StructurePermissions.TicariBelgeYonetimi.View)]
+    public async Task<IActionResult> GetKdvIstisnaLookup(
+        [FromQuery] TicariBelgeKdvIstisnaLookupFilterDto filter, CancellationToken cancellationToken)
+    {
+        var result = await _lookupService.GetKdvIstisnalarAsync(filter, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("lookups/iade-adaylari")]
+    [Permission(StructurePermissions.TicariBelgeYonetimi.View)]
+    public async Task<IActionResult> GetIadeAdaylariLookup(
+        [FromBody] TicariBelgeIadeAdayiFilterDto filter, CancellationToken cancellationToken)
+    {
+        var result = await _lookupService.GetIadeAdaylariAsync(filter, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("lookups/kaynak-satirlar/{kaynakBelgeId:int}")]
+    [Permission(StructurePermissions.TicariBelgeYonetimi.View)]
+    public async Task<IActionResult> GetKaynakSatirLookup(
+        int kaynakBelgeId, [FromQuery] int? mevcutBelgeId, CancellationToken cancellationToken)
+    {
+        var result = await _lookupService.GetKaynakSatirlarAsync(kaynakBelgeId, mevcutBelgeId, cancellationToken);
+        return Ok(result);
     }
 }

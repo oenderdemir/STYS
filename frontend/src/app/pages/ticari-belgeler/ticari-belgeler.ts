@@ -16,8 +16,6 @@ import { TooltipModule } from 'primeng/tooltip';
 import { finalize } from 'rxjs';
 import { toLocalDateString } from '../../core/utils/date-time.util';
 import { AuthService } from '../auth';
-import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
-import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { TicariBelgeDetayDialogComponent } from './components/ticari-belge-detay-dialog/ticari-belge-detay-dialog';
 import { TicariBelgeGuncelleDialogComponent } from './components/ticari-belge-guncelle-dialog/ticari-belge-guncelle-dialog';
 import {
@@ -43,6 +41,7 @@ import {
     TicariBelgeMuhasebeDurumu,
     SatisBelgesiTipi,
     SatisKaynakModulu,
+    TicariBelgeTesisLookupDto,
     belgeToGuncelleRequest,
     createDefaultTicariBelgeFilter,
     getMusteriDisplayName
@@ -73,7 +72,6 @@ import { TicariBelgeService } from './ticari-belge.service';
 })
 export class TicariBelgelerComponent implements OnInit {
     private readonly service = inject(TicariBelgeService);
-    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
@@ -82,7 +80,7 @@ export class TicariBelgelerComponent implements OnInit {
     belgeler = signal<TicariBelgeDto[]>([]);
     loading = signal(false);
     filter = signal<TicariBelgeFilterDto>(createDefaultTicariBelgeFilter());
-    tesisler = signal<TesisDto[]>([]);
+    tesisler = signal<TicariBelgeTesisLookupDto[]>([]);
     /** p-select tekli seçim için ayrı tutulur; loadBelgeler() sırasında filter().belgeTipleri'ne yansıtılır. */
     selectedBelgeTipi = signal<SatisBelgesiTipi | null>(null);
     /** p-datepicker Date bekler; loadBelgeler() sırasında filter'ın string alanlarına dönüştürülür. */
@@ -95,6 +93,7 @@ export class TicariBelgelerComponent implements OnInit {
     guncelleDialogVisible = signal(false);
     guncelleSaving = signal(false);
     guncelleFormData = signal<TicariBelgeGuncelleRequest | null>(null);
+    guncellenenBelgeIdSignal = signal<number | null>(null);
     private guncellenenBelgeId: number | null = null;
 
     readonly belgeTipiLabels = SATIS_BELGESI_TIPI_LABELS;
@@ -158,8 +157,8 @@ export class TicariBelgelerComponent implements OnInit {
     }
 
     private loadTesisler(): void {
-        this.tesisService.getTesisler().subscribe({
-            next: tesisler => this.tesisler.set([...tesisler].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''))),
+        this.service.getTesisLookup().subscribe({
+            next: tesisler => this.tesisler.set([...tesisler].sort((a, b) => a.ad.localeCompare(b.ad))),
             error: () => this.tesisler.set([])
         });
     }
@@ -213,6 +212,7 @@ export class TicariBelgelerComponent implements OnInit {
         this.service.getById(belge.id).subscribe({
             next: detay => {
                 this.guncellenenBelgeId = detay.id;
+                this.guncellenenBelgeIdSignal.set(detay.id);
                 this.guncelleFormData.set(belgeToGuncelleRequest(detay));
                 this.guncelleDialogVisible.set(true);
             },

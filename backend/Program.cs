@@ -198,6 +198,7 @@ builder.Services.AddScoped<IKdvRaporService, KdvRaporService>();
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
 builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
 builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();
+builder.Services.AddScoped<ITicariBelgeLookupService, TicariBelgeLookupService>();
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();
 builder.Services.AddScoped<IRestoranSatisBelgesiService, RestoranSatisBelgesiService>();
 builder.Services.AddScoped<IKampSatisBelgesiService, KampSatisBelgesiService>();

@@ -67,21 +67,6 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     ];
 
     /// <summary>
-    /// İade satırlarının kümülatif miktar toplamına DAHİL EDİLEN OTORİTER muhasebe durumları
-    /// (bkz. ValidateIadeSatirlariAsync). Bekliyor (Taslak) durumundaki belgeler henüz onay
-    /// sürecinden geçmediğinden birbirini gereksiz yere kilitlemez/toplama katılmaz - bir belge en
-    /// az MuhasebeDurumu=Onayda durumuna (yani ValidateBelgeOnayaGonderilebilir'den geçmiş)
-    /// ulaşmadan başka bir iade belgesinin kotasını TÜKETMEZ. Reddedildi ve IptalEdildi (ve
-    /// soft-delete edilmiş belgeler, ayrıca kontrol edilir) kapsam dışıdır - artık geçerli bir
-    /// iade talebini temsil etmezler.
-    /// </summary>
-    private static readonly HashSet<TicariBelgeMuhasebeDurumu> IadeKumulatifSayilanMuhasebeDurumlari =
-    [
-        TicariBelgeMuhasebeDurumu.Onayda,
-        TicariBelgeMuhasebeDurumu.Onaylandi
-    ];
-
-    /// <summary>
     /// Güncellenebilirlik/silinebilirlik/onaya-gönderilebilirlik/iptal-edilebilirlik kararları
     /// ARTIK ortak, saf TicariBelgeIslemYetkisi policy'sinden alınır (bkz. görev A/C.1-C.3/C.7) -
     /// bu kurallar SatisBelgesiService VE TicariBelgeService (operasyon uygulama katmanı) içinde
@@ -2143,9 +2128,8 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         if (asilBelge.KurumId != kurumId)
             throw new BaseException($"İade edilen belge bulunamadı. (Id: {iadeEdilenBelgeId})", errorCode: 404);
 
-        var beklenenAsilTip = belgeTipi == SatisBelgesiTipi.SatisIadeFaturasi
-            ? SatisBelgesiTipi.SatisFaturasi
-            : SatisBelgesiTipi.AlisFaturasi;
+        // OTORİTER kaynak: IadeEdilenBelgeEligibility.BeklenenAsilTip - lookup sorgusuyla AYNI eşleme.
+        var beklenenAsilTip = IadeEdilenBelgeEligibility.BeklenenAsilTip(belgeTipi);
 
         if (asilBelge.BelgeTipi != beklenenAsilTip)
         {
@@ -2225,12 +2209,15 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         if (fis.IsDeleted)
             throw new BaseException("Bağlı muhasebe fişi silinmiş.", errorCode: 400);
 
+        // OTORİTER kaynak: IadeEdilenBelgeEligibility.FisDurumuGecerliMi - lookup sorgusuyla
+        // (TicariBelgeLookupService) AYNI kriter, iki yerde ayrı ayrı yazılmaz.
+        if (IadeEdilenBelgeEligibility.FisDurumuGecerliMi(fis.Durum))
+        {
+            return;
+        }
+
         switch (fis.Durum)
         {
-            case MuhasebeFisDurumlari.Taslak:
-            case MuhasebeFisDurumlari.Onayli:
-                return;
-
             case MuhasebeFisDurumlari.Iptal:
                 throw new BaseException("Bağlı muhasebe fişi iptal edilmiş.", errorCode: 400);
 
@@ -2780,7 +2767,7 @@ WHERE [Id] = {kaynakSatirId} AND [IsDeleted] = 0")
                 // OTORİTER: filtre artık eski Durum yerine MuhasebeDurumu üzerinden yapılır (bkz.
                 // C.8) - yalnızca Onayda/Onaylandi dahil edilir; Bekliyor, Reddedildi, IptalEdildi
                 // HARİÇ tutulur.
-                var durumListesi = string.Join(",", IadeKumulatifSayilanMuhasebeDurumlari.Select(d => (int)d));
+                var durumListesi = string.Join(",", IadeEdilenBelgeEligibility.IadeKumulatifSayilanMuhasebeDurumlari.Select(d => (int)d));
                 var sql = $"""
                     SELECT ssb.* FROM [muhasebe].[SatisBelgesiSatirlari] ssb
                     INNER JOIN [muhasebe].[SatisBelgeleri] sb ON sb.[Id] = ssb.[SatisBelgesiId]

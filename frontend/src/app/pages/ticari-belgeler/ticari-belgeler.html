@@ -119,5 +119,6 @@
     [visible]="guncelleDialogVisible()"
     [saving]="guncelleSaving()"
     [formData]="guncelleFormData()"
+    [belgeId]="guncellenenBelgeIdSignal()"
     (visibleChange)="guncelleDialogVisible.set($event)"
     (save)="saveGuncelle()"></app-ticari-belge-guncelle-dialog>

@@ -4,10 +4,18 @@ import { Observable, map } from 'rxjs';
 import { getApiBaseUrl } from '../../core/config';
 import { ApiResponse, tryReadApiMessage } from '../../core/api/api-response.model';
 import {
+    KdvUygulamaTipi,
+    SatisBelgesiTipi,
+    TicariBelgeCariKartLookupDto,
     TicariBelgeDetayDto,
     TicariBelgeDto,
     TicariBelgeFilterDto,
-    TicariBelgeGuncelleRequest
+    TicariBelgeGuncelleRequest,
+    TicariBelgeIadeAdayiDto,
+    TicariBelgeIadeAdayiFilterDto,
+    TicariBelgeKaynakSatirDto,
+    TicariBelgeKdvIstisnaLookupDto,
+    TicariBelgeTesisLookupDto
 } from './ticari-belge.models';
 
 @Injectable({ providedIn: 'root' })
@@ -50,6 +58,47 @@ export class TicariBelgeService {
         return this.http
             .post<ApiResponse<void>>(`${this.base}/${id}/iptal`, {})
             .pipe(map(envelope => { if (!envelope.success) throw new Error(tryReadApiMessage(envelope) ?? 'İşlem başarısız.'); }));
+    }
+
+    // ── Operasyonel lookup uç noktaları (bkz. görev A/C) — yalnızca TicariBelgeYonetimi.View
+    // yetkisi gerektirir; CariKartYonetimi/MuhasebeKdvIstisnaTanimlariYonetimi/TesisYonetimi
+    // servislerine BAĞIMLI DEĞİLDİR. ──
+
+    getTesisLookup(): Observable<TicariBelgeTesisLookupDto[]> {
+        return this.http
+            .get<ApiResponse<TicariBelgeTesisLookupDto[]>>(`${this.base}/lookups/tesisler`)
+            .pipe(map(envelope => this.unwrap(envelope) ?? []));
+    }
+
+    getCariKartLookup(tesisId: number, belgeTipi: SatisBelgesiTipi): Observable<TicariBelgeCariKartLookupDto[]> {
+        const params = { tesisId: String(tesisId), belgeTipi: String(belgeTipi) };
+        return this.http
+            .get<ApiResponse<TicariBelgeCariKartLookupDto[]>>(`${this.base}/lookups/cari-kartlar`, { params })
+            .pipe(map(envelope => this.unwrap(envelope) ?? []));
+    }
+
+    getKdvIstisnaLookup(
+        belgeTipi: SatisBelgesiTipi,
+        kdvUygulamaTipi: KdvUygulamaTipi,
+        belgeTarihi: string
+    ): Observable<TicariBelgeKdvIstisnaLookupDto[]> {
+        const params = { belgeTipi: String(belgeTipi), kdvUygulamaTipi: String(kdvUygulamaTipi), belgeTarihi };
+        return this.http
+            .get<ApiResponse<TicariBelgeKdvIstisnaLookupDto[]>>(`${this.base}/lookups/kdv-istisnalari`, { params })
+            .pipe(map(envelope => this.unwrap(envelope) ?? []));
+    }
+
+    getIadeAdaylari(filter: TicariBelgeIadeAdayiFilterDto): Observable<TicariBelgeIadeAdayiDto[]> {
+        return this.http
+            .post<ApiResponse<TicariBelgeIadeAdayiDto[]>>(`${this.base}/lookups/iade-adaylari`, filter)
+            .pipe(map(envelope => this.unwrap(envelope) ?? []));
+    }
+
+    getKaynakSatirlar(kaynakBelgeId: number, mevcutBelgeId: number | null): Observable<TicariBelgeKaynakSatirDto[]> {
+        const params: Record<string, string> = mevcutBelgeId != null ? { mevcutBelgeId: String(mevcutBelgeId) } : {};
+        return this.http
+            .get<ApiResponse<TicariBelgeKaynakSatirDto[]>>(`${this.base}/lookups/kaynak-satirlar/${kaynakBelgeId}`, { params })
+            .pipe(map(envelope => this.unwrap(envelope) ?? []));
     }
 
     private unwrap<T>(envelope: ApiResponse<T>): T {

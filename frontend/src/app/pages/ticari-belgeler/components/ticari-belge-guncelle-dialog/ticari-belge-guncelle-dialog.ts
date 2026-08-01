@@ -177,13 +177,16 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
     /** Belge tipi alış/satış yönleri arasında değiştirilirse: mevcut cari yeni yöne uygun
      * değilse temizlenir, lookup yeniden yüklenir ve kullanıcıya uyarı gösterilir (bkz. görev D).
-     * Belge tipi iade ↔ normal arasında değiştirilirse eski referans/KaynakSatirId'ler SESSİZCE
-     * taşınmaz - bkz. iadeNormalGecisiniIsle (görev 2). */
+     * Belge tipi iade ↔ normal arasında değiştirilirse eski referans/KaynakSatirId'ler/kaynak
+     * satırlar SESSİZCE taşınmaz - bkz. iadeNormalGecisiniIsle (görev 1). SatisIadeFaturasi ↔
+     * AlisIadeFaturasi (iki iade alt tipi ARASINDA) değiştirilirse de aynı şekilde eski referans/
+     * KaynakSatirId/kaynak satırlar temizlenir - bkz. iadeYonuGecisiniIsle (görev 2). */
     onBelgeTipiChange(value: SatisBelgesiTipi): void {
         if (!this.formData) return;
-        const oncekiAlisMi = isAlisBelgeTipi(this.oncekiBelgeTipi);
+        const oncekiTip = this.oncekiBelgeTipi;
+        const oncekiAlisMi = isAlisBelgeTipi(oncekiTip);
         const yeniAlisMi = isAlisBelgeTipi(value);
-        const oncekiIadeMi = isIadeBelgeTipi(this.oncekiBelgeTipi);
+        const oncekiIadeMi = isIadeBelgeTipi(oncekiTip);
         const yeniIadeMi = isIadeBelgeTipi(value);
         this.formData.belgeTipi = value;
         this.oncekiBelgeTipi = value;
@@ -206,6 +209,8 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
         if (oncekiIadeMi !== yeniIadeMi) {
             this.iadeNormalGecisiniIsle(yeniIadeMi);
+        } else if (oncekiIadeMi && yeniIadeMi && oncekiTip !== value) {
+            this.iadeYonuGecisiniIsle();
         }
 
         this.kdvIstisnaCache.clear();
@@ -215,14 +220,14 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         return isAlisBelgeTipi(belgeTipi) ? cari.cariTipi === 'Tedarikci' : cari.cariTipi !== 'Tedarikci';
     }
 
-    /** Belge tipi iade ↔ normal arasında değiştiğinde eski referans ve KaynakSatirId değerlerinin
-     * SESSİZCE taşınmasını engeller (bkz. görev 2):
+    /** Belge tipi iade ↔ normal arasında değiştiğinde eski referans, KaynakSatirId ve kaynak
+     * satırların SESSİZCE taşınmasını engeller (bkz. görev 1):
      * - Normalden iadeye: eski (kaynaksız) satırlar bir iade kaynağını temsil EDEMEZ, bu yüzden
      *   temizlenir; kullanıcı YENİ bir kaynak seçene kadar kaydetme (kaynakSatirHataMesaji ile)
      *   engellenir.
-     * - İadeden normale: kaynak satırları KaynakSatirId'leri KALDIRILARAK serbest, normal satırlar
-     *   olarak taşınır (mali alanlar/miktar/açıklama korunur, artık düzenlenebilirler); iade
-     *   referansı (varsa) açıkça kaldırılır.
+     * - İadeden normale: eski iade satırları normal satıra DÖNÜŞTÜRÜLMEZ - referansla (ve
+     *   KaynakSatirId'leriyle) BİRLİKTE TAMAMEN temizlenir; kullanıcı YENİ bir normal satır
+     *   ekleyene kadar (bkz. addSatir) kaydetme engellenir.
      * Her iki yönde de bekleyen bir kaynak satır isteği geçersiz kılınır (request token). */
     private iadeNormalGecisiniIsle(yeniIadeMi: boolean): void {
         if (!this.formData) return;
@@ -230,18 +235,37 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         this.kaynakSatirRequestToken++;
         this.kaynakSatirlarYukleniyor = false;
         this.kaynakSatirlar = [];
+        this.formData.satirlar = [];
 
         if (yeniIadeMi) {
-            this.formData.satirlar = [];
             this.kaynakSatirHataMesaji = 'İade faturası için önce bir kaynak (iade edilen) belge seçmelisiniz.';
         } else {
-            this.formData.satirlar = (this.formData.satirlar ?? []).map(satir => ({ ...satir, kaynakSatirId: null }));
             this.formData.iadeEdilenBelgeId = null;
             this.formData.iadeEdilenBelgeReferansiKaldir = true;
             this.iadeEdilenBelgeGosterim = null;
-            this.kaynakSatirHataMesaji =
-                this.formData.satirlar.length === 0 ? 'Normal bir belge en az bir satır içermelidir.' : null;
+            this.kaynakSatirHataMesaji = 'Normal bir belge en az bir satır içermelidir.';
         }
+    }
+
+    /** SatisIadeFaturasi ↔ AlisIadeFaturasi arasında (iki iade alt tipi arasında) değiştiğinde:
+     * eski iade referansı, KaynakSatirId'ler ve kaynak satırlar TAMAMEN temizlenir - eski yönün
+     * kaynağı (ör. bir SatisFaturasi) yeni yönde (AlisIadeFaturasi için AlisFaturasi) GEÇERSİZDİR
+     * (bkz. görev 2). Yeni yöne uygun bir cari seçilmeden searchIadeEdilenBelge zaten aday
+     * getirmediğinden (bkz. doc'u), yeni bir kaynak seçilmesi DOLAYLI olarak uygun cari
+     * seçilmesini de zorunlu kılar - kaydetme, kullanıcı YENİ bir kaynak seçene kadar
+     * (kaynakSatirHataMesaji ile) engellenir. Bekleyen eski bir kaynak satır isteği geçersiz kılınır. */
+    private iadeYonuGecisiniIsle(): void {
+        if (!this.formData) return;
+
+        this.kaynakSatirRequestToken++;
+        this.kaynakSatirlarYukleniyor = false;
+        this.kaynakSatirlar = [];
+        this.formData.satirlar = [];
+        this.formData.iadeEdilenBelgeId = null;
+        this.formData.iadeEdilenBelgeReferansiKaldir = true;
+        this.iadeEdilenBelgeGosterim = null;
+        this.kaynakSatirHataMesaji =
+            'Belge yönü değişti - yeni yöne uygun bir cari ve kaynak (iade edilen) belge seçmeden kaydedemezsiniz.';
     }
 
     // ── Cari kart ──
@@ -693,6 +717,9 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         const yeniSatir = createEmptyTicariBelgeGuncelleSatiri();
         yeniSatir.siraNo = satirlar.length + 1;
         this.formData.satirlar = [...satirlar, yeniSatir];
+        // Yeni bir normal satır eklendi - iadeden normale geçişten kalan "en az bir satır"
+        // kaydetme engeli artık geçerli DEĞİLDİR (bkz. görev 1).
+        this.kaynakSatirHataMesaji = null;
     }
 
     removeSatir(index: number): void {

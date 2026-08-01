@@ -473,9 +473,7 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         expect(saveEmitSpy).not.toHaveBeenCalled();
     });
 
-    it('iadeden normale gecince kaynak satirlari KaynakSatirId kaldirilarak normal satir olarak tasinir', () => {
-        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
-
+    it('iadeden normale gecince eski iade satirlari normal satira DONUSTURULMEZ - referansla birlikte tamamen temizlenir', () => {
         const component = createComponent();
         component.belgeId = 99;
         component.formData = ornekFormData({
@@ -483,21 +481,50 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
             iadeEdilenBelgeId: 50,
             satirlar: [ornekIadeSatiri({ kaynakSatirId: '10', miktar: 4, aciklama: 'Iade satiri' })]
         });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
         component.visible = true;
         component.ngOnChanges(VISIBLE_ILK_ACILIS);
 
         component.onBelgeTipiChange(SatisBelgesiTipi.SatisFaturasi);
 
-        const satirlar = component.formData!.satirlar!;
-        expect(satirlar.length).toBe(1);
-        expect(satirlar[0].kaynakSatirId).toBeNull();
-        // Mali alanlar/miktar/aciklama KORUNUR - yalnizca KaynakSatirId kaldirilir.
-        expect(satirlar[0].miktar).toBe(4);
-        expect(satirlar[0].aciklama).toBe('Iade satiri');
+        // Eski iade satiri KORUNMAZ/DONUSTURULMEZ - satirlar TAMAMEN bosaltilir.
+        expect(component.formData!.satirlar).toEqual([]);
         expect(component.formData!.iadeEdilenBelgeId).toBeNull();
         expect(component.formData!.iadeEdilenBelgeReferansiKaldir).toBeTrue();
         expect(component.iadeEdilenBelgeGosterim).toBeNull();
+        expect(component.kaynakSatirlar).toEqual([]);
+        // Kullanici YENI bir normal satir eklemeden kaydetme engellenir.
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('iadeden normale gecince yeni satir eklenebilir ve eklenince gecis hata mesaji kaydi engellemez', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.SatisFaturasi);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        component.addSatir();
+
+        expect(component.formData!.satirlar!.length).toBe(1);
+        expect(component.formData!.satirlar![0].kaynakSatirId).toBeFalsy();
         expect(component.kaynakSatirHataMesaji).toBeNull();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).toHaveBeenCalledTimes(1);
     });
 
     it('normal bir belge hicbir satir icermeden kaydedilemez', () => {
@@ -531,6 +558,86 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
 
         expect(component.kaynakSatirHataMesaji).toBeNull();
         expect(component.formData!.satirlar!.length).toBe(1);
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('SatisIadeFaturasi -> AlisIadeFaturasi gecisinde eski referans/KaynakSatirId/kaynak satirlar tamamen temizlenir', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            cariKartId: 5,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        component.kaynakSatirlar = [ornekKaynakSatir({ id: 10 })];
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.AlisIadeFaturasi);
+
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.formData!.iadeEdilenBelgeId).toBeNull();
+        expect(component.formData!.iadeEdilenBelgeReferansiKaldir).toBeTrue();
+        expect(component.iadeEdilenBelgeGosterim).toBeNull();
+        expect(component.kaynakSatirlar).toEqual([]);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        const saveEmitSpy = spyOn(component.save, 'emit');
+        component.onSaveClick();
+        expect(saveEmitSpy).not.toHaveBeenCalled();
+    });
+
+    it('iade yonu degisikliginde bekleyen eski kaynak istegi gecersiz kilinir (stale yanit uygulanmaz)', () => {
+        const subject = new Subject<TicariBelgeKaynakSatirDto[]>();
+        serviceSpy.getKaynakSatirlar.and.returnValue(subject.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        expect(component.kaynakSatirlarYukleniyor).toBeTrue();
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.AlisIadeFaturasi);
+        expect(component.kaynakSatirlarYukleniyor).toBeFalse();
+
+        // Acilis anindaki (artik eskimis/stale) kaynak satir istegi simdi (gec) sonuclanir.
+        subject.next([ornekKaynakSatir({ id: 10, aciklama: 'Eski (stale) kaynak', iadeEdilebilirKalanMiktar: 6 })]);
+
+        expect(component.formData!.satirlar).toEqual([]);
+        expect(component.kaynakSatirlarYukleniyor).toBeFalse();
+    });
+
+    it('iade yonu degisikliginden sonra yeni yona uygun kaynak secilince kaydetme engeli kalkar', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi,
+            iadeEdilenBelgeId: 50,
+            satirlar: [ornekIadeSatiri({ kaynakSatirId: '10' })]
+        });
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        component.onBelgeTipiChange(SatisBelgesiTipi.AlisIadeFaturasi);
+        expect(component.kaynakSatirHataMesaji).toBeTruthy();
+
+        serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 90, iadeEdilebilirKalanMiktar: 3 })]));
+        component.onIadeEdilenBelgeSecildi({ id: 90, belgeNo: 'ALIS-ASIL', belgeTarihi: '2026-03-09' });
+
+        expect(component.kaynakSatirHataMesaji).toBeNull();
+        expect(component.formData!.satirlar!.length).toBe(1);
+        expect(component.formData!.satirlar![0].kaynakSatirId).toBe('90');
 
         const saveEmitSpy = spyOn(component.save, 'emit');
         component.onSaveClick();
